@@ -182,7 +182,7 @@
                                      (.maximumSize 16)
                                      (.build))})))))
 
-  (-emit-query [_ {:keys [conformed-plan scan-cols col-names ^Cache emit-cache], :as planned-query} wm param-fields default-tz]
+  (-emit-query [_ {:keys [conformed-plan scan-cols col-names ^Cache emit-cache]} wm param-fields default-tz]
     (.get emit-cache {:scan-fields (when (seq scan-cols)
                                      (scan/scan-fields table-cat wm scan-cols))
                       :last-known-block (some-> block-cat .getCurrentBlockIndex)

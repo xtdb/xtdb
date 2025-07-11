@@ -327,9 +327,6 @@
 (defn node->log ^xtdb.api.log.Log [node]
   (util/component node :xtdb/log))
 
-(defn node->log-proc ^xtdb.indexer.LogProcessor [node]
-  (util/component node :xtdb.log/processor))
-
 (defn await-tx
   (^java.util.concurrent.CompletableFuture [{:keys [^LogProcessor log-processor]}]
    (-> @(.awaitAsync log-processor)

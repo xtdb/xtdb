@@ -5,20 +5,20 @@
             [xtdb.buffer-pool]
             [xtdb.compactor :as c]
             [xtdb.metrics :as metrics]
+            [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
            (java.lang AutoCloseable)
-           (java.time Duration Instant)
+           (java.time Duration)
            (java.util HashMap List Map)
            (java.util.concurrent StructuredTaskScope$ShutdownOnFailure StructuredTaskScope$Subtask)
            (java.util.concurrent.locks StampedLock)
-           (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api IndexerConfig TransactionKey)
-           (xtdb.api.log Log Log$Message$TriesAdded Log$MessageMetadata)
+           (xtdb.api.log Log Log$Message$TriesAdded)
            xtdb.api.storage.Storage
            xtdb.BufferPool
            xtdb.catalog.BlockCatalog
@@ -30,13 +30,13 @@
 (defn open-live-idx-wm [^Map tables]
   (util/with-close-on-catch [wms (HashMap.)]
 
-    (doseq [[table-name ^LiveTable live-table] tables]
-      (.put wms table-name (.openWatermark live-table)))
+    (doseq [[table ^LiveTable live-table] tables]
+      (.put wms table (.openWatermark live-table)))
 
     (reify LiveIndex$Watermark
       (getAllColumnFields [_] (update-vals wms #(.getColumnFields ^LiveTable$Watermark %)))
 
-      (liveTable [_ table-name] (.get wms table-name))
+      (liveTable [_ table] (.get wms table))
 
       (getLiveTables [_] (keys wms))
 
@@ -47,8 +47,7 @@
   (merge-with set/union
               (update-vals (table-cat/all-column-fields table-catalog)
                            (comp set keys))
-              (update-vals (some-> live-index-wm
-                                   (.getAllColumnFields))
+              (update-vals (some-> live-index-wm (.getAllColumnFields))
                            (comp set keys))))
 
 (deftype LiveIndex [^BufferAllocator allocator, ^BufferPool buffer-pool, ^Log log, compactor
@@ -68,28 +67,27 @@
   xtdb.indexer.LiveIndex
   (getLatestCompletedTx [_] latest-completed-tx)
 
-  (liveTable [_ table-name] (.get tables table-name))
+  (liveTable [_ table] (.get tables table))
 
   (startTx [this-idx tx-key]
     (let [table-txs (HashMap.)]
       (reify LiveIndex$Tx
-        (liveTable [_ table-name]
-          (.computeIfAbsent table-txs table-name
-                            (reify Function
-                              (apply [_ table-name]
-                                (let [live-table (.liveTable this-idx table-name)
-                                      new-live-table? (nil? live-table)
-                                      ^LiveTable live-table (or live-table
-                                                                (LiveTable. allocator buffer-pool table-name row-counter
-                                                                            (partial trie/->live-trie log-limit page-limit)))]
+        (liveTable [_ table]
+          (.computeIfAbsent table-txs table
+                            (fn [table]
+                              (let [live-table (.liveTable this-idx table)
+                                    new-live-table? (nil? live-table)
+                                    ^LiveTable live-table (or live-table
+                                                              (LiveTable. allocator buffer-pool table row-counter
+                                                                          (partial trie/->live-trie log-limit page-limit)))]
 
-                                  (.startTx live-table tx-key new-live-table?))))))
+                                (.startTx live-table tx-key new-live-table?)))))
 
         (commit [_]
           (let [wm-lock-stamp (.writeLock wm-lock)]
             (try
-              (doseq [[table-name ^LiveTable$Tx live-table-tx] table-txs]
-                (.put tables table-name (.commit live-table-tx)))
+              (doseq [[table ^LiveTable$Tx live-table-tx] table-txs]
+                (.put tables table (.commit live-table-tx)))
 
               (set! (.-latest-completed-tx this-idx) tx-key)
 
@@ -110,15 +108,15 @@
 
         (openWatermark [_]
           (util/with-close-on-catch [wms (HashMap.)]
-            (doseq [[table-name ^LiveTable$Tx live-table-tx] table-txs]
-              (.put wms table-name (.openWatermark live-table-tx)))
+            (doseq [[table ^LiveTable$Tx live-table-tx] table-txs]
+              (.put wms table (.openWatermark live-table-tx)))
 
-            (doseq [[table-name ^LiveTable live-table] tables]
-              (.computeIfAbsent wms table-name (fn [_] (.openWatermark live-table))))
+            (doseq [[table ^LiveTable live-table] tables]
+              (.computeIfAbsent wms table (fn [_] (.openWatermark live-table))))
 
             (reify LiveIndex$Watermark
               (getAllColumnFields [_] (update-vals wms #(.getColumnFields ^LiveTable$Watermark %)))
-              (liveTable [_ table-name] (.get wms table-name))
+              (liveTable [_ table] (.get wms table))
               (getLiveTables [_] (keys wms))
 
               AutoCloseable
@@ -139,20 +137,20 @@
 
   (finishBlock [_ block-idx]
     (with-open [scope (StructuredTaskScope$ShutdownOnFailure.)]
-      (let [tasks (vec (for [[table-name ^LiveTable table] tables]
+      (let [tasks (vec (for [[table ^LiveTable live-table] tables]
                          (.fork scope (fn []
                                         (try
-                                          (when-let [finished-block (.finishBlock table block-idx)]
-                                            [table-name {:fields (.getFields finished-block)
-                                                         :trie-key (.getTrieKey finished-block)
-                                                         :row-count (.getRowCount finished-block)
-                                                         :data-file-size (.getDataFileSize finished-block)
-                                                         :trie-metadata (.getTrieMetadata finished-block)
-                                                         :hlls (.getHllDeltas finished-block)}])
+                                          (when-let [finished-block (.finishBlock live-table block-idx)]
+                                            [table {:fields (.getFields finished-block)
+                                                    :trie-key (.getTrieKey finished-block)
+                                                    :row-count (.getRowCount finished-block)
+                                                    :data-file-size (.getDataFileSize finished-block)
+                                                    :trie-metadata (.getTrieMetadata finished-block)
+                                                    :hlls (.getHllDeltas finished-block)}])
                                           (catch InterruptedException e
                                             (throw e))
                                           (catch Exception e
-                                            (log/warn e "Error finishing block for table" table)
+                                            (log/warn e "Error finishing block for table" live-table)
                                             (throw e)))))))]
         (.join scope)
 
@@ -162,17 +160,17 @@
                                                         (catch Exception _
                                                           (throw (.exception ^StructuredTaskScope$Subtask %)))))))
                                  (util/rethrowing-cause))]
-          (let [added-tries (for [[table-name {:keys [trie-key data-file-size trie-metadata state]}] table-metadata]
-                              (trie/->trie-details table-name trie-key data-file-size trie-metadata state))]
+          (let [added-tries (for [[table {:keys [trie-key data-file-size trie-metadata state]}] table-metadata]
+                              (trie/->trie-details table trie-key data-file-size trie-metadata state))]
             (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION added-tries))
             (doseq [^TrieDetails added-trie added-tries]
-              (.addTries trie-cat (.getTableName added-trie) [added-trie] (.getSystemTime latest-completed-tx))))
+              (.addTries trie-cat (table/->ref (.getTableName added-trie)) [added-trie] (.getSystemTime latest-completed-tx))))
 
-          (let [all-tables (set (concat (keys table-metadata) (.getAllTableNames block-cat)))
+          (let [all-tables (set (concat (keys table-metadata) (.getAllTables block-cat)))
                 table->all-tries (->> all-tables
-                                      (map (fn [table-name]
-                                             (MapEntry/create table-name (->> (trie-cat/trie-state trie-cat table-name)
-                                                                              trie-cat/all-tries))))
+                                      (map (fn [table]
+                                             (MapEntry/create table (->> (trie-cat/trie-state trie-cat table)
+                                                                         trie-cat/all-tries))))
                                       (into {}))]
             (table-cat/finish-block! table-cat block-idx table-metadata table->all-tries))))))
 

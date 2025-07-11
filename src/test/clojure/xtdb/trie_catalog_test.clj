@@ -1,6 +1,5 @@
 (ns xtdb.trie-catalog-test
-  (:require [clojure.string :as str]
-            [clojure.test :as t]
+  (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.buffer-pool :as bp]
             [xtdb.compactor :as c]
@@ -8,8 +7,7 @@
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
-            [xtdb.util :as util]
-            [xtdb.buffer-pool-test :as bpt])
+            [xtdb.util :as util])
   (:import (java.time Duration Instant)
            (java.util.concurrent ConcurrentHashMap)
            (xtdb.api.storage ObjectStore$StoredObject)
@@ -59,7 +57,7 @@
     (let [min-query-recency (min (.getLower (.getValidTime query-bounds)) (.getLower (.getSystemTime query-bounds)))]
       (if recency
         (< min-query-recency recency)
-        true)) )
+        true)))
   (getTemporalMetadata [_] temporal-metadata))
 
 (defn apply-filter-msgs [& trie-keys]
@@ -106,7 +104,7 @@
 
         (t/is (= #{"l01-current-block-00" "l01-current-block-01" "l01-recency-2022-block-01"}
                  (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
-                                ["l01-recency-2022-block-01" 20220101 [20210101 20220101] ]
+                                ["l01-recency-2022-block-01" 20220101 [20210101 20220101]]
                                 ["l01-current-block-01"      nil      [20200101 Long/MAX_VALUE]]]
                                query-bounds))
               "newer recency files get taken"))
@@ -295,27 +293,27 @@
         (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
         (tu/finish-block! node)
 
-        (t/is (= #{"public/foo" "xt/txs"} (.getTableNames cat)))
+        (t/is (= #{#xt/table foo, #xt/table xt/txs} (.getTables cat)))
         (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
-                 (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+                 (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into #{} (map :trie-key)))))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [cat (cat/trie-catalog node)]
-        (t/is (= #{"public/foo" "xt/txs"} (.getTableNames cat)))
+        (t/is (= #{#xt/table foo, #xt/table xt/txs} (.getTables cat)))
         (t/is (= #{"l00-rc-b01" "l00-rc-b00"}
-                 (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+                 (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into #{} (map :trie-key)))))))
 
     (t/testing "artifically adding tries"
 
       (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
         (let [cat (cat/trie-catalog node)]
-          (.addTries cat "public/foo"
+          (.addTries cat #xt/table foo
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
                            ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
-                          (map #(apply trie/->trie-details "public/foo" %)))
+                          (map #(apply trie/->trie-details #xt/table foo %)))
                      (Instant/now))
           (tu/finish-block! node))))
 
@@ -327,21 +325,21 @@
                    "l02-rc-p1-b01"
                    "l02-rc-p2-b01"
                    "l02-rc-p3-b01"}
-                 (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+                 (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into (sorted-set) (map :trie-key)))))))))
 
 (t/deftest test-trie-catalog-init
-  (let [->trie-details (partial trie/->trie-details "public/foo")]
+  (let [->trie-details (partial trie/->trie-details #xt/table foo)]
     ;; old
     (let [old-table-blocks {:tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10})
                                     (->trie-details {:trie-key "l01-rc-b00" :data-file-size 10})
                                     (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10})]}
-          cat (cat/trie-catalog-init {"public/foo" old-table-blocks})]
+          cat (cat/trie-catalog-init {#xt/table foo old-table-blocks})]
 
-      (t/is (= #{"l00-rc-b01" "l01-rc-b00"} (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+      (t/is (= #{"l00-rc-b01" "l01-rc-b00"} (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                                                  (into (sorted-set) (map :trie-key)))))
 
-      (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat "public/foo")
+      (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat #xt/table foo)
                                            #xt/instant "2025-01-01T00:00:00Z")
                         (into (sorted-set) (map :trie-key))))))
 
@@ -350,12 +348,12 @@
                                                      :garbage :garbage-as-of #xt/instant "2000-01-01T00:00:00Z"})
                                     (->trie-details {:trie-key "l01-rc-b00" :data-file-size 10 :state :live})
                                     (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})]}
-          cat (cat/trie-catalog-init {"public/foo" new-table-blocks})]
+          cat (cat/trie-catalog-init {#xt/table foo new-table-blocks})]
 
-      (t/is (= #{"l00-rc-b01" "l01-rc-b00"} (->> (cat/current-tries (cat/trie-state cat "public/foo"))
+      (t/is (= #{"l00-rc-b01" "l01-rc-b00"} (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                                                  (into (sorted-set) (map :trie-key)))))
 
-      (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat "public/foo")
+      (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat #xt/table foo)
                                            #xt/instant "2025-01-01T00:00:00Z")
                         (into (sorted-set) (map :trie-key))))))))
 
@@ -389,20 +387,20 @@
 (t/deftest test-dry-trie-catalog-gc
   (let [cat (TrieCatalog. (ConcurrentHashMap.) 20)] ;file-size-target
     (letfn [(add-tries [tries inst]
-              (.addTries cat "public/foo"
-                         (map #(apply trie/->trie-details "public/foo" %) tries)
+              (.addTries cat #xt/table foo
+                         (map #(apply trie/->trie-details #xt/table foo %) tries)
                          inst))
             (all-tries []
-              (->> (cat/all-tries (cat/trie-state cat "public/foo"))
+              (->> (cat/all-tries (cat/trie-state cat #xt/table foo))
                    (sort-by (juxt :trie-key :state))
                    (map (juxt :trie-key :state :garbage-as-of))))
 
             (garbage-tries [as-of]
-              (->> (cat/garbage-tries (cat/trie-state cat "public/foo") as-of)
+              (->> (cat/garbage-tries (cat/trie-state cat #xt/table foo) as-of)
                    (sort-by (juxt :trie-key :state))
                    (map (juxt :trie-key :state :garbage-as-of))))
             (delete-tries [garbage-trie-keys]
-              (.deleteTries cat "public/foo" garbage-trie-keys))]
+              (.deleteTries cat #xt/table foo garbage-trie-keys))]
 
       (add-tries [["l00-rc-b00" 1] ["l01-rc-b00" 1]]
                  #xt/instant "2000-01-01T00:00:00Z")
@@ -450,7 +448,6 @@
                 ["l02-rc-p3-b01" :live nil]]
                (all-tries))))))
 
-
 (t/deftest test-default-garbage-collection
   (binding [c/*ignore-signal-block?* true]
     (let [node-dir (util/->path "target/trie-catalog-test/test-default-garbage-collection")
@@ -480,7 +477,7 @@
                     "l01-rc-b01"
                     "l01-rc-b02"
                     "l01-rc-b03"]
-                   (->> (cat/all-tries (cat/trie-state cat "public/foo"))
+                   (->> (cat/all-tries (cat/trie-state cat #xt/table foo))
                         (map :trie-key))))
 
           ;; all l0 files are present

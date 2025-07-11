@@ -9,7 +9,7 @@
     {tab0.1/z ?_sq_z_3}
     [:map
      [{_row_number_0 (row-number)}]
-     [:rename tab0.1 [:scan {:table public/tab0} [z]]]]
+     [:rename tab0.1 [:scan {:table #xt/table tab0} [z]]]]
     [:rename
      x.5
      [:project

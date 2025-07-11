@@ -43,7 +43,7 @@
      [:rename
       l.1
       [:scan
-       {:table public/lineitem}
+       {:table #xt/table lineitem}
        [l_linestatus
         l_tax
         {l_shipdate

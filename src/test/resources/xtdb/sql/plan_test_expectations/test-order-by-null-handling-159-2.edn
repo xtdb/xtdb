@@ -2,4 +2,4 @@
  [{a foo.1/a}]
  [:order-by
   [[foo.1/a {:direction :asc, :null-ordering :nulls-last}]]
-  [:rename foo.1 [:scan {:table public/foo} [a]]]]]
+  [:rename foo.1 [:scan {:table #xt/table foo} [a]]]]]

@@ -1,3 +1,5 @@
 [:project
  [{bar (- foo.1/a 4)}]
- [:group-by [foo.1/a] [:rename foo.1 [:scan {:table public/foo} [a]]]]]
+ [:group-by
+  [foo.1/a]
+  [:rename foo.1 [:scan {:table #xt/table foo} [a]]]]]

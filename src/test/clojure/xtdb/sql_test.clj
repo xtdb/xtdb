@@ -51,82 +51,82 @@
   (t/is (=plan-file
          "basic-query-1"
          (sql/plan "SELECT si.movie_title FROM stars_in AS si, movie_star AS ms WHERE si.star_name = ms.name AND ms.birthdate = 1960"
-                   {:table-info {"public/stars_in" #{"movie_title" "star_name" "year"}
-                                 "public/movie_star" #{"name" "birthdate"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title" "star_name" "year"}
+                                 #xt/table movie_star #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
          "basic-query-1"
          (sql/plan "FROM stars_in AS si, movie_star AS ms WHERE si.star_name = ms.name AND ms.birthdate = 1960 SELECT si.movie_title"
-                   {:table-info {"public/stars_in" #{"movie_title" "star_name" "year"}
-                                 "public/movie_star" #{"name" "birthdate"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title" "star_name" "year"}
+                                 #xt/table movie_star #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
          "basic-query-2"
          (sql/plan "FROM stars_in AS si, movie_star AS ms WHERE si.star_name = ms.name AND ms.birthdate < 1960 AND ms.birthdate > 1950 SELECT si.movie_title"
-                   {:table-info {"public/stars_in" #{"movie_title" "star_name" "year"}
-                                 "public/movie_star" #{"name" "birthdate"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title" "star_name" "year"}
+                                 #xt/table movie_star #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
          "basic-query-3"
          (sql/plan "SELECT si.movie_title FROM stars_in AS si, movie_star AS ms WHERE si.star_name = ms.name AND ms.birthdate < 1960 AND ms.name = 'Foo'"
-                   {:table-info {"public/stars_in" #{"movie_title" "star_name" "year"}
-                                 "public/movie_star" #{"name" "birthdate"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title" "star_name" "year"}
+                                 #xt/table movie_star #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
          "basic-query-4"
          (sql/plan "SELECT si.movie_title FROM stars_in AS si, (SELECT ms.name FROM movie_star AS ms WHERE ms.birthdate = 1960) AS m WHERE si.star_name = m.name"
-                   {:table-info {"public/stars_in" #{"movie_title" "star_name" "year"}
-                                 "public/movie_star" #{"name" "birthdate"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title" "star_name" "year"}
+                                 #xt/table movie_star #{"name" "birthdate"}}})))
 
   (t/is (=plan-file
          "basic-query-5"
          (sql/plan "SELECT si.movie_title FROM movie AS m JOIN stars_in AS si ON m.title = si.movie_title AND si.`year` = m.movie_year"
-                   {:table-info {"public/movie" #{"title" "movie_year"}
-                                 "public/stars_in" #{"movie_title" "year"}}})))
+                   {:table-info {#xt/table movie #{"title" "movie_year"}
+                                 #xt/table stars_in #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
          "basic-query-6"
          (sql/plan "SELECT si.movie_title FROM movie AS m LEFT JOIN stars_in AS si ON m.title = si.movie_title AND si.`year` = m.movie_year"
-                   {:table-info {"public/movie" #{"title" "movie_year"}
-                                 "public/stars_in" #{"movie_title" "year"}}})))
+                   {:table-info {#xt/table movie #{"title" "movie_year"}
+                                 #xt/table stars_in #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
          "basic-query-9"
          (sql/plan "SELECT me.name, SUM(m.`length`) FROM movie_exec AS me, movie AS m WHERE me.cert = m.producer GROUP BY me.name HAVING MIN(m.`year`) < 1930"
-                   {:table-info {"public/movie_exec" #{"name" "cert"}
-                                 "public/movie" #{"producer" "year" "length"}}})))
+                   {:table-info {#xt/table movie_exec #{"name" "cert"}
+                                 #xt/table movie #{"producer" "year" "length"}}})))
 
   (t/is (=plan-file
          "basic-query-10"
          (sql/plan "SELECT SUM(m.`length`) FROM movie AS m"
-                   {:table-info {"public/movie" #{"length"}}})))
+                   {:table-info {#xt/table movie #{"length"}}})))
 
   (t/is (=plan-file
          "basic-query-11"
          (sql/plan "SELECT * FROM stars_in AS si(name)"
-                   {:table-info {"public/stars_in" #{"name" "title"}}})))
+                   {:table-info {#xt/table stars_in #{"name" "title"}}})))
 
   (t/is (=plan-file
          "basic-query-11"
          (sql/plan "FROM stars_in AS si(name)"
-                   {:table-info {"public/stars_in" #{"name" "title"}}}))
+                   {:table-info {#xt/table stars_in #{"name" "title"}}}))
         "implicit SELECT *")
 
   (t/is (=plan-file
          "basic-query-12"
          (sql/plan "SELECT * FROM (SELECT si.name FROM stars_in AS si) AS foo(bar)"
-                   {:table-info {"public/stars_in" #{"name"}}})))
+                   {:table-info {#xt/table stars_in #{"name"}}})))
 
   (t/is (=plan-file
          "basic-query-12"
          (sql/plan "FROM (SELECT si.name FROM stars_in AS si) AS foo(bar)"
-                   {:table-info {"public/stars_in" #{"name"}}}))
+                   {:table-info {#xt/table stars_in #{"name"}}}))
         "implicit SELECT *")
 
   (t/is (=plan-file
          "basic-query-13"
          (sql/plan "SELECT si.* FROM stars_in AS si WHERE si.name = si.lastname"
-                   {:table-info {"public/stars_in" #{"name" "lastname"}}}))))
+                   {:table-info {#xt/table stars_in #{"name" "lastname"}}}))))
 
 (t/deftest test-values
   (t/is (=plan-file
@@ -141,23 +141,23 @@
   (t/is (=plan-file
          "basic-query-35"
          (sql/plan "SELECT * FROM t1 AS t1(a) WHERE t1.a IS NULL"
-                   {:table-info {"public/t1" #{"a"}}})))
+                   {:table-info {#xt/table t1 #{"a"}}})))
 
   (t/is (=plan-file
          "basic-query-35"
          (sql/plan "FROM t1 AS t1(a) WHERE t1.a IS NULL"
-                   {:table-info {"public/t1" #{"a"}}}))
+                   {:table-info {#xt/table t1 #{"a"}}}))
         "implicit SELECT *")
 
   (t/is (=plan-file
          "basic-query-36"
          (sql/plan "SELECT * FROM t1 WHERE a IS NOT NULL"
-                   {:table-info {"public/t1" #{"a"}}})))
+                   {:table-info {#xt/table t1 #{"a"}}})))
 
   (t/is (=plan-file
          "basic-query-36"
          (sql/plan "FROM t1 WHERE a IS NOT NULL"
-                   {:table-info {"public/t1" #{"a"}}}))
+                   {:table-info {#xt/table t1 #{"a"}}}))
         "implicit SELECT *"))
 
 (t/deftest test-case
@@ -166,122 +166,122 @@
          (sql/plan "SELECT CASE t1.a + 1 WHEN t1.b THEN 111 WHEN t1.c THEN 222 WHEN t1.d THEN 333 WHEN t1.e THEN 444 ELSE 555 END,
                     CASE WHEN t1.a < t1.b - 3 THEN 111 WHEN t1.a <= t1.b THEN 222 WHEN t1.a < t1.b+3 THEN 333 ELSE 444 END,
                     CASE t1.a + 1 WHEN t1.b, t1.c THEN 222 WHEN t1.d, t1.e + 1 THEN 444 ELSE 555 END FROM t1"
-                   {:table-info {"public/t1" #{"a" "b" "c" "d" "e"}}})))
+                   {:table-info {#xt/table t1 #{"a" "b" "c" "d" "e"}}})))
 
   (t/is (=plan-file
          "basic-query-37"
          (sql/plan "SELECT NULLIF(t1.a, t1.b) FROM t1"
-                   {:table-info {"public/t1" #{"a" "b"}}}))))
+                   {:table-info {#xt/table t1 #{"a" "b"}}}))))
 
 (t/deftest test-basic-set-operators
   (t/is (=plan-file
          "basic-query-14"
          (sql/plan "SELECT DISTINCT si.movie_title FROM stars_in AS si"
-                   {:table-info {"public/stars_in" #{"movie_title"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title"}}})))
 
   (t/is (=plan-file
          "basic-query-15"
          (sql/plan "SELECT si.name FROM stars_in AS si EXCEPT SELECT si.name FROM stars_in AS si"
-                   {:table-info {"public/stars_in" #{"name"}}})))
+                   {:table-info {#xt/table stars_in #{"name"}}})))
 
   (t/is (=plan-file
          "basic-query-16"
          (sql/plan "SELECT si.name FROM stars_in AS si UNION ALL SELECT si.name FROM stars_in AS si"
-                   {:table-info {"public/stars_in" #{"name"}}})))
+                   {:table-info {#xt/table stars_in #{"name"}}})))
 
   (t/is (=plan-file
          "basic-query-17"
          (sql/plan "SELECT si.name FROM stars_in AS si INTERSECT SELECT si.name FROM stars_in AS si"
-                   {:table-info {"public/stars_in" #{"name"}}})))
+                   {:table-info {#xt/table stars_in #{"name"}}})))
 
   #_ ; TODO should rename the RHS col
   (t/is (=plan-file
          "basic-query-18"
          (sql/plan "SELECT si.movie_title FROM stars_in AS si UNION SELECT si.name FROM stars_in AS si"
-                   {:table-info {"public/stars_in" #{"movie_title" "name"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title" "name"}}})))
 
   #_ ; TODO order-by over union shouldn't create eobrs
   (t/is (=plan-file
          "basic-query-19"
          (sql/plan "SELECT si.name FROM stars_in AS si UNION SELECT si.name FROM stars_in AS si ORDER BY name"
-                   {:table-info {"public/stars_in" #{"name"}}}))))
+                   {:table-info {#xt/table stars_in #{"name"}}}))))
 
 (t/deftest test-order-by-limit-offset
   (t/is (=plan-file
          "basic-query-20"
          (sql/plan "SELECT si.movie_title FROM stars_in AS si FETCH FIRST 10 ROWS ONLY"
-                   {:table-info {"public/stars_in" #{"movie_title"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title"}}})))
 
   (t/is (=plan-file
          "basic-query-20"
          (sql/plan "FROM stars_in AS si SELECT si.movie_title FETCH FIRST 10 ROWS ONLY"
-                   {:table-info {"public/stars_in" #{"movie_title"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title"}}})))
 
   (t/is (=plan-file
          "basic-query-21"
          (sql/plan "SELECT si.movie_title FROM stars_in AS si OFFSET 5 ROWS"
-                   {:table-info {"public/stars_in" #{"movie_title"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title"}}})))
 
   (t/is (=plan-file
          "basic-query-21"
          (sql/plan "FROM stars_in AS si SELECT si.movie_title OFFSET 5 ROWS"
-                   {:table-info {"public/stars_in" #{"movie_title"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title"}}})))
 
   (t/is (=plan-file
          "basic-query-22"
          (sql/plan "SELECT si.movie_title FROM stars_in AS si OFFSET 5 LIMIT 10"
-                   {:table-info {"public/stars_in" #{"movie_title"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title"}}})))
 
   (t/is (=plan-file
          "basic-query-22"
          (sql/plan "SELECT si.movie_title FROM stars_in AS si LIMIT 10 OFFSET 5"
-                   {:table-info {"public/stars_in" #{"movie_title"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title"}}})))
 
   (t/is (=plan-file
          "basic-query-22"
          (sql/plan "FROM stars_in AS si SELECT si.movie_title OFFSET 5 LIMIT 10"
-                   {:table-info {"public/stars_in" #{"movie_title"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title"}}})))
 
   (t/is (=plan-file
          "basic-query-22"
          (sql/plan "FROM stars_in AS si SELECT si.movie_title LIMIT 10 OFFSET 5"
-                   {:table-info {"public/stars_in" #{"movie_title"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title"}}})))
 
   (t/is (=plan-file
          "basic-query-23"
          (sql/plan "SELECT si.movie_title FROM stars_in AS si ORDER BY si.movie_title"
-                   {:table-info {"public/stars_in" #{"movie_title"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title"}}})))
 
   (t/is (=plan-file
          "basic-query-24"
          (sql/plan "SELECT si.movie_title FROM stars_in AS si ORDER BY si.movie_title OFFSET 100 ROWS"
-                   {:table-info {"public/stars_in" #{"movie_title"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title"}}})))
 
   (t/is (=plan-file
          "basic-query-25"
          (sql/plan "SELECT si.movie_title FROM stars_in AS si ORDER BY movie_title DESC"
-                   {:table-info {"public/stars_in" #{"movie_title"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title"}}})))
 
   #_ ; TODO this is an error
   (t/is (=plan-file
          "basic-query-26"
          (sql/plan "SELECT si.movie_title FROM stars_in AS si ORDER BY si.\"year\" = 'foo' DESC, movie_title"
-                   {:table-info {"public/stars_in" #{"movie_title" "year"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
          "basic-query-27"
          (sql/plan "SELECT si.movie_title FROM stars_in AS si ORDER BY si.`year`"
-                   {:table-info {"public/stars_in" #{"movie_title" "year"}}})))
+                   {:table-info {#xt/table stars_in #{"movie_title" "year"}}})))
 
   (t/is (=plan-file
          "basic-query-28"
          (sql/plan "SELECT si.`year` = 'foo' FROM stars_in AS si ORDER BY si.`year` = 'foo'"
-                   {:table-info {"public/stars_in" #{"year"}}}))))
+                   {:table-info {#xt/table stars_in #{"year"}}}))))
 
 (t/deftest test-limit-offset-params-3699
   (t/is (=plan-file "test-limit-offset-params-3699"
                     (sql/plan "SELECT * FROM foo OFFSET ? LIMIT ?"
-                              {:table-info {"public/foo" #{"a"}}})))
+                              {:table-info {#xt/table foo #{"a"}}})))
 
   (xt/submit-tx tu/*node* ["INSERT INTO foo SELECT _id FROM generate_series(1, 100) ids (_id)"])
 
@@ -296,35 +296,35 @@
   (t/is (=plan-file
          "basic-query-29"
          (sql/plan "SELECT film FROM stars_in AS si, UNNEST(si.films) AS film(film)"
-                   {:table-info {"public/stars_in" #{"films"}}})))
+                   {:table-info {#xt/table stars_in #{"films"}}})))
 
   (t/is (=plan-file
          "basic-query-30"
          (sql/plan "SELECT * FROM stars_in AS si, UNNEST(si.films) AS film"
-                   {:table-info {"public/stars_in" #{"films"}}})))
+                   {:table-info {#xt/table stars_in #{"films"}}})))
 
   (t/is (=plan-file
          "basic-query-30"
          (sql/plan "FROM stars_in si, UNNEST(films) AS film"
-                   {:table-info {"public/stars_in" #{"films"}}}))
+                   {:table-info {#xt/table stars_in #{"films"}}}))
 
         "implicit SELECT *")
 
   (t/is (=plan-file
          "basic-query-31"
          (sql/plan "SELECT * FROM stars_in AS si, UNNEST(si.films) WITH ORDINALITY AS film"
-                   {:table-info {"public/stars_in" #{"films"}}})))
+                   {:table-info {#xt/table stars_in #{"films"}}})))
 
   (t/is (=plan-file
          "basic-query-31"
          (sql/plan "FROM stars_in AS si, UNNEST(si.films) WITH ORDINALITY AS film"
-                   {:table-info {"public/stars_in" #{"films"}}}))
+                   {:table-info {#xt/table stars_in #{"films"}}}))
         "implicit SELECT *")
 
   (t/is (=plan-file
          "unnest-query-1"
          (sql/plan "SELECT * FROM stars_in AS si, UNNEST(si.films) WITH ORDINALITY AS film(film, film_ord)"
-                   {:table-info {"public/stars_in" #{"films"}}})))
+                   {:table-info {#xt/table stars_in #{"films"}}})))
 
   (xt/submit-tx tu/*node* [[:put-docs :actors
                             {:xt/id "bob", :name "Bob", :films ["The Great Escape", "Bob the Builder", "Bob the Builder Electric Boogaloo"]}
@@ -352,40 +352,40 @@
   (t/is (=plan-file
          "cross-join-1"
          (sql/plan "SELECT * FROM a CROSS JOIN b"
-                   {:table-info {"public/a" #{"a1" "a2"}
-                                 "public/b" #{"b1"}}})))
+                   {:table-info {#xt/table a #{"a1" "a2"}
+                                 #xt/table b #{"b1"}}})))
   (t/is (=plan-file
          "cross-join-2"
          (sql/plan "SELECT c1 FROM a, b CROSS JOIN c"
-                   {:table-info {"public/a" #{"a1" "a2"}
-                                 "public/b" #{"b1"}
-                                 "public/c" #{"c1"}}}))))
+                   {:table-info {#xt/table a #{"a1" "a2"}
+                                 #xt/table b #{"b1"}
+                                 #xt/table c #{"c1"}}}))))
 
 (t/deftest test-named-columns-join
   (t/is (=plan-file
          "basic-query-7"
          (sql/plan "SELECT si.title FROM movie AS m JOIN stars_in AS si USING (title)"
-                   {:table-info {"public/movie" #{"title"}
-                                 "public/stars_in" #{"title"}}})))
+                   {:table-info {#xt/table movie #{"title"}
+                                 #xt/table stars_in #{"title"}}})))
 
   (t/is (=plan-file
          "basic-query-8"
          (sql/plan "SELECT si.title FROM movie AS m LEFT OUTER JOIN stars_in AS si USING (title)"
-                   {:table-info {"public/movie" #{"title"}
-                                 "public/stars_in" #{"title"}}}))))
+                   {:table-info {#xt/table movie #{"title"}
+                                 #xt/table stars_in #{"title"}}}))))
 
 (t/deftest test-natural-join
   (t/is (=plan-file
          "natural-join-1"
          (sql/plan "SELECT si.title, m.`length`, si.films FROM movie AS m NATURAL JOIN stars_in AS si"
-                   {:table-info {"public/movie" #{"title" "length"}
-                                 "public/stars_in" #{"title" "films"}}})))
+                   {:table-info {#xt/table movie #{"title" "length"}
+                                 #xt/table stars_in #{"title" "films"}}})))
 
   (t/is (=plan-file
          "natural-join-2"
          (sql/plan "SELECT si.title, m.`length`, si.films FROM movie AS m NATURAL RIGHT OUTER JOIN stars_in AS si"
-                   {:table-info {"public/movie" #{"title" "length"}
-                                 "public/stars_in" #{"title" "films"}}}))))
+                   {:table-info {#xt/table movie #{"title" "length"}
+                                 #xt/table stars_in #{"title" "films"}}}))))
 
 
 ;; TODO: sanity check semantic analysis for correlation both inside
@@ -397,89 +397,89 @@
     (t/is (=plan-file
            "scalar-subquery-in-select-1"
            (sql/plan "SELECT (1 = (SELECT bar FROM foo)) AS some_column FROM x WHERE y = 1"
-                     {:table-info {"public/x" #{"y"}
-                                   "public/foo" #{"bar"}}})))
+                     {:table-info {#xt/table x #{"y"}
+                                   #xt/table foo #{"bar"}}})))
 
     (t/is (=plan-file
            "scalar-subquery-in-select-2"
            (sql/plan "SELECT (1 = (SELECT MAX(foo.bar) FROM foo)) AS some_column FROM x WHERE x.y = 1"
-                     {:table-info {"public/x" #{"y"}
-                                   "public/foo" #{"bar"}}}))))
+                     {:table-info {#xt/table x #{"y"}
+                                   #xt/table foo #{"bar"}}}))))
 
   (t/testing "Scalar subquery in WHERE"
     (t/is (=plan-file
            "scalar-subquery-in-where"
            (sql/plan "SELECT x.y AS some_column FROM x WHERE x.y = (SELECT MAX(foo.bar) FROM foo)"
-                     {:table-info {"public/x" #{"y"}
-                                   "public/foo" #{"bar"}}}))))
+                     {:table-info {#xt/table x #{"y"}
+                                   #xt/table foo #{"bar"}}}))))
 
   (t/testing "Correlated scalar subquery in SELECT"
     (t/is (=plan-file
            "correlated-scalar-subquery-in-select"
            (sql/plan "SELECT (1 = (SELECT bar = z FROM foo)) AS some_column FROM x WHERE y = 1"
-                     {:table-info {"public/x" #{"y" "z"}
-                                   "public/foo" #{"bar"}}}))))
+                     {:table-info {#xt/table x #{"y" "z"}
+                                   #xt/table foo #{"bar"}}}))))
 
   (t/testing "EXISTS in WHERE"
     (t/is (=plan-file
            "exists-in-where"
            (sql/plan "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10.0"
-                     {:table-info {"public/x" #{"y" "z"}
-                                   "public/y" #{"z"}}}))))
+                     {:table-info {#xt/table x #{"y" "z"}
+                                   #xt/table y #{"z"}}}))))
 
   (t/testing "EXISTS as expression in SELECT"
     (t/is (=plan-file
            "exists-as-expression-in-select"
            (sql/plan "SELECT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) FROM x WHERE x.z = 10"
-                     {:table-info {"public/x" #{"y" "z"}
-                                   "public/y" #{"z"}}}))))
+                     {:table-info {#xt/table x #{"y" "z"}
+                                   #xt/table y #{"z"}}}))))
 
   (t/testing "NOT EXISTS in WHERE"
     (t/is (=plan-file
            "not-exists-in-where"
            (sql/plan "SELECT x.y FROM x WHERE NOT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
-                     {:table-info {"public/x" #{"y" "z"}
-                                   "public/y" #{"z"}}}))))
+                     {:table-info {#xt/table x #{"y" "z"}
+                                   #xt/table y #{"z"}}}))))
 
   (t/testing "IN in WHERE"
     (t/is (=plan-file
            "in-in-where-select"
            (sql/plan "SELECT x.y FROM x WHERE x.z IN (SELECT y.z FROM y)"
-                     {:table-info {"public/x" #{"y" "z"}
-                                   "public/y" #{"z"}}})))
+                     {:table-info {#xt/table x #{"y" "z"}
+                                   #xt/table y #{"z"}}})))
 
     (t/is (=plan-file
            "in-in-where-set"
            (sql/plan "SELECT x.y FROM x WHERE x.z IN (1, 2)"
-                     {:table-info {"public/x" #{"y" "z"}}}))))
+                     {:table-info {#xt/table x #{"y" "z"}}}))))
 
   (t/testing "NOT IN in WHERE"
     (t/is (=plan-file
            "not-in-in-where"
            (sql/plan "SELECT x.y FROM x WHERE x.z NOT IN (SELECT y.z FROM y)"
-                     {:table-info {"public/x" #{"y" "z"}
-                                   "public/y" #{"z"}}}))))
+                     {:table-info {#xt/table x #{"y" "z"}
+                                   #xt/table y #{"z"}}}))))
 
   (t/testing "ALL in WHERE"
     (t/is (=plan-file
            "all-in-where"
            (sql/plan "SELECT x.y FROM x WHERE x.z > ALL (SELECT y.z FROM y)"
-                     {:table-info {"public/x" #{"y" "z"}
-                                   "public/y" #{"z"}}}))))
+                     {:table-info {#xt/table x #{"y" "z"}
+                                   #xt/table y #{"z"}}}))))
 
   (t/testing "ANY in WHERE"
     (t/is (=plan-file
            "any-in-where"
            (sql/plan "SELECT x.y FROM x WHERE (x.z = 1) > ANY (SELECT y.z FROM y)"
-                     {:table-info {"public/x" #{"y" "z"}
-                                   "public/y" #{"z"}}}))))
+                     {:table-info {#xt/table x #{"y" "z"}
+                                   #xt/table y #{"z"}}}))))
 
   (t/testing "ALL as expression in SELECT"
     (t/is (=plan-file
            "all-as-expression-in-select"
            (sql/plan "SELECT x.z <= ALL (SELECT y.z FROM y) FROM x"
-                     {:table-info {"public/x" #{"y" "z"}
-                                   "public/y" #{"z"}}}))))
+                     {:table-info {#xt/table x #{"y" "z"}
+                                   #xt/table y #{"z"}}}))))
 
   (t/testing "decorrelation"
     ;; http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.563.8492&rep=rep1&type=pdf "Orthogonal Optimization of Subqueries and Aggregation"
@@ -487,8 +487,8 @@
            "decorrelation-1"
            (sql/plan "SELECT c.custkey FROM customer c
                       WHERE 1000000 < (SELECT SUM(o.totalprice) FROM orders o WHERE o.custkey = c.custkey)"
-                     {:table-info {"public/customer" #{"custkey"}
-                                   "public/orders" #{"custkey" "totalprice"}}})))
+                     {:table-info {#xt/table customer #{"custkey"}
+                                   #xt/table orders #{"custkey" "totalprice"}}})))
 
     ;; https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2000-31.pdf "Parameterized Queries and Nesting Equivalences"
     (t/is (=plan-file
@@ -496,8 +496,8 @@
            (sql/plan "SELECT * FROM customers AS customers(country, custno)
                       WHERE customers.country = 'Mexico' AND
                       EXISTS (SELECT * FROM orders AS orders(custno) WHERE customers.custno = orders.custno)"
-                     {:table-info {"public/customers" #{"country" "custno"}
-                                   "public/orders" #{"custno"}}})))
+                     {:table-info {#xt/table customers #{"country" "custno"}
+                                   #xt/table orders #{"custno"}}})))
 
     ;; NOTE: these below simply check what's currently being produced,
     ;; not necessarily what should be produced.
@@ -505,9 +505,9 @@
            "decorrelation-3"
            (sql/plan "SELECT customers.name, (SELECT COUNT(*) FROM orders WHERE customers.custno = orders.custno)
                       FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp)"
-                     {:table-info {"public/customers" #{"name" "custno" "country"}
-                                   "public/orders" #{"custno"}
-                                   "public/salesp" #{"country"}}})))
+                     {:table-info {#xt/table customers #{"name" "custno" "country"}
+                                   #xt/table orders #{"custno"}
+                                   #xt/table salesp #{"country"}}})))
 
     ;; https://subs.emis.de/LNI/Proceedings/Proceedings241/383.pdf "Unnesting Arbitrary Queries"
     (t/is (=plan-file
@@ -518,8 +518,8 @@
                       e.grade = (SELECT MIN(e2.grade)
                       FROM exams e2
                       WHERE s.id = e2.sid)"
-                     {:table-info {"public/students" #{"id" "name"}
-                                   "public/exams" #{"sid" "grade" "course"}}})))
+                     {:table-info {#xt/table students #{"id" "name"}
+                                   #xt/table exams #{"sid" "grade" "course"}}})))
 
     (t/is (=plan-file
            "decorrelation-5"
@@ -533,8 +533,8 @@
               WHERE s.id = e2.sid OR
               (e2.curriculum = s.major AND
               s.\"year\" > e2.\"date\"))"
-            {:table-info {"public/students" #{"id" "major" "name" "year"}
-                          "public/exams" #{"sid" "grade" "course" "curriculum" "date"}}})))
+            {:table-info {#xt/table students #{"id" "major" "name" "year"}
+                          #xt/table exams #{"sid" "grade" "course" "curriculum" "date"}}})))
 
 
     (t/testing "Subqueries in join conditions"
@@ -543,15 +543,15 @@
            (t/is (=plan-file
                   "subquery-in-join-uncorrelated-subquery"
                   (sql/plan "select foo.a from foo join bar on bar.c = (select foo.b from foo)"
-                            {:table-info {"public/foo" #{"a" "b"}
-                                          "public/bar" #{"c"}}}))))
+                            {:table-info {#xt/table foo #{"a" "b"}
+                                          #xt/table bar #{"c"}}}))))
 
       (->> "correlated subquery"
            (t/is (=plan-file
                   "subquery-in-join-correlated-subquery"
                   (sql/plan "select foo.a from foo join bar on bar.c in (select foo.b from foo where foo.a = bar.b)"
-                            {:table-info {"public/foo" #{"a" "b"}
-                                          "public/bar" #{"b" "c"}}}))))
+                            {:table-info {#xt/table foo #{"a" "b"}
+                                          #xt/table bar #{"b" "c"}}}))))
 
       ;; TODO unable to decorr, need to be able to pull the select over the max-1-row
       ;; although should be able to do this now, no such thing as max-1-row any more
@@ -559,39 +559,39 @@
            (t/is (=plan-file
                   "subquery-in-join-correlated-equality-subquery"
                   (sql/plan "select foo.a from foo join bar on bar.c = (select foo.b from foo where foo.a = bar.b)"
-                            {:table-info {"public/foo" #{"a" "b"}
-                                          "public/bar" #{"b" "c"}}})))))))
+                            {:table-info {#xt/table foo #{"a" "b"}
+                                          #xt/table bar #{"b" "c"}}})))))))
 
 (t/deftest lateral-derived-table
   (t/is (=plan-file
          "lateral-derived-table-1"
          (sql/plan "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
-                   {:table-info {"public/x" #{"y"}
-                                 "public/z" #{"z"}}})))
+                   {:table-info {#xt/table x #{"y"}
+                                 #xt/table z #{"z"}}})))
 
   (t/is (=plan-file
          "lateral-derived-table-2"
          (sql/plan "SELECT y.z FROM LATERAL (SELECT z.z FROM z WHERE z.z = 1) AS y"
-                   {:table-info {"public/z" #{"z"}}}))))
+                   {:table-info {#xt/table z #{"z"}}}))))
 
 (t/deftest join-lateral
   (t/is (=plan-file
          "join-lateral-1"
          (sql/plan "SELECT x.y, y.z FROM x CROSS JOIN LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
-                   {:table-info {"public/x" #{"y"}
-                                 "public/z" #{"z"}}})))
+                   {:table-info {#xt/table x #{"y"}
+                                 #xt/table z #{"z"}}})))
 
   (t/is (=plan-file
          "join-lateral-2"
          (sql/plan "SELECT x.y, y.z FROM x LEFT JOIN LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y ON TRUE"
-                   {:table-info {"public/x" #{"y"}
-                                 "public/z" #{"z"}}})))
+                   {:table-info {#xt/table x #{"y"}
+                                 #xt/table z #{"z"}}})))
 
   (t/is (=plan-file
          "join-lateral-3"
          (sql/plan "SELECT x, x.y, y.z FROM x NATURAL JOIN LATERAL (SELECT x, z.z FROM z WHERE z.z = x.y) AS y"
-                   {:table-info {"public/x" #{"x" "y"}
-                                 "public/z" #{"x" "z"}}})))
+                   {:table-info {#xt/table x #{"x" "y"}
+                                 #xt/table z #{"x" "z"}}})))
 
   (xt/submit-tx tu/*node* [[:put-docs :nested-table {:xt/id 1}]])
   (xt/submit-tx tu/*node* [[:put-docs :other-table {:xt/id 1} {:xt/id 2} {:xt/id 3}]])
@@ -604,7 +604,7 @@
 (t/deftest test-qc-array-expr-3539
   (t/is (=plan-file "test-qc-array-expr"
                     (sql/plan "SELECT * FROM foo WHERE foo.a = ANY(CURRENT_SCHEMAS(true))"
-                              {:table-info {"public/foo" #{"a"}}})))
+                              {:table-info {#xt/table foo #{"a"}}})))
 
   (xt/submit-tx tu/*node* [[:put-docs :foo
                             {:xt/id 1, :a "pg_catalog"}
@@ -634,19 +634,19 @@
   (t/is (=plan-file
          "non-semi-join-subquery-optimizations-test-1"
          (sql/plan "select f.a from foo f where f.a in (1,2) or f.b = 42"
-                   {:table-info {"public/foo" #{"a" "b"}}}))
+                   {:table-info {#xt/table foo #{"a" "b"}}}))
         "should not be decorrelated")
   (t/is (=plan-file
          "non-semi-join-subquery-optimizations-test-2"
          (sql/plan "select f.a from foo f where true = (EXISTS (SELECT foo.c from foo))"
-                   {:table-info {"public/foo" #{"a" "c"}}}))
+                   {:table-info {#xt/table foo #{"a" "c"}}}))
         "should be decorrelated as a cross join, not a semi/anti join"))
 
 (t/deftest multiple-ins-in-where-clause
   (t/is (=plan-file
          "multiple-ins-in-where-clause"
          (sql/plan "select f.a from foo f where f.a in (1,2) AND f.a = 42 AND f.b in (3,4)"
-                   {:table-info {"public/foo" #{"a" "b"}}}))))
+                   {:table-info {#xt/table foo #{"a" "b"}}}))))
 
 #_ ; FIXME broken
 (t/deftest deeply-nested-correlated-query
@@ -661,18 +661,18 @@
                     (SELECT R3.A, R3.B
                     FROM R R3
                     WHERE R3.A = R2.B AND R3.B = S.C))"
-                   {:table-info {"public/r" #{"a" "b"}, "public/s" #{"c"}}}))))
+                   {:table-info {#xt/table r #{"a" "b"}, #xt/table s #{"c"}}}))))
 
 (t/deftest test-array-element-reference-107
   (t/is (=plan-file
          "test-array-element-reference-107-1"
          (sql/plan "SELECT u.a[1] AS first_el FROM u"
-                   {:table-info {"public/u" #{"a"}}})))
+                   {:table-info {#xt/table u #{"a"}}})))
 
   (t/is (=plan-file
          "test-array-element-reference-107-2"
          (sql/plan "SELECT u.b[u.a[1]] AS dyn_idx FROM u"
-                   {:table-info {"public/u" #{"a" "b"}}}))))
+                   {:table-info {#xt/table u #{"a" "b"}}}))))
 
 (t/deftest test-current-time-111
   (t/is (=plan-file
@@ -685,58 +685,58 @@
                     LOCALTIME, LOCALTIME(6),
                     LOCALTIMESTAMP, LOCALTIMESTAMP(9)
                     FROM u"
-                   {:table-info {"public/u" #{"a"}}}))))
+                   {:table-info {#xt/table u #{"a"}}}))))
 
 (t/deftest test-dynamic-parameters-103
   (t/is (=plan-file
          "test-dynamic-parameters-103-1"
          (sql/plan "SELECT foo.a FROM foo WHERE foo.b = ? AND foo.c = ?"
-                   {:table-info {"public/foo" #{"a" "b" "c"}}})))
+                   {:table-info {#xt/table foo #{"a" "b" "c"}}})))
 
   (t/is (=plan-file
          "test-dynamic-parameters-103-2"
          (sql/plan "SELECT foo.a
                     FROM foo, (SELECT bar.b FROM bar WHERE bar.c = ?) bar (b)
                     WHERE foo.b = ? AND foo.c = ?"
-                   {:table-info {"public/foo" #{"a" "b" "c"}
-                                 "public/bar" #{"b" "c"}}})))
+                   {:table-info {#xt/table foo #{"a" "b" "c"}
+                                 #xt/table bar #{"b" "c"}}})))
 
   (t/is (=plan-file
          "test-dynamic-parameters-103-subquery-project"
          (sql/plan "SELECT t1.col1, (SELECT ? FROM bar WHERE bar.col1 = 4) FROM t1"
-                   {:table-info {"public/t1" #{"col1"}
-                                 "public/bar" #{"col1"}}})))
+                   {:table-info {#xt/table t1 #{"col1"}
+                                 #xt/table bar #{"col1"}}})))
 
   (t/is (=plan-file
          "test-dynamic-parameters-103-top-level-project"
          (sql/plan "SELECT t1.col1, ? FROM t1"
-                   {:table-info {"public/t1" #{"col1"}}})))
+                   {:table-info {#xt/table t1 #{"col1"}}})))
 
   (t/is (=plan-file
          "test-dynamic-parameters-103-update-set-value"
          (sql/plan "UPDATE t1 SET col1 = ?"
-                   {:table-info {"public/t1" #{"col1"}}})))
+                   {:table-info {#xt/table t1 #{"col1"}}})))
 
   (t/is (=plan-file
          "test-dynamic-parameters-103-table-values"
          (sql/plan "SELECT bar.foo FROM (VALUES (?)) AS bar(foo)"
-                   {:table-info {"public/bar" #{"foo"}}})))
+                   {:table-info {#xt/table bar #{"foo"}}})))
 
   (t/is (=plan-file
          "test-dynamic-parameters-103-update-app-time"
          (sql/plan "UPDATE users FOR PORTION OF VALID_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.id = ?"
-                   {:table-info {"public/users" #{"first_name" "id"}}})))
+                   {:table-info {#xt/table users #{"first_name" "id"}}})))
 
   (t/is (=plan-file
          "test-dynamic-parameters-103-update-app-time"
          (sql/plan "UPDATE users FOR VALID_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.id = ?"
-                   {:table-info {"public/users" #{"first_name" "id"}}}))))
+                   {:table-info {#xt/table users #{"first_name" "id"}}}))))
 
 (t/deftest from-where-param-order-bug-4305
   (t/is (=plan-file
          "from-where-param-order-bug-4305"
          (sql/plan "SELECT _id FROM foo FOR VALID_TIME AS OF ? WHERE _id = ?"
-                   {:table-info {"public/foo" #{"_id"}}}))))
+                   {:table-info {#xt/table foo #{"_id"}}}))))
 
 (t/deftest test-dynamic-temporal-filters-3068
   (t/testing "AS OF"
@@ -744,28 +744,28 @@
      (=plan-file
       "test-dynamic-parameters-temporal-filters-3068-as-of"
       (sql/plan "SELECT bar FROM foo FOR VALID_TIME AS OF ?"
-                {:table-info {"public/foo" #{"bar"}}}))))
+                {:table-info {#xt/table foo #{"bar"}}}))))
 
   (t/testing "FROM A to B"
     (t/is
      (=plan-file
       "test-dynamic-parameters-temporal-filters-3068-from-to"
       (sql/plan "SELECT bar FROM foo FOR VALID_TIME FROM ? TO ?"
-                {:table-info {"public/foo" #{"bar"}}}))))
+                {:table-info {#xt/table foo #{"bar"}}}))))
 
   (t/testing "BETWEEN A AND B"
     (t/is
      (=plan-file
       "test-dynamic-parameters-temporal-filters-3068-between"
       (sql/plan "SELECT bar FROM foo FOR VALID_TIME BETWEEN ? AND ?"
-                {:table-info {"public/foo" #{"bar"}}}))))
+                {:table-info {#xt/table foo #{"bar"}}}))))
 
   (t/testing "AS OF SYSTEM TIME"
     (t/is
      (=plan-file
       "test-dynamic-parameters-temporal-filters-3068-as-of-system-time"
       (sql/plan "SELECT bar FROM foo FOR SYSTEM_TIME AS OF ?"
-                {:table-info {"public/foo" #{"bar"}}}))))
+                {:table-info {#xt/table foo #{"bar"}}}))))
 
   (t/testing "using dynamic AS OF in a query"
     (xt/submit-tx tu/*node* [[:put-docs {:into :docs, :valid-from #inst "2015"}
@@ -783,12 +783,12 @@
   (t/is (=plan-file
          "test-order-by-null-handling-159-1"
          (sql/plan "SELECT a FROM foo ORDER BY a NULLS FIRST"
-                   {:table-info {"public/foo" #{"a"}}})))
+                   {:table-info {#xt/table foo #{"a"}}})))
 
   (t/is (=plan-file
          "test-order-by-null-handling-159-2"
          (sql/plan "SELECT a FROM foo ORDER BY a NULLS LAST"
-                   {:table-info {"public/foo" #{"a"}}}))))
+                   {:table-info {#xt/table foo #{"a"}}}))))
 
 (t/deftest test-arrow-table
   (t/is (=plan-file
@@ -810,8 +810,8 @@
             FROM
             (SELECT orders.id, orders.product
             FROM orders) AS o"
-          {:table-info {"public/customers" #{"id"}
-                        "public/orders" #{"id" "product"}}}))))
+          {:table-info {#xt/table customers #{"id"}
+                        #xt/table orders #{"id" "product"}}}))))
 
 (t/deftest test-semi-and-anti-joins-are-pushed-down
   (t/is (=plan-file
@@ -823,9 +823,9 @@
             AND t2.b1 in (808,662)
             AND t3.c1 in (792,14)
             AND t1.a1 = t2.a2"
-          {:table-info {"public/t1" #{"a1" "b1"}
-                        "public/t2" #{"b1" "a2"}
-                        "public/t3" #{"c1"}}}))))
+          {:table-info {#xt/table t1 #{"a1" "b1"}
+                        #xt/table t2 #{"b1" "a2"}
+                        #xt/table t3 #{"c1"}}}))))
 
 (t/deftest datascript-test-aggregates
   (let [_tx (xt/submit-tx tu/*node*
@@ -871,24 +871,24 @@
           "SELECT foo.a - 4 AS bar
             FROM foo
             GROUP BY foo.a"
-          {:table-info {"public/foo" #{"a"}}})))
+          {:table-info {#xt/table foo #{"a"}}})))
 
   (t/is (=plan-file
          "test-group-by-with-projected-column-in-expr-2"
          (sql/plan
           "SELECT SUM(foo.a - 4) AS bar
             FROM foo "
-          {:table-info {"public/foo" #{"a"}}}))))
+          {:table-info {#xt/table foo #{"a"}}}))))
 
 (t/deftest test-window-functions
   (t/is (=plan-file
          "test-window-with-partition-and-order-by"
          (sql/plan "SELECT y, ROW_NUMBER() OVER (PARTITION BY y ORDER BY z) FROM docs"
-                   {:table-info {"public/docs" #{"y" "z"}}})))
+                   {:table-info {#xt/table docs #{"y" "z"}}})))
 
   (t/is (thrown-with-msg? UnsupportedOperationException #"TODO"
                           (sql/plan "SELECT ROW_NUMBER() OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM docs"
-                                    {:table-info {"public/docs" #{"y" "z"}}}))
+                                    {:table-info {#xt/table docs #{"y" "z"}}}))
         "window frames not yet supported")
 
   (t/is (thrown-with-msg? UnsupportedOperationException #"TODO"
@@ -896,14 +896,14 @@
                                        ROW_NUMBER() OVER (PARTITION BY y) AS rn,
                                        ROW_NUMBER() OVER (PARTITION BY z) AS rn2
                                      FROM docs"
-                                    {:table-info {"public/docs" #{"y" "z"}}}))
+                                    {:table-info {#xt/table docs #{"y" "z"}}}))
         "multiple windows not supported")
 
   ;; TODO similar to #3640
   #_
   (t/is (= nil
            (sql/plan "SELECT ROW_NUMBER() OVER (PARTITION BY y ORDER BY z) FROM docs"
-                     {:table-info {"public/docs" #{"_id"}}})))
+                     {:table-info {#xt/table docs #{"_id"}}})))
 
   (let [docs [{:a 1 :b 20}
               {:a 1 :b 10}
@@ -985,7 +985,7 @@
   (t/is (=plan-file
          "test-group-by-with-unresolved-column-reference"
          (sql/plan "SELECT SUM(_id + 1) FROM docs GROUP BY x"
-                   {:table-info {"public/docs" #{"_id"}}})))
+                   {:table-info {#xt/table docs #{"_id"}}})))
 
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
 
@@ -995,7 +995,7 @@
   (t/is (=plan-file
          "test-having-with-unresolved-column-reference"
          (sql/plan "SELECT SUM(_id) AS s FROM docs HAVING SUM(x) > 1"
-                   {:table-info {"public/docs" #{"_id"}}})))
+                   {:table-info {#xt/table docs #{"_id"}}})))
 
   (t/is (= []
            (xt/q tu/*node* "SELECT SUM(_id) AS s FROM docs HAVING SUM(x) > 1")))
@@ -1003,14 +1003,14 @@
   (t/is (=plan-file
          "test-where-with-unresolved-column-reference"
          (sql/plan "SELECT _id AS s FROM docs WHERE x > 1"
-                   {:table-info {"public/docs" #{"_id"}}})))
+                   {:table-info {#xt/table docs #{"_id"}}})))
 
   (t/is (= []
            (xt/q tu/*node* "SELECT _id AS s FROM docs WHERE x > 1"))))
 
 (t/deftest test-array-subqueries
   (t/are [file q]
-      (=plan-file file (sql/plan q {:table-info {"public/a" #{"a" "b"}, "public/b" #{"b1" "b2"}}}))
+      (=plan-file file (sql/plan q {:table-info {#xt/table a #{"a" "b"}, #xt/table b #{"b1" "b2"}}}))
 
     "test-array-subquery1" "SELECT ARRAY(select b.b1 from b where b.b2 = 42) FROM a where a.a = 42"
     "test-array-subquery2" "SELECT ARRAY(select b.b1 from b where b.b2 = a.b) FROM a where a.a = 42")
@@ -1050,12 +1050,12 @@
    (=plan-file
     "test-expr-in-equi-join-1"
     (sql/plan "SELECT a FROM a JOIN bar b ON a+1 = b+1"
-              {:table-info {"public/a" #{"a"}, "public/bar" #{"b"}}})))
+              {:table-info {#xt/table a #{"a"}, #xt/table bar #{"b"}}})))
   (t/is
    (=plan-file
     "test-expr-in-equi-join-2"
     (sql/plan "SELECT a FROM a JOIN bar b ON a = b+1"
-              {:table-info {"public/a" #{"a"}, "bar" #{"b"}}}))))
+              {:table-info {#xt/table a #{"a"}, "bar" #{"b"}}}))))
 
 (t/deftest push-semi-and-anti-joins-down-test
   ;;semi-join was previously been pushed down below the cross join
@@ -1071,9 +1071,9 @@
                        FROM z
                        WHERE z.bar = x.foo AND z.baz = y.biz
                      )"
-              {:table-info {"public/x" #{"foo"}
-                            "public/y" #{"biz"}
-                            "public/z" #{"bar" "baz"}}}))))
+              {:table-info {#xt/table x #{"foo"}
+                            #xt/table y #{"biz"}
+                            #xt/table z #{"bar" "baz"}}}))))
 
 (t/deftest test-system-time-queries
   (t/testing "AS OF"
@@ -1081,34 +1081,34 @@
      (=plan-file
       "system-time-as-of"
       (sql/plan "SELECT foo.bar FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00'"
-                {:table-info {"public/foo" #{"bar"}}})))
+                {:table-info {#xt/table foo #{"bar"}}})))
 
     (t/is
      (=plan-file
       "system-time-as-of"
       (sql/plan "SELECT foo.bar FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00'"
-                {:table-info {"public/foo" #{"bar"}}}))))
+                {:table-info {#xt/table foo #{"bar"}}}))))
 
   (t/testing "FROM A to B"
     (t/is
      (=plan-file
       "system-time-from-a-to-b"
       (sql/plan "SELECT foo.bar FROM foo FOR SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3000-01-01 00:00:00+00:00'"
-                {:table-info {"public/foo" #{"bar"}}}))))
+                {:table-info {#xt/table foo #{"bar"}}}))))
 
   (t/testing "BETWEEN A AND B"
     (t/is
      (=plan-file
       "system-time-between-subquery"
       (sql/plan "SELECT (SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00') FROM t2"
-                {:table-info {"public/t1" #{}, "public/t2" #{}}}))))
+                {:table-info {#xt/table t1 #{}, #xt/table t2 #{}}}))))
 
   (t/is
    (=plan-file
     "system-time-between-lateraly-derived-table"
     (sql/plan "SELECT x.y, y.z FROM x FOR SYSTEM_TIME AS OF DATE '3001-01-01',
                   LATERAL (SELECT z.z FROM z FOR SYSTEM_TIME FROM DATE '3001-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00' WHERE z.z = x.y) AS y"
-              {:table-info {"public/z" #{"z"}, "public/x" #{"y"}}}))))
+              {:table-info {#xt/table z #{"z"}, #xt/table x #{"y"}}}))))
 
 (t/deftest setting-default-system-time
   (t/testing "AS OF"
@@ -1116,20 +1116,20 @@
      (=plan-file
       "system-time-as-of"
       (sql/plan "SETTING DEFAULT SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00' SELECT foo.bar FROM foo"
-                {:table-info {"public/foo" #{"bar"}}})))
+                {:table-info {#xt/table foo #{"bar"}}})))
 
     (t/is
      (=plan-file
       "system-time-as-of"
       (sql/plan "SETTING DEFAULT SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00' SELECT foo.bar FROM foo"
-                {:table-info {"public/foo" #{"bar"}}}))))
+                {:table-info {#xt/table foo #{"bar"}}}))))
 
   (t/testing "FROM A to B"
     (t/is
      (=plan-file
       "system-time-from-a-to-b"
       (sql/plan "SETTING DEFAULT SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3000-01-01 00:00:00+00:00' SELECT foo.bar FROM foo"
-                {:table-info {"public/foo" #{"bar"}}}))))
+                {:table-info {#xt/table foo #{"bar"}}}))))
 
   (t/is
    (=plan-file
@@ -1137,7 +1137,7 @@
     (sql/plan "SETTING DEFAULT SYSTEM_TIME AS OF DATE '3001-01-01'
                  SELECT x.y, y.z
                  FROM x, LATERAL (SELECT z.z FROM z FOR SYSTEM_TIME FROM DATE '3001-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00' WHERE z.z = x.y) AS y"
-              {:table-info {"public/z" #{"z"}, "public/x" #{"y"}}}))))
+              {:table-info {#xt/table z #{"z"}, #xt/table x #{"y"}}}))))
 
 (t/deftest test-valid-time-period-spec-queries
   (t/testing "AS OF"
@@ -1145,21 +1145,21 @@
      (=plan-file
       "valid-time-period-spec-as-of"
       (sql/plan "SELECT bar FROM foo FOR VALID_TIME AS OF TIMESTAMP '2999-01-01 00:00:00'"
-                {:table-info {"public/foo" #{"bar"}}}))))
+                {:table-info {#xt/table foo #{"bar"}}}))))
 
   (t/testing "FROM A to B"
     (t/is
      (=plan-file
       "valid-time-period-spec-from-to"
       (sql/plan "SELECT bar FROM foo FOR VALID_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3000-01-01 00:00:00+00:00'"
-                {:table-info {"public/foo" #{"bar"}}}))))
+                {:table-info {#xt/table foo #{"bar"}}}))))
 
   (t/testing "BETWEEN A AND B"
     (t/is
      (=plan-file
       "valid-time-period-spec-between"
       (sql/plan "SELECT 4 FROM t1 FOR VALID_TIME BETWEEN TIMESTAMP '3000-01-01 00:00:00+00:00' AND DATE '3001-01-01'"
-                {:table-info {"public/t1" #{}}})))))
+                {:table-info {#xt/table t1 #{}}})))))
 
 (t/deftest test-valid-and-system-time-period-spec-queries
   (t/is
@@ -1169,7 +1169,7 @@
                FROM t1
                   FOR SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '2001-01-01'
                   FOR VALID_TIME BETWEEN TIMESTAMP '3001-01-01 00:00:00+00:00' AND DATE '3000-01-01'"
-              {:table-info {"public/t1" #{}}})))
+              {:table-info {#xt/table t1 #{}}})))
 
   (t/is
    (=plan-file
@@ -1177,7 +1177,7 @@
     (sql/plan "SETTING DEFAULT VALID_TIME BETWEEN TIMESTAMP '3001-01-01 00:00:00+00:00' AND DATE '3000-01-01',
                        DEFAULT SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '2001-01-01'
                SELECT 4 FROM t1"
-              {:table-info {"public/t1" #{}}})))
+              {:table-info {#xt/table t1 #{}}})))
 
   (t/is
    (=plan-file
@@ -1185,7 +1185,7 @@
     (sql/plan "SETTING DEFAULT SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '2001-01-01',
                        DEFAULT VALID_TIME BETWEEN TIMESTAMP '3001-01-01 00:00:00+00:00' AND DATE '3000-01-01'
                SELECT 4 FROM t1"
-              {:table-info {"public/t1" #{}}}))))
+              {:table-info {#xt/table t1 #{}}}))))
 
 (t/deftest test-multiple-references-to-temporal-cols
   (t/is
@@ -1196,7 +1196,7 @@
                 WHERE foo._valid_from = 4 AND foo._valid_to > 10
                 AND foo._system_from = 20 AND foo._system_to <= 23
                 AND foo._VALID_TIME OVERLAPS PERIOD (DATE '2000-01-01', DATE '2004-01-01')"
-              {:table-info {"public/foo" {}}}))))
+              {:table-info {#xt/table foo {}}}))))
 
 (t/deftest test-sql-insert-plan
   (t/is (=plan-file "test-sql-insert-plan-1"
@@ -1222,32 +1222,32 @@
 (t/deftest test-sql-delete-plan
   (t/is (=plan-file "test-sql-delete-plan"
                     (sql/plan "DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' AS u WHERE u.id = ?"
-                              {:table-info {"public/users" #{"id"}}})))
+                              {:table-info {#xt/table users #{"id"}}})))
 
   (t/is (=plan-file "test-sql-delete-plan"
                     (sql/plan "DELETE FROM users FOR VALID_TIME FROM DATE '2020-05-01' AS u WHERE u.id = ?"
-                              {:table-info {"public/users" #{"id"}}}))))
+                              {:table-info {#xt/table users #{"id"}}}))))
 
 (t/deftest test-sql-erase-plan
   (t/is (=plan-file "test-sql-erase-plan"
                     (sql/plan "ERASE FROM users AS u WHERE u.id = ?"
-                              {:table-info {"public/users" #{"id"}}}))))
+                              {:table-info {#xt/table users #{"id"}}}))))
 
 (t/deftest test-sql-update-plan
   (t/is (=plan-file "test-sql-update-plan"
                     (sql/plan "UPDATE users FOR PORTION OF VALID_TIME FROM DATE '2021-07-01' AS u SET first_name = 'Sue' WHERE u.id = ?"
-                              {:table-info {"public/users" #{"id" "first_name" "last_name"}}})))
+                              {:table-info {#xt/table users #{"id" "first_name" "last_name"}}})))
 
   (t/is (=plan-file "test-sql-update-plan-with-column-references"
                     (sql/plan "UPDATE foo FOR ALL VALID_TIME SET bar = foo.baz"
-                              {:table-info {"public/foo" #{"bar" "baz" "quux"}}})))
+                              {:table-info {#xt/table foo #{"bar" "baz" "quux"}}})))
 
   (t/is (=plan-file "test-sql-update-plan-with-period-references"
                     (sql/plan "UPDATE foo FOR ALL VALID_TIME SET bar = (foo._SYSTEM_TIME OVERLAPS foo._VALID_TIME)"
-                              {:table-info {"public/foo" #{"bar" "baz"}}}))))
+                              {:table-info {#xt/table foo #{"bar" "baz"}}}))))
 
 (t/deftest dml-target-table-aliases
-  (let [opts {:table-info {"public/t1" #{"col1"}}}]
+  (let [opts {:table-info {#xt/table t1 #{"col1"}}}]
     (t/testing "UPDATE"
       (t/is (=plan-file "update-target-table-aliases-1"
                         (sql/plan "UPDATE t1 AS u SET col1 = 30" opts)))
@@ -1276,8 +1276,8 @@
      "SELECT foo.name foo_name, bar.name bar_name
         FROM foo, bar
         WHERE foo._SYSTEM_TIME OVERLAPS bar._SYSTEM_TIME"
-     {:table-info {"public/foo" #{"name"}
-                   "public/bar" #{"name"}}}))))
+     {:table-info {#xt/table foo #{"name"}
+                   #xt/table bar #{"name"}}}))))
 
 (t/deftest test-valid-time-correlated-subquery
   (t/is (=plan-file
@@ -1285,15 +1285,15 @@
          (sql/plan "SELECT (SELECT foo.name
                     FROM foo
                     WHERE foo._VALID_TIME OVERLAPS bar._VALID_TIME) FROM bar"
-                   {:table-info {"public/foo" #{"name"}
-                                 "public/bar" #{}}})))
+                   {:table-info {#xt/table foo #{"name"}
+                                 #xt/table bar #{}}})))
 
   (t/is (=plan-file
          "test-valid-time-correlated-subquery-projection"
          (sql/plan "SELECT (SELECT (foo._VALID_TIME OVERLAPS bar._VALID_TIME) FROM foo)
                     FROM bar"
-                   {:table-info {"public/foo" #{"name"}
-                                 "public/bar" #{}}}))))
+                   {:table-info {#xt/table foo #{"name"}
+                                 #xt/table bar #{}}}))))
 
 (t/deftest test-derived-columns-with-periods
   (t/is
@@ -1303,7 +1303,7 @@
      "SELECT f._VALID_TIME OVERLAPS f._SYSTEM_TIME
         FROM foo
         AS f (_system_from, _system_to, _valid_from, _valid_to)"
-     {:table-info {"public/foo" #{}}})))
+     {:table-info {#xt/table foo #{}}})))
 
   (t/is
    (=plan-file
@@ -1314,44 +1314,44 @@
         FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP
         FOR VALID_TIME AS OF CURRENT_TIMESTAMP
         AS f (bar)"
-     {:table-info {"public/foo" #{"bar"}}}))))
+     {:table-info {#xt/table foo #{"bar"}}}))))
 
 (t/deftest test-for-all-valid-time-387
   (t/is (=plan-file
          "test-for-all-valid-time-387-query"
          (sql/plan "SELECT bar FROM foo FOR ALL VALID_TIME"
-                   {:table-info {"public/foo" #{"bar"}}})))
+                   {:table-info {#xt/table foo #{"bar"}}})))
 
   (t/is (=plan-file
          "test-for-all-valid-time-387-query"
          (sql/plan "SELECT foo.bar FROM foo FOR VALID_TIME ALL"
-                   {:table-info {"public/foo" #{"bar"}}})))
+                   {:table-info {#xt/table foo #{"bar"}}})))
 
   (t/is (=plan-file
          "test-for-all-valid-time-387-update"
          (sql/plan "UPDATE users FOR ALL VALID_TIME SET first_name = 'Sue'"
-                   {:table-info {"public/users" #{}}})))
+                   {:table-info {#xt/table users #{}}})))
 
   (t/is (=plan-file
          "test-for-all-valid-time-387-delete"
          (sql/plan "DELETE FROM users FOR ALL VALID_TIME"
-                   {:table-info {"public/users" #{}}})))
+                   {:table-info {#xt/table users #{}}})))
 
   (t/is (=plan-file
          "test-for-all-valid-time-387-delete"
          (sql/plan "DELETE FROM users FOR VALID_TIME ALL"
-                   {:table-info {"public/users" #{}}}))))
+                   {:table-info {#xt/table users #{}}}))))
 
 (t/deftest test-for-all-system-time-404
   (t/is (=plan-file
          "test-for-all-system-time-404"
          (sql/plan "SELECT bar FROM foo FOR ALL SYSTEM_TIME"
-                   {:table-info {"public/foo" #{"bar"}}})))
+                   {:table-info {#xt/table foo #{"bar"}}})))
 
   (t/is (=plan-file
          "test-for-all-system-time-404"
          (sql/plan "SELECT foo.bar FROM foo FOR SYSTEM_TIME ALL"
-                   {:table-info {"public/foo" #{"bar"}}}))))
+                   {:table-info {#xt/table foo #{"bar"}}}))))
 
 (t/deftest test-period-specs-with-subqueries-407
   (t/is
@@ -1359,14 +1359,14 @@
     "test-period-specs-with-subqueries-407-system-time"
     (sql/plan
      "SELECT 1 FROM (select foo.bar from foo FOR ALL SYSTEM_TIME) as tmp"
-     {:table-info {"public/foo" #{"bar"}}})))
+     {:table-info {#xt/table foo #{"bar"}}})))
 
   (t/is
    (=plan-file
     "test-period-specs-with-subqueries-407-app-time"
     (sql/plan
      "SELECT 1 FROM (select foo.bar from foo FOR VALID_TIME AS OF NOW) as tmp"
-     {:table-info {"public/foo" #{"bar"}}})))
+     {:table-info {#xt/table foo #{"bar"}}})))
 
   (t/is
    (=plan-file
@@ -1380,13 +1380,13 @@
                 FROM Prop_Owner
                 FOR ALL SYSTEM_TIME
                 WHERE Prop_Owner.id = 1) AS tmp"
-              {:table-info {"public/prop_owner" #{"id"}}}))))
+              {:table-info {#xt/table prop_owner #{"id"}}}))))
 
 (t/deftest parenthesized-joined-tables-are-unboxed-502
   (t/is (= (sql/plan "SELECT 1 FROM ( tab0 JOIN tab2 ON TRUE )"
-                     {:table-info {"public/tab0" #{}, "public/tab2" #{}}})
+                     {:table-info {#xt/table tab0 #{}, #xt/table tab2 #{}}})
            (sql/plan "SELECT 1 FROM tab0 JOIN tab2 ON TRUE"
-                     {:table-info {"public/tab0" #{}, "public/tab2" #{}}}))))
+                     {:table-info {#xt/table tab0 #{}, #xt/table tab2 #{}}}))))
 
 (t/deftest test-with-clause
   (t/is (=plan-file
@@ -1394,7 +1394,7 @@
          (sql/plan "WITH foo AS (SELECT id FROM bar WHERE id = 5)
                     SELECT foo.id foo_id, baz.id baz_id
                     FROM foo, foo AS baz"
-                   {:table-info {"public/bar" #{"id"}}}))))
+                   {:table-info {#xt/table bar #{"id"}}}))))
 
 (t/deftest test-delimited-identifiers-in-insert-column-list-2549
   (t/is (=plan-file
@@ -1408,7 +1408,7 @@
           "INSERT INTO posts RECORDS {_id: 1234, \"user-id\": 5678}"))))
 
 (t/deftest test-table-period-specification-ordering-2260
-  (let [opts {:table-info {"foo" #{"bar"}}}
+  (let [opts {:table-info {#xt/table foo #{"bar"}}}
         v-s (sql/plan
              "SELECT foo.bar
                FROM foo
@@ -1435,11 +1435,11 @@
     (t/is (=plan-file
            "array-agg-decorrelation-1"
            (sql/plan "SELECT (SELECT sum(x.y) FROM (VALUES (1), (2), (3), (tab0.z)) AS x(y)) FROM tab0"
-                     {:table-info {"public/tab0" #{"z"}}})))
+                     {:table-info {#xt/table tab0 #{"z"}}})))
     (t/is (=plan-file
            "array-agg-decorrelation-2"
            (sql/plan "SELECT (SELECT ARRAY_AGG(x.y) FROM (VALUES (1), (2), (3), (tab0.z)) AS x(y)) FROM tab0"
-                     {:table-info {"public/tab0" #{"z"}}})))))
+                     {:table-info {#xt/table tab0 #{"z"}}})))))
 
 (t/deftest test-order-by-3065
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 3}]
@@ -1610,7 +1610,7 @@
    (=plan-file
     "test-sql-over-scanning-col-ref"
     (sql/plan "SELECT foo.name FROM foo"
-              {:table-info {"public/foo" #{"name" "lastname"}}}))
+              {:table-info {#xt/table foo #{"name" "lastname"}}}))
 
    "Tests only those columns required by the query are scanned for, rather than all those present on the base table")
 
@@ -1618,28 +1618,28 @@
    (=plan-file
     "test-sql-over-scanning-qualified-asterisk"
     (sql/plan "SELECT foo.*, bar.jame FROM foo, bar"
-              {:table-info {"public/foo" #{"name" "lastname"}
-                            "public/bar" #{"jame" "lastjame"}}})))
+              {:table-info {#xt/table foo #{"name" "lastname"}
+                            #xt/table bar #{"jame" "lastjame"}}})))
 
   (t/is
    (=plan-file
     "test-sql-over-scanning-asterisk"
     (sql/plan "SELECT * FROM foo, bar"
-              {:table-info {"public/foo" #{"name" "lastname"}
-                            "public/bar" #{"jame" "lastjame"}}})))
+              {:table-info {#xt/table foo #{"name" "lastname"}
+                            #xt/table bar #{"jame" "lastjame"}}})))
 
   (t/is
    (=plan-file
     "test-sql-over-scanning-asterisk-subquery"
     (sql/plan "SELECT foo.*, (SELECT * FROM baz) FROM foo, bar"
-              {:table-info {"public/foo" #{"name" "lastname"}
-                            "public/bar" #{"jame" "lastjame"}
-                            "public/baz" #{"frame"}}})))
+              {:table-info {#xt/table foo #{"name" "lastname"}
+                            #xt/table bar #{"jame" "lastjame"}
+                            #xt/table baz #{"frame"}}})))
   (t/is
    (=plan-file
     "test-sql-over-scanning-asterisk-from-subquery"
     (sql/plan "SELECT bar.* FROM (SELECT foo.a, foo.b FROM foo) AS bar"
-              {:table-info {"public/foo" #{"a" "b"}}}))))
+              {:table-info {#xt/table foo #{"a" "b"}}}))))
 
 (t/deftest test-schema-qualified-names
   (t/is
@@ -1725,8 +1725,8 @@
                     (sql/plan "SELECT _id AS order_id, value,
                             NEST_ONE(SELECT c.name FROM customers c WHERE c._id = o.customer_id) AS customer
                      FROM orders o"
-                              {:table-info {"public/orders" #{"_id" "value" "customer_id"}
-                                            "public/customers" #{"_id" "name"}}})))
+                              {:table-info {#xt/table orders #{"_id" "value" "customer_id"}
+                                            #xt/table customers #{"_id" "name"}}})))
 
   (t/is (=plan-file "test-nest-many"
                     (sql/plan "SELECT c._id AS customer_id, c.name,
@@ -1735,8 +1735,8 @@
                                       WHERE o.customer_id = c._id)
                               AS orders
                      FROM customers c"
-                              {:table-info {"public/orders" #{"_id" "value" "customer_id"}
-                                            "public/customers" #{"_id" "name"}}})))
+                              {:table-info {#xt/table orders #{"_id" "value" "customer_id"}
+                                            #xt/table customers #{"_id" "name"}}})))
 
   (xt/submit-tx tu/*node* [[:put-docs :customers {:xt/id 0, :name "bob"}]
                            [:put-docs :customers {:xt/id 1, :name "alice"}]
@@ -2130,7 +2130,7 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
                 (mapv (comp symbol :column-name))))))
 
 (t/deftest test-sql->static-ops-3484
-  (let [opts {:table-info {"public/foo" #{"bar"}}}]
+  (let [opts {:table-info {#xt/table foo #{"bar"}}}]
     (t/testing "non-inserts"
       (t/is (nil? (sql/sql->static-ops "UPDATE foo SET bar = baz" nil opts)))
       (t/is (nil? (sql/sql->static-ops "DELETE FROM foo WHERE bar = 1" nil opts)))
@@ -2327,8 +2327,8 @@ UNION ALL
 "]
     (t/is (=plan-file "limit-parens"
                       (sql/plan q
-                                {:table-info {"public/bar" #{"_id" "foo"}
-                                              "public/baz" #{"_id" "foo"}}})))
+                                {:table-info {#xt/table bar #{"_id" "foo"}
+                                              #xt/table baz #{"_id" "foo"}}})))
 
     (xt/submit-tx tu/*node*
                   [[:put-docs :bar {:xt/id 1 :foo 2} {:xt/id 2 :foo 3}]
@@ -2396,7 +2396,7 @@ UNION ALL
 
   (t/is (=plan-file "select-from-schema-qualified-table"
                     (sql/plan "SELECT * FROM foo.bar"
-                              {:table-info {"foo/bar" #{"_id" "x"}}})))
+                              {:table-info {#xt/table foo/bar #{"_id" "x"}}})))
 
   (t/is (= [{:x 2, :xt/id 1}] (xt/q tu/*node* "SELECT * FROM foo.bar")))
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM bar")))
@@ -2664,24 +2664,24 @@ UNION ALL
            (sql/plan "SELECT foo.name
                     FROM foo, bar, baz
                     WHERE OVERLAPS(foo._valid_time, bar._valid_time, baz._valid_time)"
-                     {:table-info {"public/foo" #{"name"}
-                                   "public/bar" #{"dog"}
-                                   "public/baz" #{"fish"}}})))
+                     {:table-info {#xt/table foo #{"name"}
+                                   #xt/table bar #{"dog"}
+                                   #xt/table baz #{"fish"}}})))
     (t/is (=plan-file
            "test-period-predicate-optimisations-4054-variadic-overlaps-3"
            (sql/plan "SELECT foo.name
                     FROM foo, bar
                     WHERE OVERLAPS(foo._valid_time, bar._valid_time)"
-                     {:table-info {"public/foo" #{"name"}
-                                   "public/bar" #{"dog"}
-                                   "public/baz" #{"fish"}}})))
+                     {:table-info {#xt/table foo #{"name"}
+                                   #xt/table bar #{"dog"}
+                                   #xt/table baz #{"fish"}}})))
     (t/is (=plan-file
            "test-period-predicate-optimisations-4054-infix-overlaps"
            (sql/plan "SELECT foo.name
                     FROM foo
                     WHERE foo._valid_time OVERLAPS
                     PERIOD(TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
-                     {:table-info {"public/foo" #{"name"}}})))
+                     {:table-info {#xt/table foo #{"name"}}})))
 
     (t/is (=plan-file
            "test-period-predicate-optimisations-4054-contains-with-period-literal"
@@ -2689,7 +2689,7 @@ UNION ALL
                     FROM foo
                     WHERE foo._valid_time CONTAINS
                     PERIOD(TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
-                     {:table-info {"public/foo" #{"name"}}})))))
+                     {:table-info {#xt/table foo #{"name"}}})))))
 
 (t/deftest interval-read-write-bug-4066
   (xt/submit-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, tx_interval: INTERVAL 'PT1H'};"])
@@ -2710,7 +2710,7 @@ UNION ALL
              (xt/q tu/*node* [q])))
     (t/is (=plan-file
            "test-push-selection-down-past-unnest-inner-col-ref"
-           (sql/plan q {:table-info {"public/foo" #{"_id" "vs"}}}))))
+           (sql/plan q {:table-info {#xt/table foo #{"_id" "vs"}}}))))
 
   (let [q "FROM foo AS f,
            UNNEST(vs) AS uvs(v)
@@ -2720,7 +2720,7 @@ UNION ALL
              (xt/q tu/*node* [q])))
     (t/is (=plan-file
            "test-push-selection-down-past-unnest-unnested-col-ref"
-           (sql/plan q {:table-info {"public/foo" #{"_id" "vs"}}}))))
+           (sql/plan q {:table-info {#xt/table foo #{"_id" "vs"}}}))))
 
   (let [q "FROM foo AS f,
            UNNEST(vs) WITH ORDINALITY AS uvs (v, ord)
@@ -2730,7 +2730,7 @@ UNION ALL
              (xt/q tu/*node* [q])))
     (t/is (=plan-file
            "test-push-selection-down-past-unnest-ord-col-ref"
-           (sql/plan q {:table-info {"public/foo" #{"_id" "vs"}}})))))
+           (sql/plan q {:table-info {#xt/table foo #{"_id" "vs"}}})))))
 
 (t/deftest forbid-invalid-columns-insert
   (t/is (anomalous? [:incorrect nil
@@ -2816,7 +2816,7 @@ UNION ALL
       (t/is
        (=plan-file "test-full-outer-join-uncorrelated"
                    (sql/plan q
-                             {:table-info {"public/d1" #{"_id" "bar"} "public/d2" #{"_id" "foo"}}})))
+                             {:table-info {#xt/table d1 #{"_id" "bar"} #xt/table d2 #{"_id" "foo"}}})))
 
       (xt/execute-tx tu/*node* ["INSERT INTO d1 (_id, foo) VALUES (1, 1), (2, 2), (3, 4)"
                                 "INSERT INTO d2 (_id, bar) VALUES (1, 1), (2, 2), (3, 3)"])
@@ -2828,7 +2828,7 @@ UNION ALL
    (anomalous? [:incorrect nil
                 #"Subqueries are not allowed in this context"]
                (sql/plan "SELECT foo, bar FROM d1 FULL OUTER JOIN d2 ON foo = (SELECT bar)"
-                         {:table-info {"public/d1" #{"_id" "bar"} "public/d2" #{"_id" "foo"}}}))))
+                         {:table-info {#xt/table d1 #{"_id" "bar"} #xt/table d2 #{"_id" "foo"}}}))))
 
 (t/deftest order-by-ignored-4193
   (xt/submit-tx tu/*node* ["INSERT INTO docs (_id, col1, w) VALUES (1, 'foo', 'x')"
@@ -2987,8 +2987,8 @@ FROM dates"))))
                     JOIN UNNEST(r2.xs) WITH ORDINALITY AS u2(x2, i2)
                       ON i1 = i2
                     SELECT i1, i2, x1, x2"
-                   {:table-info {"public/r1" #{"xs"}
-                                 "public/r2" #{"xs"}}}))))
+                   {:table-info {#xt/table r1 #{"xs"}
+                                 #xt/table r2 #{"xs"}}}))))
 
 (t/deftest inconsistent-patch-behaviour-4448
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, _valid_from: ?, _valid_to: ?}" [1 #inst "2010" #inst "2040"]]])

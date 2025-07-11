@@ -4,4 +4,6 @@
   [[_ob2 {:direction :asc, :null-ordering :nulls-last}]]
   [:project
    [si.1/movie_title {_ob2 si.1/year}]
-   [:rename si.1 [:scan {:table public/stars_in} [year movie_title]]]]]]
+   [:rename
+    si.1
+    [:scan {:table #xt/table stars_in} [year movie_title]]]]]]

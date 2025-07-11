@@ -61,22 +61,22 @@
           [[:rename
             r.5
             [:scan
-             {:table public/region}
+             {:table #xt/table region}
              [r_regionkey {r_name (= r_name "EUROPE")}]]]
            [:rename
             n.4
             [:scan
-             {:table public/nation}
+             {:table #xt/table nation}
              [n_name n_regionkey n_nationkey]]]
            [:rename
             ps.3
             [:scan
-             {:table public/partsupp}
+             {:table #xt/table partsupp}
              [ps_partkey ps_supplycost ps_suppkey]]]
            [:rename
             p.1
             [:scan
-             {:table public/part}
+             {:table #xt/table part}
              [{p_size (= p_size 15)}
               p_partkey
               p_mfgr
@@ -84,7 +84,7 @@
            [:rename
             s.2
             [:scan
-             {:table public/supplier}
+             {:table #xt/table supplier}
              [s_comment
               s_name
               s_address
@@ -99,18 +99,18 @@
          [[:rename
            r.10
            [:scan
-            {:table public/region}
+            {:table #xt/table region}
             [r_regionkey {r_name (= r_name "EUROPE")}]]]
           [:rename
            n.9
-           [:scan {:table public/nation} [n_regionkey n_nationkey]]]
+           [:scan {:table #xt/table nation} [n_regionkey n_nationkey]]]
           [:rename
            ps.7
            [:scan
-            {:table public/partsupp}
+            {:table #xt/table partsupp}
             [ps_partkey ps_supplycost ps_suppkey]]]
           [:rename
            s.8
            [:scan
-            {:table public/supplier}
+            {:table #xt/table supplier}
             [s_suppkey s_nationkey]]]]]]]]]]]]]

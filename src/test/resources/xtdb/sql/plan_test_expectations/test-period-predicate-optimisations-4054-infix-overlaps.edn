@@ -8,7 +8,7 @@
     _valid_to
     {_valid_time (period _valid_from _valid_to)}]
    [:scan
-    {:table public/foo}
+    {:table #xt/table foo}
     [name
      {_valid_from
       (<

@@ -12,9 +12,11 @@ import xtdb.api.log.Log.Message
 import xtdb.api.log.MessageId
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
+import xtdb.arrow.RelationReader
 import xtdb.arrow.asChannel
 import xtdb.catalog.BlockCatalog
 import xtdb.error.Interrupted
+import xtdb.table.TableRef
 import xtdb.trie.TrieCatalog
 import xtdb.util.MsgIdUtil.msgIdToEpoch
 import xtdb.util.MsgIdUtil.msgIdToOffset
@@ -23,7 +25,6 @@ import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
-import xtdb.arrow.RelationReader
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
 import java.time.Instant
@@ -184,7 +185,7 @@ class LogProcessor(
                     is Message.TriesAdded -> {
                         if (msg.storageVersion == Storage.VERSION)
                             msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                                trieCatalog.addTries(tableName, tries, record.logTimestamp)
+                                trieCatalog.addTries(TableRef.parse(tableName), tries, record.logTimestamp)
                             }
                         null
                     }
@@ -222,8 +223,8 @@ class LogProcessor(
     fun finishBlock() {
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
-        val tableNames = liveIndex.finishBlock(blockIdx)
-        blockCatalog.finishBlock(blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId, tableNames)
+        val tables = liveIndex.finishBlock(blockIdx)
+        blockCatalog.finishBlock(blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId, tables)
         liveIndex.nextBlock()
         LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
     }

@@ -13,8 +13,8 @@
 
 (t/deftest test-merges-segments
   (with-open [seg-merge (SegmentMerge. tu/*allocator*)]
-    (util/with-open [lt0 (tu/open-live-table "foo")
-                     lt1 (tu/open-live-table "foo")]
+    (util/with-open [lt0 (tu/open-live-table #xt/table foo)
+                     lt1 (tu/open-live-table #xt/table "foo")]
 
       (tu/index-tx! lt0 #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}
                     [{:xt/id "foo", :v 0}

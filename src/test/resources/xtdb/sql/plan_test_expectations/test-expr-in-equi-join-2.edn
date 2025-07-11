@@ -2,5 +2,5 @@
  [{a a.1/a}]
  [:mega-join
   [(= a.1/a (+ nil 1))]
-  [[:rename a.1 [:scan {:table public/a} [a]]]
-   [:rename b.2 [:scan {:table public/bar} []]]]]]
+  [[:rename a.1 [:scan {:table #xt/table a} [a]]]
+   [:rename b.2 [:scan {:table #xt/table bar} []]]]]]

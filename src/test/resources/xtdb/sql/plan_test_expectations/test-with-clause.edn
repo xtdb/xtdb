@@ -6,9 +6,9 @@
     foo.2
     [:project
      [{id bar.1/id}]
-     [:rename bar.1 [:scan {:table public/bar} [{id (= id 5)}]]]]]
+     [:rename bar.1 [:scan {:table #xt/table bar} [{id (= id 5)}]]]]]
    [:rename
     baz.3
     [:project
      [{id bar.1/id}]
-     [:rename bar.1 [:scan {:table public/bar} [{id (= id 5)}]]]]]]]]
+     [:rename bar.1 [:scan {:table #xt/table bar} [{id (= id 5)}]]]]]]]]

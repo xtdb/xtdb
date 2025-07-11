@@ -36,7 +36,7 @@ class GarbageCollector(
 
             if (garbageAsOf != null) {
                 LOGGER.debug("Starting trie garbage collection")
-                val tableNames = blockCatalog.allTableNames.take(100)
+                val tableNames = blockCatalog.allTables.take(100)
                 for (tableName in tableNames) {
                     val garbageTries = trieCatalog.garbageTries(tableName, garbageAsOf)
                     for (garbageTrie in garbageTries) {

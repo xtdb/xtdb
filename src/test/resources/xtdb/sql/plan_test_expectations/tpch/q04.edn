@@ -13,7 +13,7 @@
       [:rename
        o.1
        [:scan
-        {:table public/orders}
+        {:table #xt/table orders}
         [o_orderpriority
          {o_orderdate
           (and
@@ -46,7 +46,7 @@
         [:select
          (< l_commitdate l_receiptdate)
          [:scan
-          {:table public/lineitem}
+          {:table #xt/table lineitem}
           [l_linestatus
            l_receiptdate
            l_commitdate

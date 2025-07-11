@@ -38,7 +38,7 @@
 
     (t/testing "commit"
       (let [live-idx-tx (.startTx live-index (serde/->TxKey 0 (.toInstant #inst "2000")))
-            live-table-tx (.liveTable live-idx-tx "my-table")
+            live-table-tx (.liveTable live-idx-tx #xt/table my-table)
             put-doc-wrt (.getDocWriter live-table-tx)]
         (doseq [^UUID iid iids]
           (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes iid)) 0 0
@@ -46,7 +46,7 @@
 
         (.commit live-idx-tx)
 
-        (let [live-table (.liveTable live-index "my-table")
+        (let [live-table (.liveTable live-index #xt/table my-table)
               live-rel (.getLiveRelation live-table)
               iid-vec (.getVector (.vectorFor live-rel "_iid"))
 
@@ -60,8 +60,8 @@
     (t/testing "finish block"
       (tu/finish-block! tu/*node*)
 
-      (let [trie-ba (.getByteArray buffer-pool (util/->path "tables/my-table/meta/l00-rc-b00.arrow"))
-            leaf-ba (.getByteArray buffer-pool (util/->path "tables/my-table/data/l00-rc-b00.arrow"))]
+      (let [trie-ba (.getByteArray buffer-pool (util/->path "tables/public$my-table/meta/l00-rc-b00.arrow"))
+            leaf-ba (.getByteArray buffer-pool (util/->path "tables/public$my-table/data/l00-rc-b00.arrow"))]
         (util/with-open [trie-loader (Relation/loader allocator (util/->seekable-byte-channel (ByteBuffer/wrap trie-ba)))
                          trie-rel (Relation/open allocator (.getSchema trie-loader))
                          leaf-loader (Relation/loader allocator (util/->seekable-byte-channel (ByteBuffer/wrap leaf-ba)))
@@ -139,7 +139,7 @@
   (let [^LiveIndex live-index (tu/component tu/*node* :xtdb.indexer/live-index)]
 
     (let [live-tx0 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})
-          foo-table-tx (.liveTable live-tx0 "foo")
+          foo-table-tx (.liveTable live-tx0 #xt/table foo)
           doc-wtr (.getDocWriter foo-table-tx)]
       (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0
                (fn []
@@ -148,41 +148,41 @@
 
     (t/testing "aborting bar means it doesn't get added to the committed live-index")
     (let [live-tx1 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-02T00:00:00Z"})
-          bar-table-tx (.liveTable live-tx1 "bar")
+          bar-table-tx (.liveTable live-tx1 #xt/table bar)
           doc-wtr (.getDocWriter bar-table-tx)]
       (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0
                (fn []
                  (.endStruct doc-wtr)))
 
       (t/testing "doesn't get added in the tx either"
-        (t/is (nil? (.liveTable live-index "bar"))))
+        (t/is (nil? (.liveTable live-index #xt/table bar))))
 
       (.abort live-tx1)
 
-      (t/is (some? (.liveTable live-index "foo")))
-      (t/is (nil? (.liveTable live-index "bar"))))
+      (t/is (some? (.liveTable live-index #xt/table foo)))
+      (t/is (nil? (.liveTable live-index #xt/table bar))))
 
     (t/testing "aborting foo doesn't clear it from the live-index"
       (let [live-tx2 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-03T00:00:00Z"})
-            foo-table-tx (.liveTable live-tx2 "foo")
+            foo-table-tx (.liveTable live-tx2 #xt/table foo)
             doc-wtr (.getDocWriter foo-table-tx)]
         (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0
                  (fn []
                    (.endStruct doc-wtr)))
         (.abort live-tx2))
 
-      (t/is (some? (.liveTable live-index "foo"))))
+      (t/is (some? (.liveTable live-index #xt/table foo))))
 
     (t/testing "committing bar after an abort adds it correctly"
       (let [live-tx3 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-04T00:00:00Z"})
-            bar-table-tx (.liveTable live-tx3 "bar")
+            bar-table-tx (.liveTable live-tx3 #xt/table bar)
             doc-wtr (.getDocWriter bar-table-tx)]
         (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0
                  (fn []
                    (.endStruct doc-wtr)))
         (.commit live-tx3))
 
-      (t/is (some? (.liveTable live-index "bar"))))))
+      (t/is (some? (.liveTable live-index #xt/table bar))))))
 
 (t/deftest live-index-row-counter-reinitialization
   (binding [c/*ignore-signal-block?* true]

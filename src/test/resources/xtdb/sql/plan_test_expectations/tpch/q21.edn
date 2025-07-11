@@ -20,17 +20,17 @@
         [[:rename
           n.4
           [:scan
-           {:table public/nation}
+           {:table #xt/table nation}
            [{n_name (= n_name "SAUDI ARABIA")} n_nationkey]]]
          [:rename
           o.3
           [:scan
-           {:table public/orders}
+           {:table #xt/table orders}
            [{o_orderstatus (= o_orderstatus "F")} o_orderkey]]]
          [:rename
           s.1
           [:scan
-           {:table public/supplier}
+           {:table #xt/table supplier}
            [s_name s_suppkey s_nationkey]]]
          [:semi-join
           [(<> l_suppkey l1.2/l_suppkey) {l1.2/l_orderkey l_orderkey}]
@@ -41,7 +41,7 @@
             [:select
              (> l_receiptdate l_commitdate)
              [:scan
-              {:table public/lineitem}
+              {:table #xt/table lineitem}
               [l_receiptdate l_commitdate l_orderkey l_suppkey]]]]
            [:project
             [{l_comment l3.10/l_comment}
@@ -65,7 +65,7 @@
              [:select
               (> l_receiptdate l_commitdate)
               [:scan
-               {:table public/lineitem}
+               {:table #xt/table lineitem}
                [l_linestatus
                 l_receiptdate
                 l_commitdate
@@ -102,7 +102,7 @@
            [:rename
             l2.6
             [:scan
-             {:table public/lineitem}
+             {:table #xt/table lineitem}
              [l_linestatus
               l_receiptdate
               l_commitdate

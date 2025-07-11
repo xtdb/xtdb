@@ -1,11 +1,11 @@
 (ns xtdb.table-catalog
   (:require [integrant.core :as ig]
+            [xtdb.table :as table]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
            (com.google.protobuf ByteString)
-           (io.netty.buffer ByteBuf)
            [java.nio ByteBuffer]
            [java.nio.file Path]
            [java.util ArrayList Map]
@@ -13,21 +13,23 @@
            (xtdb BufferPool)
            (xtdb.block.proto TableBlock)
            xtdb.catalog.BlockCatalog
+           xtdb.table.TableRef
+           xtdb.trie.Trie
            (xtdb.util HyperLogLog)))
 
 (defprotocol PTableCatalog
   (finish-block! [table-cat block-idx delta-tables->metadata table->current-tries])
-  (column-fields [table-cat table-name])
-  (row-count [table-cat table-name])
-  (column-field [table-cat talbe-name col-name])
+  (column-fields [table-cat table])
+  (row-count [table-cat table])
+  (column-field [table-cat table col-name])
   (all-column-fields [table-cat])
-  (get-hll [table-cat table-name col-name])
-  (get-hlls [table-cat table-name]))
+  (get-hll [table-cat table col-name])
+  (get-hlls [table-cat table]))
 
 (def ^java.nio.file.Path block-table-metadata-path (util/->path "blocks"))
 
-(defn ->table-block-dir ^java.nio.file.Path [table-name]
-  (-> (trie/table-name->table-path table-name)
+(defn ->table-block-dir ^java.nio.file.Path [^TableRef table]
+  (-> (Trie/getTablePath table)
       (.resolve block-table-metadata-path)))
 
 (defn ->table-block-metadata-obj-key ^java.nio.file.Path [^Path table-path block-idx]
@@ -72,22 +74,22 @@
                     (update :hlls merge-hlls hlls))))
 
 (defn- new-tables-metadata [old-tables-metadata new-deltas-metadata]
-  (let [table-names (set (concat (keys old-tables-metadata) (keys new-deltas-metadata)))]
-    (->> table-names
-         (map (fn [table-name]
-                (MapEntry/create table-name
-                                 (merge-tables (get old-tables-metadata table-name)
-                                               (get new-deltas-metadata table-name)))))
+  (let [tables (set (concat (keys old-tables-metadata) (keys new-deltas-metadata)))]
+    (->> tables
+         (map (fn [table]
+                (MapEntry/create table
+                                 (merge-tables (get old-tables-metadata table)
+                                               (get new-deltas-metadata table)))))
          (into {}))))
 
 (defn load-tables-to-metadata ^java.util.Map [^BufferPool buffer-pool, ^BlockCatalog block-cat]
   (when-let [block-idx (.getCurrentBlockIndex block-cat)]
-    (let [table-names (.getAllTableNames block-cat)]
+    (let [tables (.getAllTables block-cat)]
       [block-idx
-       (->> (for [table-name table-names
-                  :let [table-block-path (->table-block-metadata-obj-key (trie/table-name->table-path table-name) block-idx)
+       (->> (for [^TableRef table tables
+                  :let [table-block-path (->table-block-metadata-obj-key (Trie/getTablePath table) block-idx)
                         table-block (TableBlock/parseFrom (.getByteArray buffer-pool table-block-path))]]
-              (MapEntry/create table-name (<-table-block table-block)))
+              (MapEntry/create table (<-table-block table-block)))
             (into {}))])))
 
 (deftype TableCatalog [^BufferPool buffer-pool
@@ -97,29 +99,29 @@
   (finish-block! [this block-idx delta-table->metadata table->tries]
     (when (or (nil? (.block-idx this)) (< (.block-idx this) block-idx))
       (let [new-table->metadata (new-tables-metadata table->metadata delta-table->metadata)
-            table-names (ArrayList.)]
-        (doseq [[table-name {:keys [row-count fields hlls]}] new-table->metadata]
-          (let [table-tries (get table->tries table-name)
+            tables (ArrayList.)]
+        (doseq [[^TableRef table {:keys [row-count fields hlls]}] new-table->metadata]
+          (let [table-tries (get table->tries table)
                 fields (for [[col-name field] fields]
                          (types/field-with-name field col-name))
-                table-block-path (->table-block-metadata-obj-key (trie/table-name->table-path table-name) block-idx)]
-            (.add table-names table-name)
+                table-block-path (->table-block-metadata-obj-key (Trie/getTablePath table) block-idx)]
+            (.add tables table)
             (.putObject buffer-pool table-block-path
                         (write-table-block-data (Schema. fields) row-count
-                                                (map (fn [trie] (trie/->trie-details table-name trie)) table-tries)
+                                                (map (fn [trie] (trie/->trie-details table trie)) table-tries)
                                                 hlls))))
         (set! (.block-idx this) block-idx)
         (set! (.table->metadata this) new-table->metadata)
-        (vec table-names))))
+        (vec tables))))
 
-  (column-fields [_ table-name] (get-in table->metadata [table-name :fields]))
-  (row-count [_ table-name] (get-in table->metadata [table-name :row-count]))
-  (column-field [_ table-name col-name]
-    (some-> (get-in table->metadata [table-name :fields])
+  (column-fields [_ table] (get-in table->metadata [table :fields]))
+  (row-count [_ table] (get-in table->metadata [table :row-count]))
+  (column-field [_ table col-name]
+    (some-> (get-in table->metadata [table :fields])
             (get col-name (types/->field col-name #xt.arrow/type :null true))))
   (all-column-fields [_] (update-vals table->metadata :fields))
-  (get-hll [_ table-name col-name] (get-in table->metadata [table-name :hlls col-name]))
-  (get-hlls [_ table-name] (get-in table->metadata [table-name :hlls])))
+  (get-hll [_ table col-name] (get-in table->metadata [table :hlls col-name]))
+  (get-hlls [_ table] (get-in table->metadata [table :hlls])))
 
 (defmethod ig/prep-key :xtdb/table-catalog [_ _]
   {:buffer-pool (ig/ref :xtdb/buffer-pool)

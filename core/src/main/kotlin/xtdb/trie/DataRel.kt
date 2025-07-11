@@ -6,6 +6,7 @@ import xtdb.BufferPool
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.compactor.resolveSameSystemTimeEvents
+import xtdb.table.TableRef
 import xtdb.trie.Trie.dataFilePath
 import xtdb.util.closeAll
 import java.nio.file.Path
@@ -20,13 +21,13 @@ interface DataRel<L> : AutoCloseable {
         @JvmStatic
         fun openRels(
             al: BufferAllocator, bp: BufferPool,
-            tableName: TableName, trieKeys: Iterable<TrieKey>
+            table: TableRef, trieKeys: Iterable<TrieKey>
         ): List<DataRel<ArrowHashTrie.Leaf>> =
             mutableListOf<Arrow>().also { res ->
                 try {
                     trieKeys.forEach { trieKey ->
                         val parsedKey = Trie.parseKey(trieKey)
-                        val dataFile = tableName.dataFilePath(trieKey)
+                        val dataFile = table.dataFilePath(trieKey)
                         res.add(Arrow(al, bp, dataFile, bp.getFooter(dataFile).schema, parsedKey.level))
                     }
                 } catch (e: Throwable) {

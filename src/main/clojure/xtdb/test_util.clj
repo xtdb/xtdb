@@ -375,8 +375,8 @@
 
     meta-rel))
 
-(defn open-live-table ^xtdb.indexer.LiveTable [table-name]
-  (LiveTable. *allocator* BufferPool/UNUSED table-name (RowCounter.)))
+(defn open-live-table ^xtdb.indexer.LiveTable [table]
+  (LiveTable. *allocator* BufferPool/UNUSED table (RowCounter.)))
 
 (defn index-tx! [^LiveTable live-table, ^TransactionKey tx-key, docs]
   (let [system-time (.getSystemTime tx-key)

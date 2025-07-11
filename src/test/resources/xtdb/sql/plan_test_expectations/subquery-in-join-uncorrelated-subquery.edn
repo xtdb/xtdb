@@ -2,12 +2,12 @@
  [{a foo.1/a}]
  [:mega-join
   []
-  [[:rename foo.1 [:scan {:table public/foo} [a]]]
+  [[:rename foo.1 [:scan {:table #xt/table foo} [a]]]
    [:select
     (= bar.2/c _sq_3)
     [:single-join
      []
-     [:rename bar.2 [:scan {:table public/bar} [c]]]
+     [:rename bar.2 [:scan {:table #xt/table bar} [c]]]
      [:project
       [{_sq_3 foo.4/b}]
-      [:rename foo.4 [:scan {:table public/foo} [b]]]]]]]]]
+      [:rename foo.4 [:scan {:table #xt/table foo} [b]]]]]]]]]

@@ -4,4 +4,4 @@
   foo.2
   [:rename
    {si.1/name bar}
-   [:rename si.1 [:scan {:table public/stars_in} [name]]]]]]
+   [:rename si.1 [:scan {:table #xt/table stars_in} [name]]]]]]

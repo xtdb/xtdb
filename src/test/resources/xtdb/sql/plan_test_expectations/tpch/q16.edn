@@ -28,13 +28,13 @@
          [{ps.1/ps_suppkey s_suppkey}]
          [:rename
           ps.1
-          [:scan {:table public/partsupp} [ps_partkey ps_suppkey]]]
+          [:scan {:table #xt/table partsupp} [ps_partkey ps_suppkey]]]
          [:project
           [{s_suppkey s.6/s_suppkey}]
           [:rename
            s.6
            [:scan
-            {:table public/supplier}
+            {:table #xt/table supplier}
             [{s_comment (like s_comment "%Customer%Complaints%")}
              s_suppkey]]]]]
         [:semi-join
@@ -42,7 +42,7 @@
          [:rename
           p.2
           [:scan
-           {:table public/part}
+           {:table #xt/table part}
            [{p_brand (<> p_brand "Brand#45")}
             p_size
             p_partkey

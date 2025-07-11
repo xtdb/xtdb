@@ -13,4 +13,4 @@
    {col1 30})
   [:rename
    t1.1
-   [:scan {:table public/t1} [_valid_to _valid_from _iid]]]]]
+   [:scan {:table #xt/table t1} [_valid_to _valid_from _iid]]]]]

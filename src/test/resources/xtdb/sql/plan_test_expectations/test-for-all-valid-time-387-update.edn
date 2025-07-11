@@ -6,5 +6,5 @@
  [:rename
   users.1
   [:scan
-   {:table public/users, :for-valid-time :all-time}
+   {:table #xt/table users, :for-valid-time :all-time}
    [_valid_to _valid_from _iid]]]]

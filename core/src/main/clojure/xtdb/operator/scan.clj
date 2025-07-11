@@ -8,6 +8,7 @@
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
             xtdb.object-store
+            [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
@@ -29,10 +30,11 @@
            (xtdb.indexer LiveTable$Watermark Watermark Watermark$Source)
            (xtdb.metadata PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask)
+           xtdb.table.TableRef
            (xtdb.trie ArrowHashTrie$Leaf HashTrie HashTrieKt MergePlanNode MergePlanTask Trie TrieCatalog)
            (xtdb.util TemporalBounds TemporalDimension)))
 
-(s/def ::table symbol?)
+(s/def ::table ::table/ref)
 
 ;; TODO be good to just specify a single expression here and have the interpreter split it
 ;; into metadata + col-preds - the former can accept more than just `(and ~@col-preds)
@@ -49,9 +51,10 @@
 
 (defn ->scan-cols [{:keys [columns], {:keys [table]} :scan-opts}]
   (for [[col-tag col-arg] columns]
-    [table (case col-tag
-             :column col-arg
-             :select (key (first col-arg)))]))
+    [table
+     (case col-tag
+       :column col-arg
+       :select (key (first col-arg)))]))
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
@@ -171,12 +174,11 @@
 
 (defn scan-fields [table-catalog ^Watermark wm scan-cols]
   (letfn [(->field [[table col-name]]
-            (let [table (str table)
-                  col-name (str col-name)]
+            (let [col-name (str col-name)]
               ;; TODO move to fields here
               (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
-                      (get-in info-schema/derived-tables [(symbol table) (symbol col-name)])
-                      (get-in info-schema/template-tables [(symbol table) (symbol col-name)])
+                      (get-in info-schema/derived-tables [table (symbol col-name)])
+                      (get-in info-schema/template-tables [table (symbol col-name)])
                       (types/merge-fields (table-cat/column-field table-catalog table col-name)
                                           (some-> (.getLiveIndex wm)
                                                   (.liveTable table)
@@ -189,7 +191,7 @@
                                                  info-schema ^TrieCatalog trie-catalog, table-catalog]}]
   (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
     (reify IScanEmitter
-      (emitScan [_ {:keys [columns], {:keys [table] :as scan-opts} :scan-opts} scan-fields param-fields]
+      (emitScan [_ {:keys [columns], {:keys [^TableRef table] :as scan-opts} :scan-opts} scan-fields param-fields]
         (let [col-names (->> columns
                              (into #{} (map (fn [[col-type arg]]
                                               (case col-type
@@ -201,8 +203,6 @@
                                                 (get scan-fields [table col-name]))))))
 
               col-names (into #{} (map str) col-names)
-
-              table-name (str table)
 
               selects (->> (for [[tag arg] columns
                                  :when (= tag :select)
@@ -223,7 +223,7 @@
                                        :when (not (types/temporal-column? col-name))]
                                    select))
 
-              row-count (table-cat/row-count table-catalog table-name)]
+              row-count (table-cat/row-count table-catalog table)]
 
           {:fields fields
            :stats {:row-count row-count}
@@ -241,16 +241,16 @@
                                              (update :for-valid-time
                                                      (fn [fvt]
                                                        (or fvt [:at [:now]]))))
-                               ^LiveTable$Watermark live-table-wm (some-> (.getLiveIndex watermark) (.liveTable table-name))
+                               ^LiveTable$Watermark live-table-wm (some-> (.getLiveIndex watermark) (.liveTable table))
                                temporal-bounds (->temporal-bounds allocator args scan-opts snapshot-time)]
                            (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                              (let [merge-tasks (util/with-open [page-metadatas (LinkedList.)]
                                                  (let [segments (cond-> (mapv (fn [{:keys [trie-key]}]
-                                                                                (let [meta-path (Trie/metaFilePath table-name trie-key)
+                                                                                (let [meta-path (Trie/metaFilePath table trie-key)
                                                                                       page-metadata (.openPageMetadata metadata-mgr meta-path)]
                                                                                   (.add page-metadatas page-metadata)
                                                                                   (into (trie/->Segment (.getTrie page-metadata))
-                                                                                        {:data-file-path (Trie/dataFilePath table-name trie-key)
+                                                                                        {:data-file-path (Trie/dataFilePath table trie-key)
                                                                                          :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
                                                                                                                   (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred page-metadata col-name)]
                                                                                                                     (.and page-idx-pred bloom-page-idx-pred)
@@ -258,13 +258,13 @@
                                                                                                                 (.build metadata-pred page-metadata)
                                                                                                                 col-names)
                                                                                          :page-metadata page-metadata})))
-                                                                              (-> (cat/trie-state trie-catalog table-name)
+                                                                              (-> (cat/trie-state trie-catalog table)
                                                                                   (cat/current-tries)
                                                                                   (cat/filter-tries temporal-bounds)))
 
                                                                   live-table-wm (conj (-> (trie/->Segment (.getLiveTrie live-table-wm))
                                                                                           (assoc :memory-rel (.getLiveRelation live-table-wm))))
-                                                                  template-table? (conj (let [[memory-rel trie] (table->template-rel+trie (symbol table-name))]
+                                                                  template-table? (conj (let [[memory-rel trie] (table->template-rel+trie table)]
                                                                                           (-> (trie/->Segment trie)
                                                                                               (assoc :memory-rel memory-rel)))))]
                                                    (->> (HashTrieKt/toMergePlan segments (->path-pred iid-arrow-buf))

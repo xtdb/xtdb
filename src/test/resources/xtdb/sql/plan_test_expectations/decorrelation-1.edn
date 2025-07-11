@@ -10,7 +10,7 @@
      [{c.1/custkey o.3/custkey}]
      [:map
       [{_row_number_0 (row-number)}]
-      [:rename c.1 [:scan {:table public/customer} [custkey]]]]
+      [:rename c.1 [:scan {:table #xt/table customer} [custkey]]]]
      [:rename
       o.3
-      [:scan {:table public/orders} [custkey totalprice]]]]]]]]
+      [:scan {:table #xt/table orders} [custkey totalprice]]]]]]]]

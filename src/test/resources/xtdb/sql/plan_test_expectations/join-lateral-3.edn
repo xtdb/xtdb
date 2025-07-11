@@ -2,9 +2,9 @@
  [{x x.1/x} {y x.1/y} {z y.4/z}]
  [:mega-join
   [{x.1/x y.4/x} (= y.4/z x.1/y)]
-  [[:rename x.1 [:scan {:table public/x} [x y]]]
+  [[:rename x.1 [:scan {:table #xt/table x} [x y]]]
    [:rename
     y.4
     [:project
      [{x z.2/x} {z z.2/z}]
-     [:rename z.2 [:scan {:table public/z} [x z]]]]]]]]
+     [:rename z.2 [:scan {:table #xt/table z} [x z]]]]]]]]

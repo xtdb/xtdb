@@ -38,12 +38,12 @@
                                    (assoc :data-file-size (or size -1)))))
                         (completing (partial cat/apply-trie-notification opts))
                         {}))
-        (as-> table-cat (c/compaction-jobs "foo" table-cat opts))
+        (as-> table-cat (c/compaction-jobs #xt/table foo, table-cat opts))
         (->> (into #{} (map (fn [job]
                               (-> job
                                   (update :part vec)
                                   (update :out-trie-key str)
-                                  (dissoc :table-name :partitioned-by-recency?)))))))))
+                                  (dissoc :table :partitioned-by-recency?)))))))))
 
 (t/deftest test-l0->l1-compaction-jobs
   (binding [cat/*file-size-target* 16]
@@ -438,12 +438,12 @@
               (tu/then-await-tx tx-id node)
               (c/compact-all! node (Duration/ofSeconds 5)))
 
-            (let [table-name "foo"
+            (let [^String table-name "foo"
                   meta-files (->> (.listAllObjects bp (trie/->table-meta-dir table-name))
                                   (mapv (comp :key os/<-StoredObject)))]
 
               ;; TODO this doseq seems to return nothing, so nothing gets tested?
-              (doseq [{:keys [trie-key]} (map trie/parse-trie-file-path meta-files)]
+              (doseq [{:keys [^String trie-key]} (map trie/parse-trie-file-path meta-files)]
                 (util/with-open [page-meta (.openPageMetadata meta-mgr (Trie/metaFilePath table-name trie-key))
                                  ^DataRel data-rel (first (DataRel/openRels tu/*allocator* bp table-name [trie-key]))]
 
@@ -592,7 +592,7 @@
                                          :valid-to #xt/instant "2016-01-01T00:00:00Z"}
                               {:xt/id 2}]]
                        {:default-tz #xt/zone "Europe/London"})
-        (tu/flush-block! node )
+        (tu/flush-block! node)
 
         (c/compact-all! node #xt/duration "PT5S")
         ;; to artifically create a new table block
@@ -642,7 +642,7 @@
         (c/compact-all! node #xt/duration "PT1S")
 
         (t/is (= #{"l01-r20210101-b00" "l01-r20220101-b00" "l01-rc-b00"}
-                 (->> (cat/trie-state tc "public/docs")
+                 (->> (cat/trie-state tc #xt/table docs)
                       (cat/current-tries)
                       (into #{} (map :trie-key)))))))))
 
@@ -662,13 +662,13 @@
   (t/is (= [] (xt/q tu/*node* "SELECT _id FROM foo"))))
 
 (t/deftest null-duv-issue-4231
-  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :l [{:foo 1}]}]] )
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :l [{:foo 1}]}]])
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 2 :l []}]])
   (tu/flush-block! tu/*node*)
   (c/compact-all! tu/*node* nil)
 
   (t/is (= [{:xt/id 2, :l []} {:xt/id 1, :l [{:foo 1}]}]
-           (xt/q tu/*node* ["SELECT * FROM docs" ]))))
+           (xt/q tu/*node* ["SELECT * FROM docs"]))))
 
 (t/deftest test-same-entity-same-transaction-4303
   (let [q "SELECT *, _valid_from, _valid_to, _system_from, _system_to FROM docs FOR ALL VALID_TIME"]

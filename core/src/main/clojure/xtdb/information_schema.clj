@@ -4,6 +4,7 @@
             [xtdb.authn.crypt :as authn.crypt]
             [xtdb.metadata]
             [xtdb.pgwire.types :as pg-types]
+            [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as trie-cat]
@@ -21,6 +22,7 @@
            (xtdb.arrow Relation RelationReader VectorReader VectorWriter)
            (xtdb.indexer Watermark)
            xtdb.operator.SelectionSpec
+           xtdb.table.TableRef
            (xtdb.trie MemoryHashTrie Trie TrieCatalog)
            xtdb.types.Fields))
 
@@ -29,9 +31,9 @@
 
 (defn schema-info->col-rows [schema-info]
   (for [table-entry schema-info
-        :let [table (key table-entry)
-              cols (into (when-not (and (contains? #{"pg_catalog" "information_schema" "xt"} (namespace table))
-                                        (not= 'xt/txs table))
+        :let [^TableRef table (key table-entry)
+              cols (into (when-not (and (contains? #{"pg_catalog" "information_schema" "xt"} (.getSchemaName table))
+                                        (not= #xt/table xt/txs table))
                            {"_valid_from" (-> Fields/TEMPORAL (.toArrowField "_valid_from"))
                             "_valid_to" (-> Fields/TEMPORAL (.getNullable) (.toArrowField "_valid_to"))
                             "_system_from" (-> Fields/TEMPORAL (.toArrowField "_system_from"))
@@ -52,64 +54,64 @@
 
 (do
   (def info-tables
-    '{information_schema/tables {table_catalog :utf8, table_schema :utf8, table_name :utf8, table_type :utf8}
-      information_schema/columns {table_catalog :utf8, table_schema :utf8, table_name :utf8, column_name :utf8, data_type :utf8}
-      information_schema/schemata {catalog_name :utf8, schema_name :utf8, schema_owner :utf8}})
+    '{#xt/table information_schema/tables {table_catalog :utf8, table_schema :utf8, table_name :utf8, table_type :utf8}
+      #xt/table information_schema/columns {table_catalog :utf8, table_schema :utf8, table_name :utf8, column_name :utf8, data_type :utf8}
+      #xt/table information_schema/schemata {catalog_name :utf8, schema_name :utf8, schema_owner :utf8}})
 
   (def ^:private pg-catalog-tables
-    '{pg_catalog/pg_tables {schemaname :utf8, tablename :utf8, tableowner :utf8, tablespace :null}
-      pg_catalog/pg_type {oid :i32, typname :utf8, typnamespace :i32, typowner :i32
-                          typtype :utf8, typbasetype :i32, typnotnull :bool, typtypmod :i32
-                          typsend :utf8, typreceive :utf8, typinput :utf8, typoutput :utf8
-                          typrelid :i32, typelem :i32}
-      pg_catalog/pg_class {oid :i32, relname :utf8, relnamespace :i32, relkind :utf8, relam :i32, relchecks :i32
-                           relhasindex :bool, relhasrules :bool, relhastriggers :bool, relrowsecurity :bool
-                           relforcerowsecurity :bool, relispartition :bool, reltablespace :i32, reloftype :i32
-                           relpersistence :utf8, relreplident :utf8, reltoastrelid :i32}
-      pg_catalog/pg_description {objoid :i32, classoid :i32, objsubid :i16, description :utf8}
-      pg_catalog/pg_views {schemaname :utf8, viewname :utf8, viewowner :utf8}
-      pg_catalog/pg_matviews {schemaname :utf8, matviewname :utf8, matviewowner :utf8}
-      pg_catalog/pg_attribute {attrelid :i32, attname :utf8, atttypid :i32
-                               attlen :i32, attnum :i32
-                               attisdropped :bool, attnotnull :bool
-                               atttypmod :i32, attidentity :utf8, attgenerated :utf8}
-      pg_catalog/pg_namespace {oid :i32, nspname :utf8, nspowner :i32, nspacl :null}
-      pg_catalog/pg_proc {oid :i32, proname :utf8, pronamespace :i32}
-      pg_catalog/pg_database {oid :i32, datname :utf8, datallowconn :bool, datistemplate :bool}
+    '{#xt/table pg_catalog/pg_tables {schemaname :utf8, tablename :utf8, tableowner :utf8, tablespace :null}
+      #xt/table pg_catalog/pg_type {oid :i32, typname :utf8, typnamespace :i32, typowner :i32
+                                    typtype :utf8, typbasetype :i32, typnotnull :bool, typtypmod :i32
+                                    typsend :utf8, typreceive :utf8, typinput :utf8, typoutput :utf8
+                                    typrelid :i32, typelem :i32}
+      #xt/table pg_catalog/pg_class {oid :i32, relname :utf8, relnamespace :i32, relkind :utf8, relam :i32, relchecks :i32
+                                     relhasindex :bool, relhasrules :bool, relhastriggers :bool, relrowsecurity :bool
+                                     relforcerowsecurity :bool, relispartition :bool, reltablespace :i32, reloftype :i32
+                                     relpersistence :utf8, relreplident :utf8, reltoastrelid :i32}
+      #xt/table pg_catalog/pg_description {objoid :i32, classoid :i32, objsubid :i16, description :utf8}
+      #xt/table pg_catalog/pg_views {schemaname :utf8, viewname :utf8, viewowner :utf8}
+      #xt/table pg_catalog/pg_matviews {schemaname :utf8, matviewname :utf8, matviewowner :utf8}
+      #xt/table pg_catalog/pg_attribute {attrelid :i32, attname :utf8, atttypid :i32
+                                         attlen :i32, attnum :i32
+                                         attisdropped :bool, attnotnull :bool
+                                         atttypmod :i32, attidentity :utf8, attgenerated :utf8}
+      #xt/table pg_catalog/pg_namespace {oid :i32, nspname :utf8, nspowner :i32, nspacl :null}
+      #xt/table pg_catalog/pg_proc {oid :i32, proname :utf8, pronamespace :i32}
+      #xt/table pg_catalog/pg_database {oid :i32, datname :utf8, datallowconn :bool, datistemplate :bool}
 
-      pg_catalog/pg_stat_user_tables {relid :i32
-                                      schemaname :utf8
-                                      relname :utf8
-                                      n_live_tup :i64}
+      #xt/table pg_catalog/pg_stat_user_tables {relid :i32
+                                                schemaname :utf8
+                                                relname :utf8
+                                                n_live_tup :i64}
 
-      pg_catalog/pg_settings {name :utf8, setting :utf8}
+      #xt/table pg_catalog/pg_settings {name :utf8, setting :utf8}
 
-      pg_catalog/pg_range {rngtypid :i32, rngsubtype :i32, rngmultitypid :i32
-                           rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}
-      pg_catalog/pg_am {oid :i32, amname :utf8, amhandler :utf8, amtype :utf8}})
+      #xt/table pg_catalog/pg_range {rngtypid :i32, rngsubtype :i32, rngmultitypid :i32
+                                     rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}
+      #xt/table pg_catalog/pg_am {oid :i32, amname :utf8, amhandler :utf8, amtype :utf8}})
 
   (def ^:private pg-catalog-template-tables
-    '{pg_catalog/pg_user {username :utf8 usesuper :bool passwd [:union #{:utf8 :null}]}})
+    '{#xt/table pg_catalog/pg_user {username :utf8 usesuper :bool passwd [:union #{:utf8 :null}]}})
 
   (def ^:private xt-derived-tables
-    '{xt/trie_stats {schema_name :utf8, table_name :utf8, trie_key :utf8, level :i32, recency [:union #{:null [:date :day]}],
-                     trie_state :utf8, data_file_size :i64, row_count [:union #{:null :i64}], temporal_metadata [:union #{:null [:struct {}]}]}
+    '{#xt/table xt/trie_stats {schema_name :utf8, table_name :utf8, trie_key :utf8, level :i32, recency [:union #{:null [:date :day]}],
+                               trie_state :utf8, data_file_size :i64, row_count [:union #{:null :i64}], temporal_metadata [:union #{:null [:struct {}]}]}
 
-      xt/live_tables {schema_name :utf8, table_name :utf8, row_count :i64}
+      #xt/table xt/live_tables {schema_name :utf8, table_name :utf8, row_count :i64}
 
-      xt/live_columns {schema_name :utf8, table_name :utf8, col_name :utf8, col_type :utf8}
+      #xt/table xt/live_columns {schema_name :utf8, table_name :utf8, col_name :utf8, col_type :utf8}
 
-      xt/metrics_timers {name :utf8, tags [:struct {}]
-                         count :i64,
-                         mean_time [:union #{:null [:duration :nano]}],
-                         p75_time [:union #{:null [:duration :nano]}]
-                         p95_time [:union #{:null [:duration :nano]}]
-                         p99_time [:union #{:null [:duration :nano]}]
-                         p999_time [:union #{:null [:duration :nano]}]
-                         max_time [:union #{:null [:duration :nano]}]}
+      #xt/table xt/metrics_timers {name :utf8, tags [:struct {}]
+                                   count :i64,
+                                   mean_time [:union #{:null [:duration :nano]}],
+                                   p75_time [:union #{:null [:duration :nano]}]
+                                   p95_time [:union #{:null [:duration :nano]}]
+                                   p99_time [:union #{:null [:duration :nano]}]
+                                   p999_time [:union #{:null [:duration :nano]}]
+                                   max_time [:union #{:null [:duration :nano]}]}
 
-      xt/metrics_gauges {name :utf8, tags [:struct {}], value :f64}
-      xt/metrics_counters {name :utf8, tags [:struct {}], count :f64}})
+      #xt/table xt/metrics_gauges {name :utf8, tags [:struct {}], value :f64}
+      #xt/table xt/metrics_counters {name :utf8, tags [:struct {}], count :f64}})
 
   (def derived-tables
     (-> (merge info-tables pg-catalog-tables xt-derived-tables)
@@ -125,12 +127,14 @@
                               [col-name (types/col-type->field col-name col-type)])
                             (into {}))))))
 
-  (def table-info (-> (merge derived-tables template-tables) (update-vals (comp set keys))))
+  (def table-info
+    (-> (merge derived-tables template-tables)
+        (update-vals (comp set keys))))
 
   (def unq-pg-catalog
     (-> (merge pg-catalog-tables pg-catalog-template-tables)
         (update-vals keys)
-        (update-keys (comp symbol name))))
+        (update-keys (comp symbol TableRef/.getTableName))))
 
   (def meta-table-schemas
     (-> (merge info-tables pg-catalog-tables pg-catalog-template-tables)
@@ -139,10 +143,9 @@
                            (update-keys str)
                            (update-vals #(types/col-type->field %)))))))
 
-  (def views (-> (set (keys meta-table-schemas))
-                 (disj 'pg_catalog/pg_user))))
-
-
+  (def views
+    (-> (set (keys meta-table-schemas))
+        (disj #xt/table pg_catalog/pg_user))))
 
 (def schemas
   [{:catalog-name "xtdb"
@@ -163,24 +166,24 @@
         schemas))
 
 (defn tables [schema-info]
-  (for [table (keys schema-info)]
+  (for [^TableRef table (keys schema-info)]
     {:table-catalog "xtdb"
-     :table-name (name table)
-     :table-schema (namespace table)
+     :table-name (.getTableName table)
+     :table-schema (.getSchemaName table)
      :table-type (if (views table) "VIEW" "BASE TABLE")}))
 
 (defn pg-tables [schema-info]
-  (for [table (keys schema-info)]
-    {:schemaname (namespace table)
-     :tablename (name table)
+  (for [^TableRef table (keys schema-info)]
+    {:schemaname (.getSchemaName table)
+     :tablename (.getTableName table)
      :tableowner "xtdb"
      :tablespace nil}))
 
 (defn pg-class [schema-info]
-  (for [table (keys schema-info)]
-    {:oid (name->oid table)
-     :relname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (name table))
-     :relnamespace (name->oid (namespace table))
+  (for [^TableRef table (keys schema-info)]
+    {:oid (name->oid (table/ref->sym table))
+     :relname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (.getTableName table))
+     :relnamespace (name->oid (.getSchemaName table))
      :relkind "r"
      :relam (int 2)
      :relchecks (int 0)
@@ -224,10 +227,10 @@
      :rngsubdiff rngsubdiff}))
 
 (defn columns [col-rows]
-  (for [{:keys [table type], col-name :name} col-rows]
+  (for [{:keys [^TableRef table, type], col-name :name} col-rows]
     {:table-catalog "xtdb"
-     :table-name (name table)
-     :table-schema (namespace table)
+     :table-name (.getTableName table)
+     :table-schema (.getSchemaName table)
      :column-name (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) col-name)
      :data-type (pr-str type)}))
 
@@ -239,7 +242,7 @@
                                        :pg-type
                                        (->> (get (-> pg-types/pg-types
                                                      (assoc :default (get pg-types/pg-types :json))))))]]
-    {:attrelid (name->oid table)
+    {:attrelid (name->oid (table/ref->sym table))
      :attname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) name)
      :atttypid (int oid)
      :attlen (int (or typlen -1))
@@ -303,10 +306,10 @@
      :datistemplate false}))
 
 (defn pg-stat-user-tables [schema-info]
-  (for [table (keys schema-info)]
-    {:relid (name->oid (name table))
-     :relname (name table)
-     :schemaname (namespace table)
+  (for [^TableRef table (keys schema-info)]
+    {:relid (name->oid (table/ref->sym table))
+     :relname (.getTableName table)
+     :schemaname (.getSchemaName table)
      :n-live-tup 0}))
 
 (defn pg-settings []
@@ -345,38 +348,33 @@
         [out-rel dummy-trie]))))
 
 (defn table->template-rel+tries [allocator]
-  {'pg_catalog/pg_user (pg-user-template-page+trie allocator)})
-
-(defn- split-table-name [fq-table-name]
-  (let [fq-table (symbol fq-table-name)
-        table-name (name fq-table)
-        schema-name (namespace fq-table)]
-    {:schema-name schema-name
-     :table-name table-name}))
+  {#xt/table pg_catalog/pg_user (pg-user-template-page+trie allocator)})
 
 (defn trie-stats [^TrieCatalog trie-catalog]
-  (for [table-name (.getTableNames trie-catalog)
-        :let [trie-state (trie-cat/trie-state trie-catalog table-name)]
+  (for [^TableRef table (.getTables trie-catalog)
+        :let [trie-state (trie-cat/trie-state trie-catalog table)]
         {:keys [trie-key level recency state data-file-size trie-metadata]} (trie-cat/all-tries trie-state)
         :let [{:keys [row-count] :as trie-meta} (some-> trie-metadata trie-cat/<-trie-metadata)]]
-    (into (split-table-name table-name)
-          {:trie-key trie-key, :level (int level), :recency recency, :data-file-size data-file-size
-           :trie-state (name state), :row-count row-count, :temporal-metadata (some-> trie-meta (dissoc :row-count :iid-bloom))})))
+    {:schema-name (.getSchemaName table), :table-name (.getTableName table)
+     :trie-key trie-key, :level (int level), :recency recency, :data-file-size data-file-size
+     :trie-state (name state), :row-count row-count, :temporal-metadata (some-> trie-meta (dissoc :row-count :iid-bloom))}))
 
 (defn live-tables [^Watermark wm]
   (let [li-wm (.getLiveIndex wm)]
-    (for [table (.getLiveTables li-wm)
+    (for [^TableRef table (.getLiveTables li-wm)
           :let [live-table (.liveTable li-wm table)]]
-      (into (split-table-name table)
-            {:row-count (long (.getRowCount (.getLiveRelation live-table)))}))))
+      {:schema-name (.getSchemaName table)
+       :table-name (.getTableName table)
+       :row-count (long (.getRowCount (.getLiveRelation live-table)))})))
 
 (defn live-columns [^Watermark wm]
   (let [li-wm (.getLiveIndex wm)]
-    (for [table (.getLiveTables li-wm)
+    (for [^TableRef table (.getLiveTables li-wm)
           [col-name col-field] (.getColumnFields (.liveTable li-wm table))]
-      (into (split-table-name table)
-            {:col-name col-name
-             :col-type (pr-str (types/field->col-type col-field))}))))
+      {:schema-name (.getSchemaName table)
+       :table-name (.getTableName table)
+       :col-name col-name
+       :col-type (pr-str (types/field->col-type col-field))})))
 
 (defn metrics-timers [^MeterRegistry reg]
   (->> (.getMeters reg)
@@ -458,35 +456,34 @@
                                         (table-cat/all-column-fields table-catalog)
                                         (some-> (.getLiveIndex ^Watermark wm)
                                                 (.getAllColumnFields)))
-                            (update-keys symbol)
                             (merge meta-table-schemas))]
         (util/with-close-on-catch [out-root (util/with-open [out-rel (Relation/open ^BufferAllocator allocator
                                                                                     (Schema. (vec (vals derived-table-schema))))]
 
                                               (.writeRows out-rel (->> (case table
-                                                                         information_schema/tables (tables schema-info)
-                                                                         information_schema/columns (columns (schema-info->col-rows schema-info))
-                                                                         information_schema/schemata schemas
-                                                                         pg_catalog/pg_tables (pg-tables schema-info)
-                                                                         pg_catalog/pg_type (pg-type)
-                                                                         pg_catalog/pg_class (pg-class schema-info)
-                                                                         pg_catalog/pg_description nil
-                                                                         pg_catalog/pg_views nil
-                                                                         pg_catalog/pg_matviews nil
-                                                                         pg_catalog/pg_attribute (pg-attribute (schema-info->col-rows schema-info))
-                                                                         pg_catalog/pg_namespace (pg-namespace)
-                                                                         pg_catalog/pg_proc (pg-proc)
-                                                                         pg_catalog/pg_database (pg-database)
-                                                                         pg_catalog/pg_stat_user_tables (pg-stat-user-tables schema-info)
-                                                                         pg_catalog/pg_settings (pg-settings)
-                                                                         pg_catalog/pg_range (pg-range)
-                                                                         pg_catalog/pg_am (pg-am)
-                                                                         xt/trie_stats (trie-stats trie-catalog)
-                                                                         xt/live_tables (live-tables wm)
-                                                                         xt/live_columns (live-columns wm)
-                                                                         xt/metrics_timers (metrics-timers metrics-registry)
-                                                                         xt/metrics_gauges (metrics-gauges metrics-registry)
-                                                                         xt/metrics_counters (metrics-counters metrics-registry)
+                                                                         #xt/table information_schema/tables (tables schema-info)
+                                                                         #xt/table information_schema/columns (columns (schema-info->col-rows schema-info))
+                                                                         #xt/table information_schema/schemata schemas
+                                                                         #xt/table pg_catalog/pg_tables (pg-tables schema-info)
+                                                                         #xt/table pg_catalog/pg_type (pg-type)
+                                                                         #xt/table pg_catalog/pg_class (pg-class schema-info)
+                                                                         #xt/table pg_catalog/pg_description nil
+                                                                         #xt/table pg_catalog/pg_views nil
+                                                                         #xt/table pg_catalog/pg_matviews nil
+                                                                         #xt/table pg_catalog/pg_attribute (pg-attribute (schema-info->col-rows schema-info))
+                                                                         #xt/table pg_catalog/pg_namespace (pg-namespace)
+                                                                         #xt/table pg_catalog/pg_proc (pg-proc)
+                                                                         #xt/table pg_catalog/pg_database (pg-database)
+                                                                         #xt/table pg_catalog/pg_stat_user_tables (pg-stat-user-tables schema-info)
+                                                                         #xt/table pg_catalog/pg_settings (pg-settings)
+                                                                         #xt/table pg_catalog/pg_range (pg-range)
+                                                                         #xt/table pg_catalog/pg_am (pg-am)
+                                                                         #xt/table xt/trie_stats (trie-stats trie-catalog)
+                                                                         #xt/table xt/live_tables (live-tables wm)
+                                                                         #xt/table xt/live_columns (live-columns wm)
+                                                                         #xt/table xt/metrics_timers (metrics-timers metrics-registry)
+                                                                         #xt/table xt/metrics_gauges (metrics-gauges metrics-registry)
+                                                                         #xt/table xt/metrics_counters (metrics-counters metrics-registry)
                                                                          (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table))))
                                                                        (into-array java.util.Map)))
                                               (.openAsRoot out-rel allocator))]
