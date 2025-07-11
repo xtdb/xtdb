@@ -47,13 +47,13 @@ class BlockCatalogTest {
             Storage.localStorage(tempDir).open(al, memoryCache, null).use { bufferPool ->
                 // Write dummy blocks and table blocks
                 val blocksPath = "blocks".asPath
-                val table1BlockPath = "foo".tablePath.resolve(blocksPath)
-                val table2BlockPath = "bar".tablePath.resolve(blocksPath)
+                val table1BlockPath = "public/foo".tablePath.resolve(blocksPath)
+                val table2BlockPath = "public/bar".tablePath.resolve(blocksPath)
 
                 // Write 10 blocks
                 (1L..10L).forEach { index ->
                     writeBlock(
-                        bufferPool, index, listOf("foo", "bar"),
+                        bufferPool, index, listOf("public/foo", "public/bar"),
                         listOf(blocksPath, table1BlockPath, table2BlockPath)
                     )
                 }

@@ -60,7 +60,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defprotocol PTrieCatalog
-  (trie-state [trie-cat table-name]))
+  (trie-state [trie-cat table]))
 
 (def ^:const branch-factor 4)
 
@@ -293,9 +293,9 @@
 
 (defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]
   xtdb.trie.TrieCatalog
-  (addTries [this table-name added-tries as-of]
-    (.compute !table-cats table-name
-              (fn [_table-name tries]
+  (addTries [this table added-tries as-of]
+    (.compute !table-cats table
+              (fn [_table tries]
                 (reduce (fn [table-cat ^TrieDetails added-trie]
                           (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
                             (apply-trie-notification this table-cat
@@ -307,20 +307,19 @@
                         (or tries {})
                         added-tries))))
 
-  (getTableNames [_] (set (keys !table-cats)))
+  (getTables [_] (set (keys !table-cats)))
 
-  (garbageTries [_ table-name as-of]
-    (->> (garbage-tries (.get !table-cats table-name) as-of)
+  (garbageTries [_ table as-of]
+    (->> (garbage-tries (.get !table-cats table) as-of)
          (into #{} (map :trie-key))))
 
-  (deleteTries [_ table-name garbage-trie-keys]
-    (.compute !table-cats table-name
-              (fn [_table-name tries]
+  (deleteTries [_ table garbage-trie-keys]
+    (.compute !table-cats table
+              (fn [_table tries]
                 (remove-garbage tries garbage-trie-keys))))
 
   PTrieCatalog
-  (trie-state [_ table-name] (.get !table-cats table-name)))
-
+  (trie-state [_ table] (.get !table-cats table)))
 
 (defmethod ig/prep-key :xtdb/trie-catalog [_ opts]
   (into {:buffer-pool (ig/ref :xtdb/buffer-pool)
@@ -334,7 +333,7 @@
 (defn trie-catalog-init [table->table-block]
   (if (some-> table->table-block first val :tries first new-trie-details?)
     (let [!table-cats (ConcurrentHashMap.)]
-      (doseq [[table-name {:keys [tries]}] table->table-block
+      (doseq [[table {:keys [tries]}] table->table-block
               :let [tries (-> (reduce (fn [table-cat ^TrieDetails added-trie]
                                         (let [{:keys [level recency part state] :as trie} (trie/<-trie-details added-trie)]
                                           (update table-cat [level recency part] conj-trie trie state)))
@@ -342,15 +341,16 @@
                                       tries)
                               (update-vals (fn [tries]
                                              (update-vals tries #(sort-by :block-idx (fn [a b] (compare b a)) %)))))]]
-        (.put !table-cats table-name {:tries tries}))
+        (.put !table-cats table {:tries tries}))
 
       (TrieCatalog. !table-cats *file-size-target*))
+
     ;; TODO: This else statement is here to support block files that have not yet passed to the new extended TrieDetails format
     ;; see #4526
     (let [cat (TrieCatalog. (ConcurrentHashMap.) *file-size-target*)
           now (Instant/now)]
-      (doseq [[table-name {:keys [tries]}] table->table-block]
-        (.addTries cat table-name tries now))
+      (doseq [[table {:keys [tries]}] table->table-block]
+        (.addTries cat table tries now))
       cat)))
 
 (defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^BufferPool buffer-pool, ^BlockCatalog block-cat]}]

@@ -1,7 +1,8 @@
 (ns xtdb.trie
   (:require [xtdb.buffer-pool]
-            [xtdb.util :as util]
-            [xtdb.time :as time])
+            [xtdb.table :as table]
+            [xtdb.time :as time]
+            [xtdb.util :as util])
   (:import com.carrotsearch.hppc.ByteArrayList
            (java.nio.file Path)
            (java.time LocalDate)
@@ -12,9 +13,9 @@
            (xtdb.util Temporal TemporalBounds TemporalDimension)))
 
 (defn ->trie-details ^TrieDetails
-  ([table-name {:keys [trie-key, ^long data-file-size, ^TrieMetadata trie-metadata state garbage-as-of]}]
+  ([table {:keys [trie-key, ^long data-file-size, ^TrieMetadata trie-metadata state garbage-as-of]}]
    (-> (TrieDetails/newBuilder)
-       (.setTableName table-name)
+       (.setTableName (str (table/ref->sym table)))
        (.setTrieKey trie-key)
        (.setDataFileSize data-file-size)
        (cond-> trie-metadata (.setTrieMetadata trie-metadata))
@@ -24,15 +25,15 @@
                                       :garbage TrieState/GARBAGE)))
        (cond-> garbage-as-of (.setGarbageAsOf (time/instant->micros garbage-as-of)))
        (.build)))
-  ([table-name, trie-key, data-file-size]
-   (->trie-details table-name trie-key data-file-size nil))
-  ([table-name, trie-key, data-file-size, ^TrieMetadata trie-metadata]
-   (->trie-details table-name trie-key data-file-size trie-metadata nil))
-  ([table-name, trie-key, data-file-size, ^TrieMetadata trie-metadata state]
-   (->trie-details table-name {:trie-key trie-key
-                               :data-file-size data-file-size
-                               :trie-metadata trie-metadata
-                               :state state})))
+  ([table, trie-key, data-file-size]
+   (->trie-details table trie-key data-file-size nil))
+  ([table, trie-key, data-file-size, ^TrieMetadata trie-metadata]
+   (->trie-details table trie-key data-file-size trie-metadata nil))
+  ([table, trie-key, data-file-size, ^TrieMetadata trie-metadata state]
+   (->trie-details table {:trie-key trie-key
+                          :data-file-size data-file-size
+                          :trie-metadata trie-metadata
+                          :state state})))
 
 (declare parse-trie-key)
 

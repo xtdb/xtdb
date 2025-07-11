@@ -36,3 +36,9 @@
 
 (defn ref->sym [^TableRef table-ref]
   (symbol (.getSchemaName table-ref) (.getTableName table-ref)))
+
+(defn table-path ^java.nio.file.Path [table]
+  (TableRef/getTablePath table))
+
+(defn ->meta-dir ^java.nio.file.Path [table]
+  (TableRef/metaFileDir table))

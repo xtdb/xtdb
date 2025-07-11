@@ -5,20 +5,21 @@
             [xtdb.buffer-pool]
             [xtdb.compactor :as c]
             [xtdb.metrics :as metrics]
+            [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
            (java.lang AutoCloseable)
-           (java.time Duration Instant)
+           (java.time Duration)
            (java.util HashMap List Map)
            (java.util.concurrent StructuredTaskScope$ShutdownOnFailure StructuredTaskScope$Subtask)
            (java.util.concurrent.locks StampedLock)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api IndexerConfig TransactionKey)
-           (xtdb.api.log Log Log$Message$TriesAdded Log$MessageMetadata)
+           (xtdb.api.log Log Log$Message$TriesAdded)
            xtdb.api.storage.Storage
            xtdb.BufferPool
            xtdb.catalog.BlockCatalog
@@ -45,7 +46,8 @@
 
 (defn ->schema [^LiveIndex$Watermark live-index-wm table-catalog]
   (merge-with set/union
-              (update-vals (table-cat/all-column-fields table-catalog)
+              (update-vals (-> (table-cat/all-column-fields table-catalog)
+                               (update-keys (comp str table/ref->sym)))
                            (comp set keys))
               (update-vals (some-> live-index-wm
                                    (.getAllColumnFields))
@@ -75,15 +77,14 @@
       (reify LiveIndex$Tx
         (liveTable [_ table-name]
           (.computeIfAbsent table-txs table-name
-                            (reify Function
-                              (apply [_ table-name]
-                                (let [live-table (.liveTable this-idx table-name)
-                                      new-live-table? (nil? live-table)
-                                      ^LiveTable live-table (or live-table
-                                                                (LiveTable. allocator buffer-pool table-name row-counter
-                                                                            (partial trie/->live-trie log-limit page-limit)))]
+                            (fn [table-name]
+                              (let [live-table (.liveTable this-idx table-name)
+                                    new-live-table? (nil? live-table)
+                                    ^LiveTable live-table (or live-table
+                                                              (LiveTable. allocator buffer-pool table-name row-counter
+                                                                          (partial trie/->live-trie log-limit page-limit)))]
 
-                                  (.startTx live-table tx-key new-live-table?))))))
+                                (.startTx live-table tx-key new-live-table?)))))
 
         (commit [_]
           (let [wm-lock-stamp (.writeLock wm-lock)]
@@ -143,12 +144,13 @@
                          (.fork scope (fn []
                                         (try
                                           (when-let [finished-block (.finishBlock table block-idx)]
-                                            [table-name {:fields (.getFields finished-block)
-                                                         :trie-key (.getTrieKey finished-block)
-                                                         :row-count (.getRowCount finished-block)
-                                                         :data-file-size (.getDataFileSize finished-block)
-                                                         :trie-metadata (.getTrieMetadata finished-block)
-                                                         :hlls (.getHllDeltas finished-block)}])
+                                            [(table/->ref table-name)
+                                             {:fields (.getFields finished-block)
+                                              :trie-key (.getTrieKey finished-block)
+                                              :row-count (.getRowCount finished-block)
+                                              :data-file-size (.getDataFileSize finished-block)
+                                              :trie-metadata (.getTrieMetadata finished-block)
+                                              :hlls (.getHllDeltas finished-block)}])
                                           (catch InterruptedException e
                                             (throw e))
                                           (catch Exception e
@@ -162,19 +164,19 @@
                                                         (catch Exception _
                                                           (throw (.exception ^StructuredTaskScope$Subtask %)))))))
                                  (util/rethrowing-cause))]
-          (let [added-tries (for [[table-name {:keys [trie-key data-file-size trie-metadata state]}] table-metadata]
-                              (trie/->trie-details table-name trie-key data-file-size trie-metadata state))]
+          (let [added-tries (for [[table {:keys [trie-key data-file-size trie-metadata state]}] table-metadata]
+                              (trie/->trie-details table trie-key data-file-size trie-metadata state))]
             (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION added-tries))
             (doseq [^TrieDetails added-trie added-tries]
-              (.addTries trie-cat (.getTableName added-trie) [added-trie] (.getSystemTime latest-completed-tx))))
+              (.addTries trie-cat (table/->ref (.getTableName added-trie)) [added-trie] (.getSystemTime latest-completed-tx))))
 
-          (let [all-tables (set (concat (keys table-metadata) (.getAllTableNames block-cat)))
+          (let [all-tables (set (concat (keys table-metadata) (.getAllTables block-cat)))
                 table->all-tries (->> all-tables
-                                      (map (fn [table-name]
-                                             (MapEntry/create table-name (->> (trie-cat/trie-state trie-cat table-name)
-                                                                              trie-cat/all-tries))))
+                                      (map (fn [table]
+                                             (MapEntry/create table (->> (trie-cat/trie-state trie-cat table)
+                                                                         trie-cat/all-tries))))
                                       (into {}))]
-            (table-cat/finish-block! table-cat block-idx table-metadata table->all-tries))))))
+            (map (comp str table/ref->sym) (table-cat/finish-block! table-cat block-idx table-metadata table->all-tries)))))))
 
   (nextBlock [this]
     (.nextBlock row-counter)

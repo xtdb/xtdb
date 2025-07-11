@@ -642,7 +642,7 @@
         (c/compact-all! node #xt/duration "PT1S")
 
         (t/is (= #{"l01-r20210101-b00" "l01-r20220101-b00" "l01-rc-b00"}
-                 (->> (cat/trie-state tc "public/docs")
+                 (->> (cat/trie-state tc #xt/table docs)
                       (cat/current-tries)
                       (into #{} (map :trie-key)))))))))
 

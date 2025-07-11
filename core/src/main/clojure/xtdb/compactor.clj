@@ -123,9 +123,9 @@
                    log trie-catalog metrics-registry
                    (reify Compactor$JobCalculator
                      (availableJobs [_]
-                       (->> (.getTableNames trie-catalog)
-                            (into [] (mapcat (fn [table-name]
-                                               (compaction-jobs (table/->ref table-name) (cat/trie-state trie-catalog table-name) trie-catalog)))))))
+                       (->> (.getTables trie-catalog)
+                            (into [] (mapcat (fn [table]
+                                               (compaction-jobs table (cat/trie-state trie-catalog table) trie-catalog)))))))
 
                    *ignore-signal-block?* threads *page-size* *recency-partition*))
 

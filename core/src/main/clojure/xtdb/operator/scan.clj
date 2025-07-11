@@ -30,6 +30,7 @@
            (xtdb.indexer LiveTable$Watermark Watermark Watermark$Source)
            (xtdb.metadata PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask)
+           xtdb.table.TableRef
            (xtdb.trie ArrowHashTrie$Leaf HashTrie HashTrieKt MergePlanNode MergePlanTask Trie TrieCatalog)
            (xtdb.util TemporalBounds TemporalDimension)))
 
@@ -179,7 +180,7 @@
               (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
                       (get-in info-schema/derived-tables [table (symbol col-name)])
                       (get-in info-schema/template-tables [table (symbol col-name)])
-                      (types/merge-fields (table-cat/column-field table-catalog table-str col-name)
+                      (types/merge-fields (table-cat/column-field table-catalog table col-name)
                                           (some-> (.getLiveIndex wm)
                                                   (.liveTable table-str)
                                                   (.columnField col-name))))
@@ -226,7 +227,7 @@
                                        :when (not (types/temporal-column? col-name))]
                                    select))
 
-              row-count (table-cat/row-count table-catalog table-name)]
+              row-count (table-cat/row-count table-catalog table)]
 
           {:fields fields
            :stats {:row-count row-count}
@@ -249,11 +250,11 @@
                            (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                              (let [merge-tasks (util/with-open [page-metadatas (LinkedList.)]
                                                  (let [segments (cond-> (mapv (fn [{:keys [trie-key]}]
-                                                                                (let [meta-path (Trie/metaFilePath table-name trie-key)
+                                                                                (let [meta-path (TableRef/metaFilePath table trie-key)
                                                                                       page-metadata (.openPageMetadata metadata-mgr meta-path)]
                                                                                   (.add page-metadatas page-metadata)
                                                                                   (into (trie/->Segment (.getTrie page-metadata))
-                                                                                        {:data-file-path (Trie/dataFilePath table-name trie-key)
+                                                                                        {:data-file-path (TableRef/dataFilePath table trie-key)
                                                                                          :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
                                                                                                                   (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred page-metadata col-name)]
                                                                                                                     (.and page-idx-pred bloom-page-idx-pred)
@@ -261,7 +262,7 @@
                                                                                                                 (.build metadata-pred page-metadata)
                                                                                                                 col-names)
                                                                                          :page-metadata page-metadata})))
-                                                                              (-> (cat/trie-state trie-catalog table-name)
+                                                                              (-> (cat/trie-state trie-catalog table)
                                                                                   (cat/current-tries)
                                                                                   (cat/filter-tries temporal-bounds)))
 

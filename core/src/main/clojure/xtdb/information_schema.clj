@@ -359,13 +359,13 @@
      :table-name table-name}))
 
 (defn trie-stats [^TrieCatalog trie-catalog]
-  (for [table-name (.getTableNames trie-catalog)
-        :let [trie-state (trie-cat/trie-state trie-catalog table-name)]
+  (for [{:keys [schema-name table-name] :as table} (.getTables trie-catalog)
+        :let [trie-state (trie-cat/trie-state trie-catalog table)]
         {:keys [trie-key level recency state data-file-size trie-metadata]} (trie-cat/all-tries trie-state)
         :let [{:keys [row-count] :as trie-meta} (some-> trie-metadata trie-cat/<-trie-metadata)]]
-    (into (split-table-name table-name)
-          {:trie-key trie-key, :level (int level), :recency recency, :data-file-size data-file-size
-           :trie-state (name state), :row-count row-count, :temporal-metadata (some-> trie-meta (dissoc :row-count :iid-bloom))})))
+    {:schema-name schema-name, :table-name table-name
+     :trie-key trie-key, :level (int level), :recency recency, :data-file-size data-file-size
+     :trie-state (name state), :row-count row-count, :temporal-metadata (some-> trie-meta (dissoc :row-count :iid-bloom))}))
 
 (defn live-tables [^Watermark wm]
   (let [li-wm (.getLiveIndex wm)]
@@ -459,7 +459,8 @@
       ;;TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
       ;;should be types/merge-fields as per scan-fields
       (let [schema-info (-> (merge-with merge
-                                        (table-cat/all-column-fields table-catalog)
+                                        (-> (table-cat/all-column-fields table-catalog)
+                                            (update-keys table/ref->sym))
                                         (some-> (.getLiveIndex ^Watermark wm)
                                                 (.getAllColumnFields)))
                             (update-keys symbol)

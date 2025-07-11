@@ -4,9 +4,9 @@ import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
 import xtdb.BufferPool
 import xtdb.catalog.BlockCatalog
+import xtdb.table.TableRef.Companion.dataFilePath
+import xtdb.table.TableRef.Companion.metaFilePath
 import xtdb.time.microsAsInstant
-import xtdb.trie.Trie.dataFilePath
-import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.TrieCatalog
 import java.io.Closeable
 import java.time.Duration
@@ -36,7 +36,7 @@ class GarbageCollector(
 
             if (garbageAsOf != null) {
                 LOGGER.debug("Starting trie garbage collection")
-                val tableNames = blockCatalog.allTableNames.take(100)
+                val tableNames = blockCatalog.allTables.take(100)
                 for (tableName in tableNames) {
                     val garbageTries = trieCatalog.garbageTries(tableName, garbageAsOf)
                     for (garbageTrie in garbageTries) {

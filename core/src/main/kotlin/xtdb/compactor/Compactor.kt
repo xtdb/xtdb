@@ -68,7 +68,8 @@ interface Compactor : AutoCloseable {
 
         private fun Job.trieDetails(trieKey: TrieKey, dataFileSize: FileSize, trieMetadata: TrieMetadata?) =
             TrieDetails.newBuilder()
-                .setTableName("${table.schemaName}/${table.tableName}").setTrieKey(trieKey)
+                .setTableName(table.sym.toString())
+                .setTrieKey(trieKey)
                 .setDataFileSize(dataFileSize)
                 .setTrieMetadata(trieMetadata)
                 .build()
@@ -176,7 +177,7 @@ interface Compactor : AutoCloseable {
                                     // add the trie to the catalog eagerly so that it's present
                                     // next time we run `availableJobs` (it's idempotent)
                                     trieCatalog.addTries(
-                                        job.table.sym.toString(),
+                                        job.table,
                                         addedTries,
                                         messageMetadata.logTimestamp
                                     )
