@@ -82,7 +82,7 @@
 (defn table-name->table-path ^java.nio.file.Path [^String table-name]
   (Trie/getTablePath table-name))
 
-(defn ->table-meta-dir ^java.nio.file.Path [table-name]
+(defn ->table-meta-dir ^java.nio.file.Path [^String table-name]
   (Trie/metaFileDir table-name))
 
 (defrecord Segment [trie]

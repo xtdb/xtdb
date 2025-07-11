@@ -6,7 +6,7 @@ import xtdb.ArrowWriter
 import xtdb.BufferPool
 import xtdb.arrow.Relation
 import xtdb.table.TableRef
-import xtdb.table.TableRef.Companion.dataFilePath
+import xtdb.trie.Trie.dataFilePath
 
 class DataFileWriter(
     al: BufferAllocator, private val bp: BufferPool,

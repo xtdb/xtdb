@@ -5,6 +5,7 @@
             [cognitect.transit :as transit]
             [xtdb.error :as err]
             [xtdb.mirrors.time-literals :as tl]
+            [xtdb.table :as table]
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.xtql :as xtql])
@@ -187,6 +188,7 @@
     (merge transit/default-read-handlers
            tl/transit-read-handlers
            err/transit-readers
+           table/transit-read-handlers
            {"r" (transit/read-handler uri-reader)
 
             ;; NOTE: these three have been serialised to disk - do not remove.
@@ -233,6 +235,7 @@
   (merge transit/default-write-handlers
          tl/transit-write-handlers
          err/transit-writers
+         table/transit-write-handlers
          {TxKey (transit/write-handler "xtdb/tx-key" #(into {} %))
           TxCommitted (transit/write-handler "xtdb/tx-result" #(into {} %))
           TxAborted (transit/write-handler "xtdb/tx-result" #(into {} %))

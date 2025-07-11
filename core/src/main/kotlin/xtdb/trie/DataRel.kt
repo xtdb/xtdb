@@ -7,7 +7,7 @@ import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.compactor.resolveSameSystemTimeEvents
 import xtdb.table.TableRef
-import xtdb.table.TableRef.Companion.dataFilePath
+import xtdb.trie.Trie.dataFilePath
 import xtdb.util.closeAll
 import java.nio.file.Path
 

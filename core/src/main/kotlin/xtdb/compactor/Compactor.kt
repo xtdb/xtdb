@@ -20,9 +20,9 @@ import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.PageMetadata
 import xtdb.table.TableRef
-import xtdb.table.TableRef.Companion.metaFilePath
 import xtdb.trie.*
 import xtdb.trie.ISegment.Segment
+import xtdb.trie.Trie.metaFilePath
 import xtdb.util.*
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration

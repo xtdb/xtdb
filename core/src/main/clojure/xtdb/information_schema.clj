@@ -134,7 +134,7 @@
   (def unq-pg-catalog
     (-> (merge pg-catalog-tables pg-catalog-template-tables)
         (update-vals keys)
-        (update-keys (comp symbol :table-name))))
+        (update-keys (comp symbol TableRef/.getTableName))))
 
   (def meta-table-schemas
     (-> (merge info-tables pg-catalog-tables pg-catalog-template-tables)
@@ -351,11 +351,11 @@
   {#xt/table pg_catalog/pg_user (pg-user-template-page+trie allocator)})
 
 (defn trie-stats [^TrieCatalog trie-catalog]
-  (for [{:keys [schema-name table-name] :as table} (.getTables trie-catalog)
+  (for [^TableRef table (.getTables trie-catalog)
         :let [trie-state (trie-cat/trie-state trie-catalog table)]
         {:keys [trie-key level recency state data-file-size trie-metadata]} (trie-cat/all-tries trie-state)
         :let [{:keys [row-count] :as trie-meta} (some-> trie-metadata trie-cat/<-trie-metadata)]]
-    {:schema-name schema-name, :table-name table-name
+    {:schema-name (.getSchemaName table), :table-name (.getTableName table)
      :trie-key trie-key, :level (int level), :recency recency, :data-file-size data-file-size
      :trie-state (name state), :row-count row-count, :temporal-metadata (some-> trie-meta (dissoc :row-count :iid-bloom))}))
 

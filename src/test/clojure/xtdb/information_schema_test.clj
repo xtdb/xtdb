@@ -382,7 +382,8 @@
                  "SELECT table_catalog, table_schema, table_name, table_type
                   FROM information_schema.tables
                   WHERE (table_schema = 'information_schema' AND table_name = 'tables')
-                     OR (table_schema = 'pg_catalog' AND table_name = 'pg_user')"))))
+                     OR (table_schema = 'pg_catalog' AND table_name = 'pg_user')
+                  ORDER BY table_schema, table_name"))))
 
 (t/deftest trie-stats
   (xt/execute-tx tu/*node* [[:put-docs :foo

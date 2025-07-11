@@ -8,10 +8,10 @@ import xtdb.block.proto.Block
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
 import xtdb.table.TableRef
-import xtdb.table.TableRef.Companion.tablePath
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.microsAsInstant
 import xtdb.trie.BlockIndex
+import xtdb.trie.Trie.tablePath
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath

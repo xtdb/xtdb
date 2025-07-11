@@ -191,7 +191,7 @@
                                                  info-schema ^TrieCatalog trie-catalog, table-catalog]}]
   (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
     (reify IScanEmitter
-      (emitScan [_ {:keys [columns], {:keys [table] :as scan-opts} :scan-opts} scan-fields param-fields]
+      (emitScan [_ {:keys [columns], {:keys [^TableRef table] :as scan-opts} :scan-opts} scan-fields param-fields]
         (let [col-names (->> columns
                              (into #{} (map (fn [[col-type arg]]
                                               (case col-type
@@ -246,11 +246,11 @@
                            (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                              (let [merge-tasks (util/with-open [page-metadatas (LinkedList.)]
                                                  (let [segments (cond-> (mapv (fn [{:keys [trie-key]}]
-                                                                                (let [meta-path (TableRef/metaFilePath table trie-key)
+                                                                                (let [meta-path (Trie/metaFilePath table trie-key)
                                                                                       page-metadata (.openPageMetadata metadata-mgr meta-path)]
                                                                                   (.add page-metadatas page-metadata)
                                                                                   (into (trie/->Segment (.getTrie page-metadata))
-                                                                                        {:data-file-path (TableRef/dataFilePath table trie-key)
+                                                                                        {:data-file-path (Trie/dataFilePath table trie-key)
                                                                                          :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
                                                                                                                   (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred page-metadata col-name)]
                                                                                                                     (.and page-idx-pred bloom-page-idx-pred)

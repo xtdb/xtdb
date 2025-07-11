@@ -8,7 +8,7 @@ import xtdb.indexer.TrieMetadataCalculator
 import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.ColumnMetadata
 import xtdb.table.TableRef
-import xtdb.table.TableRef.Companion.metaFilePath
+import xtdb.trie.Trie.metaFilePath
 import xtdb.types.Fields
 import xtdb.types.NamelessField.Companion.nullable
 import xtdb.types.Schema

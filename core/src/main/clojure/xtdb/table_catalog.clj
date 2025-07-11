@@ -13,6 +13,8 @@
            (xtdb BufferPool)
            (xtdb.block.proto TableBlock)
            xtdb.catalog.BlockCatalog
+           xtdb.table.TableRef
+           xtdb.trie.Trie
            (xtdb.util HyperLogLog)))
 
 (defprotocol PTableCatalog
@@ -26,8 +28,8 @@
 
 (def ^java.nio.file.Path block-table-metadata-path (util/->path "blocks"))
 
-(defn ->table-block-dir ^java.nio.file.Path [table]
-  (-> (table/table-path table)
+(defn ->table-block-dir ^java.nio.file.Path [^TableRef table]
+  (-> (Trie/getTablePath table)
       (.resolve block-table-metadata-path)))
 
 (defn ->table-block-metadata-obj-key ^java.nio.file.Path [^Path table-path block-idx]
@@ -84,8 +86,8 @@
   (when-let [block-idx (.getCurrentBlockIndex block-cat)]
     (let [tables (.getAllTables block-cat)]
       [block-idx
-       (->> (for [table tables
-                  :let [table-block-path (->table-block-metadata-obj-key (table/table-path table) block-idx)
+       (->> (for [^TableRef table tables
+                  :let [table-block-path (->table-block-metadata-obj-key (Trie/getTablePath table) block-idx)
                         table-block (TableBlock/parseFrom (.getByteArray buffer-pool table-block-path))]]
               (MapEntry/create table (<-table-block table-block)))
             (into {}))])))
@@ -98,11 +100,11 @@
     (when (or (nil? (.block-idx this)) (< (.block-idx this) block-idx))
       (let [new-table->metadata (new-tables-metadata table->metadata delta-table->metadata)
             tables (ArrayList.)]
-        (doseq [[table {:keys [row-count fields hlls]}] new-table->metadata]
+        (doseq [[^TableRef table {:keys [row-count fields hlls]}] new-table->metadata]
           (let [table-tries (get table->tries table)
                 fields (for [[col-name field] fields]
                          (types/field-with-name field col-name))
-                table-block-path (->table-block-metadata-obj-key (table/table-path table) block-idx)]
+                table-block-path (->table-block-metadata-obj-key (Trie/getTablePath table) block-idx)]
             (.add tables table)
             (.putObject buffer-pool table-block-path
                         (write-table-block-data (Schema. fields) row-count

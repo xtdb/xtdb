@@ -438,12 +438,12 @@
               (tu/then-await-tx tx-id node)
               (c/compact-all! node (Duration/ofSeconds 5)))
 
-            (let [table-name "foo"
+            (let [^String table-name "foo"
                   meta-files (->> (.listAllObjects bp (trie/->table-meta-dir table-name))
                                   (mapv (comp :key os/<-StoredObject)))]
 
               ;; TODO this doseq seems to return nothing, so nothing gets tested?
-              (doseq [{:keys [trie-key]} (map trie/parse-trie-file-path meta-files)]
+              (doseq [{:keys [^String trie-key]} (map trie/parse-trie-file-path meta-files)]
                 (util/with-open [page-meta (.openPageMetadata meta-mgr (Trie/metaFilePath table-name trie-key))
                                  ^DataRel data-rel (first (DataRel/openRels tu/*allocator* bp table-name [trie-key]))]
 

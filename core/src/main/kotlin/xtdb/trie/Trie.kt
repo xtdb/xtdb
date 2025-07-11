@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.table.TableRef
 import xtdb.types.Fields
 import xtdb.types.NamelessField
 import xtdb.types.Schema
@@ -19,6 +20,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatterBuilder
 import java.time.format.SignStyle
 import java.time.temporal.ChronoField
+import kotlin.io.resolve
 
 typealias Level = Long
 typealias InstantMicros = Long
@@ -86,6 +88,22 @@ object Trie {
 
     @JvmStatic
     fun TableName.metaFilePath(trieKey: TrieKey): Path =
+        metaFileDir().resolve("$trieKey.arrow")
+
+    @JvmStatic
+    val TableRef.tablePath: Path
+        get() =
+            tablesDir.resolve("$schemaName$$tableName".replace(Regex("[./]"), "\\$"))
+
+    @JvmStatic
+    fun TableRef.dataFilePath(trieKey: TrieKey): Path =
+        tablePath.resolve("data").resolve("$trieKey.arrow")
+
+    @JvmStatic
+    fun TableRef.metaFileDir(): Path = tablePath.resolve("meta")
+
+    @JvmStatic
+    fun TableRef.metaFilePath(trieKey: TrieKey): Path =
         metaFileDir().resolve("$trieKey.arrow")
 
     @JvmStatic
