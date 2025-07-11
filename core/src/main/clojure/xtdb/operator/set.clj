@@ -9,7 +9,7 @@
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
            (xtdb.arrow RelationReader)
-           xtdb.expression.map.IRelationMap
+           (xtdb.expression.map RelationMap)
            xtdb.ICursor))
 
 (defmethod lp/ra-expr :distinct [_]
@@ -99,7 +99,7 @@
 
 (deftype IntersectionCursor [^ICursor left-cursor
                              ^ICursor right-cursor
-                             ^IRelationMap rel-map
+                             ^RelationMap rel-map
                              difference?]
   ICursor
   (tryAdvance [_ c]
@@ -159,7 +159,7 @@
                                           true))}))))
 
 (deftype DistinctCursor [^ICursor in-cursor
-                         ^IRelationMap rel-map]
+                         ^RelationMap rel-map]
   ICursor
   (tryAdvance [_ c]
     (let [advanced? (boolean-array 1)]
@@ -223,7 +223,7 @@
 (deftype FixpointCursor [^BufferAllocator allocator
                          ^ICursor base-cursor
                          ^IFixpointCursorFactory recursive-cursor-factory
-                         ^IRelationMap rel-map
+                         ^RelationMap rel-map
                          ^boolean incremental?
                          ^:unsynchronized-mutable ^ints new-idxs
                          ^:unsynchronized-mutable ^ICursor recursive-cursor

@@ -18,7 +18,7 @@
            (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb ICursor)
            (xtdb.arrow IntVector RelationReader VectorReader VectorWriter)
-           (xtdb.expression.map IRelationMap IRelationMapBuilder)))
+           (xtdb.expression.map RelationMap RelationMapBuilder)))
 
 (s/def ::aggregate-expr
   (s/or :nullary (s/cat :f simple-symbol?)
@@ -59,7 +59,7 @@
     (.close group-mapping)))
 
 (deftype GroupMapper [^List group-col-names
-                      ^IRelationMap rel-map
+                      ^RelationMap rel-map
                       ^VectorWriter group-mapping]
   IGroupMapper
   (groupMapping [_ in-rel]
@@ -434,11 +434,11 @@
                   (while (<= (.size rel-maps) group-idx)
                     (.add rel-maps (emap/->relation-map al {:build-fields {from-name (types/col-type->field from-type)}
                                                             :build-key-col-names [from-name]})))
-                  (let [^IRelationMap rel-map (nth rel-maps group-idx)]
+                  (let [^RelationMap rel-map (nth rel-maps group-idx)]
                     (while (<= (.size builders) group-idx)
                       (.add builders nil))
 
-                    (let [^IRelationMapBuilder
+                    (let [^RelationMapBuilder
                           builder (or (nth builders group-idx)
                                       (let [builder (.buildFromRelation rel-map (vr/rel-reader [in-vec]))]
                                         (.set builders group-idx builder)
