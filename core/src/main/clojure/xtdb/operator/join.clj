@@ -553,7 +553,7 @@
 
 (defmethod lp/emit-expr :left-outer-join [join-expr args]
   (let [{:keys [left right] :as emitted-join-children} (emit-join-children join-expr args)
-        build-side (determine-build-side left right :right)]
+        build-side :left]
     (emit-join-expr emitted-join-children
                     args
                     {:build-side build-side
