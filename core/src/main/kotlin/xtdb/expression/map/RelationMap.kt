@@ -89,9 +89,9 @@ class RelationMap(
         } else {
             RelationReader.from(buildKeyColumnNames.map { inRel.vectorFor(it) })
         }
-        
+
         val inKeyCols = buildKeyColumnNames.map { inRel.vectorForOrNull(it) as VectorReader }
-        
+
         // NOTE: we might not need to compute comparator if the caller never requires addIfNotPresent (e.g. joins)
         val comparatorLazy by lazy {
             val equiComparators = buildKeyCols.zip(inKeyCols).map { (buildCol, inCol) ->
@@ -105,7 +105,7 @@ class RelationMap(
             }
             equiComparators.reduceOrNull({ acc, comp -> andIBO(acc, comp) }) ?: andIBO()
         }
-        
+
         val hasher = createHasher(inKeyCols)
         val rowCopier = relWriter.rowCopier(inRel)
 
@@ -120,7 +120,7 @@ class RelationMap(
             override fun add(inIdx: Int) {
                 add(computeHashBitmap(hasher.hashCode(inIdx)), inIdx);
             }
-            
+
             override fun addIfNotPresent(inIdx: Int): Int {
                 val hashBitmap = computeHashBitmap(hasher.hashCode(inIdx))
                 val outIdx = hashBitmap.findInHashBitmap(comparatorLazy, inIdx, false)
@@ -128,11 +128,11 @@ class RelationMap(
             }
         }
     }
-    
+
     fun probeFromRelation(probeRel: RelationReader): RelationMapProber {
         val buildRel = getBuiltRelation()
         val probeKeyCols = probeKeyColumnNames.map { probeRel.vectorForOrNull(it) as VectorReader }
-        
+
         // Create equi-comparators for key columns
         val equiComparators = buildKeyCols.zip(probeKeyCols).map { (buildCol, probeCol) ->
             equiComparatorFn.invoke(
@@ -143,7 +143,7 @@ class RelationMap(
                 ).toClojureMap()
             ) as IntBinaryOperator
         }
-        
+
         // Add theta comparator if needed
         val comparator = if (thetaExpr != null) {
             val thetaComparator = thetaComparatorFn.invoke(
@@ -154,7 +154,7 @@ class RelationMap(
                     "param-types".kw to paramTypes.mapKeys { it.key.symbol } .toClojureMap()
                 ).toClojureMap()
             ) as IntBinaryOperator
-            
+
             (equiComparators + thetaComparator).reduceOrNull({ acc, comp ->
                 andIBO(acc, comp)
             }) ?: andIBO()
@@ -163,21 +163,21 @@ class RelationMap(
                 andIBO(acc, comp)
             }) ?: andIBO()
         }
-        
+
         val hasher = createHasher(probeKeyCols)
-        
+
         return object : RelationMapProber {
             override fun indexOf(inIdx: Int, removeOnMatch: Boolean): Int{
                 val hashCode = hasher.hashCode(inIdx)
                 val hashBitmap = hashToBitmap.get(hashCode)
-                
+
                 return hashBitmap.findInHashBitmap(comparator, inIdx, removeOnMatch)
             }
-            
+
             override fun forEachMatch(inIdx: Int, c: IntConsumer) {
                 val hashCode = hasher.hashCode(inIdx)
                 val hashBitmap = hashToBitmap.get(hashCode)
-                
+
                 hashBitmap?.let { bitmap ->
                     val iterator = bitmap.intIterator
                     while (iterator.hasNext()) {
@@ -188,7 +188,7 @@ class RelationMap(
                     }
                 }
             }
-            
+
             override fun matches(inIdx: Int): Int {
                 // TODO: This doesn't use hashmaps, still a nested loop join
                 var acc = -1
@@ -204,7 +204,7 @@ class RelationMap(
             }
         }
     }
-    
+
     fun getBuiltRelation(): RelationReader = relWriter.asReader
 
     override fun close() {
