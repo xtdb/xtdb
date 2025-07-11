@@ -415,7 +415,7 @@
 (defn- plan-from [{:keys [table for-valid-time for-system-time bindings project-all-cols?]}]
   (let [planned-bind-specs (concat (cond-> (mapv plan-out-spec bindings)
                                      project-all-cols?
-                                     (concat (->> (get *table-info* (-> table (util/with-default-schema) symbol str))
+                                     (concat (->> (get *table-info* (table/->ref table))
                                                   (mapv symbol)
                                                   (mapv #(hash-map :l % :r %))))))
         distinct-scan-cols (distinct (replace-temporal-period-with-cols (mapv :l planned-bind-specs)))

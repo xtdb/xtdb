@@ -2,19 +2,19 @@ package xtdb.indexer
 
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.TransactionKey
+import xtdb.table.TableRef
 import xtdb.trie.BlockIndex
-import xtdb.trie.TableName
 
 interface LiveIndex : Watermark.Source, AutoCloseable {
 
     interface Watermark : AutoCloseable {
-        val allColumnFields: Map<TableName, Map<String, Field>>
-        fun liveTable(tableName: TableName): LiveTable.Watermark
-        val liveTables: Iterable<TableName>
+        val allColumnFields: Map<TableRef, Map<String, Field>>
+        fun liveTable(table: TableRef): LiveTable.Watermark
+        val liveTables: Iterable<TableRef>
     }
 
     interface Tx : AutoCloseable {
-        fun liveTable(name: String): LiveTable.Tx
+        fun liveTable(table: TableRef): LiveTable.Tx
         fun openWatermark(): Watermark
 
         fun commit()
@@ -23,8 +23,8 @@ interface LiveIndex : Watermark.Source, AutoCloseable {
 
     val latestCompletedTx: TransactionKey?
 
-    fun liveTable(name: String): LiveTable
-    val liveTables: Iterable<String>
+    fun liveTable(table: TableRef): LiveTable
+    val liveTables: Iterable<TableRef>
 
     // N.B. LiveIndex.Watermark and xtdb.indexer.Watermark are different classes
     // there used to be quite a lot of difference between them
@@ -34,6 +34,6 @@ interface LiveIndex : Watermark.Source, AutoCloseable {
     fun startTx(txKey: TransactionKey): Tx
 
     fun isFull(): Boolean
-    fun finishBlock(blockIdx: BlockIndex) : Collection<TableName>
+    fun finishBlock(blockIdx: BlockIndex) : Collection<TableRef>
     fun nextBlock()
 }

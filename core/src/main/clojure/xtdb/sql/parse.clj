@@ -1,7 +1,7 @@
 (ns xtdb.sql.parse
   (:require [xtdb.antlr :as antlr]
             [xtdb.sql :as sql]
-            [xtdb.util :as util])
+            [xtdb.table :as table])
   (:import (xtdb.antlr SqlVisitor)))
 
 (defrecord StatementVisitor []
@@ -16,19 +16,19 @@
     [:show-clock-time])
 
   (visitInsertStatement [_ stmt]
-    [:insert {:table (util/with-default-schema (sql/identifier-sym (.tableName stmt))), :stmt stmt}])
+    [:insert {:table (table/->ref (sql/identifier-sym (.tableName stmt))) :stmt stmt}])
 
   (visitPatchStatement [_ stmt]
-    [:patch {:table (util/with-default-schema (sql/identifier-sym (.tableName stmt))), :stmt stmt}])
+    [:patch {:table (table/->ref (sql/identifier-sym (.tableName stmt))), :stmt stmt}])
 
   (visitUpdateStatement [_ stmt]
-    [:update {:table (util/with-default-schema (sql/identifier-sym (.tableName stmt))), :stmt stmt}])
+    [:update {:table (table/->ref (sql/identifier-sym (.tableName stmt))), :stmt stmt}])
 
   (visitDeleteStatement [_ stmt]
-    [:delete {:table (util/with-default-schema (sql/identifier-sym (.tableName stmt))), :stmt stmt}])
+    [:delete {:table (table/->ref (sql/identifier-sym (.tableName stmt))), :stmt stmt}])
 
   (visitEraseStatement [_ stmt]
-    [:erase {:table (util/with-default-schema (sql/identifier-sym (.tableName stmt))), :stmt stmt}])
+    [:erase {:table (table/->ref (sql/identifier-sym (.tableName stmt))), :stmt stmt}])
 
   (visitAssertStatement [_ stmt]
     [:assert {:stmt stmt, :message (some->> (.message stmt) (sql/accept-visitor sql/string-literal-visitor))}])

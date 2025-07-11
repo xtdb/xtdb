@@ -174,15 +174,14 @@
 
 (defn scan-fields [table-catalog ^Watermark wm scan-cols]
   (letfn [(->field [[table col-name]]
-            (let [col-name (str col-name)
-                  table-str (str (table/ref->sym table))]
+            (let [col-name (str col-name)]
               ;; TODO move to fields here
               (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
                       (get-in info-schema/derived-tables [table (symbol col-name)])
                       (get-in info-schema/template-tables [table (symbol col-name)])
                       (types/merge-fields (table-cat/column-field table-catalog table col-name)
                                           (some-> (.getLiveIndex wm)
-                                                  (.liveTable table-str)
+                                                  (.liveTable table)
                                                   (.columnField col-name))))
                   (types/field-with-name col-name))))]
     (->> scan-cols
@@ -193,8 +192,7 @@
   (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
     (reify IScanEmitter
       (emitScan [_ {:keys [columns], {:keys [table] :as scan-opts} :scan-opts} scan-fields param-fields]
-        (let [table-sym (table/ref->sym table)
-              col-names (->> columns
+        (let [col-names (->> columns
                              (into #{} (map (fn [[col-type arg]]
                                               (case col-type
                                                 :column arg
@@ -205,8 +203,6 @@
                                                 (get scan-fields [table col-name]))))))
 
               col-names (into #{} (map str) col-names)
-
-              table-name (str table-sym)
 
               selects (->> (for [[tag arg] columns
                                  :when (= tag :select)
@@ -245,7 +241,7 @@
                                              (update :for-valid-time
                                                      (fn [fvt]
                                                        (or fvt [:at [:now]]))))
-                               ^LiveTable$Watermark live-table-wm (some-> (.getLiveIndex watermark) (.liveTable table-name))
+                               ^LiveTable$Watermark live-table-wm (some-> (.getLiveIndex watermark) (.liveTable table))
                                temporal-bounds (->temporal-bounds allocator args scan-opts snapshot-time)]
                            (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                              (let [merge-tasks (util/with-open [page-metadatas (LinkedList.)]
@@ -268,7 +264,7 @@
 
                                                                   live-table-wm (conj (-> (trie/->Segment (.getLiveTrie live-table-wm))
                                                                                           (assoc :memory-rel (.getLiveRelation live-table-wm))))
-                                                                  template-table? (conj (let [[memory-rel trie] (table->template-rel+trie (symbol table-name))]
+                                                                  template-table? (conj (let [[memory-rel trie] (table->template-rel+trie table)]
                                                                                           (-> (trie/->Segment trie)
                                                                                               (assoc :memory-rel memory-rel)))))]
                                                    (->> (HashTrieKt/toMergePlan segments (->path-pred iid-arrow-buf))

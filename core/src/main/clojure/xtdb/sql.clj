@@ -618,7 +618,7 @@
               (->DerivedTable plan table-alias unique-table-alias
                               (->insertion-ordered-set (or cols cte-cols)))))
 
-          (let [[sn table-cols] (or (when-let [table-cols (get table-info (symbol (or (some-> sn str) "public") (str tn)))]
+          (let [[sn table-cols] (or (when-let [table-cols (get table-info (table/->ref sn tn))]
                                       [sn table-cols])
 
                                     (when-not sn
@@ -2472,15 +2472,10 @@
                         (mapv #(->col-sym (str unique-table-alias) (str %)))))))
 
   (visitXtqlQuery [_ ctx]
-    (let [table-info (->> (:table-info env)
-                          ;; TODO get XTQL using symbol table-info
-                          (into {} (map (fn [[tbl cols]]
-                                          [(str tbl) (into #{} (map str) cols)]))))
-
-          {:keys [ra-plan]} (-> (edn/read-string {:readers *data-readers*}
+    (let [{:keys [ra-plan]} (-> (edn/read-string {:readers *data-readers*}
                                                  (.accept (.xtqlQuery ctx) string-literal-visitor))
                                 (xtql/parse-query {:!param-count (:!param-count env)})
-                                (xtql.plan/compile-query* {:table-info table-info}))]
+                                (xtql.plan/compile-query* {:table-info (:table-info env)}))]
 
       (->QueryExpr ra-plan (mapv symbol (lp/relation-columns ra-plan)))))
 
@@ -2670,7 +2665,7 @@
          [:project [_iid _valid_from _valid_to
                     {doc ~(into {} (map (juxt keyword identity)) known-cols)}]
           [:order-by [[_iid] [_valid_from]]
-           [:scan {:table ~(table/->ref table)
+           [:scan {:table ~table
                    :for-valid-time [:in ~valid-from ~valid-to]}
             [_iid _valid_from _valid_to
              ~@known-cols]]]]]]]])))
@@ -2725,11 +2720,10 @@
       insert-plan))
 
   (visitPatchStatement [this ctx]
-    (let [table-name (-> (identifier-sym (.tableName ctx))
-                         util/with-default-schema)
+    (let [table (table/->ref (identifier-sym (.tableName ctx)))
           [vf-expr vt-expr] (some-> (.patchStatementValidTimeExtents ctx)
                                     (.accept (->PatchValidTimeExtentsVisitor env scope)))]
-      (->QueryExpr (plan-patch env {:table table-name
+      (->QueryExpr (plan-patch env {:table table
                                     :valid-from vf-expr
                                     :valid-to vt-expr
                                     :patch-rel (.accept (.patchSource ctx) this)})
@@ -2757,7 +2751,7 @@
           {:keys [for-valid-time], vt-projection :projection} (some-> (.dmlStatementValidTimeExtents ctx)
                                                                       (.accept (->DmlValidTimeExtentsVisitor env scope)))
 
-          table-cols (if-let [cols (get table-info table-name)]
+          table-cols (if-let [cols (get table-info (table/->ref table-name))]
                        cols
                        (do
                          (add-warning! env (->BaseTableNotFound nil table-name))
@@ -2817,7 +2811,7 @@
           {:keys [for-valid-time], vt-projection :projection} (some-> (.dmlStatementValidTimeExtents ctx)
                                                                       (.accept (->DmlValidTimeExtentsVisitor env scope)))
 
-          table-cols (if-let [cols (get table-info table-name)]
+          table-cols (if-let [cols (get table-info (table/->ref table-name))]
                        cols
                        (do
                          (add-warning! env (->BaseTableNotFound nil table-name))
@@ -2853,7 +2847,7 @@
           table-name (util/with-default-schema table-name)
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
-          table-cols (if-let [cols (get table-info table-name)]
+          table-cols (if-let [cols (get table-info (table/->ref table-name))]
                        cols
                        (do
                          (add-warning! env (->BaseTableNotFound nil table-name))
@@ -2910,18 +2904,18 @@
 
 (defn xform-table-info [table-info]
   (into {}
-        (for [[tn cns] (merge info-schema/table-info
-                              '{xt/txs #{_id committed error system_time}}
-                              table-info)]
-          [(symbol tn) (->> cns
-                            (map ->col-sym)
-                            ^Collection
-                            (sort-by identity (fn [s1 s2]
-                                                (cond
-                                                  (= '_id s1) -1
-                                                  (= '_id s2) 1
-                                                  :else (compare s1 s2))))
-                            ->insertion-ordered-set)])))
+        (for [[table cns] (merge info-schema/table-info
+                                 '{#xt/table xt/txs #{_id committed error system_time}}
+                                 table-info)]
+          [table (->> cns
+                      (map ->col-sym)
+                      ^Collection
+                      (sort-by identity (fn [s1 s2]
+                                          (cond
+                                            (= '_id s1) -1
+                                            (= '_id s2) 1
+                                            :else (compare s1 s2))))
+                      ->insertion-ordered-set)])))
 
 (defn log-warnings [!warnings]
   (doseq [warning @!warnings]

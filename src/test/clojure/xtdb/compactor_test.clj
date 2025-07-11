@@ -592,7 +592,7 @@
                                          :valid-to #xt/instant "2016-01-01T00:00:00Z"}
                               {:xt/id 2}]]
                        {:default-tz #xt/zone "Europe/London"})
-        (tu/flush-block! node )
+        (tu/flush-block! node)
 
         (c/compact-all! node #xt/duration "PT5S")
         ;; to artifically create a new table block
@@ -662,13 +662,13 @@
   (t/is (= [] (xt/q tu/*node* "SELECT _id FROM foo"))))
 
 (t/deftest null-duv-issue-4231
-  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :l [{:foo 1}]}]] )
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :l [{:foo 1}]}]])
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 2 :l []}]])
   (tu/flush-block! tu/*node*)
   (c/compact-all! tu/*node* nil)
 
   (t/is (= [{:xt/id 2, :l []} {:xt/id 1, :l [{:foo 1}]}]
-           (xt/q tu/*node* ["SELECT * FROM docs" ]))))
+           (xt/q tu/*node* ["SELECT * FROM docs"]))))
 
 (t/deftest test-same-entity-same-transaction-4303
   (let [q "SELECT *, _valid_from, _valid_to, _system_from, _system_to FROM docs FOR ALL VALID_TIME"]

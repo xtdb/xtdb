@@ -1,6 +1,5 @@
 (ns xtdb.node-test
   (:require [clojure.java.io :as io]
-            [clojure.string :as str]
             [clojure.test :as t :refer [deftest]]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
@@ -11,14 +10,12 @@
             [xtdb.node :as xtn]
             [xtdb.node.impl] ;;TODO probably move internal methods to main node interface
             [xtdb.protocols :as xtp]
-            [xtdb.query :as query]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import [java.time ZoneId ZonedDateTime]
            [xtdb.api ServerConfig Xtdb$Config]
-           [xtdb.query IQuerySource]
            xtdb.types.RegClass))
 
 (t/use-fixtures :each tu/with-allocator tu/with-mock-clock tu/with-node)
@@ -62,8 +59,8 @@ VALUES (1, 'Happy 2024!', TIMESTAMP '2024-01-01Z'),
              (q "posts2")))))
 
 (t/deftest test-dml-sees-in-tx-docs
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id, v) VALUES ('foo', 0)"]
-                           [:sql "UPDATE foo SET v = 1"]])
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id, v) VALUES ('foo', 0)"]
+                            [:sql "UPDATE foo SET v = 1"]])
 
   (t/is (= [{:xt/id "foo", :v 1}]
            (xt/q tu/*node* "SELECT foo._id, foo.v FROM foo"))))

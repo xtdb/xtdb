@@ -82,10 +82,6 @@ object Trie {
     val TableName.tablePath: Path get() = tablesDir.resolve(replace(Regex("[./]"), "\\$"))
 
     @JvmStatic
-    fun TableName.dataFilePath(trieKey: TrieKey): Path =
-        tablePath.resolve("data").resolve("$trieKey.arrow")
-
-    @JvmStatic
     fun TableName.metaFileDir(): Path = tablePath.resolve("meta")
 
     @JvmStatic

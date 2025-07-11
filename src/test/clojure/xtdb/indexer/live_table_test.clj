@@ -41,7 +41,7 @@
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
                          ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
-                         live-table (LiveTable. allocator bp "public/foo" (RowCounter.) (partial trie/->live-trie 2 4))]
+                         live-table (LiveTable. allocator bp #xt/table foo (RowCounter.) (partial trie/->live-trie 2 4))]
 
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
                 doc-wtr (.getDocWriter live-table-tx)]
@@ -76,7 +76,7 @@
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
                          ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
-                         live-table (LiveTable. allocator bp "public/foo" (RowCounter.))]
+                         live-table (LiveTable. allocator bp #xt/table foo (RowCounter.))]
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
                 doc-wtr (.getDocWriter live-table-tx)]
 
@@ -123,7 +123,7 @@
     (with-open [node (xtn/start-node (merge tu/*node-opts* {:compactor {:threads 0}}))
                 ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
-                live-table (LiveTable. allocator bp "public/foo" rc)]
+                live-table (LiveTable. allocator bp #xt/table foo rc)]
       (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
             doc-wtr (.getDocWriter live-table-tx)]
 
@@ -150,7 +150,7 @@
 
 (deftest test-live-index-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
-        table-name "public/foo"]
+        table #xt/table foo]
     (util/with-open [allocator (RootAllocator.)]
       (let [^BufferPool bp (tu/component tu/*node* :xtdb/buffer-pool)
             block-cat (block-cat/<-node tu/*node*)
@@ -169,7 +169,7 @@
                                                                [])]
           (let [tx-key (serde/->TxKey 0 (.toInstant #inst "2000"))
                 live-index-tx (.startTx live-index tx-key)
-                live-table-tx (.liveTable live-index-tx table-name)
+                live-table-tx (.liveTable live-index-tx table)
                 doc-wtr (.getDocWriter live-table-tx)]
 
             (doseq [uuid uuids]
@@ -181,11 +181,11 @@
 
             (with-open [wm (.openWatermark live-index)]
               (let [live-index-wm (.getLiveIndex wm)
-                    live-table-before (live-table-wm->data (.liveTable live-index-wm table-name))]
+                    live-table-before (live-table-wm->data (.liveTable live-index-wm table))]
 
                 (.finishBlock live-index 0)
 
-                (let [live-table-after (live-table-wm->data (.liveTable live-index-wm table-name))]
+                (let [live-table-after (live-table-wm->data (.liveTable live-index-wm table))]
 
                   (t/is (= (:live-trie-iids live-table-before)
                            (:live-trie-iids live-table-after)

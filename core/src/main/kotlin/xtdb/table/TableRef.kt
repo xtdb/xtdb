@@ -9,8 +9,6 @@ import java.nio.file.Path
 typealias SchemaName = String
 typealias TableName = String
 
-private val TABLE_REF_REGEX = Regex("([^/]+)/([^/]+)")
-
 interface TableRef {
     val schemaName: SchemaName
     val tableName: TableName
@@ -20,9 +18,9 @@ interface TableRef {
     companion object {
         @JvmStatic
         fun parse(str: String): TableRef {
-            val match = (TABLE_REF_REGEX.matchEntire(str) ?: error("Invalid table-ref: `$str`")).groupValues
+            val sym = Symbol.intern(str)
 
-            return tableRef(match[1], match[2])
+            return tableRef(sym.namespace ?: "public", sym.name)
         }
 
         @JvmStatic

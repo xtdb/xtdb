@@ -234,7 +234,7 @@
            (xt/q tu/*node* "SELECT column_name FROM information_schema.columns ORDER BY column_name LIMIT 1")))
 
   (t/is (= [{:attname "_id", :attrelid 127091884}]
-           (xt/q tu/*node* "SELECT attname, attrelid FROM pg_attribute ORDER BY attname LIMIT 1")))
+           (xt/q tu/*node* "SELECT attname, attrelid FROM pg_attribute ORDER BY attname, attrelid LIMIT 1")))
 
   (t/is (= [{:table-name "baseball",
              :data-type ":keyword",

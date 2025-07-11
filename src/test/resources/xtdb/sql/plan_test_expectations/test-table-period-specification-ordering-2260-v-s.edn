@@ -1,9 +1,9 @@
 [:project
- [{_column_1 nil}]
+ [{bar foo.1/bar}]
  [:rename
   foo.1
   [:scan
    {:table #xt/table foo,
     :for-valid-time :all-time,
     :for-system-time :all-time}
-   []]]]
+   [bar]]]]

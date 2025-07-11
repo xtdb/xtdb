@@ -223,7 +223,7 @@ class LogProcessor(
     fun finishBlock() {
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
-        val tables = liveIndex.finishBlock(blockIdx).map { TableRef.parse(it) }
+        val tables = liveIndex.finishBlock(blockIdx)
         blockCatalog.finishBlock(blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId, tables)
         liveIndex.nextBlock()
         LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")

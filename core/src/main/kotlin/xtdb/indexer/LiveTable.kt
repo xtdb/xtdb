@@ -26,7 +26,7 @@ class LiveTable
 @JvmOverloads
 constructor(
     private val al: BufferAllocator, bp: BufferPool,
-    private val tableName: TableName,
+    private val table: TableRef,
     private val rowCounter: RowCounter,
     liveTrieFactory: LiveTrieFactory = LiveTrieFactory { MemoryHashTrie.emptyTrie(it) }
 ) : AutoCloseable {
@@ -60,11 +60,11 @@ constructor(
     private val hllCalculator = HllCalculator()
 
     class Watermark(
-        val columnFields: Map<String, Field>,
+        val columnFields: Map<ColumnName, Field>,
         val liveRelation: RelationReader,
         val liveTrie: MemoryHashTrie
     ) : AutoCloseable {
-        fun columnField(col: String): Field = columnFields[col] ?: Fields.NULL.toArrowField(col)
+        fun columnField(col: ColumnName): Field = columnFields[col] ?: Fields.NULL.toArrowField(col)
 
         override fun close() {
             liveRelation.close()
@@ -185,7 +185,7 @@ constructor(
         val trieKey = Trie.l0Key(blockIdx).toString()
 
         return liveRelation.openDirectSlice(al).use { dataRel ->
-            val dataFileSize = trieWriter.writeLiveTrie(TableRef.parse(tableName), trieKey, liveTrie, dataRel)
+            val dataFileSize = trieWriter.writeLiveTrie(table, trieKey, liveTrie, dataRel)
             FinishedBlock(
                 liveRelation.fields, trieKey, dataFileSize, rowCount,
                 trieMetadataCalculator.build(), hllCalculator.build()

@@ -622,7 +622,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
               ^BufferAllocator al (tu/component node :xtdb/allocator)]
 
           (with-open [live-idx-tx (.startTx live-idx (serde/->TxKey 1 Instant/EPOCH))
-                      live-table-tx (.liveTable live-idx-tx "public/foo")]
+                      live-table-tx (.liveTable live-idx-tx #xt/table foo)]
             (idx/crash-log! (-> idxer (assoc :node-id node-id)) "test crash log"
                             {:foo "bar"} {:live-table-tx live-table-tx}))
 

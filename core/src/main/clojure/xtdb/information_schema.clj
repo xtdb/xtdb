@@ -22,6 +22,7 @@
            (xtdb.arrow Relation RelationReader VectorReader VectorWriter)
            (xtdb.indexer Watermark)
            xtdb.operator.SelectionSpec
+           xtdb.table.TableRef
            (xtdb.trie MemoryHashTrie Trie TrieCatalog)
            xtdb.types.Fields))
 
@@ -30,9 +31,9 @@
 
 (defn schema-info->col-rows [schema-info]
   (for [table-entry schema-info
-        :let [table (key table-entry)
-              cols (into (when-not (and (contains? #{"pg_catalog" "information_schema" "xt"} (namespace table))
-                                        (not= 'xt/txs table))
+        :let [^TableRef table (key table-entry)
+              cols (into (when-not (and (contains? #{"pg_catalog" "information_schema" "xt"} (.getSchemaName table))
+                                        (not= #xt/table xt/txs table))
                            {"_valid_from" (-> Fields/TEMPORAL (.toArrowField "_valid_from"))
                             "_valid_to" (-> Fields/TEMPORAL (.getNullable) (.toArrowField "_valid_to"))
                             "_system_from" (-> Fields/TEMPORAL (.toArrowField "_system_from"))
@@ -128,8 +129,7 @@
 
   (def table-info
     (-> (merge derived-tables template-tables)
-        (update-vals (comp set keys))
-        (update-keys table/ref->sym)))
+        (update-vals (comp set keys))))
 
   (def unq-pg-catalog
     (-> (merge pg-catalog-tables pg-catalog-template-tables)
@@ -145,8 +145,7 @@
 
   (def views
     (-> (set (keys meta-table-schemas))
-        (disj #xt/table pg_catalog/pg_user)
-        (->> (into #{} (map table/ref->sym))))))
+        (disj #xt/table pg_catalog/pg_user))))
 
 (def schemas
   [{:catalog-name "xtdb"
@@ -167,24 +166,24 @@
         schemas))
 
 (defn tables [schema-info]
-  (for [table (keys schema-info)]
+  (for [^TableRef table (keys schema-info)]
     {:table-catalog "xtdb"
-     :table-name (name table)
-     :table-schema (namespace table)
+     :table-name (.getTableName table)
+     :table-schema (.getSchemaName table)
      :table-type (if (views table) "VIEW" "BASE TABLE")}))
 
 (defn pg-tables [schema-info]
-  (for [table (keys schema-info)]
-    {:schemaname (namespace table)
-     :tablename (name table)
+  (for [^TableRef table (keys schema-info)]
+    {:schemaname (.getSchemaName table)
+     :tablename (.getTableName table)
      :tableowner "xtdb"
      :tablespace nil}))
 
 (defn pg-class [schema-info]
-  (for [table (keys schema-info)]
-    {:oid (name->oid table)
-     :relname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (name table))
-     :relnamespace (name->oid (namespace table))
+  (for [^TableRef table (keys schema-info)]
+    {:oid (name->oid (table/ref->sym table))
+     :relname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (.getTableName table))
+     :relnamespace (name->oid (.getSchemaName table))
      :relkind "r"
      :relam (int 2)
      :relchecks (int 0)
@@ -228,10 +227,10 @@
      :rngsubdiff rngsubdiff}))
 
 (defn columns [col-rows]
-  (for [{:keys [table type], col-name :name} col-rows]
+  (for [{:keys [^TableRef table, type], col-name :name} col-rows]
     {:table-catalog "xtdb"
-     :table-name (name table)
-     :table-schema (namespace table)
+     :table-name (.getTableName table)
+     :table-schema (.getSchemaName table)
      :column-name (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) col-name)
      :data-type (pr-str type)}))
 
@@ -243,7 +242,7 @@
                                        :pg-type
                                        (->> (get (-> pg-types/pg-types
                                                      (assoc :default (get pg-types/pg-types :json))))))]]
-    {:attrelid (name->oid table)
+    {:attrelid (name->oid (table/ref->sym table))
      :attname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) name)
      :atttypid (int oid)
      :attlen (int (or typlen -1))
@@ -307,10 +306,10 @@
      :datistemplate false}))
 
 (defn pg-stat-user-tables [schema-info]
-  (for [table (keys schema-info)]
-    {:relid (name->oid (name table))
-     :relname (name table)
-     :schemaname (namespace table)
+  (for [^TableRef table (keys schema-info)]
+    {:relid (name->oid (table/ref->sym table))
+     :relname (.getTableName table)
+     :schemaname (.getSchemaName table)
      :n-live-tup 0}))
 
 (defn pg-settings []
@@ -349,14 +348,7 @@
         [out-rel dummy-trie]))))
 
 (defn table->template-rel+tries [allocator]
-  {'pg_catalog/pg_user (pg-user-template-page+trie allocator)})
-
-(defn- split-table-name [fq-table-name]
-  (let [fq-table (symbol fq-table-name)
-        table-name (name fq-table)
-        schema-name (namespace fq-table)]
-    {:schema-name schema-name
-     :table-name table-name}))
+  {#xt/table pg_catalog/pg_user (pg-user-template-page+trie allocator)})
 
 (defn trie-stats [^TrieCatalog trie-catalog]
   (for [{:keys [schema-name table-name] :as table} (.getTables trie-catalog)
@@ -369,18 +361,20 @@
 
 (defn live-tables [^Watermark wm]
   (let [li-wm (.getLiveIndex wm)]
-    (for [table (.getLiveTables li-wm)
+    (for [^TableRef table (.getLiveTables li-wm)
           :let [live-table (.liveTable li-wm table)]]
-      (into (split-table-name table)
-            {:row-count (long (.getRowCount (.getLiveRelation live-table)))}))))
+      {:schema-name (.getSchemaName table)
+       :table-name (.getTableName table)
+       :row-count (long (.getRowCount (.getLiveRelation live-table)))})))
 
 (defn live-columns [^Watermark wm]
   (let [li-wm (.getLiveIndex wm)]
-    (for [table (.getLiveTables li-wm)
+    (for [^TableRef table (.getLiveTables li-wm)
           [col-name col-field] (.getColumnFields (.liveTable li-wm table))]
-      (into (split-table-name table)
-            {:col-name col-name
-             :col-type (pr-str (types/field->col-type col-field))}))))
+      {:schema-name (.getSchemaName table)
+       :table-name (.getTableName table)
+       :col-name col-name
+       :col-type (pr-str (types/field->col-type col-field))})))
 
 (defn metrics-timers [^MeterRegistry reg]
   (->> (.getMeters reg)
@@ -459,12 +453,10 @@
       ;;TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
       ;;should be types/merge-fields as per scan-fields
       (let [schema-info (-> (merge-with merge
-                                        (-> (table-cat/all-column-fields table-catalog)
-                                            (update-keys table/ref->sym))
+                                        (table-cat/all-column-fields table-catalog)
                                         (some-> (.getLiveIndex ^Watermark wm)
                                                 (.getAllColumnFields)))
-                            (update-keys symbol)
-                            (merge (-> meta-table-schemas (update-keys table/ref->sym))))]
+                            (merge meta-table-schemas))]
         (util/with-close-on-catch [out-root (util/with-open [out-rel (Relation/open ^BufferAllocator allocator
                                                                                     (Schema. (vec (vals derived-table-schema))))]
 
