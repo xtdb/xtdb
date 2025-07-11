@@ -15,21 +15,18 @@
            (org.roaringbitmap IntConsumer RoaringBitmap)
            (xtdb.arrow RelationReader VectorReader)
            (xtdb.util Hasher$Xx)
-           (com.carrotsearch.hppc IntObjectHashMap)))
+           (com.carrotsearch.hppc IntObjectHashMap)
+           (xtdb.expression.map IndexHasher RelationMapBuilder RelationMapProber RelationMap)))
 
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface IIndexHasher
-  (^int hashCode [^int idx]))
-
-(defn ->hasher ^xtdb.expression.map.IIndexHasher [^List #_<VectorReader> cols]
+(defn ->hasher ^xtdb.expression.map.IndexHasher [^List #_<VectorReader> cols]
   (let [hasher (Hasher$Xx.)]
     (case (.size cols)
       1 (let [^VectorReader col (.get cols 0)]
-          (reify IIndexHasher
+          (reify IndexHasher
             (hashCode [_ idx]
               (.hashCode col idx hasher))))
 
-      (reify IIndexHasher
+      (reify IndexHasher
         (hashCode [_ idx]
           (loop [n 0
                  hash-code 0]
@@ -37,28 +34,6 @@
               (let [^VectorReader col (.get cols n)]
                 (recur (inc n) (MurmurHasher/combineHashCode hash-code (.hashCode col idx hasher))))
               hash-code)))))))
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface IRelationMapBuilder
-  (^void add [^int inIdx])
-  (^int addIfNotPresent [^int inIdx]))
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface IRelationMapProber
-  (^int indexOf [^int inIdx, ^boolean removeOnMatch])
-  (^void forEachMatch [^int inIdx, ^java.util.function.IntConsumer c])
-  (^int matches [^int inIdx]))
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface IRelationMap
-  (^java.util.Map buildFields [])
-  (^java.util.List buildKeyColumnNames [])
-  (^java.util.Map probeFields [])
-  (^java.util.List probeKeyColumnNames [])
-
-  (^xtdb.expression.map.IRelationMapBuilder buildFromRelation [^xtdb.arrow.RelationReader inRelation])
-  (^xtdb.expression.map.IRelationMapProber probeFromRelation [^xtdb.arrow.RelationReader inRelation])
-  (^xtdb.arrow.RelationReader getBuiltRelation []))
 
 (defn- andIBO
   ([]
@@ -181,7 +156,7 @@
 
 (def nil-row-idx 0)
 
-(defn ->relation-map ^xtdb.expression.map.IRelationMap
+(defn ->relation-map ^xtdb.expression.map.RelationMap
   [^BufferAllocator allocator,
    {:keys [key-col-names store-full-build-rel?
            build-fields probe-fields
@@ -212,7 +187,7 @@
                           (.put hash->bitmap (int row-hash) bitmap)
                           bitmap)))]
             (reify
-              IRelationMap
+              RelationMap
               (buildFields [_] build-fields)
               (buildKeyColumnNames [_] build-key-col-names)
               (probeFields [_] probe-fields)
@@ -247,7 +222,7 @@
                               (.add hash-bitmap out-idx)
                               (returned-idx out-idx)))]
 
-                    (reify IRelationMapBuilder
+                    (reify RelationMapBuilder
                       (add [_ idx]
                         (add (compute-hash-bitmap (.hashCode hasher idx)) idx))
 
@@ -280,7 +255,7 @@
 
                       hasher (->hasher probe-key-cols)]
 
-                  (reify IRelationMapProber
+                  (reify RelationMapProber
                     (indexOf [_ idx remove-on-match?]
                       (-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))
                           (find-in-hash-bitmap comparator idx remove-on-match?)))
