@@ -50,7 +50,7 @@
 
 (defn ->scan-cols [{:keys [columns], {:keys [table]} :scan-opts}]
   (for [[col-tag col-arg] columns]
-    [(table/ref->sym table)
+    [table
      (case col-tag
        :column col-arg
        :select (key (first col-arg)))]))
@@ -173,15 +173,15 @@
 
 (defn scan-fields [table-catalog ^Watermark wm scan-cols]
   (letfn [(->field [[table col-name]]
-            (let [table (str table)
-                  col-name (str col-name)]
+            (let [col-name (str col-name)
+                  table-str (str (table/ref->sym table))]
               ;; TODO move to fields here
               (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
-                      (get-in info-schema/derived-tables [(symbol table) (symbol col-name)])
-                      (get-in info-schema/template-tables [(symbol table) (symbol col-name)])
-                      (types/merge-fields (table-cat/column-field table-catalog table col-name)
+                      (get-in info-schema/derived-tables [table (symbol col-name)])
+                      (get-in info-schema/template-tables [table (symbol col-name)])
+                      (types/merge-fields (table-cat/column-field table-catalog table-str col-name)
                                           (some-> (.getLiveIndex wm)
-                                                  (.liveTable table)
+                                                  (.liveTable table-str)
                                                   (.columnField col-name))))
                   (types/field-with-name col-name))))]
     (->> scan-cols
@@ -192,7 +192,7 @@
   (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
     (reify IScanEmitter
       (emitScan [_ {:keys [columns], {:keys [table] :as scan-opts} :scan-opts} scan-fields param-fields]
-        (let [table (table/ref->sym table)
+        (let [table-sym (table/ref->sym table)
               col-names (->> columns
                              (into #{} (map (fn [[col-type arg]]
                                               (case col-type
@@ -205,7 +205,7 @@
 
               col-names (into #{} (map str) col-names)
 
-              table-name (str table)
+              table-name (str table-sym)
 
               selects (->> (for [[tag arg] columns
                                  :when (= tag :select)
