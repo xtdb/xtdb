@@ -19,20 +19,21 @@ import xtdb.compactor.PageTree.Companion.asTree
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.PageMetadata
+import xtdb.table.TableRef
+import xtdb.table.TableRef.Companion.metaFilePath
 import xtdb.trie.*
 import xtdb.trie.ISegment.Segment
-import xtdb.trie.Trie.metaFilePath
 import xtdb.util.*
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-private typealias JobKey = Pair<TableName, TrieKey>
+private typealias JobKey = Pair<TableRef, TrieKey>
 
 interface Compactor : AutoCloseable {
 
     interface Job {
-        val tableName: String
+        val table: TableRef
         val trieKeys: List<TrieKey>
         val part: ByteArray
         val outputTrieKey: Trie.Key
@@ -67,19 +68,19 @@ interface Compactor : AutoCloseable {
 
         private fun Job.trieDetails(trieKey: TrieKey, dataFileSize: FileSize, trieMetadata: TrieMetadata?) =
             TrieDetails.newBuilder()
-                .setTableName(tableName).setTrieKey(trieKey)
+                .setTableName("${table.schemaName}/${table.tableName}").setTrieKey(trieKey)
                 .setDataFileSize(dataFileSize)
                 .setTrieMetadata(trieMetadata)
                 .build()
 
         private fun Job.execute(): List<TrieDetails> =
             try {
-                LOGGER.debug("compacting '$tableName' '$trieKeys' -> $outputTrieKey")
+                LOGGER.debug("compacting '${table.sym}' '$trieKeys' -> $outputTrieKey")
 
-                DataRel.openRels(al, bp, tableName, trieKeys).useAll { dataRels ->
+                DataRel.openRels(al, bp, table, trieKeys).useAll { dataRels ->
                     mutableListOf<PageMetadata>().useAll { pageMetadatas ->
                         for (trieKey in trieKeys) {
-                            pageMetadatas.add(mm.openPageMetadata(tableName.metaFilePath(trieKey)))
+                            pageMetadatas.add(mm.openPageMetadata(table.metaFilePath(trieKey)))
                         }
 
                         val segments = (pageMetadatas zip dataRels)
@@ -98,12 +99,12 @@ interface Compactor : AutoCloseable {
 
                                             val (dataFileSize, trieMetadata) =
                                                 trieWriter.writePageTree(
-                                                    tableName, trieKey,
+                                                    table, trieKey,
                                                     loader, it.leaves.asTree,
                                                     pageSize
                                                 )
 
-                                            LOGGER.debug("compacted '$tableName' -> '$outputTrieKey'")
+                                            LOGGER.debug("compacted '${table.sym}' -> '$outputTrieKey'")
 
                                             trieDetails(trieKey, dataFileSize, trieMetadata)
                                         }
@@ -117,7 +118,7 @@ interface Compactor : AutoCloseable {
             } catch (e: InterruptedException) {
                 throw e
             } catch (e: Throwable) {
-                LOGGER.error(e) { "error running compaction job: $tableName/$outputTrieKey" }
+                LOGGER.error(e) { "error running compaction job: ${table.sym}/$outputTrieKey" }
                 throw e
             }
 
@@ -154,7 +155,7 @@ interface Compactor : AutoCloseable {
 
                 while (true) {
                     availableJobs =
-                        jobCalculator.availableJobs().associateBy { JobKey(it.tableName, it.outputTrieKey.toString()) }
+                        jobCalculator.availableJobs().associateBy { JobKey(it.table, it.outputTrieKey.toString()) }
 
                     if (availableJobs.isEmpty() && queuedJobs.isEmpty()) {
                         LOGGER.trace("sending idle")
@@ -170,10 +171,15 @@ interface Compactor : AutoCloseable {
                                     val timer = meterRegistry?.let { Timer.start(it) }
                                     val addedTries = runInterruptible { job.execute() }
                                     jobTimer?.let { timer?.stop(it) }
-                                    val messageMetadata =  log.appendMessage(TriesAdded(Storage.VERSION, addedTries)).await()
+                                    val messageMetadata =
+                                        log.appendMessage(TriesAdded(Storage.VERSION, addedTries)).await()
                                     // add the trie to the catalog eagerly so that it's present
                                     // next time we run `availableJobs` (it's idempotent)
-                                    trieCatalog.addTries(job.tableName, addedTries, messageMetadata.logTimestamp)
+                                    trieCatalog.addTries(
+                                        job.table.sym.toString(),
+                                        addedTries,
+                                        messageMetadata.logTimestamp
+                                    )
 
                                 }
 

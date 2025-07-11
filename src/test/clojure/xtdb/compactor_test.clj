@@ -38,12 +38,12 @@
                                    (assoc :data-file-size (or size -1)))))
                         (completing (partial cat/apply-trie-notification opts))
                         {}))
-        (as-> table-cat (c/compaction-jobs "foo" table-cat opts))
+        (as-> table-cat (c/compaction-jobs #xt/table foo, table-cat opts))
         (->> (into #{} (map (fn [job]
                               (-> job
                                   (update :part vec)
                                   (update :out-trie-key str)
-                                  (dissoc :table-name :partitioned-by-recency?)))))))))
+                                  (dissoc :table :partitioned-by-recency?)))))))))
 
 (t/deftest test-l0->l1-compaction-jobs
   (binding [cat/*file-size-target* 16]

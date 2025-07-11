@@ -1,6 +1,7 @@
 (ns xtdb.compactor
   (:require [integrant.core :as ig]
             xtdb.metadata
+            [xtdb.table :as table]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.util :as util])
@@ -12,15 +13,15 @@
 (def ^:dynamic *ignore-signal-block?* false)
 (def ^:dynamic *recency-partition* nil)
 
-(defrecord Job [table-name trie-keys part out-trie-key partitioned-by-recency?]
+(defrecord Job [table trie-keys part out-trie-key partitioned-by-recency?]
   Compactor$Job
-  (getTableName [_] table-name)
+  (getTable [_] table)
   (getTrieKeys [_] trie-keys)
   (getPart [_] part)
   (getOutputTrieKey [_] out-trie-key)
   (getPartitionedByRecency [_] partitioned-by-recency?))
 
-(defn- l0->l1-compaction-job [table-name {{l0 :live+nascent} [0 nil []], {l1c :live+nascent} [1 nil []]} {:keys [^long file-size-target]}]
+(defn- l0->l1-compaction-job [table {{l0 :live+nascent} [0 nil []], {l1c :live+nascent} [1 nil []]} {:keys [^long file-size-target]}]
   (when-let [live-l0 (seq (->> l0
                                (take-while #(= :live (:state %)))))]
 
@@ -28,7 +29,7 @@
           {l1-trie-key :trie-key} (->> l1c
                                        (take-while #(< (:data-file-size %) file-size-target))
                                        first)]
-      (->Job table-name (-> []
+      (->Job table (-> []
                             (cond-> l1-trie-key (conj l1-trie-key))
                             (conj l0-trie-key))
              nil ; part
@@ -54,7 +55,7 @@
                          (>= total-size file-size-target))
                  tries)))))
 
-(defn- l2h-compaction-jobs [table-name table-tries opts]
+(defn- l2h-compaction-jobs [table table-tries opts]
   (for [[[level recency _part] {l1h-tries :live+nascent}] table-tries
         :when (and recency (= level 1))
         :let [input-tries (l2h-input-files (-> (get-in table-tries [[2 recency []] :live+nascent])
@@ -65,12 +66,12 @@
                                                reverse)
                                            opts)]
         :when input-tries]
-    (->Job table-name (mapv :trie-key input-tries) (byte-array 0)
+    (->Job table (mapv :trie-key input-tries) (byte-array 0)
            (Trie$Key. 2 recency nil (:block-idx (last input-tries)))
            false ; partitioned-by-recency?
            )))
 
-(defn- tiering-compaction-jobs [table-name table-tries {:keys [^long file-size-target]}]
+(defn- tiering-compaction-jobs [table table-tries {:keys [^long file-size-target]}]
   (for [[[level recency part] {files :live+nascent}] table-tries
         :when (or (and (nil? recency) (= level 1))
                   (> level 1))
@@ -93,16 +94,16 @@
         :when (= cat/branch-factor (count in-files))
         :let [trie-keys (mapv :trie-key in-files)
               out-block-idx (:block-idx (last in-files))]]
-    (->Job table-name trie-keys out-part
+    (->Job table trie-keys out-part
            (Trie$Key. out-level recency (ByteArrayList/from out-part) out-block-idx)
            false ; partitioned-by-recency?
            )))
 
-(defn compaction-jobs [table-name {table-tries :tries} opts]
-  (concat (when-let [job (l0->l1-compaction-job table-name table-tries opts)]
+(defn compaction-jobs [table {table-tries :tries} opts]
+  (concat (when-let [job (l0->l1-compaction-job table table-tries opts)]
             [job])
-          (l2h-compaction-jobs table-name table-tries opts)
-          (tiering-compaction-jobs table-name table-tries opts)))
+          (l2h-compaction-jobs table table-tries opts)
+          (tiering-compaction-jobs table table-tries opts)))
 
 (defmethod ig/prep-key :xtdb/compactor [_ ^CompactorConfig config]
   {:allocator (ig/ref :xtdb/allocator)
@@ -124,7 +125,7 @@
                      (availableJobs [_]
                        (->> (.getTableNames trie-catalog)
                             (into [] (mapcat (fn [table-name]
-                                               (compaction-jobs table-name (cat/trie-state trie-catalog table-name) trie-catalog)))))))
+                                               (compaction-jobs (table/->ref table-name) (cat/trie-state trie-catalog table-name) trie-catalog)))))))
 
                    *ignore-signal-block?* threads *page-size* *recency-partition*))
 

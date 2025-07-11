@@ -8,6 +8,7 @@ import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.compactor.PageTree
 import xtdb.log.proto.TrieMetadata
+import xtdb.table.TableRef
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
 
 private typealias Selection = IntArray
@@ -17,9 +18,9 @@ class TrieWriter(
     private val calculateBlooms: Boolean
 ) {
 
-    fun writeLiveTrie(tableName: TableName, trieKey: TrieKey, trie: MemoryHashTrie, dataRel: RelationReader): FileSize =
-        DataFileWriter(al, bp, tableName, trieKey, dataRel.schema).use { dataFileWriter ->
-            MetadataFileWriter(al, bp, tableName, trieKey, dataFileWriter.dataRel, calculateBlooms, false)
+    fun writeLiveTrie(table: TableRef, trieKey: TrieKey, trie: MemoryHashTrie, dataRel: RelationReader): FileSize =
+        DataFileWriter(al, bp, table, trieKey, dataRel.schema).use { dataFileWriter ->
+            MetadataFileWriter(al, bp, table, trieKey, dataFileWriter.dataRel, calculateBlooms, false)
                 .use { metaFileWriter ->
                     val copier = dataFileWriter.dataRel.rowCopier(dataRel)
 
@@ -77,17 +78,17 @@ class TrieWriter(
     }
 
     fun writePageTree(
-        tableName: TableName, trieKey: TrieKey,
+        table: TableRef, trieKey: TrieKey,
         loader: Relation.Loader, pageTree: PageTree?,
         pageSize: Int
     ): Pair<FileSize, TrieMetadata?> =
-        DataFileWriter(al, bp, tableName, trieKey, loader.schema).use { dataFileWriter ->
+        DataFileWriter(al, bp, table, trieKey, loader.schema).use { dataFileWriter ->
             val dataRel = dataFileWriter.dataRel
 
             val startPtr = ArrowBufPointer()
             val endPtr = ArrowBufPointer()
 
-            MetadataFileWriter(al, bp, tableName, trieKey, dataFileWriter.dataRel, calculateBlooms, true)
+            MetadataFileWriter(al, bp, table, trieKey, dataFileWriter.dataRel, calculateBlooms, true)
                 .use { metaFileWriter ->
                     Relation.open(al, loader.schema).use { inRel ->
                         val iidReader = inRel["_iid"]

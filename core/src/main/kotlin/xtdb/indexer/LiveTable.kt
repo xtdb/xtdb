@@ -8,6 +8,7 @@ import xtdb.api.TransactionKey
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.log.proto.TrieMetadata
+import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.*
 import xtdb.types.Fields
@@ -184,7 +185,7 @@ constructor(
         val trieKey = Trie.l0Key(blockIdx).toString()
 
         return liveRelation.openDirectSlice(al).use { dataRel ->
-            val dataFileSize = trieWriter.writeLiveTrie(tableName, trieKey, liveTrie, dataRel)
+            val dataFileSize = trieWriter.writeLiveTrie(TableRef.parse(tableName), trieKey, liveTrie, dataRel)
             FinishedBlock(
                 liveRelation.fields, trieKey, dataFileSize, rowCount,
                 trieMetadataCalculator.build(), hllCalculator.build()

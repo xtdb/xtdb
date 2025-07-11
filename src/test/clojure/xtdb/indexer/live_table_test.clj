@@ -9,8 +9,7 @@
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.util :as util])
   (:import (java.nio ByteBuffer)
            (java.util Arrays HashMap)
            (java.util.concurrent.locks StampedLock)
@@ -42,7 +41,7 @@
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
                          ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
-                         live-table (LiveTable. allocator bp "foo" (RowCounter.) (partial trie/->live-trie 2 4))]
+                         live-table (LiveTable. allocator bp "public/foo" (RowCounter.) (partial trie/->live-trie 2 4))]
 
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
                 doc-wtr (.getDocWriter live-table-tx)]
@@ -77,7 +76,7 @@
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
                          ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                          allocator (RootAllocator.)
-                         live-table (LiveTable. allocator bp "foo" (RowCounter.))]
+                         live-table (LiveTable. allocator bp "public/foo" (RowCounter.))]
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
                 doc-wtr (.getDocWriter live-table-tx)]
 
@@ -124,7 +123,7 @@
     (with-open [node (xtn/start-node (merge tu/*node-opts* {:compactor {:threads 0}}))
                 ^BufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
-                live-table (LiveTable. allocator bp "foo" rc)]
+                live-table (LiveTable. allocator bp "public/foo" rc)]
       (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
             doc-wtr (.getDocWriter live-table-tx)]
 
@@ -151,7 +150,7 @@
 
 (deftest test-live-index-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
-        table-name "foo"]
+        table-name "public/foo"]
     (util/with-open [allocator (RootAllocator.)]
       (let [^BufferPool bp (tu/component tu/*node* :xtdb/buffer-pool)
             block-cat (block-cat/<-node tu/*node*)

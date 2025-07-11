@@ -38,7 +38,7 @@
 
     (t/testing "commit"
       (let [live-idx-tx (.startTx live-index (serde/->TxKey 0 (.toInstant #inst "2000")))
-            live-table-tx (.liveTable live-idx-tx "my-table")
+            live-table-tx (.liveTable live-idx-tx "public/my-table")
             put-doc-wrt (.getDocWriter live-table-tx)]
         (doseq [^UUID iid iids]
           (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes iid)) 0 0
@@ -46,7 +46,7 @@
 
         (.commit live-idx-tx)
 
-        (let [live-table (.liveTable live-index "my-table")
+        (let [live-table (.liveTable live-index "public/my-table")
               live-rel (.getLiveRelation live-table)
               iid-vec (.getVector (.vectorFor live-rel "_iid"))
 
@@ -60,8 +60,8 @@
     (t/testing "finish block"
       (tu/finish-block! tu/*node*)
 
-      (let [trie-ba (.getByteArray buffer-pool (util/->path "tables/my-table/meta/l00-rc-b00.arrow"))
-            leaf-ba (.getByteArray buffer-pool (util/->path "tables/my-table/data/l00-rc-b00.arrow"))]
+      (let [trie-ba (.getByteArray buffer-pool (util/->path "tables/public$my-table/meta/l00-rc-b00.arrow"))
+            leaf-ba (.getByteArray buffer-pool (util/->path "tables/public$my-table/data/l00-rc-b00.arrow"))]
         (util/with-open [trie-loader (Relation/loader allocator (util/->seekable-byte-channel (ByteBuffer/wrap trie-ba)))
                          trie-rel (Relation/open allocator (.getSchema trie-loader))
                          leaf-loader (Relation/loader allocator (util/->seekable-byte-channel (ByteBuffer/wrap leaf-ba)))

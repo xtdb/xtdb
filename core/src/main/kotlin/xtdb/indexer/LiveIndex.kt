@@ -8,9 +8,9 @@ import xtdb.trie.TableName
 interface LiveIndex : Watermark.Source, AutoCloseable {
 
     interface Watermark : AutoCloseable {
-        val allColumnFields: Map<String, Map<String, Field>>
-        fun liveTable(tableName: String): LiveTable.Watermark
-        val liveTables: Iterable<String>
+        val allColumnFields: Map<TableName, Map<String, Field>>
+        fun liveTable(tableName: TableName): LiveTable.Watermark
+        val liveTables: Iterable<TableName>
     }
 
     interface Tx : AutoCloseable {
