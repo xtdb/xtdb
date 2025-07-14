@@ -161,6 +161,7 @@ export default defineConfig({
                                 
                             ]
                         },
+                        { label: 'Maintenance', link: '/ops/maintenance' },
                         { label: 'Troubleshooting', link: '/ops/troubleshooting' },
 
                     ]
