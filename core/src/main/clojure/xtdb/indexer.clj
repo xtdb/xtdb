@@ -605,8 +605,7 @@
                (.endStruct doc-writer)))))
 
 (defmethod ig/prep-key :xtdb/indexer [_ opts]
-  (merge {:allocator (ig/ref :xtdb/allocator)
-          :config (ig/ref :xtdb/config)
+  (merge {:config (ig/ref :xtdb/config)
           :q-src (ig/ref ::q/query-source)
           :metrics-registry (ig/ref :xtdb.metrics/registry)}
          opts))
@@ -714,21 +713,21 @@
                     (.commit live-idx-tx)
                     (serde/->tx-committed msg-id system-time)))))))))))
 
-(defmethod ig/init-key :xtdb/indexer [_ {:keys [^BufferAllocator allocator, config, q-src, metrics-registry]}]
-  (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
-    (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
+(defmethod ig/init-key :xtdb/indexer [_ {:keys [config, q-src, metrics-registry]}]
+  (let [tx-timer (metrics/add-timer metrics-registry "tx.op.timer"
+                                    {:description "indicates the timing and number of transactions"})
+        tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
+    (reify Indexer
+      (openForDatabase [_ db]
+        (util/with-close-on-catch [allocator (-> (.getAllocator db) (util/->child-allocator "indexer"))]
+          ;; TODO add db-name to allocator gauge
+          (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
 
-    (let [tx-timer (metrics/add-timer metrics-registry "tx.op.timer"
-                                      {:description "indicates the timing and number of transactions"})
-          tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
-      (reify Indexer
-        (openForDatabase [_ db]
           (->IndexerForDatabase allocator (:node-id config) q-src
                                 db (.getLiveIndex db) (.getTableCatalog db)
-                                tx-timer tx-error-counter))
+                                tx-timer tx-error-counter)))
 
-        (close [_]
-          (util/close allocator))))))
+      (close [_]))))
 
 (defmethod ig/halt-key! :xtdb/indexer [_ indexer]
   (util/close indexer))
