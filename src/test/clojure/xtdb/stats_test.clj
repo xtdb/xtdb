@@ -1,6 +1,7 @@
 (ns xtdb.stats-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.database :as db]
             [xtdb.logical-plan :as lp]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
@@ -11,7 +12,8 @@
 
 (deftest test-scan
   (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 2}}))]
-    (let [scan-emitter (util/component node :xtdb.operator.scan/scan-emitter)]
+    (let [scan-emitter (util/component node :xtdb.operator.scan/scan-emitter)
+          db (db/<-node node)]
       (xt/submit-tx node [[:put-docs :foo {:xt/id "foo1"}]
                           [:put-docs :bar {:xt/id "bar1"}]])
 
@@ -24,12 +26,14 @@
       (t/is (= {:row-count 3}
                (:stats (lp/emit-expr '{:op :scan, :scan-opts {:table #xt/table foo}, :columns [[:column id]]}
                                      {:scan-fields {['foo 'id] (types/col-type->field :utf8)},
-                                      :scan-emitter scan-emitter}))))
+                                      :scan-emitter scan-emitter
+                                      :db db}))))
 
       (t/is (= {:row-count 2}
                (:stats (lp/emit-expr '{:op :scan, :scan-opts {:table #xt/table bar}, :columns [[:column id]]}
                                      {:scan-fields {['bar 'id] (types/col-type->field :utf8)},
-                                      :scan-emitter scan-emitter})))))))
+                                      :scan-emitter scan-emitter
+                                      :db db})))))))
 
 (deftest test-project
   (t/is (= {:row-count 5}

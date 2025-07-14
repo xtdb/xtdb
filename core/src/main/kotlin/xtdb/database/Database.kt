@@ -2,25 +2,24 @@ package xtdb.database
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.BufferPool
+import xtdb.api.log.Log
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveIndex
-import xtdb.operator.scan.ScanEmitter
+import xtdb.metadata.PageMetadata
 import xtdb.trie.TrieCatalog
 
 typealias DatabaseName = String
 
-interface Database : AutoCloseable {
-    val name: DatabaseName
+class Database(
+    val name: DatabaseName,
+    val allocator: BufferAllocator,
+    val blockCatalog: BlockCatalog, val tableCatalog: TableCatalog, val trieCatalog: TrieCatalog,
+    val log: Log, val bufferPool: BufferPool,
+    val metadataManager: PageMetadata.Factory, val liveIndex: LiveIndex
+) : AutoCloseable {
 
-    val allocator: BufferAllocator
-
-    val blockCatalog: BlockCatalog
-    val tableCatalog: TableCatalog
-    val trieCatalog: TrieCatalog
-
-    val bufferPool: BufferPool
-    val liveIndex: LiveIndex
-
-    val scanEmitter: ScanEmitter
+    override fun close() {
+        allocator.close()
+    }
 }

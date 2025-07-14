@@ -3,21 +3,18 @@ package xtdb.compactor
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.future.await
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.withTimeout
-import org.apache.arrow.memory.BufferAllocator
-import xtdb.BufferPool
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.api.storage.Storage
 import xtdb.arrow.Relation
 import xtdb.compactor.PageTree.Companion.asTree
+import xtdb.database.Database
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.PageMetadata
@@ -28,8 +25,11 @@ import xtdb.trie.Trie.metaFilePath
 import xtdb.util.*
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 private typealias JobKey = Pair<TableRef, TrieKey>
+
+private val LOGGER = Compactor::class.logger
 
 interface Compactor : AutoCloseable {
 
@@ -42,189 +42,216 @@ interface Compactor : AutoCloseable {
     }
 
     interface JobCalculator {
-        fun availableJobs(): Collection<Job>
+        fun availableJobs(trieCatalog: TrieCatalog): Collection<Job>
     }
 
-    fun signalBlock()
-    fun compactAll(timeout: Duration? = null)
+    interface ForDatabase : AutoCloseable {
+        fun signalBlock()
+        fun compactAll(timeout: Duration? = null)
+    }
+
+    fun openForDatabase(db: Database): ForDatabase
 
     class Impl(
-        al: BufferAllocator, private val bp: BufferPool, private val mm: PageMetadata.Factory,
-        private val log: Log, private val trieCatalog: TrieCatalog, meterRegistry: MeterRegistry?,
+        private val meterRegistry: MeterRegistry?,
         private val jobCalculator: JobCalculator,
-        private val ignoreBlockSignal: Boolean,
-        private val pool: CompactionPool,
+        private val ignoreSignalBlock: Boolean,
+        threadCount: Int,
         private val pageSize: Int,
         private val recencyPartition: RecencyPartition?
     ) : Compactor {
-        private val al = al.openChildAllocator("compactor")
-            .also { meterRegistry?.register(it) }
 
-        private val trieWriter = TrieWriter(al, bp, calculateBlooms = true)
-        private val segMerge = SegmentMerge(al)
+        internal val scope = CoroutineScope(Dispatchers.Default)
 
-        companion object {
-            private val LOGGER = Compactor::class.logger
+        internal val jobsScope =
+            CoroutineScope(
+                Dispatchers.Default.limitedParallelism(threadCount, "compactor")
+                        + SupervisorJob(scope.coroutineContext.job)
+            )
 
-        }
+        override fun openForDatabase(db: Database) = object : ForDatabase {
+            private val al = db.allocator.openChildAllocator("compactor")
+                .also { meterRegistry?.register(it) }
 
-        private fun Job.trieDetails(trieKey: TrieKey, dataFileSize: FileSize, trieMetadata: TrieMetadata?) =
-            TrieDetails.newBuilder()
-                .setTableName(table.sym.toString())
-                .setTrieKey(trieKey)
-                .setDataFileSize(dataFileSize)
-                .setTrieMetadata(trieMetadata)
-                .build()
+            private val log = db.log
+            private val bp = db.bufferPool
+            private val mm = db.metadataManager
+            private val trieCatalog = db.trieCatalog
 
-        private fun Job.execute(): List<TrieDetails> =
-            try {
-                LOGGER.debug("compacting '${table.sym}' '$trieKeys' -> $outputTrieKey")
+            private val trieWriter = TrieWriter(al, bp, calculateBlooms = true)
+            private val segMerge = SegmentMerge(al)
 
-                DataRel.openRels(al, bp, table, trieKeys).useAll { dataRels ->
-                    mutableListOf<PageMetadata>().useAll { pageMetadatas ->
-                        for (trieKey in trieKeys) {
-                            pageMetadatas.add(mm.openPageMetadata(table.metaFilePath(trieKey)))
-                        }
+            private fun Job.trieDetails(trieKey: TrieKey, dataFileSize: FileSize, trieMetadata: TrieMetadata?) =
+                TrieDetails.newBuilder()
+                    .setTableName(table.sym.toString())
+                    .setTrieKey(trieKey)
+                    .setDataFileSize(dataFileSize)
+                    .setTrieMetadata(trieMetadata)
+                    .build()
 
-                        val segments = (pageMetadatas zip dataRels)
-                            .map { (pageMetadata, dataRel) -> Segment(pageMetadata.trie, dataRel) }
+            private fun Job.execute(): List<TrieDetails> =
+                try {
+                    LOGGER.debug("compacting '${table.sym}' '$trieKeys' -> $outputTrieKey")
 
-                        val recencyPartitioning =
-                            if (partitionedByRecency) SegmentMerge.RecencyPartitioning.Partition
-                            else SegmentMerge.RecencyPartitioning.Preserve(outputTrieKey.recency)
+                    DataRel.openRels(al, bp, table, trieKeys).useAll { dataRels ->
+                        mutableListOf<PageMetadata>().useAll { pageMetadatas ->
+                            for (trieKey in trieKeys) {
+                                pageMetadatas.add(mm.openPageMetadata(table.metaFilePath(trieKey)))
+                            }
 
-                        segMerge.mergeSegments(segments, part, recencyPartitioning, this@Impl.recencyPartition)
-                            .useAll { mergeRes ->
-                                mergeRes.map {
-                                    it.openForRead().use { mergeReadCh ->
-                                        Relation.loader(al, mergeReadCh).use { loader ->
-                                            val trieKey = outputTrieKey.copy(recency = it.recency).toString()
+                            val segments = (pageMetadatas zip dataRels)
+                                .map { (pageMetadata, dataRel) -> Segment(pageMetadata.trie, dataRel) }
 
-                                            val (dataFileSize, trieMetadata) =
-                                                trieWriter.writePageTree(
-                                                    table, trieKey,
-                                                    loader, it.leaves.asTree,
-                                                    pageSize
-                                                )
+                            val recencyPartitioning =
+                                if (partitionedByRecency) SegmentMerge.RecencyPartitioning.Partition
+                                else SegmentMerge.RecencyPartitioning.Preserve(outputTrieKey.recency)
 
-                                            LOGGER.debug("compacted '${table.sym}' -> '$outputTrieKey'")
+                            segMerge.mergeSegments(segments, part, recencyPartitioning, this@Impl.recencyPartition)
+                                .useAll { mergeRes ->
+                                    mergeRes.map {
+                                        it.openForRead().use { mergeReadCh ->
+                                            Relation.loader(al, mergeReadCh).use { loader ->
+                                                val trieKey = outputTrieKey.copy(recency = it.recency).toString()
 
-                                            trieDetails(trieKey, dataFileSize, trieMetadata)
+                                                val (dataFileSize, trieMetadata) =
+                                                    trieWriter.writePageTree(
+                                                        table, trieKey,
+                                                        loader, it.leaves.asTree,
+                                                        pageSize
+                                                    )
+
+                                                LOGGER.debug("compacted '${table.sym}' -> '$outputTrieKey'")
+
+                                                trieDetails(trieKey, dataFileSize, trieMetadata)
+                                            }
                                         }
                                     }
                                 }
-                            }
+                        }
                     }
+                } catch (e: ClosedByInterruptException) {
+                    throw InterruptedException(e.message)
+                } catch (e: InterruptedException) {
+                    throw e
+                } catch (e: Throwable) {
+                    LOGGER.error(e) { "error running compaction job: ${table.sym}/$outputTrieKey" }
+                    throw e
                 }
-            } catch (e: ClosedByInterruptException) {
-                throw InterruptedException(e.message)
-            } catch (e: InterruptedException) {
-                throw e
-            } catch (e: Throwable) {
-                LOGGER.error(e) { "error running compaction job: ${table.sym}/$outputTrieKey" }
-                throw e
-            }
 
-        private val wakeup = Channel<Unit>(1, onBufferOverflow = DROP_OLDEST)
-        private val idle = Channel<Unit>()
+            private val wakeup = Channel<Unit>(1, onBufferOverflow = DROP_OLDEST)
+            private val idle = Channel<Unit>()
 
-        @Volatile
-        private var availableJobs = emptyMap<JobKey, Job>()
+            @Volatile
+            private var availableJobs = emptyMap<JobKey, Job>()
 
-        private val queuedJobs = mutableSetOf<JobKey>()
-        private val jobTimer: Timer? = meterRegistry?.let {
-            Timer.builder("compactor.job.timer")
-                .publishPercentiles(0.75, 0.85, 0.95, 0.98, 0.99, 0.999)
-                .register(it)
-        }
-
-        init {
-
-            meterRegistry?.let {
-                Gauge.builder("compactor.jobs.available") { jobCalculator.availableJobs().size.toDouble() }
+            private val queuedJobs = mutableSetOf<JobKey>()
+            private val jobTimer: Timer? = meterRegistry?.let {
+                Timer.builder("compactor.job.timer")
+                    .publishPercentiles(0.75, 0.85, 0.95, 0.98, 0.99, 0.999)
                     .register(it)
             }
 
-            pool.scope.launch {
-                val doneCh = Channel<JobKey>()
+            init {
 
-                while (true) {
-                    availableJobs =
-                        jobCalculator.availableJobs().associateBy { JobKey(it.table, it.outputTrieKey.toString()) }
+                meterRegistry?.let {
+                    Gauge.builder("compactor.jobs.available") { jobCalculator.availableJobs(trieCatalog).size.toDouble() }
+                        .register(it)
+                }
 
-                    if (availableJobs.isEmpty() && queuedJobs.isEmpty()) {
-                        LOGGER.trace("sending idle")
-                        idle.trySend(Unit)
-                    }
+                scope.launch {
+                    val doneCh = Channel<JobKey>()
 
-                    availableJobs.keys.forEach { jobKey ->
-                        if (queuedJobs.add(jobKey)) {
-                            pool.jobsScope.launch {
-                                // check it's still required
-                                val job = availableJobs[jobKey]
-                                if (job != null) {
-                                    val timer = meterRegistry?.let { Timer.start(it) }
-                                    val addedTries = runInterruptible { job.execute() }
-                                    jobTimer?.let { timer?.stop(it) }
-                                    val messageMetadata =
-                                        log.appendMessage(TriesAdded(Storage.VERSION, addedTries)).await()
-                                    // add the trie to the catalog eagerly so that it's present
-                                    // next time we run `availableJobs` (it's idempotent)
-                                    trieCatalog.addTries(
-                                        job.table,
-                                        addedTries,
-                                        messageMetadata.logTimestamp
-                                    )
+                    while (true) {
+                        availableJobs =
+                            jobCalculator.availableJobs(trieCatalog)
+                                .associateBy { JobKey(it.table, it.outputTrieKey.toString()) }
 
+                        if (availableJobs.isEmpty() && queuedJobs.isEmpty()) {
+                            LOGGER.trace("sending idle")
+                            idle.trySend(Unit)
+                        }
+
+                        availableJobs.keys.forEach { jobKey ->
+                            if (queuedJobs.add(jobKey)) {
+                                jobsScope.launch {
+                                    // check it's still required
+                                    val job = availableJobs[jobKey]
+                                    if (job != null) {
+                                        val timer = meterRegistry?.let { Timer.start(it) }
+                                        val addedTries = runInterruptible { job.execute() }
+                                        jobTimer?.let { timer?.stop(it) }
+                                        val messageMetadata =
+                                            log.appendMessage(TriesAdded(Storage.VERSION, addedTries)).await()
+                                        // add the trie to the catalog eagerly so that it's present
+                                        // next time we run `availableJobs` (it's idempotent)
+                                        trieCatalog.addTries(
+                                            job.table,
+                                            addedTries,
+                                            messageMetadata.logTimestamp
+                                        )
+
+                                    }
+
+                                    doneCh.send(jobKey)
                                 }
-
-                                doneCh.send(jobKey)
                             }
                         }
-                    }
 
-                    select {
-                        doneCh.onReceive {
-                            queuedJobs.remove(it)
-                        }
+                        select {
+                            doneCh.onReceive {
+                                queuedJobs.remove(it)
+                            }
 
-                        wakeup.onReceive {
-                            LOGGER.trace("wakey wakey")
+                            wakeup.onReceive {
+                                LOGGER.trace("wakey wakey")
+                            }
                         }
                     }
                 }
             }
-        }
 
-        override fun signalBlock() {
-            if (!ignoreBlockSignal) wakeup.trySend(Unit)
-        }
-
-        override fun compactAll(timeout: Duration?) {
-            val job = pool.scope.launch {
-                LOGGER.trace("compactAll: waiting for idle")
-                if (timeout == null) idle.receive() else withTimeout(timeout) { idle.receive() }
-                LOGGER.trace("compactAll: idle")
+            override fun signalBlock() {
+                if (!ignoreSignalBlock) wakeup.trySend(Unit)
             }
 
-            wakeup.trySend(Unit)
+            override fun compactAll(timeout: Duration?) {
+                val job = scope.launch {
+                    LOGGER.trace("compactAll: waiting for idle")
+                    if (timeout == null) idle.receive() else withTimeout(timeout) { idle.receive() }
+                    LOGGER.trace("compactAll: idle")
+                }
 
-            runBlocking { job.join() }
+                wakeup.trySend(Unit)
+
+                runBlocking { job.join() }
+            }
+
+            override fun close() {
+                segMerge.close()
+
+                runBlocking {
+                    withTimeoutOrNull(10.seconds) { scope.coroutineContext.job.cancelAndJoin() }
+                        ?: LOGGER.warn("failed to close compactor cleanly in 10s")
+                }
+
+                LOGGER.debug("compactor closed")
+            }
         }
+    }
 
-        override fun close() {
-            segMerge.close()
-
-            LOGGER.debug("compactor closed")
-        }
+    override fun close() {
     }
 
     companion object {
         @JvmField
         val NOOP = object : Compactor {
-            override fun signalBlock() {}
-            override fun compactAll(timeout: Duration?) {}
-            override fun close() {}
+            override fun openForDatabase(db: Database) = object : ForDatabase {
+                override fun signalBlock() = Unit
+                override fun compactAll(timeout: Duration?) = Unit
+                override fun close() = Unit
+            }
+
+            override fun close() = Unit
         }
     }
 }

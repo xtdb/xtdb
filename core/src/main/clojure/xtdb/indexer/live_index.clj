@@ -50,7 +50,7 @@
               (update-vals (some-> live-index-wm (.getAllColumnFields))
                            (comp set keys))))
 
-(deftype LiveIndex [^BufferAllocator allocator, ^BufferPool buffer-pool, ^Log log, compactor
+(deftype LiveIndex [^BufferAllocator allocator, ^BufferPool buffer-pool, ^Log log
                     ^BlockCatalog block-cat, table-cat, ^TrieCatalog trie-cat
 
                     ^:volatile-mutable ^TransactionKey latest-completed-tx
@@ -193,8 +193,6 @@
         (finally
           (.unlock wm-lock wm-lock-stamp))))
 
-    (c/signal-block! compactor)
-
     (when (and (not-empty skip-txs) (>= (:tx-id latest-completed-tx) (last skip-txs)))
       #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
       (defonce -log-skip-txs-once
@@ -213,18 +211,17 @@
    :buffer-pool (ig/ref :xtdb/buffer-pool)
    :block-cat (ig/ref :xtdb/block-catalog)
    :table-cat (ig/ref :xtdb/table-catalog)
-   :compactor (ig/ref :xtdb/compactor)
    :log (ig/ref :xtdb/log)
    :trie-cat (ig/ref :xtdb/trie-catalog)
    :metrics-registry (ig/ref :xtdb.metrics/registry)
    :config config})
 
-(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator, ^BlockCatalog block-cat, buffer-pool log trie-cat table-cat compactor ^IndexerConfig config metrics-registry]}]
+(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator, ^BlockCatalog block-cat, buffer-pool log trie-cat table-cat ^IndexerConfig config metrics-registry]}]
   (let [latest-completed-tx (.getLatestCompletedTx block-cat)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (metrics/add-allocator-gauge metrics-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]
-        (->LiveIndex allocator buffer-pool log compactor
+        (->LiveIndex allocator buffer-pool log
                      block-cat table-cat trie-cat
                      latest-completed-tx
                      tables

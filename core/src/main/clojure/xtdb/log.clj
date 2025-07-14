@@ -25,6 +25,7 @@
            (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
+           xtdb.database.Database
            xtdb.indexer.LogProcessor
            (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs)
            (xtdb.util MsgIdUtil)))
@@ -295,9 +296,10 @@
                  (not (instance? TxOp tx-op)) tx-ops/parse-tx-op)))))
 
 (defn submit-tx ^long
-  [{:keys [^BufferAllocator allocator, ^Log log, default-tz]} tx-ops {:keys [system-time] :as opts}]
+  [{:keys [^BufferAllocator allocator, ^Database db, default-tz]} tx-ops {:keys [system-time] :as opts}]
 
-  (let [default-tz (:default-tz opts default-tz)]
+  (let [log (.getLog db)
+        default-tz (:default-tz opts default-tz)]
     (util/rethrowing-cause
       (let [^Log$MessageMetadata message-meta @(.appendMessage log
                                                                (Log$Message$Tx. (serialize-tx-ops allocator (->TxOps tx-ops)
@@ -309,15 +311,15 @@
 (defmethod ig/prep-key :xtdb.log/processor [_ ^Xtdb$Config opts]
   {:allocator (ig/ref :xtdb/allocator)
    :indexer (ig/ref :xtdb/indexer)
+   :compactor (ig/ref :xtdb/compactor)
    :db (ig/ref :xtdb/database)
-   :log (ig/ref :xtdb/log)
    :metrics-registry (ig/ref :xtdb.metrics/registry)
    :block-flush-duration (.getFlushDuration (.getIndexer opts))
    :skip-txs (.getSkipTxs (.getIndexer opts))})
 
-(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator db indexer log metrics-registry block-flush-duration skip-txs] :as deps}]
+(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator db indexer compactor metrics-registry block-flush-duration skip-txs] :as deps}]
   (when deps
-    (LogProcessor. allocator indexer metrics-registry db log block-flush-duration (set skip-txs))))
+    (LogProcessor. allocator indexer metrics-registry compactor db block-flush-duration (set skip-txs))))
 
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
   (util/close log-processor))

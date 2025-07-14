@@ -29,7 +29,7 @@
            xtdb.catalog.TableCatalog
            (xtdb.indexer LiveTable$Watermark Watermark Watermark$Source)
            (xtdb.metadata PageMetadata PageMetadata$Factory)
-           (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask ScanEmitter)
+           (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask)
            xtdb.table.TableRef
            (xtdb.trie ArrowHashTrie$Leaf HashTrie HashTrieKt MergePlanNode MergePlanTask Trie TrieCatalog)
            (xtdb.util TemporalBounds TemporalDimension)))
@@ -47,7 +47,7 @@
 
 (definterface IScanEmitter
   (close [])
-  (emitScan [scan-expr scan-fields param-fields]))
+  (emitScan [^xtdb.database.Database db scan-expr scan-fields param-fields]))
 
 (defn ->scan-cols [{:keys [columns], {:keys [table]} :scan-opts}]
   (for [[col-tag col-arg] columns]
@@ -166,10 +166,6 @@
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
          {:allocator (ig/ref :xtdb/allocator)
-          :metadata-mgr (ig/ref ::meta/metadata-manager)
-          :buffer-pool (ig/ref :xtdb/buffer-pool)
-          :table-catalog (ig/ref :xtdb/table-catalog)
-          :trie-catalog (ig/ref :xtdb/trie-catalog)
           :info-schema (ig/ref :xtdb/information-schema)}))
 
 (defn scan-fields [^TableCatalog table-catalog, ^Watermark wm scan-cols]
@@ -187,14 +183,16 @@
     (->> scan-cols
          (into {} (map (juxt identity ->field))))))
 
-(defmethod ig/init-key ::scan-emitter [_ {:keys [^BufferAllocator allocator, ^PageMetadata$Factory metadata-mgr, ^BufferPool buffer-pool,
-                                                 info-schema ^TrieCatalog trie-catalog, ^TableCatalog table-catalog]}]
+(defmethod ig/init-key ::scan-emitter [_ {:keys [^BufferAllocator allocator, info-schema]}]
   (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
     (reify
-      ScanEmitter
       IScanEmitter
-      (emitScan [_ {:keys [columns], {:keys [^TableRef table] :as scan-opts} :scan-opts} scan-fields param-fields]
-        (let [col-names (->> columns
+      (emitScan [_ db {:keys [columns], {:keys [^TableRef table] :as scan-opts} :scan-opts} scan-fields param-fields]
+        (let [^PageMetadata$Factory metadata-mgr (.getMetadataManager db)
+              ^BufferPool buffer-pool (.getBufferPool db)
+              ^TrieCatalog trie-catalog (.getTrieCatalog db)
+              ^TableCatalog table-catalog (.getTableCatalog db)
+              col-names (->> columns
                              (into #{} (map (fn [[col-type arg]]
                                               (case col-type
                                                 :column arg
@@ -232,7 +230,7 @@
            :->cursor (fn [{:keys [allocator, ^Watermark watermark, snapshot-time, schema, args]}]
                        (if (and (info-schema/derived-tables table) (not (info-schema/template-tables table)))
                          (let [derived-table-schema (info-schema/derived-tables table)]
-                           (info-schema/->cursor info-schema allocator watermark derived-table-schema table col-names col-preds schema args))
+                           (info-schema/->cursor info-schema allocator db watermark derived-table-schema table col-names col-preds schema args))
 
                          (let [template-table? (info-schema/template-tables table)
                                iid-bb (selects->iid-byte-buffer selects args)
@@ -297,5 +295,5 @@
 (defmethod ig/halt-key! ::scan-emitter [_ ^IScanEmitter scan-emmiter]
   (.close scan-emmiter))
 
-(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-fields, param-fields]}]
-  (.emitScan scan-emitter scan-expr scan-fields param-fields))
+(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db scan-fields, param-fields]}]
+  (.emitScan scan-emitter db scan-expr scan-fields param-fields))

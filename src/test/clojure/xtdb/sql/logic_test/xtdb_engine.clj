@@ -11,6 +11,7 @@
            (org.antlr.v4.runtime ParserRuleContext)
            (xtdb.antlr SqlVisitor SqlVisitor)
            xtdb.api.query.IKeyFn
+           xtdb.database.Database
            xtdb.node.impl.Node))
 
 (defn- create-table [node {:keys [table-name columns]}]
@@ -37,9 +38,10 @@
 
   node)
 
-(defn- execute-sql-query [{:keys [live-idx] :as node} sql-statement variables {:keys [direct-sql] :as opts}]
+(defn- execute-sql-query [{:keys [^Database db] :as node} sql-statement variables {:keys [direct-sql] :as opts}]
   (let [!cache (atom {})
-        plan-stmt sql/plan]
+        plan-stmt sql/plan
+        live-idx (.getLiveIndex db)]
 
     ;; we remove _id from non-direct SLT queries because `SELECT *` doesn't expect it to be there
     (with-redefs [sql/plan (fn self

@@ -19,7 +19,7 @@
            (xtdb ICursor)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader VectorReader VectorWriter)
-           xtdb.catalog.TableCatalog
+           xtdb.database.Database
            (xtdb.indexer Watermark)
            xtdb.operator.SelectionSpec
            xtdb.table.TableRef
@@ -435,24 +435,25 @@
     (some-> out-rel .close)))
 
 (defprotocol InfoSchema
-  (->cursor [info-schema allocator wm derived-table-schema
+  (->cursor [info-schema allocator db wm derived-table-schema
              table col-names col-preds
              schema params]))
 
 (defmethod ig/prep-key :xtdb/information-schema [_ opts]
-  (into {:table-catalog (ig/ref :xtdb/table-catalog)
-         :trie-catalog (ig/ref :xtdb/trie-catalog)
-         :metrics-registry (ig/ref :xtdb.metrics/registry)}
+  (into {:metrics-registry (ig/ref :xtdb.metrics/registry)}
         opts))
 
-(defmethod ig/init-key :xtdb/information-schema [_ {:keys [^TableCatalog table-catalog trie-catalog metrics-registry]}]
+(defmethod ig/init-key :xtdb/information-schema [_ {:keys [metrics-registry]}]
   (reify InfoSchema
-    (->cursor [_ allocator wm derived-table-schema
+    (->cursor [_ allocator db wm derived-table-schema
                table col-names col-preds
                schema params]
       ;;TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
       ;;should be types/merge-fields as per scan-fields
-      (let [schema-info (-> (merge-with merge
+      (let [^Database db db
+            table-catalog (.getTableCatalog db)
+            trie-catalog (.getTrieCatalog db)
+            schema-info (-> (merge-with merge
                                         (.getFields table-catalog)
                                         (some-> (.getLiveIndex ^Watermark wm)
                                                 (.getAllColumnFields)))

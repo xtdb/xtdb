@@ -14,6 +14,7 @@ import xtdb.api.storage.Storage
 import xtdb.arrow.RelationReader
 import xtdb.arrow.asChannel
 import xtdb.catalog.BlockCatalog
+import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.error.Interrupted
 import xtdb.table.TableRef
@@ -38,12 +39,13 @@ class LogProcessor(
     allocator: BufferAllocator,
     indexer: Indexer,
     meterRegistry: MeterRegistry,
+    private val compactor: Compactor.ForDatabase,
     db: Database,
-    private val log: Log,
     flushTimeout: Duration,
     private val skipTxs: Set<MessageId>
 ) : Log.Subscriber, AutoCloseable {
 
+    private val log = db.log
     private val epoch = log.epoch
 
     private val blockCatalog = db.blockCatalog
@@ -228,6 +230,7 @@ class LogProcessor(
         val tables = liveIndex.finishBlock(blockIdx)
         blockCatalog.finishBlock(blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId, tables)
         liveIndex.nextBlock()
+        compactor.signalBlock()
         LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
     }
 

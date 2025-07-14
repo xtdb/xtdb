@@ -24,6 +24,7 @@
            [org.apache.arrow.vector.types.pojo Schema]
            [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
            xtdb.arrow.Relation
+           xtdb.database.Database
            xtdb.IResultCursor
            [xtdb.query IQuerySource PreparedQuery]))
 
@@ -270,7 +271,7 @@
                     (some? port) (.port port))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-server [{:keys [allocator q-src live-idx db] :as node}
+(defn open-server [{:keys [allocator q-src ^Database db] :as node}
                    ^FlightSqlServer$Factory factory]
   (let [host (.getHost factory)
         port (.getPort factory)
@@ -280,7 +281,7 @@
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "flight-sql")
                                server (doto (-> (FlightServer/builder allocator (Location/forGrpcInsecure host port)
                                                                       (->fsql-producer {:allocator allocator, :node node,
-                                                                                        :q-src q-src, :db db, :wm-src live-idx
+                                                                                        :q-src q-src, :db db, :wm-src (.getLiveIndex db)
                                                                                         :fsql-txs fsql-txs, :stmts stmts, :tickets tickets}))
 
                                                 #_(doto with-error-logging-middleware)

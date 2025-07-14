@@ -14,20 +14,20 @@
            [java.net InetAddress]
            org.eclipse.jetty.server.Server
            (xtdb.api Xtdb$Config)
-           (xtdb.api.log Log Log$Message$FlushBlock)
+           (xtdb.api.log Log$Message$FlushBlock)
            (xtdb.api.metrics HealthzConfig)
            xtdb.api.Xtdb$Config
            xtdb.BufferPoolKt
-           xtdb.catalog.BlockCatalog
+           xtdb.database.Database
            (xtdb.indexer LogProcessor)))
 
 (defn get-ingestion-error [^LogProcessor log-processor]
   (.getIngestionError log-processor))
 
-(defn- ->block-lag [{:keys [buffer-pool ^BlockCatalog block-catalog]}]
+(defn- ->block-lag [^Database db]
   ;; we could add a gauge for this too
-  (max 0 (- (BufferPoolKt/getLatestAvailableBlockIndex buffer-pool)
-            (or (.getCurrentBlockIndex block-catalog) -1))))
+  (max 0 (- (BufferPoolKt/getLatestAvailableBlockIndex (.getBufferPool db))
+            (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1))))
 
 (def router
   (http/router [["/metrics" {:name :metrics
@@ -49,11 +49,11 @@
                                                        :body "Started."}))))}]
 
                 ["/healthz/alive" {:name :alive
-                                   :get (fn [{:keys [log-processor] :as ctx}]
+                                   :get (fn [{:keys [log-processor db]}]
                                           (or (when-let [ingestion-error (get-ingestion-error log-processor)]
                                                 {:status 503, :body (str "Ingestion error - " ingestion-error)})
 
-                                              (let [block-lag (->block-lag ctx)
+                                              (let [block-lag (->block-lag db)
                                                     block-lag-healthy? (<= block-lag 5)]
                                                 (-> (if block-lag-healthy?
                                                       {:status 200, :body "Alive."}
@@ -65,10 +65,10 @@
                                    :get (fn [_] {:status 200, :body "Ready."})}]
 
                 ["/system/finish-block" {:name :finish-block
-                                         :post (fn [{:keys [^Log log ^BlockCatalog block-catalog]}]
+                                         :post (fn [{:keys [^Database db]}]
                                                  (try
-                                                   (let [flush-msg (Log$Message$FlushBlock. (or (.getCurrentBlockIndex block-catalog) -1))
-                                                         msg-id @(.appendMessage log flush-msg)]
+                                                   (let [flush-msg (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1))
+                                                         msg-id @(.appendMessage (.getLog db) flush-msg)]
                                                      {:status 200, :body "Block flush message sent successfully."
                                                       :headers {"X-XTDB-Message-Id" (str msg-id)}})
                                                    (catch Exception e
@@ -103,18 +103,14 @@
   {:host (.getHost config)
    :port (.getPort config)
    :meter-registry (ig/ref :xtdb.metrics/registry)
-   :log (ig/ref :xtdb/log)
    :log-processor (ig/ref :xtdb.log/processor)
-   :buffer-pool (ig/ref :xtdb/buffer-pool)
-   :block-catalog (ig/ref :xtdb/block-catalog)
+   :db (ig/ref :xtdb/database)
    :node (ig/ref :xtdb/node)})
 
-(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^InetAddress host, ^long port, meter-registry, ^Log log, ^LogProcessor log-processor, buffer-pool block-catalog]}]
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^InetAddress host, ^long port, meter-registry, ^LogProcessor log-processor, db]}]
   (let [^Server server (-> (handler {:meter-registry meter-registry
-                                     :log log
+                                     :db db
                                      :log-processor log-processor
-                                     :buffer-pool buffer-pool
-                                     :block-catalog block-catalog
                                      :initial-target-message-id (.getLatestSubmittedMsgId log-processor)
                                      :node node})
                            (j/run-jetty {:host (some-> host (.getHostAddress)), :port port, :async? true, :join? false}))]

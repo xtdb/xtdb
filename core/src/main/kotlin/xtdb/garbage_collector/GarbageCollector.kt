@@ -2,12 +2,10 @@ package xtdb.garbage_collector
 
 import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
-import xtdb.BufferPool
-import xtdb.catalog.BlockCatalog
+import xtdb.database.Database
 import xtdb.time.microsAsInstant
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
-import xtdb.trie.TrieCatalog
 import java.io.Closeable
 import java.time.Duration
 import java.time.Instant
@@ -16,16 +14,17 @@ import kotlin.time.Duration.Companion.seconds
 
 private val LOGGER = LoggerFactory.getLogger(GarbageCollector::class.java)
 
-
 class GarbageCollector(
-    private val blockCatalog: BlockCatalog,
+    db: Database,
     private val blocksToKeep: Int,
-    private val trieCatalog: TrieCatalog,
     private val garbageLifetime: Duration,
     private val approxRunInterval: Duration,
-    private val bufferPool: BufferPool
 ) : Closeable {
     private val scope = CoroutineScope(Dispatchers.IO)
+
+    private val blockCatalog = db.blockCatalog
+    private val trieCatalog = db.trieCatalog
+    private val bufferPool = db.bufferPool
 
     // explicit function for testing
     fun garbageCollect(garbageAsOf: Instant?) {
@@ -63,7 +62,11 @@ class GarbageCollector(
     }
 
     fun start() {
-        LOGGER.info("Starting GarbageCollector with approxRunInterval: $approxRunInterval, blocksToKeep: $blocksToKeep")
+        LOGGER.debug(
+            "Starting GarbageCollector with approxRunInterval: {}, blocksToKeep: {}",
+            approxRunInterval, blocksToKeep
+        )
+
         scope.launch {
             delay(Random.nextLong(approxRunInterval.toMillis()))
             while (isActive) {
@@ -76,6 +79,6 @@ class GarbageCollector(
 
     override fun close() {
         runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
-        LOGGER.info("GarbageCollector shut down")
+        LOGGER.debug("GarbageCollector shut down")
     }
 }

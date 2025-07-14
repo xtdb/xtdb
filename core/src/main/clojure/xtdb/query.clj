@@ -52,6 +52,7 @@
            xtdb.database.Database
            (xtdb.indexer Watermark)
            (xtdb.query IQuerySource PreparedQuery)
+           xtdb.operator.scan.IScanEmitter
            xtdb.util.RefCounter))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, result-fields
@@ -147,7 +148,7 @@
 
     conformed-plan))
 
-(defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache]} ^Database db, wm param-fields default-tz]
+(defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache]}, scan-emitter, ^Database db, wm param-fields default-tz]
   (.get emit-cache {:scan-fields (when (seq scan-cols)
                                    (scan/scan-fields (.getTableCatalog db) wm scan-cols))
                     :last-known-block (some-> db .getBlockCatalog .getCurrentBlockIndex)
@@ -161,7 +162,8 @@
                                                            :default-tz default-tz
                                                            :last-known-block last-known-block
                                                            :param-fields param-fields
-                                                           :scan-emitter (some-> db .getScanEmitter)}))]
+                                                           :db db
+                                                           :scan-emitter scan-emitter}))]
 
             {:fields (->result-fields col-names fields)
              :->cursor ->cursor}))))
@@ -170,6 +172,7 @@
   (-plan-query [q-src parsed-query query-opts table-info]))
 
 (defrecord QuerySource [^BufferAllocator allocator
+                        ^IScanEmitter scan-emitter
                         ^Counter query-warning-counter
                         ^RefCounter ref-ctr
                         ^Cache plan-cache]
@@ -213,7 +216,7 @@
           (getColumnFields [_ param-fields]
             (let [planned-query (plan-query* @!table-info)]
               (with-open [wm (.openWatermark wm-src)]
-                (:fields (emit-query planned-query db wm
+                (:fields (emit-query planned-query scan-emitter db wm
                                      (->> param-fields
                                           (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity))))
                                      default-tz)))))
@@ -236,7 +239,7 @@
                            :else (throw (ex-info "invalid args"
                                                  {:type (class args)})))
 
-                    {:keys [fields ->cursor]} (emit-query planned-query db wm (->arg-fields args) default-tz)
+                    {:keys [fields ->cursor]} (emit-query planned-query scan-emitter db wm (->arg-fields args) default-tz)
                     current-time (or (some-> (:current-time planned-query) (expr->instant {:args args, :default-tz default-tz}))
                                      (some-> current-time (expr->instant {:args args, :default-tz default-tz}))
                                      (expr/current-time))]
@@ -281,7 +284,8 @@
 (defmethod ig/prep-key ::query-source [_ opts]
   (merge opts
          {:allocator (ig/ref :xtdb/allocator)
-          :metrics-registry (ig/ref :xtdb.metrics/registry)}))
+          :metrics-registry (ig/ref :xtdb.metrics/registry)
+          :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)}))
 
 (defn ->query-source [{:keys [allocator metrics-registry] :as deps}]
   (let [ref-ctr (RefCounter.)

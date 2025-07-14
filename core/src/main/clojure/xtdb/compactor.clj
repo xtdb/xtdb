@@ -5,8 +5,8 @@
             [xtdb.util :as util])
   (:import com.carrotsearch.hppc.ByteArrayList
            xtdb.api.CompactorConfig
-           (xtdb.compactor CompactionPool Compactor Compactor$Impl Compactor$Job Compactor$JobCalculator)
-           (xtdb.trie Trie$Key TrieCatalog)))
+           (xtdb.compactor Compactor Compactor$ForDatabase Compactor$Impl Compactor$Job Compactor$JobCalculator)
+           (xtdb.trie Trie$Key)))
 
 (def ^:dynamic *ignore-signal-block?* false)
 (def ^:dynamic *recency-partition* nil)
@@ -104,52 +104,36 @@
           (tiering-compaction-jobs table table-tries opts)))
 
 (defmethod ig/prep-key :xtdb/compactor [_ ^CompactorConfig config]
-  {:allocator (ig/ref :xtdb/allocator)
-   :buffer-pool (ig/ref :xtdb/buffer-pool)
-   :metadata-mgr (ig/ref :xtdb.metadata/metadata-manager)
-   :compaction-pool (ig/ref ::pool)
-   :threads (.getThreads config)
+  {:threads (.getThreads config)
    :metrics-registry (ig/ref :xtdb.metrics/registry)
-   :log (ig/ref :xtdb/log)
-   :trie-catalog (ig/ref :xtdb/trie-catalog)})
+   :db (ig/ref :xtdb/database)})
 
 (def ^:dynamic *page-size* 1024)
 
-(defn- open-compactor [{:keys [allocator buffer-pool metadata-mgr compaction-pool
-                               log, ^TrieCatalog trie-catalog, metrics-registry]}]
-  (Compactor$Impl. allocator buffer-pool metadata-mgr
-                   log trie-catalog metrics-registry
-                   (reify Compactor$JobCalculator
-                     (availableJobs [_]
-                       (->> (.getTables trie-catalog)
-                            (into [] (mapcat (fn [table]
-                                               (compaction-jobs table (cat/trie-state trie-catalog table) trie-catalog)))))))
+(defn- open-compactor [{:keys [db metrics-registry threads]}]
+  (-> (Compactor$Impl. metrics-registry
+                       (reify Compactor$JobCalculator
+                         (availableJobs [_ trie-catalog]
+                           (->> (.getTables trie-catalog)
+                                (into [] (mapcat (fn [table]
+                                                   (compaction-jobs table (cat/trie-state trie-catalog table) trie-catalog)))))))
 
-                   *ignore-signal-block?* compaction-pool *page-size* *recency-partition*))
+                       *ignore-signal-block?* threads *page-size* *recency-partition*)
+      (.openForDatabase db)))
 
-(defmethod ig/init-key :xtdb/compactor [_ {:keys [threads] :as opts}]
+(defmethod ig/init-key :xtdb/compactor [_ {:keys [threads db] :as opts}]
   (if (pos? threads)
     (open-compactor opts)
-    Compactor/NOOP))
+    (.openForDatabase Compactor/NOOP db)))
 
 (defmethod ig/halt-key! :xtdb/compactor [_ compactor]
   (util/close compactor))
 
-(defn signal-block! [^Compactor compactor]
+(defn signal-block! [^Compactor$ForDatabase compactor]
   (.signalBlock compactor))
 
 (defn compact-all!
   "`timeout` is now required, explicitly specify `nil` if you want to wait indefinitely."
   [node timeout]
 
-  (.compactAll ^Compactor (util/component node :xtdb/compactor) timeout))
-
-(defmethod ig/prep-key ::pool [_ ^CompactorConfig config]
-  {:threads (.getThreads config)})
-
-(defmethod ig/init-key ::pool [_ {:keys [threads]}]
-  (when (pos? threads)
-    (CompactionPool. threads)))
-
-(defmethod ig/halt-key! ::pool [_ pool]
-  (util/close pool))
+  (.compactAll ^Compactor$ForDatabase (util/component node :xtdb/compactor) timeout))

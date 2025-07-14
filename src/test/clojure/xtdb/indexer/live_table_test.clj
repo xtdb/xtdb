@@ -15,7 +15,6 @@
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory RootAllocator)
            xtdb.BufferPool
-           xtdb.compactor.Compactor
            (xtdb.indexer LiveIndex LiveTable LiveTable$Watermark)
            (xtdb.trie MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)))
@@ -158,7 +157,7 @@
             table-catalog (table-cat/<-node tu/*node*)
             trie-catalog (tu/component tu/*node* :xtdb/trie-catalog)
             live-index-allocator (util/->child-allocator allocator "live-index")]
-        (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp log Compactor/NOOP
+        (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp log
                                                                block-cat table-catalog trie-catalog
 
                                                                nil (HashMap.)

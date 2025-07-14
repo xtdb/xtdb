@@ -26,8 +26,9 @@
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
+           xtdb.database.Database
            xtdb.error.Anomaly
-           (xtdb.indexer LiveIndex LogProcessor)
+           (xtdb.indexer LogProcessor)
            (xtdb.query IQuerySource PreparedQuery)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -57,9 +58,8 @@
     (-> (q/cursor->stream cursor query-opts metrics)
         (metrics/wrap-query query-timer))))
 
-(defrecord Node [^BufferAllocator allocator
-                 ^LiveIndex live-idx, db
-                 ^Log log, ^LogProcessor log-processor
+(defrecord Node [^BufferAllocator allocator, ^Database db
+                 ^LogProcessor log-processor
                  ^IQuerySource q-src
                  ^CompositeMeterRegistry metrics-registry
                  default-tz, ^AtomicLong !wm-tx-id
@@ -142,10 +142,10 @@
           (throw e)))))
 
   xtp/PStatus
-  (latest-completed-tx [_] (.getLatestCompletedTx live-idx))
+  (latest-completed-tx [_] (.getLatestCompletedTx (.getLiveIndex db)))
   (latest-submitted-tx-id [_] (.getLatestSubmittedMsgId log-processor))
   (status [this]
-    {:latest-completed-tx (.getLatestCompletedTx live-idx)
+    {:latest-completed-tx (.getLatestCompletedTx (.getLiveIndex db))
      :latest-submitted-tx-id (xtp/latest-submitted-tx-id this)})
 
   xtp/PLocalNode
@@ -160,7 +160,7 @@
 
       (xt-log/await-tx this after-tx-id tx-timeout)
 
-      (.prepareQuery q-src ast db live-idx query-opts)))
+      (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
   (prepare-xtql [this query query-opts]
     (let [{:keys [^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
@@ -171,13 +171,13 @@
                                               {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]
       (xt-log/await-tx this after-tx-id tx-timeout)
 
-      (.prepareQuery q-src ast db live-idx query-opts)))
+      (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
   (prepare-ra [this plan query-opts]
     (let [{:keys [^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (xt-log/await-tx this after-tx-id tx-timeout)
 
-      (.prepareQuery q-src plan db live-idx query-opts)))
+      (.prepareQuery q-src plan db (.getLiveIndex db) query-opts)))
 
   Closeable
   (close [_]
@@ -189,8 +189,6 @@
 
 (defmethod ig/prep-key :xtdb/node [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
-          :live-idx (ig/ref :xtdb.indexer/live-index)
-          :log (ig/ref :xtdb/log)
           :log-processor (ig/ref :xtdb.log/processor)
           :config (ig/ref :xtdb/config)
           :q-src (ig/ref :xtdb.query/query-source)
@@ -254,7 +252,6 @@
          :xtdb.operator.scan/scan-emitter {}
          :xtdb.query/query-source {}
          :xtdb/compactor (.getCompactor opts)
-         :xtdb.compactor/pool (.getCompactor opts)
          :xtdb.metrics/registry {}
          :xtdb/database {}
          :xtdb/authn {:authn-factory (.getAuthn opts)}
