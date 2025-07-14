@@ -3,6 +3,7 @@
             [clojure.test :as t]
             [cognitect.anomalies :as-alias anom]
             [xtdb.api :as xt]
+            [xtdb.database :as db]
             [xtdb.error :as err]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
@@ -243,15 +244,21 @@
                         (cond-> node (-> (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id node)))
                                          (doto (-> :after-tx-id (then-await-tx node))))))
 
+         db (when node
+              (db/<-node node))
+
+         wm-src (if node
+                  (li/<-node node)
+                  (reify Watermark$Source
+                    (openWatermark [_]
+                      (Watermark. nil nil {}))))
+
          ^IQuerySource q-src (if node
                                (util/component node ::q/query-source)
                                (q/->query-source {:allocator allocator
-                                                  :ref-ctr (RefCounter.)
-                                                  :wm-src (reify Watermark$Source
-                                                            (openWatermark [_]
-                                                              (Watermark. nil nil {})))}))
+                                                  :ref-ctr (RefCounter.)}))
 
-         ^PreparedQuery pq (.prepareQuery q-src query query-opts)]
+         ^PreparedQuery pq (.prepareQuery q-src query db wm-src query-opts)]
 
      (util/with-open [^RelationReader args-rel (if args
                                                  (vw/open-args allocator args)

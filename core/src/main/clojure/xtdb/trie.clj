@@ -58,10 +58,10 @@
 (defn ->trie-key [^long level, ^LocalDate recency, ^bytes part, ^long block-idx]
   (str (Trie$Key. level recency (some-> part ByteArrayList/from) block-idx)))
 
-(defn ->l0-trie-key [^long block-idx]
+(defn ->l0-trie-key ^java.lang.String [^long block-idx]
   (->trie-key 0 nil nil block-idx))
 
-(defn ->l1-trie-key [^LocalDate recency, ^long block-idx]
+(defn ->l1-trie-key ^java.lang.String [^LocalDate recency, ^long block-idx]
   (->trie-key 1 recency nil block-idx))
 
 (defn parse-trie-key [trie-key]

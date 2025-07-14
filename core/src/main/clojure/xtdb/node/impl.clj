@@ -62,7 +62,7 @@
         (metrics/wrap-query query-timer))))
 
 (defrecord Node [^BufferAllocator allocator
-                 ^IIndexer indexer, ^LiveIndex live-idx
+                 ^IIndexer indexer, ^LiveIndex live-idx, db
                  ^Log log, ^LogProcessor log-processor
                  ^IQuerySource q-src, scan-emitter
                  ^CompositeMeterRegistry metrics-registry
@@ -164,7 +164,7 @@
 
       (xt-log/await-tx this after-tx-id tx-timeout)
 
-      (.prepareQuery q-src ast query-opts)))
+      (.prepareQuery q-src ast db live-idx query-opts)))
 
   (prepare-xtql [this query query-opts]
     (let [{:keys [^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
@@ -175,13 +175,13 @@
                                               {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]
       (xt-log/await-tx this after-tx-id tx-timeout)
 
-      (.prepareQuery q-src ast query-opts)))
+      (.prepareQuery q-src ast db live-idx query-opts)))
 
   (prepare-ra [this plan query-opts]
     (let [{:keys [^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (xt-log/await-tx this after-tx-id tx-timeout)
 
-      (.prepareQuery q-src plan query-opts)))
+      (.prepareQuery q-src plan db live-idx query-opts)))
 
   Closeable
   (close [_]
@@ -199,6 +199,7 @@
           :log-processor (ig/ref :xtdb.log/processor)
           :config (ig/ref :xtdb/config)
           :q-src (ig/ref :xtdb.query/query-source)
+          :db (ig/ref :xtdb/database)
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
           :metrics-registry (ig/ref :xtdb.metrics/registry)
           :authn (ig/ref :xtdb/authn)}
@@ -261,6 +262,7 @@
          :xtdb/compactor (.getCompactor opts)
          :xtdb.compactor/pool (.getCompactor opts)
          :xtdb.metrics/registry {}
+         :xtdb/database {}
          :xtdb/authn {:authn-factory (.getAuthn opts)}
          :xtdb/log (.getLog opts)
          :xtdb/buffer-pool (.getStorage opts)

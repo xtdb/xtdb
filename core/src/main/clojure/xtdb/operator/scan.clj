@@ -29,7 +29,7 @@
            xtdb.catalog.TableCatalog
            (xtdb.indexer LiveTable$Watermark Watermark Watermark$Source)
            (xtdb.metadata PageMetadata PageMetadata$Factory)
-           (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask)
+           (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask ScanEmitter)
            xtdb.table.TableRef
            (xtdb.trie ArrowHashTrie$Leaf HashTrie HashTrieKt MergePlanNode MergePlanTask Trie TrieCatalog)
            (xtdb.util TemporalBounds TemporalDimension)))
@@ -190,7 +190,9 @@
 (defmethod ig/init-key ::scan-emitter [_ {:keys [^BufferAllocator allocator, ^PageMetadata$Factory metadata-mgr, ^BufferPool buffer-pool,
                                                  info-schema ^TrieCatalog trie-catalog, ^TableCatalog table-catalog]}]
   (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
-    (reify IScanEmitter
+    (reify
+      ScanEmitter
+      IScanEmitter
       (emitScan [_ {:keys [columns], {:keys [^TableRef table] :as scan-opts} :scan-opts} scan-fields param-fields]
         (let [col-names (->> columns
                              (into #{} (map (fn [[col-type arg]]

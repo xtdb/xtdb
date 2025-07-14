@@ -372,8 +372,8 @@
                                  (map-indexed (fn [idx ^VectorReader col]
                                                 (.withName col (str "?_" idx))))))))))))
 
-(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, wm-src, tx-opts, {:keys [stmt message]}]
-  (let [^PreparedQuery pq (.prepareQuery q-src stmt wm-src tx-opts)]
+(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, db, wm-src, tx-opts, {:keys [stmt message]}]
+  (let [^PreparedQuery pq (.prepareQuery q-src stmt db wm-src tx-opts)]
     (-> (fn eval-query [^RelationReader args]
           (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
                                              (assoc :args args, :close-args? false)))]
@@ -389,8 +389,8 @@
 
         (wrap-sql-args (.getParamCount pq)))))
 
-(defn- query-indexer [^IQuerySource q-src, wm-src, ^RelationIndexer rel-idxer, tx-opts, {:keys [stmt] :as query-opts}]
-  (let [^PreparedQuery pq (.prepareQuery q-src stmt wm-src tx-opts)]
+(defn- query-indexer [^IQuerySource q-src, db, wm-src, ^RelationIndexer rel-idxer, tx-opts, {:keys [stmt] :as query-opts}]
+  (let [^PreparedQuery pq (.prepareQuery q-src stmt db wm-src tx-opts)]
     (-> (fn eval-query [^RelationReader args]
           (with-open [res (-> (.openQuery pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
                                                  (assoc :args args, :close-args? false))))]
@@ -435,7 +435,7 @@
                  #(.copyRow doc-copier idx))))))
 
 (defn- ->patch-docs-indexer [^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
-                             ^IQuerySource q-src, wm-src,
+                             ^IQuerySource q-src, db, wm-src
                              {:keys [snapshot-time] :as tx-opts}]
   (let [patch-leg (.vectorFor tx-ops-rdr "patch-docs")
         iids-rdr (.vectorFor patch-leg "iids")
@@ -482,7 +482,7 @@
                                                                                                          ?patch_docs]
                                                                                                        '[_iid doc])})
                                                           (lp/rewrite-plan))
-                                                wm-src tx-opts)
+                                                db wm-src tx-opts)
                               args (vr/rel-reader [(SingletonListReader.
                                                     "?patch_docs"
                                                     (RelationAsStructReader.
@@ -530,7 +530,7 @@
                (.endStruct doc-writer)))))
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^LiveIndex$Tx live-idx-tx
-                                              ^VectorReader tx-ops-rdr, ^IQuerySource q-src, wm-src,
+                                              ^VectorReader tx-ops-rdr, ^IQuerySource q-src, db, wm-src,
                                               {:keys [tx-key] :as tx-opts}]
   (let [sql-leg (.vectorFor tx-ops-rdr "sql")
         query-rdr (.vectorFor sql-leg "query")
@@ -550,17 +550,17 @@
                     tx-opts (assoc tx-opts :arg-fields (some-> args-arrow-rdr (.getVectorSchemaRoot) (.getSchema) (.getFields)))]
                 (case q-tag
                   :insert (foreach-arg-row args-arrow-rdr
-                                           (query-indexer q-src wm-src upsert-idxer tx-opts q-args))
+                                           (query-indexer q-src db wm-src upsert-idxer tx-opts q-args))
                   :patch (foreach-arg-row args-arrow-rdr
-                                          (query-indexer q-src wm-src patch-idxer tx-opts q-args))
+                                          (query-indexer q-src db wm-src patch-idxer tx-opts q-args))
                   :update (foreach-arg-row args-arrow-rdr
-                                           (query-indexer q-src wm-src upsert-idxer tx-opts q-args))
+                                           (query-indexer q-src db wm-src upsert-idxer tx-opts q-args))
                   :delete (foreach-arg-row args-arrow-rdr
-                                           (query-indexer q-src wm-src delete-idxer tx-opts q-args))
+                                           (query-indexer q-src db wm-src delete-idxer tx-opts q-args))
                   :erase (foreach-arg-row args-arrow-rdr
-                                          (query-indexer q-src wm-src erase-idxer tx-opts q-args))
+                                          (query-indexer q-src db wm-src erase-idxer tx-opts q-args))
                   :assert (foreach-arg-row args-arrow-rdr
-                                           (->assert-idxer q-src wm-src tx-opts q-args))
+                                           (->assert-idxer q-src db wm-src tx-opts q-args))
 
                   :create-user (let [{:keys [username password]} q-args]
                                  (update-pg-user! live-idx-tx tx-key username password))
@@ -606,6 +606,7 @@
                     node-id
                     ^BufferPool buffer-pool
                     ^IQuerySource q-src
+                    db
                     ^LiveIndex live-idx
                     table-catalog
                     ^Timer tx-timer
@@ -663,10 +664,10 @@
                              :indexer this}
 
                     !put-docs-idxer (delay (->put-docs-indexer live-idx-tx tx-ops-rdr system-time tx-opts))
-                    !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src wm-src tx-opts))
+                    !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src db wm-src tx-opts))
                     !delete-docs-idxer (delay (->delete-docs-indexer live-idx-tx tx-ops-rdr system-time tx-opts))
                     !erase-docs-idxer (delay (->erase-docs-indexer live-idx-tx tx-ops-rdr tx-opts))
-                    !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src wm-src tx-opts))]
+                    !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src db wm-src tx-opts))]
 
                 (if-let [e (try
                              (err/wrap-anomaly {}
@@ -716,16 +717,17 @@
           :config (ig/ref :xtdb/config)
           :buffer-pool (ig/ref :xtdb/buffer-pool)
           :live-index (ig/ref :xtdb.indexer/live-index)
+          :db (ig/ref :xtdb/database)
           :q-src (ig/ref ::q/query-source)
           :metrics-registry (ig/ref :xtdb.metrics/registry)
           :table-catalog (ig/ref :xtdb/table-catalog)}
          opts))
 
-(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator config buffer-pool, q-src,
+(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator config buffer-pool, q-src, db
                                                 live-index metrics-registry table-catalog]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
     (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
-    (->Indexer allocator (:node-id config) buffer-pool q-src live-index table-catalog
+    (->Indexer allocator (:node-id config) buffer-pool q-src db live-index table-catalog
 
                (metrics/add-timer metrics-registry "tx.op.timer"
                                   {:description "indicates the timing and number of transactions"})

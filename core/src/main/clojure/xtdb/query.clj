@@ -49,9 +49,8 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn Query)
            (xtdb.arrow RelationReader VectorReader)
-           xtdb.catalog.BlockCatalog
            (xtdb.indexer Watermark)
-           (xtdb.query IQuerySource PreparedQuery)
+           (xtdb.query Database IQuerySource PreparedQuery)
            xtdb.util.RefCounter))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, result-fields
@@ -147,12 +146,29 @@
 
     conformed-plan))
 
-(defprotocol PQuerySource
-  (-plan-query [q-src parsed-query query-opts table-info])
-  (-emit-query [q-src planned-query wm param-fields default-tz]))
+(defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache]} ^Database db, wm param-fields default-tz]
+  (.get emit-cache {:scan-fields (when (seq scan-cols)
+                                   (scan/scan-fields (.getTableCatalog db) wm scan-cols))
+                    :last-known-block (some-> db .getBlockCatalog .getCurrentBlockIndex)
+                    :default-tz default-tz
+                    :param-fields param-fields}
 
-(defrecord QuerySource [^BufferAllocator allocator, wm-src, scan-emitter
-                        ^BlockCatalog block-cat, table-cat
+        (fn [{:keys [scan-fields last-known-block param-fields default-tz]}]
+          (let [{:keys [fields ->cursor]} (binding [expr/*default-tz* default-tz]
+                                            (lp/emit-expr conformed-plan
+                                                          {:scan-fields scan-fields
+                                                           :default-tz default-tz
+                                                           :last-known-block last-known-block
+                                                           :param-fields param-fields
+                                                           :scan-emitter (some-> db .getScanEmitter)}))]
+
+            {:fields (->result-fields col-names fields)
+             :->cursor ->cursor}))))
+
+(defprotocol PQuerySource
+  (-plan-query [q-src parsed-query query-opts table-info]))
+
+(defrecord QuerySource [^BufferAllocator allocator
                         ^Counter query-warning-counter
                         ^RefCounter ref-ctr
                         ^Cache plan-cache]
@@ -182,29 +198,7 @@
                                      (.maximumSize 16)
                                      (.build))})))))
 
-  (-emit-query [_ {:keys [conformed-plan scan-cols col-names ^Cache emit-cache]} wm param-fields default-tz]
-    (.get emit-cache {:scan-fields (when (seq scan-cols)
-                                     (scan/scan-fields table-cat wm scan-cols))
-                      :last-known-block (some-> block-cat .getCurrentBlockIndex)
-                      :default-tz default-tz
-                      :param-fields param-fields}
-
-          (fn [{:keys [scan-fields last-known-block param-fields default-tz]}]
-            (let [{:keys [fields ->cursor]} (binding [expr/*default-tz* default-tz]
-                                              (lp/emit-expr conformed-plan
-                                                            {:scan-fields scan-fields
-                                                             :default-tz default-tz
-                                                             :last-known-block last-known-block
-                                                             :param-fields param-fields
-                                                             :scan-emitter scan-emitter}))]
-
-              {:fields (->result-fields col-names fields)
-               :->cursor ->cursor}))))
-
-  (prepareQuery [this query query-opts]
-    (.prepareQuery this query wm-src query-opts))
-
-  (prepareQuery [this query wm-src {:keys [default-tz] :as query-opts}]
+  (prepareQuery [this query db wm-src {:keys [default-tz] :as query-opts}]
     (let [parsed-query (parse-query query)
           !table-info (atom (scan/tables-with-cols wm-src))
           default-tz (or default-tz expr/*default-tz*)]
@@ -218,10 +212,10 @@
           (getColumnFields [_ param-fields]
             (let [planned-query (plan-query* @!table-info)]
               (with-open [wm (.openWatermark wm-src)]
-                (:fields (-emit-query this planned-query wm
-                                      (->> param-fields
-                                           (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity))))
-                                      default-tz)))))
+                (:fields (emit-query planned-query db wm
+                                     (->> param-fields
+                                          (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity))))
+                                     default-tz)))))
 
           (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
@@ -241,7 +235,7 @@
                            :else (throw (ex-info "invalid args"
                                                  {:type (class args)})))
 
-                    {:keys [fields ->cursor]} (-emit-query this planned-query wm (->arg-fields args) default-tz)
+                    {:keys [fields ->cursor]} (emit-query planned-query db wm (->arg-fields args) default-tz)
                     current-time (or (some-> (:current-time planned-query) (expr->instant {:args args, :default-tz default-tz}))
                                      (some-> current-time (expr->instant {:args args, :default-tz default-tz}))
                                      (expr/current-time))]
@@ -286,9 +280,6 @@
 (defmethod ig/prep-key ::query-source [_ opts]
   (merge opts
          {:allocator (ig/ref :xtdb/allocator)
-          :scan-emitter (ig/ref ::scan/scan-emitter)
-          :wm-src (ig/ref :xtdb.indexer/live-index)
-          :table-cat (ig/ref :xtdb/table-catalog)
           :metrics-registry (ig/ref :xtdb.metrics/registry)}))
 
 (defn ->query-source [{:keys [allocator metrics-registry] :as deps}]

@@ -2,6 +2,7 @@
   (:require [clojure.test :as t :refer [deftest]]
             [jsonista.core :as json]
             [xtdb.authn :as authn]
+            [xtdb.database :as db]
             [xtdb.pgwire :as pgwire]
             [xtdb.pgwire.io :as pgio]
             [xtdb.pgwire.types :as pg-types]
@@ -68,7 +69,9 @@
                                                                                   "IntervalStyle" "ISO_8601"}})
                                                 :->node {"xtdb" (-> tu/*node*
                                                                     (assoc :authn (authn/->UserTableAuthn authn-rules
-                                                                                                          (util/component tu/*node* :xtdb.query/query-source))))}}
+                                                                                                          (util/component tu/*node* :xtdb.query/query-source)
+                                                                                                          (db/<-node tu/*node*)
+                                                                                                          (util/component tu/*node* :xtdb.indexer/live-index))))}}
                                        :allocator tu/*allocator*
                                        :frontend frontend
                                        :cid -1

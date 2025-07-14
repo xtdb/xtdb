@@ -3,11 +3,8 @@
             [clojure.tools.namespace.repl :as ctn]
             [xtdb.logging :as logging]
             xtdb.serde
-            [xtdb.util :as util]
-            [xtdb.xray :as xray :refer [xray]])
-  (:import java.io.File
-           [ch.qos.logback.classic Level Logger]
-           org.slf4j.LoggerFactory))
+            [xtdb.util :as util])
+  (:import java.io.File))
 
 (alter-var-root #'*warn-on-reflection* (constantly true))
 

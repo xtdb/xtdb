@@ -55,24 +55,24 @@
             (let [lit-sel (expr.meta/->metadata-selector tu/*allocator* '(> ordinal 1) '{ordinal :i64} vw/empty-args)
                   param-sel (expr.meta/->metadata-selector tu/*allocator* '(> ordinal ?ordinal) '{ordinal :i64} args)]
               (t/testing "L0 files have min-max metadata, so we have to match them"
-                (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))
+                (with-page-metadata node (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))
                   (fn [^PageMetadata page-metadata]
                     (t/is (false? (.test (.build lit-sel page-metadata) 0)))
                     (t/is (false? (.test (.build param-sel page-metadata) 0)))))
 
-                (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 1))
+                (with-page-metadata node (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 1))
                   (fn [^PageMetadata page-metadata]
                     (t/is (true? (.test (.build lit-sel page-metadata) 0)))
                     (t/is (true? (.test (.build param-sel page-metadata) 0))))))
 
               (t/testing "first L1 file has content metadata, doesn't match"
-                (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l1-trie-key nil 0))
+                (with-page-metadata node (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))
                   (fn [^PageMetadata page-metadata]
                     (t/is (false? (.test (.build lit-sel page-metadata) 0)))
                     (t/is (false? (.test (.build param-sel page-metadata) 0))))))
 
               (t/testing "combined L1 file matches"
-                (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l1-trie-key nil 1))
+                (with-page-metadata node (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 1))
                   (fn [^PageMetadata page-metadata]
                     (t/is (true? (.test (.build lit-sel page-metadata) 0)))
                     (t/is (true? (.test (.build param-sel page-metadata) 0)))))))))
@@ -111,24 +111,24 @@
           (let [lit-sel (expr.meta/->metadata-selector tu/*allocator* '(= name "Ivan") '{name :utf8} vw/empty-args)
                 param-sel (expr.meta/->metadata-selector tu/*allocator* '(= name ?name) '{name :utf8} args)]
             (t/testing "L0 has no bloom filter metadata -> always match"
-              (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 0))
+              (with-page-metadata node (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))
                 (fn [^PageMetadata page-metadata]
                   (t/is (true? (.test (.build lit-sel page-metadata) 0)))
                   (t/is (true? (.test (.build param-sel page-metadata) 0)))))
 
-              (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l0-trie-key 1))
+              (with-page-metadata node (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 1))
                 (fn [^PageMetadata page-metadata]
                   (t/is (true? (.test (.build lit-sel page-metadata) 0)))
                   (t/is (true? (.test (.build param-sel page-metadata) 0))))))
 
             (t/testing "first L1 file matches"
-              (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l1-trie-key nil 0))
+              (with-page-metadata node (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))
                 (fn [^PageMetadata page-metadata]
                   (t/is (true? (.test (.build lit-sel page-metadata) 0)))
                   (t/is (true? (.test (.build param-sel page-metadata) 0))))))
 
             (t/testing "combined L1 file also matches"
-              (with-page-metadata node (Trie/metaFilePath "public$xt_docs" (trie/->l1-trie-key nil 1))
+              (with-page-metadata node (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 1))
                 (fn [^PageMetadata page-metadata]
                   (t/is (true? (.test (.build lit-sel page-metadata) 0)))
                   (t/is (true? (.test (.build param-sel page-metadata) 0)))))))))
