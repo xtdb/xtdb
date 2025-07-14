@@ -9,7 +9,6 @@
             [xtdb.metadata :as meta]
             xtdb.object-store
             [xtdb.table :as table]
-            [xtdb.table-catalog :as table-cat]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
@@ -27,6 +26,7 @@
            (xtdb BufferPool)
            xtdb.arrow.RelationReader
            (xtdb.bloom BloomUtils)
+           xtdb.catalog.TableCatalog
            (xtdb.indexer LiveTable$Watermark Watermark Watermark$Source)
            (xtdb.metadata PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask)
@@ -172,14 +172,14 @@
           :trie-catalog (ig/ref :xtdb/trie-catalog)
           :info-schema (ig/ref :xtdb/information-schema)}))
 
-(defn scan-fields [table-catalog ^Watermark wm scan-cols]
+(defn scan-fields [^TableCatalog table-catalog, ^Watermark wm scan-cols]
   (letfn [(->field [[table col-name]]
             (let [col-name (str col-name)]
               ;; TODO move to fields here
               (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
                       (get-in info-schema/derived-tables [table (symbol col-name)])
                       (get-in info-schema/template-tables [table (symbol col-name)])
-                      (types/merge-fields (table-cat/column-field table-catalog table col-name)
+                      (types/merge-fields (.getField table-catalog table col-name)
                                           (some-> (.getLiveIndex wm)
                                                   (.liveTable table)
                                                   (.columnField col-name))))
@@ -188,7 +188,7 @@
          (into {} (map (juxt identity ->field))))))
 
 (defmethod ig/init-key ::scan-emitter [_ {:keys [^BufferAllocator allocator, ^PageMetadata$Factory metadata-mgr, ^BufferPool buffer-pool,
-                                                 info-schema ^TrieCatalog trie-catalog, table-catalog]}]
+                                                 info-schema ^TrieCatalog trie-catalog, ^TableCatalog table-catalog]}]
   (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
     (reify IScanEmitter
       (emitScan [_ {:keys [columns], {:keys [^TableRef table] :as scan-opts} :scan-opts} scan-fields param-fields]
@@ -223,7 +223,7 @@
                                        :when (not (types/temporal-column? col-name))]
                                    select))
 
-              row-count (table-cat/row-count table-catalog table)]
+              row-count (.rowCount table-catalog table)]
 
           {:fields fields
            :stats {:row-count row-count}
@@ -245,7 +245,7 @@
                                temporal-bounds (->temporal-bounds allocator args scan-opts snapshot-time)]
                            (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                              (let [merge-tasks (util/with-open [page-metadatas (LinkedList.)]
-                                                 (let [segments (cond-> (mapv (fn [{:keys [trie-key]}]
+                                                 (let [segments (cond-> (mapv (fn [{:keys [^String trie-key]}]
                                                                                 (let [meta-path (Trie/metaFilePath table trie-key)
                                                                                       page-metadata (.openPageMetadata metadata-mgr meta-path)]
                                                                                   (.add page-metadatas page-metadata)

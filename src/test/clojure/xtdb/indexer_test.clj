@@ -234,7 +234,7 @@
                                   (types/col-type->field :utf8)
                                   (types/col-type->field :keyword)
                                   (types/col-type->field :i64))
-                   (cat/column-field tc #xt/table xt_docs "_id")))
+                   (.getField tc #xt/table xt_docs "_id")))
 
           (t/is (= (types/->field "list" #xt.arrow/type :list true
                                   (types/->field "$data$" #xt.arrow/type :union false
@@ -242,7 +242,7 @@
                                                  (types/col-type->field :utf8)
                                                  (types/col-type->field [:timestamp-tz :micro "UTC"])
                                                  (types/col-type->field :bool)))
-                   (cat/column-field tc #xt/table xt_docs "list")))
+                   (.getField tc #xt/table xt_docs "list")))
 
           (t/is (= (types/->field "struct" #xt.arrow/type :struct true
                                   (types/->field "a" #xt.arrow/type :union false
@@ -253,7 +253,7 @@
                                                  (types/->field "struct" #xt.arrow/type :struct false
                                                                 (types/->field "c" #xt.arrow/type :utf8 false)
                                                                 (types/->field "d" #xt.arrow/type :utf8 false))))
-                   (cat/column-field tc #xt/table xt_docs "struct"))))))))
+                   (.getField tc #xt/table xt_docs "struct"))))))))
 
 (t/deftest drops-nils-on-round-trip
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id "nil-bar", :foo "foo", :bar nil}]
@@ -442,7 +442,7 @@
                     (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/l00.+?\.arrow" %) objs))))))
 
                 (t/is (= :utf8
-                         (types/field->col-type (cat/column-field tc #xt/table device_readings "_id"))))
+                         (types/field->col-type (.getField tc #xt/table device_readings "_id"))))
 
                 (let [second-half-tx-id (reduce
                                          (fn [_ tx-ops]
@@ -464,7 +464,7 @@
                                 second-half-tx-id))
 
                       (t/is (= :utf8
-                               (types/field->col-type (cat/column-field tc #xt/table device_info "_id"))))
+                               (types/field->col-type (.getField tc #xt/table device_info "_id"))))
 
                       (let [lc-tx (-> second-half-tx-id (tu/then-await-tx node3 (Duration/ofSeconds 15)))]
                         (t/is (= second-half-tx-id (:tx-id lc-tx)))
@@ -482,7 +482,7 @@
                         (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/l00-.+.arrow" %) objs)))))
 
                       (t/is (= :utf8
-                               (types/field->col-type (cat/column-field tc #xt/table device_info "_id")))))))))))))))
+                               (types/field->col-type (.getField tc #xt/table device_info "_id")))))))))))))))
 
 (t/deftest merges-column-fields-on-restart
   (let [node-dir (util/->path "target/merges-column-fields")
@@ -497,7 +497,7 @@
         (tu/flush-block! node1)
 
         (t/is (= :utf8
-                 (types/field->col-type (cat/column-field tc1 #xt/table xt_docs "v"))))
+                 (types/field->col-type (.getField tc1 #xt/table xt_docs "v"))))
 
         (let [tx2 (xt/submit-tx node1 [[:put-docs :xt_docs {:xt/id 1, :v :bar}]
                                        [:put-docs :xt_docs {:xt/id 2, :v #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
@@ -507,14 +507,14 @@
           (tu/flush-block! node1)
 
           (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
-                   (types/field->col-type (cat/column-field tc1 #xt/table xt_docs "v"))))
+                   (types/field->col-type (.getField tc1 #xt/table xt_docs "v"))))
 
           (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
             (let [tc2 (cat/<-node node2)]
               (tu/then-await-tx tx2 node2 (Duration/ofMillis 200))
 
               (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
-                       (types/field->col-type (cat/column-field tc2 #xt/table xt_docs "v")))))))))))
+                       (types/field->col-type (.getField tc2 #xt/table xt_docs "v")))))))))))
 
 (t/deftest test-await-fails-fast
   (let [e (UnsupportedOperationException. "oh no!")]

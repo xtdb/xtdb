@@ -21,7 +21,7 @@
            (xtdb.api.log Log Log$Message$TriesAdded)
            xtdb.api.storage.Storage
            xtdb.BufferPool
-           xtdb.catalog.BlockCatalog
+           (xtdb.catalog BlockCatalog TableCatalog)
            (xtdb.indexer LiveIndex$Tx LiveIndex$Watermark LiveTable LiveTable$Tx LiveTable$Watermark Watermark)
            (xtdb.log.proto TrieDetails)
            (xtdb.trie TrieCatalog)
@@ -43,9 +43,9 @@
       AutoCloseable
       (close [_] (util/close wms)))))
 
-(defn ->schema [^LiveIndex$Watermark live-index-wm table-catalog]
+(defn ->schema [^LiveIndex$Watermark live-index-wm, ^TableCatalog table-catalog]
   (merge-with set/union
-              (update-vals (table-cat/all-column-fields table-catalog)
+              (update-vals (.getFields table-catalog)
                            (comp set keys))
               (update-vals (some-> live-index-wm (.getAllColumnFields))
                            (comp set keys))))

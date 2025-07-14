@@ -5,7 +5,6 @@
             [xtdb.metadata]
             [xtdb.pgwire.types :as pg-types]
             [xtdb.table :as table]
-            [xtdb.table-catalog :as table-cat]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.types :as types]
@@ -20,6 +19,7 @@
            (xtdb ICursor)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader VectorReader VectorWriter)
+           xtdb.catalog.TableCatalog
            (xtdb.indexer Watermark)
            xtdb.operator.SelectionSpec
            xtdb.table.TableRef
@@ -445,7 +445,7 @@
          :metrics-registry (ig/ref :xtdb.metrics/registry)}
         opts))
 
-(defmethod ig/init-key :xtdb/information-schema [_ {:keys [table-catalog trie-catalog metrics-registry]}]
+(defmethod ig/init-key :xtdb/information-schema [_ {:keys [^TableCatalog table-catalog trie-catalog metrics-registry]}]
   (reify InfoSchema
     (->cursor [_ allocator wm derived-table-schema
                table col-names col-preds
@@ -453,7 +453,7 @@
       ;;TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
       ;;should be types/merge-fields as per scan-fields
       (let [schema-info (-> (merge-with merge
-                                        (table-cat/all-column-fields table-catalog)
+                                        (.getFields table-catalog)
                                         (some-> (.getLiveIndex ^Watermark wm)
                                                 (.getAllColumnFields)))
                             (merge meta-table-schemas))]

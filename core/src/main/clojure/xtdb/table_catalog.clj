@@ -18,13 +18,7 @@
            (xtdb.util HyperLogLog)))
 
 (defprotocol PTableCatalog
-  (finish-block! [table-cat block-idx delta-tables->metadata table->current-tries])
-  (column-fields [table-cat table])
-  (row-count [table-cat table])
-  (column-field [table-cat table col-name])
-  (all-column-fields [table-cat])
-  (get-hll [table-cat table col-name])
-  (get-hlls [table-cat table]))
+  (finish-block! [table-cat block-idx delta-tables->metadata table->current-tries]))
 
 (def ^java.nio.file.Path block-table-metadata-path (util/->path "blocks"))
 
@@ -95,6 +89,7 @@
 (deftype TableCatalog [^BufferPool buffer-pool
                        ^:volatile-mutable ^long block-idx
                        ^:volatile-mutable table->metadata]
+  xtdb.catalog.TableCatalog
   PTableCatalog
   (finish-block! [this block-idx delta-table->metadata table->tries]
     (when (or (nil? (.block-idx this)) (< (.block-idx this) block-idx))
@@ -114,14 +109,14 @@
         (set! (.table->metadata this) new-table->metadata)
         (vec tables))))
 
-  (column-fields [_ table] (get-in table->metadata [table :fields]))
-  (row-count [_ table] (get-in table->metadata [table :row-count]))
-  (column-field [_ table col-name]
+  (rowCount [_ table] (get-in table->metadata [table :row-count]))
+
+  (getField [_ table col-name]
     (some-> (get-in table->metadata [table :fields])
             (get col-name (types/->field col-name #xt.arrow/type :null true))))
-  (all-column-fields [_] (update-vals table->metadata :fields))
-  (get-hll [_ table col-name] (get-in table->metadata [table :hlls col-name]))
-  (get-hlls [_ table] (get-in table->metadata [table :hlls])))
+
+  (getFields [_ table] (get-in table->metadata [table :fields]))
+  (getFields [_] (update-vals table->metadata :fields)))
 
 (defmethod ig/prep-key :xtdb/table-catalog [_ _]
   {:buffer-pool (ig/ref :xtdb/buffer-pool)
@@ -132,5 +127,5 @@
     (TableCatalog. buffer-pool (or block-idx -1)
                    (update-vals table->table-block #(dissoc % :tries)))))
 
-(defn <-node [node]
+(defn <-node ^xtdb.catalog.TableCatalog [node]
   (util/component node :xtdb/table-catalog))
