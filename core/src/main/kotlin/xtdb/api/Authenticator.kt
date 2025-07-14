@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 import xtdb.api.Authenticator.Method.TRUST
 import xtdb.api.Authenticator.MethodRule
 import xtdb.indexer.Watermark
-import xtdb.query.Database
+import xtdb.database.Database
 import xtdb.query.IQuerySource
 import xtdb.util.requiringResolve
 

@@ -12,7 +12,6 @@
             [xtdb.query :as q]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.tx-ops :as tx-ops]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw]
             [xtdb.xtql :as xtql])
@@ -20,7 +19,6 @@
            io.micrometer.core.instrument.Counter
            (java.io Closeable Writer)
            (java.util HashMap)
-           (java.util.concurrent ExecutionException)
            [java.util.concurrent.atomic AtomicLong]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
@@ -28,11 +26,9 @@
            (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
-           [xtdb.api.tx TxOp]
            xtdb.error.Anomaly
-           (xtdb.indexer IIndexer LiveIndex LogProcessor)
-           (xtdb.query IQuerySource PreparedQuery)
-           (xtdb.util MsgIdUtil)))
+           (xtdb.indexer LiveIndex LogProcessor)
+           (xtdb.query IQuerySource PreparedQuery)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -62,9 +58,9 @@
         (metrics/wrap-query query-timer))))
 
 (defrecord Node [^BufferAllocator allocator
-                 ^IIndexer indexer, ^LiveIndex live-idx, db
+                 ^LiveIndex live-idx, db
                  ^Log log, ^LogProcessor log-processor
-                 ^IQuerySource q-src, scan-emitter
+                 ^IQuerySource q-src
                  ^CompositeMeterRegistry metrics-registry
                  default-tz, ^AtomicLong !wm-tx-id
                  system, close-fn,
@@ -193,14 +189,12 @@
 
 (defmethod ig/prep-key :xtdb/node [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
-          :indexer (ig/ref :xtdb/indexer)
           :live-idx (ig/ref :xtdb.indexer/live-index)
           :log (ig/ref :xtdb/log)
           :log-processor (ig/ref :xtdb.log/processor)
           :config (ig/ref :xtdb/config)
           :q-src (ig/ref :xtdb.query/query-source)
           :db (ig/ref :xtdb/database)
-          :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
           :metrics-registry (ig/ref :xtdb.metrics/registry)
           :authn (ig/ref :xtdb/authn)}
          opts))

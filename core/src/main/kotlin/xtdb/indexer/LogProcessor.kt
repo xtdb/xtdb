@@ -6,7 +6,6 @@ import kotlinx.coroutines.future.await
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.ArrowStreamReader
-import org.slf4j.LoggerFactory
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message
 import xtdb.api.log.MessageId
@@ -15,9 +14,9 @@ import xtdb.api.storage.Storage
 import xtdb.arrow.RelationReader
 import xtdb.arrow.asChannel
 import xtdb.catalog.BlockCatalog
+import xtdb.database.Database
 import xtdb.error.Interrupted
 import xtdb.table.TableRef
-import xtdb.trie.TrieCatalog
 import xtdb.util.MsgIdUtil.msgIdToEpoch
 import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.util.MsgIdUtil.offsetToMsgId
@@ -25,6 +24,7 @@ import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
+import xtdb.util.warn
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
 import java.time.Instant
@@ -32,23 +32,23 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlin.coroutines.cancellation.CancellationException
 
+private val LOG = LogProcessor::class.logger
+
 class LogProcessor(
     allocator: BufferAllocator,
-    private val indexer: IIndexer,
-    private val liveIndex: LiveIndex,
-    private val log: Log,
-    private val blockCatalog: BlockCatalog,
-    private val trieCatalog: TrieCatalog,
+    indexer: Indexer,
     meterRegistry: MeterRegistry,
+    db: Database,
+    private val log: Log,
     flushTimeout: Duration,
     private val skipTxs: Set<MessageId>
 ) : Log.Subscriber, AutoCloseable {
 
-    companion object {
-        private val LOG = LogProcessor::class.logger
-    }
-
     private val epoch = log.epoch
+
+    private val blockCatalog = db.blockCatalog
+    private val trieCatalog = db.trieCatalog
+    private val liveIndex = db.liveIndex
 
     @Volatile
     override var latestProcessedMsgId: MessageId =
@@ -58,6 +58,8 @@ class LogProcessor(
         } ?: -1
         private set
 
+    private val dbIndexer = indexer.openForDatabase(db)
+
     private val latestProcessedOffset = blockCatalog.latestProcessedMsgId?.let {
         if (msgIdToEpoch(it) == epoch) msgIdToOffset(it) else -1
     } ?: -1
@@ -66,7 +68,6 @@ class LogProcessor(
         get() = offsetToMsgId(epoch, log.latestSubmittedOffset)
 
     private val watchers = Watchers(latestProcessedMsgId)
-    private val LOGGER = LoggerFactory.getLogger(LogProcessor::class.java)
 
     val ingestionError get() = watchers.exception
 
@@ -115,6 +116,7 @@ class LogProcessor(
             }
 
     override fun close() {
+        dbIndexer.close()
         subscription.close()
         allocator.close()
     }
@@ -137,9 +139,9 @@ class LogProcessor(
                 val res = when (val msg = record.message) {
                     is Message.Tx -> {
                         val result = if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
-                            LOGGER.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
+                            LOG.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
                             // use abort flow in indexTx
-                            indexer.indexTx(
+                            dbIndexer.indexTx(
                                 msgId, record.logTimestamp,
                                 null, null, null, null
                             )
@@ -158,7 +160,7 @@ class LogProcessor(
 
                                         val user = rdr["user"].getObject(0) as String?
 
-                                        indexer.indexTx(
+                                        dbIndexer.indexTx(
                                             msgId, record.logTimestamp,
                                             rdr["tx-ops"].listElements,
                                             systemTime, defaultTz, user

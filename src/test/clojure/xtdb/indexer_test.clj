@@ -7,6 +7,7 @@
             [xtdb.block-catalog :as block-cat]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
+            [xtdb.database :as db]
             [xtdb.error :as err]
             [xtdb.indexer :as idx]
             [xtdb.object-store :as os]
@@ -26,8 +27,7 @@
            [org.apache.arrow.vector.types UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType$Union]
            (xtdb BufferPool)
-           xtdb.arrow.Relation
-           xtdb.indexer.LiveIndex))
+           xtdb.arrow.Relation))
 
 (t/use-fixtures :once tu/with-allocator)
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
@@ -616,14 +616,16 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
 
       (binding [idx/*crash-log-clock* (InstantSource/fixed Instant/EPOCH)]
         (let [node-id "xtdb-foo-node"
-              idxer (tu/component node :xtdb/indexer)
-              ^BufferPool bp (tu/component node :xtdb/buffer-pool)
-              ^LiveIndex live-idx (tu/component node :xtdb.indexer/live-index)
-              ^BufferAllocator al (tu/component node :xtdb/allocator)]
+              ^BufferAllocator al (tu/component node :xtdb/allocator)
+              idxer (idx/<-node node)
+              db (db/<-node node)
+              bp (.getBufferPool db)
+              live-idx (.getLiveIndex db)]
 
-          (with-open [live-idx-tx (.startTx live-idx (serde/->TxKey 1 Instant/EPOCH))
+          (with-open [db-idxer (.openForDatabase idxer (db/<-node node))
+                      live-idx-tx (.startTx live-idx (serde/->TxKey 1 Instant/EPOCH))
                       live-table-tx (.liveTable live-idx-tx #xt/table foo)]
-            (idx/crash-log! (-> idxer (assoc :node-id node-id)) "test crash log"
+            (idx/crash-log! (-> db-idxer (assoc :node-id node-id)) "test crash log"
                             {:foo "bar"} {:live-table-tx live-table-tx}))
 
           (t/is (= {:foo "bar", :ex "test crash log"}

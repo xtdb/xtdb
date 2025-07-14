@@ -309,17 +309,15 @@
 (defmethod ig/prep-key :xtdb.log/processor [_ ^Xtdb$Config opts]
   {:allocator (ig/ref :xtdb/allocator)
    :indexer (ig/ref :xtdb/indexer)
-   :live-idx (ig/ref :xtdb.indexer/live-index)
+   :db (ig/ref :xtdb/database)
    :log (ig/ref :xtdb/log)
-   :block-catalog (ig/ref :xtdb/block-catalog)
-   :trie-catalog (ig/ref :xtdb/trie-catalog)
    :metrics-registry (ig/ref :xtdb.metrics/registry)
    :block-flush-duration (.getFlushDuration (.getIndexer opts))
    :skip-txs (.getSkipTxs (.getIndexer opts))})
 
-(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator indexer log live-idx block-catalog trie-catalog metrics-registry block-flush-duration skip-txs] :as deps}]
+(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator db indexer log metrics-registry block-flush-duration skip-txs] :as deps}]
   (when deps
-    (LogProcessor. allocator indexer live-idx log block-catalog trie-catalog metrics-registry block-flush-duration (set skip-txs))))
+    (LogProcessor. allocator indexer metrics-registry db log block-flush-duration (set skip-txs))))
 
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
   (util/close log-processor))

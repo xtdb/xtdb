@@ -49,8 +49,9 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn Query)
            (xtdb.arrow RelationReader VectorReader)
+           xtdb.database.Database
            (xtdb.indexer Watermark)
-           (xtdb.query Database IQuerySource PreparedQuery)
+           (xtdb.query IQuerySource PreparedQuery)
            xtdb.util.RefCounter))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, result-fields

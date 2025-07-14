@@ -22,7 +22,7 @@
             [xtdb.vector.reader :as vr])
   (:import (clojure.lang MapEntry)
            (io.micrometer.core.instrument Counter Timer)
-           (java.io ByteArrayInputStream Closeable)
+           (java.io ByteArrayInputStream)
            (java.nio ByteBuffer)
            (java.time Instant InstantSource)
            (java.time.temporal ChronoUnit)
@@ -32,8 +32,9 @@
            xtdb.api.TransactionKey
            (xtdb.arrow RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            xtdb.BufferPool
+           xtdb.database.Database
            (xtdb.error Anomaly$Caller Interrupted)
-           (xtdb.indexer IIndexer LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Watermark Watermark$Source)
+           (xtdb.indexer Indexer Indexer$ForDatabase LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Watermark Watermark$Source)
            (xtdb.query IQuerySource PreparedQuery)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -42,8 +43,9 @@
 
 (def ^:dynamic ^java.time.InstantSource *crash-log-clock* (InstantSource/system))
 
-(defn crash-log! [{:keys [allocator, ^BufferPool buffer-pool, node-id]} ex data {:keys [^LiveTable$Tx live-table-tx, ^RelationReader query-rel]}]
-  (let [ts (str (.truncatedTo (.instant *crash-log-clock*) ChronoUnit/SECONDS))
+(defn crash-log! [{:keys [allocator ^Database db node-id]} ex data {:keys [^LiveTable$Tx live-table-tx, ^RelationReader query-rel]}]
+  (let [buffer-pool (.getBufferPool db)
+        ts (str (.truncatedTo (.instant *crash-log-clock*) ChronoUnit/SECONDS))
         crash-dir (util/->path (format "crashes/%s/%s" node-id ts))]
     (log/warn "writing a crash log:" (str crash-dir) (pr-str data))
 
@@ -602,19 +604,23 @@
 
                (.endStruct doc-writer)))))
 
-(defrecord Indexer [^BufferAllocator allocator
-                    node-id
-                    ^BufferPool buffer-pool
-                    ^IQuerySource q-src
-                    db
-                    ^LiveIndex live-idx
-                    table-catalog
-                    ^Timer tx-timer
-                    ^Counter tx-error-counter]
-  IIndexer
+(defmethod ig/prep-key :xtdb/indexer [_ opts]
+  (merge {:allocator (ig/ref :xtdb/allocator)
+          :config (ig/ref :xtdb/config)
+          :q-src (ig/ref ::q/query-source)
+          :metrics-registry (ig/ref :xtdb.metrics/registry)}
+         opts))
+
+(defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
+                               db, ^LiveIndex live-index, table-catalog
+                               ^Timer tx-timer
+                               ^Counter tx-error-counter]
+  Indexer$ForDatabase
+  (close [_])
+
   (indexTx [this msg-id msg-ts tx-ops-rdr
             system-time default-tz _user]
-    (let [lc-tx (.getLatestCompletedTx live-idx)
+    (let [lc-tx (.getLatestCompletedTx live-index)
           default-system-time (or (when-let [lc-sys-time (some-> lc-tx (.getSystemTime))]
                                     (when-not (neg? (compare lc-sys-time msg-ts))
                                       (.plusNanos lc-sys-time 1000)))
@@ -626,12 +632,12 @@
               err (err/illegal-arg :invalid-system-time
                                    {::err/message "specified system-time older than current tx"
                                     :tx-key (serde/->TxKey msg-id system-time)
-                                    :latest-completed-tx (.getLatestCompletedTx live-idx)})]
+                                    :latest-completed-tx (.getLatestCompletedTx live-index)})]
           (log/warnf "specified system-time '%s' older than current tx '%s'"
                      (pr-str system-time)
-                     (pr-str (.getLatestCompletedTx live-idx)))
+                     (pr-str (.getLatestCompletedTx live-index)))
 
-          (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
+          (util/with-open [live-idx-tx (.startTx live-index tx-key)]
             (when tx-error-counter
               (.increment tx-error-counter))
             (add-tx-row! live-idx-tx tx-key err)
@@ -641,11 +647,11 @@
 
         (let [system-time (or system-time default-system-time)
               tx-key (serde/->TxKey msg-id system-time)]
-          (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
+          (util/with-open [live-idx-tx (.startTx live-index tx-key)]
             (if (nil? tx-ops-rdr)
               (do
                 (.abort live-idx-tx)
-                (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
+                (util/with-open [live-idx-tx (.startTx live-index tx-key)]
                   (add-tx-row! live-idx-tx tx-key skipped-exn)
                   (.commit live-idx-tx))
 
@@ -695,7 +701,7 @@
                     (log/debug e "aborted tx")
                     (.abort live-idx-tx)
 
-                    (util/with-open [live-idx-tx (.startTx live-idx tx-key)]
+                    (util/with-open [live-idx-tx (.startTx live-index tx-key)]
                       (when tx-error-counter
                         (.increment tx-error-counter))
                       (add-tx-row! live-idx-tx tx-key e)
@@ -706,32 +712,26 @@
                   (do
                     (add-tx-row! live-idx-tx tx-key nil)
                     (.commit live-idx-tx)
-                    (serde/->tx-committed msg-id system-time))))))))))
+                    (serde/->tx-committed msg-id system-time)))))))))))
 
-  Closeable
-  (close [_]
-    (util/close allocator)))
-
-(defmethod ig/prep-key :xtdb/indexer [_ opts]
-  (merge {:allocator (ig/ref :xtdb/allocator)
-          :config (ig/ref :xtdb/config)
-          :buffer-pool (ig/ref :xtdb/buffer-pool)
-          :live-index (ig/ref :xtdb.indexer/live-index)
-          :db (ig/ref :xtdb/database)
-          :q-src (ig/ref ::q/query-source)
-          :metrics-registry (ig/ref :xtdb.metrics/registry)
-          :table-catalog (ig/ref :xtdb/table-catalog)}
-         opts))
-
-(defmethod ig/init-key :xtdb/indexer [_ {:keys [allocator config buffer-pool, q-src, db
-                                                live-index metrics-registry table-catalog]}]
+(defmethod ig/init-key :xtdb/indexer [_ {:keys [^BufferAllocator allocator, config, q-src, metrics-registry]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
     (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
-    (->Indexer allocator (:node-id config) buffer-pool q-src db live-index table-catalog
 
-               (metrics/add-timer metrics-registry "tx.op.timer"
-                                  {:description "indicates the timing and number of transactions"})
-               (metrics/add-counter metrics-registry "tx.error"))))
+    (let [tx-timer (metrics/add-timer metrics-registry "tx.op.timer"
+                                      {:description "indicates the timing and number of transactions"})
+          tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
+      (reify Indexer
+        (openForDatabase [_ db]
+          (->IndexerForDatabase allocator (:node-id config) q-src
+                                db (.getLiveIndex db) (.getTableCatalog db)
+                                tx-timer tx-error-counter))
+
+        (close [_]
+          (util/close allocator))))))
 
 (defmethod ig/halt-key! :xtdb/indexer [_ indexer]
   (util/close indexer))
+
+(defn <-node ^xtdb.indexer.Indexer [node]
+  (util/component node :xtdb/indexer))

@@ -13,15 +13,15 @@
            (org.apache.arrow.memory BufferAllocator)))
 
 (defn add-counter
-  ([reg name] (add-counter reg name {}))
-  ([reg name {:keys [description]}]
+  (^io.micrometer.core.instrument.Counter [reg name] (add-counter reg name {}))
+  (^io.micrometer.core.instrument.Counter [reg name {:keys [description]}]
    (cond-> (Counter/builder name)
      description (.description description)
      :always (.register reg))))
 
 (def percentiles [0.75 0.85 0.95 0.98 0.99 0.999])
 
-(defn add-timer [reg name {:keys [^String description]}]
+(defn add-timer ^io.micrometer.core.instrument.Timer [reg name {:keys [^String description]}]
   (cond-> (.. (Timer/builder name)
               (publishPercentiles (double-array percentiles)))
     description (.description description)

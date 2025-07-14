@@ -1,5 +1,6 @@
 package xtdb.query
 
+import xtdb.database.Database
 import xtdb.indexer.Watermark
 
 interface IQuerySource {
