@@ -1,13 +1,11 @@
 (ns xtdb.compactor
   (:require [integrant.core :as ig]
-            xtdb.metadata
-            [xtdb.table :as table]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.util :as util])
   (:import com.carrotsearch.hppc.ByteArrayList
            xtdb.api.CompactorConfig
-           (xtdb.compactor Compactor Compactor$Impl Compactor$Job Compactor$JobCalculator)
+           (xtdb.compactor CompactionPool Compactor Compactor$Impl Compactor$Job Compactor$JobCalculator)
            (xtdb.trie Trie$Key TrieCatalog)))
 
 (def ^:dynamic *ignore-signal-block?* false)
@@ -109,6 +107,7 @@
   {:allocator (ig/ref :xtdb/allocator)
    :buffer-pool (ig/ref :xtdb/buffer-pool)
    :metadata-mgr (ig/ref :xtdb.metadata/metadata-manager)
+   :compaction-pool (ig/ref ::pool)
    :threads (.getThreads config)
    :metrics-registry (ig/ref :xtdb.metrics/registry)
    :log (ig/ref :xtdb/log)
@@ -116,9 +115,8 @@
 
 (def ^:dynamic *page-size* 1024)
 
-(defn- open-compactor [{:keys [allocator buffer-pool metadata-mgr
-                               log, ^TrieCatalog trie-catalog, metrics-registry
-                               threads]}]
+(defn- open-compactor [{:keys [allocator buffer-pool metadata-mgr compaction-pool
+                               log, ^TrieCatalog trie-catalog, metrics-registry]}]
   (Compactor$Impl. allocator buffer-pool metadata-mgr
                    log trie-catalog metrics-registry
                    (reify Compactor$JobCalculator
@@ -127,7 +125,7 @@
                             (into [] (mapcat (fn [table]
                                                (compaction-jobs table (cat/trie-state trie-catalog table) trie-catalog)))))))
 
-                   *ignore-signal-block?* threads *page-size* *recency-partition*))
+                   *ignore-signal-block?* compaction-pool *page-size* *recency-partition*))
 
 (defmethod ig/init-key :xtdb/compactor [_ {:keys [threads] :as opts}]
   (if (pos? threads)
@@ -145,3 +143,13 @@
   [node timeout]
 
   (.compactAll ^Compactor (util/component node :xtdb/compactor) timeout))
+
+(defmethod ig/prep-key ::pool [_ ^CompactorConfig config]
+  {:threads (.getThreads config)})
+
+(defmethod ig/init-key ::pool [_ {:keys [threads]}]
+  (when (pos? threads)
+    (CompactionPool. threads)))
+
+(defmethod ig/halt-key! ::pool [_ pool]
+  (util/close pool))

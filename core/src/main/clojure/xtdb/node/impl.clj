@@ -259,6 +259,7 @@
          :xtdb.operator.scan/scan-emitter {}
          :xtdb.query/query-source {}
          :xtdb/compactor (.getCompactor opts)
+         :xtdb.compactor/pool (.getCompactor opts)
          :xtdb.metrics/registry {}
          :xtdb/authn {:authn-factory (.getAuthn opts)}
          :xtdb/log (.getLog opts)

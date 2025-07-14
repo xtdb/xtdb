@@ -3,10 +3,12 @@ package xtdb.compactor
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
-import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.future.await
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.withTimeout
 import org.apache.arrow.memory.BufferAllocator
@@ -26,7 +28,6 @@ import xtdb.trie.Trie.metaFilePath
 import xtdb.util.*
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
-import kotlin.time.Duration.Companion.seconds
 
 private typealias JobKey = Pair<TableRef, TrieKey>
 
@@ -52,7 +53,8 @@ interface Compactor : AutoCloseable {
         private val log: Log, private val trieCatalog: TrieCatalog, meterRegistry: MeterRegistry?,
         private val jobCalculator: JobCalculator,
         private val ignoreBlockSignal: Boolean,
-        threadCount: Int, private val pageSize: Int,
+        private val pool: CompactionPool,
+        private val pageSize: Int,
         private val recencyPartition: RecencyPartition?
     ) : Compactor {
         private val al = al.openChildAllocator("compactor")
@@ -123,14 +125,6 @@ interface Compactor : AutoCloseable {
                 throw e
             }
 
-        private val scope = CoroutineScope(Dispatchers.Default)
-
-        private val jobsScope =
-            CoroutineScope(
-                Dispatchers.Default.limitedParallelism(threadCount, "compactor")
-                        + SupervisorJob(scope.coroutineContext.job)
-            )
-
         private val wakeup = Channel<Unit>(1, onBufferOverflow = DROP_OLDEST)
         private val idle = Channel<Unit>()
 
@@ -151,7 +145,7 @@ interface Compactor : AutoCloseable {
                     .register(it)
             }
 
-            scope.launch {
+            pool.scope.launch {
                 val doneCh = Channel<JobKey>()
 
                 while (true) {
@@ -165,7 +159,7 @@ interface Compactor : AutoCloseable {
 
                     availableJobs.keys.forEach { jobKey ->
                         if (queuedJobs.add(jobKey)) {
-                            jobsScope.launch {
+                            pool.jobsScope.launch {
                                 // check it's still required
                                 val job = availableJobs[jobKey]
                                 if (job != null) {
@@ -207,7 +201,7 @@ interface Compactor : AutoCloseable {
         }
 
         override fun compactAll(timeout: Duration?) {
-            val job = scope.launch {
+            val job = pool.scope.launch {
                 LOGGER.trace("compactAll: waiting for idle")
                 if (timeout == null) idle.receive() else withTimeout(timeout) { idle.receive() }
                 LOGGER.trace("compactAll: idle")
@@ -219,11 +213,6 @@ interface Compactor : AutoCloseable {
         }
 
         override fun close() {
-            runBlocking {
-                withTimeoutOrNull(10.seconds) { scope.coroutineContext.job.cancelAndJoin() }
-                    ?: LOGGER.warn("failed to close compactor cleanly in 10s")
-            }
-
             segMerge.close()
 
             LOGGER.debug("compactor closed")
