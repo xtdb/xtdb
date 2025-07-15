@@ -7,9 +7,7 @@
 
 (t/use-fixtures :each
   (tu/with-opts {:default-tz #xt/zone "Europe/London"})
-  (tu/with-each-api-implementation
-    (-> {:in-memory (t/join-fixtures [tu/with-mock-clock tu/with-node]),}
-        #_(select-keys [:in-memory]))))
+  tu/with-mock-clock tu/with-node)
 
 (t/deftest can-specify-default-tz-in-query-396
   (let [q (str "SELECT CAST(DATE '2020-08-01' AS TIMESTAMP WITH TIME ZONE) AS tstz "

@@ -67,8 +67,6 @@
    (binding [*node-opts* (merge *node-opts* opts)]
      (f))))
 
-(declare component)
-
 (defn with-node [f]
   (util/with-open [node (xtn/start-node *node-opts*)]
     (binding [*node* node]
@@ -77,16 +75,6 @@
 (defn free-port ^long []
   (with-open [s (ServerSocket. 0)]
     (.getLocalPort s)))
-
-#_{:clj-kondo/ignore [:uninitialized-var]}
-(def ^:dynamic *node-type*)
-
-(defn with-each-api-implementation [api-implementations]
-  (fn [f]
-    (doseq [[node-type run-tests] api-implementations]
-      (binding [*node-type* node-type]
-        (t/testing (str node-type)
-          (run-tests f))))))
 
 (defn component
   ([k] (component *node* k))

@@ -10,10 +10,7 @@
   (:import (java.lang AutoCloseable)
            (java.time Duration ZoneId)))
 
-(t/use-fixtures :each
-  (tu/with-each-api-implementation
-    (-> {:in-memory (t/join-fixtures [tu/with-mock-clock tu/with-node])}
-        #_(select-keys [:in-memory]))))
+(t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (t/deftest test-status
   (t/is (map? (xt/status *node*))))
@@ -539,11 +536,10 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
 
     (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo"))))
 
-    (when (= tu/*node-type* :in-memory)
-      (tu/finish-block! tu/*node*)
-      (c/compact-all! tu/*node* #xt/duration "PT2S")
+    (tu/finish-block! tu/*node*)
+    (c/compact-all! tu/*node* #xt/duration "PT2S")
 
-      (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo")))))))
+    (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo"))))))
 
 (t/deftest test-remote-client
   (let [client (xt/client {:port (.getServerPort tu/*node*)})]
