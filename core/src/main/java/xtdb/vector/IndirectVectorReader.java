@@ -1,5 +1,6 @@
 package xtdb.vector;
 
+import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
@@ -193,6 +194,11 @@ class IndirectVectorReader implements IVectorReader {
     @Override
     public VectorReader select(int startIdx, int len) {
         return select(IntStream.range(startIdx, startIdx + len).toArray());
+    }
+
+    @Override
+    public @NotNull VectorReader openSlice(@NotNull BufferAllocator al) {
+        return new IndirectVectorReader(reader.openSlice(al), indirection);
     }
 
     @Override
