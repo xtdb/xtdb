@@ -1,6 +1,7 @@
 (ns ^:kafka xtdb.kafka-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.log :as log]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -57,8 +58,7 @@
                                                     :properties-map {}
                                                     :properties-file nil}]})]
       (t/testing "KafkaLog successfully created"
-        (let [log (get-in node [:system :xtdb/log])]
-          (t/is (instance? Log log)))))))
+        (t/is (instance? Log (log/<-node node)))))))
 
 (t/deftest ^:integration test-kafka-closes-properly-with-messages-sent
   (let [test-uuid (random-uuid)]

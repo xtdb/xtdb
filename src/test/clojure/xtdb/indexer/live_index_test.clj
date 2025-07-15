@@ -2,12 +2,12 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.buffer-pool :as bp]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
-            [xtdb.log :as xt-log]
+            [xtdb.indexer.live-index :as li]
             xtdb.node.impl
             [xtdb.object-store :as os]
-            [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
@@ -17,8 +17,6 @@
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            (xtdb.arrow Relation)
-           xtdb.BufferPool
-           xtdb.indexer.LiveIndex
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie MemoryHashTrie$Leaf)))
 
 (t/use-fixtures :each tu/with-allocator
@@ -27,8 +25,8 @@
 
 (t/deftest test-block
   (let [^BufferAllocator allocator (tu/component tu/*node* :xtdb/allocator)
-        ^BufferPool buffer-pool (tu/component tu/*node* :xtdb/buffer-pool)
-        ^LiveIndex live-index (tu/component tu/*node* :xtdb.indexer/live-index)
+        buffer-pool (bp/<-node tu/*node*)
+        live-index (li/<-node tu/*node*)
 
         iids (let [rnd (Random. 0)]
                (repeatedly 12000 #(UUID. (.nextLong rnd) (.nextLong rnd))))
@@ -113,7 +111,7 @@
       (util/delete-dir node-dir)
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-        (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)]
+        (let [bp (bp/<-node node)]
 
           (doseq [tx-ops txs]
             (try
@@ -136,7 +134,7 @@
                         (.resolve node-dir "objects"))))))
 
 (t/deftest test-new-table-discarded-on-abort-2721
-  (let [^LiveIndex live-index (tu/component tu/*node* :xtdb.indexer/live-index)]
+  (let [live-index (li/<-node tu/*node*)]
 
     (let [live-tx0 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})
           foo-table-tx (.liveTable live-tx0 #xt/table foo)
@@ -194,7 +192,7 @@
         (tu/finish-block! node))
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-        (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)]
+        (let [bp (bp/<-node node)]
           (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
           (tu/finish-block! node)
 

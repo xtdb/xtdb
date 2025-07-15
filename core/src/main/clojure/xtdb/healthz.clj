@@ -37,8 +37,8 @@
                                      :body (.scrape meter-registry)})}]
 
                 ["/healthz/started" {:name :started
-                                     :get (fn [{:keys [^long initial-target-message-id, ^LogProcessor log-processor]}]
-                                            (let [lpm-id (.getLatestProcessedMsgId log-processor)]
+                                     :get (fn [{:keys [^long initial-target-message-id, ^Database db]}]
+                                            (let [lpm-id (.getLatestProcessedMsgId (.getLogProcessor db))]
                                               (into {:headers {"X-XTDB-Target-Message-Id" (str initial-target-message-id)
                                                                "X-XTDB-Current-Message-Id" (str lpm-id)}}
                                                     (if (< lpm-id initial-target-message-id)
@@ -49,8 +49,8 @@
                                                        :body "Started."}))))}]
 
                 ["/healthz/alive" {:name :alive
-                                   :get (fn [{:keys [log-processor db]}]
-                                          (or (when-let [ingestion-error (get-ingestion-error log-processor)]
+                                   :get (fn [{:keys [^Database db]}]
+                                          (or (when-let [ingestion-error (get-ingestion-error (.getLogProcessor db))]
                                                 {:status 503, :body (str "Ingestion error - " ingestion-error)})
 
                                               (let [block-lag (->block-lag db)
@@ -103,15 +103,13 @@
   {:host (.getHost config)
    :port (.getPort config)
    :meter-registry (ig/ref :xtdb.metrics/registry)
-   :log-processor (ig/ref :xtdb.log/processor)
    :db (ig/ref :xtdb/database)
    :node (ig/ref :xtdb/node)})
 
-(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^InetAddress host, ^long port, meter-registry, ^LogProcessor log-processor, db]}]
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^InetAddress host, ^long port, meter-registry, ^Database db]}]
   (let [^Server server (-> (handler {:meter-registry meter-registry
                                      :db db
-                                     :log-processor log-processor
-                                     :initial-target-message-id (.getLatestSubmittedMsgId log-processor)
+                                     :initial-target-message-id (.getLatestSubmittedMsgId (.getLogProcessor db))
                                      :node node})
                            (j/run-jetty {:host (some-> host (.getHostAddress)), :port port, :async? true, :join? false}))]
 

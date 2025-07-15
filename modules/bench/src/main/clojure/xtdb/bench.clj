@@ -6,7 +6,7 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
-            [xtdb.indexer.live-index :as li]
+            [xtdb.database :as db]
             [xtdb.log :as xt-log]
             [xtdb.logging :as logging]
             [xtdb.node :as xtn]
@@ -292,7 +292,7 @@
   ([node] (sync-node node nil))
 
   ([node ^Duration timeout]
-   (xt-log/await-tx node (xtp/latest-submitted-tx-id node) timeout)))
+   (xt-log/await-tx (db/<-node node) (xtp/latest-submitted-tx-id node) timeout)))
 
 (defn finish-block! [node]
   (xt-log/finish-block! node))

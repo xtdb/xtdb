@@ -1,5 +1,6 @@
 (ns xtdb.compactor
   (:require [integrant.core :as ig]
+            [xtdb.database :as db]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.util :as util])
@@ -105,35 +106,41 @@
 
 (defmethod ig/prep-key :xtdb/compactor [_ ^CompactorConfig config]
   {:threads (.getThreads config)
-   :metrics-registry (ig/ref :xtdb.metrics/registry)
-   :db (ig/ref :xtdb/database)})
+   :metrics-registry (ig/ref :xtdb.metrics/registry)})
 
 (def ^:dynamic *page-size* 1024)
 
-(defn- open-compactor [{:keys [db metrics-registry threads]}]
-  (-> (Compactor$Impl. metrics-registry
-                       (reify Compactor$JobCalculator
-                         (availableJobs [_ trie-catalog]
-                           (->> (.getTables trie-catalog)
-                                (into [] (mapcat (fn [table]
-                                                   (compaction-jobs table (cat/trie-state trie-catalog table) trie-catalog)))))))
+(defn- open-compactor [{:keys [metrics-registry threads]}]
+  (Compactor$Impl. metrics-registry
+                   (reify Compactor$JobCalculator
+                     (availableJobs [_ trie-catalog]
+                       (->> (.getTables trie-catalog)
+                            (into [] (mapcat (fn [table]
+                                               (compaction-jobs table (cat/trie-state trie-catalog table) trie-catalog)))))))
 
-                       *ignore-signal-block?* threads *page-size* *recency-partition*)
-      (.openForDatabase db)))
+                   *ignore-signal-block?* threads *page-size* *recency-partition*))
 
-(defmethod ig/init-key :xtdb/compactor [_ {:keys [threads db] :as opts}]
+(defmethod ig/init-key :xtdb/compactor [_ {:keys [threads] :as opts}]
   (if (pos? threads)
     (open-compactor opts)
-    (.openForDatabase Compactor/NOOP db)))
+    Compactor/NOOP))
 
 (defmethod ig/halt-key! :xtdb/compactor [_ compactor]
   (util/close compactor))
 
-(defn signal-block! [^Compactor$ForDatabase compactor]
-  (.signalBlock compactor))
+(defmethod ig/prep-key ::for-db [_ {:keys [base]}]
+  {:base base
+   :query-db (ig/ref :xtdb.database/for-query)})
+
+(defmethod ig/init-key ::for-db [_ {{:keys [^Compactor compactor]} :base, :keys [query-db]}]
+  (.openForDatabase compactor query-db))
+
+(defmethod ig/halt-key! ::for-db [_ compactor-for-db]
+  (util/close compactor-for-db))
 
 (defn compact-all!
   "`timeout` is now required, explicitly specify `nil` if you want to wait indefinitely."
   [node timeout]
 
-  (.compactAll ^Compactor$ForDatabase (util/component node :xtdb/compactor) timeout))
+  (-> (.getCompactor (db/<-node node))
+      (.compactAll timeout)))

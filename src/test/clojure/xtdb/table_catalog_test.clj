@@ -1,6 +1,7 @@
 (ns xtdb.table-catalog-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.buffer-pool :as bp]
             [xtdb.object-store :as os]
             [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]
@@ -9,12 +10,10 @@
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import [java.time Instant]
-           [xtdb BufferPool]
            [xtdb.arrow VectorReader]
            [xtdb.block.proto TableBlock]
            [xtdb.bloom BloomUtils]
            [xtdb.log.proto TrieDetails]
-           [xtdb.trie TrieCatalog]
            (xtdb.util HyperLogLog)))
 
 (defn trie-details->edn [^TrieDetails trie]
@@ -36,8 +35,8 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-      (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)
-            ^TrieCatalog trie-catalog (tu/component node :xtdb/trie-catalog)]
+      (let [bp (bp/<-node node)
+            trie-catalog (trie-cat/<-node node)]
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
         (tu/finish-block! node)
 
@@ -118,7 +117,7 @@
       (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
         ;; need some dummy tx for latest-completed-txt
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
-        (let [cat (trie-cat/trie-catalog node)]
+        (let [cat (trie-cat/<-node node)]
           (.addTries cat #xt/table foo
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-r20200101-b00" 5] ["l01-rc-b00" 2]
@@ -130,7 +129,7 @@
           (tu/finish-block! node))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-      (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)]
+      (let [bp (bp/<-node node)]
         (t/is (= ["l00-rc-b00"
                   "l00-rc-b01"
                   "l00-rc-b02"

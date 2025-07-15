@@ -101,13 +101,13 @@
 ;; TODO inline this now that we have `log/await-tx`
 (defn then-await-tx
   (^TransactionKey [node]
-   (xt-log/await-tx node))
+   (xt-log/await-tx (db/<-node node)))
 
   (^TransactionKey [tx-id node]
-   (xt-log/await-tx node tx-id))
+   (xt-log/await-tx (db/<-node node) tx-id))
 
   (^TransactionKey [tx-id node timeout]
-   (xt-log/await-tx node tx-id timeout)))
+   (xt-log/await-tx (db/<-node node) tx-id timeout)))
 
 (defn ->instants
   ([u] (->instants u 1))

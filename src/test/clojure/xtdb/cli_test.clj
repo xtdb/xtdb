@@ -4,6 +4,7 @@
             [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.cli :as cli]
+            [xtdb.indexer.live-index :as li]
             [xtdb.node :as xtn])
   (:import (xtdb.indexer.live_index LiveIndex)))
 
@@ -109,7 +110,7 @@
 
     (t/testing "node opts passed to start-node passes through yaml file and starts node"
       (with-open [node (xtn/start-node (->node-opts ["-f" (str (io/as-file xtdb-cli-yaml))]))]
-        (let [index ^LiveIndex (get-in node [:system :xtdb.indexer/live-index])]
+        (let [^LiveIndex index (li/<-node node)]
           (t/is (= 65 (.log-limit index))
                 "using provided config"))
         (xt/submit-tx node [[:put-docs :docs {:xt/id :foo}]])
@@ -127,7 +128,7 @@
     
     (t/testing "YAML with multiple dots in the filename starts node"
       (with-open [node (xtn/start-node (->node-opts ["-f" (str (io/as-file xtdb-cli-yaml-multi-dot))]))]
-        (let [index ^LiveIndex (get-in node [:system :xtdb.indexer/live-index])]
+        (let [^LiveIndex index (li/<-node node)]
           (t/is (= 65 (.log-limit index))
                 "using provided config"))
         (xt/submit-tx node [[:put-docs :docs {:xt/id :foo}]])

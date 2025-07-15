@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.buffer-pool :as bp]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
             [xtdb.metadata :as meta]
@@ -15,9 +16,9 @@
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
+            [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import (java.time Duration)
-           (xtdb BufferPool)
            xtdb.api.storage.Storage
            (xtdb.arrow RelationReader)
            [xtdb.block.proto TableBlock]
@@ -426,7 +427,7 @@
               cat/*file-size-target* (* 16 1024)
               c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
-        (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)
+        (let [bp (bp/<-node node)
               meta-mgr (meta/<-node node)]
           (letfn [(submit! [xs]
                     (last (for [batch (partition-all 8 xs)]
@@ -577,7 +578,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 1})]
-      (let [^BufferPool bp (tu/component node :xtdb/buffer-pool)]
+      (let [bp (bp/<-node node)]
         (xt/execute-tx node [[:put-docs {:into :foo
                                          :valid-from #xt/instant "2010-01-01T00:00:00Z"
                                          :valid-to #xt/instant "2011-01-01T00:00:00Z"}
@@ -634,7 +635,7 @@
 (t/deftest different-recency-partitioning
   (binding [c/*recency-partition* RecencyPartition/YEAR]
     (with-open [node (xtn/start-node (merge tu/*node-opts* {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]}))]
-      (let [tc (tu/component node :xtdb/trie-catalog)]
+      (let [tc (trie-cat/<-node node)]
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 1}]])
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 2}]])
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 3}]])

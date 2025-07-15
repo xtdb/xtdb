@@ -8,6 +8,7 @@
             [xtdb.antlr :as antlr]
             [xtdb.api :as xt]
             [xtdb.authn :as authn]
+            [xtdb.database :as db]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.log :as xt-log]
@@ -450,7 +451,7 @@
 
              (when-not (or (neg? watermark-tx-id)
                            (= :read-write (:access-mode tx-opts)))
-               (xt-log/await-tx node watermark-tx-id #xt/duration "PT30S"))
+               (xt-log/await-tx (db/<-node node) watermark-tx-id #xt/duration "PT30S"))
 
              (-> st
                  (update :transaction

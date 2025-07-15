@@ -37,10 +37,10 @@ private val LOG = LogProcessor::class.logger
 
 class LogProcessor(
     allocator: BufferAllocator,
-    indexer: Indexer,
     meterRegistry: MeterRegistry,
-    private val compactor: Compactor.ForDatabase,
     db: Database,
+    private val indexer: Indexer.ForDatabase,
+    private val compactor: Compactor.ForDatabase,
     flushTimeout: Duration,
     private val skipTxs: Set<MessageId>
 ) : Log.Subscriber, AutoCloseable {
@@ -59,8 +59,6 @@ class LogProcessor(
             if (msgIdToEpoch(it) == epoch) it else offsetToMsgId(epoch, 0) - 1
         } ?: -1
         private set
-
-    private val dbIndexer = indexer.openForDatabase(db)
 
     private val latestProcessedOffset = blockCatalog.latestProcessedMsgId?.let {
         if (msgIdToEpoch(it) == epoch) msgIdToOffset(it) else -1
@@ -118,7 +116,6 @@ class LogProcessor(
             }
 
     override fun close() {
-        dbIndexer.close()
         subscription.close()
         allocator.close()
     }
@@ -143,7 +140,7 @@ class LogProcessor(
                         val result = if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
                             LOG.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
                             // use abort flow in indexTx
-                            dbIndexer.indexTx(
+                            indexer.indexTx(
                                 msgId, record.logTimestamp,
                                 null, null, null, null
                             )
@@ -162,7 +159,7 @@ class LogProcessor(
 
                                         val user = rdr["user"].getObject(0) as String?
 
-                                        dbIndexer.indexTx(
+                                        indexer.indexTx(
                                             msgId, record.logTimestamp,
                                             rdr["tx-ops"].listElements,
                                             systemTime, defaultTz, user

@@ -1,5 +1,6 @@
 (ns xtdb.table-catalog
   (:require [integrant.core :as ig]
+            [xtdb.database :as db]
             [xtdb.table :as table]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
@@ -128,4 +129,4 @@
                    (update-vals table->table-block #(dissoc % :tries)))))
 
 (defn <-node ^xtdb.catalog.TableCatalog [node]
-  (util/component node :xtdb/table-catalog))
+  (.getTableCatalog (db/<-node node)))

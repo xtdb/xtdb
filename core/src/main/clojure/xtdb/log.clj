@@ -4,6 +4,7 @@
             [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.block-catalog :as block-cat]
+            [xtdb.database :as db]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
             xtdb.protocols
@@ -20,8 +21,8 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
-           (xtdb.api TransactionKey Xtdb$Config)
-           (xtdb.api.log Log Log$Factory Log$Message$Tx Log$Message$FlushBlock Log$MessageMetadata)
+           (xtdb.api IndexerConfig TransactionKey Xtdb$Config)
+           (xtdb.api.log Log Log$Factory Log$Message$FlushBlock Log$Message$Tx Log$MessageMetadata)
            (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
@@ -253,7 +254,7 @@
                        :kafka :xtdb.kafka/log)
                      opts))
 
-(defmethod ig/prep-key :xtdb/log [_ factory]
+(defmethod ig/prep-key :xtdb/log [_ {:keys [factory]}]
   {:block-cat (ig/ref :xtdb/block-catalog)
    :factory factory})
 
@@ -282,7 +283,7 @@
           (throw (->out-of-sync-exception latest-completed-offset latest-submitted-offset epoch)))
         (log/info "Starting node with a log that has a different epoch than the latest completed tx (This is expected if you are starting a new epoch) - Skipping offset validation.")))))
 
-(defmethod ig/init-key :xtdb/log [_ {:keys [^BlockCatalog block-cat ^Log$Factory factory]}]
+(defmethod ig/init-key :xtdb/log [_ {:keys [^BlockCatalog block-cat, ^Log$Factory factory]}]
   (doto (.openLog factory)
     (validate-offsets (.getLatestCompletedTx block-cat))))
 
@@ -308,45 +309,46 @@
                                                                                                              :system-time (some-> system-time time/expect-instant))))))]
         (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset message-meta))))))
 
-(defmethod ig/prep-key :xtdb.log/processor [_ ^Xtdb$Config opts]
-  {:allocator (ig/ref :xtdb/allocator)
-   :indexer (ig/ref :xtdb/indexer)
-   :compactor (ig/ref :xtdb/compactor)
-   :db (ig/ref :xtdb/database)
-   :metrics-registry (ig/ref :xtdb.metrics/registry)
-   :block-flush-duration (.getFlushDuration (.getIndexer opts))
-   :skip-txs (.getSkipTxs (.getIndexer opts))})
+(defmethod ig/prep-key :xtdb.log/processor [_ {:keys [base ^IndexerConfig indexer-conf]}]
+  {:base base
+   :allocator (ig/ref :xtdb.database/allocator)
+   :db (ig/ref :xtdb.database/for-query)
+   :indexer (ig/ref :xtdb.indexer/for-db)
+   :compactor (ig/ref :xtdb.compactor/for-db)
+   :block-flush-duration (.getFlushDuration indexer-conf)
+   :skip-txs (.getSkipTxs indexer-conf)})
 
-(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator db indexer compactor metrics-registry block-flush-duration skip-txs] :as deps}]
+(defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry]} :base
+                                               :keys [allocator db indexer compactor block-flush-duration skip-txs] :as deps}]
   (when deps
-    (LogProcessor. allocator indexer metrics-registry compactor db block-flush-duration (set skip-txs))))
+    (LogProcessor. allocator meter-registry db indexer compactor block-flush-duration (set skip-txs))))
 
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
   (util/close log-processor))
 
-(defn node->log ^xtdb.api.log.Log [node]
-  (util/component node :xtdb/log))
+(defn <-node ^xtdb.api.log.Log [node]
+  (.getLog (db/<-node node)))
 
 (defn await-tx
-  (^java.util.concurrent.CompletableFuture [{:keys [^LogProcessor log-processor]}]
-   (-> @(.awaitAsync log-processor)
+  (^java.util.concurrent.CompletableFuture [^Database db]
+   (-> @(.awaitAsync (.getLogProcessor db))
        (util/rethrowing-cause)))
 
-  (^java.util.concurrent.CompletableFuture [{:keys [^LogProcessor log-processor]} ^long tx-id]
-   (-> @(.awaitAsync log-processor tx-id)
+  (^java.util.concurrent.CompletableFuture [^Database db, ^long tx-id]
+   (-> @(.awaitAsync (.getLogProcessor db) tx-id)
        (util/rethrowing-cause)))
 
-  (^java.util.concurrent.CompletableFuture [{:keys [^LogProcessor log-processor]} ^long tx-id ^Duration timeout]
-   (-> @(cond-> (.awaitAsync log-processor tx-id)
+  (^java.util.concurrent.CompletableFuture [^Database db, ^long tx-id ^Duration timeout]
+   (-> @(cond-> (.awaitAsync (.getLogProcessor db) tx-id)
           timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))
        (util/rethrowing-cause))))
 
 (defn finish-block! [node]
-  (.finishBlock ^LogProcessor (util/component node :xtdb.log/processor)))
+  (.finishBlock (.getLogProcessor (db/<-node node))))
 
 (defn flush-block!
   ([node] (flush-block! node #xt/duration "PT5S"))
   ([node timeout]
-   (let [log (node->log node)
+   (let [log (<-node node)
          ^Log$MessageMetadata msg @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (block-cat/<-node node)) -1)))]
-     (await-tx node (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset msg)) timeout))))
+     (await-tx (db/<-node node) (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset msg)) timeout))))

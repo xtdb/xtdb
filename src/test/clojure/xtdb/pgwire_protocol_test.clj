@@ -3,6 +3,7 @@
             [jsonista.core :as json]
             [xtdb.authn :as authn]
             [xtdb.database :as db]
+            [xtdb.indexer.live-index :as li]
             [xtdb.pgwire :as pgwire]
             [xtdb.pgwire.io :as pgio]
             [xtdb.pgwire.types :as pg-types]
@@ -71,7 +72,7 @@
                                                                     (assoc :authn (authn/->UserTableAuthn authn-rules
                                                                                                           (util/component tu/*node* :xtdb.query/query-source)
                                                                                                           (db/<-node tu/*node*)
-                                                                                                          (util/component tu/*node* :xtdb.indexer/live-index))))}}
+                                                                                                          (li/<-node tu/*node*))))}}
                                        :allocator tu/*allocator*
                                        :frontend frontend
                                        :cid -1

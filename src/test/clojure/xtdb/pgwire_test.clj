@@ -2837,7 +2837,7 @@ ORDER BY 1,2;")
   (with-open [conn (jdbc-conn)]
     (xt/execute-tx conn [[:put-docs :foo {:xt/id 1}]])
     (t/is (= [{:xt/id 1}] (xt/q conn "SELECT * FROM foo")))
-    (doto (xt-log/node->log tu/*node*)
+    (doto (xt-log/<-node tu/*node*)
       (.appendMessage (Log$Message$FlushBlock. 1)))
     (t/is (= [{:xt/id 1}] (xt/q conn "SELECT * FROM foo")))))
 

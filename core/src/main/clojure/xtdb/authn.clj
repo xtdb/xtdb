@@ -6,6 +6,7 @@
             [xtdb.query :as q])
   (:import [java.io Writer]
            (xtdb.api Authenticator Authenticator$Factory Authenticator$Factory$UserTable Authenticator$Method Authenticator$MethodRule Xtdb$Config)
+           xtdb.database.Database
            (xtdb.indexer Watermark$Source)
            (xtdb.query IQuerySource)))
 
@@ -73,11 +74,10 @@
 
 (defmethod ig/prep-key :xtdb/authn [_ opts]
   (into {:q-src (ig/ref :xtdb.query/query-source)
-         :db (ig/ref :xtdb/database)
-         :wm-src (ig/ref :xtdb.indexer/live-index)}
+         :db (ig/ref :xtdb/database)}
         opts))
 
-(defmethod ig/init-key :xtdb/authn [_ {:keys [^Authenticator$Factory authn-factory, q-src, db, wm-src]}]
-  (.open authn-factory q-src db wm-src))
+(defmethod ig/init-key :xtdb/authn [_ {:keys [^Authenticator$Factory authn-factory, q-src, ^Database db]}]
+  (.open authn-factory q-src db (.getLiveIndex db)))
 
 (defn <-node ^xtdb.api.Authenticator [node] (:authn node))

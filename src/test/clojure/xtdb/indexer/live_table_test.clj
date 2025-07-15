@@ -2,13 +2,16 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [xtdb.block-catalog :as block-cat]
+            [xtdb.buffer-pool :as bp]
             [xtdb.indexer.live-index :as li]
+            [xtdb.log :as log]
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.table-catalog :as table-cat]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
+            [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import (java.nio ByteBuffer)
            (java.util Arrays HashMap)
@@ -38,7 +41,7 @@
           n 1000]
       (tu/with-tmp-dirs #{path}
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
-                         ^BufferPool bp (tu/component node :xtdb/buffer-pool)
+                         bp (bp/<-node node)
                          allocator (RootAllocator.)
                          live-table (LiveTable. allocator bp #xt/table foo (RowCounter.) (partial trie/->live-trie 2 4))]
 
@@ -73,7 +76,7 @@
           n 50000]
       (tu/with-tmp-dirs #{path}
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
-                         ^BufferPool bp (tu/component node :xtdb/buffer-pool)
+                         bp (bp/<-node node)
                          allocator (RootAllocator.)
                          live-table (LiveTable. allocator bp #xt/table foo (RowCounter.))]
           (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
@@ -120,7 +123,7 @@
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         rc (RowCounter.)]
     (with-open [node (xtn/start-node (merge tu/*node-opts* {:compactor {:threads 0}}))
-                ^BufferPool bp (tu/component node :xtdb/buffer-pool)
+                bp (bp/<-node node)
                 allocator (RootAllocator.)
                 live-table (LiveTable. allocator bp #xt/table foo rc)]
       (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
@@ -151,11 +154,11 @@
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         table #xt/table foo]
     (util/with-open [allocator (RootAllocator.)]
-      (let [^BufferPool bp (tu/component tu/*node* :xtdb/buffer-pool)
+      (let [^BufferPool bp (bp/<-node tu/*node*)
             block-cat (block-cat/<-node tu/*node*)
-            log (tu/component tu/*node* :xtdb/log)
+            log (log/<-node tu/*node*)
             table-catalog (table-cat/<-node tu/*node*)
-            trie-catalog (tu/component tu/*node* :xtdb/trie-catalog)
+            trie-catalog (trie-cat/<-node tu/*node*)
             live-index-allocator (util/->child-allocator allocator "live-index")]
         (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp log
                                                                block-cat table-catalog trie-catalog

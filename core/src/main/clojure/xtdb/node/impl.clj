@@ -23,7 +23,6 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config)
-           (xtdb.api.log Log)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
            xtdb.database.Database
@@ -33,9 +32,10 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defmethod ig/prep-key :xtdb/config [_ ^Xtdb$Config opts]
-  {:node-id (.getNodeId opts)
-   :default-tz (.getDefaultTz opts)})
+(defmethod ig/prep-key :xtdb/config [_ ^Xtdb$Config config]
+  {:config config
+   :node-id (.getNodeId config)
+   :default-tz (.getDefaultTz config)})
 
 (defmethod ig/init-key :xtdb/config [_ cfg] cfg)
 
@@ -59,7 +59,6 @@
         (metrics/wrap-query query-timer))))
 
 (defrecord Node [^BufferAllocator allocator, ^Database db
-                 ^LogProcessor log-processor
                  ^IQuerySource q-src
                  ^CompositeMeterRegistry metrics-registry
                  default-tz, ^AtomicLong !wm-tx-id
@@ -105,7 +104,7 @@
 
   (execute-tx [this tx-ops opts]
     (let [tx-id (xtp/submit-tx this tx-ops opts)]
-      (or (let [^TransactionResult tx-res (-> @(.awaitAsync log-processor tx-id)
+      (or (let [^TransactionResult tx-res (-> @(.awaitAsync (.getLogProcessor db) tx-id)
                                               (util/rethrowing-cause))]
             (when (and tx-res
                        (= (.getTxId tx-res) tx-id))
@@ -143,7 +142,7 @@
 
   xtp/PStatus
   (latest-completed-tx [_] (.getLatestCompletedTx (.getLiveIndex db)))
-  (latest-submitted-tx-id [_] (.getLatestSubmittedMsgId log-processor))
+  (latest-submitted-tx-id [_] (.getLatestSubmittedMsgId (.getLogProcessor db)))
   (status [this]
     {:latest-completed-tx (.getLatestCompletedTx (.getLiveIndex db))
      :latest-submitted-tx-id (xtp/latest-submitted-tx-id this)})
@@ -158,7 +157,7 @@
 
           {:keys [^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
 
-      (xt-log/await-tx this after-tx-id tx-timeout)
+      (xt-log/await-tx db after-tx-id tx-timeout)
 
       (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
@@ -169,13 +168,13 @@
                 (instance? XtqlQuery query) query
                 :else (throw (err/illegal-arg :xtdb/unsupported-query-type
                                               {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]
-      (xt-log/await-tx this after-tx-id tx-timeout)
+      (xt-log/await-tx db after-tx-id tx-timeout)
 
       (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
   (prepare-ra [this plan query-opts]
     (let [{:keys [^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-      (xt-log/await-tx this after-tx-id tx-timeout)
+      (xt-log/await-tx db after-tx-id tx-timeout)
 
       (.prepareQuery q-src plan db (.getLiveIndex db) query-opts)))
 
@@ -189,7 +188,6 @@
 
 (defmethod ig/prep-key :xtdb/node [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
-          :log-processor (ig/ref :xtdb.log/processor)
           :config (ig/ref :xtdb/config)
           :q-src (ig/ref :xtdb.query/query-source)
           :db (ig/ref :xtdb/database)
@@ -237,29 +235,20 @@
 
 (defn node-system [^Xtdb$Config opts]
   (let [srv-config (.getServer opts)
-        healthz (.getHealthz opts)
-        indexer-cfg (.getIndexer opts)]
+        healthz (.getHealthz opts)]
     (-> {:xtdb/node {}
          :xtdb/config opts
          :xtdb/allocator {}
          :xtdb/indexer {}
-         :xtdb/block-catalog {}
-         :xtdb/table-catalog {}
-         :xtdb/trie-catalog {}
          :xtdb/information-schema {}
-         :xtdb.log/processor opts
-         :xtdb.metadata/metadata-manager {}
          :xtdb.operator.scan/scan-emitter {}
          :xtdb.query/query-source {}
          :xtdb/compactor (.getCompactor opts)
          :xtdb.metrics/registry {}
          :xtdb/database {}
          :xtdb/authn {:authn-factory (.getAuthn opts)}
-         :xtdb/log (.getLog opts)
-         :xtdb/buffer-pool (.getStorage opts)
          :xtdb.cache/memory (.getMemoryCache opts)
          :xtdb.cache/disk (.getDiskCache opts)
-         :xtdb.indexer/live-index indexer-cfg
          :xtdb/garbage-collector (.getGarbageCollector opts)
          :xtdb/modules (.getModules opts)}
         (cond-> srv-config (assoc :xtdb.pgwire/server srv-config)
