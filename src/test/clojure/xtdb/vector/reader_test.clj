@@ -176,7 +176,7 @@
         (.copyRow 1))
 
       (t/is (= [42 43]
-               (tu/vec->vals (vw/vec-wtr->rdr  int-wrt)))
+               (.toList (vw/vec-wtr->rdr int-wrt)))
             "duv to monomorphic base type vector copying")))
 
   (with-open [duv (DenseUnionVector/empty "my-duv" tu/*allocator*)
@@ -203,7 +203,7 @@
       (let [copier (.rowCopier list-wrt duv)]
         (.copyRow copier 0))
       (t/is (= [[42 43]]
-               (tu/vec->vals (vw/vec-wtr->rdr  list-wrt)))
+               (.toList (vw/vec-wtr->rdr list-wrt)))
             "duv to monomorphic list type vector copying")))
 
   (with-open [duv (DenseUnionVector/empty "my-duv" tu/*allocator*)
@@ -229,7 +229,7 @@
       (let [copier (.rowCopier struct-wrt duv)]
         (.copyRow copier 0))
       (t/is (= [{:foo 42, :bar "forty-two"}]
-               (tu/vec->vals (vw/vec-wtr->rdr struct-wrt)))
+               (.toList (vw/vec-wtr->rdr struct-wrt) #xt/key-fn :kebab-case-keyword))
             "duv to monomorphic struct type vector copying"))))
 
 (deftest testing-set-writing-reading
@@ -240,7 +240,7 @@
       (.writeObject set-wrt #{4 5 6})
 
       (t/is (= [#{1 2 3} #{4 5 6}]
-               (tu/vec->vals (vw/vec-wtr->rdr  set-wrt))))
+               (.toList (vw/vec-wtr->rdr  set-wrt))))
 
       (let [pos (VectorPosition/build)]
         (.setPosition pos 0)
@@ -338,7 +338,7 @@
               str-copier (.rowCopier wtr struct-str-vec)]
           (.copyRow int-copier 0)
           (t/is (= [{:bar 42}]
-                   (tu/vec->vals (vw/vec-wtr->rdr wtr))))
+                   (.toList (vw/vec-wtr->rdr wtr) #xt/key-fn :kebab-case-keyword)))
           (.copyRow str-copier 0)
           (t/is (= [{:bar 42} {:bar "forty-two"}]
-                   (tu/vec->vals (vw/vec-wtr->rdr wtr)))))))))
+                   (.toList (vw/vec-wtr->rdr wtr) #xt/key-fn :kebab-case-keyword))))))))

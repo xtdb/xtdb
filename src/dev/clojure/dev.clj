@@ -4,8 +4,10 @@
             [integrant.repl :as ir]
             [xtdb.compactor :as c]
             [xtdb.datasets.tpch :as tpch]
+            [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgw]
+            [xtdb.protocols :as xtp]
             [xtdb.table-catalog :as table-cat]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
@@ -83,7 +85,7 @@
       (time
        (do
          (time (tpch/submit-docs! node 0.5))
-         (time (tu/then-await-tx (tu/latest-submitted-tx-id node) node (Duration/ofHours 1)))
+         (time (tu/then-await-tx (xtp/latest-submitted-tx-id node) node (Duration/ofHours 1)))
          (tu/finish-block! node)
          (time (c/compact-all! node (Duration/ofMinutes 5)))))))
 

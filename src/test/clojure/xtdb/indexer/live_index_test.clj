@@ -24,7 +24,7 @@
   tu/with-node)
 
 (t/deftest test-block
-  (let [^BufferAllocator allocator (tu/component tu/*node* :xtdb/allocator)
+  (let [^BufferAllocator allocator (util/component tu/*node* :xtdb/allocator)
         buffer-pool (bp/<-node tu/*node*)
         live-index (li/<-node tu/*node*)
 

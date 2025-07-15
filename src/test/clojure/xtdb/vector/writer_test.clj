@@ -332,4 +332,4 @@
 
           (.endList map-vec))
 
-        (t/is (= maps (tu/vec->vals (vw/vec-wtr->rdr map-vec))))))))
+        (t/is (= maps (.toList (vw/vec-wtr->rdr map-vec))))))))

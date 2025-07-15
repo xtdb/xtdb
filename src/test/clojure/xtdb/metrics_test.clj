@@ -4,7 +4,8 @@
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
-            [xtdb.types])
+            [xtdb.types]
+            [xtdb.util :as util])
   (:import (io.micrometer.core.instrument Counter Gauge)
            io.micrometer.core.instrument.MeterRegistry))
 
@@ -13,7 +14,7 @@
 (t/deftest test-error-and-warning-counter
   (let [node (xtn/start-node tu/*node-opts*)
         conn (jdbc/get-connection node)
-        registry ^MeterRegistry (tu/component node :xtdb.metrics/registry)]
+        ^MeterRegistry registry (util/component node :xtdb.metrics/registry)]
 
     ;; it's only the runtime errors that increment the error counter
     (t/is (thrown? Exception (xt/q node "SLECT 1"))
@@ -38,7 +39,7 @@
 (t/deftest test-transaction-exception-counter
   (let [node (xtn/start-node tu/*node-opts*)
         conn (jdbc/get-connection node)
-        registry ^MeterRegistry (tu/component node :xtdb.metrics/registry)]
+        ^MeterRegistry registry (util/component node :xtdb.metrics/registry)]
     (t/is (thrown? Exception (jdbc/execute! conn ["INSERT INTO foo (a) VALUES (42)"]))
           "presubmit error via pgwire")
 
@@ -58,7 +59,7 @@
 
 (t/deftest test-transaction-exception-counter-on-submit-tx
   (let [node (xtn/start-node tu/*node-opts*)
-        registry ^MeterRegistry (tu/component node :xtdb.metrics/registry)]
+        ^MeterRegistry registry (util/component node :xtdb.metrics/registry)]
     (t/is (anomalous? [:incorrect :missing-id] (xt/submit-tx node ["INSERT INTO foo (a) VALUES (42)"]))
           "presubmit error via the node (submit-tx)")
 
@@ -73,7 +74,7 @@
 
 (t/deftest test-total-and-active-connections
   (let [node (xtn/start-node tu/*node-opts*)
-        registry ^MeterRegistry (tu/component node :xtdb.metrics/registry)]
+        ^MeterRegistry registry (util/component node :xtdb.metrics/registry)]
 
     (with-open [conn1 (jdbc/get-connection node)]
       (jdbc/execute! conn1 ["SELECT 1"]))

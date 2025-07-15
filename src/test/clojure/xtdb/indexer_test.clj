@@ -336,14 +336,14 @@
                                        {:default-tz #xt/zone "Europe/London"})))))
 
         (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))
-        (t/is (= last-tx-key (tu/latest-completed-tx node)))
+        (t/is (= last-tx-key (xtp/latest-completed-tx node)))
 
         (with-open [node (tu/->local-node {:node-dir node-dir})]
           (tu/then-await-tx magic-last-tx-id node (Duration/ofSeconds 2))
           (t/is (= last-tx-key
                    (xtp/latest-completed-tx node)))
 
-          (t/is (= last-tx-key (tu/latest-completed-tx node))))
+          (t/is (= last-tx-key (xtp/latest-completed-tx node))))
 
         (t/is (zero? (->> (.toList (Files/list object-dir))
                           (filter util/is-file?)
@@ -366,7 +366,7 @@
 
         (t/is (= 11000 (count tx-ops)))
 
-        (t/is (nil? (tu/latest-completed-tx node)))
+        (t/is (nil? (xtp/latest-completed-tx node)))
 
         (let [last-tx-id (reduce
                           (fn [_acc tx-ops]
@@ -376,7 +376,7 @@
               last-tx-key (serde/->TxKey last-tx-id (time/->instant #inst "2020-04-19"))]
 
           (tu/then-await-tx last-tx-id node (Duration/ofSeconds 15))
-          (t/is (= last-tx-key (tu/latest-completed-tx node)))
+          (t/is (= last-tx-key (xtp/latest-completed-tx node)))
           (tu/flush-block! node)
 
           (t/is (= last-tx-key (.getLatestCompletedTx block-cat)))
@@ -424,7 +424,7 @@
                               (tu/then-await-tx node2 (Duration/ofSeconds 10)))]
                 (t/is (= first-half-tx-id (:tx-id lc-tx)))
                 (t/is (= (serde/->TxKey (:tx-id lc-tx) (:system-time lc-tx))
-                         (tu/latest-completed-tx node2)))
+                         (xtp/latest-completed-tx node2)))
 
 
                 (let [latest-completed-tx (.getLatestCompletedTx block-cat)]
@@ -451,7 +451,7 @@
                                          (partition-all 100 second-half-tx-ops))]
 
                   (t/is (<= first-half-tx-id
-                            (:tx-id (tu/latest-completed-tx node2))
+                            (:tx-id (xtp/latest-completed-tx node2))
                             second-half-tx-id))
 
                   (.close node2)
@@ -469,7 +469,7 @@
                       (let [lc-tx (-> second-half-tx-id (tu/then-await-tx node3 (Duration/ofSeconds 15)))]
                         (t/is (= second-half-tx-id (:tx-id lc-tx)))
                         (t/is (= (serde/->TxKey (:tx-id lc-tx) (:system-time lc-tx))
-                                 (tu/latest-completed-tx node3))))
+                                 (xtp/latest-completed-tx node3))))
 
                       (Thread/sleep 250); wait for the block to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx
@@ -616,7 +616,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
 
       (binding [idx/*crash-log-clock* (InstantSource/fixed Instant/EPOCH)]
         (let [node-id "xtdb-foo-node"
-              ^BufferAllocator al (tu/component node :xtdb/allocator)
+              ^BufferAllocator al (util/component node :xtdb/allocator)
               idxer (idx/<-node node)
               db (db/<-node node)
               bp (.getBufferPool db)

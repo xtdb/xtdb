@@ -1,13 +1,13 @@
 (ns xtdb.ts-devices-small-test
   (:require [clojure.test :as t]
             [clojure.tools.logging :as log]
-            [xtdb.metadata :as meta]
+            [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu]
             [xtdb.ts-devices :as tsd]
             [xtdb.util :as util])
   (:import java.time.Duration))
 
-(def ^:private ^:dynamic *node*)
+(def ^:private ^:dynamic *node* nil)
 
 (t/use-fixtures :once
   (fn [f]
@@ -16,13 +16,13 @@
 
       (with-open [node (tu/->local-node {:node-dir node-dir})]
         (binding [*node* node]
-          (t/is (nil? (tu/latest-completed-tx node)))
+          (t/is (nil? (xtp/latest-completed-tx node)))
 
           (let [last-tx-key (tsd/submit-ts-devices node {:size :small})]
 
             (log/info "transactions submitted, last tx" (pr-str last-tx-key))
             (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofMinutes 15))))
-            (t/is (= last-tx-key (tu/latest-completed-tx node)))
+            (t/is (= last-tx-key (xtp/latest-completed-tx node)))
             (tu/finish-block! node))
 
           (f))))))

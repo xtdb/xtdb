@@ -295,7 +295,7 @@
    (xt-log/await-tx (db/<-node node) (xtp/latest-submitted-tx-id node) timeout)))
 
 (defn finish-block! [node]
-  (xt-log/finish-block! node))
+  (tu/finish-block! node))
 
 (defn compact! [node]
   (c/compact-all! node (Duration/ofMinutes 10)))

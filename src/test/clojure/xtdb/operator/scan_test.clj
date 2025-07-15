@@ -476,9 +476,14 @@
                      (map :version)
                      set))))))
 
+(defn- uuid-seq [n]
+  (letfn [(new-uuid [n]
+            (java.util.UUID. (Long/reverse n) 0))]
+    (map new-uuid (range n))))
+
 (deftest test-iid-fast-path-multiple-pages
   (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}}))]
-    (let [uuids (tu/uuid-seq 40)
+    (let [uuids (uuid-seq 40)
           search-uuid (rand-nth uuids)]
       (xt/execute-tx node (for [uuid (take 20 uuids)]
                             [:put-docs :xt_docs {:xt/id uuid}]))

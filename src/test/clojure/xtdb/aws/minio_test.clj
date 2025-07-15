@@ -3,6 +3,7 @@
             [xtdb.api :as xt]
             [xtdb.buffer-pool :as bp]
             [xtdb.buffer-pool-test :as bp-test]
+            [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
             [xtdb.object-store-test :as os-test]

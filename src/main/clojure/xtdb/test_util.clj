@@ -3,6 +3,7 @@
             [clojure.test :as t]
             [cognitect.anomalies :as-alias anom]
             [xtdb.api :as xt]
+            [xtdb.block-catalog :as block-cat]
             [xtdb.database :as db]
             [xtdb.error :as err]
             [xtdb.indexer :as idx]
@@ -32,14 +33,15 @@
            (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb BufferPool ICursor)
            (xtdb.api TransactionKey)
+           (xtdb.api.log Log$Message$FlushBlock Log$MessageMetadata)
            xtdb.api.query.IKeyFn
-           (xtdb.arrow Relation RelationReader Vector VectorReader)
+           (xtdb.arrow Relation RelationReader Vector)
            (xtdb.indexer LiveTable Watermark Watermark$Source)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
            (xtdb.trie MetadataFileWriter)
            xtdb.types.ZonedDateTimeRange
-           (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)))
+           (xtdb.util MsgIdUtil RefCounter RowCounter TemporalBounds TemporalDimension)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -75,16 +77,6 @@
 (defn free-port ^long []
   (with-open [s (ServerSocket. 0)]
     (.getLocalPort s)))
-
-(defn component
-  ([k] (component *node* k))
-  ([node k] (util/component node k)))
-
-(defn latest-completed-tx ^TransactionKey [node]
-  (:latest-completed-tx (xtp/status node)))
-
-(defn latest-submitted-tx-id ^TransactionKey [node]
-  (xtp/latest-submitted-tx-id node))
 
 ;; TODO inline this now that we have `log/await-tx`
 (defn then-await-tx
@@ -137,11 +129,14 @@
   (ZonedDateTimeRange. (time/->zdt from) (some-> to time/->zdt)))
 
 (defn finish-block! [node]
-  (xt-log/finish-block! node))
+  (.finishBlock (.getLogProcessor (db/<-node node))))
 
 (defn flush-block!
-  ([node] (xt-log/flush-block! node))
-  ([node timeout] (xt-log/flush-block! node timeout)))
+  ([node] (flush-block! node #xt/duration "PT5S"))
+  ([node timeout]
+   (let [log (xt-log/<-node node)
+         ^Log$MessageMetadata msg @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (block-cat/<-node node)) -1)))]
+     (xt-log/await-tx (db/<-node node) (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset msg)) timeout))))
 
 (defn open-vec
   (^xtdb.arrow.Vector [^Field field]
@@ -397,15 +392,6 @@
              (bit-and (bit-shift-right b 2) 3)
              (bit-and b 3)])
           (.array bb)))
-
-(defn uuid-seq [n]
-  (letfn [(new-uuid [n]
-            (java.util.UUID. (Long/reverse n) 0))]
-    (map new-uuid (range n))))
-
-(defn vec->vals
-  ([^VectorReader rdr] (vec->vals rdr #xt/key-fn :kebab-case-keyword))
-  ([^VectorReader rdr ^IKeyFn key-fn] (.toList rdr key-fn)))
 
 (defn q-sql
   "Like xtdb.api/q, but also returns the result type."

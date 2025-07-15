@@ -161,7 +161,7 @@
       ;; here we first transform from writer to reader then read the objects out
       ;; of the reader
       (t/is (= [42 "forty-two"]
-               (tu/vec->vals (vw/vec-wtr->rdr duv-writer))))))
+               (.toList (vw/vec-wtr->rdr duv-writer))))))
 
   ;; Writing to a relation is done in the same way as `VectorReader/vectorFor`
 

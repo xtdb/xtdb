@@ -3,7 +3,6 @@
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.api :as xt]
-            [xtdb.block-catalog :as block-cat]
             [xtdb.database :as db]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
@@ -22,7 +21,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api IndexerConfig TransactionKey Xtdb$Config)
-           (xtdb.api.log Log Log$Factory Log$Message$FlushBlock Log$Message$Tx Log$MessageMetadata)
+           (xtdb.api.log Log Log$Factory Log$Message$Tx Log$MessageMetadata)
            (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
@@ -342,13 +341,3 @@
    (-> @(cond-> (.awaitAsync (.getLogProcessor db) tx-id)
           timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))
        (util/rethrowing-cause))))
-
-(defn finish-block! [node]
-  (.finishBlock (.getLogProcessor (db/<-node node))))
-
-(defn flush-block!
-  ([node] (flush-block! node #xt/duration "PT5S"))
-  ([node timeout]
-   (let [log (<-node node)
-         ^Log$MessageMetadata msg @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (block-cat/<-node node)) -1)))]
-     (await-tx (db/<-node node) (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset msg)) timeout))))

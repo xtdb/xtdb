@@ -144,7 +144,7 @@
   (prop/for-all [{:keys [field vs]} (field+data-gen 100)]
     (with-open [al (RootAllocator.)
                 vec (vw/open-vec al field vs)]
-      (= vs (tu/vec->vals (vr/vec->reader vec) #xt/key-fn :snake-case-string)))))
+      (= vs (.toList (vr/vec->reader vec) #xt/key-fn :snake-case-string)))))
 
 (defn generate-vector [^BufferAllocator al]
   (gen/let [nb-entries (gen/choose 0 100)
@@ -170,7 +170,7 @@
 #_
 (defspec ^:integration read-multi-vec 20
   (prop/for-all [^VectorReader multi-rdr (multi-vec-reader tu/*allocator*)]
-    (let [res (= (.getValueCount multi-rdr) (count (tu/vec->vals multi-rdr)))]
+    (let [res (= (.getValueCount multi-rdr) (count (.toList multi-rdr)))]
       (.close multi-rdr)
       res)))
 
@@ -191,7 +191,7 @@
 (defspec ^:integration row-copiers 50
   (prop/for-all [^VectorReader rdr (gen-rdr tu/*allocator*)]
     (with-open [copied-rdr (copy-all rdr tu/*allocator*)]
-      (let [res (= (tu/vec->vals rdr) (tu/vec->vals copied-rdr))]
+      (let [res (= (.toList rdr) (.toList copied-rdr))]
         (.close rdr)
         res))))
 
@@ -205,14 +205,14 @@
     (prop/for-all [{:keys [field vs]} (field+data-gen 100)]
       (with-open [al (RootAllocator.)
                   vec (vw/open-vec al field vs)]
-        (= vs (tu/vec->vals (vr/vec->reader vec) #xt/key-fn :snake-case-string)))))
+        (= vs (.toList (vr/vec->reader vec) #xt/key-fn :snake-case-string)))))
 
   (tc/quick-check 100 read-what-you-write-prop)
 
 
   (defn- read-multi-vec-prop [^BufferAllocator al]
     (prop/for-all [^VectorReader multi-rdr (multi-vec-reader al)]
-      (let [res (= (.getValueCount multi-rdr) (count (tu/vec->vals multi-rdr)))]
+      (let [res (= (.getValueCount multi-rdr) (count (.toList multi-rdr)))]
         (.close multi-rdr)
         res)))
 
@@ -222,7 +222,7 @@
   (defn- row-copiers-prop  [^BufferAllocator al]
     (prop/for-all [^VectorReader rdr (gen-rdr al)]
       (with-open [copied-rdr (copy-all rdr al)]
-        (let [res (= (tu/vec->vals rdr) (tu/vec->vals copied-rdr))]
+        (let [res (= (.toList rdr) (.toList copied-rdr))]
           (.close rdr)
           res))))
 
