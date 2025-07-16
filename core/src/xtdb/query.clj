@@ -1510,7 +1510,9 @@
     (doc-count [_ a] (db/doc-count index-snapshot a))
     (doc-value-count [_ a] (db/doc-value-count index-snapshot a))
     (eid-cardinality [_ a] (db/eid-cardinality index-snapshot a))
-    (value-cardinality [_ a] (db/value-cardinality index-snapshot a))))
+    (value-cardinality [_ a] (db/value-cardinality index-snapshot a))
+    (attr-min-value [_ a] (db/attr-min-value index-snapshot a))
+    (attr-max-value [_ a] (db/attr-max-value index-snapshot a))))
 
 (defn- compile-sub-query [{:keys [fn-allow-list pred-ctx value-serde] :as db}
                           stats where in in-var-cardinalities override-join-order

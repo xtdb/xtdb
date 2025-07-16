@@ -490,6 +490,12 @@
       (0 1 2) false
       true)))
 
+(defn ordered-value-buf? [^DirectBuffer buffer]
+  (when (and buffer (pos? (.capacity buffer)))
+    (case (.getByte buffer 0)
+      (0 1 2 3 4 10) false
+      true)))
+
 (defn decode-value-buffer [^DirectBuffer buffer]
   (let [type-id (.getByte buffer 0)]
     (case type-id

@@ -51,7 +51,9 @@
   (doc-count [this attr])
   (doc-value-count [this attr])
   (^double value-cardinality [this attr])
-  (^double eid-cardinality [this attr]))
+  (^double eid-cardinality [this attr])
+  (attr-min-value [this attr])
+  (attr-max-value [this attr]))
 
 (defprotocol ValueSerde
   (decode-value [this value-buffer])

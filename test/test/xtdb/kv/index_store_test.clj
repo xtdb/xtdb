@@ -236,10 +236,14 @@
               (->> (db/all-attrs index-snapshot)
                    (into {} (map (juxt identity
                                        (fn [attr]
-                                         {:doc-count (db/doc-count index-snapshot attr)
-                                          :doc-value-count (db/doc-value-count index-snapshot attr)
-                                          :values (Math/round (db/value-cardinality index-snapshot attr))
-                                          :eids (Math/round (db/eid-cardinality index-snapshot attr))})))))))]
+                                         (let [min-val (db/attr-min-value index-snapshot attr)
+                                               max-val (db/attr-max-value index-snapshot attr)]
+                                           (cond-> {:doc-count (db/doc-count index-snapshot attr)
+                                                    :doc-value-count (db/doc-value-count index-snapshot attr)
+                                                    :values (Math/round (db/value-cardinality index-snapshot attr))
+                                                    :eids (Math/round (db/eid-cardinality index-snapshot attr))}
+                                             min-val (assoc :min-value min-val)
+                                             max-val (assoc :max-value max-val))))))))))]
     (with-fresh-index-store
       (let [ivan {:crux.db/id :ivan, :name "Ivan", :interests #{:clojure :databases}}
             ivan2 {:crux.db/id :ivan, :name "Ivan2", :interests #{:clojure :databases :bitemporality}}
@@ -247,21 +251,30 @@
         (let [index-store-tx (db/begin-index-tx *index-store*)]
           (db/index-tx index-store-tx #::xt{:tx-time #inst "2021", :tx-id 0})
           (index-docs index-store-tx {(c/new-id ivan) ivan})
-          (t/is (= {:doc-count 1, :doc-value-count 1, :values 1, :eids 1} (:name (->stats *index-store*))))
-          (t/is (= {:doc-count 1, :doc-value-count 2, :values 2, :eids 1} (:interests (->stats *index-store*)))))
+          (t/is (= {:doc-count 1, :doc-value-count 1, :values 1, :eids 1
+                    :min-value "Ivan", :max-value "Ivan"}
+                   (:name (->stats *index-store*))))
+          (t/is (= {:doc-count 1, :doc-value-count 2, :values 2, :eids 1}
+                   (:interests (->stats *index-store*)))))
 
         (let [index-store-tx (db/begin-index-tx *index-store*)]
           (db/index-tx index-store-tx #::xt{:tx-time #inst "2021-01", :tx-id 1})
           (index-docs index-store-tx {(c/new-id petr) petr})
-          (t/is (= {:doc-count 2, :doc-value-count 2, :values 2, :eids 2} (:name (->stats *index-store*)))))
+          (t/is (= {:doc-count 2, :doc-value-count 2, :values 2, :eids 2
+                    :min-value "Ivan", :max-value "Petr"}
+                   (:name (->stats *index-store*)))))
 
         (t/testing "updated"
           (doto (db/begin-index-tx *index-store*)
             (db/index-tx #::xt{:tx-time #inst "2022", :tx-id 1})
             (index-docs {(c/new-id ivan2) ivan2}))
 
-          (t/is (= {:doc-count 3, :doc-value-count 3, :values 3, :eids 2} (:name (->stats *index-store*))))
-          (t/is (= {:doc-count 2, :doc-value-count 5, :values 3, :eids 1} (:interests (->stats *index-store*)))))
+          (t/is (= {:doc-count 3, :doc-value-count 3, :values 3, :eids 2
+                    :min-value "Ivan", :max-value "Petr"}
+                   (:name (->stats *index-store*))))
+
+          (t/is (= {:doc-count 2, :doc-value-count 5, :values 3, :eids 1}
+                   (:interests (->stats *index-store*)))))
 
         (t/testing "duplicate docs are reflected twice in the doc-count"
           ;; this isn't ideal, but stats won't ever be 100% accurate
@@ -269,7 +282,8 @@
           (let [index-store-tx (db/begin-index-tx *index-store* )]
             (db/index-tx index-store-tx #::xt{:tx-time #inst "2022", :tx-id 1})
             (index-docs index-store-tx {(c/new-id petr) petr})
-            (t/is (= {:doc-count 4, :doc-value-count 4, :values 3, :eids 2}
+            (t/is (= {:doc-count 4, :doc-value-count 4, :values 3, :eids 2
+                      :min-value "Ivan", :max-value "Petr"}
                      (:name (->stats *index-store*))))))))
 
     (with-fresh-index-store
@@ -292,8 +306,10 @@
             (db/index-tx #::xt{:tx-time #inst "2022", :tx-id 2})
             (index-docs (mk-docs 50)))))
 
-      (t/is (= {:crux.db/id {:doc-count 3675, :doc-value-count 3675, :values 3554, :eids 3554}
-                :sub-idx {:doc-count 3675, :doc-value-count 3675, :values 50, :eids 3554}}
+      (t/is (= {:crux.db/id {:doc-count 3675, :doc-value-count 3675, :values 3554, :eids 3554
+                             :min-value 0, :max-value 3674}
+                :sub-idx {:doc-count 3675, :doc-value-count 3675, :values 50, :eids 3554
+                          :min-value 0, :max-value 48}}
                (->stats *index-store*))))))
 
 (t/deftest test-entity

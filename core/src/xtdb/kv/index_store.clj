@@ -135,6 +135,10 @@
         (.putBytes (+ c/index-id-size c/id-size) v 0 (.capacity v)))
       (+ c/index-id-size c/id-size (.capacity v))))))
 
+(defn- decode-av-key->v-from [^DirectBuffer k]
+  (let [a-size (+ c/index-id-size c/id-size)]
+    (mem/slice-buffer k a-size (- (.capacity k) a-size))))
+
 (defn- encode-ave-key-to
   (^org.agrona.MutableDirectBuffer[b attr]
    (encode-ave-key-to b attr mem/empty-buffer mem/empty-buffer))
@@ -957,6 +961,22 @@
                 decode-stats-value->eid-hll-buffer-from
                 hll/estimate)
         0.0))
+
+  (attr-min-value [_ attr]
+    (with-open [i (kv/new-iterator snapshot)]
+      (let [prefix (encode-av-key-to nil (c/->id-buffer attr))]
+        (when-let [v-buf (some-> (first (all-keys-in-prefix i prefix))
+                             (decode-av-key->v-from))]
+          (when (c/ordered-value-buf? v-buf)
+            (c/decode-value-buffer v-buf))))))
+
+  (attr-max-value [_ attr]
+    (with-open [i (kv/new-iterator snapshot)]
+      (let [prefix (encode-av-key-to nil (c/->id-buffer attr))]
+        (when-let [v-buf (some-> (first (all-keys-in-prefix i prefix (.capacity prefix) {:reverse? true}))
+                             (decode-av-key->v-from))]
+          (when (c/ordered-value-buf? v-buf)
+            (c/decode-value-buffer v-buf))))))
 
   db/IndexMeta
   (-read-index-meta [_ k not-found]
