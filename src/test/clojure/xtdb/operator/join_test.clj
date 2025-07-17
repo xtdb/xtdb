@@ -1069,3 +1069,39 @@
                   1]]
                (:join-order (lp/emit-expr (s/conform ::lp/logical-plan plan) {})))))))
 
+(t/deftest full-outer-join-with-polymorphic-types
+  (t/testing "polymorphic types on both sides - all matching"
+    (t/is (= {:res [[{:a 1 :b 1} {:a "2" :b "2"}]],
+              :col-types
+              '{a [:union #{:utf8 :null :i64}]
+                b [:union #{:utf8 :null :i64}]}}
+             (tu/query-ra [:full-outer-join '[{a b}]
+                           [::tu/pages
+                            [[{:a 1}, {:a "2"}]]]
+                           [::tu/pages
+                            [[{:b 1}, {:b "2"}]]]]
+                          {:preserve-pages? true, :with-col-types? true}))))
+
+  (t/testing "polymorphic types on both sides - some unmatching"
+    (t/is (= {:res [[{:b 1, :a 1} {:b "3"}] [{:a "2"}]],
+              :col-types
+              '{a [:union #{:utf8 :null :i64}]
+                b [:union #{:utf8 :null :i64}]}}
+             (tu/query-ra [:full-outer-join '[{a b}]
+                           [::tu/pages
+                            [[{:a 1}, {:a "2"}]]]
+                           [::tu/pages
+                            [[{:b 1}, {:b "3"}]]]]
+                          {:preserve-pages? true, :with-col-types? true}))))
+
+  (t/testing "polymorphic types on both sides - all unmatching"
+    (t/is (= {:res [[{:b 3} {:b "4"}] [{:a 1} {:a "2"}]],
+              :col-types
+              '{a [:union #{:utf8 :null :i64}]
+                b [:union #{:utf8 :null :i64}]}}
+             (tu/query-ra [:full-outer-join '[{a b}]
+                           [::tu/pages
+                            [[{:a 1}, {:a "2"}]]]
+                           [::tu/pages
+                            [[{:b 3}, {:b "4"}]]]]
+                          {:preserve-pages? true, :with-col-types? true})))))

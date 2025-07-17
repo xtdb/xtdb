@@ -11,7 +11,8 @@
             [xtdb.operator.scan :as scan]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.vector.reader :as vr]
+            [xtdb.vector.writer :as vw])
   (:import [clojure.lang IFn]
            (java.util ArrayList Iterator List)
            (java.util.function IntConsumer)
@@ -22,7 +23,7 @@
            (org.roaringbitmap.buffer MutableRoaringBitmap)
            org.roaringbitmap.RoaringBitmap
            (xtdb ICursor)
-           (xtdb.arrow RelationReader)
+           (xtdb.arrow RelationReader RelationWriter)
            (xtdb.bloom BloomUtils)
            (xtdb.expression.map IRelationMap)
            (xtdb.operator ProjectionSpec)))
@@ -320,7 +321,8 @@
          (join-rels probe-rel rel-map))))
 
 (deftype JoinCursor [^BufferAllocator allocator, ^ICursor build-cursor,
-                     ^:unsynchronized-mutable ^ICursor probe-cursor
+                     ^:unsynchronized-mutable ^ICursor probe-cursor 
+                     ^:unsynchronized-mutable ^RelationWriter nil-rel-writer
                      ^IFn ->probe-cursor
                      ^IRelationMap rel-map
                      ^RoaringBitmap matched-build-idxs
@@ -337,6 +339,10 @@
              (when-not probe-cursor
                (util/with-close-on-catch [probe-cursor (->probe-cursor)]
                  (set! (.probe-cursor this) probe-cursor)))
+             
+             (when (and matched-build-idxs (not nil-rel-writer))
+               (util/with-close-on-catch [nil-rel-writer (emap/->nillable-rel-writer allocator (.probeFields rel-map))]
+                 (set! (.nil-rel-writer this) nil-rel-writer)))
 
              (while (and (not (aget advanced? 0))
                          (.tryAdvance ^ICursor (.probe-cursor this)
@@ -360,7 +366,7 @@
                ;; this means .isEmpty will be true on the next iteration (we flip the bitmap)
                (.add matched-build-idxs 0 build-row-count)
 
-               (let [nil-rel (emap/->nil-rel (set (keys (.probeFields rel-map))))
+               (let [nil-rel (vw/rel-wtr->rdr nil-rel-writer)
                      build-sel (.toArray unmatched-build-idxs)
                      probe-sel (int-array (alength build-sel))]
                  (.accept c (join-rels nil-rel rel-map [probe-sel build-sel]))
@@ -369,6 +375,7 @@
   (close [_]
     (run! #(.clear ^MutableRoaringBitmap %) pushdown-blooms)
     (util/try-close rel-map)
+    (util/try-close nil-rel-writer)
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
@@ -513,7 +520,7 @@
                      (project/->project-cursor opts
                                                (if (= join-type ::mark-join)
                                                  (MarkJoinCursor. allocator build-cursor nil (partial ->probe-cursor opts) relation-map matched-build-idxs mark-col-name pushdown-blooms join-type)
-                                                 (JoinCursor. allocator build-cursor nil (partial ->probe-cursor opts) relation-map matched-build-idxs pushdown-blooms join-type))
+                                                 (JoinCursor. allocator build-cursor nil nil (partial ->probe-cursor opts) relation-map matched-build-idxs pushdown-blooms join-type))
                                                output-projections))))}))
 
 (defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]

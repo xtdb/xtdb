@@ -165,6 +165,20 @@
                    (vr/vec->reader (doto (NullVector. (str col-name))
                                      (.setValueCount 1))))))
 
+(defn ->nillable-rel-writer
+  "Returns a relation with a single row where all columns are nil, but the schema is nillable."
+  ^xtdb.arrow.RelationWriter [^BufferAllocator allocator fields]
+  (let [schema (Schema. (mapv (fn [[field-name field]]
+                                (-> field
+                                    (types/field-with-name (str field-name))
+                                    (types/->nullable-field)))
+                              fields))]
+    (util/with-close-on-catch [root (VectorSchemaRoot/create schema allocator)]
+      (let [rel-writer (vw/root->writer root)]
+        (doto (.rowCopier rel-writer (->nil-rel (keys fields)))
+          (.copyRow 0))
+        rel-writer))))
+
 (def nil-row-idx 0)
 
 (defn ->relation-map ^xtdb.expression.map.IRelationMap
