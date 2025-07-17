@@ -9,9 +9,9 @@
             [xtdb.fixtures.kv :as fkv]
             [xtdb.fixtures.tpch :as tpch]
             [xtdb.index :as idx]
-            [xtdb.query :as q]
-            [xtdb.io :as xio])
-  (:import (java.util Arrays Date UUID)
+            [xtdb.io :as xio]
+            [xtdb.query :as q])
+  (:import (java.util Arrays Date Random)
            (java.util.concurrent TimeoutException)))
 
 (t/use-fixtures :each fkv/with-each-kv-store* fkv/with-kv-store-opts* fix/with-node)
@@ -1830,7 +1830,7 @@
                         (let [direct-hit-ns (- (System/nanoTime) direct-hit-ns-start)
                               limited-hit-ns-start (System/nanoTime)]
                           (t/is (= 1 (count (xt/q (xt/db *api*) '{:find [i]
-                                                                  :where [[i :age 20]]
+                                                                  :where [[i :age 30]]
                                                                   :limit 1}))))
                           (let [limited-hit-ns (- (System/nanoTime) limited-hit-ns-start)]
                             (double (/ (min direct-hit-ns limited-hit-ns)
@@ -3803,7 +3803,7 @@
                             (apply concat)))
 
   (let [db (xt/db *api*)]
-    (t/is (= '[$v $type e v]
+    (t/is (= '[$v $type v e]
              (->> (q/query-plan-for db
                                     '{:find [e]
                                       :in [$type $v]
@@ -3813,14 +3813,14 @@
                                     [:thing 590])
                   :vars-in-join-order)))
 
-    (t/is (= '[$v $type v e]
+    (t/is (= '[$v $type e v]
              (->> (q/query-plan-for db
                                     '{:find [e]
                                       :in [$type $v]
                                       :where [[e :type $type]
                                               [e :v v]
                                               [(> v $v)]]
-                                      :override-join-order [$v $type v e]}
+                                      :override-join-order [$v $type e v]}
                                     [:thing 590])
                   :vars-in-join-order)))
 
@@ -3954,7 +3954,7 @@
                                    :my-number n}]))))
 
   (t/testing "join order avoids cross product"
-    (t/is (= '["Oleg" "Ivan" e1 n e2]
+    (t/is (= '["Ivan" "Oleg" n e2 e1]
              (:vars-in-join-order
               (q/query-plan-for (xt/db *api*)
                                 '{:find [e1]
@@ -4103,25 +4103,26 @@
   (let [query '{:find [?e ?name]
                 :in [?name ?type]
                 :where [[?e :name ?name]
-                        [?e :type ?type]]}]
+                        [?e :type ?type]]}
+        rand (Random. 1234)]
     (fix/submit+await-tx (conj (for [idx (range 1000)]
-                                 [::xt/put {:xt/id (UUID/randomUUID)
+                                 [::xt/put {:xt/id (.nextLong rand)
                                             :type :person
                                             :name (str "person-" idx)}])
-                               [::xt/put {:xt/id (UUID/randomUUID)
+                               [::xt/put {:xt/id (.nextLong rand)
                                           :type "extra type"}]))
 
-    (t/is (= '[?type ?name ?e]
+    (t/is (= '[?name ?type ?e]
              (-> (q/query-plan-for (xt/db *api*) query
                                    ["person-104" :person])
                  :vars-in-join-order)))
 
-    (fix/submit+await-tx [[::xt/put {:xt/id (UUID/randomUUID)
+    (fix/submit+await-tx [[::xt/put {:xt/id (.nextLong rand)
                                      :name "extra name"}]
-                          [::xt/put {:xt/id (UUID/randomUUID)
+                          [::xt/put {:xt/id (.nextLong rand)
                                      :name "another extra name"}]])
 
-    (t/is (= '[?type ?name ?e]
+    (t/is (= '[?name ?type ?e]
              (-> (q/query-plan-for (xt/db *api*) query
                                    ["person-104" :person])
                  :vars-in-join-order)))))
@@ -4193,7 +4194,7 @@
       (with-open [res (xt/open-q db '{:find [j e]
                                       :where [[e :j j]
                                               [(> j -10)]]})]
-        (t/is (= '([-7 :e] [14 :c] [14 :d] [25 :b] [30 :a])
+        (t/is (= '([30 :a] [25 :b] [14 :c] [14 :d] [-7 :e])
                  (iterator-seq res)))))
 
     (t/testing "range constraint predicates combine sensibly"
