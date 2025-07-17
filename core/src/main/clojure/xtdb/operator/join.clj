@@ -349,10 +349,11 @@
                                               (.accept c out-rel)))))))))
            (aget advanced? 0))
 
-         (when (= ::full-outer-join join-type)
+         (when matched-build-idxs
            (let [build-rel (.getBuiltRelation rel-map)
                  build-row-count (long (.getRowCount build-rel))
                  unmatched-build-idxs (RoaringBitmap/flip matched-build-idxs 0 build-row-count)]
+             
              (.remove unmatched-build-idxs emap/nil-row-idx)
 
              (when-not (.isEmpty unmatched-build-idxs)
