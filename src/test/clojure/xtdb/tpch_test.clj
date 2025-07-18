@@ -30,7 +30,7 @@
           :docs (tpch/submit-docs! node scale-factor)
           :dml (tpch/submit-dml! node scale-factor))
 
-        (tu/then-await-tx node)
+        (tu/then-await node)
         (tu/finish-block! node)
 
         (c/compact-all! node (Duration/ofMinutes 5))

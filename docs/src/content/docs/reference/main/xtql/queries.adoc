@@ -732,11 +732,11 @@ Instead, we want to preserve them, albeit without values for the columns in the 
 
 XTQL query options are an optional map of the following keys:
 
-`after-tx-id`::
-requires that the node has indexed _at least_ the specified transaction.
+`await-token`::
+requires that the node has indexed _at least_ as far as the specified await-token.
 * If not provided, XTDB clients will default it to the latest transaction submitted through that client.
   This is so that, by default, transactions submitted to a client are guaranteed to be visible to any later query to that same client.
-* If submitting transactions and queries to different clients (e.g. via a non-sticky load-balancer), it is the user's responsibility to pass the transaction token returned from `submit-tx` as the `after-tx-id` for subsequent queries to guarantee this same read-after-write consistency level.
+* If submitting transactions and queries to different clients (e.g. via a non-sticky load-balancer), it is the user's responsibility to pass the await-token returned after `submit-tx` as the `await-token` for subsequent queries to guarantee this same read-after-write consistency level.
 * If the requested transaction hasn't been indexed, the XTDB client will wait (see `tx-timeout`) before evaluating the query.
 +
 [source,clojure]
@@ -756,7 +756,7 @@ requires that the node has indexed _at least_ the specified transaction.
 `key-fn`:: specifies how keys are returned in query results.
 * `:kebab-case-keyword` (default): kebab-case, dot-namespaced keywords (e.g. `:foo.bar/baz-quux`)
 
-`tx-timeout`:: duration to wait for the requested transaction (`after-tx-id`) to be indexed before timing out (default unlimited).
+`tx-timeout`:: duration to wait for the requested transaction (`await-token`) to be indexed before timing out (default unlimited).
 
 [#basis]
 These query options (in particular, `snapshot-time`, `current-time`, `default-tz` - together, the 'basis') allow for truly immutable, repeatable database snapshots - two queries run with the same basis will see exactly the same version of the whole database, regardless of any other transactions that have occurred in the meantime.

@@ -19,14 +19,14 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 
-typealias TxId = Long
+typealias AwaitToken = Long
 
 @Serializable
 data class QueryOptions(
     @Serializable(ArgsSerde::class) val args: Map<String, *>? = null,
     val snapshotTime: Instant? = null,
     val currentTime: Instant? = null,
-    val afterTxId: TxId? = null,
+    val awaitToken: AwaitToken? = null,
     val txTimeout: Duration? = null,
     val defaultTz: ZoneId? = null,
     val explain: Boolean = false,

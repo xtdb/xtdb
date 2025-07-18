@@ -79,7 +79,7 @@ They (optionally) provide system-time bounds to control what data is visible to 
 
 * a `snapshot-time` - an exact bound on the system-time.
   This is used to ensure query repeatability, to replay an earlier query.
-* an 'after-tx-id' - a lower-bound on the transaction indexed.
+* an 'await-token' - a lower-bound on the transaction indexed.
 This is used to ensure that queries observe earlier-submitted transactions - indeed, this argument ensures the read-your-writes aspect of the 'strict serialisable' guarantee.
 
 When the query is submitted:

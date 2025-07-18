@@ -45,7 +45,7 @@
 
 (defn- with-query-opts-defaults [query-opts {:keys [default-tz] :as node}]
   (-> (into {:default-tz default-tz,
-             :after-tx-id (xtp/latest-submitted-tx-id node)
+             :await-token (xtp/latest-submitted-tx-id node)
              :key-fn (serde/read-key-fn :snake-case-string)}
             query-opts)
       (update :snapshot-time #(some-> % (time/->instant)))
@@ -61,7 +61,7 @@
 (defrecord Node [^BufferAllocator allocator, ^Database db
                  ^IQuerySource q-src
                  ^CompositeMeterRegistry metrics-registry
-                 default-tz, ^AtomicLong !wm-tx-id
+                 default-tz, ^AtomicLong !await-token
                  system, close-fn,
                  query-timer, ^Counter query-error-counter, ^Counter tx-error-counter]
   Xtdb
@@ -79,12 +79,12 @@
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))
 
-  (getWatermarkTxId [_] (.get !wm-tx-id))
-  (setWatermarkTxId [_ tx-id]
+  (getAwaitToken [_] (.get !await-token))
+  (setAwaitToken [_ await-token]
     (loop []
-      (let [wm-tx-id (.get !wm-tx-id)]
-        (when (< wm-tx-id tx-id)
-          (when-not (.compareAndSet !wm-tx-id wm-tx-id tx-id)
+      (let [old-token (.get !await-token)]
+        (when (< old-token await-token)
+          (when-not (.compareAndSet !await-token old-token await-token)
             (recur))))))
 
   (module [_ clazz]
@@ -95,7 +95,7 @@
   (submit-tx [this tx-ops opts]
     (try 
       (let [tx-id (xt-log/submit-tx this tx-ops opts)]
-        (.set !wm-tx-id tx-id)
+        (.set !await-token tx-id)
         tx-id)
       (catch Anomaly e
         (when tx-error-counter
@@ -155,26 +155,26 @@
                 :else (throw (err/illegal-arg :xtdb/unsupported-query-type
                                               {::err/message (format "Unsupported SQL query type: %s" (type query))})))
 
-          {:keys [^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+          {:keys [^long await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
 
-      (xt-log/await-tx db after-tx-id tx-timeout)
+      (xt-log/await db await-token tx-timeout)
 
       (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
   (prepare-xtql [this query query-opts]
-    (let [{:keys [^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
+    (let [{:keys [^long await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
           ast (cond
                 (sequential? query) (xtql/parse-query query nil)
                 (instance? XtqlQuery query) query
                 :else (throw (err/illegal-arg :xtdb/unsupported-query-type
                                               {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]
-      (xt-log/await-tx db after-tx-id tx-timeout)
+      (xt-log/await db await-token tx-timeout)
 
       (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
   (prepare-ra [this plan query-opts]
-    (let [{:keys [^long after-tx-id tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-      (xt-log/await-tx db after-tx-id tx-timeout)
+    (let [{:keys [^long await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+      (xt-log/await db await-token tx-timeout)
 
       (.prepareQuery q-src plan db (.getLiveIndex db) query-opts)))
 
@@ -199,7 +199,7 @@
   (let [node (map->Node (-> deps
                             (dissoc :config)
                             (assoc :default-tz (:default-tz config)
-                                   :!wm-tx-id (AtomicLong. -1))
+                                   :!await-token (AtomicLong. -1))
                             (assoc :query-timer (metrics/add-timer metrics-registry "query.timer"
                                                                    {:description "indicates the timings for queries"})
                                    :query-error-counter (metrics/add-counter metrics-registry "query.error")

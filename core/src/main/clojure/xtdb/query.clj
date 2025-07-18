@@ -223,7 +223,7 @@
 
           (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
-          (openQuery [_ {:keys [args current-time snapshot-time default-tz close-args? after-tx-id]
+          (openQuery [_ {:keys [args current-time snapshot-time default-tz close-args? await-token]
                          :or {default-tz default-tz
                               close-args? true}}]
             (util/with-close-on-catch [^BufferAllocator allocator (if allocator
@@ -254,7 +254,7 @@
                             expr/*snapshot-time* (or (some-> (:snapshot-time planned-query) (expr->instant {:args args, :default-tz default-tz}))
                                                      (some-> snapshot-time (expr->instant {:args args, :default-tz default-tz}))
                                                      (some-> snap .getTxBasis .getSystemTime))
-                            expr/*after-tx-id* (or after-tx-id -1)]
+                            expr/*await-token* (or await-token -1)]
 
                     (validate-snapshot-not-before expr/*snapshot-time* snap)
 

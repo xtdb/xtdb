@@ -45,11 +45,11 @@ directlyExecutableStatement
     | SET SESSION CHARACTERISTICS AS sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
     | SET ROLE ( identifier | NONE ) # SetRoleStatement
     | SET TIME ZONE zone=expr # SetTimeZoneStatement
-    | SET WATERMARK ( TO | '=' ) literal # SetWatermarkStatement
+    | SET AWAIT_TOKEN ( TO | '=' ) awaitToken=literal # SetAwaitTokenStatement
     | SET identifier ( TO | '=' ) literal # SetSessionVariableStatement
     | SHOW showVariable # ShowVariableStatement
     | SHOW identifier # ShowSessionVariableStatement
-    | SHOW WATERMARK # ShowWatermarkStatement
+    | SHOW AWAIT_TOKEN # ShowAwaitTokenStatement
     | SHOW SNAPSHOT_TIME # ShowSnapshotTimeStatement
     | SHOW CLOCK_TIME # ShowClockTimeStatement
     | CREATE USER userName WITH PASSWORD password=characterString # CreateUserStatement
@@ -849,7 +849,7 @@ txTzOption : ('TIMEZONE' | 'TIME' 'ZONE') '='? tz=expr ;
 readOnlyTxOption
     : 'SNAPSHOT_TIME' '='? snapshotTime=expr # SnapshotTimeTxOption
     | 'CLOCK_TIME' '='? clockTime=expr # ClockTimeTxOption
-    | 'WATERMARK' '='? watermarkTx=expr # WatermarkTxOption
+    | AWAIT_TOKEN '='? awaitToken=expr # AwaitTokenTxOption
     | txTzOption # TxTzOption0
     ;
 

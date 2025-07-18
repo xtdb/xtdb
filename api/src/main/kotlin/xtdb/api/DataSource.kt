@@ -7,7 +7,7 @@ import java.sql.ShardingKey
 import java.util.*
 
 interface DataSource : javax.sql.DataSource {
-    var watermarkTxId: Long
+    var awaitToken: Long
 
     override fun getConnection() = createConnectionBuilder().build()
 

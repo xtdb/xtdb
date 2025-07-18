@@ -3,7 +3,6 @@
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
-            [xtdb.log :as xt-log]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.time :as time]

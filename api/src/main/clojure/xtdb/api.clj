@@ -50,11 +50,11 @@
 (defmacro ^:private with-conn [[binding connectable] & body]
   `(with-conn* ~connectable (fn [~binding] ~@body)))
 
-(defn- begin-ro-sql [{:keys [default-tz after-tx-id snapshot-time current-time]}]
+(defn- begin-ro-sql [{:keys [default-tz await-token snapshot-time current-time]}]
   (let [kvs (->> [["TIMEZONE = ?" (some-> default-tz str)]
                   ["SNAPSHOT_TIME = ?" snapshot-time]
                   ["CLOCK_TIME = ?" current-time]
-                  ["WATERMARK = ?" after-tx-id]]
+                  ["AWAIT_TOKEN = ?" await-token]]
                  (into [] (filter (comp some? second))))]
     (into [(format "BEGIN READ ONLY WITH (%s)"
                    (str/join ", " (map first kvs)))]
@@ -100,7 +100,7 @@
 
          opts (cond-> opts
                 (instance? xtdb.api.DataSource connectable)
-                (update :after-tx-id (fnil identity (.getWatermarkTxId ^xtdb.api.DataSource connectable))))]
+                (update :await-token (fnil identity (.getAwaitToken ^xtdb.api.DataSource connectable))))]
      (reify IReduceInit
        (reduce [_ f start]
          (with-conn [conn connectable]
@@ -281,12 +281,12 @@
                                  (assoc :async? true)))
 
      (try
-       (jdbc/execute! conn ["BEGIN READ ONLY WITH (WATERMARK = -1)"])
+       (jdbc/execute! conn ["BEGIN READ ONLY WITH (AWAIT_TOKEN = -1)"])
 
        (let [{:keys [tx-id]} (jdbc/execute-one! conn ["SHOW LATEST_SUBMITTED_TX"]
                                                 {:builder-fn xt-jdbc/builder-fn})]
          (when (instance? xtdb.api.DataSource connectable)
-           (.setWatermarkTxId ^xtdb.api.DataSource connectable tx-id))
+           (.setAwaitToken ^xtdb.api.DataSource connectable tx-id))
          tx-id)
 
        (finally
@@ -331,7 +331,7 @@
      (let [{:keys [tx-id system-time]} (jdbc/execute-one! conn ["SHOW LATEST_SUBMITTED_TX"]
                                                           {:builder-fn xt-jdbc/builder-fn})]
        (when (instance? xtdb.api.DataSource connectable)
-         (.setWatermarkTxId ^xtdb.api.DataSource connectable tx-id))
+         (.setAwaitToken ^xtdb.api.DataSource connectable tx-id))
        (serde/->TxKey tx-id (time/->instant system-time))))))
 
 (defn client
@@ -350,14 +350,14 @@
                                port 5432
                                dbname "xtdb"}}]
 
-  (let [!wm-tx-id (AtomicLong.)]
+  (let [!await-token (AtomicLong.)]
     (reify DataSource
-      (getWatermarkTxId [_] (.get !wm-tx-id))
-      (setWatermarkTxId [_ tx-id]
+      (getAwaitToken [_] (.get !await-token))
+      (setAwaitToken [_ await-token]
         (loop []
-          (let [wm-tx-id (.get !wm-tx-id)]
-            (when (< wm-tx-id tx-id)
-              (when-not (.compareAndSet !wm-tx-id wm-tx-id tx-id)
+          (let [old-token (.get !await-token)]
+            (when (< old-token await-token)
+              (when-not (.compareAndSet !await-token old-token await-token)
                 (recur))))))
 
       (createConnectionBuilder [_]
@@ -372,7 +372,7 @@
                (jdbc/execute! conn query+args
                               {:builder-fn xt-jdbc/builder-fn}))]
 
-       (jdbc/execute! conn ["BEGIN READ ONLY WITH (watermark = NULL)"])
+       (jdbc/execute! conn ["BEGIN READ ONLY WITH (await_token = NULL)"])
 
        (try
          {:metrics (-> (concat (status-q conn ["SELECT * FROM xt.metrics_counters"])
@@ -385,7 +385,7 @@
           :latest-completed-tx (some-> (first (status-q conn ["SHOW LATEST_COMPLETED_TX"]))
                                        (serde/map->TxKey))
 
-          :latest-submitted-tx (:watermark (first (status-q conn ["SHOW WATERMARK"])))}
+          :latest-submitted-tx (:latest-submitted-tx (first (status-q conn ["SHOW LATEST_SUBMITTED_TX"])))}
 
          (finally
            (jdbc/execute! conn ["ROLLBACK"])))))))

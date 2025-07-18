@@ -216,7 +216,7 @@
 
 (s/def ::current-time inst?)
 (s/def ::snapshot-time (s/nilable ::time/datetime-value))
-(s/def ::after-tx-id (s/nilable int?))
+(s/def ::await-token (s/nilable int?))
 
 (s/def ::tx-timeout
   (st/spec (s/nilable #(instance? Duration %))
@@ -229,11 +229,11 @@
 
 (s/def ::query-body
   (s/keys :req-un [::query],
-          :opt-un [::after-tx-id ::snapshot-time ::current-time ::tx-timeout ::args ::default-tz ::key-fn ::explain?]))
+          :opt-un [::await-token ::snapshot-time ::current-time ::tx-timeout ::args ::default-tz ::key-fn ::explain?]))
 
 (defn- <-QueryOpts [^QueryOptions opts]
   (->> {:args (.getArgs opts)
-        :after-tx-id (.getAfterTxId opts)
+        :await-token (.getAwaitToken opts)
         :snapshot-time (.getSnapshotTime opts)
         :current-time (.getCurrentTime opts)
         :tx-timeout (.getTxTimeout opts)

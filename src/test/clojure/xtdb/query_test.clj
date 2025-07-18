@@ -91,14 +91,14 @@
     (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]
                             [:put-docs :xt_docs {:name "James", :xt/id :jms}]
                             [:put-docs :xt_docs {:name "Ivan", :xt/id :iva}]])
-        (tu/then-await-tx node))
+        (tu/then-await node))
 
     (tu/finish-block! node)
     (c/compact-all! node #xt/duration "PT1S")
     (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]
 
                             [:put-docs :xt_docs {:name "James", :xt/id :jms}]])
-        (tu/then-await-tx node))
+        (tu/then-await node))
 
     (tu/finish-block! node)
     (c/compact-all! node #xt/duration "PT1S")

@@ -70,7 +70,7 @@
   (t/is (= [{:xt/id 1}]
            (xt/q tu/*node* '(from :docs [xt/id])
                  {:snapshot-time #xt/zdt "2020-01-02Z"
-                  :after-tx-id 1})))
+                  :await-token 1})))
 
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 2 :key :some-keyword}]])
 
@@ -84,7 +84,7 @@
                             :request-method :post
                             :content-type :transit+json
                             :form-params {:query '(from :docs [xt/id key])
-                                          :after-tx-id 2
+                                          :await-token 2
                                           :key-fn #xt/key-fn :kebab-case-keyword}
                             :transit-opts transit-opts
                             :url (http-url "query")})
@@ -152,7 +152,7 @@
 
     (t/is (= [{:xt/id 2}]
              (xt/q tu/*node* '(from :docs [xt/id])
-                   {:after-tx-id tx-id})))
+                   {:await-token tx-id})))
 
     (t/is (= [{"xt/id" 2}]
              (-> (http/request {:accept :json

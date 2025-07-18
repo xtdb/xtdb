@@ -78,16 +78,16 @@
   (with-open [s (ServerSocket. 0)]
     (.getLocalPort s)))
 
-;; TODO inline this now that we have `log/await-tx`
-(defn then-await-tx
+;; TODO inline this now that we have `log/await`
+(defn then-await
   (^TransactionKey [node]
-   (xt-log/await-tx (db/<-node node)))
+   (xt-log/await (db/<-node node)))
 
   (^TransactionKey [tx-id node]
-   (xt-log/await-tx (db/<-node node) tx-id))
+   (xt-log/await (db/<-node node) tx-id))
 
   (^TransactionKey [tx-id node timeout]
-   (xt-log/await-tx (db/<-node node) tx-id timeout)))
+   (xt-log/await (db/<-node node) tx-id timeout)))
 
 (defn ->instants
   ([u] (->instants u 1))
@@ -136,7 +136,7 @@
   ([node timeout]
    (let [log (xt-log/<-node node)
          ^Log$MessageMetadata msg @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (block-cat/<-node node)) -1)))]
-     (xt-log/await-tx (db/<-node node) (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset msg)) timeout))))
+     (xt-log/await (db/<-node node) (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset msg)) timeout))))
 
 (defn open-vec
   (^xtdb.arrow.Vector [^Field field]
@@ -224,8 +224,8 @@
            :or {key-fn (serde/read-key-fn :kebab-case-keyword)}}]
    (let [allocator (:allocator node *allocator*)
          query-opts (-> query-opts
-                        (cond-> node (-> (update :after-tx-id (fnil identity (xtp/latest-submitted-tx-id node)))
-                                         (doto (-> :after-tx-id (then-await-tx node))))))
+                        (cond-> node (-> (update :await-token (fnil identity (xtp/latest-submitted-tx-id node)))
+                                         (doto (-> :await-token (then-await node))))))
 
          db (when node
               (db/<-node node))
@@ -246,7 +246,7 @@
      (util/with-open [^RelationReader args-rel (if args
                                                  (vw/open-args allocator args)
                                                  vw/empty-args)
-                      res (.openQuery pq (-> (select-keys query-opts [:snapshot-time :current-time :after-tx-id :table-args :default-tz])
+                      res (.openQuery pq (-> (select-keys query-opts [:snapshot-time :current-time :await-token :table-args :default-tz])
                                              (assoc :args args-rel, :close-args? false)))]
        (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
                       (cond->> (not preserve-pages?) (into [] cat)))]

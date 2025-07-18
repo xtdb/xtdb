@@ -360,7 +360,7 @@
                           {:node tu/*node*, :with-col-types? true})))]
 
     (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :doc}]])
-        (tu/then-await-tx tu/*node*))
+        (tu/then-await tu/*node*))
 
     (tu/finish-block! tu/*node*)
 
@@ -542,10 +542,10 @@
             uuid (first first-page)]
         (xt/submit-tx node (for [uuid (concat first-page second-page)]
                              [:put-docs :docs {:xt/id uuid}]))
-        (tu/then-await-tx node)
+        (tu/then-await node)
         (tu/finish-block! node)
         (xt/submit-tx node [[:put-docs :docs {:xt/id uuid}]])
-        (tu/then-await-tx node)
+        (tu/then-await node)
 
         ;; first + second page
         (t/is (= 32

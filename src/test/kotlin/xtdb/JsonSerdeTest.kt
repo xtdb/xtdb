@@ -2,10 +2,8 @@ package xtdb
 
 import clojure.lang.Keyword
 import clojure.lang.Symbol
-import kotlinx.serialization.encodeToString
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import xtdb.api.TransactionKey
 import xtdb.api.query.IKeyFn
 import xtdb.error.Incorrect
 import xtdb.error.Unsupported
@@ -188,7 +186,7 @@ class JsonSerdeTest {
                 args = mapOf("foo" to "bar"),
                 snapshotTime = Instant.EPOCH + Duration.ofHours(1),
                 currentTime = Instant.EPOCH,
-                afterTxId = 1,
+                awaitToken = 1,
                 txTimeout = Duration.parse("PT3H"),
                 defaultTz = ZoneId.of("America/Los_Angeles"),
                 explain = true,
@@ -200,7 +198,7 @@ class JsonSerdeTest {
                 "queryOpts": {"args":{"foo":"bar"},
                               "snapshotTime":"1970-01-01T01:00:00Z",
                               "currentTime": "1970-01-01T00:00:00Z",
-                              "afterTxId":1,
+                              "awaitToken":1,
                               "txTimeout":"PT3H",
                               "defaultTz":"America/Los_Angeles",
                               "explain":true,

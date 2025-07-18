@@ -1566,7 +1566,7 @@
   {:return-type [:union #{:null :i64}]
    :continue-call (fn [f _]
                     (let [tx-id (gensym 'tx-id)]
-                      `(let [~tx-id expr/*after-tx-id*]
+                      `(let [~tx-id expr/*await-token*]
                          (if (neg? ~tx-id)
                            ~(f :null nil)
                            ~(f :i64 tx-id)))))})

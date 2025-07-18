@@ -660,7 +660,7 @@
 (deftest map-read-test
   (with-open [conn (jdbc-conn)]
     (-> (xt/submit-tx tu/*node* [[:put-docs :a {:xt/id "map-test", :a {:b 42}}]])
-        (tu/then-await-tx tu/*node*))
+        (tu/then-await tu/*node*))
 
     (let [rs (q conn ["select a.a from a a"])]
       (is (= [{:a {:b 42}}] rs)))))
@@ -691,7 +691,7 @@
 (deftest transaction-by-default-pins-the-snapshot-to-last-tx-test
   (let [insert #(xt/submit-tx tu/*node* [[:put-docs %1 %2]])]
     (-> (insert :a {:xt/id :fred, :name "Fred"})
-        (tu/then-await-tx tu/*node*))
+        (tu/then-await tu/*node*))
 
     (with-open [conn (jdbc-conn)]
       (jdbc/with-transaction [db conn]
@@ -1724,50 +1724,50 @@
              [{"x" "foo", "y" "bar"}]
              (rs->maps (.executeQuery stmt)))))))
 
-(deftest test-show-watermark
+(deftest test-show-await-token
   (with-open [conn (jdbc-conn)]
-    (t/is (= [{}] (q conn ["SHOW WATERMARK"])))
+    (t/is (= [{}] (q conn ["SHOW AWAIT_TOKEN"])))
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
 
-    (t/is (= [{:watermark 0}]
-             (q conn ["SHOW WATERMARK"])))
+    (t/is (= [{:await-token 0}]
+             (q conn ["SHOW AWAIT_TOKEN"])))
 
     (t/is (= [{:tx-id 0, :system-time #xt/zdt "2020-01-01Z[UTC]"}]
              (q conn ["SHOW LATEST_COMPLETED_TX"])))
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
 
-    (t/is (= [{:watermark 1}]
-             (q conn ["SHOW WATERMARK"])))
+    (t/is (= [{:await-token 1}]
+             (q conn ["SHOW AWAIT_TOKEN"])))
 
-    (jdbc/execute! conn ["SET WATERMARK = 0"])
+    (jdbc/execute! conn ["SET AWAIT_TOKEN = 0"])
 
-    (t/is (= [{:watermark 0}]
-             (q conn ["SHOW WATERMARK"])))
+    (t/is (= [{:await-token 0}]
+             (q conn ["SHOW AWAIT_TOKEN"])))
 
     (t/is (= [{:tx-id 1, :system-time #xt/zdt "2020-01-02Z[UTC]"}]
              (q conn ["SHOW LATEST_COMPLETED_TX"])))
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
 
-    (t/is (= [{:watermark 2}]
-             (q conn ["SHOW WATERMARK"])))))
+    (t/is (= [{:await-token 2}]
+             (q conn ["SHOW AWAIT_TOKEN"])))))
 
-(t/deftest show-watermark-param-fail-4504
+(t/deftest show-await-token-param-fail-4504
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
 
-    (t/is (= [{:watermark 0}]
-             (q conn ["SHOW WATERMARK"]))))
+    (t/is (= [{:await-token 0}]
+             (q conn ["SHOW AWAIT_TOKEN"]))))
 
   (when (psql-available?)
     (psql-session
      (fn [send read]
        (send "INSERT INTO foo (_id) VALUES (1);\n")
        (read)
-       (send "SHOW WATERMARK;\n")
-       (t/is (= [["watermark"] ["1"]] (read)))))))
+       (send "SHOW AWAIT_TOKEN;\n")
+       (t/is (= [["await_token"] ["1"]] (read)))))))
 
 (t/deftest test-show-latest-submitted-tx
   (with-open [conn (jdbc-conn)]
@@ -2707,23 +2707,23 @@ ORDER BY 1,2;")
              (jdbc/execute-one! conn ["SHOW TIME ZONE"]))
           "reset tz")))
 
-(t/deftest in-tx-watermark
+(t/deftest in-tx-await-token
   (with-open [conn (jdbc-conn)]
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"])
-    (t/is (= {:watermark 0} (jdbc/execute-one! conn ["SHOW WATERMARK"])))
+    (t/is (= {:await_token 0} (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
 
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 2}"])
-    (t/is (= {:watermark 1} (jdbc/execute-one! conn ["SHOW WATERMARK"])))
+    (t/is (= {:await_token 1} (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
 
-    (jdbc/execute! conn ["BEGIN READ ONLY WITH (watermark = ?)" 0])
+    (jdbc/execute! conn ["BEGIN READ ONLY WITH (await_token = ?)" 0])
     (try
-      (t/is (= {:watermark 0} (jdbc/execute-one! conn ["SHOW WATERMARK"])))
+      (t/is (= {:await_token 0} (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
       (finally
         (jdbc/execute! conn ["ROLLBACK"])))
 
-    (t/is (= {:watermark 1} (jdbc/execute-one! conn ["SHOW WATERMARK"])))))
+    (t/is (= {:await_token 1} (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))))
 
-(t/deftest watermark+snapshot-time
+(t/deftest await-token+snapshot-time
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 0}]])
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 1}]])
 
@@ -2731,7 +2731,7 @@ ORDER BY 1,2;")
     (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 2}]])
     (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 3}]])
 
-    (jdbc/execute! conn ["BEGIN READ ONLY WITH (watermark = 3)"])
+    (jdbc/execute! conn ["BEGIN READ ONLY WITH (AWAIT_TOKEN = 3)"])
     (try
       (t/is (= {:_id 1, :version 3}
                (jdbc/execute-one! conn ["SELECT * FROM foo"])))

@@ -85,7 +85,7 @@
       (time
        (do
          (time (tpch/submit-docs! node 0.5))
-         (time (tu/then-await-tx (xtp/latest-submitted-tx-id node) node (Duration/ofHours 1)))
+         (time (tu/then-await (xtp/latest-submitted-tx-id node) node (Duration/ofHours 1)))
          (tu/finish-block! node)
          (time (c/compact-all! node (Duration/ofMinutes 5)))))))
 

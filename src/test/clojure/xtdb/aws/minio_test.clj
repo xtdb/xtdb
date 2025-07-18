@@ -169,7 +169,7 @@
                         (util/with-open [node (start-node local-disk-cache (str (random-uuid)))]
                                         ;; Submit tpch docs
                                         (-> (tpch/submit-docs! node 0.05)
-            (tu/then-await-tx node (Duration/ofHours 1)))
+            (tu/then-await node (Duration/ofHours 1)))
 
                                         ;; Ensure finish-block! works
                                         (t/is (nil? (tu/finish-block! node)))

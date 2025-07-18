@@ -443,15 +443,15 @@
 
 (defn cmd-begin [{:keys [node conn-state]} tx-opts {:keys [args]}]
   (swap! conn-state
-         (fn [{:keys [session watermark-tx-id] :as st}]
-           (let [watermark-tx-id (or (some-> (:watermark-tx-id tx-opts) (apply-args args))
-                                     watermark-tx-id
-                                     -1)
+         (fn [{:keys [session await-token] :as st}]
+           (let [await-token (or (some-> (:await-token tx-opts) (apply-args args))
+                                 await-token
+                                 -1)
                  {:keys [^Clock clock]} session]
 
-             (when-not (or (neg? watermark-tx-id)
+             (when-not (or (neg? await-token)
                            (= :read-write (:access-mode tx-opts)))
-               (xt-log/await-tx (db/<-node node) watermark-tx-id #xt/duration "PT30S"))
+               (xt-log/await (db/<-node node) await-token #xt/duration "PT30S"))
 
              (-> st
                  (update :transaction
@@ -465,13 +465,13 @@
                                   :implicit? false}
                                  (into (:characteristics session))
                                  (into (-> tx-opts
-                                           (dissoc :watermark-tx-id)
+                                           (dissoc :await-token)
                                            (update :default-tz #(some-> % (apply-args args) (coerce->tz)))
                                            (update :system-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
                                            (update :current-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
                                            (update :snapshot-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
                                            (->> (into {} (filter (comp some? val))))))
-                                 (assoc :after-tx-id watermark-tx-id))))))))))
+                                 (assoc :await-token await-token))))))))))
 
 (defn- inc-error-counter! [^Counter counter]
   (when counter
@@ -492,10 +492,10 @@
                          :authn {:user (get parameters "user")}}]
             (if async?
               (let [tx-id (xtp/submit-tx node dml-buf tx-opts)]
-                (swap! conn-state assoc :watermark-tx-id tx-id, :latest-submitted-tx {:tx-id tx-id}))
+                (swap! conn-state assoc :await-token tx-id, :latest-submitted-tx {:tx-id tx-id}))
 
               (let [{:keys [tx-id error] :as tx} (xtp/execute-tx node dml-buf tx-opts)]
-                (swap! conn-state assoc :watermark-tx-id tx-id, :latest-submitted-tx tx)
+                (swap! conn-state assoc :await-token tx-id, :latest-submitted-tx tx)
 
                 (when error
                   (throw error))))))
@@ -699,8 +699,8 @@
                                         (visitTxTzOption [_ ctx]
                                           {:default-tz (sql/plan-expr (.tz ctx) env)})
 
-                                        (visitWatermarkTxOption [_ ctx]
-                                          {:watermark-tx-id (sql/plan-expr (.watermarkTx ctx) env)})
+                                        (visitAwaitTokenTxOption [_ ctx]
+                                          {:await-token (sql/plan-expr (.awaitToken ctx) env)})
 
                                         (visitReadWriteSession [_ _] {:access-mode :read-write})
 
@@ -780,14 +780,14 @@
                                         (visitShowVariableStatement [_ ctx]
                                           {:statement-type :query, :query sql, :parsed-query ctx})
 
-                                        (visitSetWatermarkStatement [_ ctx]
-                                          (let [wm-tx-id (sql/plan-expr (.literal ctx) env)]
-                                            (if (number? wm-tx-id)
-                                              {:statement-type :set-watermark, :watermark-tx-id wm-tx-id}
-                                              (throw (pgio/err-protocol-violation "invalid watermark - expecting number")))))
+                                        (visitSetAwaitTokenStatement [_ ctx]
+                                          (let [await-token (sql/plan-expr (.awaitToken ctx) env)]
+                                            (if (number? await-token)
+                                              {:statement-type :set-await-token, :await-token await-token}
+                                              (throw (pgio/err-protocol-violation "invalid await-token - expecting number")))))
 
-                                        (visitShowWatermarkStatement [_ _]
-                                          {:statement-type :show-variable, :query sql, :variable :watermark})
+                                        (visitShowAwaitTokenStatement [_ _]
+                                          {:statement-type :show-variable, :query sql, :variable "await_token"})
 
                                         (visitShowSnapshotTimeStatement [_ ctx]
                                           {:statement-type :query, :query sql, :parsed-query ctx})
@@ -820,7 +820,7 @@
   (case variable
     "latest_completed_tx" [:i64 types/temporal-col-type]
     "latest_submitted_tx" [:i64 types/temporal-col-type :bool :transit]
-    :watermark [:i64]
+    "await_token" [:i64]
     "standard_conforming_strings" [:bool]
 
     [:utf8]))
@@ -831,10 +831,10 @@
     (try
       (let [{:keys [^Sql$DirectlyExecutableStatementContext parsed-query explain?]} stmt
 
-            {:keys [session watermark-tx-id]} @conn-state
+            {:keys [session await-token]} @conn-state
             {:keys [^Clock clock]} session
 
-            query-opts {:after-tx-id (or watermark-tx-id -1)
+            query-opts {:await-token (or await-token -1)
                         :tx-timeout (Duration/ofMinutes 1)
                         :default-tz (.getZone clock)
                         :explain? explain?}
@@ -949,16 +949,16 @@
           result-formats)))
 
 (defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator] :as conn} {:keys [statement-type ^PreparedQuery prepared-query args result-format] :as stmt}]
-  (let [{:keys [session transaction watermark-tx-id]} @conn-state
+  (let [{:keys [session transaction await-token]} @conn-state
         {:keys [^Clock clock], session-params :parameters} session
-        after-tx-id (or (:after-tx-id transaction) watermark-tx-id -1)
+        await-token (or (:await-token transaction) await-token -1)
 
         query-opts {:snapshot-time (or (:snapshot-time stmt) (:snapshot-time transaction))
                     :current-time (or (:current-time stmt)
                                       (:current-time transaction)
                                       (.instant clock))
                     :default-tz (or (:default-tz transaction) (.getZone clock))
-                    :after-tx-id after-tx-id}
+                    :await-token await-token}
 
         xt-args (xtify-args conn args stmt)]
 
@@ -990,8 +990,8 @@
 
         :show-variable (let [{:keys [variable]} stmt]
                          (util/with-close-on-catch [cursor (->cursor (case variable
-                                                                       :watermark [(when-not (neg? after-tx-id)
-                                                                                     after-tx-id)]
+                                                                       "await_token" [(when-not (neg? await-token)
+                                                                                        await-token)]
                                                                        "latest_completed_tx" (mapv (into {} (xtp/latest-completed-tx node))
                                                                                                    [:tx-id :system-time])
                                                                        "latest_submitted_tx" (mapv (into {} (:latest-submitted-tx @conn-state))
@@ -1107,9 +1107,9 @@
     (set-time-zone conn tz))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TIME ZONE"}))
 
-(defn cmd-set-watermark [{:keys [conn-state] :as conn} {:keys [watermark-tx-id]}]
-  (swap! conn-state assoc :watermark-tx-id watermark-tx-id)
-  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET WATERMARK"}))
+(defn cmd-set-await-token [{:keys [conn-state] :as conn} {:keys [await-token]}]
+  (swap! conn-state assoc :await-token await-token)
+  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"}))
 
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
   (swap! conn-state update-in [:session :characteristics] (fnil into {}) session-characteristics)
@@ -1221,7 +1221,7 @@
     :set-role nil
     :set-transaction (cmd-set-transaction conn tx-characteristics)
     :set-time-zone (cmd-set-time-zone conn portal)
-    :set-watermark (cmd-set-watermark conn portal)
+    :set-await-token (cmd-set-await-token conn portal)
     :ignore (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "IGNORED"})
 
     :begin (do
