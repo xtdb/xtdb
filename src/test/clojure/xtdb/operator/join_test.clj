@@ -1105,3 +1105,68 @@
                            [::tu/pages
                             [[{:b 3}, {:b "4"}]]]]
                           {:preserve-pages? true, :with-col-types? true})))))
+
+(t/deftest test-determine-build-side
+  (t/is (= :left (join/determine-build-side {:stats {:row-count 1}} {:stats {:row-count 10}} :right))
+        "left side has fewer rows")
+
+  (t/is (= :right (join/determine-build-side {:stats {:row-count 10}} {:stats {:row-count 1}} :left))
+        "right side has fewer rows")
+
+  (t/is (= :right (join/determine-build-side {:stats {:row-count 5}} {:stats {:row-count 5}} :right))
+        "both sides equal, fallback to default")
+
+  (t/is (= :left (join/determine-build-side {:stats {:row-count 5}} {:stats nil} :right))
+        "right side missing stats")
+
+  (t/is (= :right (join/determine-build-side {:stats nil} {:stats {:row-count 5}} :left))
+        "left side missing stats")
+
+  (t/is (= :left (join/determine-build-side {:stats nil} {:stats nil} :left))
+        "both sides missing stats, fallback to default"))
+
+(t/deftest test-determine-build-side-with-emitted-relations
+  (let [smaller-table (lp/emit-expr (s/conform ::lp/logical-plan [:table [{:baz 1} {:baz 2} {:baz 2}]]) {})
+        bigger-table (lp/emit-expr (s/conform ::lp/logical-plan [:table [{:biff 1} {:biff 2}]]) {})]
+
+    (t/is (= :left
+             (join/determine-build-side bigger-table smaller-table :right))
+          "right side has fewer rows - build right")
+
+    (t/is (= :right
+             (join/determine-build-side smaller-table bigger-table :left))
+          "left side has fewer rows - build left")
+
+    (t/is (= :right
+             (join/determine-build-side smaller-table smaller-table :right))
+          "equal row count - fallback to default")))
+
+(t/deftest test-left-side-built-left-outer-join
+  (t/is (= [{:a 1, :b 1, :c 1} {:a 2, :b 2, :c 1} {:a 2, :b 2, :c 2}]
+           (tu/query-ra
+            '[:left-outer-join [{a b}]
+              [:table [{:a 1} {:a 2}]]
+              [:table [{:b 1 :c 1} {:b 2 :c 1} {:b 2 :c 2}]]]))
+        "left side built LOJ with all matched rows")
+
+  (t/is (= [{:a 1, :b 1, :c 1} {:a 2, :b 2, :c 1}]
+           (tu/query-ra
+            '[:left-outer-join [{a b}]
+              [:table [{:a 1} {:a 2}]]
+              [:table [{:b 1 :c 1} {:b 2 :c 1} {:b 3 :c 1}]]]))
+        "left side built LOJ with some unmatched rows")
+
+  (t/is (= [{:a 1} {:a 2}]
+           (tu/query-ra
+            '[:left-outer-join [{a b}]
+              [:table [{:a 1} {:a 2}]]
+              [:table [{:b 3} {:b 4} {:b 5}]]]))
+        "left side built LOJ with all unmatched rows")
+
+  (t/is (= (tu/query-ra '[:left-outer-join [{a b}]
+                          [:table [{:a 1} {:a 2}]]
+                          [:table [{:b 1} {:b 3} {:b 4}]]])
+           (tu/query-ra '[:left-outer-join [{a b}]
+                          [:table [{:a 1} {:a 2}]]
+                          [:table [{:b 1}]]]))
+        "left side built LOJ should return same results as right built LOJ (with right side having mostly unmatched rows)"))
