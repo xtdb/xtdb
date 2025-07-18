@@ -19,9 +19,9 @@
   (:import (clojure.lang IReduceInit)
            (java.io Writer)
            (java.sql BatchUpdateException Connection)
-           (xtdb.api TransactionKey)
+           [java.util.concurrent.atomic AtomicLong]
+           (xtdb.api DataSource DataSource$ConnectionBuilder TransactionKey)
            (xtdb.api.tx TxOp TxOp$Sql)
-           xtdb.jdbc.XtConnection
            (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs)
            xtdb.types.ClojureForm
            xtdb.util.NormalForm))
@@ -345,9 +345,23 @@
     * `:dbname`: the database to connect to (default: `xtdb`)
 
    See `next.jdbc/get-datasource` for more options."
-  ^javax.sql.DataSource [conn-opts]
+  ^javax.sql.DataSource [{:keys [host port user password dbname]
+                          :or {host "127.0.0.1"
+                               port 5432
+                               dbname "xtdb"}}]
 
-  (jdbc/get-datasource (into {:dbtype "xtdb", :dbname "xtdb"} conn-opts)))
+  (let [!wm-tx-id (AtomicLong.)]
+    (reify DataSource
+      (getWatermarkTxId [_] (.get !wm-tx-id))
+      (setWatermarkTxId [_ tx-id]
+        (loop []
+          (let [wm-tx-id (.get !wm-tx-id)]
+            (when (< wm-tx-id tx-id)
+              (when-not (.compareAndSet !wm-tx-id wm-tx-id tx-id)
+                (recur))))))
+
+      (createConnectionBuilder [_]
+        (DataSource$ConnectionBuilder. host port user password dbname)))))
 
 (defn status
   "Returns the status of this node as a map"
