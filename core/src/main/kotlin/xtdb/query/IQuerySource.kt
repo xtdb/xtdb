@@ -1,8 +1,8 @@
 package xtdb.query
 
 import xtdb.database.Database
-import xtdb.indexer.Watermark
+import xtdb.indexer.Snapshot
 
 interface IQuerySource {
-    fun prepareQuery(query: Any, db: Database, wmSrc: Watermark.Source, opts: Any?): PreparedQuery
+    fun prepareQuery(query: Any, db: Database, wmSrc: Snapshot.Source, opts: Any?): PreparedQuery
 }

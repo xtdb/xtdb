@@ -596,7 +596,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
                  :valid-to #xt/zoned-date-time "2023-03-26T01:05Z[UTC]"}]
            (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME ORDER BY _valid_from"))))
 
-(t/deftest test-wm-schema-is-updated-within-a-tx
+(t/deftest test-snapshot-schema-is-updated-within-a-tx
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO t1(_id, foo) VALUES(1, 100)"]
                             [:sql "INSERT INTO t1(_id, foo, bar) (SELECT 2, 200, 2000)"]
                             [:sql "INSERT INTO t1(_id, foo, bar) (SELECT 3, x.foo, x.bar FROM (SELECT * FROM t1 WHERE bar = 2000) AS x)"]])

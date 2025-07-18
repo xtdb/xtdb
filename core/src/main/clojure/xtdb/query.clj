@@ -50,14 +50,14 @@
            (xtdb.api.query IKeyFn Query)
            (xtdb.arrow RelationReader VectorReader)
            xtdb.database.Database
-           (xtdb.indexer Watermark)
+           (xtdb.indexer Snapshot)
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.operator.scan.IScanEmitter
            xtdb.util.RefCounter))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, result-fields
                                         current-time, snapshot-time, default-tz,
-                                        ^AutoCloseable wm, ^BufferAllocator al, ^RefCounter ref-ctr, args-to-close]
+                                        ^AutoCloseable snap, ^BufferAllocator al, ^RefCounter ref-ctr, args-to-close]
   (reify IResultCursor
     (getResultFields [_] result-fields)
     (tryAdvance [_ c]
@@ -80,7 +80,7 @@
       (.release ref-ctr)
       (util/close cursor)
       (util/close args-to-close)
-      (util/close wm)
+      (util/close snap)
       (util/close al))))
 
 (defn- ->result-fields [ordered-outer-projection fields]
@@ -103,13 +103,13 @@
     (recur (-> args (.vectorFor (str expr)) (.getObject 0)) opts)
     (time/->instant expr {:default-tz default-tz})))
 
-(defn- validate-snapshot-not-before [snapshot-time ^Watermark wm]
-  (let [wm-tx (.getTxBasis wm)]
-    (when (and snapshot-time (or (nil? wm-tx) (neg? (compare (.getSystemTime wm-tx) snapshot-time))))
+(defn- validate-snapshot-not-before [snapshot-time ^Snapshot snap]
+  (let [snap-tx (.getTxBasis snap)]
+    (when (and snapshot-time (or (nil? snap-tx) (neg? (compare (.getSystemTime snap-tx) snapshot-time))))
       (throw (err/illegal-arg :xtdb/unindexed-tx
                               {::err/message (format "snapshot-time (%s) is after the latest completed tx (%s)"
-                                                     (str snapshot-time) (pr-str wm-tx))
-                               :latest-completed-tx wm-tx
+                                                     (str snapshot-time) (pr-str snap-tx))
+                               :latest-completed-tx snap-tx
                                :snapshot-time snapshot-time})))))
 
 (defn- parse-query [query]
@@ -148,9 +148,9 @@
 
     conformed-plan))
 
-(defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache]}, scan-emitter, ^Database db, wm param-fields default-tz]
+(defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache]}, scan-emitter, ^Database db, snap param-fields default-tz]
   (.get emit-cache {:scan-fields (when (seq scan-cols)
-                                   (scan/scan-fields (.getTableCatalog db) wm scan-cols))
+                                   (scan/scan-fields (.getTableCatalog db) snap scan-cols))
                     :last-known-block (some-> db .getBlockCatalog .getCurrentBlockIndex)
                     :default-tz default-tz
                     :param-fields param-fields}
@@ -202,9 +202,9 @@
                                      (.maximumSize 16)
                                      (.build))})))))
 
-  (prepareQuery [this query db wm-src {:keys [default-tz] :as query-opts}]
+  (prepareQuery [this query db snap-src {:keys [default-tz] :as query-opts}]
     (let [parsed-query (parse-query query)
-          !table-info (atom (scan/tables-with-cols wm-src))
+          !table-info (atom (scan/tables-with-cols snap-src))
           default-tz (or default-tz expr/*default-tz*)]
       (letfn [(plan-query* [table-info]
                 (-plan-query this parsed-query query-opts table-info))]
@@ -215,8 +215,8 @@
 
           (getColumnFields [_ param-fields]
             (let [planned-query (plan-query* @!table-info)]
-              (with-open [wm (.openWatermark wm-src)]
-                (:fields (emit-query planned-query scan-emitter db wm
+              (with-open [snap (.openSnapshot snap-src)]
+                (:fields (emit-query planned-query scan-emitter db snap
                                      (->> param-fields
                                           (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity))))
                                      default-tz)))))
@@ -229,8 +229,8 @@
             (util/with-close-on-catch [^BufferAllocator allocator (if allocator
                                                                     (util/->child-allocator allocator "BoundQuery/openCursor")
                                                                     (RootAllocator.))
-                                       wm (.openWatermark wm-src)]
-              (let [table-info (reset! !table-info (.getSchema wm))
+                                       snap (.openSnapshot snap-src)]
+              (let [table-info (reset! !table-info (.getSchema snap))
                     planned-query (plan-query* table-info)
                     args (cond
                            (instance? RelationReader args) args
@@ -239,7 +239,7 @@
                            :else (throw (ex-info "invalid args"
                                                  {:type (class args)})))
 
-                    {:keys [fields ->cursor]} (emit-query planned-query scan-emitter db wm (->arg-fields args) default-tz)
+                    {:keys [fields ->cursor]} (emit-query planned-query scan-emitter db snap (->arg-fields args) default-tz)
                     current-time (or (some-> (:current-time planned-query) (expr->instant {:args args, :default-tz default-tz}))
                                      (some-> current-time (expr->instant {:args args, :default-tz default-tz}))
                                      (expr/current-time))]
@@ -253,12 +253,12 @@
                             expr/*default-tz* default-tz
                             expr/*snapshot-time* (or (some-> (:snapshot-time planned-query) (expr->instant {:args args, :default-tz default-tz}))
                                                      (some-> snapshot-time (expr->instant {:args args, :default-tz default-tz}))
-                                                     (some-> wm .getTxBasis .getSystemTime))
+                                                     (some-> snap .getTxBasis .getSystemTime))
                             expr/*after-tx-id* (or after-tx-id -1)]
 
-                    (validate-snapshot-not-before expr/*snapshot-time* wm)
+                    (validate-snapshot-not-before expr/*snapshot-time* snap)
 
-                    (-> (->cursor {:allocator allocator, :watermark wm
+                    (-> (->cursor {:allocator allocator, :snapshot snap
                                    :default-tz default-tz,
                                    :snapshot-time expr/*snapshot-time*
                                    :current-time current-time
@@ -266,7 +266,7 @@
                                    :schema table-info})
                         (wrap-cursor fields
                                      current-time expr/*snapshot-time* default-tz
-                                     allocator wm ref-ctr (when close-args? args))))
+                                     allocator snap ref-ctr (when close-args? args))))
 
                   (catch Throwable t
                     (.release ref-ctr)

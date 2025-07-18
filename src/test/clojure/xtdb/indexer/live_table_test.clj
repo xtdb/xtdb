@@ -18,7 +18,7 @@
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory RootAllocator)
            xtdb.BufferPool
-           (xtdb.indexer LiveIndex LiveTable LiveTable$Watermark)
+           (xtdb.indexer LiveIndex LiveTable Snapshot)
            (xtdb.trie MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)))
 
@@ -106,9 +106,9 @@
                 (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
                 (.resolve path "objects")))))))))
 
-(defn live-table-wm->data [^LiveTable$Watermark live-table-wm]
-  (let [live-rel-data (.toMaps (.getLiveRelation live-table-wm))
-        live-trie (.compactLogs (.getLiveTrie live-table-wm))
+(defn live-table-snap->data [^Snapshot live-table-snap]
+  (let [live-rel-data (.toMaps (.getLiveRelation live-table-snap))
+        live-trie (.compactLogs (.getLiveTrie live-table-snap))
         live-trie-leaf-data (->> live-trie
                                  (.getLeaves)
                                  (mapcat #(.getData ^MemoryHashTrie$Leaf %))
@@ -136,13 +136,13 @@
 
         (.commit live-table-tx)
 
-        (with-open [live-table-wm (.openWatermark live-table)]
-          (let [live-table-before (live-table-wm->data live-table-wm)]
+        (with-open [live-table-snap (.openSnapshot live-table)]
+          (let [live-table-before (live-table-snap->data live-table-snap)]
 
             (.finishBlock live-table 0)
             (.close live-table)
 
-            (let [live-table-after (live-table-wm->data live-table-wm)]
+            (let [live-table-after (live-table-snap->data live-table-snap)]
 
               (t/is (= (:live-trie-iids live-table-before)
                        (:live-trie-iids live-table-after)
@@ -181,13 +181,13 @@
 
             (.commit live-index-tx)
 
-            (with-open [wm (.openWatermark live-index)]
-              (let [live-index-wm (.getLiveIndex wm)
-                    live-table-before (live-table-wm->data (.liveTable live-index-wm table))]
+            (with-open [snap (.openSnapshot live-index)]
+              (let [live-index-snap (.getLiveIndex snap)
+                    live-table-before (live-table-snap->data (.liveTable live-index-snap table))]
 
                 (.finishBlock live-index 0)
 
-                (let [live-table-after (live-table-wm->data (.liveTable live-index-wm table))]
+                (let [live-table-after (live-table-snap->data (.liveTable live-index-snap table))]
 
                   (t/is (= (:live-trie-iids live-table-before)
                            (:live-trie-iids live-table-after)

@@ -71,7 +71,7 @@
                                       (while (.next flight-stream)
                                         (write-page!)))))
 
-(defn- ->fsql-producer [{:keys [allocator node, ^IQuerySource q-src, db, wm-src, ^Map fsql-txs, ^Map stmts, ^Map tickets]}]
+(defn- ->fsql-producer [{:keys [allocator node, ^IQuerySource q-src, db, snap-src, ^Map fsql-txs, ^Map stmts, ^Map tickets]}]
   (letfn [(exec-dml [dml fsql-tx-id]
             (if fsql-tx-id
               (when-not (.computeIfPresent fsql-txs fsql-tx-id
@@ -150,7 +150,7 @@
         (try
           (let [sql (.toStringUtf8 (.getQueryBytes cmd))
                 ticket-handle (new-id)
-                pq (.prepareQuery q-src sql db wm-src {})
+                pq (.prepareQuery q-src sql db snap-src {})
                 cursor (.openQuery pq {})
                 ticket (Ticket. (-> (doto (FlightSql$TicketStatementQuery/newBuilder)
                                       (.setStatementHandle ticket-handle))
@@ -201,7 +201,7 @@
       (createPreparedStatement [_ req _ctx listener]
         (let [ps-id (new-id)
               sql (.toStringUtf8 (.getQueryBytes req))
-              pq (.prepareQuery q-src sql db wm-src {})
+              pq (.prepareQuery q-src sql db snap-src {})
               ps (cond-> {:id ps-id, :sql sql
                           :fsql-tx-id (when (.hasTransactionId req)
                                         (.getTransactionId req))}
@@ -281,7 +281,7 @@
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "flight-sql")
                                server (doto (-> (FlightServer/builder allocator (Location/forGrpcInsecure host port)
                                                                       (->fsql-producer {:allocator allocator, :node node,
-                                                                                        :q-src q-src, :db db, :wm-src (.getLiveIndex db)
+                                                                                        :q-src q-src, :db db, :snap-src (.getLiveIndex db)
                                                                                         :fsql-txs fsql-txs, :stmts stmts, :tickets tickets}))
 
                                                 #_(doto with-error-logging-middleware)

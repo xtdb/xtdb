@@ -27,7 +27,7 @@
            xtdb.arrow.RelationReader
            (xtdb.bloom BloomUtils)
            xtdb.catalog.TableCatalog
-           (xtdb.indexer LiveTable$Watermark Watermark Watermark$Source)
+           (xtdb.indexer Snapshot Snapshot$Source)
            (xtdb.metadata PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask)
            xtdb.table.TableRef
@@ -112,9 +112,9 @@
 
       bounds)))
 
-(defn tables-with-cols [^Watermark$Source wm-src]
-  (with-open [wm (.openWatermark wm-src)]
-    (.getSchema wm)))
+(defn tables-with-cols [^Snapshot$Source snap-src]
+  (with-open [snap (.openSnapshot snap-src)]
+    (.getSchema snap)))
 
 (defn- eid-select->eid [eid-select]
   (cond (= '_id (second eid-select))
@@ -168,7 +168,7 @@
          {:allocator (ig/ref :xtdb/allocator)
           :info-schema (ig/ref :xtdb/information-schema)}))
 
-(defn scan-fields [^TableCatalog table-catalog, ^Watermark wm scan-cols]
+(defn scan-fields [^TableCatalog table-catalog, ^Snapshot snap scan-cols]
   (letfn [(->field [[table col-name]]
             (let [col-name (str col-name)]
               ;; TODO move to fields here
@@ -176,7 +176,7 @@
                       (get-in info-schema/derived-tables [table (symbol col-name)])
                       (get-in info-schema/template-tables [table (symbol col-name)])
                       (types/merge-fields (.getField table-catalog table col-name)
-                                          (some-> (.getLiveIndex wm)
+                                          (some-> (.getLiveIndex snap)
                                                   (.liveTable table)
                                                   (.columnField col-name))))
                   (types/field-with-name col-name))))]
@@ -227,10 +227,10 @@
 
           {:fields fields
            :stats {:row-count row-count}
-           :->cursor (fn [{:keys [allocator, ^Watermark watermark, snapshot-time, schema, args]}]
+           :->cursor (fn [{:keys [allocator, ^Snapshot snapshot, snapshot-time, schema, args]}]
                        (if (and (info-schema/derived-tables table) (not (info-schema/template-tables table)))
                          (let [derived-table-schema (info-schema/derived-tables table)]
-                           (info-schema/->cursor info-schema allocator db watermark derived-table-schema table col-names col-preds schema args))
+                           (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args))
 
                          (let [template-table? (info-schema/template-tables table)
                                iid-bb (selects->iid-byte-buffer selects args)
@@ -241,7 +241,7 @@
                                              (update :for-valid-time
                                                      (fn [fvt]
                                                        (or fvt [:at [:now]]))))
-                               ^LiveTable$Watermark live-table-wm (some-> (.getLiveIndex watermark) (.liveTable table))
+                               live-table-snap (some-> (.getLiveIndex snapshot) (.liveTable table))
                                temporal-bounds (->temporal-bounds allocator args scan-opts snapshot-time)]
                            (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                              (let [merge-tasks (util/with-open [page-metadatas (LinkedList.)]
@@ -262,8 +262,8 @@
                                                                                   (cat/current-tries)
                                                                                   (cat/filter-tries temporal-bounds)))
 
-                                                                  live-table-wm (conj (-> (trie/->Segment (.getLiveTrie live-table-wm))
-                                                                                          (assoc :memory-rel (.getLiveRelation live-table-wm))))
+                                                                  live-table-snap (conj (-> (trie/->Segment (.getLiveTrie live-table-snap))
+                                                                                            (assoc :memory-rel (.getLiveRelation live-table-snap))))
                                                                   template-table? (conj (let [[memory-rel trie] (table->template-rel+trie table)]
                                                                                           (-> (trie/->Segment trie)
                                                                                               (assoc :memory-rel memory-rel)))))]

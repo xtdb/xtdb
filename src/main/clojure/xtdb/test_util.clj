@@ -36,7 +36,7 @@
            (xtdb.api.log Log$Message$FlushBlock Log$MessageMetadata)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector)
-           (xtdb.indexer LiveTable Watermark Watermark$Source)
+           (xtdb.indexer LiveTable Snapshot Snapshot$Source)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
            (xtdb.trie MetadataFileWriter)
@@ -230,18 +230,18 @@
          db (when node
               (db/<-node node))
 
-         wm-src (if node
-                  (li/<-node node)
-                  (reify Watermark$Source
-                    (openWatermark [_]
-                      (Watermark. nil nil {}))))
+         snap-src (if node
+                    (li/<-node node)
+                    (reify Snapshot$Source
+                      (openSnapshot [_]
+                        (Snapshot. nil nil {}))))
 
          ^IQuerySource q-src (if node
                                (util/component node ::q/query-source)
                                (q/->query-source {:allocator allocator
                                                   :ref-ctr (RefCounter.)}))
 
-         ^PreparedQuery pq (.prepareQuery q-src query db wm-src query-opts)]
+         ^PreparedQuery pq (.prepareQuery q-src query db snap-src query-opts)]
 
      (util/with-open [^RelationReader args-rel (if args
                                                  (vw/open-args allocator args)

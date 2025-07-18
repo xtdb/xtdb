@@ -20,7 +20,7 @@
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader VectorReader VectorWriter)
            xtdb.database.Database
-           (xtdb.indexer Watermark)
+           (xtdb.indexer Snapshot)
            xtdb.operator.SelectionSpec
            xtdb.table.TableRef
            (xtdb.trie MemoryHashTrie Trie TrieCatalog)
@@ -359,18 +359,18 @@
      :trie-key trie-key, :level (int level), :recency recency, :data-file-size data-file-size
      :trie-state (name state), :row-count row-count, :temporal-metadata (some-> trie-meta (dissoc :row-count :iid-bloom))}))
 
-(defn live-tables [^Watermark wm]
-  (let [li-wm (.getLiveIndex wm)]
-    (for [^TableRef table (.getLiveTables li-wm)
-          :let [live-table (.liveTable li-wm table)]]
+(defn live-tables [^Snapshot snap]
+  (let [li-snap (.getLiveIndex snap)]
+    (for [^TableRef table (.getLiveTables li-snap)
+          :let [live-table (.liveTable li-snap table)]]
       {:schema-name (.getSchemaName table)
        :table-name (.getTableName table)
        :row-count (long (.getRowCount (.getLiveRelation live-table)))})))
 
-(defn live-columns [^Watermark wm]
-  (let [li-wm (.getLiveIndex wm)]
-    (for [^TableRef table (.getLiveTables li-wm)
-          [col-name col-field] (.getColumnFields (.liveTable li-wm table))]
+(defn live-columns [^Snapshot snap]
+  (let [li-snap (.getLiveIndex snap)]
+    (for [^TableRef table (.getLiveTables li-snap)
+          [col-name col-field] (.getColumnFields (.liveTable li-snap table))]
       {:schema-name (.getSchemaName table)
        :table-name (.getTableName table)
        :col-name col-name
@@ -435,7 +435,7 @@
     (some-> out-rel .close)))
 
 (defprotocol InfoSchema
-  (->cursor [info-schema allocator db wm derived-table-schema
+  (->cursor [info-schema allocator db snapshot derived-table-schema
              table col-names col-preds
              schema params]))
 
@@ -445,7 +445,7 @@
 
 (defmethod ig/init-key :xtdb/information-schema [_ {:keys [metrics-registry]}]
   (reify InfoSchema
-    (->cursor [_ allocator db wm derived-table-schema
+    (->cursor [_ allocator db snap derived-table-schema
                table col-names col-preds
                schema params]
       ;;TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
@@ -455,7 +455,7 @@
             trie-catalog (.getTrieCatalog db)
             schema-info (-> (merge-with merge
                                         (.getFields table-catalog)
-                                        (some-> (.getLiveIndex ^Watermark wm)
+                                        (some-> (.getLiveIndex ^Snapshot snap)
                                                 (.getAllColumnFields)))
                             (merge meta-table-schemas))]
         (util/with-close-on-catch [out-root (util/with-open [out-rel (Relation/open ^BufferAllocator allocator
@@ -480,8 +480,8 @@
                                                                          #xt/table pg_catalog/pg_range (pg-range)
                                                                          #xt/table pg_catalog/pg_am (pg-am)
                                                                          #xt/table xt/trie_stats (trie-stats trie-catalog)
-                                                                         #xt/table xt/live_tables (live-tables wm)
-                                                                         #xt/table xt/live_columns (live-columns wm)
+                                                                         #xt/table xt/live_tables (live-tables snap)
+                                                                         #xt/table xt/live_columns (live-columns snap)
                                                                          #xt/table xt/metrics_timers (metrics-timers metrics-registry)
                                                                          #xt/table xt/metrics_gauges (metrics-gauges metrics-registry)
                                                                          #xt/table xt/metrics_counters (metrics-counters metrics-registry)

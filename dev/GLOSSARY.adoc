@@ -18,6 +18,6 @@
 | object-store           | A core component of XTDB that manages the long-term, durable storage of data. e.g. S3, Google Cloud Storage, Azure Blob Storage.
 | operator               | A relational algebra operator (or some extension thereof). The simplest example is a join.
 | page                   | A group of (ideally ~1024) rows. Where possible, we process rows in page batches to amortize the overhead of parsing data, setting up copiers, etc.
+| snapshot               | An immutable snapshot of the state of the live index, used to give queries an immutable view while the indexer continues indexing concurrently.
 | transaction            | Referring to an atomic sequence of operations (put, delete etc...) to be performed on the db. Or alternatively a SQL transaction string.
-| watermark              | Holds the resources of the system at a particular point in time.
 |===

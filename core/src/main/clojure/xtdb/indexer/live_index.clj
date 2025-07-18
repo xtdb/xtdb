@@ -22,32 +22,32 @@
            xtdb.api.storage.Storage
            xtdb.BufferPool
            (xtdb.catalog BlockCatalog TableCatalog)
-           (xtdb.indexer LiveIndex$Tx LiveIndex$Watermark LiveTable LiveTable$Tx LiveTable$Watermark Watermark)
+           (xtdb.indexer LiveIndex$Snapshot LiveIndex$Tx LiveTable LiveTable$Snapshot LiveTable$Tx Snapshot Snapshot)
            (xtdb.log.proto TrieDetails)
            (xtdb.trie TrieCatalog)
            (xtdb.util RefCounter RowCounter)))
 
-(defn open-live-idx-wm [^Map tables]
-  (util/with-close-on-catch [wms (HashMap.)]
+(defn open-live-idx-snap [^Map tables]
+  (util/with-close-on-catch [snaps (HashMap.)]
 
     (doseq [[table ^LiveTable live-table] tables]
-      (.put wms table (.openWatermark live-table)))
+      (.put snaps table (.openSnapshot live-table)))
 
-    (reify LiveIndex$Watermark
-      (getAllColumnFields [_] (update-vals wms #(.getColumnFields ^LiveTable$Watermark %)))
+    (reify LiveIndex$Snapshot
+      (getAllColumnFields [_] (update-vals snaps #(.getColumnFields ^LiveTable$Snapshot %)))
 
-      (liveTable [_ table] (.get wms table))
+      (liveTable [_ table] (.get snaps table))
 
-      (getLiveTables [_] (keys wms))
+      (getLiveTables [_] (keys snaps))
 
       AutoCloseable
-      (close [_] (util/close wms)))))
+      (close [_] (util/close snaps)))))
 
-(defn ->schema [^LiveIndex$Watermark live-index-wm, ^TableCatalog table-catalog]
+(defn ->schema [^LiveIndex$Snapshot live-index-snap, ^TableCatalog table-catalog]
   (merge-with set/union
               (update-vals (.getFields table-catalog)
                            (comp set keys))
-              (update-vals (some-> live-index-wm (.getAllColumnFields))
+              (update-vals (some-> live-index-snap (.getAllColumnFields))
                            (comp set keys))))
 
 (deftype LiveIndex [^BufferAllocator allocator, ^BufferPool buffer-pool, ^Log log
@@ -56,9 +56,9 @@
                     ^:volatile-mutable ^TransactionKey latest-completed-tx
                     ^Map tables,
 
-                    ^:volatile-mutable ^Watermark shared-wm
-                    ^StampedLock wm-lock
-                    ^RefCounter wm-cnt,
+                    ^:volatile-mutable ^Snapshot shared-snap
+                    ^StampedLock snap-lock
+                    ^RefCounter snap-ref-counter,
 
                     ^RowCounter row-counter, ^long rows-per-block
 
@@ -84,21 +84,21 @@
                                 (.startTx live-table tx-key new-live-table?)))))
 
         (commit [_]
-          (let [wm-lock-stamp (.writeLock wm-lock)]
+          (let [snap-lock-stamp (.writeLock snap-lock)]
             (try
               (doseq [[table ^LiveTable$Tx live-table-tx] table-txs]
                 (.put tables table (.commit live-table-tx)))
 
               (set! (.-latest-completed-tx this-idx) tx-key)
 
-              (let [^Watermark old-wm (.shared-wm this-idx)
-                    ^Watermark shared-wm (util/with-close-on-catch [live-index-wm (open-live-idx-wm tables)]
-                                           (Watermark. tx-key live-index-wm (->schema live-index-wm table-cat)))]
-                (set! (.shared-wm this-idx) shared-wm)
-                (some-> old-wm .close))
+              (let [^Snapshot old-snap (.shared-snap this-idx)
+                    ^Snapshot shared-snap (util/with-close-on-catch [live-index-snap (open-live-idx-snap tables)]
+                                            (Snapshot. tx-key live-index-snap (->schema live-index-snap table-cat)))]
+                (set! (.shared-snap this-idx) shared-snap)
+                (some-> old-snap .close))
 
               (finally
-                (.unlock wm-lock wm-lock-stamp)))))
+                (.unlock snap-lock snap-lock-stamp)))))
 
         (abort [_]
           (doseq [^LiveTable$Tx live-table-tx (.values table-txs)]
@@ -106,31 +106,31 @@
 
           (set! (.-latest-completed-tx this-idx) tx-key))
 
-        (openWatermark [_]
-          (util/with-close-on-catch [wms (HashMap.)]
+        (openSnapshot [_]
+          (util/with-close-on-catch [snaps (HashMap.)]
             (doseq [[table ^LiveTable$Tx live-table-tx] table-txs]
-              (.put wms table (.openWatermark live-table-tx)))
+              (.put snaps table (.openSnapshot live-table-tx)))
 
             (doseq [[table ^LiveTable live-table] tables]
-              (.computeIfAbsent wms table (fn [_] (.openWatermark live-table))))
+              (.computeIfAbsent snaps table (fn [_] (.openSnapshot live-table))))
 
-            (reify LiveIndex$Watermark
-              (getAllColumnFields [_] (update-vals wms #(.getColumnFields ^LiveTable$Watermark %)))
-              (liveTable [_ table] (.get wms table))
-              (getLiveTables [_] (keys wms))
+            (reify LiveIndex$Snapshot
+              (getAllColumnFields [_] (update-vals snaps #(.getColumnFields ^LiveTable$Snapshot %)))
+              (liveTable [_ table] (.get snaps table))
+              (getLiveTables [_] (keys snaps))
 
               AutoCloseable
-              (close [_] (util/close wms)))))
+              (close [_] (util/close snaps)))))
 
         AutoCloseable
         (close [_]))))
 
-  (openWatermark [this]
-    (let [wm-read-stamp (.readLock wm-lock)]
+  (openSnapshot [this]
+    (let [snap-read-stamp (.readLock snap-lock)]
       (try
-        (doto ^Watermark (.-shared-wm this) .retain)
+        (doto ^Snapshot (.-shared-snap this) .retain)
         (finally
-          (.unlock wm-lock wm-read-stamp)))))
+          (.unlock snap-lock snap-read-stamp)))))
 
   (isFull [_]
     (>= (.getBlockRowCount row-counter) rows-per-block))
@@ -177,21 +177,20 @@
   (nextBlock [this]
     (.nextBlock row-counter)
 
-    (let [wm-lock-stamp (.writeLock wm-lock)]
+    (let [snap-lock-stamp (.writeLock snap-lock)]
       (try
-        (let [^Watermark shared-wm (.shared-wm this)]
-          (.close shared-wm))
+        (let [^Snapshot shared-snap (.shared-snap this)]
+          (.close shared-snap))
 
         (util/close tables)
         (.clear tables)
-        (set! (.shared-wm this)
-              (util/with-close-on-catch [live-index-wm (open-live-idx-wm tables)]
-                (Watermark.
-                 latest-completed-tx
-                 live-index-wm
-                 (->schema live-index-wm table-cat))))
+        (set! (.shared-snap this)
+              (util/with-close-on-catch [live-index-snap (open-live-idx-snap tables)]
+                (Snapshot. latest-completed-tx
+                           live-index-snap
+                           (->schema live-index-snap table-cat))))
         (finally
-          (.unlock wm-lock wm-lock-stamp))))
+          (.unlock snap-lock snap-lock-stamp))))
 
     (when (and (not-empty skip-txs) (>= (:tx-id latest-completed-tx) (last skip-txs)))
       #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -200,9 +199,9 @@
 
   AutoCloseable
   (close [_]
-    (some-> shared-wm .close)
+    (some-> shared-snap .close)
     (util/close tables)
-    (if-not (.tryClose wm-cnt (Duration/ofMinutes 1))
+    (if-not (.tryClose snap-ref-counter (Duration/ofMinutes 1))
       (log/warn "Failed to shut down live-index after 60s due to outstanding watermarks.")
       (util/close allocator))))
 
@@ -233,7 +232,7 @@
                      latest-completed-tx
                      tables
 
-                     (Watermark. latest-completed-tx (open-live-idx-wm tables) (->schema nil table-cat))
+                     (Snapshot. latest-completed-tx (open-live-idx-snap tables) (->schema nil table-cat))
                      (StampedLock.)
                      (RefCounter.)
 

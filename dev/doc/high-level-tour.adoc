@@ -160,7 +160,7 @@ Because the query plan forms an https://en.wikipedia.org/wiki/Abstract_algebra[a
 A few notes on the individual operators:
 
 * The `:scan` operator (`xtdb.operator.scan`) is easily the most complex operator - it's (directly/indirectly) responsible for choosing which files to read, reading those files, merge-sorting those pages (together with the live-index) and applying 'bitemporal resolution' to re-construct the current state of the given entities.
-** After every transaction, the indexer takes a 'watermark' of the current state of the live index, allowing it to be read by queries concurrently to new transactions being indexed.
+** After every transaction, the indexer takes a 'snapshot' of the current state of the live index, allowing it to be read by queries concurrently to new transactions being indexed.
 ** 'Bitemporal resolution' is the process by which the scan operator reduces a system-time descending list of events for each entity into the actual history relevant to the query.
 At this point, system-time-descending is a useful ordering - for as-of-now queries, we can usually skip all bar the most recent event for each entity.
 

@@ -59,7 +59,7 @@ constructor(
 
     private val hllCalculator = HllCalculator()
 
-    class Watermark(
+    class Snapshot(
         val columnFields: Map<ColumnName, Field>,
         val liveRelation: RelationReader,
         val liveTrie: MemoryHashTrie
@@ -78,7 +78,7 @@ constructor(
         private var transientTrie = liveTrie
         private val systemFrom: InstantMicros = txKey.systemTime.asMicros
 
-        fun openWatermark(): Watermark = openWatermark(transientTrie)
+        fun openSnapshot(): Snapshot = openSnapshot(transientTrie)
         val docWriter: IVectorWriter = putWtr
         val liveRelation: IRelationWriter = this@LiveTable.liveRelation
 
@@ -154,7 +154,7 @@ constructor(
             .children
             .associateBy { it.name }
 
-    private fun openWatermark(trie: MemoryHashTrie): Watermark {
+    private fun openSnapshot(trie: MemoryHashTrie): Snapshot {
         // this can be openSlice once liveRel is a new-style relation
         liveRelation.openDirectSlice(al).use { wmLiveRel ->
             wmLiveRel.openAsRoot(al).closeOnCatch { root ->
@@ -162,12 +162,12 @@ constructor(
 
                 val wmLiveTrie = trie.withIidReader(relReader["_iid"])
 
-                return Watermark(liveRelation.fields, relReader, wmLiveTrie)
+                return Snapshot(liveRelation.fields, relReader, wmLiveTrie)
             }
         }
     }
 
-    fun openWatermark() = openWatermark(liveTrie)
+    fun openSnapshot() = openSnapshot(liveTrie)
 
     data class FinishedBlock(
         val fields: Map<ColumnName, Field>,

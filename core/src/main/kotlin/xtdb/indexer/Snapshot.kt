@@ -3,23 +3,23 @@ package xtdb.indexer
 import xtdb.api.TransactionKey
 import java.util.concurrent.atomic.AtomicInteger
 
-class Watermark(
+class Snapshot(
     val txBasis: TransactionKey?,
-    val liveIndex: LiveIndex.Watermark?,
+    val liveIndex: LiveIndex.Snapshot?,
     val schema: Map<String, Any>
 ) : AutoCloseable {
     interface Source {
-        fun openWatermark(): Watermark
+        fun openSnapshot(): Snapshot
     }
 
     private val refCount = AtomicInteger(1)
 
     fun retain() {
-        if (0 == refCount.getAndIncrement()) throw IllegalStateException("watermark closed")
+        if (0 == refCount.getAndIncrement()) throw IllegalStateException("snapshot closed")
     }
 
     /**
-     * releases a reference to the Watermark.
+     * releases a reference to the Snapshot.
      * if this was the last reference, close it.
      */
     override fun close() {
