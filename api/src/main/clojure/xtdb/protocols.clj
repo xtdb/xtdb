@@ -14,6 +14,7 @@
 
 (defprotocol PStatus
   (^long latest-submitted-tx-id [node])
+  (await-token [node])
   (latest-completed-tx [node])
   (status [node] [node opts]))
 

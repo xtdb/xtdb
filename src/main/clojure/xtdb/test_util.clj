@@ -78,17 +78,6 @@
   (with-open [s (ServerSocket. 0)]
     (.getLocalPort s)))
 
-;; TODO inline this now that we have `log/await`
-(defn then-await
-  (^TransactionKey [node]
-   (xt-log/await (db/<-node node)))
-
-  (^TransactionKey [tx-id node]
-   (xt-log/await (db/<-node node) tx-id))
-
-  (^TransactionKey [tx-id node timeout]
-   (xt-log/await (db/<-node node) tx-id timeout)))
-
 (defn ->instants
   ([u] (->instants u 1))
   ([u len] (->instants u len #inst "2020-01-01"))
@@ -136,7 +125,7 @@
   ([node timeout]
    (let [log (xt-log/<-node node)
          ^Log$MessageMetadata msg @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (block-cat/<-node node)) -1)))]
-     (xt-log/await (db/<-node node) (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset msg)) timeout))))
+     (xt-log/await-db (db/<-node node) (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset msg)) timeout))))
 
 (defn open-vec
   (^xtdb.arrow.Vector [^Field field]
@@ -223,12 +212,11 @@
   ([query {:keys [node args preserve-pages? with-col-types? key-fn] :as query-opts
            :or {key-fn (serde/read-key-fn :kebab-case-keyword)}}]
    (let [allocator (:allocator node *allocator*)
-         query-opts (-> query-opts
-                        (cond-> node (-> (update :await-token (fnil identity (xtp/latest-submitted-tx-id node)))
-                                         (doto (-> :await-token (then-await node))))))
+         query-opts (cond-> query-opts
+                      node (-> (update :await-token (fnil identity (xtp/await-token node)))
+                               (doto (-> :await-token (->> (xt-log/await-db (db/<-node node)))))))
 
-         db (when node
-              (db/<-node node))
+         db (some-> node db/<-node)
 
          snap-src (if node
                     (li/<-node node)

@@ -292,7 +292,7 @@
   ([node] (sync-node node nil))
 
   ([node ^Duration timeout]
-   (xt-log/await (db/<-node node) (xtp/latest-submitted-tx-id node) timeout)))
+   (xt-log/sync-node node timeout)))
 
 (defn finish-block! [node]
   (tu/finish-block! node))

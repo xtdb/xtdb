@@ -1,6 +1,7 @@
 (ns xtdb.ts-devices-small-test
   (:require [clojure.test :as t]
             [clojure.tools.logging :as log]
+            [xtdb.log :as xt-log]
             [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu]
             [xtdb.ts-devices :as tsd]
@@ -21,7 +22,7 @@
           (let [last-tx-key (tsd/submit-ts-devices node {:size :small})]
 
             (log/info "transactions submitted, last tx" (pr-str last-tx-key))
-            (t/is (= last-tx-key (tu/then-await last-tx-key node (Duration/ofMinutes 15))))
+            (xt-log/await-db node last-tx-key (Duration/ofMinutes 15))
             (t/is (= last-tx-key (xtp/latest-completed-tx node)))
             (tu/finish-block! node))
 

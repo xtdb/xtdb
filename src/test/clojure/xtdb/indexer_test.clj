@@ -11,6 +11,7 @@
             [xtdb.database :as db]
             [xtdb.error :as err]
             [xtdb.indexer :as idx]
+            [xtdb.log :as xt-log]
             [xtdb.object-store :as os]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
@@ -95,7 +96,7 @@
                    (last (for [tx-ops txs]
                            (xt/submit-tx node tx-ops {:default-tz #xt/zone "Europe/London"})))))
 
-          (tu/then-await magic-last-tx-id node (Duration/ofSeconds 2))
+          (xt-log/sync-node node (Duration/ofSeconds 2))
 
           (tu/flush-block! node)
 
@@ -167,8 +168,7 @@
       (util/delete-dir node-dir)
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-        (-> (xt/submit-tx node tx-ops)
-            (tu/then-await node (Duration/ofMillis 2000)))
+        (xt/execute-tx node tx-ops)
 
         (tu/flush-block! node)
 
@@ -218,8 +218,7 @@
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-page 3})]
         (xt/execute-tx node tx0 {:default-tz #xt/zone "Europe/London"})
 
-        (-> (xt/submit-tx node tx1 {:default-tz #xt/zone "Europe/London"})
-            (tu/then-await node (Duration/ofMillis 200)))
+        (xt/execute-tx node tx1 {:default-tz #xt/zone "Europe/London"})
 
         (tu/flush-block! node)
 
@@ -268,8 +267,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (-> (xt/submit-tx node [[:put-docs :xt_docs {:xt/id :foo, :uuid uuid}]])
-          (tu/then-await node (Duration/ofMillis 2000)))
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo, :uuid uuid}]])
 
       (tu/flush-block! node)
 
@@ -335,11 +333,11 @@
                          (xt/submit-tx node tx-ops
                                        {:default-tz #xt/zone "Europe/London"})))))
 
-        (tu/then-await magic-last-tx-id node (Duration/ofSeconds 2))
+        (xt-log/sync-node node (Duration/ofSeconds 2))
         (t/is (= last-tx-key (xtp/latest-completed-tx node)))
 
         (with-open [node (tu/->local-node {:node-dir node-dir})]
-          (tu/then-await magic-last-tx-id node (Duration/ofSeconds 2))
+          (xt-log/sync-node node (Duration/ofSeconds 2))
           (t/is (= last-tx-key
                    (xtp/latest-completed-tx node)))
 
@@ -375,7 +373,7 @@
                           (partition-all 100 tx-ops))
               last-tx-key (serde/->TxKey last-tx-id (time/->instant #inst "2020-04-19"))]
 
-          (tu/then-await last-tx-id node (Duration/ofSeconds 15))
+          (xt-log/sync-node node (Duration/ofSeconds 15))
           (t/is (= last-tx-key (xtp/latest-completed-tx node)))
           (tu/flush-block! node)
 
@@ -420,8 +418,7 @@
               (let [bp (bp/<-node node2)
                     block-cat (block-cat/<-node node2)
                     tc (cat/<-node node2)
-                    lc-tx (-> first-half-tx-id
-                              (tu/then-await node2 (Duration/ofSeconds 10)))]
+                    lc-tx (xt-log/await-db (db/<-node node2) first-half-tx-id (Duration/ofSeconds 10))]
                 (t/is (= first-half-tx-id (:tx-id lc-tx)))
                 (t/is (= (serde/->TxKey (:tx-id lc-tx) (:system-time lc-tx))
                          (xtp/latest-completed-tx node2)))
@@ -459,14 +456,13 @@
                   (with-open [node3 (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
                     (let [bp (bp/<-node node3)]
                       (t/is (<= first-half-tx-id
-                                (:tx-id (-> first-half-tx-id
-                                            (tu/then-await node3 (Duration/ofSeconds 10))))
+                                (:tx-id (xt-log/await-db (db/<-node node3) first-half-tx-id (Duration/ofSeconds 10)))
                                 second-half-tx-id))
 
                       (t/is (= :utf8
                                (types/field->col-type (.getField tc #xt/table device_info "_id"))))
 
-                      (let [lc-tx (-> second-half-tx-id (tu/then-await node3 (Duration/ofSeconds 15)))]
+                      (let [lc-tx (xt-log/await-db (db/<-node node3) second-half-tx-id (Duration/ofSeconds 15))]
                         (t/is (= second-half-tx-id (:tx-id lc-tx)))
                         (t/is (= (serde/->TxKey (:tx-id lc-tx) (:system-time lc-tx))
                                  (xtp/latest-completed-tx node3))))
@@ -499,10 +495,9 @@
         (t/is (= :utf8
                  (types/field->col-type (.getField tc1 #xt/table xt_docs "v"))))
 
-        (let [tx2 (xt/submit-tx node1 [[:put-docs :xt_docs {:xt/id 1, :v :bar}]
+        (let [tx2 (xt/execute-tx node1 [[:put-docs :xt_docs {:xt/id 1, :v :bar}]
                                        [:put-docs :xt_docs {:xt/id 2, :v #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
                                        [:put-docs :xt_docs {:xt/id 3, :v #xt/clj-form :foo}]])]
-          (tu/then-await tx2 node1 (Duration/ofMillis 200))
 
           (tu/flush-block! node1)
 
@@ -511,7 +506,7 @@
 
           (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
             (let [tc2 (cat/<-node node2)]
-              (tu/then-await tx2 node2 (Duration/ofMillis 200))
+              (xt-log/sync-node node2 (Duration/ofMillis 200))
 
               (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
                        (types/field->col-type (.getField tc2 #xt/table xt_docs "v")))))))))))
@@ -536,8 +531,7 @@
                                (when-not (identical? e throwable)
                                  (log* logger level throwable message))))]
       (t/is (thrown-with-msg? Exception #"Interrupted"
-                              (-> (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo(_id) VALUES (1)"]])
-                                  (tu/then-await tu/*node* (Duration/ofSeconds 1))))))))
+                              (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo(_id) VALUES (1)"]]))))))
 
 (t/deftest test-indexes-sql-insert
   (binding [c/*ignore-signal-block?* true]
@@ -553,8 +547,6 @@
                    (xt/execute-tx node [[:sql "INSERT INTO table (_id, foo, bar, baz) VALUES (?, ?, ?, ?)"
                                          [0, 2, "hello", 12]
                                          [1, 1, "world", 3.3]]])))
-
-          (tu/then-await 0 node (Duration/ofSeconds 1))
 
           (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
                    (xtp/latest-completed-tx node)))

@@ -6,6 +6,7 @@
             [xtdb.buffer-pool :as bp]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
+            [xtdb.log :as xt-log]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
@@ -270,19 +271,19 @@
                        (map :id)))]
 
           (submit! (range 100))
-          (tu/then-await node)
+          (xt-log/sync-node node)
           (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (range 100) (q)))
 
           (submit! (range 100 200))
-          (tu/then-await node)
+          (xt-log/sync-node node)
           (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (range 200) (q)))
 
           (submit! (range 200 500))
-          (tu/then-await node)
+          (xt-log/sync-node node)
           (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (range 500) (q)))
@@ -361,21 +362,21 @@
                                   (order-by id)))
                        (map :id)))]
 
-          (let [tx-id (submit! (range 500))]
-            (tu/then-await tx-id node #xt/duration "PT2S")
-            (c/compact-all! node #xt/duration "PT2S"))
+          (submit! (range 500))
+          (xt-log/sync-node node #xt/duration "PT2S")
+          (c/compact-all! node #xt/duration "PT2S")
 
           (t/is (= (set (range 500)) (set (q))))
 
-          (let [tx-id (submit! (range 500 1000))]
-            (tu/then-await tx-id node #xt/duration "PT2S")
-            (c/compact-all! node #xt/duration "PT2S"))
+          (submit! (range 500 1000))
+          (xt-log/sync-node node #xt/duration "PT2S")
+          (c/compact-all! node #xt/duration "PT2S")
 
           (t/is (= (set (range 1000)) (set (q))))
 
-          (let [tx-id (submit! (range 1000 2000))]
-            (tu/then-await tx-id node #xt/duration "PT5S")
-            (c/compact-all! node #xt/duration "PT5S"))
+          (submit! (range 1000 2000))
+          (xt-log/sync-node node #xt/duration "PT5S")
+          (c/compact-all! node #xt/duration "PT5S")
 
           (t/is (= (set (range 2000)) (set (q))))
 
@@ -435,9 +436,9 @@
                                                       (for [x batch]
                                                         {:xt/id x}))]))))]
 
-            (let [tx-id (submit! (take 512 (cycle (bad-uuid-seq 8))))]
-              (tu/then-await tx-id node)
-              (c/compact-all! node (Duration/ofSeconds 5)))
+            (submit! (take 512 (cycle (bad-uuid-seq 8))))
+            (xt-log/sync-node node)
+            (c/compact-all! node (Duration/ofSeconds 5))
 
             (let [^String table-name "foo"
                   meta-files (->> (.listAllObjects bp (trie/->table-meta-dir table-name))
@@ -474,19 +475,19 @@
                        (map :id)))]
 
           (submit! (bad-uuid-seq 100))
-          (tu/then-await node)
+          (xt-log/sync-node node)
           (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (bad-uuid-seq 100) (q)))
 
           (submit! (bad-uuid-seq 100 200))
-          (tu/then-await node)
+          (xt-log/sync-node node)
           (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (bad-uuid-seq 200) (q)))
 
           (submit! (bad-uuid-seq 200 500))
-          (tu/then-await node)
+          (xt-log/sync-node node)
           (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (bad-uuid-seq 500) (q))))))))

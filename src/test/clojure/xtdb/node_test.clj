@@ -5,6 +5,7 @@
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.error :as err]
+            [xtdb.log :as xt-log]
             [xtdb.logging :as logging]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
@@ -476,10 +477,9 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (deftest test-scan-all-table-col-names
   (t/testing "testing scan.allTableColNames combines table info from both live and past blocks"
-    (-> (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id "foo1" :a 1}]
-                                 [:put-docs :bar {:xt/id "bar1"}]
-                                 [:put-docs :bar {:xt/id "bar2" :b 2}]])
-        (tu/then-await tu/*node*))
+    (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id "foo1" :a 1}]
+                              [:put-docs :bar {:xt/id "bar1"}]
+                              [:put-docs :bar {:xt/id "bar2" :b 2}]])
 
     (tu/finish-block! tu/*node*)
 
@@ -673,9 +673,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
           (xt/submit-tx node tx))))))
 
 (deftest test-prepared-statements
-  (-> (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1 :a "one" :b 2}]
-                               [:put-docs :unrelated-table {:xt/id 1 :a "a-string"}]])
-      (tu/then-await tu/*node* #xt/duration "PT2S"))
+  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1 :a "one" :b 2}]
+                            [:put-docs :unrelated-table {:xt/id 1 :a "a-string"}]])
 
   (let [pq (xtp/prepare-sql tu/*node* "SELECT foo.*, ? FROM foo" {})
         column-fields [#xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]
@@ -713,23 +712,20 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                     {:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]]
 
           (t/testing "relevant schema unchanged since preparing query"
-            (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 2 :a "two" :b 3}]])]
-              (tu/then-await tx tu/*node*))
+            (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 2 :a "two" :b 3}]])
 
             (with-open [cursor (.openQuery pq {:args args, :close-args? false})]
               (t/is (= res (tu/<-cursor cursor)))))
 
           (t/testing "irrelevant schema changed since preparing query"
 
-            (let [tx (xt/submit-tx tu/*node* [[:put-docs :unrelated-table {:xt/id 2 :a 222}]])]
-              (tu/then-await tx tu/*node*))
+            (xt/execute-tx tu/*node* [[:put-docs :unrelated-table {:xt/id 2 :a 222}]])
 
             (with-open [cursor (.openQuery pq {:args args, :close-args? false})]
               (t/is (= res (tu/<-cursor cursor)))))
 
           (t/testing "a -> union, but prepared query is still fine outside of pgwire"
-            (let [tx (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])]
-              (tu/then-await tx tu/*node*))
+            (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])
 
             (with-open [cursor (.openQuery pq {:args args, :close-args? false})]
               (t/is (= [[{:xt/id 2, :a "two", :b 3, :xt/column-2 42}
@@ -850,7 +846,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
         (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
                                           :storage [:local {:path (str path "/storage")}]
                                           :indexer {:skip-txs [@!skiptxid]}})]
-          (tu/then-await node)
+          (xt-log/sync-node node)
           (t/testing "Can query two back out - skipped one"
             (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
                      (set (xt/q node "SELECT * from xt_docs")))))
@@ -885,7 +881,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                           :indexer {:skip-txs [@!skiptxid]}
                                           :compactor {:threads 0}})]
 
-          (tu/then-await node)
+          (xt-log/sync-node node)
           (t/testing "Can query one back out - skipped one"
             (t/is (= (set [{:xt/id :foo}]) (set (xt/q node "SELECT * from xt_docs")))))
 

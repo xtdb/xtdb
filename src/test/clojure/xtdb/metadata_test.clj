@@ -30,13 +30,12 @@
         "#310"))
 
 (deftest test-bloom-filter-for-num-types-2133
-  (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:num 0 :xt/id "a"}]
-                               [:put-docs :xt_docs {:num 1 :xt/id "b"}]
-                               [:put-docs :xt_docs {:num 1.0 :xt/id "c"}]
-                               [:put-docs :xt_docs {:num 4 :xt/id "d"}]
-                               [:put-docs :xt_docs {:num (short 3) :xt/id "e"}]
-                               [:put-docs :xt_docs {:num 2.0 :xt/id "f"}]])
-      (tu/then-await tu/*node*))
+  (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:num 0 :xt/id "a"}]
+                            [:put-docs :xt_docs {:num 1 :xt/id "b"}]
+                            [:put-docs :xt_docs {:num 1.0 :xt/id "c"}]
+                            [:put-docs :xt_docs {:num 4 :xt/id "d"}]
+                            [:put-docs :xt_docs {:num (short 3) :xt/id "e"}]
+                            [:put-docs :xt_docs {:num 2.0 :xt/id "f"}]])
 
   (tu/finish-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT1S")
@@ -62,12 +61,11 @@
                         {:node tu/*node*, :args {:x (float 3)}}))))
 
 (deftest test-bloom-filter-for-datetime-types-2133
-  (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:timestamp #xt/date "2010-01-01" :xt/id "a"}]
-                               [:put-docs :xt_docs {:timestamp #xt/zoned-date-time "2010-01-01T00:00:00Z" :xt/id "b"}]
-                               [:put-docs :xt_docs {:timestamp #xt/date-time "2010-01-01T00:00:00" :xt/id "c"}]
-                               [:put-docs :xt_docs {:timestamp #xt/date "2020-01-01" :xt/id "d"}]]
-                    {:default-tz #xt/zone "Z"})
-      (tu/then-await tu/*node*))
+  (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:timestamp #xt/date "2010-01-01" :xt/id "a"}]
+                            [:put-docs :xt_docs {:timestamp #xt/zoned-date-time "2010-01-01T00:00:00Z" :xt/id "b"}]
+                            [:put-docs :xt_docs {:timestamp #xt/date-time "2010-01-01T00:00:00" :xt/id "c"}]
+                            [:put-docs :xt_docs {:timestamp #xt/date "2020-01-01" :xt/id "d"}]]
+                 {:default-tz #xt/zone "Z"})
 
   (tu/finish-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT1S")
@@ -94,10 +92,9 @@
                         {:node tu/*node*, :default-tz #xt/zone "Z"}))))
 
 (deftest test-bloom-filter-for-time-types
-  (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:time #xt/time "01:02:03" :xt/id "a"}]
-                               [:put-docs :xt_docs {:time #xt/time "04:05:06" :xt/id "b"}]]
-                    {:default-tz #xt/zone "Z"})
-      (tu/then-await tu/*node*))
+  (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:time #xt/time "01:02:03" :xt/id "a"}]
+                            [:put-docs :xt_docs {:time #xt/time "04:05:06" :xt/id "b"}]]
+                 {:default-tz #xt/zone "Z"})
 
   (tu/finish-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT1S")
@@ -110,8 +107,7 @@
 (deftest test-min-max-on-xt-id
   (binding [c/*page-size* 16]
     (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}}))]
-      (-> (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
-          (tu/then-await node))
+      (xt/execute-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
 
       (tu/finish-block! node)
       (c/compact-all! node #xt/duration "PT1S")

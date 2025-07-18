@@ -659,8 +659,7 @@
 
 (deftest map-read-test
   (with-open [conn (jdbc-conn)]
-    (-> (xt/submit-tx tu/*node* [[:put-docs :a {:xt/id "map-test", :a {:b 42}}]])
-        (tu/then-await tu/*node*))
+    (xt/execute-tx tu/*node* [[:put-docs :a {:xt/id "map-test", :a {:b 42}}]])
 
     (let [rs (q conn ["select a.a from a a"])]
       (is (= [{:a {:b 42}}] rs)))))
@@ -689,9 +688,8 @@
 
 ;; right now all isolation levels have the same defined behaviour
 (deftest transaction-by-default-pins-the-snapshot-to-last-tx-test
-  (let [insert #(xt/submit-tx tu/*node* [[:put-docs %1 %2]])]
-    (-> (insert :a {:xt/id :fred, :name "Fred"})
-        (tu/then-await tu/*node*))
+  (let [insert #(xt/execute-tx tu/*node* [[:put-docs %1 %2]])]
+    (insert :a {:xt/id :fred, :name "Fred"})
 
     (with-open [conn (jdbc-conn)]
       (jdbc/with-transaction [db conn]

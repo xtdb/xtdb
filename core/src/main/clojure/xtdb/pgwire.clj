@@ -451,7 +451,7 @@
 
              (when-not (or (neg? await-token)
                            (= :read-write (:access-mode tx-opts)))
-               (xt-log/await (db/<-node node) await-token #xt/duration "PT30S"))
+               (xt-log/await-db (db/<-node node) await-token #xt/duration "PT30S"))
 
              (-> st
                  (update :transaction

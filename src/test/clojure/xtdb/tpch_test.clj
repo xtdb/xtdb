@@ -6,8 +6,9 @@
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
             [xtdb.datasets.tpch.xtql :as tpch-xtql]
-            xtdb.sql-test
+            [xtdb.log :as xt-log]
             [xtdb.sql :as sql]
+            xtdb.sql-test
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (java.nio.file Path)
@@ -30,7 +31,7 @@
           :docs (tpch/submit-docs! node scale-factor)
           :dml (tpch/submit-dml! node scale-factor))
 
-        (tu/then-await node)
+        (xt-log/sync-node node)
         (tu/finish-block! node)
 
         (c/compact-all! node (Duration/ofMinutes 5))

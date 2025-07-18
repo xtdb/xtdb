@@ -88,17 +88,15 @@
 
 (t/deftest test-find-eq-ivan
   (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 10}}))]
-    (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]
-                            [:put-docs :xt_docs {:name "James", :xt/id :jms}]
-                            [:put-docs :xt_docs {:name "Ivan", :xt/id :iva}]])
-        (tu/then-await node))
+    (xt/execute-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]
+                         [:put-docs :xt_docs {:name "James", :xt/id :jms}]
+                         [:put-docs :xt_docs {:name "Ivan", :xt/id :iva}]])
 
     (tu/finish-block! node)
     (c/compact-all! node #xt/duration "PT1S")
-    (-> (xt/submit-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]
+    (xt/execute-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]
 
-                            [:put-docs :xt_docs {:name "James", :xt/id :jms}]])
-        (tu/then-await node))
+                         [:put-docs :xt_docs {:name "James", :xt/id :jms}]])
 
     (tu/finish-block! node)
     (c/compact-all! node #xt/duration "PT1S")

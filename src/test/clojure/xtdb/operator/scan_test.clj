@@ -359,8 +359,7 @@
              (tu/query-ra [:scan '{:table #xt/table xt_docs} [col]]
                           {:node tu/*node*, :with-col-types? true})))]
 
-    (-> (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :doc}]])
-        (tu/then-await tu/*node*))
+    (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :doc}]])
 
     (tu/finish-block! tu/*node*)
 
@@ -540,12 +539,10 @@
       (let [first-page (for [i (range page-limit)] (java.util.UUID. 0 i))
             second-page (for [i (range page-limit)] (java.util.UUID. 1 i))
             uuid (first first-page)]
-        (xt/submit-tx node (for [uuid (concat first-page second-page)]
+        (xt/execute-tx node (for [uuid (concat first-page second-page)]
                              [:put-docs :docs {:xt/id uuid}]))
-        (tu/then-await node)
         (tu/finish-block! node)
-        (xt/submit-tx node [[:put-docs :docs {:xt/id uuid}]])
-        (tu/then-await node)
+        (xt/execute-tx node [[:put-docs :docs {:xt/id uuid}]])
 
         ;; first + second page
         (t/is (= 32

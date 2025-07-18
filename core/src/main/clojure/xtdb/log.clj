@@ -1,5 +1,4 @@
 (ns xtdb.log
-  (:refer-clojure :exclude [await])
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
@@ -7,7 +6,7 @@
             [xtdb.database :as db]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
-            xtdb.protocols
+            [xtdb.protocols :as xtp]
             [xtdb.sql :as sql]
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
@@ -329,16 +328,20 @@
 (defn <-node ^xtdb.api.log.Log [node]
   (.getLog (db/<-node node)))
 
-(defn await
-  (^java.util.concurrent.CompletableFuture [^Database db]
+(defn await-db
+  ([^Database db]
    (-> @(.awaitAsync (.getLogProcessor db))
        (util/rethrowing-cause)))
 
-  (^java.util.concurrent.CompletableFuture [^Database db, ^long token]
+  ([^Database db, ^long token]
    (-> @(.awaitAsync (.getLogProcessor db) token)
        (util/rethrowing-cause)))
 
-  (^java.util.concurrent.CompletableFuture [^Database db, ^long token ^Duration timeout]
+  ([^Database db, ^long token ^Duration timeout]
    (-> @(cond-> (.awaitAsync (.getLogProcessor db) token)
           timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))
        (util/rethrowing-cause))))
+
+(defn sync-node
+  ([node] (await-db (db/<-node node)))
+  ([node timeout] (await-db (db/<-node node) (xtp/await-token node) timeout)))

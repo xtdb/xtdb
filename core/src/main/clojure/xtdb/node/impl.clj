@@ -45,7 +45,7 @@
 
 (defn- with-query-opts-defaults [query-opts {:keys [default-tz] :as node}]
   (-> (into {:default-tz default-tz,
-             :await-token (xtp/latest-submitted-tx-id node)
+             :await-token (xtp/await-token node)
              :key-fn (serde/read-key-fn :snake-case-string)}
             query-opts)
       (update :snapshot-time #(some-> % (time/->instant)))
@@ -143,9 +143,11 @@
   xtp/PStatus
   (latest-completed-tx [_] (.getLatestCompletedTx (.getLiveIndex db)))
   (latest-submitted-tx-id [_] (.getLatestSubmittedMsgId (.getLogProcessor db)))
+  (await-token [this] (xtp/latest-submitted-tx-id this))
   (status [this]
     {:latest-completed-tx (.getLatestCompletedTx (.getLiveIndex db))
-     :latest-submitted-tx-id (xtp/latest-submitted-tx-id this)})
+     :latest-submitted-tx-id (xtp/latest-submitted-tx-id this)
+     :await-token (xtp/await-token this)})
 
   xtp/PLocalNode
   (prepare-sql [this query query-opts]
@@ -157,7 +159,7 @@
 
           {:keys [^long await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
 
-      (xt-log/await db await-token tx-timeout)
+      (xt-log/await-db db await-token tx-timeout)
 
       (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
@@ -168,13 +170,13 @@
                 (instance? XtqlQuery query) query
                 :else (throw (err/illegal-arg :xtdb/unsupported-query-type
                                               {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]
-      (xt-log/await db await-token tx-timeout)
+      (xt-log/await-db db await-token tx-timeout)
 
       (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
   (prepare-ra [this plan query-opts]
     (let [{:keys [^long await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-      (xt-log/await db await-token tx-timeout)
+      (xt-log/await-db db await-token tx-timeout)
 
       (.prepareQuery q-src plan db (.getLiveIndex db) query-opts)))
 

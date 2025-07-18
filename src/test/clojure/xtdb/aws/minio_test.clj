@@ -166,16 +166,16 @@
 
   (t/deftest ^:minio tpch-test-node
     (util/with-tmp-dirs #{local-disk-cache}
-                        (util/with-open [node (start-node local-disk-cache (str (random-uuid)))]
-                                        ;; Submit tpch docs
-                                        (-> (tpch/submit-docs! node 0.05)
-            (tu/then-await node (Duration/ofHours 1)))
+      (util/with-open [node (start-node local-disk-cache (str (random-uuid)))]
+        ;; Submit tpch docs
+        (tpch/submit-docs! node 0.05)
+        (xt-log/sync-node node (Duration/ofHours 1))
 
-                                        ;; Ensure finish-block! works
-                                        (t/is (nil? (tu/finish-block! node)))
+        ;; Ensure finish-block! works
+        (t/is (nil? (tu/finish-block! node)))
 
-                                        (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/storage)))]
-                                          (t/is (instance? RemoteBufferPool buffer-pool))
-                                          (t/is (instance? ObjectStore object-store))
-                                          ;; Ensure some files are written
-                                          (t/is (seq (.listAllObjects object-store))))))))
+        (let [{:keys [^ObjectStore object-store] :as buffer-pool} (val (first (ig/find-derived (:system node) :xtdb/storage)))]
+          (t/is (instance? RemoteBufferPool buffer-pool))
+          (t/is (instance? ObjectStore object-store))
+          ;; Ensure some files are written
+          (t/is (seq (.listAllObjects object-store))))))))
