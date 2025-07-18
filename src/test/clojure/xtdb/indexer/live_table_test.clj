@@ -18,7 +18,7 @@
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory RootAllocator)
            xtdb.BufferPool
-           (xtdb.indexer LiveIndex LiveTable Snapshot)
+           (xtdb.indexer LiveIndex LiveTable LiveTable$Snapshot)
            (xtdb.trie MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)))
 
@@ -106,7 +106,7 @@
                 (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
                 (.resolve path "objects")))))))))
 
-(defn live-table-snap->data [^Snapshot live-table-snap]
+(defn live-table-snap->data [^LiveTable$Snapshot live-table-snap]
   (let [live-rel-data (.toMaps (.getLiveRelation live-table-snap))
         live-trie (.compactLogs (.getLiveTrie live-table-snap))
         live-trie-leaf-data (->> live-trie
