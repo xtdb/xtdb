@@ -19,7 +19,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 
-typealias AwaitToken = Long
+typealias AwaitToken = String
 
 @Serializable
 data class QueryOptions(

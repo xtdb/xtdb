@@ -216,7 +216,7 @@
 
 (s/def ::current-time inst?)
 (s/def ::snapshot-time (s/nilable ::time/datetime-value))
-(s/def ::await-token (s/nilable int?))
+(s/def ::await-token (s/nilable string?))
 
 (s/def ::tx-timeout
   (st/spec (s/nilable #(instance? Duration %))

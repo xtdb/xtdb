@@ -19,7 +19,7 @@
   (:import (clojure.lang IReduceInit)
            (java.io Writer)
            (java.sql BatchUpdateException Connection)
-           [java.util.concurrent.atomic AtomicLong]
+           [java.util.concurrent.atomic AtomicReference]
            (xtdb.api DataSource DataSource$ConnectionBuilder TransactionKey)
            (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs)
@@ -245,7 +245,10 @@
         (jdbc/execute! conn ["ROLLBACK"])
         (catch Throwable t
           (throw (doto e (.addSuppressed t)))))
-      (throw e))))
+      (throw e)))
+
+  (jdbc/execute-one! conn ["SHOW LATEST_SUBMITTED_TX"]
+                     {:builder-fn xt-jdbc/builder-fn}))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx
@@ -279,13 +282,10 @@
 
   ([connectable, tx-ops tx-opts]
    (with-conn [conn connectable]
-     (submit-tx* conn tx-ops (-> tx-opts
-                                 (assoc :async? true)))
-
-     (let [{:keys [tx-id]} (jdbc/execute-one! conn ["SHOW LATEST_SUBMITTED_TX"]
-                                              {:builder-fn xt-jdbc/builder-fn})]
+     (let [{:keys [tx-id await-token]} (submit-tx* conn tx-ops (-> tx-opts
+                                                       (assoc :async? true)))]
        (when (instance? xtdb.api.DataSource connectable)
-         (.setAwaitToken ^xtdb.api.DataSource connectable tx-id))
+         (.setAwaitToken ^xtdb.api.DataSource connectable await-token))
        {:tx-id tx-id}))))
 
 (defn execute-tx
@@ -322,12 +322,9 @@
 
   (^TransactionKey [connectable, tx-ops tx-opts]
    (with-conn [conn connectable]
-     (submit-tx* conn tx-ops (-> tx-opts (assoc :async? false)))
-
-     (let [{:keys [tx-id system-time]} (jdbc/execute-one! conn ["SHOW LATEST_SUBMITTED_TX"]
-                                                          {:builder-fn xt-jdbc/builder-fn})]
+     (let [{:keys [tx-id system-time await-token]} (submit-tx* conn tx-ops (-> tx-opts (assoc :async? false)))]
        (when (instance? xtdb.api.DataSource connectable)
-         (.setAwaitToken ^xtdb.api.DataSource connectable tx-id))
+         (.setAwaitToken ^xtdb.api.DataSource connectable await-token))
        (serde/->TxKey tx-id (time/->instant system-time))))))
 
 (defn client
@@ -346,13 +343,15 @@
                                port 5432
                                dbname "xtdb"}}]
 
-  (let [!await-token (AtomicLong.)]
+  (let [!await-token (AtomicReference.)]
     (reify DataSource
       (getAwaitToken [_] (.get !await-token))
       (setAwaitToken [_ await-token]
         (loop []
           (let [old-token (.get !await-token)]
-            (when (< old-token await-token)
+            (when (or (nil? old-token)
+                      (and await-token
+                           (< ^long (parse-long old-token) ^long (parse-long await-token))))
               (when-not (.compareAndSet !await-token old-token await-token)
                 (recur))))))
 

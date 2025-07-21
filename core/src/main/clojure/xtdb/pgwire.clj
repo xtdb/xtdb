@@ -444,13 +444,12 @@
 (defn cmd-begin [{:keys [node conn-state]} tx-opts {:keys [args]}]
   (swap! conn-state
          (fn [{:keys [session await-token] :as st}]
-           (let [await-token (or (some-> (:await-token tx-opts) (apply-args args))
-                                 await-token
-                                 -1)
+           (let [await-token (if-let [[_ tok] (find tx-opts :await-token)]
+                               (apply-args tok args)
+                               await-token)
                  {:keys [^Clock clock]} session]
 
-             (when-not (or (neg? await-token)
-                           (= :read-write (:access-mode tx-opts)))
+             (when-not (= :read-write (:access-mode tx-opts))
                (xt-log/await-db (db/<-node node) await-token #xt/duration "PT30S"))
 
              (-> st
@@ -492,10 +491,10 @@
                          :authn {:user (get parameters "user")}}]
             (if async?
               (let [tx-id (xtp/submit-tx node dml-buf tx-opts)]
-                (swap! conn-state assoc :await-token tx-id, :latest-submitted-tx {:tx-id tx-id}))
+                (swap! conn-state assoc :await-token (xtp/await-token node), :latest-submitted-tx {:tx-id tx-id}))
 
-              (let [{:keys [tx-id error] :as tx} (xtp/execute-tx node dml-buf tx-opts)]
-                (swap! conn-state assoc :await-token tx-id, :latest-submitted-tx tx)
+              (let [{:keys [error] :as tx} (xtp/execute-tx node dml-buf tx-opts)]
+                (swap! conn-state assoc :await-token (xtp/await-token node), :latest-submitted-tx tx)
 
                 (when error
                   (throw error))))))
@@ -782,9 +781,7 @@
 
                                         (visitSetAwaitTokenStatement [_ ctx]
                                           (let [await-token (sql/plan-expr (.awaitToken ctx) env)]
-                                            (if (number? await-token)
-                                              {:statement-type :set-await-token, :await-token await-token}
-                                              (throw (pgio/err-protocol-violation "invalid await-token - expecting number")))))
+                                            {:statement-type :set-await-token, :await-token await-token}))
 
                                         (visitShowAwaitTokenStatement [_ _]
                                           {:statement-type :show-variable, :query sql, :variable "await_token"})
@@ -811,7 +808,8 @@
                               (with-meta {:param-count 2}))
     "latest_submitted_tx" (-> '[:select (not (nil? tx_id))
                                 [:table [{:tx_id ?_0, :system_time ?_1,
-                                          :committed ?_2, :error ?_3}]]]
+                                          :committed ?_2, :error ?_3
+                                          :await_token ?_4}]]]
                               (with-meta {:param-count 4}))
     (-> (xt/template [:table [{~(keyword variable) ?_0}]])
         (with-meta {:param-count 1}))))
@@ -819,8 +817,8 @@
 (defn- show-var-param-types [variable]
   (case variable
     "latest_completed_tx" [:i64 types/temporal-col-type]
-    "latest_submitted_tx" [:i64 types/temporal-col-type :bool :transit]
-    "await_token" [:i64]
+    "latest_submitted_tx" [:i64 types/temporal-col-type :bool :transit :utf8]
+    "await_token" [:utf8]
     "standard_conforming_strings" [:bool]
 
     [:utf8]))
@@ -834,7 +832,7 @@
             {:keys [session await-token]} @conn-state
             {:keys [^Clock clock]} session
 
-            query-opts {:await-token (or await-token -1)
+            query-opts {:await-token await-token
                         :tx-timeout (Duration/ofMinutes 1)
                         :default-tz (.getZone clock)
                         :explain? explain?}
@@ -951,7 +949,7 @@
 (defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator] :as conn} {:keys [statement-type ^PreparedQuery prepared-query args result-format] :as stmt}]
   (let [{:keys [session transaction await-token]} @conn-state
         {:keys [^Clock clock], session-params :parameters} session
-        await-token (or (:await-token transaction) await-token -1)
+        await-token (:await-token transaction await-token)
 
         query-opts {:snapshot-time (or (:snapshot-time stmt) (:snapshot-time transaction))
                     :current-time (or (:current-time stmt)
@@ -990,12 +988,12 @@
 
         :show-variable (let [{:keys [variable]} stmt]
                          (util/with-close-on-catch [cursor (->cursor (case variable
-                                                                       "await_token" [(when-not (neg? await-token)
-                                                                                        await-token)]
+                                                                       "await_token" [await-token]
                                                                        "latest_completed_tx" (mapv (into {} (xtp/latest-completed-tx node))
                                                                                                    [:tx-id :system-time])
-                                                                       "latest_submitted_tx" (mapv (into {} (:latest-submitted-tx @conn-state))
-                                                                                                   [:tx-id :system-time :committed? :error])
+                                                                       "latest_submitted_tx" (mapv (into {} (assoc (:latest-submitted-tx @conn-state)
+                                                                                                                  :await-token await-token))
+                                                                                                   [:tx-id :system-time :committed? :error :await-token])
                                                                        [(get session-params variable)]))]
 
                            (-> stmt
@@ -1107,9 +1105,10 @@
     (set-time-zone conn tz))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TIME ZONE"}))
 
-(defn cmd-set-await-token [{:keys [conn-state] :as conn} {:keys [await-token]}]
-  (swap! conn-state assoc :await-token await-token)
-  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"}))
+(defn cmd-set-await-token [{:keys [conn-state] :as conn} {:keys [await-token args]}]
+  (let [await-token (-> await-token (apply-args args))]
+    (swap! conn-state assoc :await-token await-token)
+    (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"})))
 
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
   (swap! conn-state update-in [:session :characteristics] (fnil into {}) session-characteristics)

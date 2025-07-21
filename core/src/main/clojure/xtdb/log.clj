@@ -3,6 +3,7 @@
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.api :as xt]
+            [xtdb.basis :as basis]
             [xtdb.database :as db]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
@@ -333,14 +334,18 @@
    (-> @(.awaitAsync (.getLogProcessor db))
        (util/rethrowing-cause)))
 
-  ([^Database db, ^long token]
-   (-> @(.awaitAsync (.getLogProcessor db) token)
-       (util/rethrowing-cause)))
+  ([^Database db, token]
+   (when token
+     (-> @(.awaitAsync (.getLogProcessor db) (-> (basis/<-tx-basis-str token)
+                                                 (get-in ["xtdb" 0])))
+         (util/rethrowing-cause))))
 
-  ([^Database db, ^long token ^Duration timeout]
-   (-> @(cond-> (.awaitAsync (.getLogProcessor db) token)
-          timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))
-       (util/rethrowing-cause))))
+  ([^Database db, token ^Duration timeout]
+   (when token
+     (-> @(cond-> (.awaitAsync (.getLogProcessor db) (-> (basis/<-tx-basis-str token)
+                                                         (get-in ["xtdb" 0])))
+            timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))
+         (util/rethrowing-cause)))))
 
 (defn sync-node
   ([node] (await-db (db/<-node node)))

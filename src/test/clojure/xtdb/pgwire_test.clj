@@ -9,7 +9,7 @@
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as result-set]
             [xtdb.api :as xt]
-            [xtdb.error :as err]
+            [xtdb.basis :as basis]
             [xtdb.log :as xt-log]
             [xtdb.logging :as logging]
             [xtdb.next.jdbc :as xt-jdbc]
@@ -1728,7 +1728,7 @@
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
 
-    (t/is (= [{:await-token 0}]
+    (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW AWAIT_TOKEN"])))
 
     (t/is (= [{:tx-id 0, :system-time #xt/zdt "2020-01-01Z[UTC]"}]
@@ -1736,12 +1736,12 @@
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
 
-    (t/is (= [{:await-token 1}]
+    (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [1]})}]
              (q conn ["SHOW AWAIT_TOKEN"])))
 
-    (jdbc/execute! conn ["SET AWAIT_TOKEN = 0"])
+    (jdbc/execute! conn ["SET AWAIT_TOKEN = ?" (basis/->tx-basis-str {"xtdb" [0]})])
 
-    (t/is (= [{:await-token 0}]
+    (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW AWAIT_TOKEN"])))
 
     (t/is (= [{:tx-id 1, :system-time #xt/zdt "2020-01-02Z[UTC]"}]
@@ -1749,14 +1749,14 @@
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
 
-    (t/is (= [{:await-token 2}]
+    (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [2]})}]
              (q conn ["SHOW AWAIT_TOKEN"])))))
 
 (t/deftest show-await-token-param-fail-4504
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
 
-    (t/is (= [{:await-token 0}]
+    (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW AWAIT_TOKEN"]))))
 
   (when (psql-available?)
@@ -1765,7 +1765,7 @@
        (send "INSERT INTO foo (_id) VALUES (1);\n")
        (read)
        (send "SHOW AWAIT_TOKEN;\n")
-       (t/is (= [["await_token"] ["1"]] (read)))))))
+       (t/is (= [["await_token"] [(basis/->tx-basis-str {"xtdb" [1]})]] (read)))))))
 
 (t/deftest test-show-latest-submitted-tx
   (with-open [conn (jdbc-conn)]
@@ -1773,15 +1773,17 @@
 
     (jdbc/execute! conn ["INSERT INTO users RECORDS ?" {:xt/id "jms", :given-name "James"}])
 
-    (t/is (= [{:tx-id 0, :system-time #xt/zdt "2020-01-01T00:00Z[UTC]", :committed true}]
+    (t/is (= [{:tx-id 0, :system-time #xt/zdt "2020-01-01T00:00Z[UTC]", :committed true,
+               :await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW LATEST_SUBMITTED_TX"])))
 
     (t/is (thrown? PSQLException (jdbc/execute! conn ["ASSERT FALSE"])))
 
-    (t/is (= [{:tx-id 1, :system-time #xt/zdt "2020-01-02T00:00Z[UTC]", :committed false
+    (t/is (= [{:tx-id 1, :system-time #xt/zdt "2020-01-02T00:00Z[UTC]", :committed false,
                :error #xt/error [:conflict :xtdb/assert-failed "Assert failed"
                                  {:arg-idx 0, :sql "ASSERT FALSE", :tx-op-idx 0,
-                                  :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]}]
+                                  :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]
+               :await-token (basis/->tx-basis-str {"xtdb" [1]})}]
              (q conn ["SHOW LATEST_SUBMITTED_TX"])))))
 
 (t/deftest test-show-session-variable-3804
@@ -2708,18 +2710,22 @@ ORDER BY 1,2;")
 (t/deftest in-tx-await-token
   (with-open [conn (jdbc-conn)]
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"])
-    (t/is (= {:await_token 0} (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
+    (t/is (= {:await_token (basis/->tx-basis-str {"xtdb" [0]})}
+             (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
 
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 2}"])
-    (t/is (= {:await_token 1} (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
+    (t/is (= {:await_token (basis/->tx-basis-str {"xtdb" [1]})}
+             (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
 
-    (jdbc/execute! conn ["BEGIN READ ONLY WITH (await_token = ?)" 0])
+    (jdbc/execute! conn ["BEGIN READ ONLY WITH (await_token = ?)" (basis/->tx-basis-str {"xtdb" [0]})])
     (try
-      (t/is (= {:await_token 0} (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
+      (t/is (= {:await_token (basis/->tx-basis-str {"xtdb" [0]})}
+               (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
       (finally
         (jdbc/execute! conn ["ROLLBACK"])))
 
-    (t/is (= {:await_token 1} (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))))
+    (t/is (= {:await_token (basis/->tx-basis-str {"xtdb" [1]})}
+             (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))))
 
 (t/deftest await-token+snapshot-time
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 0}]])
@@ -2729,7 +2735,7 @@ ORDER BY 1,2;")
     (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 2}]])
     (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 3}]])
 
-    (jdbc/execute! conn ["BEGIN READ ONLY WITH (AWAIT_TOKEN = 3)"])
+    (jdbc/execute! conn ["BEGIN READ ONLY WITH (AWAIT_TOKEN = ?)" (basis/->tx-basis-str {"xtdb" [3]})])
     (try
       (t/is (= {:_id 1, :version 3}
                (jdbc/execute-one! conn ["SELECT * FROM foo"])))

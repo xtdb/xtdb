@@ -8,6 +8,8 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("org.jetbrains.dokka")
+    
+    alias(libs.plugins.protobuf)
 }
 
 publishing {
@@ -33,6 +35,8 @@ dependencies {
 
     api(kotlin("stdlib-jdk8"))
     api(libs.kotlinx.serialization.json)
+    
+    api(libs.protobuf.kotlin)
 
     api(libs.caffeine)
 
@@ -69,4 +73,18 @@ kotlin {
 
 tasks.dokkaHtmlPartial {
     moduleName.set("xtdb-api")
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.asProvider().get()}"
+    }
+
+    generateProtoTasks {
+        all().forEach {
+            it.builtins {
+                create("kotlin")
+            }
+        }
+    }
 }

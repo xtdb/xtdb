@@ -7,7 +7,7 @@ import java.sql.ShardingKey
 import java.util.*
 
 interface DataSource : javax.sql.DataSource {
-    var awaitToken: Long
+    var awaitToken: String
 
     override fun getConnection() = createConnectionBuilder().build()
 

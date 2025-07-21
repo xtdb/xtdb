@@ -3,9 +3,9 @@
             [integrant.core :as ig]
             [xtdb.antlr :as antlr]
             [xtdb.api :as api]
+            [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.garbage-collector]
-            [xtdb.indexer :as idx]
             [xtdb.log :as xt-log]
             [xtdb.metrics :as metrics]
             [xtdb.protocols :as xtp]
@@ -19,7 +19,7 @@
            io.micrometer.core.instrument.Counter
            (java.io Closeable Writer)
            (java.util HashMap)
-           [java.util.concurrent.atomic AtomicLong]
+           [java.util.concurrent.atomic AtomicReference]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config)
@@ -27,7 +27,6 @@
            (xtdb.api.query XtqlQuery)
            xtdb.database.Database
            xtdb.error.Anomaly
-           (xtdb.indexer LogProcessor)
            (xtdb.query IQuerySource PreparedQuery)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -43,9 +42,8 @@
 (defmethod ig/halt-key! :xtdb/allocator [_ ^BufferAllocator a]
   (util/close a))
 
-(defn- with-query-opts-defaults [query-opts {:keys [default-tz] :as node}]
+(defn- with-query-opts-defaults [query-opts {:keys [default-tz]}]
   (-> (into {:default-tz default-tz,
-             :await-token (xtp/await-token node)
              :key-fn (serde/read-key-fn :snake-case-string)}
             query-opts)
       (update :snapshot-time #(some-> % (time/->instant)))
@@ -61,7 +59,7 @@
 (defrecord Node [^BufferAllocator allocator, ^Database db
                  ^IQuerySource q-src
                  ^CompositeMeterRegistry metrics-registry
-                 default-tz, ^AtomicLong !await-token
+                 default-tz, ^AtomicReference !await-token
                  system, close-fn,
                  query-timer, ^Counter query-error-counter, ^Counter tx-error-counter]
   Xtdb
@@ -83,8 +81,8 @@
   (setAwaitToken [_ await-token]
     (loop []
       (let [old-token (.get !await-token)]
-        (when (< old-token await-token)
-          (when-not (.compareAndSet !await-token old-token await-token)
+        (when (or (nil? old-token) await-token)
+          (when-not (.compareAndSet !await-token old-token (basis/merge-tx-tokens old-token await-token))
             (recur))))))
 
   (module [_ clazz]
@@ -95,7 +93,7 @@
   (submit-tx [this tx-ops opts]
     (try 
       (let [tx-id (xt-log/submit-tx this tx-ops opts)]
-        (.set !await-token tx-id)
+        (.set !await-token (basis/->tx-basis-str {"xtdb" [tx-id]}))
         tx-id)
       (catch Anomaly e
         (when tx-error-counter
@@ -143,7 +141,8 @@
   xtp/PStatus
   (latest-completed-tx [_] (.getLatestCompletedTx (.getLiveIndex db)))
   (latest-submitted-tx-id [_] (.getLatestSubmittedMsgId (.getLogProcessor db)))
-  (await-token [this] (xtp/latest-submitted-tx-id this))
+  (await-token [this] (basis/->tx-basis-str {"xtdb" [(xtp/latest-submitted-tx-id this)]}))
+  
   (status [this]
     {:latest-completed-tx (.getLatestCompletedTx (.getLiveIndex db))
      :latest-submitted-tx-id (xtp/latest-submitted-tx-id this)
@@ -157,14 +156,14 @@
                 :else (throw (err/illegal-arg :xtdb/unsupported-query-type
                                               {::err/message (format "Unsupported SQL query type: %s" (type query))})))
 
-          {:keys [^long await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+          {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
 
       (xt-log/await-db db await-token tx-timeout)
 
       (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
   (prepare-xtql [this query query-opts]
-    (let [{:keys [^long await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
+    (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
           ast (cond
                 (sequential? query) (xtql/parse-query query nil)
                 (instance? XtqlQuery query) query
@@ -175,7 +174,7 @@
       (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
   (prepare-ra [this plan query-opts]
-    (let [{:keys [^long await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+    (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (xt-log/await-db db await-token tx-timeout)
 
       (.prepareQuery q-src plan db (.getLiveIndex db) query-opts)))
@@ -201,7 +200,7 @@
   (let [node (map->Node (-> deps
                             (dissoc :config)
                             (assoc :default-tz (:default-tz config)
-                                   :!await-token (AtomicLong. -1))
+                                   :!await-token (AtomicReference. nil))
                             (assoc :query-timer (metrics/add-timer metrics-registry "query.timer"
                                                                    {:description "indicates the timings for queries"})
                                    :query-error-counter (metrics/add-counter metrics-registry "query.error")

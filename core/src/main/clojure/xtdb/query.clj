@@ -254,7 +254,7 @@
                             expr/*snapshot-time* (or (some-> (:snapshot-time planned-query) (expr->instant {:args args, :default-tz default-tz}))
                                                      (some-> snapshot-time (expr->instant {:args args, :default-tz default-tz}))
                                                      (some-> snap .getTxBasis .getSystemTime))
-                            expr/*await-token* (or await-token -1)]
+                            expr/*await-token* await-token]
 
                     (validate-snapshot-not-before expr/*snapshot-time* snap)
 

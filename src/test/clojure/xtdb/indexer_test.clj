@@ -407,18 +407,19 @@
           (t/is (= 5500 (count first-half-tx-ops)))
           (t/is (= 5500 (count second-half-tx-ops)))
 
-          (let [{first-half-tx-id :tx-id } (reduce
-                                            (fn [_ tx-ops]
-                                              (xt/submit-tx node1 tx-ops))
-                                            nil
-                                            (partition-all 100 first-half-tx-ops))]
+          (let [{first-half-tx-id :tx-id} (reduce
+                                           (fn [_ tx-ops]
+                                             (xt/submit-tx node1 tx-ops))
+                                           nil
+                                           (partition-all 100 first-half-tx-ops))
+                first-half-await-token (xtp/await-token node1)]
             (.close node1)
 
             (util/with-close-on-catch [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
               (let [bp (bp/<-node node2)
                     block-cat (block-cat/<-node node2)
                     tc (cat/<-node node2)
-                    lc-tx (xt-log/await-db (db/<-node node2) first-half-tx-id (Duration/ofSeconds 10))]
+                    lc-tx (xt-log/await-db (db/<-node node2) first-half-await-token (Duration/ofSeconds 10))]
                 (t/is (= first-half-tx-id (:tx-id lc-tx)))
                 (t/is (= (serde/->TxKey (:tx-id lc-tx) (:system-time lc-tx))
                          (xtp/latest-completed-tx node2)))
@@ -445,7 +446,8 @@
                                                   (fn [_ tx-ops]
                                                     (xt/submit-tx node2 tx-ops))
                                                   nil
-                                                  (partition-all 100 second-half-tx-ops))]
+                                                  (partition-all 100 second-half-tx-ops))
+                      second-half-await-token (xtp/await-token node2)]
 
                   (t/is (<= first-half-tx-id
                             (:tx-id (xtp/latest-completed-tx node2))
@@ -456,16 +458,14 @@
                   (with-open [node3 (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
                     (let [bp (bp/<-node node3)]
                       (t/is (<= first-half-tx-id
-                                (:tx-id (xt-log/await-db (db/<-node node3) first-half-tx-id (Duration/ofSeconds 10)))
+                                (:tx-id (xt-log/await-db (db/<-node node3) first-half-await-token (Duration/ofSeconds 10)))
                                 second-half-tx-id))
 
                       (t/is (= :utf8
                                (types/field->col-type (.getField tc #xt/table device_info "_id"))))
 
-                      (let [lc-tx (xt-log/await-db (db/<-node node3) second-half-tx-id (Duration/ofSeconds 15))]
-                        (t/is (= second-half-tx-id (:tx-id lc-tx)))
-                        (t/is (= (serde/->TxKey (:tx-id lc-tx) (:system-time lc-tx))
-                                 (xtp/latest-completed-tx node3))))
+                      (xt-log/await-db (db/<-node node3) second-half-await-token (Duration/ofSeconds 15))
+                      (t/is (= second-half-tx-id (:tx-id (xtp/latest-completed-tx node3))))
 
                       (Thread/sleep 250); wait for the block to finish writing to disk
                                         ; we don't have an accessible hook for this, beyond awaiting the tx

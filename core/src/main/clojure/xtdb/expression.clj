@@ -390,7 +390,7 @@
     (f col-type (apply read-value-code col-type reader-sym args))))
 
 (def ^:dynamic ^java.time.Instant *snapshot-time* nil)
-(def ^:dynamic ^{:tag 'long} *await-token* -1)
+(def ^:dynamic ^String *await-token* nil)
 (def ^:dynamic ^java.time.InstantSource *clock* (InstantSource/system))
 (defn current-time ^java.time.Instant [] (.instant *clock*))
 (def ^:dynamic ^java.time.ZoneId *default-tz* (ZoneId/systemDefault))
