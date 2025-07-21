@@ -164,7 +164,7 @@
   (.forEachRemaining build-cursor
                      (fn [^RelationReader build-rel]
                        (let [rel-map-builder (.buildFromRelation rel-map build-rel)
-                             build-key-col-names (vec (.buildKeyColumnNames rel-map))]
+                             build-key-col-names (vec (.getBuildKeyColumnNames rel-map))]
                          (dotimes [build-idx (.getRowCount build-rel)]
                            (.add rel-map-builder build-idx))
 
@@ -343,9 +343,10 @@
 
     (boolean
      (or (let [advanced? (boolean-array 1)
-               probe-iid-keys (filter #(= (name %) "_iid") (.probeKeyColumnNames rel-map))]
+               probe-key-columns (.getProbeKeyColumnNames rel-map)
+               probe-iid-keys (filter #(= (name %) "_iid") probe-key-columns)]
            (binding [scan/*column->pushdown-bloom* (cond-> scan/*column->pushdown-bloom*
-                                                     (some? pushdown-blooms) (conj (zipmap (.probeKeyColumnNames rel-map) pushdown-blooms)))
+                                                     (some? pushdown-blooms) (conj (zipmap (map symbol probe-key-columns) pushdown-blooms)))
                      scan/*column->iid-set* (cond-> scan/*column->iid-set*
                                               (some? iid-set) (conj (zipmap probe-iid-keys (repeat iid-set))))]
              (when-not probe-cursor
@@ -353,7 +354,7 @@
                  (set! (.probe-cursor this) probe-cursor)))
 
              (when (and matched-build-idxs (not nil-rel-writer))
-               (util/with-close-on-catch [nil-rel-writer (emap/->nillable-rel-writer allocator (.probeFields rel-map))]
+               (util/with-close-on-catch [nil-rel-writer (emap/->nillable-rel-writer allocator (.getProbeFields rel-map))]
                  (set! (.nil-rel-writer this) nil-rel-writer)))
 
              (while (and (not (aget advanced? 0))
@@ -416,7 +417,7 @@
     (boolean
      (let [advanced? (boolean-array 1)]
        (binding [scan/*column->pushdown-bloom* (conj scan/*column->pushdown-bloom*
-                                                     (zipmap (.probeKeyColumnNames rel-map) pushdown-blooms))]
+                                                     (zipmap (map symbol (.getProbeKeyColumnNames rel-map)) pushdown-blooms))]
          (when-not probe-cursor
            (util/with-close-on-catch [probe-cursor (->probe-cursor)]
              (set! (.probe-cursor this) probe-cursor)))
