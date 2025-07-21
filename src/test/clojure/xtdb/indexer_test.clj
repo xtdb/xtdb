@@ -92,7 +92,7 @@
         (let [block-cat (block-cat/<-node node)]
           (t/is (nil? (.getCurrentBlockIndex block-cat)))
 
-          (t/is (= magic-last-tx-id
+          (t/is (= {:tx-id magic-last-tx-id}
                    (last (for [tx-ops txs]
                            (xt/submit-tx node tx-ops {:default-tz #xt/zone "Europe/London"})))))
 
@@ -328,7 +328,7 @@
 
         (util/mkdirs object-dir)
 
-        (t/is (= magic-last-tx-id
+        (t/is (= {:tx-id magic-last-tx-id}
                  (last (for [tx-ops txs]
                          (xt/submit-tx node tx-ops
                                        {:default-tz #xt/zone "Europe/London"})))))
@@ -366,11 +366,11 @@
 
         (t/is (nil? (xtp/latest-completed-tx node)))
 
-        (let [last-tx-id (reduce
-                          (fn [_acc tx-ops]
-                            (xt/submit-tx node tx-ops))
-                          nil
-                          (partition-all 100 tx-ops))
+        (let [{last-tx-id :tx-id} (reduce
+                                   (fn [_acc tx-ops]
+                                     (xt/submit-tx node tx-ops))
+                                   nil
+                                   (partition-all 100 tx-ops))
               last-tx-key (serde/->TxKey last-tx-id (time/->instant #inst "2020-04-19"))]
 
           (xt-log/sync-node node (Duration/ofSeconds 15))
@@ -407,11 +407,11 @@
           (t/is (= 5500 (count first-half-tx-ops)))
           (t/is (= 5500 (count second-half-tx-ops)))
 
-          (let [first-half-tx-id (reduce
-                                  (fn [_ tx-ops]
-                                    (xt/submit-tx node1 tx-ops))
-                                  nil
-                                  (partition-all 100 first-half-tx-ops))]
+          (let [{first-half-tx-id :tx-id } (reduce
+                                            (fn [_ tx-ops]
+                                              (xt/submit-tx node1 tx-ops))
+                                            nil
+                                            (partition-all 100 first-half-tx-ops))]
             (.close node1)
 
             (util/with-close-on-catch [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
@@ -441,11 +441,11 @@
                 (t/is (= :utf8
                          (types/field->col-type (.getField tc #xt/table device_readings "_id"))))
 
-                (let [second-half-tx-id (reduce
-                                         (fn [_ tx-ops]
-                                           (xt/submit-tx node2 tx-ops))
-                                         nil
-                                         (partition-all 100 second-half-tx-ops))]
+                (let [{second-half-tx-id :tx-id} (reduce
+                                                  (fn [_ tx-ops]
+                                                    (xt/submit-tx node2 tx-ops))
+                                                  nil
+                                                  (partition-all 100 second-half-tx-ops))]
 
                   (t/is (<= first-half-tx-id
                             (:tx-id (xtp/latest-completed-tx node2))

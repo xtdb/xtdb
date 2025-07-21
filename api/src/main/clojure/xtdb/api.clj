@@ -263,7 +263,9 @@
 
      \"UPDATE foo SET b = 1\"]
 
-  Returns the tx-id.
+  Returns a map:
+   - :tx-id (long)
+     transaction ID of the submitted transaction
 
   opts (map):
    - :system-time
@@ -273,9 +275,9 @@
    - :default-tz
      overrides the default time zone for the transaction,
      should be an instance of java.time.ZoneId"
-  (^TransactionKey [connectable, tx-ops] (submit-tx connectable tx-ops {}))
+  ([connectable, tx-ops] (submit-tx connectable tx-ops {}))
 
-  (^TransactionKey [connectable, tx-ops tx-opts]
+  ([connectable, tx-ops tx-opts]
    (with-conn [conn connectable]
      (submit-tx* conn tx-ops (-> tx-opts
                                  (assoc :async? true)))
@@ -287,7 +289,7 @@
                                                 {:builder-fn xt-jdbc/builder-fn})]
          (when (instance? xtdb.api.DataSource connectable)
            (.setAwaitToken ^xtdb.api.DataSource connectable tx-id))
-         tx-id)
+         {:tx-id tx-id})
 
        (finally
          (jdbc/execute! conn ["ROLLBACK"]))))))

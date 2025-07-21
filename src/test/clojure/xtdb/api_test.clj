@@ -145,7 +145,7 @@
 (t/deftest test-sql-roundtrip
   (let [tx (xt/submit-tx *node* devs)]
 
-    (t/is (= 0 tx))
+    (t/is (= {:tx-id 0} tx))
 
     (t/is (= [{:name "James"}]
              (xt/q *node* "SELECT u.name FROM users u WHERE u.name = 'James'")))))
@@ -236,7 +236,7 @@
   (let [tx (xt/submit-tx *node*
                          ["INSERT INTO foo (_id, _valid_from) VALUES ('foo', DATE '2018-01-01')"])]
 
-    (t/is (= 0 tx))
+    (t/is (= {:tx-id 0} tx))
 
     (t/is (= [{:xt/id "foo", :xt/valid-from (-> (time/->zdt #inst "2018")
                                                 (.withZoneSameLocal (ZoneId/systemDefault))
@@ -554,7 +554,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
           "original node")
 
     (with-open [conn (jdbc/get-connection client)]
-      (t/is (= 1 (xt/submit-tx conn [[:put-docs :docs {:xt/id :bar, :name "Bar"}]])))
+      (t/is (= {:tx-id 1} (xt/submit-tx conn [[:put-docs :docs {:xt/id :bar, :name "Bar"}]])))
 
       (t/is (= [{:name "Bar", :xt/id :bar}
                 {:xt/id :foo, :name "Foo"}]
