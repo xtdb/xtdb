@@ -215,7 +215,7 @@
               (util/close out))))))))
 
 (s/def ::current-time inst?)
-(s/def ::snapshot-time (s/nilable ::time/datetime-value))
+(s/def ::snapshot-token (s/nilable string?))
 (s/def ::await-token (s/nilable string?))
 
 (s/def ::tx-timeout
@@ -229,12 +229,12 @@
 
 (s/def ::query-body
   (s/keys :req-un [::query],
-          :opt-un [::await-token ::snapshot-time ::current-time ::tx-timeout ::args ::default-tz ::key-fn ::explain?]))
+          :opt-un [::await-token ::snapshot-token ::current-time ::tx-timeout ::args ::default-tz ::key-fn ::explain?]))
 
 (defn- <-QueryOpts [^QueryOptions opts]
   (->> {:args (.getArgs opts)
         :await-token (.getAwaitToken opts)
-        :snapshot-time (.getSnapshotTime opts)
+        :snapshot-token (.getSnapshotToken opts)
         :current-time (.getCurrentTime opts)
         :tx-timeout (.getTxTimeout opts)
         :default-tz (.getDefaultTz opts)

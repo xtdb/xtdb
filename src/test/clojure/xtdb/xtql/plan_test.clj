@@ -6,14 +6,14 @@
 (ns xtdb.xtql.plan-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.basis :as basis]
             [xtdb.compactor :as c]
             [xtdb.james-bond :as bond]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.xtql :as xtql]
-            [xtdb.xtql.plan :as plan])
-  (:import (xtdb.error Incorrect)))
+            [xtdb.xtql.plan :as plan]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -1198,7 +1198,8 @@
 
 (t/deftest test-temporal-opts
   (letfn [(q [query {:keys [system-time]} current-time]
-            (xt/q tu/*node* query {:snapshot-time system-time, :current-time current-time}))]
+            (xt/q tu/*node* query {:snapshot-token (basis/->time-basis-str {"xtdb" [system-time]})
+                                   :current-time current-time}))]
 
     ;; Matthew 2015+
 
@@ -1333,7 +1334,8 @@
 (t/deftest test-temporal-opts-from-and-to
   (letfn [(q [query {:keys [system-time]} current-time]
             (xt/q tu/*node* query
-                  {:snapshot-time system-time, :current-time current-time}))]
+                  {:snapshot-token (basis/->time-basis-str {"xtdb" [system-time]})
+                   :current-time current-time}))]
 
     ;; tx0
     ;; 2015 - eof : Matthew
@@ -1384,7 +1386,8 @@
 (deftest test-snodgrass-99-tutorial
   (letfn [(q [q+args {:keys [system-time]} current-time]
             (xt/q tu/*node* q+args
-                  {:snapshot-time system-time, :current-time current-time}))]
+                  {:snapshot-token (basis/->time-basis-str {"xtdb" [system-time]})
+                   :current-time current-time}))]
 
     (let [tx0 (xt/execute-tx tu/*node*
                              [[:put-docs {:into :docs, :valid-from #inst "1998-01-10"}
@@ -1902,12 +1905,12 @@
     (t/is (= [{:x {:xt/id 0, :b 0}}]
              (q '{:find [x]
                   :where [($ :x {:xt/* x})],}
-                {:snapshot-time #inst "2023-01-18"})))
+                {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2023-01-18"]})})))
 
     (t/is (= [{:x {:xt/id 0, :a 0}}]
              (q '{:find [x]
                   :where [($ :x {:xt/* x})],}
-                {:snapshot-time #inst "2023-01-17"})))))
+                {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2023-01-17"]})})))))
 
 #_
 (t/deftest test-row-alias-app-time-key-set ;TODO from-star

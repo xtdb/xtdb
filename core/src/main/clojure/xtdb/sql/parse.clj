@@ -9,8 +9,8 @@
   (visitQueryExpr [_ stmt]
     [:query {:stmt stmt}])
 
-  (visitShowSnapshotTimeStatement [_ _]
-    [:show-snapshot-time])
+  (visitShowSnapshotTokenStatement [_ _]
+    [:show-snapshot-token])
 
   (visitShowClockTimeStatement [_ _]
     [:show-clock-time])

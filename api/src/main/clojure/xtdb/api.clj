@@ -50,9 +50,9 @@
 (defmacro ^:private with-conn [[binding connectable] & body]
   `(with-conn* ~connectable (fn [~binding] ~@body)))
 
-(defn- begin-ro-sql [{:keys [default-tz await-token snapshot-time current-time]}]
+(defn- begin-ro-sql [{:keys [default-tz await-token snapshot-token current-time]}]
   (let [kvs (->> [["TIMEZONE = ?" (some-> default-tz str)]
-                  ["SNAPSHOT_TIME = ?" snapshot-time]
+                  ["SNAPSHOT_TOKEN = ?" snapshot-token]
                   ["CLOCK_TIME = ?" current-time]
                   ["AWAIT_TOKEN = ?" await-token]]
                  (into [] (filter (comp some? second))))]
@@ -119,7 +119,7 @@
 
   - query: either an XTQL or SQL query.
   - opts:
-    - `:snapshot-time`: see 'Transaction Basis'
+    - `:snapshot-token`: see 'Transaction Basis'
     - `:current-time`: override wall-clock time to use in functions that require it
     - `:default-tz`: overrides the default time zone for the query
 
@@ -141,16 +141,16 @@
   Transaction Basis:
 
   In XTDB there are a number of ways to control at what point in time a query is run -
-  this is done via a snapshot-time basis optionally supplied as part of the query map.
+  this is done via a snapshot-token basis optionally supplied as part of the query map.
 
   In the case a basis is not provided the query is guaranteed to run sometime after
   the latest transaction submitted by this connection/node.
 
-  Alternatively a specific snapshot-time can be supplied,
-  in this case the query will be run exactly at that system-time, ensuring the repeatability of queries.
+  Alternatively a specific snapshot-token can be supplied,
+  in this case the query will be run exactly at that basis, ensuring the repeatability of queries.
 
   (q conn '(from ...)
-     {:snapshot-time #inst \"2020-01-02\"}))"
+     {:snapshot-token \"ChAKBHh0ZGISCAoGCIDCr/AF\"}))"
   ([node query] (q node query {}))
 
   ([node query opts]

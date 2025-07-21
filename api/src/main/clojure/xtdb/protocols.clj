@@ -16,6 +16,7 @@
   (^long latest-submitted-tx-id [node])
   (await-token [node])
   (latest-completed-tx [node])
+  (snapshot-token [node])
   (status [node] [node opts]))
 
 (def http-routes

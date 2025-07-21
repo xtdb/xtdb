@@ -4,6 +4,7 @@
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
+            [xtdb.basis :as basis]
             [xtdb.block-catalog :as block-cat]
             [xtdb.buffer-pool :as bp]
             [xtdb.check-pbuf :as cpb]
@@ -149,7 +150,7 @@
                                _valid_from, _valid_to
                                _system_from, _system_to]]
                             {:node tu/*node*,
-                             :snapshot-time tt}))
+                             :snapshot-token (basis/->time-basis-str {"xtdb" [tt]})}))
             "re-using the original tx basis should see the same result"))))
 
 (t/deftest can-handle-dynamic-cols-in-same-block

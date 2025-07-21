@@ -46,7 +46,6 @@
   (-> (into {:default-tz default-tz,
              :key-fn (serde/read-key-fn :snake-case-string)}
             query-opts)
-      (update :snapshot-time #(some-> % (time/->instant)))
       (update :current-time #(some-> % (time/->instant)))))
 
 (defn- then-execute-prepared-query [^PreparedQuery prepared-query, allocator {:keys [args], :as query-opts} {:keys [query-timer] :as metrics}]
@@ -78,6 +77,7 @@
     (.add metrics-registry reg))
 
   (getAwaitToken [_] (.get !await-token))
+
   (setAwaitToken [_ await-token]
     (loop []
       (let [old-token (.get !await-token)]
@@ -142,6 +142,7 @@
   (latest-completed-tx [_] (.getLatestCompletedTx (.getLiveIndex db)))
   (latest-submitted-tx-id [_] (.getLatestSubmittedMsgId (.getLogProcessor db)))
   (await-token [this] (basis/->tx-basis-str {"xtdb" [(xtp/latest-submitted-tx-id this)]}))
+  (snapshot-token [this] (basis/->time-basis-str {"xtdb" [(:system-time (xtp/latest-completed-tx this))]}))
   
   (status [this]
     {:latest-completed-tx (.getLatestCompletedTx (.getLiveIndex db))

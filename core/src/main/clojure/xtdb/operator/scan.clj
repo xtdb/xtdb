@@ -1,6 +1,7 @@
 (ns xtdb.operator.scan
   (:require [clojure.spec.alpha :as s]
             [integrant.core :as ig]
+            [xtdb.basis :as basis]
             [xtdb.expression :as expr]
             [xtdb.expression.metadata :as expr.meta]
             xtdb.indexer.live-index
@@ -59,7 +60,7 @@
 (def ^:dynamic *column->pushdown-bloom* {})
 
 (defn ->temporal-bounds [^BufferAllocator alloc, ^RelationReader args,
-                         {:keys [for-valid-time for-system-time]}, ^Instant snapshot-time]
+                         {:keys [for-valid-time for-system-time]}, ^Instant snapshot-token]
   (letfn [(->time-μs
             ([arg] (->time-μs arg nil))
             ([[tag arg] default]
@@ -104,7 +105,7 @@
     (let [^TemporalDimension sys-dim (apply-constraint for-system-time)
           bounds (TemporalBounds. (apply-constraint for-valid-time) sys-dim)]
       ;; we further constrain bases on tx
-      (when-let [system-time (some-> snapshot-time time/instant->micros)]
+      (when-let [system-time (some-> snapshot-token time/instant->micros)]
         (.setUpper sys-dim (min (inc system-time) (.getUpper sys-dim)))
 
         (when-not for-system-time
@@ -227,7 +228,7 @@
 
           {:fields fields
            :stats {:row-count row-count}
-           :->cursor (fn [{:keys [allocator, ^Snapshot snapshot, snapshot-time, schema, args]}]
+           :->cursor (fn [{:keys [allocator, ^Snapshot snapshot, snapshot-token, schema, args]}]
                        (if (and (info-schema/derived-tables table) (not (info-schema/template-tables table)))
                          (let [derived-table-schema (info-schema/derived-tables table)]
                            (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args))
@@ -242,7 +243,8 @@
                                                      (fn [fvt]
                                                        (or fvt [:at [:now]]))))
                                live-table-snap (some-> (.getLiveIndex snapshot) (.liveTable table))
-                               temporal-bounds (->temporal-bounds allocator args scan-opts snapshot-time)]
+                               temporal-bounds (->temporal-bounds allocator args scan-opts (-> (basis/<-time-basis-str snapshot-token)
+                                                                                               (get-in ["xtdb" 0])))]
                            (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                              (let [merge-tasks (util/with-open [page-metadatas (LinkedList.)]
                                                  (let [segments (cond-> (mapv (fn [{:keys [^String trie-key]}]

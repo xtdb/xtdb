@@ -50,7 +50,7 @@ directlyExecutableStatement
     | SHOW showVariable # ShowVariableStatement
     | SHOW identifier # ShowSessionVariableStatement
     | SHOW AWAIT_TOKEN # ShowAwaitTokenStatement
-    | SHOW SNAPSHOT_TIME # ShowSnapshotTimeStatement
+    | SHOW SNAPSHOT_TOKEN # ShowSnapshotTokenStatement
     | SHOW CLOCK_TIME # ShowClockTimeStatement
     | CREATE USER userName WITH PASSWORD password=characterString # CreateUserStatement
     | ALTER USER userName WITH PASSWORD password=characterString # AlterUserStatement
@@ -74,7 +74,7 @@ settingQueryVariables : 'SETTING' settingQueryVariable (',' settingQueryVariable
 settingQueryVariable
     : 'DEFAULT' 'VALID_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultValidTime
     | 'DEFAULT' 'SYSTEM_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultSystemTime
-    | SNAPSHOT_TIME ('TO' | '=') snapshotTime=expr # SettingSnapshotTime
+    | SNAPSHOT_TOKEN ('TO' | '=') snapshotToken=expr # SettingSnapshotToken
     | CLOCK_TIME ('TO' | '=') clockTime=expr # SettingClockTime
     ;
 
@@ -349,7 +349,7 @@ exprPrimary
 currentInstantFunction
     : 'CURRENT_DATE' ( '(' ')' )? # CurrentDateFunction
     | ('CURRENT_TIMESTAMP' | 'NOW') ('(' precision? ')')? # CurrentTimestampFunction
-    | 'SNAPSHOT_TIME' ('(' ')')? # SnapshotTimeFunction
+    | 'SNAPSHOT_TOKEN' ('(' ')')? # SnapshotTokenFunction
     | LOCAL_DATE ( '(' ')' )? # LocalDateFunction
     | LOCAL_TIMESTAMP ('(' precision ')')? # LocalTimestampFunction
     ;
@@ -847,7 +847,7 @@ transactionMode
 txTzOption : ('TIMEZONE' | 'TIME' 'ZONE') '='? tz=expr ;
 
 readOnlyTxOption
-    : 'SNAPSHOT_TIME' '='? snapshotTime=expr # SnapshotTimeTxOption
+    : 'SNAPSHOT_TOKEN' '='? snapshotToken=expr # SnapshotTokenTxOption
     | 'CLOCK_TIME' '='? clockTime=expr # ClockTimeTxOption
     | AWAIT_TOKEN '='? awaitToken=expr # AwaitTokenTxOption
     | txTzOption # TxTzOption0

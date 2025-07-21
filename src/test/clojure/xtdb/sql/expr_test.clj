@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.basis :as basis]
             [xtdb.expression :as expr]
             [xtdb.sql :as sql]
             [xtdb.test-util :as tu]
@@ -1445,30 +1446,31 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= '(and (= f/a 1)) (plan-expr "WHERE , a = 1")))
     (t/is (= '(and (= f/a 1) (= f/b 2)) (plan-expr "WHERE a = 1, , b = 2 ,")))))
 
-(t/deftest select-snapshot-time
-  (t/is (= [{}] (xt/q tu/*node* "SELECT SNAPSHOT_TIME ts"))
+(t/deftest select-snapshot-token
+  (t/is (= [{:token (basis/->time-basis-str {"xtdb" [nil]})}]
+           (xt/q tu/*node* "SELECT SNAPSHOT_TOKEN token"))
         "before any transactions")
 
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :x 3}]])
 
-  (t/is (= [{:ts (time/->zdt #inst "2020-01-01")}]
-           (xt/q tu/*node* "SELECT SNAPSHOT_TIME ts")))
+  (t/is (= [{:token (basis/->time-basis-str {"xtdb" [#inst "2020-01-01"]})}]
+           (xt/q tu/*node* "SELECT SNAPSHOT_TOKEN token")))
 
-  (t/is (= [{:snapshot-time (time/->zdt #inst "2020-01-01")}]
-           (xt/q tu/*node* "SHOW SNAPSHOT_TIME")))
+  (t/is (= [{:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020-01-01"]})}]
+           (xt/q tu/*node* "SHOW SNAPSHOT_TOKEN")))
 
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 2, :x 5}]])
 
-  (let [sql "SELECT SNAPSHOT_TIME ts, * FROM docs ORDER BY _id"]
-    (t/is (= [{:ts (time/->zdt #inst "2020-01-02"), :xt/id 1, :x 3}
-              {:ts (time/->zdt #inst "2020-01-02"), :xt/id 2, :x 5}]
+  (let [sql "SELECT SNAPSHOT_TOKEN token, * FROM docs ORDER BY _id"]
+    (t/is (= [{:token (basis/->time-basis-str {"xtdb" [#inst "2020-01-02"]}), :xt/id 1, :x 3}
+              {:token (basis/->time-basis-str {"xtdb" [#inst "2020-01-02"]}), :xt/id 2, :x 5}]
              (xt/q tu/*node* sql)))
 
-    (t/is (= [{:ts (time/->zdt #inst "2020-01-01"), :xt/id 1, :x 3}]
-             (xt/q tu/*node* sql {:snapshot-time #inst "2020-01-01"})))
+    (t/is (= [{:token (basis/->time-basis-str {"xtdb" [#inst "2020-01-01"]}), :xt/id 1, :x 3}]
+             (xt/q tu/*node* sql {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020-01-01"]})})))
 
-    (t/is (= [{:snapshot-time (time/->zdt #inst "2020-01-01")}]
-             (xt/q tu/*node* "SHOW SNAPSHOT_TIME" {:snapshot-time #inst "2020-01-01"})))))
+    (t/is (= [{:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020-01-01"]})}]
+             (xt/q tu/*node* "SHOW SNAPSHOT_TOKEN" {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020-01-01"]})})))))
 
 (t/deftest show-clock-time
   (t/testing "defaults to now"

@@ -68,7 +68,7 @@
 
   (t/is (= [{:xt/id 1}]
            (xt/q tu/*node* '(from :docs [xt/id])
-                 {:snapshot-time #xt/zdt "2020-01-02Z"
+                 {:snapshot-token (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-02Z"]})
                   :await-token (basis/->tx-basis-str {"xtdb" [1]})})))
 
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 2 :key :some-keyword}]])
@@ -159,7 +159,7 @@
                                 :request-method :post
                                 :content-type :json
                                 :form-params {:sql "SELECT docs._id FROM docs"
-                                              :queryOpts {:snapshotTime (str system-time)
+                                              :queryOpts {:snapshotToken (basis/->time-basis-str {"xtdb" [system-time]})
                                                           :keyFn "KEBAB_CASE_KEYWORD"}}
                                 :url (http-url "query")})
                  :body
