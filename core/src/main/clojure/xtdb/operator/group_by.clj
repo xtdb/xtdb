@@ -67,7 +67,7 @@
     (let [row-count (.getRowCount in-rel)
           builder (.buildFromRelation rel-map in-rel)]
       (dotimes [idx row-count]
-        (.writeInt group-mapping (emap/inserted-idx (.addIfNotPresent builder idx))))
+        (.writeInt group-mapping (RelationMap/insertedIdx (.addIfNotPresent builder idx))))
 
       group-mapping))
 
