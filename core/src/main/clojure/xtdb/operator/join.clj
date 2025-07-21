@@ -178,7 +178,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^xtdb.arrow.RelationReader probe-phase
-  (fn [join-type probe-rel rel-map matched-build-idxs side-flipped?]
+  (fn [join-type probe-rel rel-map matched-build-idxs]
     join-type))
 
 (defn- probe-inner-join-select
@@ -203,14 +203,14 @@
 
 (defn- join-rels
   "Takes a relation (probe-rel) and its mapped relation (via rel-map) and returns a relation with the columns of both."
-  [^RelationReader probe-rel
-   ^IRelationMap rel-map
-   side-flipped?
+  [join-type
+   ^RelationReader probe-rel
+   ^IRelationMap rel-map 
    [^ints probe-sel, ^ints build-sel :as _selection]]
   (let [built-rel (.getBuiltRelation rel-map)
         selected-probe-rel (.select probe-rel probe-sel)
         selected-build-rel (.select built-rel build-sel)]
-    (vr/rel-reader (if side-flipped? 
+    (vr/rel-reader (if (= join-type ::left-outer-join-flipped) 
                      (concat selected-probe-rel selected-build-rel)
                      (concat selected-build-rel selected-probe-rel)))))
 
@@ -225,23 +225,21 @@
     (.toArray (.build matching-probe-idxs))))
 
 (defmethod probe-phase ::inner-join
-  [_join-type
+  [join-type
    ^RelationReader probe-rel
    ^IRelationMap rel-map
-   _matched-build-idxs
-   _side-flipped?]
-  (join-rels probe-rel rel-map false (probe-inner-join-select probe-rel rel-map)))
+   _matched-build-idxs]
+  (join-rels join-type probe-rel rel-map (probe-inner-join-select probe-rel rel-map)))
 
 (defmethod probe-phase ::semi-join
   [_join-type
    ^RelationReader probe-rel
    ^IRelationMap rel-map
-   _matched-build-idxs
-   _side-flipped?]
+   _matched-build-idxs]
   (.select probe-rel (probe-semi-join-select probe-rel rel-map)))
 
 (defmethod probe-phase ::anti-semi-join
-  [_join-type, ^RelationReader probe-rel, ^IRelationMap rel-map, _matched-build-idxs, _side-flipped?]
+  [_join-type, ^RelationReader probe-rel, ^IRelationMap rel-map, _matched-build-idxs]
   (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
         matching-probe-idxs (IntStream/builder)]
     (dotimes [probe-idx (.getRowCount probe-rel)]
@@ -254,8 +252,7 @@
   [_join-type
    ^RelationReader probe-rel
    ^IRelationMap rel-map
-   _matched-build-idxs
-   _side-flipped?]
+   _matched-build-idxs]
   (.select probe-rel (probe-semi-join-select probe-rel rel-map)))
 
 (defn- int-array-concat
@@ -265,7 +262,7 @@
     (System/arraycopy arr2 0 ret-arr (alength arr1) (alength arr2))
     ret-arr))
 
-(defn- probe-outer-join-select [^RelationReader probe-rel, rel-map, ^RoaringBitmap matched-build-idxs, side-flipped?]
+(defn- probe-outer-join-select [join-type ^RelationReader probe-rel, rel-map, ^RoaringBitmap matched-build-idxs]
   (let [[probe-sel build-sel] (probe-inner-join-select probe-rel rel-map)
 
         _ (when matched-build-idxs (.add matched-build-idxs ^ints build-sel))
@@ -274,7 +271,7 @@
         probe-int-stream (IntStream/builder)
         build-int-stream (IntStream/builder)
 
-        _ (when (not side-flipped?)
+        _ (when-not (= join-type ::left-outer-join-flipped)
             (dotimes [idx (.getRowCount probe-rel)]
               (when-not (.contains probe-bm idx)
                 (.add probe-int-stream idx)
@@ -290,22 +287,21 @@
 
 (derive ::full-outer-join ::outer-join)
 (derive ::left-outer-join ::outer-join)
+(derive ::left-outer-join-flipped ::outer-join)
 
 (defmethod probe-phase ::outer-join
-  [_join-type
+  [join-type
    ^RelationReader probe-rel
    ^IRelationMap rel-map
-   ^RoaringBitmap matched-build-idxs
-   side-flipped?]
-  (->> (probe-outer-join-select probe-rel rel-map matched-build-idxs side-flipped?)
-       (join-rels probe-rel rel-map side-flipped?)))
+   ^RoaringBitmap matched-build-idxs]
+  (->> (probe-outer-join-select join-type probe-rel rel-map matched-build-idxs)
+       (join-rels join-type probe-rel rel-map)))
 
 (defmethod probe-phase ::single-join
-  [_join-type
+  [join-type
    ^RelationReader probe-rel
    ^IRelationMap rel-map
-   _matched-build-idxs
-   _side-flipped?]
+   _matched-build-idxs]
 
   (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
         matching-build-idxs (IntStream/builder)
@@ -328,7 +324,7 @@
           (.add matching-build-idxs emap/nil-row-idx))))
 
     (->> [(.toArray (.build matching-probe-idxs)) (.toArray (.build matching-build-idxs))]
-         (join-rels probe-rel rel-map false))))
+         (join-rels join-type probe-rel rel-map))))
 
 (deftype JoinCursor [^BufferAllocator allocator, ^ICursor build-cursor,
                      ^:unsynchronized-mutable ^ICursor probe-cursor 
@@ -337,8 +333,7 @@
                      ^IRelationMap rel-map
                      ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
-                     join-type
-                     side-flipped?]
+                     join-type]
   ICursor
   (tryAdvance [this c]
     (build-phase build-cursor rel-map pushdown-blooms)
@@ -359,7 +354,7 @@
                          (.tryAdvance ^ICursor (.probe-cursor this)
                                       (fn [^RelationReader probe-rel]
                                         (when (pos? (.getRowCount probe-rel))
-                                          (with-open [out-rel (-> (probe-phase join-type probe-rel rel-map matched-build-idxs side-flipped?)
+                                          (with-open [out-rel (-> (probe-phase join-type probe-rel rel-map matched-build-idxs)
                                                                   (.openSlice allocator))]
                                             (when (pos? (.getRowCount out-rel))
                                               (aset advanced? 0 true)
@@ -371,8 +366,8 @@
                  build-row-count (long (.getRowCount build-rel))
                  unmatched-build-idxs (RoaringBitmap/flip matched-build-idxs 0 build-row-count)]
              
-             ;; Only need to remove the nil-row-idx if we are not side-flipped.
-             (when-not side-flipped?
+             ;; Only need to remove the nil-row-idx for full outer joins
+             (when (= join-type ::full-outer-join)
                (.remove unmatched-build-idxs emap/nil-row-idx))
 
              (when-not (.isEmpty unmatched-build-idxs)
@@ -382,7 +377,7 @@
                (let [nil-rel (vw/rel-wtr->rdr nil-rel-writer)
                      build-sel (.toArray unmatched-build-idxs)
                      probe-sel (int-array (alength build-sel))]
-                 (.accept c (join-rels nil-rel rel-map side-flipped? [probe-sel build-sel]))
+                 (.accept c (join-rels join-type nil-rel rel-map [probe-sel build-sel]))
                  true)))))))
 
   (close [_]
@@ -469,7 +464,7 @@
   [{:keys [condition left right]}
    {:keys [param-fields]}
    {:keys [build-side merge-fields-fn join-type
-           with-nil-row? pushdown-blooms? matched-build-idxs? side-flipped? mark-col-name]}]
+           with-nil-row? pushdown-blooms? matched-build-idxs? mark-col-name]}]
   (let [{left-fields :fields, ->left-cursor :->cursor} left
         {right-fields :fields, ->right-cursor :->cursor} right
         {equis :equi-condition, thetas :pred-expr} (group-by first condition)
@@ -533,7 +528,7 @@
                      (project/->project-cursor opts
                                                (if (= join-type ::mark-join)
                                                  (MarkJoinCursor. allocator build-cursor nil (partial ->probe-cursor opts) relation-map matched-build-idxs mark-col-name pushdown-blooms join-type)
-                                                 (JoinCursor. allocator build-cursor nil nil (partial ->probe-cursor opts) relation-map matched-build-idxs pushdown-blooms join-type side-flipped?))
+                                                 (JoinCursor. allocator build-cursor nil nil (partial ->probe-cursor opts) relation-map matched-build-idxs pushdown-blooms join-type))
                                                output-projections))))}))
 
 (defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]
@@ -562,13 +557,16 @@
         build-side (determine-build-side left right :right)]
     (emit-join-expr emitted-join-children
                     args
-                    {:build-side build-side
-                     :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
-                     :join-type ::left-outer-join
-                     :with-nil-row? (= build-side :right)
-                     :matched-build-idxs? (= build-side :left)
-                     :side-flipped? (= build-side :left)
-                     :pushdown-blooms? (= build-side :left)})))
+                    (if (= build-side :right)
+                      {:build-side build-side
+                       :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
+                       :join-type ::left-outer-join
+                       :with-nil-row? true}
+                      {:build-side build-side
+                       :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
+                       :join-type ::left-outer-join-flipped
+                       :matched-build-idxs? true 
+                       :pushdown-blooms? true}))))
 
 (defmethod lp/emit-expr :full-outer-join [join-expr args]
   (emit-join-expr-and-children join-expr args
