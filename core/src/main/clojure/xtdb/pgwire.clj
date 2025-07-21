@@ -1279,8 +1279,9 @@
   (close-portal conn "")
 
   (try
-    (doseq [stmt (parse-sql query)]
-      (when-not (boolean (:transaction @conn-state))
+    (doseq [{:keys [statement-type] :as stmt} (parse-sql query)]
+      (when-not (or (boolean (:transaction @conn-state))
+                    (= statement-type :show-variable))
         (cmd-begin conn {:implicit? true} {}))
 
       (try

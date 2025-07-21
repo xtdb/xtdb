@@ -282,17 +282,11 @@
      (submit-tx* conn tx-ops (-> tx-opts
                                  (assoc :async? true)))
 
-     (try
-       (jdbc/execute! conn ["BEGIN READ ONLY WITH (AWAIT_TOKEN = -1)"])
-
-       (let [{:keys [tx-id]} (jdbc/execute-one! conn ["SHOW LATEST_SUBMITTED_TX"]
-                                                {:builder-fn xt-jdbc/builder-fn})]
-         (when (instance? xtdb.api.DataSource connectable)
-           (.setAwaitToken ^xtdb.api.DataSource connectable tx-id))
-         {:tx-id tx-id})
-
-       (finally
-         (jdbc/execute! conn ["ROLLBACK"]))))))
+     (let [{:keys [tx-id]} (jdbc/execute-one! conn ["SHOW LATEST_SUBMITTED_TX"]
+                                              {:builder-fn xt-jdbc/builder-fn})]
+       (when (instance? xtdb.api.DataSource connectable)
+         (.setAwaitToken ^xtdb.api.DataSource connectable tx-id))
+       {:tx-id tx-id}))))
 
 (defn execute-tx
   "Executes a transaction; blocks waiting for the receiving node to index it.
