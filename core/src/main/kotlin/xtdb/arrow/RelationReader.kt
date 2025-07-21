@@ -69,6 +69,9 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     }
 
     companion object {
+        fun from(cols: List<VectorReader>): RelationReader =
+            FromCols(cols.associateByTo(linkedMapOf()) { it.name }, cols.firstOrNull()?.valueCount ?: 0)
+
         @JvmStatic
         fun from(cols: Iterable<VectorReader>, rowCount: Int): RelationReader =
             FromCols(cols.associateByTo(linkedMapOf()) { it.name }, rowCount)
