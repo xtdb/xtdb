@@ -174,7 +174,8 @@
                                    build-col (.vectorForOrNull build-rel (str build-col-name))
                                    ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
                                (dotimes [build-idx (.getRowCount build-rel)]
-                                 (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))))
+                                 (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx)))))))))
+  (.compactHashTrie rel-map))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^xtdb.arrow.RelationReader probe-phase

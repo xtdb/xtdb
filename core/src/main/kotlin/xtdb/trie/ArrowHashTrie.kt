@@ -21,7 +21,7 @@ class ArrowHashTrie(private val nodesVec: Vector) :
         private val startIdx = iidBranchVec.getListStartIndex(branchVecIdx)
         private val count = iidBranchVec.getListCount(branchVecIdx)
 
-        override val iidChildren: Array<Node?>
+        override val hashChildren: Array<Node?>
             get() = Array(count) { childBucket ->
                 val childIdx = childBucket + startIdx
                 if (iidBranchElVec.isNull(childIdx))
@@ -34,7 +34,7 @@ class ArrowHashTrie(private val nodesVec: Vector) :
     inner class Leaf(override val path: ByteArray, private val leafOffset: Int) : Node {
         val dataPageIndex get() = dataPageIdxVec.getInt(leafOffset)
 
-        override val iidChildren = null
+        override val hashChildren = null
     }
 
     private fun forIndex(path: ByteArray, idx: Int) =
