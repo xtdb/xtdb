@@ -77,7 +77,11 @@
                                                         (into {}
                                                               (map (fn [[k v]]
                                                                      (let [k (symbol k)
-                                                                           expr (expr/form->expr v (assoc opts :param-types param-types))
+                                                                           expr (try
+                                                                                  (expr/form->expr v (assoc opts :param-types param-types))
+                                                                                  (catch Exception e
+                                                                                    (clojure.tools.logging/warn "fail" {:expr v, :param-types param-types})
+                                                                                    (throw e)))
                                                                            ^Set field-set (.computeIfAbsent field-sets k (fn [_] (HashSet.)))]
                                                                        (case (:op expr)
                                                                          :literal (do

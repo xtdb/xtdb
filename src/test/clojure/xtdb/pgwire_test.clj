@@ -1726,8 +1726,8 @@
     (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW AWAIT_TOKEN"])))
 
-    (t/is (= [{:tx-id 0, :system-time #xt/zdt "2020-01-01Z[UTC]"}]
-             (q conn ["SHOW LATEST_COMPLETED_TX"])))
+    (t/is (= [{:db-name "xtdb", :part 0, :tx-id 0, :system-time #xt/zdt "2020-01-01Z[UTC]"}]
+             (q conn ["SHOW LATEST_COMPLETED_TXS"])))
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
 
@@ -1739,8 +1739,8 @@
     (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW AWAIT_TOKEN"])))
 
-    (t/is (= [{:tx-id 1, :system-time #xt/zdt "2020-01-02Z[UTC]"}]
-             (q conn ["SHOW LATEST_COMPLETED_TX"])))
+    (t/is (= [{:db-name "xtdb", :part 0, :tx-id 1, :system-time #xt/zdt "2020-01-02Z[UTC]"}]
+             (q conn ["SHOW LATEST_COMPLETED_TXS"])))
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
 
@@ -1771,6 +1771,9 @@
     (t/is (= [{:tx-id 0, :system-time #xt/zdt "2020-01-01T00:00Z[UTC]", :committed true,
                :await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW LATEST_SUBMITTED_TX"])))
+
+    (t/is (= [{:db-name "xtdb", :part 0, :tx-id 0}]
+             (q conn ["SHOW LATEST_SUBMITTED_TXS"])))
 
     (t/is (thrown? PSQLException (jdbc/execute! conn ["ASSERT FALSE"])))
 

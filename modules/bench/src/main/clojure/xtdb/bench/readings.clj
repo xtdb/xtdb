@@ -113,7 +113,8 @@
 
                   [{:t :call
                     :f (fn [{:keys [node !state]}]
-                         (let [{:keys [latest-completed-tx]} (xt/status node)
+                         (let [latest-completed-tx (-> (xt/status node)
+                                                       (get-in [:latest-completed-txs "xtdb" 0]))
                                max-valid-time (-> (xt/q node max-valid-time-q)
                                                   first
                                                   :max-valid-time)]

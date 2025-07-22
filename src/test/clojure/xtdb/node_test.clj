@@ -875,7 +875,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
               (reset! !skiptxid tx-id)))
 
-          (t/is (= @!skiptxid (:tx-id (:latest-completed-tx (xt/status node)))))))
+          (t/is (= @!skiptxid (-> (xt/status node)
+                                  (get-in [:latest-completed-txs "xtdb" 0 :tx-id]))))))
 
       (t/testing "node with txs to skip"
         (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
@@ -888,7 +889,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (t/is (= (set [{:xt/id :foo}]) (set (xt/q node "SELECT * from xt_docs")))))
 
           (t/testing "Latest submitted tx id should be the one that was skipped"
-            (t/is (= @!skiptxid (:tx-id (:latest-completed-tx (xt/status node))))))
+            (t/is (= @!skiptxid (-> (xt/status node)
+                                    (get-in [:latest-completed-txs "xtdb" 0 :tx-id])))))
 
           ;; Call finish-block! to write files
           (tu/finish-block! node)))
@@ -899,7 +901,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                           :compactor {:threads 0}})]
 
           (t/testing "Latest submitted tx id should still be the one that was skipped"
-            (t/is (= @!skiptxid (:tx-id (:latest-completed-tx (xt/status node))))))
+            (t/is (= @!skiptxid (-> (xt/status node)
+                                    (get-in [:latest-completed-txs "xtdb" 0 :tx-id])))))
 
           (t/testing "Can send a new transaction after skipping one"
             (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]])

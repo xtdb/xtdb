@@ -803,20 +803,23 @@
 
 (defn- show-var-query [variable]
   (case variable
-    "latest_completed_tx" (-> '[:select (not (nil? tx_id))
-                                [:table [{:tx_id ?_0, :system_time ?_1}]]]
-                              (with-meta {:param-count 2}))
+    "latest_completed_txs" (-> '[:table [{:db-name ?_0, :part ?_1, :tx_id ?_2, :system_time ?_3}]]
+                               (with-meta {:param-count 4}))
+    "latest_submitted_txs" (-> '[:table [{:db-name ?_0, :part ?_1, :tx_id ?_2}]]
+                               (with-meta {:param-count 3}))
     "latest_submitted_tx" (-> '[:select (not (nil? tx_id))
                                 [:table [{:tx_id ?_0, :system_time ?_1,
-                                          :committed ?_2, :error ?_3
+                                          :committed ?_2, :error ?_3,
                                           :await_token ?_4}]]]
-                              (with-meta {:param-count 4}))
+                              (with-meta {:param-count 5}))
+
     (-> (xt/template [:table [{~(keyword variable) ?_0}]])
         (with-meta {:param-count 1}))))
 
 (defn- show-var-param-types [variable]
   (case variable
-    "latest_completed_tx" [:i64 types/temporal-col-type]
+    "latest_completed_txs" [:utf8 :i32 :i64 types/temporal-col-type]
+    "latest_submitted_txs" [:utf8 :i32 :i64]
     "latest_submitted_tx" [:i64 types/temporal-col-type :bool :transit :utf8]
     "await_token" [:utf8]
     "standard_conforming_strings" [:bool]
@@ -989,10 +992,16 @@
         :show-variable (let [{:keys [variable]} stmt]
                          (util/with-close-on-catch [cursor (->cursor (case variable
                                                                        "await_token" [await-token]
-                                                                       "latest_completed_tx" (mapv (into {} (xtp/latest-completed-tx node))
-                                                                                                   [:tx-id :system-time])
+                                                                       "latest_completed_txs" (for [[db-name parts] (xtp/latest-completed-txs node)
+                                                                                                    [part-idx {:keys [tx-id system-time]}] (map vector (range) parts)
+                                                                                                    arg [db-name (int part-idx) tx-id system-time]]
+                                                                                                arg)
+                                                                       "latest_submitted_txs" (for [[db-name parts] (xtp/latest-submitted-tx-ids node)
+                                                                                                    [part-idx tx-id] (map vector (range) parts)
+                                                                                                    arg [db-name (int part-idx) tx-id]]
+                                                                                                arg)
                                                                        "latest_submitted_tx" (mapv (into {} (assoc (:latest-submitted-tx @conn-state)
-                                                                                                                  :await-token await-token))
+                                                                                                                   :await-token await-token))
                                                                                                    [:tx-id :system-time :committed? :error :await-token])
                                                                        [(get session-params variable)]))]
 

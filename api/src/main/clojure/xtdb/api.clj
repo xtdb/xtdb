@@ -377,10 +377,14 @@
                        (update-vals (fn [metrics]
                                       (mapv #(dissoc % :name) metrics))))
 
-          :latest-completed-tx (some-> (first (status-q conn ["SHOW LATEST_COMPLETED_TX"]))
-                                       (serde/map->TxKey))
+          :latest-completed-txs (-> (status-q conn ["SHOW LATEST_COMPLETED_TXS"])
+                                    (->> (group-by :db-name))
+                                    (update-vals (fn [txs]
+                                                   (mapv #(serde/map->TxKey (select-keys % [:tx-id :system-time])) txs))))
 
-          :latest-submitted-tx (:latest-submitted-tx (first (status-q conn ["SHOW LATEST_SUBMITTED_TX"])))}
+          :latest-submitted-txs (-> (status-q conn ["SHOW LATEST_SUBMITTED_TXS"])
+                                    (->> (group-by :db-name))
+                                    (update-vals #(mapv :tx-id %)))}
 
          (finally
            (jdbc/execute! conn ["ROLLBACK"])))))))

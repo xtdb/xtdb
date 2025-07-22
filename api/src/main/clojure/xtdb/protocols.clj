@@ -13,10 +13,12 @@
   (^xtdb.query.PreparedQuery prepare-ra [node ra-plan query-opts]))
 
 (defprotocol PStatus
-  (^long latest-submitted-tx-id [node])
+  (latest-submitted-tx-ids [node])
+  (latest-completed-txs [node])
+
   (await-token [node])
-  (latest-completed-tx [node])
   (snapshot-token [node])
+
   (status [node] [node opts]))
 
 (def http-routes

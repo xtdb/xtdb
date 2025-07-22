@@ -139,14 +139,17 @@
           (throw e)))))
 
   xtp/PStatus
-  (latest-completed-tx [_] (.getLatestCompletedTx (.getLiveIndex db)))
-  (latest-submitted-tx-id [_] (.getLatestSubmittedMsgId (.getLogProcessor db)))
-  (await-token [this] (basis/->tx-basis-str {"xtdb" [(xtp/latest-submitted-tx-id this)]}))
-  (snapshot-token [this] (basis/->time-basis-str {"xtdb" [(:system-time (xtp/latest-completed-tx this))]}))
+  (latest-completed-txs [_] {"xtdb" [(.getLatestCompletedTx (.getLiveIndex db))]})
+  (latest-submitted-tx-ids [_] {"xtdb" [(.getLatestSubmittedMsgId (.getLogProcessor db))]})
+
+  (await-token [this] (basis/->tx-basis-str (xtp/latest-submitted-tx-ids this)))
+  (snapshot-token [this] (basis/->time-basis-str (-> (xtp/latest-completed-txs this)
+                                                     (update-vals #(mapv :system-time %)))))
   
   (status [this]
-    {:latest-completed-tx (.getLatestCompletedTx (.getLiveIndex db))
-     :latest-submitted-tx-id (xtp/latest-submitted-tx-id this)
+    {:latest-completed-txs (xtp/latest-completed-txs this)
+     :latest-submitted-tx-ids (xtp/latest-submitted-tx-ids this)
+
      :await-token (xtp/await-token this)})
 
   xtp/PLocalNode
@@ -208,14 +211,23 @@
                                    :tx-error-counter (metrics/add-counter metrics-registry "tx.error"))))]
 
     (doto metrics-registry
-      (metrics/add-gauge "node.tx.latestSubmittedTxId" (fn [] (xtp/latest-submitted-tx-id node)))
-      (metrics/add-gauge "node.tx.latestCompletedTxId" (fn [] (get-in (xtp/status node) [:latest-completed-tx :tx-id] -1)))
+      (metrics/add-gauge "node.tx.latestSubmittedTxId"
+                         (fn []
+                           (-> (xtp/latest-submitted-tx-ids node)
+                               (get-in ["xtdb" 0] -1))))
+
+      (metrics/add-gauge "node.tx.latestCompletedTxId"
+                         (fn []
+                           (-> (xtp/latest-completed-txs node)
+                               (get-in ["xtdb" 0 :tx-id] -1))))
+
       (metrics/add-gauge "node.tx.lag.TxId"
                          (fn []
-                           (let [{:keys [latest-completed-tx ^long latest-submitted-tx-id]} (xtp/status node)]
-                             (if (and latest-completed-tx (> latest-submitted-tx-id ^long (:tx-id latest-completed-tx)))
-                               (- latest-submitted-tx-id ^long (:tx-id latest-completed-tx))
-                               0)))))
+                           (max (- (long (-> (xtp/latest-submitted-tx-ids node)
+                                             (get-in ["xtdb" 0] -1)))
+                                   (long (-> (xtp/latest-completed-txs node)
+                                             (get-in ["xtdb" 0 :tx-id] -1))))
+                                0))))
     node))
 
 (defmethod ig/halt-key! :xtdb/node [_ node]

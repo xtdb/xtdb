@@ -17,13 +17,13 @@
 
       (with-open [node (tu/->local-node {:node-dir node-dir})]
         (binding [*node* node]
-          (t/is (nil? (xtp/latest-completed-tx node)))
+          (t/is (= {"xtdb" [nil]} (xtp/latest-completed-txs node)))
 
           (let [last-tx-key (tsd/submit-ts-devices node {:size :small})]
 
             (log/info "transactions submitted, last tx" (pr-str last-tx-key))
             (xt-log/await-db node last-tx-key (Duration/ofMinutes 15))
-            (t/is (= last-tx-key (xtp/latest-completed-tx node)))
+            (t/is (= {"xtdb" [last-tx-key]} (xtp/latest-completed-txs node)))
             (tu/finish-block! node))
 
           (f))))))
