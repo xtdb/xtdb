@@ -33,7 +33,7 @@
            (xtdb.metadata PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask)
            xtdb.table.TableRef
-           (xtdb.trie ArrowHashTrie$Leaf HashTrie HashTrieKt MergePlanNode MergePlanTask Trie TrieCatalog)
+           (xtdb.trie ArrowHashTrie$Leaf Bucketer HashTrie HashTrieKt MergePlanNode MergePlanTask Trie TrieCatalog)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (s/def ::table ::table/ref)
@@ -153,17 +153,18 @@
       (reify IntPredicate
         (test [_ page-idx]
           (boolean
-            (let [bloom-vec-idx (.rowIndex page-metadata col-name page-idx)]
-              (and (>= bloom-vec-idx 0)
-                   (or (.isNull bloom-rdr bloom-vec-idx)
-                       (MutableRoaringBitmap/intersects pushdown-bloom (BloomUtils/bloomToBitmap bloom-rdr bloom-vec-idx)))))))))))
+           (let [bloom-vec-idx (.rowIndex page-metadata col-name page-idx)]
+             (and (>= bloom-vec-idx 0)
+                  (or (.isNull bloom-rdr bloom-vec-idx)
+                      (MutableRoaringBitmap/intersects pushdown-bloom (BloomUtils/bloomToBitmap bloom-rdr bloom-vec-idx)))))))))))
+
 
 (defn ->path-pred [^ArrowBuf iid-arrow-buf]
   (when iid-arrow-buf
     (let [iid-ptr (ArrowBufPointer. iid-arrow-buf 0 (.capacity iid-arrow-buf))]
       (reify Predicate
         (test [_ path]
-          (zero? (HashTrie/compareToPath iid-ptr path)))))))
+          (zero? (.compareToPath Bucketer/DEFAULT iid-ptr path)))))))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
@@ -240,7 +241,7 @@
                            template-table? (boolean (info-schema/template-table table))]
                        (if (and derived-table-schema (not template-table?))
                          (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args)
-                         (let [iid-pushdown-bloom (get *column->pushdown-bloom* '_iid) 
+                         (let [iid-pushdown-bloom (get *column->pushdown-bloom* '_iid)
                                iid-set (get *column->iid-set* '_iid)
                                iid-bb (or (selects->iid-byte-buffer selects args)
                                           (when (and iid-set (= (count iid-set) 1)) (first iid-set)))

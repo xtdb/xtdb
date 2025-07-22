@@ -18,6 +18,52 @@ fun conjPath(path: ByteArray, idx: Byte): ByteArray {
     return childPath
 }
 
+const val DEFAULT_LEVEL_BITS = 2
+const val DEFAULT_LEVEL_WIDTH = 1 shl DEFAULT_LEVEL_BITS
+
+data class Bucketer(val levelBits: Int = DEFAULT_LEVEL_BITS) {
+
+    val levelWidth: Int = 1 shl levelBits
+    val levelMask: Int = levelWidth - 1
+
+    init {
+        require(levelBits in setOf(2,4,8), {"levelBits must be one of 2, 4 or 8, got $levelBits"})
+    }
+
+    fun bucketFor(byteArray: ByteArray, level: Int): Byte {
+        assert(level * levelBits < byteArray.size * java.lang.Byte.SIZE)
+        val bitIdx = level * levelBits
+        val byteIdx = bitIdx / java.lang.Byte.SIZE
+        val bitOffset = bitIdx % java.lang.Byte.SIZE
+
+        val b = byteArray.get(byteIdx)
+        return ((b.toInt() ushr ((java.lang.Byte.SIZE - levelBits) - bitOffset)) and levelMask).toByte()
+    }
+
+    fun bucketFor(pointer: ArrowBufPointer, level: Int): Byte {
+        assert(level * levelBits < pointer.length * java.lang.Byte.SIZE)
+        val bitIdx = level * levelBits
+        val byteIdx = bitIdx / java.lang.Byte.SIZE
+        val bitOffset = bitIdx % java.lang.Byte.SIZE
+
+        val b = pointer.buf!!.getByte(pointer.offset + byteIdx)
+        return ((b.toInt() ushr ((java.lang.Byte.SIZE - levelBits) - bitOffset)) and levelMask).toByte()
+    }
+
+    fun compareToPath(pointer: ArrowBufPointer, path: ByteArray): Int {
+        for (level in path.indices) {
+            val cmp = bucketFor(pointer, level).toInt() compareTo (path[level].toInt())
+            if (cmp != 0) return cmp
+        }
+        return 0
+    }
+
+    companion object {
+        @JvmField
+        val DEFAULT = Bucketer()
+    }
+}
+
 interface HashTrie<N : Node<N>, L : N> {
     val rootNode: N?
 
@@ -26,44 +72,15 @@ interface HashTrie<N : Node<N>, L : N> {
     interface Node<N : Node<N>> {
         val path: ByteArray
 
-        val iidChildren: Array<N?>?
+        val hashChildren: Array<N?>?
 
         fun leafStream(): Stream<out Node<N>> =
             when {
-                iidChildren != null -> Arrays.stream(iidChildren).flatMap { child -> child?.leafStream() }
+                hashChildren != null -> Arrays.stream(hashChildren).flatMap { child -> child?.leafStream() }
                 else -> Stream.of(this)
             }
 
         val leaves: List<Node<N>> get() = leafStream().toList()
-    }
-
-    @Suppress("MemberVisibilityCanBePrivate")
-    companion object {
-
-        const val LEVEL_BITS: Int = 2
-        const val LEVEL_WIDTH: Int = 1 shl LEVEL_BITS
-        const val LEVEL_MASK: Int = LEVEL_WIDTH - 1
-
-        @JvmStatic
-        fun bucketFor(pointer: ArrowBufPointer, level: Int): Byte {
-            assert(level * LEVEL_BITS < pointer.length * java.lang.Byte.SIZE)
-            val bitIdx = level * LEVEL_BITS
-            val byteIdx = bitIdx / java.lang.Byte.SIZE
-            val bitOffset = bitIdx % java.lang.Byte.SIZE
-
-            val b = pointer.buf!!.getByte(pointer.offset + byteIdx)
-            return ((b.toInt() ushr ((java.lang.Byte.SIZE - LEVEL_BITS) - bitOffset)) and LEVEL_MASK).toByte()
-        }
-
-        @JvmStatic
-        fun compareToPath(pointer: ArrowBufPointer, path: ByteArray): Int {
-            for (level in path.indices) {
-                val cmp = bucketFor(pointer, level).toInt() compareTo (path[level].toInt())
-                if (cmp != 0) return cmp
-            }
-
-            return 0
-        }
     }
 }
 
@@ -106,9 +123,9 @@ fun List<ISegment<*, *>>.toMergePlan(
             pathPred != null && !pathPred.test(mergePlanTask.path) -> null
 
             mpNodes.any { it.node is IidBranch || it.node is MemoryHashTrie.Branch } -> {
-                val nodeChildren = mpNodes.map { it.node.iidChildren }
+                val nodeChildren = mpNodes.map { it.node.hashChildren }
                 // do these in reverse order so that they're on the stack in path-prefix order
-                for (bucketIdx in HashTrie.LEVEL_WIDTH - 1 downTo 0) {
+                for (bucketIdx in DEFAULT_LEVEL_WIDTH - 1 downTo 0) {
                     val newMpNodes = nodeChildren.mapIndexedNotNull { idx, children ->
                         if (children != null) {
                             children[bucketIdx]?.let { MergePlanNode.create(mpNodes[idx].segment, it) }

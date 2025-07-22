@@ -20,7 +20,7 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
         var mid: Int
         while (left < right) {
             mid = (left + right) / 2
-            if (HashTrie.compareToPath(iidReader.getPointer(mid), path) < 0) left = mid + 1
+            if (Bucketer.DEFAULT.compareToPath(iidReader.getPointer(mid), path) < 0) left = mid + 1
             else right = mid
         }
         this.index = left
@@ -36,7 +36,7 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
     val op get() = opReader.getLeg(index)!!
 
     fun isValid(reuse: ArrowBufPointer, path: ByteArray): Boolean =
-        index < relReader.rowCount && HashTrie.compareToPath(getIidPointer(reuse), path) <= 0
+        index < relReader.rowCount && Bucketer.DEFAULT.compareToPath(getIidPointer(reuse), path) <= 0
 
     companion object {
         @JvmStatic

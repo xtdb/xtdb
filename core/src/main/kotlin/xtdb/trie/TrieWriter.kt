@@ -9,7 +9,6 @@ import xtdb.arrow.VectorReader
 import xtdb.compactor.PageTree
 import xtdb.log.proto.TrieMetadata
 import xtdb.table.TableRef
-import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
 
 private typealias Selection = IntArray
 
@@ -17,7 +16,6 @@ class TrieWriter(
     private val al: BufferAllocator, private val bp: BufferPool,
     private val calculateBlooms: Boolean
 ) {
-
     fun writeLiveTrie(table: TableRef, trieKey: TrieKey, trie: MemoryHashTrie, dataRel: RelationReader): FileSize =
         DataFileWriter(al, bp, table, trieKey, dataRel.schema).use { dataFileWriter ->
             MetadataFileWriter(al, bp, table, trieKey, dataFileWriter.dataRel, calculateBlooms, false)
@@ -28,7 +26,7 @@ class TrieWriter(
                         when (this) {
                             is MemoryHashTrie.Branch ->
                                 metaFileWriter.writeIidBranch(
-                                    IntArray(iidChildren.size) { idx -> iidChildren[idx]?.writeNode() ?: -1 }
+                                    IntArray(hashChildren.size) { idx -> hashChildren[idx]?.writeNode() ?: -1 }
                                 )
 
                             is MemoryHashTrie.Leaf -> {
@@ -46,7 +44,7 @@ class TrieWriter(
 
     companion object {
         internal fun Selection.partitionSlices(partIdxs: IntArray) =
-            Array(LEVEL_WIDTH) { partition ->
+            Array(DEFAULT_LEVEL_WIDTH) { partition ->
                 val cur = partIdxs[partition]
                 val nxt = if (partition == partIdxs.lastIndex) size else partIdxs[partition + 1]
 
@@ -57,14 +55,14 @@ class TrieWriter(
             val iidPtr = ArrowBufPointer()
 
             // for each partition, find the starting index in the selection
-            val partIdxs = IntArray(LEVEL_WIDTH) { partition ->
+            val partIdxs = IntArray(DEFAULT_LEVEL_WIDTH) { partition ->
                 var left = 0
                 var right = size
                 var mid: Int
                 while (left < right) {
                     mid = (left + right) / 2
 
-                    val bucket = HashTrie.bucketFor(iidReader.getPointer(this[mid], iidPtr), level)
+                    val bucket = Bucketer.DEFAULT.bucketFor(iidReader.getPointer(this[mid], iidPtr), level)
 
                     if (bucket < partition) left = mid + 1 else right = mid
                 }
