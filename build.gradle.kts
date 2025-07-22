@@ -562,6 +562,8 @@ createBench("readings", mapOf("readingCount" to "--readings", "deviceCount" to "
 
 createBench("tsbs-iot", mapOf("file" to "--file"))
 
+createBench("patch", mapOf("docCount" to "--doc-count", "patchCount" to "--patch-count"))
+
 tasks.dokkaHtmlMultiModule {
     moduleName.set("")
     moduleVersion.set("2.x-SNAPSHOT")
