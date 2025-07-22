@@ -18,7 +18,7 @@
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            (xtdb.arrow Relation)
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie MemoryHashTrie$Leaf)))
+           (xtdb.trie ArrowHashTrie Bucketer ArrowHashTrie$Leaf HashTrie MemoryHashTrie$Leaf)))
 
 (t/use-fixtures :each tu/with-allocator
   (tu/with-opts {:compactor {:threads 0}})
@@ -77,18 +77,19 @@
                                          (mapv #(vec (.getObject iid-vec %)))))))))))))))
 
 (deftest test-bucket-for
-  (let [uuid1 #uuid "ce33e4b8-ec2f-4b80-8e9c-a4314005adbf"]
+  (let [uuid1 #uuid "ce33e4b8-ec2f-4b80-8e9c-a4314005adbf"
+        bucketer Bucketer/DEFAULT]
     (with-open [allocator (RootAllocator.)
                 iid-vec (doto ^FixedSizeBinaryVector (FixedSizeBinaryVector. "iid" allocator 16)
                           (.setSafe 0 (util/uuid->bytes uuid1))
                           (.setValueCount 1))]
       (t/is (= [3 0 3 2 0 3 0 3 3 2 1 0 2 3 2 0]
-               (for [x (range 16)]
-                 (HashTrie/bucketFor (.getDataPointer iid-vec 0) x))))
+               (for [^int x (range 16)]
+                 (.bucketFor bucketer (.getDataPointer iid-vec 0) x))))
 
-      (t/is (= 3 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 18)))
-      (t/is (= 0 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 30)))
-      (t/is (= 3 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 63))))))
+      (t/is (= 3 (.bucketFor bucketer (.getDataPointer iid-vec 0) 18)))
+      (t/is (= 0 (.bucketFor bucketer (.getDataPointer iid-vec 0) 30)))
+      (t/is (= 3 (.bucketFor bucketer (.getDataPointer iid-vec 0) 63))))))
 
 (def txs
   [[[:put-docs :hello {:xt/id #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d" :a 1}]

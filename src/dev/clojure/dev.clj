@@ -147,7 +147,7 @@
     (letfn [(render-trie [^ArrowHashTrie$Node node]
               (cond
                 (instance? ArrowHashTrie$Leaf node) (.getDataPageIndex ^ArrowHashTrie$Leaf node)
-                (instance? ArrowHashTrie$IidBranch node) (mapv render-trie (.getIidChildren ^ArrowHashTrie$IidBranch node))
+                (instance? ArrowHashTrie$IidBranch node) (mapv render-trie (.getHashChildren ^ArrowHashTrie$IidBranch node))
                 :else node))]
 
       (render-trie (-> (.getVectorSchemaRoot rdr)

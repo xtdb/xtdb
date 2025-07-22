@@ -5,8 +5,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import (com.carrotsearch.hppc IntObjectHashMap)
-           (java.util Map)
+  (:import (java.util Map)
            java.util.function.IntBinaryOperator
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector NullVector VectorSchemaRoot)
@@ -112,7 +111,6 @@
         build-key-col-names (get opts :build-key-col-names key-col-names)
         probe-key-col-names (get opts :probe-key-col-names key-col-names)
 
-        hash->bitmap (IntObjectHashMap.)
         schema (Schema. (-> build-fields
                             (cond-> (not store-full-build-rel?) (select-keys build-key-col-names))
                             (->> (mapv (fn [[field-name field]]
@@ -126,15 +124,18 @@
             (.copyRow 0)))
 
         (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.vectorFor rel-writer (str %))) build-key-col-names)]
-          (RelationMap. (update-keys build-fields str)
+          (RelationMap. allocator
+                        (update-keys build-fields str)
                         (map str build-key-col-names)
                         (update-keys probe-fields str)
                         (map str probe-key-col-names)
                         (boolean store-full-build-rel?)
                         rel-writer
                         build-key-cols
-                        hash->bitmap
                         (boolean nil-keys-equal?)
                         theta-expr
                         (update-keys param-types str)
-                        args))))))
+                        args
+                        (boolean with-nil-row?)
+                        64
+                        4))))))

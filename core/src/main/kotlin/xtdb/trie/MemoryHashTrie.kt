@@ -3,14 +3,15 @@ package xtdb.trie
 import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.arrow.VectorReader
-import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
-import xtdb.trie.HashTrie.Companion.bucketFor
 
 private const val LOG_LIMIT = 64
 private const val PAGE_LIMIT = 1024
 private const val MAX_LEVEL = 64
 
 class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) : HashTrie<MemoryHashTrie.Node, MemoryHashTrie.Leaf> {
+
+    private val bucketer = Bucketer()
+
     sealed interface Node : HashTrie.Node<Node> {
         fun add(trie: MemoryHashTrie, newIdx: Int): Node
 
@@ -37,7 +38,7 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
     fun compactLogs() = MemoryHashTrie(rootNode = rootNode.compactLogs(this), iidReader)
 
     private fun bucketFor(idx: Int, level: Int, reusePtr: ArrowBufPointer): Int =
-        bucketFor(iidReader.getPointer(idx, reusePtr), level).toInt()
+        bucketer.bucketFor(iidReader.getPointer(idx, reusePtr), level).toInt()
 
     private fun compare(leftIdx: Int, rightIdx: Int, leftPtr: ArrowBufPointer, rightPtr: ArrowBufPointer): Int {
         val cmp =
@@ -51,16 +52,16 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
         private val logLimit: Int,
         private val pageLimit: Int,
         override val path: ByteArray,
-        override val iidChildren: Array<Node?>,
+        override val hashChildren: Array<Node?>,
     ) : Node {
         private val addPtr = ArrowBufPointer()
 
         override fun add(trie: MemoryHashTrie, newIdx: Int): Node {
             val bucket = trie.bucketFor(newIdx, path.size, addPtr)
 
-            val newChildren = iidChildren.indices
+            val newChildren = hashChildren.indices
                 .map { childIdx ->
-                    var child = iidChildren[childIdx]
+                    var child = hashChildren[childIdx]
                     if (bucket == childIdx) {
                         child = child ?: Leaf(logLimit, pageLimit, conjPath(path, childIdx.toByte()))
                         child = child.add(trie, newIdx)
@@ -72,7 +73,7 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
         }
 
         override fun compactLogs(trie: MemoryHashTrie) =
-            Branch(logLimit, pageLimit, path, iidChildren.map { child -> child?.compactLogs(trie) }.toTypedArray())
+            Branch(logLimit, pageLimit, path, hashChildren.map { child -> child?.compactLogs(trie) }.toTypedArray())
     }
 
     class Leaf(
@@ -85,7 +86,7 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
         private var sortedData: IntArray? = null
     ) : Node {
 
-        override val iidChildren = null
+        override val hashChildren = null
 
         fun mergeSort(trie: MemoryHashTrie): IntArray {
             if (log.isEmpty()) return data
@@ -137,7 +138,7 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
 
 
         private fun idxBuckets(trie: MemoryHashTrie, idxs: IntArray, path: ByteArray): Array<IntArray?> {
-            val entryGroups = arrayOfNulls<IntArrayList>(LEVEL_WIDTH)
+            val entryGroups = arrayOfNulls<IntArrayList>(trie.bucketer.levelWidth)
             val ptr = ArrowBufPointer()
 
             for (i in idxs) {
