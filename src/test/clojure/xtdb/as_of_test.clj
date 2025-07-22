@@ -1,6 +1,7 @@
 (ns xtdb.as-of-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.basis :as basis]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]))
 
@@ -21,11 +22,11 @@
   (t/testing "at tx1"
     (t/is (= #{{:last-updated "tx1"}}
              (set (tu/query-ra '[:scan {:table #xt/table docs} [last_updated]]
-                               {:node tu/*node*, :snapshot-time (time/->instant #inst "2020")}))))
+                               {:node tu/*node*, :snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020"]})}))))
 
     (t/is (= #{{:last-updated "tx1"}}
              (set (xt/q tu/*node* '(from :docs [last-updated])
-                        {:snapshot-time #inst "2020"}))))))
+                        {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020"]})}))))))
 
 (t/deftest test-app-time
   (let [tx (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :doc, :version 1}]

@@ -19,7 +19,7 @@
   (:import (clojure.lang IReduceInit)
            (java.io Writer)
            (java.sql BatchUpdateException Connection)
-           [java.util.concurrent.atomic AtomicLong]
+           [java.util.concurrent.atomic AtomicReference]
            (xtdb.api DataSource DataSource$ConnectionBuilder TransactionKey)
            (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs)
@@ -50,9 +50,9 @@
 (defmacro ^:private with-conn [[binding connectable] & body]
   `(with-conn* ~connectable (fn [~binding] ~@body)))
 
-(defn- begin-ro-sql [{:keys [default-tz await-token snapshot-time current-time]}]
+(defn- begin-ro-sql [{:keys [default-tz await-token snapshot-token current-time]}]
   (let [kvs (->> [["TIMEZONE = ?" (some-> default-tz str)]
-                  ["SNAPSHOT_TIME = ?" snapshot-time]
+                  ["SNAPSHOT_TOKEN = ?" snapshot-token]
                   ["CLOCK_TIME = ?" current-time]
                   ["AWAIT_TOKEN = ?" await-token]]
                  (into [] (filter (comp some? second))))]
@@ -119,7 +119,7 @@
 
   - query: either an XTQL or SQL query.
   - opts:
-    - `:snapshot-time`: see 'Transaction Basis'
+    - `:snapshot-token`: see 'Transaction Basis'
     - `:current-time`: override wall-clock time to use in functions that require it
     - `:default-tz`: overrides the default time zone for the query
 
@@ -141,16 +141,16 @@
   Transaction Basis:
 
   In XTDB there are a number of ways to control at what point in time a query is run -
-  this is done via a snapshot-time basis optionally supplied as part of the query map.
+  this is done via a snapshot-token basis optionally supplied as part of the query map.
 
   In the case a basis is not provided the query is guaranteed to run sometime after
   the latest transaction submitted by this connection/node.
 
-  Alternatively a specific snapshot-time can be supplied,
-  in this case the query will be run exactly at that system-time, ensuring the repeatability of queries.
+  Alternatively a specific snapshot-token can be supplied,
+  in this case the query will be run exactly at that basis, ensuring the repeatability of queries.
 
   (q conn '(from ...)
-     {:snapshot-time #inst \"2020-01-02\"}))"
+     {:snapshot-token \"ChAKBHh0ZGISCAoGCIDCr/AF\"}))"
   ([node query] (q node query {}))
 
   ([node query opts]
@@ -245,7 +245,10 @@
         (jdbc/execute! conn ["ROLLBACK"])
         (catch Throwable t
           (throw (doto e (.addSuppressed t)))))
-      (throw e))))
+      (throw e)))
+
+  (jdbc/execute-one! conn ["SHOW LATEST_SUBMITTED_TX"]
+                     {:builder-fn xt-jdbc/builder-fn}))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx
@@ -279,13 +282,10 @@
 
   ([connectable, tx-ops tx-opts]
    (with-conn [conn connectable]
-     (submit-tx* conn tx-ops (-> tx-opts
-                                 (assoc :async? true)))
-
-     (let [{:keys [tx-id]} (jdbc/execute-one! conn ["SHOW LATEST_SUBMITTED_TX"]
-                                              {:builder-fn xt-jdbc/builder-fn})]
+     (let [{:keys [tx-id await-token]} (submit-tx* conn tx-ops (-> tx-opts
+                                                       (assoc :async? true)))]
        (when (instance? xtdb.api.DataSource connectable)
-         (.setAwaitToken ^xtdb.api.DataSource connectable tx-id))
+         (.setAwaitToken ^xtdb.api.DataSource connectable await-token))
        {:tx-id tx-id}))))
 
 (defn execute-tx
@@ -322,12 +322,9 @@
 
   (^TransactionKey [connectable, tx-ops tx-opts]
    (with-conn [conn connectable]
-     (submit-tx* conn tx-ops (-> tx-opts (assoc :async? false)))
-
-     (let [{:keys [tx-id system-time]} (jdbc/execute-one! conn ["SHOW LATEST_SUBMITTED_TX"]
-                                                          {:builder-fn xt-jdbc/builder-fn})]
+     (let [{:keys [tx-id system-time await-token]} (submit-tx* conn tx-ops (-> tx-opts (assoc :async? false)))]
        (when (instance? xtdb.api.DataSource connectable)
-         (.setAwaitToken ^xtdb.api.DataSource connectable tx-id))
+         (.setAwaitToken ^xtdb.api.DataSource connectable await-token))
        (serde/->TxKey tx-id (time/->instant system-time))))))
 
 (defn client
@@ -346,13 +343,15 @@
                                port 5432
                                dbname "xtdb"}}]
 
-  (let [!await-token (AtomicLong.)]
+  (let [!await-token (AtomicReference.)]
     (reify DataSource
       (getAwaitToken [_] (.get !await-token))
       (setAwaitToken [_ await-token]
         (loop []
           (let [old-token (.get !await-token)]
-            (when (< old-token await-token)
+            (when (or (nil? old-token)
+                      (and await-token
+                           (< ^long (parse-long old-token) ^long (parse-long await-token))))
               (when-not (.compareAndSet !await-token old-token await-token)
                 (recur))))))
 

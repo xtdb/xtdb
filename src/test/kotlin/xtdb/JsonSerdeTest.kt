@@ -184,9 +184,9 @@ class JsonSerdeTest {
             "SELECT * FROM foo",
             QueryOptions(
                 args = mapOf("foo" to "bar"),
-                snapshotTime = Instant.EPOCH + Duration.ofHours(1),
+                snapshotToken = "foobarbaz",
                 currentTime = Instant.EPOCH,
-                awaitToken = 1,
+                awaitToken = "1",
                 txTimeout = Duration.parse("PT3H"),
                 defaultTz = ZoneId.of("America/Los_Angeles"),
                 explain = true,
@@ -196,9 +196,9 @@ class JsonSerdeTest {
             """{
                 "sql": "SELECT * FROM foo",
                 "queryOpts": {"args":{"foo":"bar"},
-                              "snapshotTime":"1970-01-01T01:00:00Z",
+                              "snapshotToken":"foobarbaz",
                               "currentTime": "1970-01-01T00:00:00Z",
-                              "awaitToken":1,
+                              "awaitToken":"1",
                               "txTimeout":"PT3H",
                               "defaultTz":"America/Los_Angeles",
                               "explain":true,

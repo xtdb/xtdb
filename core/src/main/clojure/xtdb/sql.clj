@@ -1541,9 +1541,9 @@
   (visitCurrentTimeFunction [_ ctx] (fn-with-precision 'current-time (.precision ctx)))
   (visitCurrentTimestampFunction [_ ctx] (fn-with-precision 'current-timestamp (.precision ctx)))
 
-  (visitSnapshotTimeFunction [_ _]
-    (-> '(snapshot_time)
-        (vary-meta assoc :identifier 'snapshot_time)))
+  (visitSnapshotTokenFunction [_ _]
+    (-> '(snapshot_token)
+        (vary-meta assoc :identifier 'snapshot_token)))
 
   (visitLocalDateFunction [_ _] '(local-date))
   (visitLocalTimeFunction [_ ctx] (fn-with-precision 'local-time (.precision ctx)))
@@ -2682,10 +2682,10 @@
           (.accept (->QueryPlanVisitor (into env query-vars) scope))
           (into query-vars))))
 
-  (visitShowSnapshotTimeStatement [_ _]
-    (->QueryExpr '[:table [snapshot_time]
-                   [{:snapshot_time (snapshot_time)}]]
-                 '[snapshot_time]))
+  (visitShowSnapshotTokenStatement [_ _]
+    (->QueryExpr '[:table [snapshot_token]
+                   [{:snapshot_token (snapshot_token)}]]
+                 '[snapshot_token]))
 
   (visitShowClockTimeStatement [_ _]
     (->QueryExpr '[:table [clock_time]
@@ -2705,8 +2705,8 @@
   (visitSettingClockTime [_ ctx]
     [:current-time (.accept (.clockTime ctx) (->ExprPlanVisitor env scope))])
 
-  (visitSettingSnapshotTime [_ ctx]
-    [:snapshot-time (.accept (.snapshotTime ctx) (->ExprPlanVisitor env scope))])
+  (visitSettingSnapshotToken [_ ctx]
+    [:snapshot-token (.accept (.snapshotToken ctx) (->ExprPlanVisitor env scope))])
 
   (visitInsertStatement [_ ctx]
     (let [{:keys [col-syms] :as insert-plan} (-> (.insertColumnsAndSource ctx)
@@ -3002,7 +3002,7 @@
             (-> plan
                 (vary-meta (fn [m]
                              (-> (or m {})
-                                 (into (select-keys stmt [:explain? :current-time :snapshot-time]))
+                                 (into (select-keys stmt [:explain? :current-time :snapshot-token]))
                                  (assoc :param-count @!param-count
                                         :warnings @!warnings
                                         :ordered-outer-projection col-syms)))))))))))

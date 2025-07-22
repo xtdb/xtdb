@@ -9,7 +9,7 @@
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as result-set]
             [xtdb.api :as xt]
-            [xtdb.error :as err]
+            [xtdb.basis :as basis]
             [xtdb.log :as xt-log]
             [xtdb.logging :as logging]
             [xtdb.next.jdbc :as xt-jdbc]
@@ -997,14 +997,15 @@
            (q conn ["SELECT version, _valid_from, _valid_to FROM foo"])))
 
     (t/is (= {:sql-state "0B000",
-             :message "snapshot-time (2024-01-01T00:00:00Z) is after the latest completed tx (#xt/tx-key {:tx-id 0, :system-time #xt/instant \"2020-01-01T00:00:00Z\"})",
-             :detail #xt/illegal-arg [:xtdb/unindexed-tx
-                                      "snapshot-time (2024-01-01T00:00:00Z) is after the latest completed tx (#xt/tx-key {:tx-id 0, :system-time #xt/instant \"2020-01-01T00:00:00Z\"})"
-                                      {:latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"},
-                                       :snapshot-time #xt/instant "2024-01-01T00:00:00Z"}]}
+              :message "system-time (2024-01-01T00:00:00Z) is after the latest completed tx (#xt/tx-key {:tx-id 0, :system-time #xt/instant \"2020-01-01T00:00:00Z\"})",
+              :detail #xt/illegal-arg [:xtdb/unindexed-tx
+                                       "system-time (2024-01-01T00:00:00Z) is after the latest completed tx (#xt/tx-key {:tx-id 0, :system-time #xt/instant \"2020-01-01T00:00:00Z\"})"
+                                       {:latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"},
+                                        :system-time #xt/instant "2024-01-01T00:00:00Z"}]}
              (reading-ex
-               (q conn ["SETTING SNAPSHOT_TIME = '2024-01-01Z'
-                         SELECT CURRENT_TIMESTAMP FROM foo"]))))
+               (q conn ["SETTING SNAPSHOT_TOKEN = ?
+                         SELECT CURRENT_TIMESTAMP FROM foo"
+                        (basis/->time-basis-str {"xtdb" [#xt/zdt "2024-01-01Z[UTC]"]})]))))
 
     (q conn ["UPDATE foo SET version = 1 WHERE _id = 'foo'"])
 
@@ -1015,9 +1016,10 @@
     (is (= [{:version 0
              :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"
              :ts (-> #xt/zdt "2024-01-01Z[UTC]" in-system-tz)}]
-           (q conn ["SETTING SNAPSHOT_TIME = '2020-01-01Z',
+           (q conn ["SETTING SNAPSHOT_TOKEN = ?,
                              CLOCK_TIME = '2024-01-01Z'
-                     SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo"]))
+                     SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo"
+                    (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-01Z[UTC]"]})]))
         "both snapshot and current time")
 
     (q conn ["SET TIME ZONE 'UTC'"])
@@ -1025,16 +1027,18 @@
     (is (= [{:version 0
              :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"
              :ts #xt/zdt "2024-01-01Z[UTC]"}]
-           (q conn ["SETTING SNAPSHOT_TIME = ?, CLOCK_TIME = ?
+           (q conn ["SETTING SNAPSHOT_TOKEN = ?, CLOCK_TIME = ?
                      SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo"
-                    #xt/zdt "2020-01-01Z[UTC]" #xt/zdt "2024-01-01Z[UTC]"]))
+                    (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-01Z[UTC]"]})
+                    #xt/zdt "2024-01-01Z[UTC]"]))
         "both snapshot and current time, params")
 
     (is (= [{:version 0
              :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"
              :ts #xt/zdt "2024-01-01Z[UTC]"}]
-           (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01Z', CLOCK_TIME = ?
+           (q conn ["SETTING SNAPSHOT_TOKEN = ?, CLOCK_TIME = ?
                      SELECT version, _valid_from, _valid_to, CURRENT_TIMESTAMP ts FROM foo WHERE _id = ?"
+                    (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-01Z[UTC]"]})
                     #xt/zdt "2024-01-01Z[UTC]", "foo"]))
         "gets correct param order")
 
@@ -1046,19 +1050,10 @@
     (t/testing "for system-time cannot override snapshot"
       (exec conn "SET TIME ZONE 'UTC'")
       (is (= [{:version 0}]
-             (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01Z'
-                     SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02Z'"]))
-          "timestamp-tz")
-
-      (is (= [{:version 0}]
-             (q conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-01T00:00:00'
-                     SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02Z'"]))
-          "timestamp-local")
-
-      (is (= [{:version 0}]
-             (q conn ["SETTING SNAPSHOT_TIME = DATE '2020-01-01'
-                     SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02Z'"]))
-          "date - #4034"))
+             (q conn ["SETTING SNAPSHOT_TOKEN = ?
+                       SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02Z'"
+                      (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-01Z[UTC]"]})]))
+          "timestamp-tz"))
 
     (is (= [{:version 1}]
            (q conn ["SELECT version FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02Z'"]))
@@ -1728,7 +1723,7 @@
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
 
-    (t/is (= [{:await-token 0}]
+    (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW AWAIT_TOKEN"])))
 
     (t/is (= [{:tx-id 0, :system-time #xt/zdt "2020-01-01Z[UTC]"}]
@@ -1736,12 +1731,12 @@
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
 
-    (t/is (= [{:await-token 1}]
+    (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [1]})}]
              (q conn ["SHOW AWAIT_TOKEN"])))
 
-    (jdbc/execute! conn ["SET AWAIT_TOKEN = 0"])
+    (jdbc/execute! conn ["SET AWAIT_TOKEN = ?" (basis/->tx-basis-str {"xtdb" [0]})])
 
-    (t/is (= [{:await-token 0}]
+    (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW AWAIT_TOKEN"])))
 
     (t/is (= [{:tx-id 1, :system-time #xt/zdt "2020-01-02Z[UTC]"}]
@@ -1749,14 +1744,14 @@
 
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (2)"])
 
-    (t/is (= [{:await-token 2}]
+    (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [2]})}]
              (q conn ["SHOW AWAIT_TOKEN"])))))
 
 (t/deftest show-await-token-param-fail-4504
   (with-open [conn (jdbc-conn {"prepareThreshold" -1})]
     (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (1)"])
 
-    (t/is (= [{:await-token 0}]
+    (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW AWAIT_TOKEN"]))))
 
   (when (psql-available?)
@@ -1765,7 +1760,7 @@
        (send "INSERT INTO foo (_id) VALUES (1);\n")
        (read)
        (send "SHOW AWAIT_TOKEN;\n")
-       (t/is (= [["await_token"] ["1"]] (read)))))))
+       (t/is (= [["await_token"] [(basis/->tx-basis-str {"xtdb" [1]})]] (read)))))))
 
 (t/deftest test-show-latest-submitted-tx
   (with-open [conn (jdbc-conn)]
@@ -1773,15 +1768,17 @@
 
     (jdbc/execute! conn ["INSERT INTO users RECORDS ?" {:xt/id "jms", :given-name "James"}])
 
-    (t/is (= [{:tx-id 0, :system-time #xt/zdt "2020-01-01T00:00Z[UTC]", :committed true}]
+    (t/is (= [{:tx-id 0, :system-time #xt/zdt "2020-01-01T00:00Z[UTC]", :committed true,
+               :await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW LATEST_SUBMITTED_TX"])))
 
     (t/is (thrown? PSQLException (jdbc/execute! conn ["ASSERT FALSE"])))
 
-    (t/is (= [{:tx-id 1, :system-time #xt/zdt "2020-01-02T00:00Z[UTC]", :committed false
+    (t/is (= [{:tx-id 1, :system-time #xt/zdt "2020-01-02T00:00Z[UTC]", :committed false,
                :error #xt/error [:conflict :xtdb/assert-failed "Assert failed"
                                  {:arg-idx 0, :sql "ASSERT FALSE", :tx-op-idx 0,
-                                  :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]}]
+                                  :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]
+               :await-token (basis/->tx-basis-str {"xtdb" [1]})}]
              (q conn ["SHOW LATEST_SUBMITTED_TX"])))))
 
 (t/deftest test-show-session-variable-3804
@@ -2341,7 +2338,7 @@ ORDER BY t.oid DESC LIMIT 1"
 
     (t/is (thrown-with-msg? PSQLException
                             #"Cannot parse timestamp: 2020-01-00"
-                            (jdbc/execute! conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2020-01-00' SELECT 1"])))))
+                            (jdbc/execute! conn ["SETTING SNAPSHOT_TOKEN = TIMESTAMP '2020-01-00' SELECT 1"])))))
 
 (t/deftest can-handle-errors-containing-instants-4025
   (with-open [conn (jdbc-conn)]
@@ -2417,36 +2414,41 @@ ORDER BY 1,2;")
                  ["public" "foo" "table" "xtdb"]]
                 (read)))))))
 
-(t/deftest select-snapshot-time
+(t/deftest select-snapshot-token
   (with-open [conn (jdbc-conn)]
-    (t/is (= [{:ts nil}] (jdbc/execute! conn ["SELECT SNAPSHOT_TIME ts"]))
+    (t/is (= [{:ts nil}] (jdbc/execute! conn ["SELECT SNAPSHOT_TOKEN ts"]))
           "before any transactions")
 
     (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :x 3}]])
 
-    (t/is (= [{:ts #xt/zdt "2020-01-01Z[UTC]"}]
-             (jdbc/execute! conn ["SELECT SNAPSHOT_TIME ts"])))
+    (t/is (= [{:ts (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-01Z[UTC]"]})}]
+             (jdbc/execute! conn ["SELECT SNAPSHOT_TOKEN ts"])))
 
     (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 2, :x 5}]])
 
-    (t/is (= [{:snapshot_time #xt/zdt "2020-01-02Z[UTC]"}]
-             (jdbc/execute! conn ["SHOW SNAPSHOT_TIME"])))
+    (t/is (= [{:snapshot_token (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-02Z[UTC]"]})}]
+             (jdbc/execute! conn ["SHOW SNAPSHOT_TOKEN"])))
 
-    (let [sql "SELECT SNAPSHOT_TIME ts, * FROM docs ORDER BY _id"]
-      (t/is (= [{:ts #xt/zdt "2020-01-02Z[UTC]", :_id 1, :x 3}
-                {:ts #xt/zdt "2020-01-02Z[UTC]", :_id 2, :x 5}]
+    (let [sql "SELECT SNAPSHOT_TOKEN token, * FROM docs ORDER BY _id"]
+      (t/is (= [{:token (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-02Z[UTC]"]}), :_id 1, :x 3}
+                {:token (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-02Z[UTC]"]}), :_id 2, :x 5}]
                (jdbc/execute! conn [sql])))
 
-      (t/is (= [{:ts #xt/zdt "2020-01-01Z[UTC]", :_id 1, :x 3}]
-               (jdbc/execute! conn [(str "SETTING SNAPSHOT_TIME = '2020-01-01Z' " sql)])))
+      (t/is (= [{:token (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-01Z[UTC]"]}), :_id 1, :x 3}]
+               (jdbc/execute! conn [(str "SETTING SNAPSHOT_TOKEN = ? " sql)
+                                    (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-01Z"]})])))
 
       (t/testing "in tx"
-        (jdbc/execute! conn ["BEGIN READ ONLY WITH (SNAPSHOT_TIME = '2020-01-01Z', CLOCK_TIME = ?)" "2020-01-04Z"])
+        (jdbc/execute! conn ["BEGIN READ ONLY WITH (SNAPSHOT_TOKEN = ?, CLOCK_TIME = ?)"
+                             (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-01Z"]})
+                             "2020-01-04Z"])
         (try
-          (t/is (= [{:ts #xt/zdt "2020-01-01Z[UTC]", :_id 1, :x 3}]
+          (t/is (= [{:token (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-01Z[UTC]"]}),
+                     :_id 1, :x 3}]
                    (jdbc/execute! conn [sql])))
 
-          (t/is (= [{:ts #xt/zdt "2020-01-01Z[UTC]", :_id 1, :x 3}]
+          (t/is (= [{:token (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-01Z[UTC]"]}),
+                     :_id 1, :x 3}]
                    (jdbc/execute! conn [sql]))
                 "once more for luck")
 
@@ -2708,20 +2710,24 @@ ORDER BY 1,2;")
 (t/deftest in-tx-await-token
   (with-open [conn (jdbc-conn)]
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"])
-    (t/is (= {:await_token 0} (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
+    (t/is (= {:await_token (basis/->tx-basis-str {"xtdb" [0]})}
+             (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
 
     (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 2}"])
-    (t/is (= {:await_token 1} (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
+    (t/is (= {:await_token (basis/->tx-basis-str {"xtdb" [1]})}
+             (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
 
-    (jdbc/execute! conn ["BEGIN READ ONLY WITH (await_token = ?)" 0])
+    (jdbc/execute! conn ["BEGIN READ ONLY WITH (await_token = ?)" (basis/->tx-basis-str {"xtdb" [0]})])
     (try
-      (t/is (= {:await_token 0} (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
+      (t/is (= {:await_token (basis/->tx-basis-str {"xtdb" [0]})}
+               (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))
       (finally
         (jdbc/execute! conn ["ROLLBACK"])))
 
-    (t/is (= {:await_token 1} (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))))
+    (t/is (= {:await_token (basis/->tx-basis-str {"xtdb" [1]})}
+             (jdbc/execute-one! conn ["SHOW AWAIT_TOKEN"])))))
 
-(t/deftest await-token+snapshot-time
+(t/deftest await-token+snapshot-token
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 0}]])
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 1}]])
 
@@ -2729,7 +2735,7 @@ ORDER BY 1,2;")
     (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 2}]])
     (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :version 3}]])
 
-    (jdbc/execute! conn ["BEGIN READ ONLY WITH (AWAIT_TOKEN = 3)"])
+    (jdbc/execute! conn ["BEGIN READ ONLY WITH (AWAIT_TOKEN = ?)" (basis/->tx-basis-str {"xtdb" [3]})])
     (try
       (t/is (= {:_id 1, :version 3}
                (jdbc/execute-one! conn ["SELECT * FROM foo"])))
@@ -2739,12 +2745,13 @@ ORDER BY 1,2;")
 (t/deftest ex-cause-in-detail-message
   (with-open [conn (jdbc-conn)]
     (t/is (= {:sql-state "0B000",
-              :message "snapshot-time (2020-01-02T00:00:00Z) is after the latest completed tx (nil)",
+              :message "system-time (2020-01-02T00:00:00Z) is after the latest completed tx (nil)",
               :detail #xt/illegal-arg [:xtdb/unindexed-tx
-                                       "snapshot-time (2020-01-02T00:00:00Z) is after the latest completed tx (nil)"
-                                       {:latest-completed-tx nil, :snapshot-time #xt/instant "2020-01-02T00:00:00Z"}]}
+                                       "system-time (2020-01-02T00:00:00Z) is after the latest completed tx (nil)"
+                                       {:latest-completed-tx nil, :system-time #xt/instant "2020-01-02T00:00:00Z"}]}
              (reading-ex
-               (jdbc/execute! conn ["SETTING snapshot_time = '2020-01-02Z' SELECT 1"]))))
+               (jdbc/execute! conn ["SETTING SNAPSHOT_TOKEN = ? SELECT 1"
+                                    (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-02Z"]})]))))
 
     (t/is (= {:sql-state "08P01",
               :message "Queries are unsupported in a DML transaction",
@@ -2831,7 +2838,7 @@ ORDER BY 1,2;")
     (t/is (= [{:xt/id 0} {:xt/id 1} {:xt/id 2}]
              (xt/q conn ["SELECT * FROM foo ORDER BY _id"])))))
 
-(t/deftest snapshot-time-after-lctx-4465
+(t/deftest snapshot-token-after-lctx-4465
   (with-open [conn (jdbc-conn)]
     (xt/execute-tx conn [[:put-docs :foo {:xt/id 1}]])
     (t/is (= [{:xt/id 1}] (xt/q conn "SELECT * FROM foo")))

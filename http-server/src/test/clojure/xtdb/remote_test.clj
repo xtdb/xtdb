@@ -3,15 +3,14 @@
             [clojure.test :as t :refer [deftest]]
             [hato.client :as http]
             [xtdb.api :as xt]
-            [xtdb.error :as err]
+            [xtdb.basis :as basis]
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.server :as xt-http]
             [xtdb.test-util :as tu]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.util :as util])
-  (:import (xtdb JsonSerde)
-           (xtdb.error Incorrect)))
+  (:import (xtdb JsonSerde)))
 
 ;; ONLY put stuff here where remote DIFFERS to in-memory
 
@@ -69,8 +68,8 @@
 
   (t/is (= [{:xt/id 1}]
            (xt/q tu/*node* '(from :docs [xt/id])
-                 {:snapshot-time #xt/zdt "2020-01-02Z"
-                  :await-token 1})))
+                 {:snapshot-token (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-02Z"]})
+                  :await-token (basis/->tx-basis-str {"xtdb" [1]})})))
 
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 2 :key :some-keyword}]])
 
@@ -84,7 +83,7 @@
                             :request-method :post
                             :content-type :transit+json
                             :form-params {:query '(from :docs [xt/id key])
-                                          :await-token 2
+                                          :await-token (basis/->tx-basis-str {"xtdb" [2]})
                                           :key-fn #xt/key-fn :kebab-case-keyword}
                             :transit-opts transit-opts
                             :url (http-url "query")})
@@ -152,7 +151,7 @@
 
     (t/is (= [{:xt/id 2}]
              (xt/q tu/*node* '(from :docs [xt/id])
-                   {:await-token tx-id})))
+                   {:await-token (basis/->tx-basis-str {"xtdb" [tx-id]})})))
 
     (t/is (= [{"xt/id" 2}]
              (-> (http/request {:accept :json
@@ -160,7 +159,7 @@
                                 :request-method :post
                                 :content-type :json
                                 :form-params {:sql "SELECT docs._id FROM docs"
-                                              :queryOpts {:snapshotTime (str system-time)
+                                              :queryOpts {:snapshotToken (basis/->time-basis-str {"xtdb" [system-time]})
                                                           :keyFn "KEBAB_CASE_KEYWORD"}}
                                 :url (http-url "query")})
                  :body

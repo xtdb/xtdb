@@ -24,7 +24,7 @@
                  '{:find [foo]
                    :where [(match :xt_docs {:xt/id 1})
                            [1 :foo foo]]}
-                 {:snapshot-time #inst "2020-01-01"})))
+                 {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020-01-01"]})})))
   ;; app-time
   (t/is (= []
            (xt/q tu/*node* '{:find [foo]
@@ -41,24 +41,24 @@
            (xt/q tu/*node* '{:find [foo]
                              :where [(match :xt_docs {:xt/id 1})
                                      [1 :foo foo]]}
-                 {:snapshot-time #inst "2020-01-02"
+                 {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020-01-02"]})
                   :current-time #inst "3001"})))
 
   (t/is (= []
            (xt/q tu/*node* '{:find [foo]
                              :where [(match :xt_docs {:xt/id 1})
                                      [1 :foo foo]]}
-                 {:snapshot-time #inst "2020", :current-time #inst "4001"})))
+                 {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020"]}), :current-time #inst "4001"})))
 
   ;; system-time - eugh, TODO, we need to just be able to pass a system-time to basis
   (t/is (=  []
             (xt/q tu/*node* '{:find [foo]
                               :where [(match :xt_docs {:xt/id 1})
                                       [1 :foo foo]]}
-                  {:snapshot-time #inst "2000"})))
+                  {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2000"]})})))
 
   (t/is (=  [{:foo "2000-4000"}]
             (xt/q tu/*node* '{:find [foo]
                               :where [(match :xt_docs {:xt/id 1})
                                       [1 :foo foo]]}
-                  {:snapshot-time (java.util.Date.)}))))
+                  {:snapshot-token (basis/->time-basis-str {xtdb [ (java.util.Date.)]})}))))

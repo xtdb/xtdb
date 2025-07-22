@@ -4,6 +4,7 @@
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.antlr :as antlr]
+            [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             xtdb.expression.pg
@@ -51,12 +52,12 @@
            (xtdb.arrow RelationReader VectorReader)
            xtdb.database.Database
            (xtdb.indexer Snapshot)
-           (xtdb.query IQuerySource PreparedQuery)
            xtdb.operator.scan.IScanEmitter
+           (xtdb.query IQuerySource PreparedQuery)
            xtdb.util.RefCounter))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, result-fields
-                                        current-time, snapshot-time, default-tz,
+                                        current-time, snapshot-token, default-tz,
                                         ^AutoCloseable snap, ^BufferAllocator al, ^RefCounter ref-ctr, args-to-close]
   (reify IResultCursor
     (getResultFields [_] result-fields)
@@ -65,7 +66,7 @@
         (throw (InterruptedException.)))
 
       (binding [expr/*clock* (InstantSource/fixed current-time)
-                expr/*snapshot-time* snapshot-time
+                expr/*snapshot-token* snapshot-token
                 expr/*default-tz* default-tz]
         (.tryAdvance cursor c)))
 
@@ -98,19 +99,24 @@
        (into {} (map (fn [^VectorReader col]
                        (MapEntry/create (symbol (.getName col)) (.getField col)))))))
 
-(defn expr->instant [expr {:keys [^RelationReader args default-tz] :as opts}]
+(defn expr->value [expr {:keys [^RelationReader args]}]
   (if (symbol? expr)
-    (recur (-> args (.vectorFor (str expr)) (.getObject 0)) opts)
-    (time/->instant expr {:default-tz default-tz})))
+    (-> args (.vectorFor (str expr)) (.getObject 0))
+    expr))
 
-(defn- validate-snapshot-not-before [snapshot-time ^Snapshot snap]
+(defn- validate-snapshot-not-before [snapshot-token ^Snapshot snap]
   (let [snap-tx (.getTxBasis snap)]
-    (when (and snapshot-time (or (nil? snap-tx) (neg? (compare (.getSystemTime snap-tx) snapshot-time))))
-      (throw (err/illegal-arg :xtdb/unindexed-tx
-                              {::err/message (format "snapshot-time (%s) is after the latest completed tx (%s)"
-                                                     (str snapshot-time) (pr-str snap-tx))
-                               :latest-completed-tx snap-tx
-                               :snapshot-time snapshot-time})))))
+    (when snapshot-token
+      (let [system-time (-> (basis/<-time-basis-str snapshot-token)
+                            (get-in ["xtdb" 0]))]
+        (when (and system-time
+                   (or (nil? snap-tx)
+                       (neg? (compare (.getSystemTime snap-tx) system-time))))
+          (throw (err/illegal-arg :xtdb/unindexed-tx
+                                  {::err/message (format "system-time (%s) is after the latest completed tx (%s)"
+                                                         (str system-time) (pr-str snap-tx))
+                                   :latest-completed-tx snap-tx
+                                   :system-time system-time})))))))
 
 (defn- parse-query [query]
   (cond
@@ -189,7 +195,7 @@
 
                   {:keys [ordered-outer-projection warnings param-count], :or {param-count 0}, :as plan-meta} (meta plan)]
 
-              (into (select-keys plan-meta [:current-time :snapshot-time])
+              (into (select-keys plan-meta [:current-time :snapshot-token])
                     {:plan plan,
                      :conformed-plan conformed-plan
                      :scan-cols (->> (lp/child-exprs conformed-plan)
@@ -223,7 +229,7 @@
 
           (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
-          (openQuery [_ {:keys [args current-time snapshot-time default-tz close-args? await-token]
+          (openQuery [_ {:keys [args current-time snapshot-token default-tz close-args? await-token]
                          :or {default-tz default-tz
                               close-args? true}}]
             (util/with-close-on-catch [^BufferAllocator allocator (if allocator
@@ -240,8 +246,9 @@
                                                  {:type (class args)})))
 
                     {:keys [fields ->cursor]} (emit-query planned-query scan-emitter db snap (->arg-fields args) default-tz)
-                    current-time (or (some-> (:current-time planned-query) (expr->instant {:args args, :default-tz default-tz}))
-                                     (some-> current-time (expr->instant {:args args, :default-tz default-tz}))
+                    current-time (or (some-> (or (:current-time planned-query) current-time)
+                                             (expr->value {:args args})
+                                             (time/->instant {:default-tz default-tz}))
                                      (expr/current-time))]
 
                 (when (seq (:warnings planned-query))
@@ -251,21 +258,21 @@
                 (try
                   (binding [expr/*clock* (InstantSource/fixed current-time)
                             expr/*default-tz* default-tz
-                            expr/*snapshot-time* (or (some-> (:snapshot-time planned-query) (expr->instant {:args args, :default-tz default-tz}))
-                                                     (some-> snapshot-time (expr->instant {:args args, :default-tz default-tz}))
-                                                     (some-> snap .getTxBasis .getSystemTime))
-                            expr/*await-token* (or await-token -1)]
+                            expr/*snapshot-token* (or (some-> (:snapshot-token planned-query snapshot-token) (expr->value {:args args}))
+                                                      (when-let [sys-time (some-> snap .getTxBasis .getSystemTime)]
+                                                        (basis/->time-basis-str {"xtdb" [sys-time]})))
+                            expr/*await-token* await-token]
 
-                    (validate-snapshot-not-before expr/*snapshot-time* snap)
+                    (validate-snapshot-not-before expr/*snapshot-token* snap)
 
                     (-> (->cursor {:allocator allocator, :snapshot snap
                                    :default-tz default-tz,
-                                   :snapshot-time expr/*snapshot-time*
+                                   :snapshot-token expr/*snapshot-token*
                                    :current-time current-time
                                    :args args
                                    :schema table-info})
                         (wrap-cursor fields
-                                     current-time expr/*snapshot-time* default-tz
+                                     current-time expr/*snapshot-token* default-tz
                                      allocator snap ref-ctr (when close-args? args))))
 
                   (catch Throwable t

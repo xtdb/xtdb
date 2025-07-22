@@ -33,7 +33,7 @@
            (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb BufferPool ICursor)
            (xtdb.api TransactionKey)
-           (xtdb.api.log Log$Message$FlushBlock Log$MessageMetadata)
+           (xtdb.api.log Log$Message$FlushBlock)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector)
            (xtdb.indexer LiveTable Snapshot Snapshot$Source)
@@ -41,7 +41,7 @@
            (xtdb.query IQuerySource PreparedQuery)
            (xtdb.trie MetadataFileWriter)
            xtdb.types.ZonedDateTimeRange
-           (xtdb.util MsgIdUtil RefCounter RowCounter TemporalBounds TemporalDimension)))
+           (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -123,9 +123,9 @@
 (defn flush-block!
   ([node] (flush-block! node #xt/duration "PT5S"))
   ([node timeout]
-   (let [log (xt-log/<-node node)
-         ^Log$MessageMetadata msg @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (block-cat/<-node node)) -1)))]
-     (xt-log/await-db (db/<-node node) (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset msg)) timeout))))
+   (let [log (xt-log/<-node node)]
+     @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (block-cat/<-node node)) -1)))
+     (xt-log/await-db (db/<-node node) (xtp/await-token node) timeout))))
 
 (defn open-vec
   (^xtdb.arrow.Vector [^Field field]
@@ -234,7 +234,7 @@
      (util/with-open [^RelationReader args-rel (if args
                                                  (vw/open-args allocator args)
                                                  vw/empty-args)
-                      res (.openQuery pq (-> (select-keys query-opts [:snapshot-time :current-time :await-token :table-args :default-tz])
+                      res (.openQuery pq (-> (select-keys query-opts [:snapshot-token :current-time :await-token :table-args :default-tz])
                                              (assoc :args args-rel, :close-args? false)))]
        (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
                       (cond->> (not preserve-pages?) (into [] cat)))]

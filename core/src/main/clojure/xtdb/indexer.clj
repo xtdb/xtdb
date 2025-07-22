@@ -19,7 +19,8 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.vector.reader :as vr]
+            [xtdb.basis :as basis])
   (:import (clojure.lang MapEntry)
            (io.micrometer.core.instrument Counter Timer)
            (java.io ByteArrayInputStream)
@@ -376,7 +377,7 @@
 (defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, db, snap-src, tx-opts, {:keys [stmt message]}]
   (let [^PreparedQuery pq (.prepareQuery q-src stmt db snap-src tx-opts)]
     (-> (fn eval-query [^RelationReader args]
-          (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
+          (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
                                              (assoc :args args, :close-args? false)))]
 
             (letfn [(throw-assert-failed []
@@ -393,7 +394,7 @@
 (defn- query-indexer [^IQuerySource q-src, db, snap-src, ^RelationIndexer rel-idxer, tx-opts, {:keys [stmt] :as query-opts}]
   (let [^PreparedQuery pq (.prepareQuery q-src stmt db snap-src tx-opts)]
     (-> (fn eval-query [^RelationReader args]
-          (with-open [res (-> (.openQuery pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
+          (with-open [res (-> (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
                                                  (assoc :args args, :close-args? false))))]
             (.forEachRemaining res
                                (fn [in-rel]
@@ -436,8 +437,8 @@
                  #(.copyRow doc-copier idx))))))
 
 (defn- ->patch-docs-indexer [^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
-                             ^IQuerySource q-src, db, snap-src
-                             {:keys [snapshot-time] :as tx-opts}]
+                             ^IQuerySource q-src, db, snap-src, ^Instant system-time
+                             tx-opts]
   (let [patch-leg (.vectorFor tx-ops-rdr "patch-docs")
         iids-rdr (.vectorFor patch-leg "iids")
         iid-rdr (.getListElements iids-rdr)
@@ -446,7 +447,7 @@
         valid-from-rdr (.vectorFor patch-leg "_valid_from")
         valid-to-rdr (.vectorFor patch-leg "_valid_to")
 
-        system-time-µs (time/instant->micros snapshot-time)]
+        system-time-µs (time/instant->micros system-time)]
     (letfn [(->table-idxer [^String table-name]
               (when (xt-log/forbidden-table? table-name)
                 (throw (xt-log/forbidden-table-ex table-name)))
@@ -493,7 +494,7 @@
                                                                      (-> (.select doc-rdr (.getListStartIndex table-docs-rdr tx-op-idx) (.getListCount table-docs-rdr tx-op-idx))
                                                                          (.withName "doc"))])))])]
 
-                          (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-time :current-time :default-tz])
+                          (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
                                                              (assoc :args args, :close-args? false)))]
                             (.forEachRemaining res
                                                (fn [^RelationReader rel]
@@ -661,14 +662,14 @@
                                    (Snapshot. tx-key live-index-snap
                                               (li/->schema live-index-snap table-catalog)))))
 
-                    tx-opts {:snapshot-time system-time
+                    tx-opts {:snapshot-token (basis/->time-basis-str {"xtdb" [system-time]})
                              :current-time system-time
                              :default-tz default-tz
                              :tx-key tx-key
                              :indexer this}
 
                     !put-docs-idxer (delay (->put-docs-indexer live-idx-tx tx-ops-rdr system-time tx-opts))
-                    !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src db snap-src tx-opts))
+                    !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src db snap-src system-time tx-opts))
                     !delete-docs-idxer (delay (->delete-docs-indexer live-idx-tx tx-ops-rdr system-time tx-opts))
                     !erase-docs-idxer (delay (->erase-docs-indexer live-idx-tx tx-ops-rdr tx-opts))
                     !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src db snap-src tx-opts))]

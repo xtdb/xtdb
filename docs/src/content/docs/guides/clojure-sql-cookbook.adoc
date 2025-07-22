@@ -7,7 +7,7 @@ SQL queries are submitted through `xtdb.api/q`:
 * `(xt/q <node> <query> <opts>?)` returns the query results as a vector of maps.
 ** `opts`: map of query options
 *** `:args`: vector of query arguments
-*** `:snapshot-time`, `:current-time`, `:tx-timeout` : see link:/reference/main/xtql/queries#basis[XTQL]
+*** `:snapshot-token`, `:current-time`, `:tx-timeout` : see link:/reference/main/xtql/queries#basis[XTQL]
 * `(xt/q& <node> <query> <opts>?)`: returns a `CompletableFuture` of the query results.
 
 For example:

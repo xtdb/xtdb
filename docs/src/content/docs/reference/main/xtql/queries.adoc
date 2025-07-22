@@ -743,7 +743,7 @@ requires that the node has indexed _at least_ as far as the specified await-toke
 ----
 (xt/q node ['#(from :users [{:username %}]) "james"])
 ----
-`snapshot-time`:: specifies the latest system-time that'll be visible to the query.
+`snapshot-token`:: a token that specifies the exact transactions that'll be visible to the query.
 +
 * If the requested transaction hasn't been indexed, the XTDB client will wait (see `tx-timeout`) before evaluating the query.
 * If not provided, this will default to the latest available transaction on the node.
@@ -759,5 +759,5 @@ requires that the node has indexed _at least_ as far as the specified await-toke
 `tx-timeout`:: duration to wait for the requested transaction (`await-token`) to be indexed before timing out (default unlimited).
 
 [#basis]
-These query options (in particular, `snapshot-time`, `current-time`, `default-tz` - together, the 'basis') allow for truly immutable, repeatable database snapshots - two queries run with the same basis will see exactly the same version of the whole database, regardless of any other transactions that have occurred in the meantime.
+These query options (in particular, `snapshot-token`, `current-time`, `default-tz` - together, the 'basis') allow for truly immutable, repeatable database snapshots - two queries run with the same basis will see exactly the same version of the whole database, regardless of any other transactions that have occurred in the meantime.
 --

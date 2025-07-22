@@ -2,6 +2,7 @@
   (:require [clojure.test :as t :refer [deftest]]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.basis :as basis]
             [xtdb.compactor :as c]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu :refer [*node*]]
@@ -113,7 +114,7 @@
 
     (letfn [(q-at [tx]
               (->> (xt/q *node* '(from :docs [{:xt/id id}])
-                         {:snapshot-time (:system-time tx)
+                         {:snapshot-token (basis/->time-basis-str {"xtdb" [(:system-time tx)]})
                           :tx-timeout (Duration/ofSeconds 1)})
                    (into #{} (map :id))))]
 
@@ -163,7 +164,7 @@
 (t/deftest test-basic-sql-dml
   (letfn [(all-users [{:keys [system-time]}]
             (->> (xt/q *node* "SELECT u.first_name, u.last_name, u._valid_from, u._valid_to FROM users FOR ALL VALID_TIME u"
-                       {:snapshot-time system-time})
+                       {:snapshot-token (basis/->time-basis-str {"xtdb" [system-time]})})
                  (into #{} (map (juxt :first-name :last-name :xt/valid-from :xt/valid-to)))))]
 
     (let [tx1 (xt/execute-tx *node* [[:sql "INSERT INTO users (_id, first_name, last_name, _valid_from) VALUES (?, ?, ?, ?)"
@@ -275,7 +276,7 @@
   (letfn [(q [{:keys [system-time]}]
             (set (xt/q *node*
                        "SELECT foo._id, foo.version, foo._valid_from, foo._valid_to FROM foo FOR ALL VALID_TIME"
-                       {:snapshot-time system-time})))]
+                       {:snapshot-token (basis/->time-basis-str {"xtdb" [system-time]})})))]
     (let [tx1 (xt/execute-tx *node*
                              [[:sql "INSERT INTO foo (_id, version) VALUES (?, ?)"
                                ["foo", 0]

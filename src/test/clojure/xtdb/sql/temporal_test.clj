@@ -2,13 +2,14 @@
   (:require [clojure.test :as t]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.basis :as basis]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (defn query-at [query {:keys [system-time]}]
-  (xt/q tu/*node* query {:snapshot-time system-time, :default-tz #xt/zone "UTC"}))
+  (xt/q tu/*node* query {:snapshot-token (basis/->time-basis-str {"xtdb" [system-time]}), :default-tz #xt/zone "UTC"}))
 
 (t/deftest all-system-time
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last-updated "tx1"}]] {:system-time #inst "3000"})

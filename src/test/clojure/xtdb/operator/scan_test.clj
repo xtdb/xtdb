@@ -1,6 +1,7 @@
 (ns xtdb.operator.scan-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.basis :as basis]
             [xtdb.compactor :as c]
             [xtdb.node :as xtn]
             [xtdb.operator.scan :as scan]
@@ -12,8 +13,8 @@
             [xtdb.vector.writer :as vw])
   (:import java.util.Date
            (java.util.function IntPredicate)
-           (xtdb.compactor RecencyPartition)
-           xtdb.arrow.RelationReader))
+           xtdb.arrow.RelationReader
+           (xtdb.compactor RecencyPartition)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
 
@@ -727,7 +728,7 @@
                                                                      :valid-from start
                                                                      :valid-to end}
                                                           {:xt/id 1 :version (+ i 8)}]])))
-                    query-opts {:node node, :snapshot-time (:system-time tx-key2), :current-time (:system-time tx-key)}]
+                    query-opts {:node node, :snapshot-token (basis/->time-basis-str {"xtdb" [(:system-time tx-key2)]}), :current-time (:system-time tx-key)}]
 
                 (t/testing "temporal bounds from the live-index"
                   (t/is (= [{:xt/id 1,
@@ -760,7 +761,7 @@
                                  :id 1}]
                            (tu/query-ra '[:scan {:table #xt/table docs, :for-valid-time [:between #inst "2026" #inst "2027"]}
                                           [_id _valid_from _valid_to]]
-                                        (assoc query-opts :snapshot-time (:system-time tx-key3))))))))))))))
+                                        (assoc query-opts :snapshot-token (basis/->time-basis-str {"xtdb" [(:system-time tx-key3)]}))))))))))))))
 
 (t/deftest ^:integration test-page-filtering
   (doseq [bucketing  [RecencyPartition/WEEK RecencyPartition/YEAR]

@@ -77,7 +77,7 @@ The user submits a query to any XTDB node.
 
 They (optionally) provide system-time bounds to control what data is visible to the query, either:
 
-* a `snapshot-time` - an exact bound on the system-time.
+* a `snapshot-token` - an exact bound on the transactions visible to the query.
   This is used to ensure query repeatability, to replay an earlier query.
 * an 'await-token' - a lower-bound on the transaction indexed.
 This is used to ensure that queries observe earlier-submitted transactions - indeed, this argument ensures the read-your-writes aspect of the 'strict serialisable' guarantee.

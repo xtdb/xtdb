@@ -1,0 +1,23 @@
+edition = "2023";
+
+package xtdb.proto.basis;
+
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+
+message TxBasis {
+    map<string, MessageIds> databases = 1;
+}
+
+message MessageIds {
+    repeated int64 message_ids = 1;
+}
+
+message TimeBasis {
+    map<string, SystemTimes> databases = 1;
+}
+
+message SystemTimes {
+    repeated google.protobuf.Timestamp system_times = 1;
+}

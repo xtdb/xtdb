@@ -1553,23 +1553,14 @@
 (def ^:private nanos-divisor (mapv long [1e9 1e6 1e6 1e6 1e3 1e3 1e3 1e0 1e0 1e0]))
 (def ^:private precision-modulus (mapv long [1e0 1e2 1e1 1e0 1e2 1e1 1e0 1e2 1e1 1e0]))
 
-(defmethod expr/codegen-call [:snapshot_time] [_]
-  (let [ts-type [:timestamp-tz :micro "UTC"]]
-    {:return-type [:union #{:null ts-type}]
-     :continue-call (fn [f _]
-                      (let [ts (gensym 'ts)]
-                        `(if-let [~ts expr/*snapshot-time*]
-                           ~(f ts-type `(time/instant->micros ~ts))
-                           ~(f :null nil))))}))
-
-(defmethod expr/codegen-call [:after_tx_id] [_]
-  {:return-type [:union #{:null :i64}]
+;; TODO might be able to push this back to pgwire now that it's a string
+(defmethod expr/codegen-call [:snapshot_token] [_]
+  {:return-type [:union #{:null :utf8}]
    :continue-call (fn [f _]
-                    (let [tx-id (gensym 'tx-id)]
-                      `(let [~tx-id expr/*await-token*]
-                         (if (neg? ~tx-id)
-                           ~(f :null nil)
-                           ~(f :i64 tx-id)))))})
+                    (let [tok (gensym 'tok)]
+                      `(if-let [~tok expr/*snapshot-token*]
+                         ~(f :utf8 `(expr/str->buf ~tok))
+                         ~(f :null nil))))})
 
 (defn- truncate-for-precision [code precision]
   (let [^long modulus (precision-modulus precision)]

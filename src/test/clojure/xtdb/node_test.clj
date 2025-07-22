@@ -3,6 +3,7 @@
             [clojure.test :as t :refer [deftest]]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.basis :as basis]
             [xtdb.compactor :as c]
             [xtdb.error :as err]
             [xtdb.log :as xt-log]
@@ -105,36 +106,36 @@ VALUES (1, 'Happy 2024!', TIMESTAMP '2024-01-01Z'),
 
   (t/is (= [{:xt/id "thing", :foo "t1-foo"}]
            (xt/q tu/*node* "SELECT t1._id, t1.foo FROM t1"
-                 {:snapshot-time #inst "2020"})))
+                 {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020"]})})))
 
   (t/is (= [{:xt/id "thing", :foo "t1-foo"}]
            (xt/q tu/*node* "SELECT t1._id, t1.foo FROM t1"
-                 {:snapshot-time #inst "2020-01-02"})))
+                 {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020-01-02"]})})))
 
   (t/is (= [{:xt/id "thing", :foo "t2-foo"}]
            (xt/q tu/*node* "SELECT t2._id, t2.foo FROM t2"
-                 {:snapshot-time #inst "2020"})))
+                 {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020"]})})))
 
   (t/is (= [{:xt/id "thing", :foo "t2-foo-v2"}]
            (xt/q tu/*node* "SELECT t2._id, t2.foo FROM t2"
-                 {:snapshot-time #inst "2020-01-02"}))))
+                 {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020-01-02"]})}))))
 
-(t/deftest ensure-snapshot-time-has-been-indexed
+(t/deftest ensure-snapshot-token-has-been-indexed
   (t/is (anomalous? [:incorrect nil
-                     #"snapshot-time \(.+?\) is after the latest completed tx \(nil\)"]
+                     #"system-time \(.+?\) is after the latest completed tx \(nil\)"]
                     (xt/q tu/*node* "SELECT 1"
-                          {:snapshot-time #inst "2020"})))
+                          {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020"]})})))
 
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
 
   (t/is (= [{:xt/id 1}]
            (xt/q tu/*node* "SELECT * FROM foo"
-                 {:snapshot-time #inst "2020"})))
+                 {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020"]})})))
 
   (t/is (anomalous? [:incorrect nil
-                     #"snapshot-time \(.+?\) is after the latest completed tx \(#xt/tx-key \{.+?\}\)"]
+                     #"system-time \(.+?\) is after the latest completed tx \(#xt/tx-key \{.+?\}\)"]
                     (xt/q tu/*node* "SELECT * FROM foo"
-                          {:snapshot-time #inst "2021"}))))
+                          {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2021"]})}))))
 
 (t/deftest test-put-delete-with-implicit-tables-338
   (letfn [(foos []
@@ -258,10 +259,10 @@ WHERE foo._id = 1"]])
               {:xt/id 1, :v 1
                :xt/valid-from (time/->zdt #inst "2024")}]
 
-             (q1 {:snapshot-time #inst "2020-01-02"})))
+             (q1 {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020-01-02"]})})))
 
     (t/is (= {{:xt/id 1, :v 1} 2, {:xt/id 1, :v 2} 1}
-             (q2 {:snapshot-time #inst "2020-01-02"})))
+             (q2 {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020-01-02"]})})))
 
     (t/is (= [{:xt/id 1, :v 1
                :xt/valid-from (time/->zdt #inst "2020")
@@ -272,15 +273,16 @@ WHERE foo._id = 1"]])
               {:xt/id 1, :v 1
                :xt/valid-from (time/->zdt #inst "2025")}]
 
-             (q1 {:snapshot-time #inst "2020-01-03"})))
+             (q1 {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020-01-03"]})})))
 
     (t/is (= [{:xt/id 1, :v 1
                :xt/valid-from (time/->zdt #inst "2025")}]
 
-             (q1-now {:snapshot-time #inst "2020-01-03", :current-time (time/->instant #inst "2026")})))
+             (q1-now {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020-01-03"]}),
+                      :current-time (time/->instant #inst "2026")})))
 
     (t/is (= {{:xt/id 1, :v 1} 2, {:xt/id 1, :v 2} 1}
-             (q2 {:snapshot-time #inst "2020-01-03"})))))
+             (q2 {:snapshot-token (basis/->time-basis-str {"xtdb" [#inst "2020-01-03"]})})))))
 
 (t/deftest test-error-handling-inserting-strings-into-app-time-cols-397
   ;; this is now supported
