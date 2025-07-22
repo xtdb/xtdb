@@ -4,7 +4,7 @@
             [cognitect.anomalies :as-alias anom]
             [xtdb.api :as xt]
             [xtdb.block-catalog :as block-cat]
-            [xtdb.database :as db]
+            [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
@@ -118,14 +118,14 @@
   (ZonedDateTimeRange. (time/->zdt from) (some-> to time/->zdt)))
 
 (defn finish-block! [node]
-  (.finishBlock (.getLogProcessor (db/<-node node))))
+  (.finishBlock (.getLogProcessor (db/primary-db<-node node))))
 
 (defn flush-block!
   ([node] (flush-block! node #xt/duration "PT5S"))
   ([node timeout]
    (let [log (xt-log/<-node node)]
      @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (block-cat/<-node node)) -1)))
-     (xt-log/await-db (db/<-node node) (xtp/await-token node) timeout))))
+     (xt-log/await-db (db/primary-db<-node node) (xtp/await-token node) timeout))))
 
 (defn open-vec
   (^xtdb.arrow.Vector [^Field field]
@@ -214,9 +214,9 @@
    (let [allocator (:allocator node *allocator*)
          query-opts (cond-> query-opts
                       node (-> (update :await-token (fnil identity (xtp/await-token node)))
-                               (doto (-> :await-token (->> (xt-log/await-db (db/<-node node)))))))
+                               (doto (-> :await-token (->> (xt-log/await-db (db/primary-db<-node node)))))))
 
-         db (some-> node db/<-node)
+         db (some-> node db/primary-db<-node)
 
          snap-src (if node
                     (li/<-node node)

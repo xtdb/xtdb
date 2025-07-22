@@ -11,7 +11,7 @@
            (org.antlr.v4.runtime ParserRuleContext)
            (xtdb.antlr SqlVisitor SqlVisitor)
            xtdb.api.query.IKeyFn
-           xtdb.database.Database
+           xtdb.database.DatabaseCatalog
            xtdb.node.impl.Node))
 
 (defn- create-table [node {:keys [table-name columns]}]
@@ -38,8 +38,9 @@
 
   node)
 
-(defn- execute-sql-query [{:keys [^Database db] :as node} sql-statement variables {:keys [direct-sql] :as opts}]
-  (let [!cache (atom {})
+(defn- execute-sql-query [{:keys [^DatabaseCatalog db-cat] :as node} sql-statement variables {:keys [direct-sql] :as opts}]
+  (let [db (.getPrimary db-cat)
+        !cache (atom {})
         plan-stmt sql/plan
         live-idx (.getLiveIndex db)]
 

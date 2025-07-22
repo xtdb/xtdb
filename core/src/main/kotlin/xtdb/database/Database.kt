@@ -10,12 +10,15 @@ import xtdb.indexer.LiveIndex
 import xtdb.indexer.LogProcessor
 import xtdb.metadata.PageMetadata
 import xtdb.trie.TrieCatalog
+import java.util.Objects
 
 typealias DatabaseName = String
+typealias DatabasePart = Int
 
-// only a data class for `copy` - don't expect these to be equal
 data class Database(
     val name: DatabaseName,
+    val part: DatabasePart,
+
     val allocator: BufferAllocator,
     val blockCatalog: BlockCatalog, val tableCatalog: TableCatalog, val trieCatalog: TrieCatalog,
     val log: Log, val bufferPool: BufferPool,
@@ -29,4 +32,9 @@ data class Database(
 
     fun withComponents(logProcessor: LogProcessor?, compactor: Compactor.ForDatabase?) =
         copy(logProcessorOrNull = logProcessor, compactorOrNull = compactor)
+
+    override fun equals(other: Any?): Boolean =
+        this === other || (other is Database && name == other.name && part == other.part)
+
+    override fun hashCode() = Objects.hash(name, part)
 }

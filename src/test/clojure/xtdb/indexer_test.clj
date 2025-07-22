@@ -9,7 +9,7 @@
             [xtdb.buffer-pool :as bp]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
-            [xtdb.database :as db]
+            [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.indexer :as idx]
             [xtdb.log :as xt-log]
@@ -420,7 +420,7 @@
               (let [bp (bp/<-node node2)
                     block-cat (block-cat/<-node node2)
                     tc (cat/<-node node2)
-                    lc-tx (xt-log/await-db (db/<-node node2) first-half-await-token (Duration/ofSeconds 10))]
+                    lc-tx (xt-log/await-db (db/primary-db<-node node2) first-half-await-token (Duration/ofSeconds 10))]
                 (t/is (= first-half-tx-id (:tx-id lc-tx)))
                 (t/is (= {"xtdb" [(serde/->TxKey (:tx-id lc-tx) (:system-time lc-tx))]}
                          (xtp/latest-completed-txs node2)))
@@ -459,13 +459,13 @@
                   (with-open [node3 (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
                     (let [bp (bp/<-node node3)]
                       (t/is (<= first-half-tx-id
-                                (:tx-id (xt-log/await-db (db/<-node node3) first-half-await-token (Duration/ofSeconds 10)))
+                                (:tx-id (xt-log/await-db (db/primary-db<-node node3) first-half-await-token (Duration/ofSeconds 10)))
                                 second-half-tx-id))
 
                       (t/is (= :utf8
                                (types/field->col-type (.getField tc #xt/table device_info "_id"))))
 
-                      (xt-log/await-db (db/<-node node3) second-half-await-token (Duration/ofSeconds 15))
+                      (xt-log/await-db (db/primary-db<-node node3) second-half-await-token (Duration/ofSeconds 15))
                       (t/is (= second-half-tx-id (-> (xtp/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))))
 
                       (Thread/sleep 250); wait for the block to finish writing to disk
@@ -496,21 +496,21 @@
         (t/is (= :utf8
                  (types/field->col-type (.getField tc1 #xt/table xt_docs "v"))))
 
-        (let [tx2 (xt/execute-tx node1 [[:put-docs :xt_docs {:xt/id 1, :v :bar}]
-                                       [:put-docs :xt_docs {:xt/id 2, :v #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
-                                       [:put-docs :xt_docs {:xt/id 3, :v #xt/clj-form :foo}]])]
+        (xt/execute-tx node1 [[:put-docs :xt_docs {:xt/id 1, :v :bar}]
+                              [:put-docs :xt_docs {:xt/id 2, :v #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
+                              [:put-docs :xt_docs {:xt/id 3, :v #xt/clj-form :foo}]])
 
-          (tu/flush-block! node1)
+        (tu/flush-block! node1)
 
-          (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
-                   (types/field->col-type (.getField tc1 #xt/table xt_docs "v"))))
+        (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
+                 (types/field->col-type (.getField tc1 #xt/table xt_docs "v"))))))
 
-          (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
-            (let [tc2 (cat/<-node node2)]
-              (xt-log/sync-node node2 (Duration/ofMillis 200))
+    (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
+      (let [tc2 (cat/<-node node2)]
+        (xt-log/sync-node node2 (Duration/ofMillis 200))
 
-              (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
-                       (types/field->col-type (.getField tc2 #xt/table xt_docs "v")))))))))))
+        (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
+                 (types/field->col-type (.getField tc2 #xt/table xt_docs "v"))))))))
 
 (t/deftest test-await-fails-fast
   (let [e (UnsupportedOperationException. "oh no!")]
@@ -611,11 +611,11 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
         (let [node-id "xtdb-foo-node"
               ^BufferAllocator al (util/component node :xtdb/allocator)
               idxer (idx/<-node node)
-              db (db/<-node node)
+              db (db/primary-db<-node node)
               bp (.getBufferPool db)
               live-idx (.getLiveIndex db)]
 
-          (with-open [db-idxer (.openForDatabase idxer (db/<-node node))
+          (with-open [db-idxer (.openForDatabase idxer (db/primary-db<-node node))
                       live-idx-tx (.startTx live-idx (serde/->TxKey 1 Instant/EPOCH))
                       live-table-tx (.liveTable live-idx-tx #xt/table foo)]
             (idx/crash-log! (-> db-idxer (assoc :node-id node-id)) "test crash log"

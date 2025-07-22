@@ -734,7 +734,7 @@
 
 (defmethod ig/prep-key ::for-db [_ {:keys [base]}]
   {:base base
-   :query-db (ig/ref :xtdb.database/for-query)})
+   :query-db (ig/ref :xtdb.db-catalog/for-query)})
 
 (defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base,
                                     :keys [query-db]}]

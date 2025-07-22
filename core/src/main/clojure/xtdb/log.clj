@@ -4,7 +4,7 @@
             [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
-            [xtdb.database :as db]
+            [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
@@ -26,7 +26,7 @@
            (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
-           xtdb.database.Database
+           (xtdb.database Database DatabaseCatalog)
            xtdb.indexer.LogProcessor
            (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs)
            (xtdb.util MsgIdUtil)))
@@ -297,9 +297,10 @@
                  (not (instance? TxOp tx-op)) tx-ops/parse-tx-op)))))
 
 (defn submit-tx ^long
-  [{:keys [^BufferAllocator allocator, ^Database db, default-tz]} tx-ops {:keys [system-time] :as opts}]
+  [{:keys [^BufferAllocator allocator, ^DatabaseCatalog db-cat, default-tz]} tx-ops {:keys [system-time] :as opts}]
 
-  (let [log (.getLog db)
+  (let [db (.getPrimary db-cat) ; TODO multi-db
+        log (.getLog db)
         default-tz (:default-tz opts default-tz)]
     (util/rethrowing-cause
       (let [^Log$MessageMetadata message-meta @(.appendMessage log
@@ -311,8 +312,8 @@
 
 (defmethod ig/prep-key :xtdb.log/processor [_ {:keys [base ^IndexerConfig indexer-conf]}]
   {:base base
-   :allocator (ig/ref :xtdb.database/allocator)
-   :db (ig/ref :xtdb.database/for-query)
+   :allocator (ig/ref :xtdb.db-catalog/allocator)
+   :db (ig/ref :xtdb.db-catalog/for-query)
    :indexer (ig/ref :xtdb.indexer/for-db)
    :compactor (ig/ref :xtdb.compactor/for-db)
    :block-flush-duration (.getFlushDuration indexer-conf)
@@ -327,9 +328,10 @@
   (util/close log-processor))
 
 (defn <-node ^xtdb.api.log.Log [node]
-  (.getLog (db/<-node node)))
+  (.getLog (db/primary-db<-node node)))
 
 (defn await-db
+  ;; TODO this should probably be await-node given it's taking a multi-db token
   ([^Database db]
    (-> @(.awaitAsync (.getLogProcessor db))
        (util/rethrowing-cause)))
@@ -348,5 +350,5 @@
          (util/rethrowing-cause)))))
 
 (defn sync-node
-  ([node] (await-db (db/<-node node)))
-  ([node timeout] (await-db (db/<-node node) (xtp/await-token node) timeout)))
+  ([node] (await-db (db/primary-db<-node node)))
+  ([node timeout] (await-db (db/primary-db<-node node) (xtp/await-token node) timeout)))

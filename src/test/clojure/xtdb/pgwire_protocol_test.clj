@@ -2,7 +2,7 @@
   (:require [clojure.test :as t :refer [deftest]]
             [jsonista.core :as json]
             [xtdb.authn :as authn]
-            [xtdb.database :as db]
+            [xtdb.db-catalog :as db]
             [xtdb.indexer.live-index :as li]
             [xtdb.pgwire :as pgwire]
             [xtdb.pgwire.io :as pgio]
@@ -71,7 +71,7 @@
                                                 :->node {"xtdb" (-> tu/*node*
                                                                     (assoc :authn (authn/->UserTableAuthn authn-rules
                                                                                                           (util/component tu/*node* :xtdb.query/query-source)
-                                                                                                          (db/<-node tu/*node*)
+                                                                                                          (db/primary-db<-node tu/*node*)
                                                                                                           (li/<-node tu/*node*))))}}
                                        :allocator tu/*allocator*
                                        :frontend frontend

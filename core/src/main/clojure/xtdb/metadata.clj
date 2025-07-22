@@ -1,12 +1,12 @@
 (ns xtdb.metadata
   (:require [integrant.core :as ig]
-            [xtdb.database :as db]
+            [xtdb.db-catalog :as db]
             [xtdb.util :as util])
   (:import xtdb.BufferPool
            (xtdb.metadata PageMetadata)))
 
 (defmethod ig/prep-key ::metadata-manager [_ _]
-  {:allocator (ig/ref :xtdb.database/allocator)
+  {:allocator (ig/ref :xtdb.db-catalog/allocator)
    :buffer-pool (ig/ref :xtdb/buffer-pool)})
 
 (defmethod ig/init-key ::metadata-manager [_ {:keys [allocator, ^BufferPool buffer-pool, cache-size], :or {cache-size 128}}]
@@ -16,4 +16,4 @@
   (util/try-close mgr))
 
 (defn <-node ^xtdb.metadata.PageMetadata$Factory [node]
-  (.getMetadataManager (db/<-node node)))
+  (.getMetadataManager (db/primary-db<-node node)))

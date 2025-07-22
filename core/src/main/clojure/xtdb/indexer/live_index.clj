@@ -3,7 +3,7 @@
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.buffer-pool]
-            [xtdb.database :as db]
+            [xtdb.db-catalog :as db]
             [xtdb.metrics :as metrics]
             [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]
@@ -208,7 +208,7 @@
 (defmethod ig/prep-key :xtdb.indexer/live-index [_ {:keys [base, ^IndexerConfig indexer-conf]}]
   {:base base
 
-   :allocator (ig/ref :xtdb.database/allocator)
+   :allocator (ig/ref :xtdb.db-catalog/allocator)
    :buffer-pool (ig/ref :xtdb/buffer-pool)
    :block-cat (ig/ref :xtdb/block-catalog)
    :table-cat (ig/ref :xtdb/table-catalog)
@@ -244,4 +244,4 @@
   (util/close live-idx))
 
 (defn <-node ^xtdb.indexer.LiveIndex [node]
-  (.getLiveIndex (db/<-node node)))
+  (.getLiveIndex (db/primary-db<-node node)))

@@ -1,7 +1,6 @@
 (ns xtdb.flight-sql
   (:require [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.database :as db]
             [xtdb.indexer]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
@@ -24,7 +23,7 @@
            [org.apache.arrow.vector.types.pojo Schema]
            [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
            xtdb.arrow.Relation
-           xtdb.database.Database
+           xtdb.database.DatabaseCatalog
            xtdb.IResultCursor
            [xtdb.query IQuerySource PreparedQuery]))
 
@@ -271,9 +270,10 @@
                     (some? port) (.port port))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-server [{:keys [allocator q-src ^Database db] :as node}
+(defn open-server [{:keys [allocator q-src ^DatabaseCatalog db-cat] :as node}
                    ^FlightSqlServer$Factory factory]
-  (let [host (.getHost factory)
+  (let [db (.getPrimary db-cat) ; TODO multi-db
+        host (.getHost factory)
         port (.getPort factory)
         fsql-txs (ConcurrentHashMap.)
         stmts (ConcurrentHashMap.)

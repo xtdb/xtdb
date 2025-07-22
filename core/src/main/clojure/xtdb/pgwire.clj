@@ -8,7 +8,7 @@
             [xtdb.antlr :as antlr]
             [xtdb.api :as xt]
             [xtdb.authn :as authn]
-            [xtdb.database :as db]
+            [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.log :as xt-log]
@@ -450,7 +450,7 @@
                  {:keys [^Clock clock]} session]
 
              (when-not (= :read-write (:access-mode tx-opts))
-               (xt-log/await-db (db/<-node node) await-token #xt/duration "PT30S"))
+               (xt-log/await-db (db/primary-db<-node node) await-token #xt/duration "PT30S"))
 
              (-> st
                  (update :transaction

@@ -1,6 +1,6 @@
 (ns xtdb.compactor
   (:require [integrant.core :as ig]
-            [xtdb.database :as db]
+            [xtdb.db-catalog :as db]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.util :as util])
@@ -130,7 +130,7 @@
 
 (defmethod ig/prep-key ::for-db [_ {:keys [base]}]
   {:base base
-   :query-db (ig/ref :xtdb.database/for-query)})
+   :query-db (ig/ref :xtdb.db-catalog/for-query)})
 
 (defmethod ig/init-key ::for-db [_ {{:keys [^Compactor compactor]} :base, :keys [query-db]}]
   (.openForDatabase compactor query-db))
@@ -142,5 +142,5 @@
   "`timeout` is now required, explicitly specify `nil` if you want to wait indefinitely."
   [node timeout]
 
-  (-> (.getCompactor (db/<-node node))
+  (-> (.getCompactor (db/primary-db<-node node))
       (.compactAll timeout)))
