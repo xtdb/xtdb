@@ -6,6 +6,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
+import java.nio.ByteBuffer
 
 internal val I32 = MinorType.INT.type
 
@@ -24,6 +25,8 @@ class IntVector private constructor(
     override fun writeInt(v: Int) = writeInt0(v)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getInt(idx)
+
+    override fun getBytes(idx: Int): ByteBuffer = getBytes0(idx)
 
     override fun writeObject0(value: Any) {
         if (value is Int) writeInt(value) else throw InvalidWriteObjectException(fieldType, value)

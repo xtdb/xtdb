@@ -2,23 +2,46 @@ package xtdb.trie
 
 import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.memory.util.ArrowBufPointer
+import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.ArrowType.FixedSizeBinary
+import org.roaringbitmap.RoaringBitmap
 import xtdb.arrow.VectorReader
+import xtdb.trie.HashTrie.Companion.LEVEL_BITS
 import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
 import xtdb.trie.HashTrie.Companion.bucketFor
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.function.IntBinaryOperator
 
 private const val LOG_LIMIT = 64
 private const val PAGE_LIMIT = 1024
-private const val MAX_LEVEL = 64
 
-class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) : HashTrie<MemoryHashTrie.Node, MemoryHashTrie.Leaf> {
+// hashReader is assumed to be a FixedSizeBinary vector
+// for iids this is ArrowType.FixedSizeBinary(16)
+// for hashes this is ArrowType.Int
+class MemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader) : HashTrie<MemoryHashTrie.Node, MemoryHashTrie.Leaf> {
+
+    private val max_level : Int
+
+    init {
+        max_level =  when(val type = hashReader.field.type) {
+            is FixedSizeBinary -> type.byteWidth * 8 / LEVEL_BITS
+            is ArrowType.Int -> type.bitWidth / LEVEL_BITS
+            else -> throw IllegalArgumentException("Unsupported Arrow type for hashReader: ${hashReader.field.type}")
+        }
+    }
+
     sealed interface Node : HashTrie.Node<Node> {
         fun add(trie: MemoryHashTrie, newIdx: Int): Node
+        fun addIfNotPresent(trie: MemoryHashTrie, newIdx: Int, comparator: IntBinaryOperator): Node
+        fun findCandidates(hash: ByteArray): IntArray
+        fun findValue(hash: ByteArray, idx: Int, comparator: IntBinaryOperator, removeOnMatch: Boolean): Int
 
         fun compactLogs(trie: MemoryHashTrie): Node
     }
 
     @Suppress("unused")
-    class Builder(private val iidReader: VectorReader) {
+    class Builder(private val hashReader: VectorReader) {
         private var logLimit = LOG_LIMIT
         private var pageLimit = PAGE_LIMIT
         private var rootPath = ByteArray(0)
@@ -26,41 +49,59 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
         fun setLogLimit(logLimit: Int) = this.apply { this.logLimit = logLimit }
         fun setPageLimit(pageLimit: Int) = this.apply { this.pageLimit = pageLimit }
         fun setRootPath(path: ByteArray) = this.apply { this.rootPath = path }
-        fun build(): MemoryHashTrie = MemoryHashTrie(Leaf(logLimit, pageLimit, rootPath), iidReader)
+        fun build(): MemoryHashTrie = MemoryHashTrie(Leaf(logLimit, pageLimit, rootPath), hashReader)
     }
 
-    operator fun plus(idx: Int) = MemoryHashTrie(rootNode.add(this, idx), iidReader)
+    operator fun plus(idx: Int) = MemoryHashTrie(rootNode.add(this, idx), hashReader)
+
+    fun addIfNotPresent(trie: MemoryHashTrie, newIdx: Int, comparator: IntBinaryOperator): MemoryHashTrie =
+        MemoryHashTrie(rootNode.addIfNotPresent(this, newIdx, comparator), hashReader)
+
+    fun findCandidates (hash: ByteArray) : IntArray = rootNode.findCandidates(hash)
+
+    fun findCandidates(value: Int) : IntArray =
+        findCandidates(ByteBuffer.allocate(Int.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).putInt(value).array())
+
+    // This assumes the trie has been compacted
+    fun findValue (hash: ByteArray, idx: Int, comparator: IntBinaryOperator, removeOnMatch: Boolean) : Int =
+        rootNode.findValue(hash, idx, comparator, removeOnMatch)
+
+    fun findValue(hash: Int, idx: Int, comparator: IntBinaryOperator, removeOnMatch: Boolean) : Int =
+        findValue(ByteBuffer.allocate(Int.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).putInt(hash).array(), idx, comparator, removeOnMatch)
+
+
 
     @Suppress("unused")
-    fun withIidReader(iidReader: VectorReader) = MemoryHashTrie(rootNode, iidReader)
+    fun withIidReader(hashReader: VectorReader) = MemoryHashTrie(rootNode, hashReader)
 
-    fun compactLogs() = MemoryHashTrie(rootNode = rootNode.compactLogs(this), iidReader)
+    fun compactLogs() = MemoryHashTrie(rootNode = rootNode.compactLogs(this), hashReader)
 
     private fun bucketFor(idx: Int, level: Int, reusePtr: ArrowBufPointer): Int =
-        bucketFor(iidReader.getPointer(idx, reusePtr), level).toInt()
+        bucketFor(hashReader.getPointer(idx, reusePtr), level).toInt()
 
     private fun compare(leftIdx: Int, rightIdx: Int, leftPtr: ArrowBufPointer, rightPtr: ArrowBufPointer): Int {
         val cmp =
-            iidReader.getPointer(leftIdx, leftPtr)
-                .compareTo(iidReader.getPointer(rightIdx, rightPtr))
+            hashReader.getPointer(leftIdx, leftPtr)
+                .compareTo(hashReader.getPointer(rightIdx, rightPtr))
 
         return if (cmp != 0) cmp else rightIdx compareTo leftIdx
     }
+
 
     class Branch(
         private val logLimit: Int,
         private val pageLimit: Int,
         override val path: ByteArray,
-        override val iidChildren: Array<Node?>,
+        override val hashChildren: Array<Node?>,
     ) : Node {
         private val addPtr = ArrowBufPointer()
 
         override fun add(trie: MemoryHashTrie, newIdx: Int): Node {
             val bucket = trie.bucketFor(newIdx, path.size, addPtr)
 
-            val newChildren = iidChildren.indices
+            val newChildren = hashChildren.indices
                 .map { childIdx ->
-                    var child = iidChildren[childIdx]
+                    var child = hashChildren[childIdx]
                     if (bucket == childIdx) {
                         child = child ?: Leaf(logLimit, pageLimit, conjPath(path, childIdx.toByte()))
                         child = child.add(trie, newIdx)
@@ -71,8 +112,36 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
             return Branch(logLimit, pageLimit, path, newChildren)
         }
 
+        override fun addIfNotPresent(trie: MemoryHashTrie, newIdx: Int, comparator: IntBinaryOperator): Node {
+            val bucket = trie.bucketFor(newIdx, path.size, addPtr)
+
+            val newChildren = hashChildren.indices
+                .map { childIdx ->
+                    var child = hashChildren[childIdx]
+                    if (bucket == childIdx) {
+                        child = child ?: Leaf(logLimit, pageLimit, conjPath(path, childIdx.toByte()))
+                        child = child.addIfNotPresent(trie, newIdx, comparator)
+                    }
+                    child
+                }.toTypedArray()
+
+            return Branch(logLimit, pageLimit, path, newChildren)
+        }
+
+        override fun findCandidates(hash: ByteArray): IntArray {
+            val bucket = bucketFor(hash, path.size).toInt()
+            val child = hashChildren[bucket] ?: return IntArray(0)
+            return child.findCandidates(hash)
+        }
+
+        override fun findValue(hash: ByteArray, idx: Int, comparator: IntBinaryOperator, removeOnMatch: Boolean ): Int {
+            val bucket = bucketFor(hash, path.size).toInt()
+            val child = hashChildren[bucket] ?: return -1
+            return child.findValue(hash, idx, comparator, removeOnMatch)
+        }
+
         override fun compactLogs(trie: MemoryHashTrie) =
-            Branch(logLimit, pageLimit, path, iidChildren.map { child -> child?.compactLogs(trie) }.toTypedArray())
+            Branch(logLimit, pageLimit, path, hashChildren.map { child -> child?.compactLogs(trie) }.toTypedArray())
     }
 
     class Leaf(
@@ -82,10 +151,11 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
         val data: IntArray = IntArray(0),
         val log: IntArray = IntArray(logLimit),
         private val logCount: Int = 0,
-        private var sortedData: IntArray? = null
+        private var sortedData: IntArray? = null,
+        private var deletions: RoaringBitmap? = null
     ) : Node {
 
-        override val iidChildren = null
+        override val hashChildren = null
 
         fun mergeSort(trie: MemoryHashTrie): IntArray {
             if (log.isEmpty()) return data
@@ -156,7 +226,7 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
             val log = IntArray(logLimit)
             val logCount = 0
 
-            return if (data.size > pageLimit && path.size < MAX_LEVEL) {
+            return if (data.size > pageLimit && path.size < trie.max_level) {
                 val childBuckets = idxBuckets(trie, data, path)
 
                 val childNodes = childBuckets
@@ -178,15 +248,50 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
 
             return if (logCount == logLimit) newLeaf.compactLogs(trie) else newLeaf
         }
+
+        override fun addIfNotPresent(trie: MemoryHashTrie, newIdx: Int, comparator: IntBinaryOperator): Node {
+            when (val node = compactLogs(trie)) {
+                is Branch -> return node.addIfNotPresent(trie, newIdx, comparator)
+                is Leaf -> {
+                    for (testIdx in node.data) {
+                        if (comparator.applyAsInt(newIdx, testIdx) == 1) {
+                            return node
+                        }
+                    }
+                    return node.add(trie, newIdx)
+                }
+            }
+        }
+
+        override fun findCandidates(hash: ByteArray): IntArray {
+            // We could filter data based on hash as well
+            return data
+        }
+
+        override fun findValue(hash: ByteArray, idx: Int, comparator: IntBinaryOperator, removeOnMatch: Boolean): Int {
+            val data = when (deletions) {
+                null -> data
+                else -> data.filter { !deletions!!.contains(it) }.toIntArray()
+            }
+            for( testIdx in data) {
+                if (comparator.applyAsInt(idx, testIdx) == 1) {
+                    if (removeOnMatch) {
+                        deletions = (deletions ?: RoaringBitmap()).apply { add(testIdx) }
+                    }
+                    return testIdx
+                }
+            }
+            return -1
+        }
     }
 
     companion object {
         @JvmStatic
-        fun builder(iidReader: VectorReader) = Builder(iidReader)
+        fun builder(hashReader: VectorReader) = Builder(hashReader)
 
         @JvmStatic
         @Suppress("unused")
-        fun emptyTrie(iidReader: VectorReader) = builder(iidReader).build()
+        fun emptyTrie(hashReader: VectorReader) = builder(hashReader).build()
 
         private fun conjPath(path: ByteArray, idx: Byte): ByteArray {
             val currentPathLength = path.size

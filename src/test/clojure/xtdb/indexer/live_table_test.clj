@@ -21,7 +21,8 @@
            xtdb.BufferPool
            (xtdb.indexer LiveIndex LiveTable LiveTable$Snapshot)
            (xtdb.trie MemoryHashTrie$Leaf)
-           (xtdb.util RefCounter RowCounter)))
+           (xtdb.util RefCounter RowCounter)
+           (xtdb.arrow UuidVector)))
 
 (t/use-fixtures :each tu/with-node)
 
@@ -114,7 +115,7 @@
                                  (.getLeaves)
                                  (mapcat #(.getData ^MemoryHashTrie$Leaf %))
                                  (vec))
-        live-trie-iids (map #(util/byte-buffer->uuid (.getBytes (.getIidReader live-trie) %))
+        live-trie-iids (map #(util/byte-buffer->uuid (.getBytes (.getHashReader live-trie) %))
                             live-trie-leaf-data)]
     {:live-rel-data live-rel-data
      :live-trie-leaf-data live-trie-leaf-data

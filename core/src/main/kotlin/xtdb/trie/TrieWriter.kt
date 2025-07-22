@@ -28,7 +28,7 @@ class TrieWriter(
                         when (this) {
                             is MemoryHashTrie.Branch ->
                                 metaFileWriter.writeIidBranch(
-                                    IntArray(iidChildren.size) { idx -> iidChildren[idx]?.writeNode() ?: -1 }
+                                    IntArray(hashChildren.size) { idx -> hashChildren[idx]?.writeNode() ?: -1 }
                                 )
 
                             is MemoryHashTrie.Leaf -> {

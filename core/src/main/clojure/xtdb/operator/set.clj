@@ -109,6 +109,8 @@
                            (dotimes [idx (.getRowCount in-rel)]
                              (.add builder idx)))))
 
+    (.compactHashTrie rel-map)
+
     (boolean
      (let [advanced? (boolean-array 1)]
        (while (and (not (aget advanced? 0))
@@ -172,7 +174,8 @@
                                            idxs (IntStream/builder)]
                                        (dotimes [idx row-count]
                                          (when (neg? (.addIfNotPresent builder idx))
-                                           (.add idxs idx)))
+                                           (.add idxs idx))
+                                         (.compactHashTrie rel-map))
 
                                        (let [idxs (.toArray (.build idxs))]
                                          (when-not (empty? idxs)
@@ -241,7 +244,8 @@
                           (dotimes [idx (.getRowCount in-rel)]
                             (let [map-idx (.addIfNotPresent rel-builder idx)]
                               (when (neg? map-idx)
-                                (.add new-idxs (RelationMap/insertedIdx map-idx)))))
+                                (.add new-idxs (RelationMap/insertedIdx map-idx)))
+                              (.compactHashTrie rel-map)))
 
                           (let [new-idxs (.toArray (.build new-idxs))]
                             (when-not (empty? new-idxs)

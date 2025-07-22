@@ -2,20 +2,24 @@ package xtdb.expression.map
 
 import clojure.lang.IFn
 import com.carrotsearch.hppc.IntObjectHashMap
+import org.apache.arrow.memory.BufferAllocator
 import java.util.function.IntBinaryOperator
 import java.util.function.IntConsumer
 import org.apache.arrow.memory.util.hash.MurmurHasher
 import org.apache.arrow.vector.types.pojo.Field
 import org.roaringbitmap.RoaringBitmap
 import xtdb.*
+import xtdb.arrow.IntVector
 
 import xtdb.arrow.RelationReader
 import xtdb.arrow.RelationWriter
 import xtdb.arrow.VectorReader
+import xtdb.trie.MemoryHashTrie
 import xtdb.util.Hasher
 import xtdb.util.requiringResolve
 
 class RelationMap(
+    val allocator: BufferAllocator,
     val buildFields : Map<String, Field>,
     val buildKeyColumnNames: List<String>,
     val probeFields : Map<String, Field>,
@@ -27,8 +31,20 @@ class RelationMap(
     private val nilKeysEqual: Boolean = false,
     private val thetaExpr: Any? = null,
     private val paramTypes: Map<String, Any> = emptyMap(),
-    private val args: RelationReader? = null
+    private val args: RelationReader? = null,
+    private val withNilRow: Boolean = false,
+    private val pageLimit: Int = 16
 ) : AutoCloseable {
+
+    private val hashColumn: IntVector
+    private var buildHashTrie : MemoryHashTrie
+
+    init {
+        hashColumn = IntVector(allocator, "xt/join-hash", false)
+        if (withNilRow) hashColumn.writeInt(0)
+        buildHashTrie = MemoryHashTrie.builder(hashColumn.asReader).setPageLimit(pageLimit).build()
+    }
+
 
     private val equiComparatorFn = requiringResolve("xtdb.expression.map/->equi-comparator") as IFn
     private val thetaComparatorFn = requiringResolve("xtdb.expression.map/->theta-comparator") as IFn
@@ -82,9 +98,13 @@ class RelationMap(
             bitmap
         }
 
+    fun compactHashTrie() {
+        buildHashTrie = buildHashTrie.compactLogs()
+    }
+
     @Suppress("NAME_SHADOWING")
     fun buildFromRelation(inRel: RelationReader): RelationMapBuilder {
-        val inRel = if (storeFullBuildRel) {
+        var inRel = if (storeFullBuildRel) {
             inRel
         } else {
             RelationReader.from(buildKeyColumnNames.map { inRel.vectorFor(it) })
@@ -109,22 +129,28 @@ class RelationMap(
         val hasher = createHasher(inKeyCols)
         val rowCopier = relWriter.rowCopier(inRel)
 
-        fun add(hashBitmap: RoaringBitmap, idx: Int): Int {
+        fun add(idx: Int): Int {
+            // outIndex and used index for hashColumn should be identical
+            val outIdxHashColumn = hashColumn.valueCount
+            hashColumn.writeInt(hasher.hashCode(idx))
+            buildHashTrie += outIdxHashColumn
+
             val outIdx = rowCopier.copyRow(idx)
-            hashBitmap.add(outIdx)
+            assert(outIdx == outIdxHashColumn) {
+                "Expected outIdx $outIdx to match hashColumn valueCount $outIdxHashColumn"
+            }
             return returnedIdx(outIdx)
         }
 
-
         return object : RelationMapBuilder {
-            override fun add(inIdx: Int) {
-                add(computeHashBitmap(hasher.hashCode(inIdx)), inIdx);
+            override fun add(inIdx: Int)  {
+               add(inIdx)
             }
 
             override fun addIfNotPresent(inIdx: Int): Int {
-                val hashBitmap = computeHashBitmap(hasher.hashCode(inIdx))
-                val outIdx = hashBitmap.findInHashBitmap(comparatorLazy, inIdx, false)
-                return if (outIdx >= 0) { outIdx } else { add(hashBitmap, inIdx) }
+                val hashCode = hasher.hashCode(inIdx)
+                val outIdx = buildHashTrie.findValue(hashCode, inIdx, comparatorLazy, false)
+                return if (outIdx >= 0) { outIdx } else { add(inIdx) }
             }
         }
     }
@@ -167,34 +193,27 @@ class RelationMap(
         val hasher = createHasher(probeKeyCols)
 
         return object : RelationMapProber {
+            // TODO one could very likely do a similar thing to a merge sort phase with the buildHashTrie and a probeHashTrie
             override fun indexOf(inIdx: Int, removeOnMatch: Boolean): Int{
                 val hashCode = hasher.hashCode(inIdx)
-                val hashBitmap = hashToBitmap.get(hashCode)
-
-                return hashBitmap.findInHashBitmap(comparator, inIdx, removeOnMatch)
+                return buildHashTrie.findValue(hashCode, inIdx, comparator, removeOnMatch)
             }
 
             override fun forEachMatch(inIdx: Int, c: IntConsumer) {
                 val hashCode = hasher.hashCode(inIdx)
-                val hashBitmap = hashToBitmap.get(hashCode)
-
-                hashBitmap?.let { bitmap ->
-                    val iterator = bitmap.intIterator
-                    while (iterator.hasNext()) {
-                        val outIdx = iterator.next()
-                        if (comparator.applyAsInt(inIdx.toInt(), outIdx) == 1) {
-                            c.accept(outIdx)
-                        }
+                for (outIdx in buildHashTrie.findCandidates(hashCode)) {
+                    if (comparator.applyAsInt(inIdx, outIdx) == 1) {
+                        c.accept(outIdx)
                     }
                 }
             }
 
             override fun matches(inIdx: Int): Int {
-                // TODO: This doesn't use hashmaps, still a nested loop join
+                // TODO: This doesn't use the hashTries, still a nested loop join
                 var acc = -1
                 val buildRowCount = buildRel.rowCount
-                for (buildIdx in 0 until buildRowCount.toInt()) {
-                    val res = comparator.applyAsInt(inIdx.toInt(), buildIdx)
+                for (buildIdx in 0 until buildRowCount) {
+                    val res = comparator.applyAsInt(inIdx, buildIdx)
                     if (res == 1) {
                         return 1
                     }
@@ -209,5 +228,6 @@ class RelationMap(
 
     override fun close() {
         relWriter.close()
+        hashColumn.close()
     }
 }

@@ -176,7 +176,8 @@
                                (dotimes [build-idx (.getRowCount build-rel)]
                                  (when (and iid-set (= (name build-col-name) "_iid"))
                                    (.add iid-set (.getBytes build-col build-idx)))
-                                 (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))))
+                                 (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx)))))))))
+  (.compactHashTrie rel-map))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^xtdb.arrow.RelationReader probe-phase
