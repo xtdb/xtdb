@@ -5,11 +5,12 @@
   (:import (xtdb.block.proto Block TxKey)
            xtdb.catalog.BlockCatalog))
 
-(defmethod ig/prep-key :xtdb/block-catalog [_ _]
-  {:buffer-pool (ig/ref :xtdb/buffer-pool)})
+(defmethod ig/prep-key :xtdb/block-catalog [_ {:keys [db-name]}]
+  {:db-name db-name
+   :buffer-pool (ig/ref :xtdb/buffer-pool)})
 
-(defmethod ig/init-key :xtdb/block-catalog [_ {:keys [buffer-pool]}]
-  (BlockCatalog. buffer-pool))
+(defmethod ig/init-key :xtdb/block-catalog [_ {:keys [db-name buffer-pool]}]
+  (BlockCatalog. db-name buffer-pool))
 
 (defn- <-TxKey [^TxKey tx-key]
   (serde/->TxKey (.getTxId tx-key) (time/micros->instant (.getSystemTime tx-key))))

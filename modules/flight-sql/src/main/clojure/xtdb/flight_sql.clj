@@ -52,7 +52,8 @@
 
 (defn- dml? [sql]
   (contains? #{:insert :update :delete :erase :create-user :alter-user}
-             (first (parse-sql/parse-statement sql))))
+             ;; TODO multi-db
+             (first (parse-sql/parse-statement sql {:default-db "xtdb"}))))
 
 (defn- flight-stream->rows [^BufferAllocator allocator, ^FlightStream flight-stream]
   (let [root (.getRoot flight-stream)

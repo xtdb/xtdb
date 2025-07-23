@@ -22,7 +22,8 @@
 
 (defn find-table [schema table-name]
   (or (some-> (some (tables schema) (->> (symbol-names table-name)
-                                         (map table/->ref)))
+                                         ;; TODO multi-db
+                                         (map (partial table/->ref "xtdb"))))
               table/ref->sym
               (info/name->oid))
       (throw (err/incorrect ::unknown-relation (format "Relation %s does not exist" table-name)))))

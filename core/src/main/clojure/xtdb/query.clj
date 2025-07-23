@@ -186,7 +186,7 @@
   PQuerySource
   (-plan-query [_ parsed-query query-opts table-info]
     (.get plan-cache [parsed-query (-> query-opts
-                                       (select-keys [:decorrelate? :explain? :arg-fields])
+                                       (select-keys [:default-db :decorrelate? :explain? :arg-fields])
                                        (update :decorrelate? (fnil boolean true))
                                        (assoc :table-info table-info))]
           (fn [[parsed-query query-opts]]
@@ -211,7 +211,10 @@
   (prepareQuery [this query db snap-src {:keys [default-tz] :as query-opts}]
     (let [parsed-query (parse-query query)
           !table-info (atom (scan/tables-with-cols snap-src))
-          default-tz (or default-tz expr/*default-tz*)]
+          default-tz (or default-tz expr/*default-tz*)
+          query-opts (-> query-opts
+                         ;; TODO multi-db
+                         (update :default-db (fnil identity "xtdb")))]
       (letfn [(plan-query* [table-info]
                 (-plan-query this parsed-query query-opts table-info))]
 

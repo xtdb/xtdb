@@ -162,7 +162,7 @@
             table-catalog (.getTableCatalog db)
             trie-catalog (.getTrieCatalog db)
             live-index-allocator (util/->child-allocator allocator "live-index")]
-        (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp log
+        (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator "xtdb" bp log
                                                                block-cat table-catalog trie-catalog
 
                                                                nil (HashMap.)

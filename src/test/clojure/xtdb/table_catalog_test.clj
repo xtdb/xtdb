@@ -18,7 +18,7 @@
            (xtdb.util HyperLogLog)))
 
 (defn trie-details->edn [^TrieDetails trie]
-  (cond-> {:table (table/->ref (.getTableName trie))
+  (cond-> {:table (table/->ref "xtdb" (.getTableName trie)) ; TODO multi-db, db is likely going to be part of the TrieDetails msg
            :trie-key (.getTrieKey trie)
            :data-file-size (.getDataFileSize trie)}
     (.hasTrieMetadata trie) (assoc :trie-metadata (trie-cat/<-trie-metadata (.getTrieMetadata trie)))))

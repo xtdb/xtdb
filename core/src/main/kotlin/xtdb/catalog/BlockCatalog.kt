@@ -7,6 +7,7 @@ import xtdb.api.log.MessageId
 import xtdb.block.proto.Block
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
+import xtdb.table.DatabaseName
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.microsAsInstant
@@ -20,7 +21,7 @@ import java.nio.file.Path
 
 private val LOGGER = LoggerFactory.getLogger(BlockCatalog::class.java)
 
-class BlockCatalog(private val bp: BufferPool) {
+class BlockCatalog(private val dbName: DatabaseName, private val bp: BufferPool) {
 
     @Volatile
     private var latestBlock: Block? =
@@ -75,7 +76,7 @@ class BlockCatalog(private val bp: BufferPool) {
         get() = latestBlock?.let { block -> block.latestProcessedMsgId.takeIf { block.hasLatestProcessedMsgId() } }
             ?: latestCompletedTx?.txId
 
-    val allTables: List<TableRef> get() = latestBlock?.tableNamesList.orEmpty().map { TableRef.parse(it) }
+    val allTables: List<TableRef> get() = latestBlock?.tableNamesList.orEmpty().map { TableRef.parse(dbName, it) }
 
     private fun Path.parseBlockIndex(): Long? =
         Regex("b(\\p{XDigit}+)\\.binpb")

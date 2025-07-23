@@ -22,6 +22,7 @@
            (xtdb.error Anomaly)
            xtdb.JsonSerde
            (xtdb.pg.codec NumericBin)
+           xtdb.table.TableRef
            [xtdb.time Interval Time]
            (xtdb.types ZonedDateTimeRange)))
 
@@ -86,6 +87,11 @@
     (instance? UUID obj) (json-clj (str obj))
     (instance? ByteBuffer obj) (json-clj (str "0x" (Hex/encodeHexString (util/byte-buffer->byte-array obj))))
     (instance? URI obj) (json-clj (str obj))
+
+    (instance? TableRef obj) (let [^TableRef table obj]
+                               (json-clj {:db-name (.getDbName table)
+                                          :schema-name (.getSchemaName table)
+                                          :table-name (.getTableName table)}))
 
     :else
     (throw (err/unsupported ::unknown-type (format "Unexpected type encountered by pgwire (%s)" (class obj))))))

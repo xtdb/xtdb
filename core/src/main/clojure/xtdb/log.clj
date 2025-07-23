@@ -1,6 +1,5 @@
 (ns xtdb.log
-  (:require [clojure.string :as str]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
@@ -9,6 +8,7 @@
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
             [xtdb.sql :as sql]
+            [xtdb.table :as table]
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
@@ -28,6 +28,7 @@
            xtdb.catalog.BlockCatalog
            (xtdb.database Database DatabaseCatalog)
            xtdb.indexer.LogProcessor
+           xtdb.table.TableRef
            (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs)
            (xtdb.util MsgIdUtil)))
 
@@ -43,16 +44,14 @@
             (types/col-type->field "default-tz" :utf8)
             (types/->field "user" #xt.arrow/type :utf8 true)]))
 
-(def ^:private forbidden-tables #{"xt/" "information_schema/" "pg_catalog/"})
+(def ^:private forbidden-schemas #{"xt" "information_schema" "pg_catalog"})
 
-(defn forbidden-table? [table-name]
-  (when-not (= table-name "xt/tx_fns")
-    (some (fn [s] (str/starts-with? table-name s)) forbidden-tables)))
+(defn forbidden-table? [^TableRef table]
+  (contains? forbidden-schemas (.getSchemaName table)))
 
-(defn forbidden-table-ex [table-name]
-  (err/illegal-arg :xtdb/forbidden-table
-                   {::err/message (format "Cannot write to table: %s" table-name)
-                    :table-name table-name}))
+(defn forbidden-table-ex [table]
+  (err/incorrect :xtdb/forbidden-table (format "Cannot write to table: %s" (table/ref->sym table))
+                 {:table table}))
 
 (defn encode-sql-args [^BufferAllocator allocator, arg-rows]
   (if (apply not= (map count arg-rows))
@@ -109,13 +108,13 @@
         valid-to-writer (.vectorFor op-writer "_valid_to" types/nullable-temporal-field-type)
         table-doc-writers (HashMap.)]
     (fn write-put! [{:keys [table-name docs valid-from valid-to]} opts]
-      (let [table-name (str (symbol (util/with-default-schema table-name)))]
-        (when (forbidden-table? table-name) (throw (forbidden-table-ex table-name)))
+      (let [table (table/->ref "xtdb" table-name)] ; TODO multi-db
+        (when (forbidden-table? table) (throw (forbidden-table-ex table)))
 
         (let [^VectorWriter table-doc-writer
-              (.computeIfAbsent table-doc-writers table-name
+              (.computeIfAbsent table-doc-writers table
                                 (fn [table]
-                                  (doto (.vectorFor doc-writer table (FieldType/notNullable #xt.arrow/type :list))
+                                  (doto (.vectorFor doc-writer (str (table/ref->sym table)) (FieldType/notNullable #xt.arrow/type :list))
                                     (.getListElements (FieldType/notNullable #xt.arrow/type :struct)))))]
 
           (.writeObject table-doc-writer docs)
@@ -151,10 +150,10 @@
         valid-from-writer (.vectorFor delete-writer "_valid_from" types/nullable-temporal-field-type)
         valid-to-writer (.vectorFor delete-writer "_valid_to" types/nullable-temporal-field-type)]
     (fn write-delete! [{:keys [table-name doc-ids valid-from valid-to]}]
-      (let [table-name (str (symbol (util/with-default-schema table-name)))]
-        (when (forbidden-table? table-name) (throw (forbidden-table-ex table-name)))
+      (let [table (table/->ref "xtdb" table-name)] ; TODO multi-db
+        (when (forbidden-table? table) (throw (forbidden-table-ex table)))
         (when (seq doc-ids)
-          (.writeObject table-writer table-name)
+          (.writeObject table-writer (str (table/ref->sym table)))
 
           (doseq [doc-id doc-ids]
             (.writeObject iid-writer (util/->iid doc-id)))
@@ -172,10 +171,10 @@
         iid-writer (some-> iids-writer
                            (.getListElements (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))]
     (fn [{:keys [table-name doc-ids]}]
-      (let [table-name (str (symbol (util/with-default-schema table-name)))]
-        (when (forbidden-table? table-name) (throw (forbidden-table-ex table-name)))
+      (let [table (table/->ref "xtdb" table-name)] ; TODO multi-db
+        (when (forbidden-table? table) (throw (forbidden-table-ex table)))
         (when (seq doc-ids)
-          (.writeObject table-writer table-name)
+          (.writeObject table-writer (str (table/ref->sym table)))
 
           (doseq [doc-id doc-ids]
             (.writeObject iid-writer (util/->iid doc-id)))

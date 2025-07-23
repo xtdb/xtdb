@@ -320,7 +320,7 @@
                             (->col-sym (str unique-table-alias) (str col)))))))
 
   PlanRelation
-  (plan-rel [{{:keys [valid-time-default sys-time-default]} :env}]
+  (plan-rel [{{:keys [valid-time-default sys-time-default default-db]} :env}]
     (let [reqd-cols (set (.keySet !reqd-cols))
           valid-time-col? (contains? reqd-cols '_valid_time)
           sys-time-col? (contains? reqd-cols '_system_time)
@@ -331,7 +331,7 @@
           for-st (or for-system-time sys-time-default)]
 
       [:rename unique-table-alias
-       (cond-> [:scan (cond-> {:table (table/->ref (or schema-name 'public) table-name)}
+       (cond-> [:scan (cond-> {:table (table/->ref default-db (or schema-name 'public) table-name)}
                         for-vt (assoc :for-valid-time for-vt)
                         for-st (assoc :for-system-time for-st))
                 scan-cols]
@@ -603,7 +603,7 @@
 
 (defrecord TableRefVisitor [env scope left-scope]
   SqlVisitor
-  (visitBaseTable [{{:keys [!id-count table-info ctes] :as env} :env} ctx]
+  (visitBaseTable [{{:keys [!id-count table-info ctes default-db] :as env} :env} ctx]
     (let [tn (some-> (.tableOrQueryName ctx) (.tableName))
           sn (identifier-sym (.schemaName tn))
           tn (identifier-sym (.identifier tn))
@@ -618,7 +618,8 @@
               (->DerivedTable plan table-alias unique-table-alias
                               (->insertion-ordered-set (or cols cte-cols)))))
 
-          (let [[sn table-cols] (or (when-let [table-cols (get table-info (table/->ref sn tn))]
+          (let [[sn table-cols] (or (when-let [;; TODO multi-db
+                                               table-cols (get table-info (table/->ref default-db sn tn))]
                                       [sn table-cols])
 
                                     (when-not sn
@@ -2559,9 +2560,9 @@
                             (->col-sym (str unique-table-alias) (str col)))))))
 
   PlanRelation
-  (plan-rel [_]
+  (plan-rel [{{:keys [default-db]} :env}]
     [:rename unique-table-alias
-     [:scan (cond-> {:table (table/->ref (symbol table-name))}
+     [:scan (cond-> {:table (table/->ref default-db (symbol table-name))}
               for-valid-time (assoc :for-valid-time for-valid-time))
       (vec (.keySet !reqd-cols))]]))
 
@@ -2620,9 +2621,9 @@
                               (->col-sym (str unique-table-alias) (str col))))))))
 
   PlanRelation
-  (plan-rel [_]
+  (plan-rel [{{:keys [default-db]} :env}]
     [:rename unique-table-alias
-     [:scan {:table (table/->ref (symbol table-name))
+     [:scan {:table (table/->ref default-db (symbol table-name))
              :for-system-time :all-time
              :for-valid-time :all-time}
       (vec (.keySet !reqd-cols))]]))
@@ -2719,8 +2720,8 @@
 
       insert-plan))
 
-  (visitPatchStatement [this ctx]
-    (let [table (table/->ref (identifier-sym (.tableName ctx)))
+  (visitPatchStatement [{{:keys [default-db]} :env, :as this} ctx]
+    (let [table (table/->ref default-db (identifier-sym (.tableName ctx)))
           [vf-expr vt-expr] (some-> (.patchStatementValidTimeExtents ctx)
                                     (.accept (->PatchValidTimeExtentsVisitor env scope)))]
       (->QueryExpr (plan-patch env {:table table
@@ -2740,7 +2741,7 @@
                       plan]
                      '[_iid doc]))))
 
-  (visitUpdateStatement [{{:keys [!id-count table-info]} :env} ctx]
+  (visitUpdateStatement [{{:keys [!id-count table-info default-db]} :env} ctx]
     (let [internal-cols (mapv ->col-sym '[_iid _valid_from _valid_to])
           table-name (identifier-sym (.tableName ctx))
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
@@ -2751,7 +2752,7 @@
           {:keys [for-valid-time], vt-projection :projection} (some-> (.dmlStatementValidTimeExtents ctx)
                                                                       (.accept (->DmlValidTimeExtentsVisitor env scope)))
 
-          table-cols (if-let [cols (get table-info (table/->ref table-name))]
+          table-cols (if-let [cols (get table-info (table/->ref default-db table-name))]
                        cols
                        (do
                          (add-warning! env (->BaseTableNotFound nil table-name))
@@ -2800,7 +2801,7 @@
                       [:project (concat aliased-cols set-clauses (mapv :projection all-non-set-cols)) plan])]
                    (vec (concat internal-cols set-clauses-cols (map :col-sym all-non-set-cols))))))
 
-  (visitDeleteStatement [{{:keys [!id-count table-info]} :env} ctx]
+  (visitDeleteStatement [{{:keys [!id-count table-info default-db]} :env} ctx]
     (let [internal-cols (mapv ->col-sym '[_iid _valid_from _valid_to])
           table-name (identifier-sym (.tableName ctx))
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
@@ -2811,7 +2812,7 @@
           {:keys [for-valid-time], vt-projection :projection} (some-> (.dmlStatementValidTimeExtents ctx)
                                                                       (.accept (->DmlValidTimeExtentsVisitor env scope)))
 
-          table-cols (if-let [cols (get table-info (table/->ref table-name))]
+          table-cols (if-let [cols (get table-info (table/->ref default-db table-name))]
                        cols
                        (do
                          (add-warning! env (->BaseTableNotFound nil table-name))
@@ -2839,7 +2840,7 @@
                       [:project aliased-cols plan])]
                    internal-cols)))
 
-  (visitEraseStatement [{{:keys [!id-count table-info]} :env} ctx]
+  (visitEraseStatement [{{:keys [!id-count table-info default-db]} :env} ctx]
     (let [internal-cols '[_iid]
           table-name (identifier-sym (.tableName ctx))
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
@@ -2847,7 +2848,7 @@
           table-name (util/with-default-schema table-name)
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
-          table-cols (if-let [cols (get table-info (table/->ref table-name))]
+          table-cols (if-let [cols (get table-info (table/->ref default-db table-name))]
                        cols
                        (do
                          (add-warning! env (->BaseTableNotFound nil table-name))
@@ -2928,6 +2929,7 @@
     :!warnings (atom [])
     :!id-count (atom 0)
     :!param-count (atom 0)
+    :default-db "xtdb" ; TODO multi-db
     :table-info (xform-table-info table-info)}))
 
 (defprotocol PlanExpr
@@ -2973,11 +2975,12 @@
         (-plan-query opts)))
 
   Sql$DirectlyExecutableStatementContext
-  (-plan-query [ctx {:keys [scope table-info arg-fields]}]
+  (-plan-query [ctx {:keys [default-db scope table-info arg-fields]}]
     (let [!errors (atom [])
           !warnings (atom [])
           !param-count (atom 0)
-          env {:!errors !errors
+          env {:default-db (or default-db "xtdb")
+               :!errors !errors
                :!warnings !warnings
                :!id-count (atom 0)
                :!param-count !param-count

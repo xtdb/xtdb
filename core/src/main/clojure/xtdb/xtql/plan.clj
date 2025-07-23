@@ -413,9 +413,10 @@
     {scan-col (list* 'and col-preds)}))
 
 (defn- plan-from [{:keys [table for-valid-time for-system-time bindings project-all-cols?]}]
-  (let [planned-bind-specs (concat (cond-> (mapv plan-out-spec bindings)
+  (let [table (table/->ref "xtdb" table) ; TODO multi-db
+        planned-bind-specs (concat (cond-> (mapv plan-out-spec bindings)
                                      project-all-cols?
-                                     (concat (->> (get *table-info* (table/->ref table))
+                                     (concat (->> (get *table-info* table)
                                                   (mapv symbol)
                                                   (mapv #(hash-map :l % :r %))))))
         distinct-scan-cols (distinct (replace-temporal-period-with-cols (mapv :l planned-bind-specs)))
@@ -424,7 +425,7 @@
                                       (map #(assoc % :pred (list '= (:l %) (:r %))))
                                       (group-by :l))
                                  (update-vals #(map :pred %)))]
-    (-> [:scan {:table (table/->ref table)
+    (-> [:scan {:table table
                 :for-valid-time (plan-temporal-filter for-valid-time)
                 :for-system-time (plan-temporal-filter for-system-time)}
          (mapv #(wrap-scan-col-preds % (get literal-preds-by-col %)) distinct-scan-cols)]
