@@ -142,5 +142,5 @@
   "`timeout` is now required, explicitly specify `nil` if you want to wait indefinitely."
   [node timeout]
 
-  (-> (.getCompactor (db/primary-db<-node node))
+  (-> (.getCompactor (db/primary-db node))
       (.compactAll timeout)))

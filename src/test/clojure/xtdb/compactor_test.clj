@@ -6,8 +6,8 @@
             [xtdb.buffer-pool :as bp]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
+            [xtdb.db-catalog :as db]
             [xtdb.log :as xt-log]
-            [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
             [xtdb.table-catalog :as table-cat]
@@ -428,8 +428,9 @@
               cat/*file-size-target* (* 16 1024)
               c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
-        (let [bp (bp/<-node node)
-              meta-mgr (meta/<-node node)]
+        (let [db (db/primary-db node)
+              bp (.getBufferPool db)
+              meta-mgr (.getMetadataManager db)]
           (letfn [(submit! [xs]
                     (last (for [batch (partition-all 8 xs)]
                             (xt/submit-tx node [(into [:put-docs :foo]
@@ -579,7 +580,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 1})]
-      (let [bp (bp/<-node node)]
+      (let [bp (.getBufferPool (db/primary-db node))]
         (xt/execute-tx node [[:put-docs {:into :foo
                                          :valid-from #xt/instant "2010-01-01T00:00:00Z"
                                          :valid-to #xt/instant "2011-01-01T00:00:00Z"}
@@ -636,7 +637,7 @@
 (t/deftest different-recency-partitioning
   (binding [c/*recency-partition* RecencyPartition/YEAR]
     (with-open [node (xtn/start-node (merge tu/*node-opts* {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]}))]
-      (let [tc (trie-cat/<-node node)]
+      (let [tc (.getTrieCatalog (db/primary-db node))]
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 1}]])
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 2}]])
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 3}]])

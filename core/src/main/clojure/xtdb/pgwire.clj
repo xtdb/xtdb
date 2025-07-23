@@ -450,7 +450,7 @@
                  {:keys [^Clock clock]} session]
 
              (when-not (= :read-write (:access-mode tx-opts))
-               (xt-log/await-db (db/primary-db<-node node) await-token #xt/duration "PT30S"))
+               (xt-log/await-db (db/primary-db node) await-token #xt/duration "PT30S"))
 
              (-> st
                  (update :transaction

@@ -360,5 +360,3 @@
     (log/debug "trie catalog started")
     cat))
 
-(defn <-node ^xtdb.trie.TrieCatalog [node]
-  (.getTrieCatalog (db/primary-db<-node node)))

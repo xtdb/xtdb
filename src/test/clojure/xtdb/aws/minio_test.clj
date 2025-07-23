@@ -1,8 +1,8 @@
 (ns xtdb.aws.minio-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
             [xtdb.buffer-pool-test :as bp-test]
+            [xtdb.db-catalog :as db]
             [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
@@ -54,14 +54,14 @@
 (t/deftest ^:minio list-test
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-node local-disk-cache (random-uuid))]
-      (let [buffer-pool (bp/<-node node)]
+      (let [buffer-pool (.getBufferPool (db/primary-db node))]
         (bp-test/test-list-objects buffer-pool)))))
 
 (t/deftest ^:minio list-test-with-prior-objects
   (util/with-tmp-dirs #{local-disk-cache}
     (let [prefix (random-uuid)]
       (util/with-open [node (start-node local-disk-cache prefix)]
-        (let [^RemoteBufferPool buffer-pool (bp/<-node node)]
+        (let [^RemoteBufferPool buffer-pool (.getBufferPool (db/primary-db node))]
           (bp-test/put-edn buffer-pool (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool (util/->path "alan") :alan)
           (Thread/sleep 100)
@@ -69,7 +69,7 @@
                    (.listAllObjects buffer-pool)))))
 
       (util/with-open [node (start-node local-disk-cache prefix)]
-        (let [^RemoteBufferPool buffer-pool (bp/<-node node)]
+        (let [^RemoteBufferPool buffer-pool (.getBufferPool (db/primary-db node))]
           (t/testing "prior objects will still be there, should be available on a list request"
           (Thread/sleep 100)
             (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
@@ -86,8 +86,8 @@
     (let [prefix (random-uuid)]
       (util/with-open [node-1 (start-node local-disk-cache prefix)
                        node-2 (start-node local-disk-cache prefix)]
-        (let [^RemoteBufferPool buffer-pool-1 (bp/<-node node-1)
-              ^RemoteBufferPool buffer-pool-2 (bp/<-node node-2)]
+        (let [^RemoteBufferPool buffer-pool-1 (.getBufferPool (db/primary-db node-1))
+              ^RemoteBufferPool buffer-pool-2 (.getBufferPool (db/primary-db node-2))]
           (bp-test/put-edn buffer-pool-1 (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool-2 (util/->path "alan") :alan)
           (Thread/sleep 1000)
@@ -141,7 +141,7 @@
 (t/deftest ^:minio node-level-test
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-node local-disk-cache (random-uuid))]
-      (let [^RemoteBufferPool buffer-pool (bp/<-node node)]
+      (let [^RemoteBufferPool buffer-pool (.getBufferPool (db/primary-db node))]
         ;; Submit some documents to the node
         (t/is (= true
                  (:committed? (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]

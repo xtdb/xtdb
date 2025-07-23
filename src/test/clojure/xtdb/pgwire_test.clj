@@ -10,7 +10,7 @@
             [next.jdbc.result-set :as result-set]
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
-            [xtdb.log :as xt-log]
+            [xtdb.db-catalog :as db]
             [xtdb.logging :as logging]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
@@ -2845,7 +2845,7 @@ ORDER BY 1,2;")
   (with-open [conn (jdbc-conn)]
     (xt/execute-tx conn [[:put-docs :foo {:xt/id 1}]])
     (t/is (= [{:xt/id 1}] (xt/q conn "SELECT * FROM foo")))
-    (doto (xt-log/<-node tu/*node*)
+    (doto (.getLog (db/primary-db tu/*node*))
       (.appendMessage (Log$Message$FlushBlock. 1)))
     (t/is (= [{:xt/id 1}] (xt/q conn "SELECT * FROM foo")))))
 

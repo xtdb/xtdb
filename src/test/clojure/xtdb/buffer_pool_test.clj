@@ -3,6 +3,7 @@
             [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.buffer-pool :as bp]
+            [xtdb.db-catalog :as db]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
             [xtdb.test-util :as tu]
@@ -19,7 +20,7 @@
            (xtdb.api.storage ObjectStore ObjectStore$Factory Storage Storage$Factory)
            (xtdb.api.storage SimulatedObjectStore StoreOperation)
            xtdb.arrow.Relation
-           (xtdb.buffer_pool LocalBufferPool MemoryBufferPool RemoteBufferPool)
+           (xtdb.buffer_pool RemoteBufferPool)
            (xtdb.cache DiskCache MemoryCache)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -57,7 +58,7 @@
 
       (tu/finish-block! node)
 
-      (let [^RemoteBufferPool buffer-pool (bp/<-node node)
+      (let [^RemoteBufferPool buffer-pool (.getBufferPool (db/primary-db node))
             object-store (.getObjectStore buffer-pool)]
         (t/is (seq (.listAllObjects object-store)))))))
 
@@ -239,8 +240,8 @@
                                        :compactor {:threads 0}})
                 node2 (xtn/start-node {:storage [:local {:path tmp-dir}]
                                        :compactor {:threads 0}})]
-      (let [bp1 (bp/<-node node1)
-            bp2 (bp/<-node node2)]
+      (let [bp1 (.getBufferPool (db/primary-db node1))
+            bp2 (.getBufferPool (db/primary-db node2))]
         (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp1)))
         (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp2)))
 

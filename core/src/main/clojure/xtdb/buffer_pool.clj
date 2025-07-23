@@ -52,5 +52,3 @@
 (defmethod ig/halt-key! :xtdb/buffer-pool [_ ^BufferPool buffer-pool]
   (util/close buffer-pool))
 
-(defn <-node ^xtdb.BufferPool [node]
-  (.getBufferPool (db/primary-db<-node node)))

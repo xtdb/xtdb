@@ -102,7 +102,7 @@
 (defn <-node ^xtdb.database.DatabaseCatalog [node]
   (:db-cat node))
 
-(defn primary-db<-node ^xtdb.database.Database [node]
+(defn primary-db ^xtdb.database.Database [node]
   ;; HACK a temporary util to just pull the primary DB out of the node
   ;; chances are the non-test callers of this will need to know which database they're interested in.
   (.getPrimary (<-node node)))

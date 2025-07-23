@@ -90,7 +90,8 @@
       (util/delete-dir node-dir)
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-        (let [block-cat (block-cat/<-node node)]
+        (let [db (db/primary-db node)
+              block-cat (.getBlockCatalog db)]
           (t/is (nil? (.getCurrentBlockIndex block-cat)))
 
           (t/is (= {:tx-id magic-last-tx-id}
@@ -229,7 +230,8 @@
         (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/multi-block-metadata")))
                         (.resolve node-dir "objects"))
 
-        (let [tc (cat/<-node node)]
+        (let [db (db/primary-db node)
+              tc (.getTableCatalog db)]
           (t/is (= (types/->field "_id" (ArrowType$Union. UnionMode/Dense (int-array 0)) false
                                   (types/col-type->field :utf8)
                                   (types/col-type->field :keyword)
@@ -355,8 +357,9 @@
     (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 3000, :rows-per-page 300, :compactor-threads 0})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
-      (let [bp (bp/<-node node)
-            block-cat (block-cat/<-node node)
+      (let [db (db/primary-db node)
+            bp (.getBufferPool db)
+            block-cat (.getBlockCatalog db)
             device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
@@ -417,10 +420,11 @@
             (.close node1)
 
             (util/with-close-on-catch [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
-              (let [bp (bp/<-node node2)
-                    block-cat (block-cat/<-node node2)
-                    tc (cat/<-node node2)
-                    lc-tx (xt-log/await-db (db/primary-db<-node node2) first-half-await-token (Duration/ofSeconds 10))]
+              (let [db (db/primary-db node2)
+                    bp (.getBufferPool db)
+                    block-cat (.getBlockCatalog db)
+                    tc (.getTableCatalog db)
+                    lc-tx (xt-log/await-db db first-half-await-token (Duration/ofSeconds 10))]
                 (t/is (= first-half-tx-id (:tx-id lc-tx)))
                 (t/is (= {"xtdb" [(serde/->TxKey (:tx-id lc-tx) (:system-time lc-tx))]}
                          (xtp/latest-completed-txs node2)))
@@ -457,15 +461,16 @@
                   (.close node2)
 
                   (with-open [node3 (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
-                    (let [bp (bp/<-node node3)]
+                    (let [db (db/primary-db node3)
+                          bp (.getBufferPool db)]
                       (t/is (<= first-half-tx-id
-                                (:tx-id (xt-log/await-db (db/primary-db<-node node3) first-half-await-token (Duration/ofSeconds 10)))
+                                (:tx-id (xt-log/await-db db first-half-await-token (Duration/ofSeconds 10)))
                                 second-half-tx-id))
 
                       (t/is (= :utf8
                                (types/field->col-type (.getField tc #xt/table device_info "_id"))))
 
-                      (xt-log/await-db (db/primary-db<-node node3) second-half-await-token (Duration/ofSeconds 15))
+                      (xt-log/await-db (db/primary-db node3) second-half-await-token (Duration/ofSeconds 15))
                       (t/is (= second-half-tx-id (-> (xtp/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))))
 
                       (Thread/sleep 250); wait for the block to finish writing to disk
@@ -487,7 +492,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node1 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
-      (let [tc1 (cat/<-node node1)]
+      (let [tc1 (.getTableCatalog (db/primary-db node1))]
 
         (xt/execute-tx node1 [[:put-docs :xt_docs {:xt/id 0, :v "foo"}]])
 
@@ -506,7 +511,7 @@
                  (types/field->col-type (.getField tc1 #xt/table xt_docs "v"))))))
 
     (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
-      (let [tc2 (cat/<-node node2)]
+      (let [tc2 (.getTableCatalog (db/primary-db node2))]
         (xt-log/sync-node node2 (Duration/ofMillis 200))
 
         (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
@@ -541,7 +546,7 @@
 
       (with-open [node (tu/->local-node {:node-dir node-dir
                                          :instant-src (tu/->mock-clock)})]
-        (let [block-cat (block-cat/<-node node)]
+        (let [block-cat (.getBlockCatalog (db/primary-db node))]
           (t/is (nil? (.getCurrentBlockIndex block-cat)))
 
           (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
@@ -611,11 +616,11 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
         (let [node-id "xtdb-foo-node"
               ^BufferAllocator al (util/component node :xtdb/allocator)
               idxer (idx/<-node node)
-              db (db/primary-db<-node node)
+              db (db/primary-db node)
               bp (.getBufferPool db)
               live-idx (.getLiveIndex db)]
 
-          (with-open [db-idxer (.openForDatabase idxer (db/primary-db<-node node))
+          (with-open [db-idxer (.openForDatabase idxer (db/primary-db node))
                       live-idx-tx (.startTx live-idx (serde/->TxKey 1 Instant/EPOCH))
                       live-table-tx (.liveTable live-idx-tx #xt/table foo)]
             (idx/crash-log! (-> db-idxer (assoc :node-id node-id)) "test crash log"

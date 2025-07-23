@@ -2,6 +2,7 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.buffer-pool :as bp]
+            [xtdb.db-catalog :as db]
             [xtdb.object-store :as os]
             [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]
@@ -35,8 +36,9 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-      (let [bp (bp/<-node node)
-            trie-catalog (trie-cat/<-node node)]
+      (let [db (db/primary-db node)
+            bp (.getBufferPool db)
+            trie-catalog (.getTrieCatalog db)]
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
         (tu/finish-block! node)
 
@@ -117,7 +119,7 @@
       (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
         ;; need some dummy tx for latest-completed-txt
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
-        (let [cat (trie-cat/<-node node)]
+        (let [cat (.getTrieCatalog (db/primary-db node))]
           (.addTries cat #xt/table foo
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-r20200101-b00" 5] ["l01-rc-b00" 2]
@@ -129,7 +131,7 @@
           (tu/finish-block! node))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-      (let [bp (bp/<-node node)]
+      (let [bp (.getBufferPool (db/primary-db node))]
         (t/is (= ["l00-rc-b00"
                   "l00-rc-b01"
                   "l00-rc-b02"

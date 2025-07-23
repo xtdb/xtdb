@@ -128,5 +128,3 @@
     (TableCatalog. buffer-pool (or block-idx -1)
                    (update-vals table->table-block #(dissoc % :tries)))))
 
-(defn <-node ^xtdb.catalog.TableCatalog [node]
-  (.getTableCatalog (db/primary-db<-node node)))

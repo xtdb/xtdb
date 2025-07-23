@@ -15,5 +15,3 @@
 (defmethod ig/halt-key! ::metadata-manager [_ mgr]
   (util/try-close mgr))
 
-(defn <-node ^xtdb.metadata.PageMetadata$Factory [node]
-  (.getMetadataManager (db/primary-db<-node node)))

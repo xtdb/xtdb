@@ -327,9 +327,6 @@
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
   (util/close log-processor))
 
-(defn <-node ^xtdb.api.log.Log [node]
-  (.getLog (db/primary-db<-node node)))
-
 (defn await-db
   ;; TODO this should probably be await-node given it's taking a multi-db token
   ([^Database db]
@@ -350,5 +347,5 @@
          (util/rethrowing-cause)))))
 
 (defn sync-node
-  ([node] (await-db (db/primary-db<-node node)))
-  ([node timeout] (await-db (db/primary-db<-node node) (xtp/await-token node) timeout)))
+  ([node] (await-db (db/primary-db node)))
+  ([node timeout] (await-db (db/primary-db node) (xtp/await-token node) timeout)))

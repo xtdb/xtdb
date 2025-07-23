@@ -64,15 +64,16 @@
   (^java.lang.AutoCloseable [frontend startup-opts]
    (->conn frontend startup-opts [{:user nil, :method #xt.authn/method :trust, :address nil}]))
   (^java.lang.AutoCloseable [frontend startup-opts authn-rules]
-   (let [conn (pgwire/map->Connection {:server {:server-state (atom {:parameters {"server_encoding" "UTF8"
+   (let [db (db/primary-db tu/*node*)
+         conn (pgwire/map->Connection {:server {:server-state (atom {:parameters {"server_encoding" "UTF8"
                                                                                   "client_encoding" "UTF8"
                                                                                   "DateStyle" "ISO"
                                                                                   "IntervalStyle" "ISO_8601"}})
                                                 :->node {"xtdb" (-> tu/*node*
                                                                     (assoc :authn (authn/->UserTableAuthn authn-rules
                                                                                                           (util/component tu/*node* :xtdb.query/query-source)
-                                                                                                          (db/primary-db<-node tu/*node*)
-                                                                                                          (li/<-node tu/*node*))))}}
+                                                                                                          db
+                                                                                                          (.getLiveIndex db))))}}
                                        :allocator tu/*allocator*
                                        :frontend frontend
                                        :cid -1
