@@ -124,7 +124,9 @@
                            (assoc-in [:formats "application/json" :decoder] json-tx-decoder)))
 
    :post {:handler (fn [{:keys [node] :as req}]
-                     (let [{:keys [tx-ops opts await-tx?]} (get-in req [:parameters :body])]
+                     (let [{:keys [tx-ops opts await-tx?]} (get-in req [:parameters :body])
+                           ;; TODO multi-db
+                           opts (-> opts (assoc :default-db "xtdb"))]
                        {:status 200
                         :body (if await-tx?
                                 (xtp/execute-tx node tx-ops opts)
@@ -239,7 +241,9 @@
         :tx-timeout (.getTxTimeout opts)
         :default-tz (.getDefaultTz opts)
         :explain? (.getExplain opts)
-        :key-fn (.getKeyFn opts)}
+        :key-fn (.getKeyFn opts)
+        ;; TODO multi-db
+        :default-db "xtdb"}
        (into {} (remove (comp nil? val)))))
 
 (defn json-query-decoder []

@@ -3,8 +3,8 @@
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
+            [xtdb.db-catalog :as db]
             [xtdb.expression.metadata :as expr.meta]
-            [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
@@ -128,7 +128,7 @@
                                 (filter (fn [[_ {:keys [min max]}]] (<= min 10 max)))
                                 (map (comp bucket->page-idx first)))
 
-            metadata-mgr (meta/<-node node)
+            metadata-mgr (.getMetadataManager (db/primary-db node))
             literal-selector (expr.meta/->metadata-selector tu/*allocator* '(and (< _id 11) (> _id 9)) '{_id :i64} vw/empty-args)]
 
         (t/testing "L0"
@@ -160,7 +160,7 @@
   (tu/finish-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
-  (let [metadata-mgr (meta/<-node tu/*node*)
+  (let [metadata-mgr (.getMetadataManager (db/primary-db tu/*node*))
         meta-file-path (Trie/metaFilePath "public$xt_docs" ^String (trie/->l0-trie-key 0))]
     (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
       (let [sys-time-micros (time/instant->micros #xt/instant "2020-01-01T00:00:00.000000Z")
@@ -171,7 +171,7 @@
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id 1 :boolean-or-int true}]])
   (tu/finish-block! tu/*node*)
 
-  (let [metadata-mgr (meta/<-node tu/*node*)
+  (let [metadata-mgr (.getMetadataManager (db/primary-db tu/*node*))
         true-selector (expr.meta/->metadata-selector tu/*allocator* '(= boolean_or_int true) '{boolean_or_int :bool} vw/empty-args)]
 
     (t/testing "L0"
@@ -204,7 +204,7 @@
       (tu/finish-block! node)
       (c/compact-all! node #xt/duration "PT1S")
 
-      (let [metadata-mgr (meta/<-node node)]
+      (let [metadata-mgr (.getMetadataManager (db/primary-db node))]
         (t/testing "L0"
           (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))]
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
@@ -239,7 +239,7 @@
       (tu/finish-block! node)
       (c/compact-all! node #xt/duration "PT1S")
 
-      (let [metadata-mgr (meta/<-node node)
+      (let [metadata-mgr (.getMetadataManager (db/primary-db node))
             meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/duration")))

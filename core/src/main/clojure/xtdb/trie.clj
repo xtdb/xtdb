@@ -15,7 +15,7 @@
 (defn ->trie-details ^TrieDetails
   ([table {:keys [trie-key, ^long data-file-size, ^TrieMetadata trie-metadata state garbage-as-of]}]
    (-> (TrieDetails/newBuilder)
-       (.setTableName (str (table/ref->sym table)))
+       (.setTableName (str (table/ref->schema+table table)))
        (.setTrieKey trie-key)
        (.setDataFileSize data-file-size)
        (cond-> trie-metadata (.setTrieMetadata trie-metadata))

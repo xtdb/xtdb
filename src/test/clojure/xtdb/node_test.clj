@@ -678,7 +678,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1 :a "one" :b 2}]
                             [:put-docs :unrelated-table {:xt/id 1 :a "a-string"}]])
 
-  (let [pq (xtp/prepare-sql tu/*node* "SELECT foo.*, ? FROM foo" {})
+  (let [pq (xtp/prepare-sql tu/*node* "SELECT foo.*, ? FROM foo" {:default-db "xtdb"})
         column-fields [#xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]
                        #xt.arrow/field ["a" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]
                        #xt.arrow/field ["b" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
@@ -738,7 +738,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 (deftest test-prepared-statements-default-tz
   (t/testing "default-tz supplied at prepare"
     (let [ptz #xt/zone "America/New_York"
-          pq (xtp/prepare-sql tu/*node* "SELECT CURRENT_TIMESTAMP x" {:default-tz ptz})]
+          pq (xtp/prepare-sql tu/*node* "SELECT CURRENT_TIMESTAMP x" {:default-tz ptz, :default-db "xtdb"})]
 
       (t/testing "and not at bind"
         (with-open [cursor (.openQuery pq {})]
@@ -750,7 +750,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor)))))))))))
 
   (t/testing "default-tz not supplied at prepare"
-    (let [pq (xtp/prepare-sql tu/*node* "SELECT CURRENT_TIMESTAMP x" {})]
+    (let [pq (xtp/prepare-sql tu/*node* "SELECT CURRENT_TIMESTAMP x" {:default-db "xtdb"})]
 
       (t/testing "and not at open"
         (with-open [cursor (.openQuery pq {})]
@@ -762,7 +762,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))))))
 
 (deftest test-default-param-types
-  (let [pq (xtp/prepare-sql tu/*node* "SELECT ? v" {:param-types nil})]
+  (let [pq (xtp/prepare-sql tu/*node* "SELECT ? v" {:param-types nil, :default-db "xtdb"})]
     (t/testing "preparedQuery rebound with args matching the assumed type"
 
       (with-open [cursor (.openQuery pq {:args (tu/open-args ["42"])})]

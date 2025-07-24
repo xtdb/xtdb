@@ -13,6 +13,7 @@
             [xtdb.vector.writer :as vw])
   (:import (io.micrometer.core.instrument Counter Gauge MeterRegistry Tag Timer)
            (io.micrometer.core.instrument.distribution ValueAtPercentile)
+           [java.lang AutoCloseable]
            [java.time Duration]
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Schema)
@@ -30,15 +31,14 @@
   (Math/abs ^Integer (hash s)))
 
 (defn schema-info->col-rows [schema-info]
-  (for [table-entry schema-info
-        :let [^TableRef table (key table-entry)
-              cols (into (when-not (and (contains? #{"pg_catalog" "information_schema" "xt"} (.getSchemaName table))
-                                        (not= #xt/table xt/txs table))
+  (for [[^TableRef table cols] schema-info
+        :let [cols (into (when-not (and (contains? #{"pg_catalog" "information_schema" "xt"} (.getSchemaName table))
+                                        (not= 'xt/txs (table/ref->schema+table table)))
                            {"_valid_from" (-> Fields/TEMPORAL (.toArrowField "_valid_from"))
                             "_valid_to" (-> Fields/TEMPORAL (.getNullable) (.toArrowField "_valid_to"))
                             "_system_from" (-> Fields/TEMPORAL (.toArrowField "_system_from"))
                             "_system_to" (-> Fields/TEMPORAL (.getNullable) (.toArrowField "_system_to"))})
-                         (val table-entry))
+                         cols)
               {xt-cols true, user-cols false} (group-by (comp #(str/starts-with? % "_") key) cols)
               cols (concat (sort-by key xt-cols)
                            (sort-by key user-cols))]
@@ -46,7 +46,7 @@
         :let [name (key col)
               col-field (val col)]]
 
-    {:idx (inc idx) ;; no guarentee of stability of idx for a given col
+    {:idx (inc idx) ;; no guarantee of stability of idx for a given col
      :table table
      :name name
      :field col-field
@@ -54,64 +54,64 @@
 
 (do
   (def info-tables
-    '{#xt/table information_schema/tables {table_catalog :utf8, table_schema :utf8, table_name :utf8, table_type :utf8}
-      #xt/table information_schema/columns {table_catalog :utf8, table_schema :utf8, table_name :utf8, column_name :utf8, data_type :utf8}
-      #xt/table information_schema/schemata {catalog_name :utf8, schema_name :utf8, schema_owner :utf8}})
+    '{information_schema/tables {table_catalog :utf8, table_schema :utf8, table_name :utf8, table_type :utf8}
+      information_schema/columns {table_catalog :utf8, table_schema :utf8, table_name :utf8, column_name :utf8, data_type :utf8}
+      information_schema/schemata {catalog_name :utf8, schema_name :utf8, schema_owner :utf8}})
 
   (def ^:private pg-catalog-tables
-    '{#xt/table pg_catalog/pg_tables {schemaname :utf8, tablename :utf8, tableowner :utf8, tablespace :null}
-      #xt/table pg_catalog/pg_type {oid :i32, typname :utf8, typnamespace :i32, typowner :i32
-                                    typtype :utf8, typbasetype :i32, typnotnull :bool, typtypmod :i32
-                                    typsend :utf8, typreceive :utf8, typinput :utf8, typoutput :utf8
-                                    typrelid :i32, typelem :i32}
-      #xt/table pg_catalog/pg_class {oid :i32, relname :utf8, relnamespace :i32, relkind :utf8, relam :i32, relchecks :i32
-                                     relhasindex :bool, relhasrules :bool, relhastriggers :bool, relrowsecurity :bool
-                                     relforcerowsecurity :bool, relispartition :bool, reltablespace :i32, reloftype :i32
-                                     relpersistence :utf8, relreplident :utf8, reltoastrelid :i32}
-      #xt/table pg_catalog/pg_description {objoid :i32, classoid :i32, objsubid :i16, description :utf8}
-      #xt/table pg_catalog/pg_views {schemaname :utf8, viewname :utf8, viewowner :utf8}
-      #xt/table pg_catalog/pg_matviews {schemaname :utf8, matviewname :utf8, matviewowner :utf8}
-      #xt/table pg_catalog/pg_attribute {attrelid :i32, attname :utf8, atttypid :i32
-                                         attlen :i32, attnum :i32
-                                         attisdropped :bool, attnotnull :bool
-                                         atttypmod :i32, attidentity :utf8, attgenerated :utf8}
-      #xt/table pg_catalog/pg_namespace {oid :i32, nspname :utf8, nspowner :i32, nspacl :null}
-      #xt/table pg_catalog/pg_proc {oid :i32, proname :utf8, pronamespace :i32}
-      #xt/table pg_catalog/pg_database {oid :i32, datname :utf8, datallowconn :bool, datistemplate :bool}
+    '{pg_catalog/pg_tables {schemaname :utf8, tablename :utf8, tableowner :utf8, tablespace :null}
+      pg_catalog/pg_type {oid :i32, typname :utf8, typnamespace :i32, typowner :i32
+                          typtype :utf8, typbasetype :i32, typnotnull :bool, typtypmod :i32
+                          typsend :utf8, typreceive :utf8, typinput :utf8, typoutput :utf8
+                          typrelid :i32, typelem :i32}
+      pg_catalog/pg_class {oid :i32, relname :utf8, relnamespace :i32, relkind :utf8, relam :i32, relchecks :i32
+                           relhasindex :bool, relhasrules :bool, relhastriggers :bool, relrowsecurity :bool
+                           relforcerowsecurity :bool, relispartition :bool, reltablespace :i32, reloftype :i32
+                           relpersistence :utf8, relreplident :utf8, reltoastrelid :i32}
+      pg_catalog/pg_description {objoid :i32, classoid :i32, objsubid :i16, description :utf8}
+      pg_catalog/pg_views {schemaname :utf8, viewname :utf8, viewowner :utf8}
+      pg_catalog/pg_matviews {schemaname :utf8, matviewname :utf8, matviewowner :utf8}
+      pg_catalog/pg_attribute {attrelid :i32, attname :utf8, atttypid :i32
+                               attlen :i32, attnum :i32
+                               attisdropped :bool, attnotnull :bool
+                               atttypmod :i32, attidentity :utf8, attgenerated :utf8}
+      pg_catalog/pg_namespace {oid :i32, nspname :utf8, nspowner :i32, nspacl :null}
+      pg_catalog/pg_proc {oid :i32, proname :utf8, pronamespace :i32}
+      pg_catalog/pg_database {oid :i32, datname :utf8, datallowconn :bool, datistemplate :bool}
 
-      #xt/table pg_catalog/pg_stat_user_tables {relid :i32
-                                                schemaname :utf8
-                                                relname :utf8
-                                                n_live_tup :i64}
+      pg_catalog/pg_stat_user_tables {relid :i32
+                                      schemaname :utf8
+                                      relname :utf8
+                                      n_live_tup :i64}
 
-      #xt/table pg_catalog/pg_settings {name :utf8, setting :utf8}
+      pg_catalog/pg_settings {name :utf8, setting :utf8}
 
-      #xt/table pg_catalog/pg_range {rngtypid :i32, rngsubtype :i32, rngmultitypid :i32
-                                     rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}
-      #xt/table pg_catalog/pg_am {oid :i32, amname :utf8, amhandler :utf8, amtype :utf8}})
+      pg_catalog/pg_range {rngtypid :i32, rngsubtype :i32, rngmultitypid :i32
+                           rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}
+      pg_catalog/pg_am {oid :i32, amname :utf8, amhandler :utf8, amtype :utf8}})
 
   (def ^:private pg-catalog-template-tables
-    '{#xt/table pg_catalog/pg_user {username :utf8 usesuper :bool passwd [:union #{:utf8 :null}]}})
+    '{pg_catalog/pg_user {username :utf8 usesuper :bool passwd [:union #{:utf8 :null}]}})
 
   (def ^:private xt-derived-tables
-    '{#xt/table xt/trie_stats {schema_name :utf8, table_name :utf8, trie_key :utf8, level :i32, recency [:union #{:null [:date :day]}],
-                               trie_state :utf8, data_file_size :i64, row_count [:union #{:null :i64}], temporal_metadata [:union #{:null [:struct {}]}]}
+    '{xt/trie_stats {schema_name :utf8, table_name :utf8, trie_key :utf8, level :i32, recency [:union #{:null [:date :day]}],
+                     trie_state :utf8, data_file_size :i64, row_count [:union #{:null :i64}], temporal_metadata [:union #{:null [:struct {}]}]}
 
-      #xt/table xt/live_tables {schema_name :utf8, table_name :utf8, row_count :i64}
+      xt/live_tables {schema_name :utf8, table_name :utf8, row_count :i64}
 
-      #xt/table xt/live_columns {schema_name :utf8, table_name :utf8, col_name :utf8, col_type :utf8}
+      xt/live_columns {schema_name :utf8, table_name :utf8, col_name :utf8, col_type :utf8}
 
-      #xt/table xt/metrics_timers {name :utf8, tags [:struct {}]
-                                   count :i64,
-                                   mean_time [:union #{:null [:duration :nano]}],
-                                   p75_time [:union #{:null [:duration :nano]}]
-                                   p95_time [:union #{:null [:duration :nano]}]
-                                   p99_time [:union #{:null [:duration :nano]}]
-                                   p999_time [:union #{:null [:duration :nano]}]
-                                   max_time [:union #{:null [:duration :nano]}]}
+      xt/metrics_timers {name :utf8, tags [:struct {}]
+                         count :i64,
+                         mean_time [:union #{:null [:duration :nano]}],
+                         p75_time [:union #{:null [:duration :nano]}]
+                         p95_time [:union #{:null [:duration :nano]}]
+                         p99_time [:union #{:null [:duration :nano]}]
+                         p999_time [:union #{:null [:duration :nano]}]
+                         max_time [:union #{:null [:duration :nano]}]}
 
-      #xt/table xt/metrics_gauges {name :utf8, tags [:struct {}], value :f64}
-      #xt/table xt/metrics_counters {name :utf8, tags [:struct {}], count :f64}})
+      xt/metrics_gauges {name :utf8, tags [:struct {}], value :f64}
+      xt/metrics_counters {name :utf8, tags [:struct {}], count :f64}})
 
   (def derived-tables
     (-> (merge info-tables pg-catalog-tables xt-derived-tables)
@@ -120,12 +120,18 @@
                               [col-name (types/col-type->field col-name col-type)])
                             (into {}))))))
 
+  (defn derived-table [table-ref]
+    (get derived-tables (table/ref->schema+table table-ref)))
+
   (def template-tables
     (-> pg-catalog-template-tables
         (update-vals (fn [col-types]
                        (->> (for [[col-name col-type] col-types]
                               [col-name (types/col-type->field col-name col-type)])
                             (into {}))))))
+
+  (defn template-table [table-ref]
+    (get template-tables (table/ref->schema+table table-ref)))
 
   (def table-info
     (-> (merge derived-tables template-tables)
@@ -134,7 +140,7 @@
   (def unq-pg-catalog
     (-> (merge pg-catalog-tables pg-catalog-template-tables)
         (update-vals keys)
-        (update-keys (comp symbol TableRef/.getTableName))))
+        (update-keys (comp symbol name))))
 
   (def meta-table-schemas
     (-> (merge info-tables pg-catalog-tables pg-catalog-template-tables)
@@ -143,45 +149,47 @@
                            (update-keys str)
                            (update-vals #(types/col-type->field %)))))))
 
-  (def views
+  (def ^:private views
     (-> (set (keys meta-table-schemas))
-        (disj #xt/table pg_catalog/pg_user))))
+        (disj 'pg_catalog/pg_user))))
 
-(def schemas
-  [{:catalog-name "xtdb"
-    :schema-name "pg_catalog"
-    :schema-owner "xtdb"}
-   {:catalog-name "xtdb"
-    :schema-name "public"
-    :schema-owner "xtdb"}
-   {:catalog-name "xtdb"
-    :schema-name "information_schema"
-    :schema-owner "xtdb"}])
+(do
+  (def ^:private internal-schemas
+    #{"xt" "pg_catalog" "information_schema"})
 
-(def pg-namespaces
-  (mapv (fn [{:keys [schema-owner schema-name] :as schema}]
-          (-> schema
-              (assoc :nspowner (name->oid schema-owner))
-              (assoc :oid (name->oid schema-name))))
-        schemas))
+  (def pg-namespaces
+    (->> (conj internal-schemas "public")
+         (mapv (fn [schema-name]
+                 (-> {:schema-name schema-name}
+                     (assoc :nspowner (name->oid "xtdb"))
+                     (assoc :oid (name->oid schema-name))))))))
+
+(defn schemas [db-name]
+  ;; TODO add other user schemas
+  (->> (conj internal-schemas "public")
+       (mapv (fn [schema-name]
+               {:catalog-name db-name
+                :schema-name schema-name
+                :schema-owner "xtdb"}))))
 
 (defn tables [schema-info]
   (for [^TableRef table (keys schema-info)]
-    {:table-catalog "xtdb"
+    {:table-catalog (.getDbName table)
      :table-name (.getTableName table)
      :table-schema (.getSchemaName table)
-     :table-type (if (views table) "VIEW" "BASE TABLE")}))
+     :table-type (if (views (table/ref->schema+table table)) "VIEW" "BASE TABLE")}))
 
 (defn pg-tables [schema-info]
-  (for [^TableRef table (keys schema-info)]
-    {:schemaname (.getSchemaName table)
+  (for [^TableRef table (keys schema-info)
+        :let [schema-name (.getSchemaName table)]]
+    {:schemaname schema-name
      :tablename (.getTableName table)
      :tableowner "xtdb"
      :tablespace nil}))
 
 (defn pg-class [schema-info]
   (for [^TableRef table (keys schema-info)]
-    {:oid (name->oid (table/ref->sym table))
+    {:oid (name->oid (table/ref->schema+table table))
      :relname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (.getTableName table))
      :relnamespace (name->oid (.getSchemaName table))
      :relkind "r"
@@ -228,7 +236,7 @@
 
 (defn columns [col-rows]
   (for [{:keys [^TableRef table, type], col-name :name} col-rows]
-    {:table-catalog "xtdb"
+    {:table-catalog (.getDbName table)
      :table-name (.getTableName table)
      :table-schema (.getSchemaName table)
      :column-name (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) col-name)
@@ -242,7 +250,7 @@
                                        :pg-type
                                        (->> (get (-> pg-types/pg-types
                                                      (assoc :default (get pg-types/pg-types :json))))))]]
-    {:attrelid (name->oid (table/ref->sym table))
+    {:attrelid (name->oid (table/ref->schema+table table))
      :attname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) name)
      :atttypid (int oid)
      :attlen (int (or typlen -1))
@@ -295,19 +303,17 @@
      :proname proname
      :pronamespace pronamespace}))
 
-(def databases
-  [{:datname "xtdb"}])
-
-(defn pg-database []
-  (for [{:keys [datname]} databases]
-    {:oid (name->oid datname)
-     :datname datname
-     :datallowconn true
-     :datistemplate false}))
+(defn pg-database [db-name]
+  ;; TODO get all databases here
+  ;; currently not available due to cyclic dep
+  [{:oid (name->oid db-name)
+    :datname db-name
+    :datallowconn true
+    :datistemplate false}])
 
 (defn pg-stat-user-tables [schema-info]
   (for [^TableRef table (keys schema-info)]
-    {:relid (name->oid (table/ref->sym table))
+    {:relid (name->oid (table/ref->schema+table table))
      :relname (.getTableName table)
      :schemaname (.getSchemaName table)
      :n-live-tup 0}))
@@ -346,9 +352,6 @@
             iid-rdr (vw/vec-wtr->rdr iid-wrt)
             dummy-trie (reduce #(.plus ^MemoryHashTrie %1 %2) (trie/->live-trie 32 1024 iid-rdr) (range (count initial-user-data)))]
         [out-rel dummy-trie]))))
-
-(defn table->template-rel+tries [allocator]
-  {#xt/table pg_catalog/pg_user (pg-user-template-page+trie allocator)})
 
 (defn trie-stats [^TrieCatalog trie-catalog]
   (for [^TableRef table (.getTables trie-catalog)
@@ -437,65 +440,86 @@
 (defprotocol InfoSchema
   (->cursor [info-schema allocator db snapshot derived-table-schema
              table col-names col-preds
-             schema params]))
+             schema params])
+
+  (table-template [info-schema table-ref]))
 
 (defmethod ig/prep-key :xtdb/information-schema [_ opts]
-  (into {:metrics-registry (ig/ref :xtdb.metrics/registry)}
+  (into {:allocator (ig/ref :xtdb/allocator)
+         :metrics-registry (ig/ref :xtdb.metrics/registry)}
         opts))
 
-(defmethod ig/init-key :xtdb/information-schema [_ {:keys [metrics-registry]}]
-  (reify InfoSchema
-    (->cursor [_ allocator db snap derived-table-schema
-               table col-names col-preds
-               schema params]
-      ;;TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
-      ;;should be types/merge-fields as per scan-fields
-      (let [^Database db db
-            table-catalog (.getTableCatalog db)
-            trie-catalog (.getTrieCatalog db)
-            schema-info (-> (merge-with merge
-                                        (.getFields table-catalog)
-                                        (some-> (.getLiveIndex ^Snapshot snap)
-                                                (.getAllColumnFields)))
-                            (merge meta-table-schemas))]
-        (util/with-close-on-catch [out-root (util/with-open [out-rel (Relation/open ^BufferAllocator allocator
-                                                                                    (Schema. (vec (vals derived-table-schema))))]
+(defmethod ig/init-key :xtdb/information-schema [_ {:keys [allocator metrics-registry]}]
+  (let [pg-user (pg-user-template-page+trie allocator)]
+    (reify InfoSchema
+      (table-template [_ table-ref]
+        (when (= 'pg_catalog/pg_user (table/ref->schema+table table-ref))
+          pg-user))
 
-                                              (.writeRows out-rel (->> (case table
-                                                                         #xt/table information_schema/tables (tables schema-info)
-                                                                         #xt/table information_schema/columns (columns (schema-info->col-rows schema-info))
-                                                                         #xt/table information_schema/schemata schemas
-                                                                         #xt/table pg_catalog/pg_tables (pg-tables schema-info)
-                                                                         #xt/table pg_catalog/pg_type (pg-type)
-                                                                         #xt/table pg_catalog/pg_class (pg-class schema-info)
-                                                                         #xt/table pg_catalog/pg_description nil
-                                                                         #xt/table pg_catalog/pg_views nil
-                                                                         #xt/table pg_catalog/pg_matviews nil
-                                                                         #xt/table pg_catalog/pg_attribute (pg-attribute (schema-info->col-rows schema-info))
-                                                                         #xt/table pg_catalog/pg_namespace (pg-namespace)
-                                                                         #xt/table pg_catalog/pg_proc (pg-proc)
-                                                                         #xt/table pg_catalog/pg_database (pg-database)
-                                                                         #xt/table pg_catalog/pg_stat_user_tables (pg-stat-user-tables schema-info)
-                                                                         #xt/table pg_catalog/pg_settings (pg-settings)
-                                                                         #xt/table pg_catalog/pg_range (pg-range)
-                                                                         #xt/table pg_catalog/pg_am (pg-am)
-                                                                         #xt/table xt/trie_stats (trie-stats trie-catalog)
-                                                                         #xt/table xt/live_tables (live-tables snap)
-                                                                         #xt/table xt/live_columns (live-columns snap)
-                                                                         #xt/table xt/metrics_timers (metrics-timers metrics-registry)
-                                                                         #xt/table xt/metrics_gauges (metrics-gauges metrics-registry)
-                                                                         #xt/table xt/metrics_counters (metrics-counters metrics-registry)
-                                                                         (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table))))
-                                                                       (into-array java.util.Map)))
-                                              (.openAsRoot out-rel allocator))]
-          (assert out-root)
-          (let [out-rel (vr/<-root out-root)]
-            ;;TODO reuse relation selector code from trie cursor
-            (InformationSchemaCursor. (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
-                                                (.select rel (.select col-pred allocator rel schema params)))
-                                              (-> out-rel
-                                                  (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
-                                                  (vr/rel-reader (.getRowCount out-rel))
-                                                  (vr/with-absent-cols allocator col-names))
-                                              (vals col-preds))
-                                      out-root)))))))
+      (->cursor [_ allocator db snap derived-table-schema
+                 table col-names col-preds
+                 schema params]
+        ;; TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
+        ;; should be types/merge-fields as per scan-fields
+        (let [^Database db db
+              db-name (.getName db)
+              table-catalog (.getTableCatalog db)
+              trie-catalog (.getTrieCatalog db)
+              schema-info (-> (merge-with merge
+                                          (.getFields table-catalog)
+                                          (some-> (.getLiveIndex ^Snapshot snap)
+                                                  (.getAllColumnFields)))
+                              (merge meta-table-schemas)
+                              (update-keys (fn [k]
+                                             (cond
+                                               (instance? TableRef k) k
+                                               (symbol? k) (table/->ref db-name k)))))]
+
+          (util/with-close-on-catch [out-root (util/with-open [out-rel (Relation/open ^BufferAllocator allocator
+                                                                                      (Schema. (vec (vals derived-table-schema))))]
+
+                                                (.writeRows out-rel (->> (case (table/ref->schema+table table)
+                                                                           information_schema/tables (tables schema-info)
+                                                                           information_schema/columns (columns (schema-info->col-rows schema-info))
+                                                                           information_schema/schemata (schemas db-name)
+                                                                           pg_catalog/pg_tables (pg-tables schema-info)
+                                                                           pg_catalog/pg_type (pg-type)
+                                                                           pg_catalog/pg_class (pg-class schema-info)
+                                                                           pg_catalog/pg_description nil
+                                                                           pg_catalog/pg_views nil
+                                                                           pg_catalog/pg_matviews nil
+                                                                           pg_catalog/pg_attribute (pg-attribute (schema-info->col-rows schema-info))
+                                                                           pg_catalog/pg_namespace (pg-namespace)
+                                                                           pg_catalog/pg_proc (pg-proc)
+                                                                           pg_catalog/pg_database (pg-database (.getName db))
+                                                                           pg_catalog/pg_stat_user_tables (pg-stat-user-tables schema-info)
+                                                                           pg_catalog/pg_settings (pg-settings)
+                                                                           pg_catalog/pg_range (pg-range)
+                                                                           pg_catalog/pg_am (pg-am)
+                                                                           xt/trie_stats (trie-stats trie-catalog)
+                                                                           xt/live_tables (live-tables snap)
+                                                                           xt/live_columns (live-columns snap)
+                                                                           xt/metrics_timers (metrics-timers metrics-registry)
+                                                                           xt/metrics_gauges (metrics-gauges metrics-registry)
+                                                                           xt/metrics_counters (metrics-counters metrics-registry)
+                                                                           (throw (UnsupportedOperationException. (str "Information Schema table does not exist: " table))))
+                                                                         (into-array java.util.Map)))
+                                                (.openAsRoot out-rel allocator))]
+            (assert out-root)
+            (let [out-rel (vr/<-root out-root)]
+              ;;TODO reuse relation selector code from trie cursor
+              (InformationSchemaCursor. (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
+                                                  (.select rel (.select col-pred allocator rel schema params)))
+                                                (-> out-rel
+                                                    (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
+                                                    (vr/rel-reader (.getRowCount out-rel))
+                                                    (vr/with-absent-cols allocator col-names))
+                                                (vals col-preds))
+                                        out-root)))))
+
+      AutoCloseable
+      (close [_]
+        (util/close (first pg-user))))))
+
+(defmethod ig/halt-key! :xtdb/information-schema [_ info-schema]
+  (util/close info-schema))

@@ -1,7 +1,6 @@
 (ns xtdb.flight-sql
   (:require [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.database :as db]
             [xtdb.indexer]
             [xtdb.node :as xtn]
             [xtdb.protocols :as xtp]
@@ -24,7 +23,7 @@
            [org.apache.arrow.vector.types.pojo Schema]
            [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
            xtdb.arrow.Relation
-           xtdb.database.Database
+           xtdb.database.DatabaseCatalog
            xtdb.IResultCursor
            [xtdb.query IQuerySource PreparedQuery]))
 
@@ -53,7 +52,8 @@
 
 (defn- dml? [sql]
   (contains? #{:insert :update :delete :erase :create-user :alter-user}
-             (first (parse-sql/parse-statement sql))))
+             ;; TODO multi-db
+             (first (parse-sql/parse-statement sql {:default-db "xtdb"}))))
 
 (defn- flight-stream->rows [^BufferAllocator allocator, ^FlightStream flight-stream]
   (let [root (.getRoot flight-stream)
@@ -80,7 +80,7 @@
                                          (update fsql-tx :dml conj dml))))
                 (throw (UnsupportedOperationException. "unknown tx")))
 
-              (xtp/execute-tx node [dml] {})))
+              (xtp/execute-tx node [dml] {:default-db "xtdb"}))) ; TODO multi-db
 
           (handle-get-stream [^IResultCursor cursor, ^FlightProducer$ServerStreamListener listener]
             (try
@@ -150,7 +150,7 @@
         (try
           (let [sql (.toStringUtf8 (.getQueryBytes cmd))
                 ticket-handle (new-id)
-                pq (.prepareQuery q-src sql db snap-src {})
+                pq (.prepareQuery q-src sql db snap-src {:default-db "xtdb"}) ; TODO multi-db
                 cursor (.openQuery pq {})
                 ticket (Ticket. (-> (doto (FlightSql$TicketStatementQuery/newBuilder)
                                       (.setStatementHandle ticket-handle))
@@ -201,7 +201,7 @@
       (createPreparedStatement [_ req _ctx listener]
         (let [ps-id (new-id)
               sql (.toStringUtf8 (.getQueryBytes req))
-              pq (.prepareQuery q-src sql db snap-src {})
+              pq (.prepareQuery q-src sql db snap-src {:default-db "xtdb"}) ; TODO multi-db
               ps (cond-> {:id ps-id, :sql sql
                           :fsql-tx-id (when (.hasTransactionId req)
                                         (.getTransactionId req))}
@@ -245,7 +245,7 @@
                  (.getAction req))
 
             (try
-              (xtp/execute-tx node dml {})
+              (xtp/execute-tx node dml {:default-db "xtdb"}) ; TODO multi-db
               (.onCompleted listener)
 
               (catch Throwable t
@@ -271,9 +271,10 @@
                     (some? port) (.port port))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-server [{:keys [allocator q-src ^Database db] :as node}
+(defn open-server [{:keys [allocator q-src ^DatabaseCatalog db-cat] :as node}
                    ^FlightSqlServer$Factory factory]
-  (let [host (.getHost factory)
+  (let [db (.getPrimary db-cat) ; TODO multi-db
+        host (.getHost factory)
         port (.getPort factory)
         fsql-txs (ConcurrentHashMap.)
         stmts (ConcurrentHashMap.)

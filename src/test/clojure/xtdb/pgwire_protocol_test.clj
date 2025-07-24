@@ -2,7 +2,7 @@
   (:require [clojure.test :as t :refer [deftest]]
             [jsonista.core :as json]
             [xtdb.authn :as authn]
-            [xtdb.database :as db]
+            [xtdb.db-catalog :as db]
             [xtdb.indexer.live-index :as li]
             [xtdb.pgwire :as pgwire]
             [xtdb.pgwire.io :as pgio]
@@ -64,20 +64,22 @@
   (^java.lang.AutoCloseable [frontend startup-opts]
    (->conn frontend startup-opts [{:user nil, :method #xt.authn/method :trust, :address nil}]))
   (^java.lang.AutoCloseable [frontend startup-opts authn-rules]
-   (let [conn (pgwire/map->Connection {:server {:server-state (atom {:parameters {"server_encoding" "UTF8"
+   (let [db (db/primary-db tu/*node*)
+         conn (pgwire/map->Connection {:server {:server-state (atom {:parameters {"server_encoding" "UTF8"
                                                                                   "client_encoding" "UTF8"
                                                                                   "DateStyle" "ISO"
                                                                                   "IntervalStyle" "ISO_8601"}})
-                                                :->node {"xtdb" (-> tu/*node*
-                                                                    (assoc :authn (authn/->UserTableAuthn authn-rules
-                                                                                                          (util/component tu/*node* :xtdb.query/query-source)
-                                                                                                          (db/<-node tu/*node*)
-                                                                                                          (li/<-node tu/*node*))))}}
+                                                :node (-> tu/*node*
+                                                          (assoc :authn (authn/->UserTableAuthn authn-rules
+                                                                                                (util/component tu/*node* :xtdb.query/query-source)
+                                                                                                db
+                                                                                                (.getLiveIndex db))))}
                                        :allocator tu/*allocator*
                                        :frontend frontend
                                        :cid -1
                                        :!closing? (atom false)
-                                       :conn-state (atom {:session {:clock (Clock/systemUTC)}})})]
+                                       :conn-state (atom {:session {:clock (Clock/systemUTC)}})
+                                       :default-db "xtdb"})]
      (try
        (pgwire/cmd-startup-pg30 conn startup-opts)
        (catch Exception e

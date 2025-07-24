@@ -2,7 +2,7 @@
   (:require [clj-http.client :as clj-http]
             [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.block-catalog :as block-cat]
+            [xtdb.db-catalog :as db]
             [xtdb.healthz :as healthz]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
@@ -119,7 +119,7 @@
     (let [port (tu/free-port)]
       (with-open [node (tu/->local-node {:node-dir local-path
                                          :healthz-port port})]
-        (let [block-cat (block-cat/<-node node)]
+        (let [block-cat (.getBlockCatalog (db/primary-db node))]
 
           (t/testing "no latest completed tx"
             (clj-http/post (->system-url port "finish-block") {:throw-exceptions false}))

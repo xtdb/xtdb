@@ -1,8 +1,8 @@
 (ns xtdb.trie-catalog-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
             [xtdb.compactor :as c]
+            [xtdb.db-catalog :as db]
             [xtdb.garbage-collector :as gc]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
@@ -286,7 +286,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-      (let [cat (cat/<-node node)]
+      (let [cat (.getTrieCatalog (db/primary-db node))]
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
         (tu/finish-block! node)
 
@@ -299,7 +299,7 @@
                       (into #{} (map :trie-key)))))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-      (let [cat (cat/<-node node)]
+      (let [cat (.getTrieCatalog (db/primary-db node))]
         (t/is (= #{#xt/table foo, #xt/table xt/txs} (.getTables cat)))
         (t/is (= #{"l00-rc-b01" "l00-rc-b00"}
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
@@ -308,7 +308,7 @@
     (t/testing "artifically adding tries"
 
       (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-        (let [cat (cat/<-node node)]
+        (let [cat (.getTrieCatalog (db/primary-db node))]
           (.addTries cat #xt/table foo
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
@@ -318,7 +318,7 @@
           (tu/finish-block! node))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-      (let [cat (cat/<-node node)]
+      (let [cat (.getTrieCatalog (db/primary-db node))]
         (t/is (= #{"l00-rc-b03"
                    "l01-rc-b02"
                    "l02-rc-p0-b01"
@@ -459,8 +459,9 @@
 
       (with-open [node (tu/->local-node opts)]
         (let [gc (gc/garbage-collector node)
-              bp (bp/<-node node)
-              cat (cat/<-node node)]
+              db (db/primary-db node)
+              bp (.getBufferPool db)
+              cat (.getTrieCatalog db)]
           (doseq [i (range 4)]
             (xt/execute-tx node [[:put-docs :foo {:xt/id i}]])
             (tu/finish-block! node)

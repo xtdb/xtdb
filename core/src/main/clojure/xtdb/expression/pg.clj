@@ -17,13 +17,12 @@
 
 (defn tables [schema]
   (set/union (set (keys info/table-info))
-             #{#xt/table xt/txs}
-             (set (keys schema))))
+             '#{xt/txs}
+             (into #{} (map table/ref->schema+table) (keys schema))))
 
 (defn find-table [schema table-name]
-  (or (some-> (some (tables schema) (->> (symbol-names table-name)
-                                         (map table/->ref)))
-              table/ref->sym
+  ;; TODO multi-db
+  (or (some-> (some (tables schema) (symbol-names table-name))
               (info/name->oid))
       (throw (err/incorrect ::unknown-relation (format "Relation %s does not exist" table-name)))))
 
@@ -34,7 +33,7 @@
 
 (defn oid->table [schema oid]
   (->> (tables schema)
-       (filter #(= oid (info/name->oid (table/ref->sym %))))
+       (filter #(= oid (info/name->oid (table/ref->schema+table %))))
        (first)))
 
 (defn string-name [fq-name]
@@ -47,7 +46,7 @@
   {:return-type target-type
    :->call-code (fn [[regclass-code]]
                   `(let [oid# ~regclass-code]
-                     (expr/resolve-utf8-buf (or (some-> (oid->table ~expr/schema-sym oid#) table/ref->sym string-name)
+                     (expr/resolve-utf8-buf (or (some-> (oid->table ~expr/schema-sym oid#) table/ref->schema+table string-name)
                                                 (str oid#)))))})
 
 (defmethod expr/codegen-cast [:regclass :int] [{:keys [target-type]}]

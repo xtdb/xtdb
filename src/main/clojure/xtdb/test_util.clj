@@ -4,7 +4,7 @@
             [cognitect.anomalies :as-alias anom]
             [xtdb.api :as xt]
             [xtdb.block-catalog :as block-cat]
-            [xtdb.database :as db]
+            [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.indexer :as idx]
             [xtdb.indexer.live-index :as li]
@@ -118,14 +118,15 @@
   (ZonedDateTimeRange. (time/->zdt from) (some-> to time/->zdt)))
 
 (defn finish-block! [node]
-  (.finishBlock (.getLogProcessor (db/<-node node))))
+  (.finishBlock (.getLogProcessor (db/primary-db node))))
 
 (defn flush-block!
   ([node] (flush-block! node #xt/duration "PT5S"))
   ([node timeout]
-   (let [log (xt-log/<-node node)]
-     @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (block-cat/<-node node)) -1)))
-     (xt-log/await-db (db/<-node node) (xtp/await-token node) timeout))))
+   (let [db (db/primary-db node)
+         log (.getLog db)]
+     @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1)))
+     (xt-log/await-db db (xtp/await-token node) timeout))))
 
 (defn open-vec
   (^xtdb.arrow.Vector [^Field field]
@@ -212,14 +213,15 @@
   ([query {:keys [node args preserve-pages? with-col-types? key-fn] :as query-opts
            :or {key-fn (serde/read-key-fn :kebab-case-keyword)}}]
    (let [allocator (:allocator node *allocator*)
-         query-opts (cond-> query-opts
-                      node (-> (update :await-token (fnil identity (xtp/await-token node)))
-                               (doto (-> :await-token (->> (xt-log/await-db (db/<-node node)))))))
+         query-opts (-> query-opts
+                        (update :default-db (fnil identity "xtdb"))
+                        (cond-> node (-> (update :await-token (fnil identity (xtp/await-token node)))
+                                         (doto (-> :await-token (->> (xt-log/await-db (db/primary-db node))))))))
 
-         db (some-> node db/<-node)
+         db (some-> node db/primary-db)
 
          snap-src (if node
-                    (li/<-node node)
+                    (.getLiveIndex db)
                     (reify Snapshot$Source
                       (openSnapshot [_]
                         (Snapshot. nil nil {}))))
@@ -385,6 +387,6 @@
   "Like xtdb.api/q, but also returns the result type."
   ([node query] (q-sql node query {}))
   ([node query opts]
-   (let [^PreparedQuery prepared-q (xtp/prepare-sql node query opts)]
+   (let [^PreparedQuery prepared-q (xtp/prepare-sql node query (merge {:default-db "xtdb"} opts))]
      {:res (xt/q node query opts)
       :res-type (mapv (juxt #(.getName ^Field %) types/field->col-type) (.getColumnFields prepared-q []))})))

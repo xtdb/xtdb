@@ -3,7 +3,7 @@
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.buffer-pool]
-            [xtdb.database :as db]
+            [xtdb.db-catalog :as db]
             [xtdb.metrics :as metrics]
             [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]
@@ -50,7 +50,7 @@
               (update-vals (some-> live-index-snap (.getAllColumnFields))
                            (comp set keys))))
 
-(deftype LiveIndex [^BufferAllocator allocator, ^BufferPool buffer-pool, ^Log log
+(deftype LiveIndex [^BufferAllocator allocator, db-name, ^BufferPool buffer-pool, ^Log log
                     ^BlockCatalog block-cat, table-cat, ^TrieCatalog trie-cat
 
                     ^:volatile-mutable ^TransactionKey latest-completed-tx
@@ -164,7 +164,7 @@
                               (trie/->trie-details table trie-key data-file-size trie-metadata state))]
             (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION added-tries))
             (doseq [^TrieDetails added-trie added-tries]
-              (.addTries trie-cat (table/->ref (.getTableName added-trie)) [added-trie] (.getSystemTime latest-completed-tx))))
+              (.addTries trie-cat (table/->ref db-name (.getTableName added-trie)) [added-trie] (.getSystemTime latest-completed-tx))))
 
           (let [all-tables (set (concat (keys table-metadata) (.getAllTables block-cat)))
                 table->all-tries (->> all-tables
@@ -205,10 +205,11 @@
       (log/warn "Failed to shut down live-index after 60s due to outstanding watermarks.")
       (util/close allocator))))
 
-(defmethod ig/prep-key :xtdb.indexer/live-index [_ {:keys [base, ^IndexerConfig indexer-conf]}]
+(defmethod ig/prep-key :xtdb.indexer/live-index [_ {:keys [base, db-name, ^IndexerConfig indexer-conf]}]
   {:base base
+   :db-name db-name
 
-   :allocator (ig/ref :xtdb.database/allocator)
+   :allocator (ig/ref :xtdb.db-catalog/allocator)
    :buffer-pool (ig/ref :xtdb/buffer-pool)
    :block-cat (ig/ref :xtdb/block-catalog)
    :table-cat (ig/ref :xtdb/table-catalog)
@@ -221,13 +222,13 @@
    :skip-txs (.getSkipTxs indexer-conf)})
 
 (defmethod ig/init-key :xtdb.indexer/live-index [_ {{:keys [meter-registry]} :base,
-                                                    :keys [allocator, ^BlockCatalog block-cat, buffer-pool log trie-cat table-cat
+                                                    :keys [allocator, db-name, ^BlockCatalog block-cat, buffer-pool log trie-cat table-cat
                                                            ^long rows-per-block, ^long log-limit, ^long page-limit, skip-txs]}]
   (let [latest-completed-tx (.getLatestCompletedTx block-cat)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (metrics/add-allocator-gauge meter-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]
-        (->LiveIndex allocator buffer-pool log
+        (->LiveIndex allocator db-name buffer-pool log
                      block-cat table-cat trie-cat
                      latest-completed-tx
                      tables
@@ -243,5 +244,3 @@
 (defmethod ig/halt-key! :xtdb.indexer/live-index [_ live-idx]
   (util/close live-idx))
 
-(defn <-node ^xtdb.indexer.LiveIndex [node]
-  (.getLiveIndex (db/<-node node)))

@@ -96,10 +96,11 @@
                              :field (pr-str (.getType (.getField rdr)))
                              :col-type (types/field->col-type (.getField rdr))}))))
 
-(defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex$Tx live-idx-tx,
-                                                   ^VectorReader tx-ops-rdr, ^Instant system-time
+(defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
+                                                   ^Database db, ^Instant system-time
                                                    {:keys [indexer tx-key]}]
-  (let [put-leg (.vectorFor tx-ops-rdr "put-docs")
+  (let [db-name (.getName db)
+        put-leg (.vectorFor tx-ops-rdr "put-docs")
         iids-rdr (.vectorFor put-leg "iids")
         iid-rdr (.getListElements iids-rdr)
         docs-rdr (.vectorFor put-leg "documents")
@@ -113,44 +114,43 @@
         system-time-µs (time/instant->micros system-time)
         tables (->> (.getLegNames docs-rdr)
                     (into {} (map (fn [^String table-name]
-                                    (when (xt-log/forbidden-table? table-name) (throw (xt-log/forbidden-table-ex table-name)))
+                                    (let [table (table/->ref db-name table-name)]
+                                      (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
 
-                                    (let [table-docs-rdr (.vectorFor docs-rdr table-name)
-                                          doc-rdr (.getListElements table-docs-rdr)
-                                          ks (.getKeyNames doc-rdr)]
-                                      (when-let [forbidden-cols (not-empty (->> ks
-                                                                                (into #{} (filter (every-pred #(str/starts-with? % "_")
-                                                                                                              (complement #{"_id" "_fn" "_valid_from" "_valid_to"}))))))]
-                                        (throw (err/illegal-arg :xtdb/forbidden-columns
-                                                                {::err/message (str "Cannot put documents with columns: " (pr-str forbidden-cols))
-                                                                 :table-name table-name
+                                      (let [table-docs-rdr (.vectorFor docs-rdr table-name)
+                                            doc-rdr (.getListElements table-docs-rdr)
+                                            ks (.getKeyNames doc-rdr)]
+                                        (when-let [forbidden-cols (not-empty (->> ks
+                                                                                  (into #{} (filter (every-pred #(str/starts-with? % "_")
+                                                                                                                (complement #{"_id" "_fn" "_valid_from" "_valid_to"}))))))]
+                                          (throw (err/incorrect :xtdb/forbidden-columns (str "Cannot put documents with columns: " (pr-str forbidden-cols))
+                                                                {:table table
                                                                  :forbidden-cols forbidden-cols})))
-                                      (let [table-doc-rdr (RelationAsStructReader.
-                                                           "docs"
-                                                           (vr/rel-reader (for [^String sk ks,
-                                                                                :when (not (contains? #{"_valid_from" "_valid_to"} sk))]
-                                                                            (.vectorFor doc-rdr sk))
-                                                                          (.getValueCount doc-rdr)))
-                                            table (table/->ref table-name)
-                                            live-table-tx (.liveTable live-idx-tx table)]
-                                        (MapEntry/create table
-                                                         {:id-rdr (.vectorFor doc-rdr "_id")
+                                        (let [table-doc-rdr (RelationAsStructReader.
+                                                             "docs"
+                                                             (vr/rel-reader (for [^String sk ks,
+                                                                                  :when (not (contains? #{"_valid_from" "_valid_to"} sk))]
+                                                                              (.vectorFor doc-rdr sk))
+                                                                            (.getValueCount doc-rdr)))
+                                              live-table-tx (.liveTable live-idx-tx table)]
+                                          (MapEntry/create table
+                                                           {:id-rdr (.vectorFor doc-rdr "_id")
 
-                                                          :live-table-tx live-table-tx
+                                                            :live-table-tx live-table-tx
 
-                                                          :row-valid-from-rdr (doto (.vectorForOrNull doc-rdr "_valid_from")
+                                                            :row-valid-from-rdr (doto (.vectorForOrNull doc-rdr "_valid_from")
+                                                                                  (assert-timestamp-col-type))
+                                                            :row-valid-to-rdr (doto (.vectorForOrNull doc-rdr "_valid_to")
                                                                                 (assert-timestamp-col-type))
-                                                          :row-valid-to-rdr (doto (.vectorForOrNull doc-rdr "_valid_to")
-                                                                              (assert-timestamp-col-type))
 
-                                                          :docs-rdr table-docs-rdr
+                                                            :docs-rdr table-docs-rdr
 
-                                                          :doc-copier (.rowCopier table-doc-rdr
-                                                                                  (.getDocWriter live-table-tx))})))))))]
+                                                            :doc-copier (.rowCopier table-doc-rdr
+                                                                                    (.getDocWriter live-table-tx))}))))))))]
 
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [table (table/->ref (.getLeg docs-rdr tx-op-idx))
+        (let [table (table/->ref db-name (.getLeg docs-rdr tx-op-idx))
 
               {:keys [^VectorReader docs-rdr, ^VectorReader id-rdr, ^LiveTable$Tx live-table-tx, ^RowCopier doc-copier
                       ^VectorReader row-valid-from-rdr, ^VectorReader row-valid-to-rdr]}
@@ -182,7 +182,7 @@
                                        :valid-to (time/micros->instant valid-to)})))
 
               (with-crash-log indexer "error putting document"
-                  {:table-name table :tx-key tx-key, :tx-op-idx tx-op-idx, :doc-idx doc-idx}
+                  {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :doc-idx doc-idx}
                   {:live-table-tx live-table-tx}
 
                 (.logPut live-table-tx
@@ -194,9 +194,11 @@
 
         nil))))
 
-(defn- ->delete-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr, ^Instant current-time
+(defn- ->delete-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
+                                                      ^Database db, ^Instant current-time
                                                       {:keys [indexer tx-key]}]
-  (let [delete-leg (.vectorFor tx-ops-rdr "delete-docs")
+  (let [db-name (.getName db)
+        delete-leg (.vectorFor tx-ops-rdr "delete-docs")
         table-rdr (.vectorFor delete-leg "table")
         iids-rdr (.vectorFor delete-leg "iids")
         iid-rdr (.getListElements iids-rdr)
@@ -205,8 +207,7 @@
         current-time-µs (time/instant->micros current-time)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [table-name (.getObject table-rdr tx-op-idx)
-              table (table/->ref table-name)
+        (let [table (table/->ref db-name (.getObject table-rdr tx-op-idx))
               live-table-tx (.liveTable live-idx-tx table)
               valid-from (if (.isNull valid-from-rdr tx-op-idx)
                            current-time-µs
@@ -215,7 +216,7 @@
                          Long/MAX_VALUE
                          (.getLong valid-to-rdr tx-op-idx))]
 
-          (when (xt-log/forbidden-table? table-name) (throw (xt-log/forbidden-table-ex table-name)))
+          (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
 
           (when (> valid-from valid-to)
             (throw (err/incorrect :xtdb.indexer/invalid-valid-times "Invalid valid times"
@@ -225,7 +226,7 @@
           (let [iids-start-idx (.getListStartIndex iids-rdr tx-op-idx)]
             (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
               (with-crash-log indexer "error deleting documents"
-                  {:table-name table-name :tx-key tx-key, :tx-op-idx tx-op-idx, :iid-idx iid-idx}
+                  {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :iid-idx iid-idx}
                   {:live-table-tx live-table-tx}
 
                 (.logDelete live-table-tx (.getBytes iid-rdr (+ iids-start-idx iid-idx))
@@ -234,23 +235,23 @@
         nil))))
 
 (defn- ->erase-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr
-                                                     {:keys [indexer tx-key]}]
-  (let [erase-leg (.vectorFor tx-ops-rdr "erase-docs")
+                                                     ^Database db, {:keys [indexer tx-key]}]
+  (let [db-name (.getName db)
+        erase-leg (.vectorFor tx-ops-rdr "erase-docs")
         table-rdr (.vectorFor erase-leg "table")
         iids-rdr (.vectorFor erase-leg "iids")
         iid-rdr (.getListElements iids-rdr)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [table-name (.getObject table-rdr tx-op-idx)
-              table (table/->ref table-name)
+        (let [table (table/->ref db-name (.getObject table-rdr tx-op-idx))
               live-table (.liveTable live-idx-tx table)
               iids-start-idx (.getListStartIndex iids-rdr tx-op-idx)]
 
-          (when (xt-log/forbidden-table? table-name) (throw (xt-log/forbidden-table-ex table-name)))
+          (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
 
           (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
             (with-crash-log indexer "error erasing documents"
-                {:table-name table-name :tx-key tx-key, :tx-op-idx tx-op-idx, :iid-idx iid-idx}
+                {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :iid-idx iid-idx}
                 {:live-table live-table}
 
               (.logErase live-table (.getBytes iid-rdr (+ iids-start-idx iid-idx))))))
@@ -267,9 +268,7 @@
               content-rel (vr/rel-reader (->> in-rel
                                               (remove (comp types/temporal-column? #(.getName ^VectorReader %))))
                                          (.getRowCount in-rel))
-              table-name (str (table/ref->sym table))
-
-              _ (when (xt-log/forbidden-table? table-name) (throw (xt-log/forbidden-table-ex table-name)))
+              _ (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
 
               id-col (.vectorForOrNull in-rel "_id")
               valid-from-rdr (.vectorForOrNull in-rel "_valid_from")
@@ -278,7 +277,7 @@
               live-table-tx (.liveTable live-idx-tx table)]
 
           (with-crash-log indexer "error upserting rows"
-              {:table-name table-name, :tx-key tx-key}
+              {:table table, :tx-key tx-key}
               {:live-table-tx live-table-tx, :query-rel in-rel}
             (let [live-idx-table-copier (.rowCopier (RelationAsStructReader. "content" content-rel)
                                                     (.getDocWriter live-table-tx))]
@@ -288,7 +287,7 @@
                                       {:column-names (vec (for [^VectorReader col in-rel] (.getName col)))})))
 
               (dotimes [idx row-count]
-                (err/wrap-anomaly {:table-name table-name, :tx-key tx-key, :row-idx idx}
+                (err/wrap-anomaly {:table table, :tx-key tx-key, :row-idx idx}
                   (let [eid (.getObject id-col idx)
                         valid-from (if (and valid-from-rdr (not (.isNull valid-from-rdr idx)))
                                      (.getLong valid-from-rdr idx)
@@ -309,18 +308,17 @@
 (defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex$Tx live-idx-tx, {:keys [indexer tx-key]}]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
-      (let [table-name (str (table/ref->sym table))
-            row-count (.getRowCount in-rel)
+      (let [row-count (.getRowCount in-rel)
             iid-rdr (.vectorFor in-rel "_iid")
             valid-from-rdr (.vectorFor in-rel "_valid_from")
             valid-to-rdr (.vectorFor in-rel "_valid_to")]
 
-        (when (xt-log/forbidden-table? table-name)
-          (throw (xt-log/forbidden-table-ex table-name)))
+        (when (xt-log/forbidden-table? table)
+          (throw (xt-log/forbidden-table-ex table)))
 
         (dotimes [idx row-count]
           (with-crash-log indexer "error deleting rows"
-              {:table-name table, :tx-key tx-key, :row-idx idx}
+              {:table table, :tx-key tx-key, :row-idx idx}
               {:live-table-tx live-idx-tx, :query-rel in-rel}
 
             (let [iid (.getBytes iid-rdr idx)
@@ -340,15 +338,14 @@
 (defn- ->erase-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex$Tx live-idx-tx {:keys [indexer tx-key]}]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
-      (let [table-name (str (table/ref->sym table))
-            row-count (.getRowCount in-rel)
+      (let [row-count (.getRowCount in-rel)
             iid-rdr (.vectorForOrNull in-rel "_iid")]
 
-        (when (xt-log/forbidden-table? table-name) (throw (xt-log/forbidden-table-ex table-name)))
+        (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
 
         (dotimes [idx row-count]
           (with-crash-log indexer "error erasing rows"
-              {:table-name table-name, :tx-key tx-key, :row-idx idx}
+              {:table table, :tx-key tx-key, :row-idx idx}
               {:live-table-tx live-idx-tx, :query-rel in-rel}
 
             (let [iid (.getBytes iid-rdr idx)]
@@ -420,14 +417,14 @@
               (aset selection 0 idx)
               (eval-query (-> param-rel (.select selection))))))))))
 
-(defn- patch-rel! [table-name ^LiveTable$Tx live-table, ^RelationReader rel {:keys [indexer tx-key]}]
+(defn- patch-rel! [table ^LiveTable$Tx live-table, ^RelationReader rel {:keys [indexer tx-key]}]
   (let [iid-rdr (.vectorForOrNull rel "_iid")
         doc-copier (.rowCopier (.vectorForOrNull rel "doc") (.getDocWriter live-table))
         from-rdr (.vectorForOrNull rel "_valid_from")
         to-rdr (.vectorForOrNull rel "_valid_to")]
     (dotimes [idx (.getRowCount rel)]
       (with-crash-log indexer "error patching rows"
-          {:table-name table-name, :tx-key tx-key, :row-idx idx}
+          {:table table, :tx-key tx-key, :row-idx idx}
           {:live-table live-table, :query-rel rel}
 
         (.logPut live-table
@@ -437,7 +434,7 @@
                  #(.copyRow doc-copier idx))))))
 
 (defn- ->patch-docs-indexer [^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
-                             ^IQuerySource q-src, db, snap-src, ^Instant system-time
+                             ^IQuerySource q-src, ^Database db, snap-src, ^Instant system-time
                              tx-opts]
   (let [patch-leg (.vectorFor tx-ops-rdr "patch-docs")
         iids-rdr (.vectorFor patch-leg "iids")
@@ -449,56 +446,56 @@
 
         system-time-µs (time/instant->micros system-time)]
     (letfn [(->table-idxer [^String table-name]
-              (when (xt-log/forbidden-table? table-name)
-                (throw (xt-log/forbidden-table-ex table-name)))
+              (let [table (table/->ref (.getName db) table-name)]
+                (when (xt-log/forbidden-table? table)
+                  (throw (xt-log/forbidden-table-ex table)))
 
-              (let [table-docs-rdr (.vectorFor docs-rdr table-name)
-                    doc-rdr (.getListElements table-docs-rdr)
-                    ks (.getKeyNames doc-rdr)]
-                (when-let [forbidden-cols (not-empty (->> ks
-                                                          (into #{} (filter (every-pred #(str/starts-with? % "_")
-                                                                                        (complement #{"_id" "_fn"}))))))]
-                  (throw (err/incorrect :xtdb/forbidden-columns
-                                        (str "Cannot put documents with columns: " (pr-str forbidden-cols))
-                                        {:table-name table-name, :forbidden-cols forbidden-cols})))
+                (let [table-docs-rdr (.vectorFor docs-rdr table-name)
+                      doc-rdr (.getListElements table-docs-rdr)
+                      ks (.getKeyNames doc-rdr)]
+                  (when-let [forbidden-cols (not-empty (->> ks
+                                                            (into #{} (filter (every-pred #(str/starts-with? % "_")
+                                                                                          (complement #{"_id" "_fn"}))))))]
+                    (throw (err/incorrect :xtdb/forbidden-columns
+                                          (str "Cannot put documents with columns: " (pr-str forbidden-cols))
+                                          {:table table, :forbidden-cols forbidden-cols})))
 
-                (let [table (table/->ref table-name)
-                      live-table (.liveTable live-idx-tx table)]
-                  (reify OpIndexer
-                    (indexOp [_ tx-op-idx]
-                      (let [valid-from (time/micros->instant (if (.isNull valid-from-rdr tx-op-idx)
-                                                               system-time-µs
-                                                               (.getLong valid-from-rdr tx-op-idx)))
-                            valid-to (when-not (.isNull valid-to-rdr tx-op-idx)
-                                       (time/micros->instant (.getLong valid-to-rdr tx-op-idx)))]
-                        (when-not (or (nil? valid-to) (pos? (compare valid-to valid-from)))
-                          (throw (err/incorrect :xtdb.indexer/invalid-valid-times
-                                                "Invalid valid times"
-                                                {:valid-from valid-from, :valid-to valid-to})))
+                  (let [live-table (.liveTable live-idx-tx table)]
+                    (reify OpIndexer
+                      (indexOp [_ tx-op-idx]
+                        (let [valid-from (time/micros->instant (if (.isNull valid-from-rdr tx-op-idx)
+                                                                 system-time-µs
+                                                                 (.getLong valid-from-rdr tx-op-idx)))
+                              valid-to (when-not (.isNull valid-to-rdr tx-op-idx)
+                                         (time/micros->instant (.getLong valid-to-rdr tx-op-idx)))]
+                          (when-not (or (nil? valid-to) (pos? (compare valid-to valid-from)))
+                            (throw (err/incorrect :xtdb.indexer/invalid-valid-times
+                                                  "Invalid valid times"
+                                                  {:valid-from valid-from, :valid-to valid-to})))
 
-                        (let [pq (.prepareQuery q-src (-> (sql/plan-patch {:table-info (sql/xform-table-info (scan/tables-with-cols snap-src))}
-                                                                          {:table table
-                                                                           :valid-from valid-from
-                                                                           :valid-to valid-to
-                                                                           :patch-rel (sql/->QueryExpr '[:table [_iid doc]
-                                                                                                         ?patch_docs]
-                                                                                                       '[_iid doc])})
-                                                          (lp/rewrite-plan))
-                                                db snap-src tx-opts)
-                              args (vr/rel-reader [(SingletonListReader.
-                                                    "?patch_docs"
-                                                    (RelationAsStructReader.
-                                                     "patch_doc"
-                                                     (vr/rel-reader [(-> (.select iid-rdr (.getListStartIndex iids-rdr tx-op-idx) (.getListCount iids-rdr tx-op-idx))
-                                                                         (.withName "_iid"))
-                                                                     (-> (.select doc-rdr (.getListStartIndex table-docs-rdr tx-op-idx) (.getListCount table-docs-rdr tx-op-idx))
-                                                                         (.withName "doc"))])))])]
+                          (let [pq (.prepareQuery q-src (-> (sql/plan-patch {:table-info (sql/xform-table-info (scan/tables-with-cols snap-src))}
+                                                                            {:table table
+                                                                             :valid-from valid-from
+                                                                             :valid-to valid-to
+                                                                             :patch-rel (sql/->QueryExpr '[:table [_iid doc]
+                                                                                                           ?patch_docs]
+                                                                                                         '[_iid doc])})
+                                                            (lp/rewrite-plan))
+                                                  db snap-src tx-opts)
+                                args (vr/rel-reader [(SingletonListReader.
+                                                      "?patch_docs"
+                                                      (RelationAsStructReader.
+                                                       "patch_doc"
+                                                       (vr/rel-reader [(-> (.select iid-rdr (.getListStartIndex iids-rdr tx-op-idx) (.getListCount iids-rdr tx-op-idx))
+                                                                           (.withName "_iid"))
+                                                                       (-> (.select doc-rdr (.getListStartIndex table-docs-rdr tx-op-idx) (.getListCount table-docs-rdr tx-op-idx))
+                                                                           (.withName "doc"))])))])]
 
-                          (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
-                                                             (assoc :args args, :close-args? false)))]
-                            (.forEachRemaining res
-                                               (fn [^RelationReader rel]
-                                                 (patch-rel! table-name live-table rel tx-opts)))))))))))]
+                            (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
+                                                               (assoc :args args, :close-args? false)))]
+                              (.forEachRemaining res
+                                                 (fn [^RelationReader rel]
+                                                   (patch-rel! table live-table rel tx-opts))))))))))))]
 
       (let [tables (->> (.getLegNames docs-rdr)
                         (into {} (map (juxt identity ->table-idxer))))]
@@ -532,7 +529,7 @@
                (.endStruct doc-writer)))))
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^LiveIndex$Tx live-idx-tx
-                                              ^VectorReader tx-ops-rdr, ^IQuerySource q-src, db, snap-src,
+                                              ^VectorReader tx-ops-rdr, ^IQuerySource q-src, ^Database db, snap-src,
                                               {:keys [tx-key] :as tx-opts}]
   (let [sql-leg (.vectorFor tx-ops-rdr "sql")
         query-rdr (.vectorFor sql-leg "query")
@@ -548,7 +545,7 @@
         (let [query-str (.getObject query-rdr tx-op-idx)]
           (err/wrap-anomaly {:sql query-str, :tx-op-idx tx-op-idx, :tx-key tx-key}
             (util/with-open [^ArrowReader args-arrow-rdr (open-args-rdr allocator args-rdr tx-op-idx)]
-              (let [[q-tag q-args] (parse-sql/parse-statement query-str)
+              (let [[q-tag q-args] (parse-sql/parse-statement query-str {:default-db (.getName db)})
                     tx-opts (assoc tx-opts :arg-fields (some-> args-arrow-rdr (.getVectorSchemaRoot) (.getSchema) (.getFields)))]
                 (case q-tag
                   :insert (foreach-arg-row args-arrow-rdr
@@ -575,11 +572,11 @@
 
         nil))))
 
-(defn- add-tx-row! [^LiveIndex$Tx live-idx-tx, ^TransactionKey tx-key, ^Throwable t]
+(defn- add-tx-row! [db-name ^LiveIndex$Tx live-idx-tx, ^TransactionKey tx-key, ^Throwable t]
   (let [tx-id (.getTxId tx-key)
         system-time-µs (time/instant->micros (.getSystemTime tx-key))
 
-        live-table (.liveTable live-idx-tx #xt/table xt/txs)
+        live-table (.liveTable live-idx-tx (table/->ref db-name 'xt/txs))
         doc-writer (.getDocWriter live-table)]
 
     (.logPut live-table (util/->iid tx-id) system-time-µs Long/MAX_VALUE
@@ -611,7 +608,7 @@
          opts))
 
 (defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
-                               db, ^LiveIndex live-index, table-catalog
+                               ^Database db, ^LiveIndex live-index, table-catalog
                                ^Timer tx-timer
                                ^Counter tx-error-counter]
   Indexer$ForDatabase
@@ -619,7 +616,8 @@
 
   (indexTx [this msg-id msg-ts tx-ops-rdr
             system-time default-tz _user]
-    (let [lc-tx (.getLatestCompletedTx live-index)
+    (let [db-name (.getName db)
+          lc-tx (.getLatestCompletedTx live-index)
           default-system-time (or (when-let [lc-sys-time (some-> lc-tx (.getSystemTime))]
                                     (when-not (neg? (compare lc-sys-time msg-ts))
                                       (.plusNanos lc-sys-time 1000)))
@@ -639,7 +637,7 @@
           (util/with-open [live-idx-tx (.startTx live-index tx-key)]
             (when tx-error-counter
               (.increment tx-error-counter))
-            (add-tx-row! live-idx-tx tx-key err)
+            (add-tx-row! db-name live-idx-tx tx-key err)
             (.commit live-idx-tx))
 
           (serde/->tx-aborted msg-id default-system-time err))
@@ -651,7 +649,7 @@
               (do
                 (.abort live-idx-tx)
                 (util/with-open [live-idx-tx (.startTx live-index tx-key)]
-                  (add-tx-row! live-idx-tx tx-key skipped-exn)
+                  (add-tx-row! db-name live-idx-tx tx-key skipped-exn)
                   (.commit live-idx-tx))
 
                 (serde/->tx-aborted msg-id system-time skipped-exn))
@@ -666,12 +664,13 @@
                              :current-time system-time
                              :default-tz default-tz
                              :tx-key tx-key
-                             :indexer this}
+                             :indexer this
+                             :default-db (.getName db)}
 
-                    !put-docs-idxer (delay (->put-docs-indexer live-idx-tx tx-ops-rdr system-time tx-opts))
+                    !put-docs-idxer (delay (->put-docs-indexer live-idx-tx tx-ops-rdr db system-time tx-opts))
                     !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src db snap-src system-time tx-opts))
-                    !delete-docs-idxer (delay (->delete-docs-indexer live-idx-tx tx-ops-rdr system-time tx-opts))
-                    !erase-docs-idxer (delay (->erase-docs-indexer live-idx-tx tx-ops-rdr tx-opts))
+                    !delete-docs-idxer (delay (->delete-docs-indexer live-idx-tx tx-ops-rdr db system-time tx-opts))
+                    !erase-docs-idxer (delay (->erase-docs-indexer live-idx-tx tx-ops-rdr db tx-opts))
                     !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src db snap-src tx-opts))]
 
                 (if-let [e (try
@@ -703,13 +702,13 @@
                     (util/with-open [live-idx-tx (.startTx live-index tx-key)]
                       (when tx-error-counter
                         (.increment tx-error-counter))
-                      (add-tx-row! live-idx-tx tx-key e)
+                      (add-tx-row! db-name live-idx-tx tx-key e)
                       (.commit live-idx-tx))
 
                     (serde/->tx-aborted msg-id system-time e))
 
                   (do
-                    (add-tx-row! live-idx-tx tx-key nil)
+                    (add-tx-row! db-name live-idx-tx tx-key nil)
                     (.commit live-idx-tx)
                     (serde/->tx-committed msg-id system-time)))))))))))
 
@@ -734,7 +733,7 @@
 
 (defmethod ig/prep-key ::for-db [_ {:keys [base]}]
   {:base base
-   :query-db (ig/ref :xtdb.database/for-query)})
+   :query-db (ig/ref :xtdb.db-catalog/for-query)})
 
 (defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base,
                                     :keys [query-db]}]

@@ -186,7 +186,7 @@
   PQuerySource
   (-plan-query [_ parsed-query query-opts table-info]
     (.get plan-cache [parsed-query (-> query-opts
-                                       (select-keys [:decorrelate? :explain? :arg-fields])
+                                       (select-keys [:default-db :decorrelate? :explain? :arg-fields])
                                        (update :decorrelate? (fnil boolean true))
                                        (assoc :table-info table-info))]
           (fn [[parsed-query query-opts]]
@@ -260,7 +260,7 @@
                             expr/*default-tz* default-tz
                             expr/*snapshot-token* (or (some-> (:snapshot-token planned-query snapshot-token) (expr->value {:args args}))
                                                       (when-let [sys-time (some-> snap .getTxBasis .getSystemTime)]
-                                                        (basis/->time-basis-str {"xtdb" [sys-time]})))
+                                                        (basis/->time-basis-str {(.getName db) [sys-time]})))
                             expr/*await-token* await-token]
 
                     (validate-snapshot-not-before expr/*snapshot-token* snap)

@@ -38,7 +38,7 @@ private val LOG = LogProcessor::class.logger
 class LogProcessor(
     allocator: BufferAllocator,
     meterRegistry: MeterRegistry,
-    db: Database,
+    private val db: Database,
     private val indexer: Indexer.ForDatabase,
     private val compactor: Compactor.ForDatabase,
     flushTimeout: Duration,
@@ -186,7 +186,7 @@ class LogProcessor(
                     is Message.TriesAdded -> {
                         if (msg.storageVersion == Storage.VERSION)
                             msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                                trieCatalog.addTries(TableRef.parse(tableName), tries, record.logTimestamp)
+                                trieCatalog.addTries(TableRef.parse(db.name, tableName), tries, record.logTimestamp)
                             }
                         null
                     }

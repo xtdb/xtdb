@@ -27,7 +27,8 @@
                                             (for [tx-op tx-ops]
                                               (cond-> tx-op
                                                 (not (instance? TxOp tx-op)) tx-ops/parse-tx-op))
-                                            opts)
+                                            ;; TODO test multi-db
+                                            (merge {:default-db "xtdb"} opts))
                       tj/arrow-streaming->json)]
 
        ;; uncomment this to reset the expected file (but don't commit it)

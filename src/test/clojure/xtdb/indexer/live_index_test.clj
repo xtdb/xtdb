@@ -5,6 +5,7 @@
             [xtdb.buffer-pool :as bp]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
+            [xtdb.db-catalog :as db]
             [xtdb.indexer.live-index :as li]
             xtdb.node.impl
             [xtdb.object-store :as os]
@@ -25,8 +26,9 @@
 
 (t/deftest test-block
   (let [^BufferAllocator allocator (util/component tu/*node* :xtdb/allocator)
-        buffer-pool (bp/<-node tu/*node*)
-        live-index (li/<-node tu/*node*)
+        db (db/primary-db tu/*node*)
+        buffer-pool (.getBufferPool db)
+        live-index (.getLiveIndex db)
 
         iids (let [rnd (Random. 0)]
                (repeatedly 12000 #(UUID. (.nextLong rnd) (.nextLong rnd))))
@@ -111,7 +113,7 @@
       (util/delete-dir node-dir)
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-        (let [bp (bp/<-node node)]
+        (let [bp (.getBufferPool (db/primary-db node))]
 
           (doseq [tx-ops txs]
             (try
@@ -134,7 +136,7 @@
                         (.resolve node-dir "objects"))))))
 
 (t/deftest test-new-table-discarded-on-abort-2721
-  (let [live-index (li/<-node tu/*node*)]
+  (let [live-index (.getLiveIndex (db/primary-db tu/*node*))]
 
     (let [live-tx0 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})
           foo-table-tx (.liveTable live-tx0 #xt/table foo)
@@ -192,7 +194,7 @@
         (tu/finish-block! node))
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
-        (let [bp (bp/<-node node)]
+        (let [bp (.getBufferPool (db/primary-db node))]
           (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
           (tu/finish-block! node)
 

@@ -1,8 +1,8 @@
 (ns xtdb.query-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.block-catalog :as block-cat]
             [xtdb.compactor :as c]
+            [xtdb.db-catalog :as db]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
@@ -18,7 +18,7 @@
 (t/use-fixtures :each tu/with-node)
 
 (defn with-page-metadata [node meta-file-path f]
-  (let [metadata-mgr (meta/<-node node)]
+  (let [metadata-mgr (.getMetadataManager (db/primary-db node))]
     (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
       (f page-metadata))))
 
@@ -38,7 +38,7 @@
     (tu/finish-block! node)
     (c/compact-all! node #xt/duration "PT1S")
 
-    (let [block-cat (block-cat/<-node node)]
+    (let [block-cat (.getBlockCatalog (db/primary-db node))]
       (letfn [(test-query-ivan [expected]
                 (t/is (= expected
                          (set (tu/query-ra '[:scan {:table #xt/table xt_docs} [_id name {ordinal (> ordinal 1)}]]
@@ -101,7 +101,7 @@
     (tu/finish-block! node)
     (c/compact-all! node #xt/duration "PT1S")
 
-    (let [block-cat (block-cat/<-node node)]
+    (let [block-cat (.getBlockCatalog (db/primary-db node))]
       (t/is (= 1 (.getCurrentBlockIndex block-cat)))
 
       (t/testing "only needs to scan block 1, page 1"

@@ -1,7 +1,7 @@
 (ns xtdb.trie-catalog
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
-            [xtdb.database :as db]
+            [xtdb.db-catalog :as db]
             [xtdb.table-catalog :as table-cat]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
@@ -360,5 +360,3 @@
     (log/debug "trie catalog started")
     cat))
 
-(defn <-node ^xtdb.trie.TrieCatalog [node]
-  (.getTrieCatalog (db/<-node node)))

@@ -25,7 +25,7 @@
            (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
-           xtdb.database.Database
+           (xtdb.database Database DatabaseCatalog)
            xtdb.error.Anomaly
            (xtdb.query IQuerySource PreparedQuery)))
 
@@ -44,7 +44,8 @@
 
 (defn- with-query-opts-defaults [query-opts {:keys [default-tz]}]
   (-> (into {:default-tz default-tz,
-             :key-fn (serde/read-key-fn :snake-case-string)}
+             :key-fn (serde/read-key-fn :snake-case-string)
+             :default-db "xtdb"}
             query-opts)
       (update :current-time #(some-> % (time/->instant)))))
 
@@ -55,7 +56,7 @@
     (-> (q/cursor->stream cursor query-opts metrics)
         (metrics/wrap-query query-timer))))
 
-(defrecord Node [^BufferAllocator allocator, ^Database db
+(defrecord Node [^BufferAllocator allocator, ^DatabaseCatalog db-cat
                  ^IQuerySource q-src
                  ^CompositeMeterRegistry metrics-registry
                  default-tz, ^AtomicReference !await-token
@@ -91,10 +92,8 @@
 
   xtp/PNode
   (submit-tx [this tx-ops opts]
-    (try 
-      (let [tx-id (xt-log/submit-tx this tx-ops opts)]
-        (.set !await-token (basis/->tx-basis-str {"xtdb" [tx-id]}))
-        tx-id)
+    (try
+      (xt-log/submit-tx this tx-ops opts)
       (catch Anomaly e
         (when tx-error-counter
           (.increment tx-error-counter))
@@ -102,7 +101,8 @@
 
   (execute-tx [this tx-ops opts]
     (let [tx-id (xtp/submit-tx this tx-ops opts)]
-      (or (let [^TransactionResult tx-res (-> @(.awaitAsync (.getLogProcessor db) tx-id)
+      (or (let [^Database db (first (.databaseOrNull db-cat (:default-db opts)))
+                ^TransactionResult tx-res (-> @(.awaitAsync (.getLogProcessor db) tx-id)
                                               (util/rethrowing-cause))]
             (when (and tx-res
                        (= (.getTxId tx-res) tx-id))
@@ -139,12 +139,26 @@
           (throw e)))))
 
   xtp/PStatus
-  (latest-completed-txs [_] {"xtdb" [(.getLatestCompletedTx (.getLiveIndex db))]})
-  (latest-submitted-tx-ids [_] {"xtdb" [(.getLatestSubmittedMsgId (.getLogProcessor db))]})
+  (latest-completed-txs [_]
+    (->> (.getDatabaseNames db-cat)
+         (into {} (map (fn [db-name]
+                         [db-name (->> (.databaseOrNull db-cat db-name)
+                                       (mapv (fn [^Database db]
+                                               (.getLatestCompletedTx (.getLiveIndex db)))))])))))
 
-  (await-token [this] (basis/->tx-basis-str (xtp/latest-submitted-tx-ids this)))
-  (snapshot-token [this] (basis/->time-basis-str (-> (xtp/latest-completed-txs this)
-                                                     (update-vals #(mapv :system-time %)))))
+  (latest-submitted-tx-ids [_]
+    (->> (.getDatabaseNames db-cat)
+         (into {} (map (fn [db-name]
+                         [db-name (->> (.databaseOrNull db-cat db-name)
+                                       (mapv (fn [^Database db]
+                                               (.getLatestSubmittedMsgId (.getLogProcessor db)))))])))))
+
+  (await-token [this]
+    (basis/->tx-basis-str (xtp/latest-submitted-tx-ids this)))
+
+  (snapshot-token [this]
+    (basis/->time-basis-str (-> (xtp/latest-completed-txs this)
+                                (update-vals #(mapv :system-time %)))))
   
   (status [this]
     {:latest-completed-txs (xtp/latest-completed-txs this)
@@ -153,8 +167,9 @@
      :await-token (xtp/await-token this)})
 
   xtp/PLocalNode
-  (prepare-sql [this query query-opts]
-    (let [ast (cond
+  (prepare-sql [this query {:keys [default-db] :as query-opts}]
+    (let [^Database db (first (.databaseOrNull db-cat default-db))
+          ast (cond
                 (instance? Sql$DirectlyExecutableStatementContext query) query
                 (string? query) (antlr/parse-statement query)
                 :else (throw (err/illegal-arg :xtdb/unsupported-query-type
@@ -167,7 +182,8 @@
       (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
   (prepare-xtql [this query query-opts]
-    (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
+    (let [^Database db (first (.databaseOrNull db-cat (:default-db query-opts)))
+          {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
           ast (cond
                 (sequential? query) (xtql/parse-query query nil)
                 (instance? XtqlQuery query) query
@@ -178,7 +194,8 @@
       (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
   (prepare-ra [this plan query-opts]
-    (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+    (let [^Database db (first (.databaseOrNull db-cat (:default-db query-opts)))
+          {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (xt-log/await-db db await-token tx-timeout)
 
       (.prepareQuery q-src plan db (.getLiveIndex db) query-opts)))
@@ -195,7 +212,7 @@
   (merge {:allocator (ig/ref :xtdb/allocator)
           :config (ig/ref :xtdb/config)
           :q-src (ig/ref :xtdb.query/query-source)
-          :db (ig/ref :xtdb/database)
+          :db-cat (ig/ref :xtdb/db-catalog)
           :metrics-registry (ig/ref :xtdb.metrics/registry)
           :authn (ig/ref :xtdb/authn)}
          opts))
@@ -259,7 +276,7 @@
          :xtdb.query/query-source {}
          :xtdb/compactor (.getCompactor opts)
          :xtdb.metrics/registry {}
-         :xtdb/database {}
+         :xtdb/db-catalog {}
          :xtdb/authn {:authn-factory (.getAuthn opts)}
          :xtdb.cache/memory (.getMemoryCache opts)
          :xtdb.cache/disk (.getDiskCache opts)

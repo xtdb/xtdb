@@ -1,6 +1,6 @@
 (ns xtdb.buffer-pool
   (:require [integrant.core :as ig]
-            [xtdb.database :as db]
+            [xtdb.db-catalog :as db]
             [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import (xtdb BufferPool)
@@ -44,7 +44,7 @@
 
 (defmethod ig/prep-key :xtdb/buffer-pool [_ {:keys [base factory]}]
   {:base base, :factory factory
-   :allocator (ig/ref :xtdb.database/allocator)})
+   :allocator (ig/ref :xtdb.db-catalog/allocator)})
 
 (defmethod ig/init-key :xtdb/buffer-pool [_ {{:keys [meter-registry mem-cache disk-cache]} :base, :keys [allocator ^Storage$Factory factory]}]
   (.open factory allocator mem-cache disk-cache meter-registry Storage/VERSION))
@@ -52,5 +52,3 @@
 (defmethod ig/halt-key! :xtdb/buffer-pool [_ ^BufferPool buffer-pool]
   (util/close buffer-pool))
 
-(defn <-node ^xtdb.BufferPool [node]
-  (.getBufferPool (db/<-node node)))

@@ -10,11 +10,12 @@
             [next.jdbc.result-set :as result-set]
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
-            [xtdb.log :as xt-log]
+            [xtdb.db-catalog :as db]
             [xtdb.logging :as logging]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
+            [xtdb.pgwire :as pgw]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -36,8 +37,8 @@
 (set! *warn-on-reflection* false) ; gagh! lazy. don't do this.
 (set! *unchecked-math* false)
 
-(def ^:dynamic ^:private *port* nil)
-(def ^:dynamic ^:private ^xtdb.api.DataSource *server* nil)
+(def ^:dynamic *port* nil)
+(def ^:dynamic ^xtdb.api.DataSource *server* nil)
 
 (defn- in-system-tz ^java.time.ZonedDateTime [^ZonedDateTime zdt]
   (.withZoneSameInstant zdt (ZoneId/systemDefault)))
@@ -86,7 +87,7 @@
                                                               :drain-wait 250}
                                                              opts))))
 
-(defn- jdbc-conn
+(defn jdbc-conn
   (^Connection [] (jdbc-conn nil))
   (^Connection [opts]
    (-> ^DataSource$ConnectionBuilder
@@ -95,11 +96,18 @@
 
                (-> (.createConnectionBuilder *server*)
                    (.user "xtdb")
-                   (.port *port*))
+                   (.port *port*)
+                   (.database (:dbname opts "xtdb")))
 
-               opts)
+               (filter (comp string? key) opts))
 
        (.build))))
+
+(defn with-playground [f]
+  (util/with-open [server (pgw/open-playground)]
+    (binding [*port* (:port server)
+              *server* server]
+      (f))))
 
 (defn- exec [^Connection conn ^String sql]
   (.execute (.createStatement conn) sql))
@@ -2401,7 +2409,8 @@ ORDER BY 1,2;")
     (jdbc/execute! conn ["INSERT INTO bar RECORDS {_id: 2}"])
 
     (t/is (= [["public" "bar"]
-              ["public" "foo"]]
+              ["public" "foo"]
+              ["xt" "txs"]]
            (map (juxt :Schema :Name)
                 (q conn [display-tables-query]))))))
 
@@ -2414,7 +2423,8 @@ ORDER BY 1,2;")
 
        (send "\\d\n")
        (t/is (= [["Schema" "Name" "Type" "Owner"]
-                 ["public" "foo" "table" "xtdb"]]
+                 ["public" "foo" "table" "xtdb"]
+                 ["xt" "txs" "table" "xtdb"]]
                 (read)))))))
 
 (t/deftest select-snapshot-token
@@ -2845,7 +2855,7 @@ ORDER BY 1,2;")
   (with-open [conn (jdbc-conn)]
     (xt/execute-tx conn [[:put-docs :foo {:xt/id 1}]])
     (t/is (= [{:xt/id 1}] (xt/q conn "SELECT * FROM foo")))
-    (doto (xt-log/<-node tu/*node*)
+    (doto (.getLog (db/primary-db tu/*node*))
       (.appendMessage (Log$Message$FlushBlock. 1)))
     (t/is (= [{:xt/id 1}] (xt/q conn "SELECT * FROM foo")))))
 

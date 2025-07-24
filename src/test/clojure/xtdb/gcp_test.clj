@@ -6,15 +6,14 @@
             [xtdb.buffer-pool :as bp]
             [xtdb.buffer-pool-test :as bp-test]
             [xtdb.datasets.tpch :as tpch]
+            [xtdb.db-catalog :as db]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
             [xtdb.object-store-test :as os-test]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]
-            [xtdb.protocols :as xtp])
+            [xtdb.util :as util])
   (:import (com.google.cloud.storage Bucket Bucket$BucketSourceOption Storage Storage$BucketGetOption StorageException StorageOptions StorageOptions$Builder)
            (java.io Closeable)
-           (java.time Duration)
            (xtdb.buffer_pool RemoteBufferPool)
            (xtdb.gcp CloudStorage)))
 
@@ -77,14 +76,14 @@
 (t/deftest ^:google-cloud list-test
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
-      (let [buffer-pool (bp/<-node node)]
+      (let [buffer-pool (.getBufferPool (db/primary-db node))]
         (bp-test/test-list-objects buffer-pool)))))
 
 (t/deftest ^:google-cloud list-test-with-prior-objects
   (util/with-tmp-dirs #{local-disk-cache}
     (let [prefix (random-uuid)]
       (util/with-open [node (start-kafka-node local-disk-cache prefix)]
-        (let [^RemoteBufferPool buffer-pool (bp/<-node node)]
+        (let [^RemoteBufferPool buffer-pool (.getBufferPool (db/primary-db node))]
           (bp-test/put-edn buffer-pool (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool (util/->path "alan") :alan)
           (Thread/sleep 1000)
@@ -92,7 +91,7 @@
                    (.listAllObjects buffer-pool)))))
 
       (util/with-open [node (start-kafka-node local-disk-cache prefix)]
-        (let [^RemoteBufferPool buffer-pool (bp/<-node node)]
+        (let [^RemoteBufferPool buffer-pool (.getBufferPool (db/primary-db node))]
           (t/testing "prior objects will still be there, should be available on a list request"
             (t/is (= [(os/->StoredObject "alan" 5) (os/->StoredObject "alice" 6)]
                      (.listAllObjects buffer-pool))))
@@ -108,8 +107,8 @@
     (let [prefix (random-uuid)]
       (util/with-open [node-1 (start-kafka-node local-disk-cache prefix)
                        node-2 (start-kafka-node local-disk-cache prefix)]
-        (let [^RemoteBufferPool buffer-pool-1 (bp/<-node node-1)
-              ^RemoteBufferPool buffer-pool-2 (bp/<-node node-2)]
+        (let [^RemoteBufferPool buffer-pool-1 (.getBufferPool (db/primary-db node-1))
+              ^RemoteBufferPool buffer-pool-2 (.getBufferPool (db/primary-db node-2))]
           (bp-test/put-edn buffer-pool-1 (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool-2 (util/->path "alan") :alan)
           (Thread/sleep 1000)
@@ -124,8 +123,8 @@
     (let [prefix (random-uuid)]
       (util/with-open [node-1 (start-kafka-node local-disk-cache prefix)
                        node-2 (start-kafka-node local-disk-cache prefix)]
-        (let [^RemoteBufferPool buffer-pool-1 (bp/<-node node-1)
-              ^RemoteBufferPool buffer-pool-2 (bp/<-node node-2)]
+        (let [^RemoteBufferPool buffer-pool-1 (.getBufferPool (db/primary-db node-1))
+              ^RemoteBufferPool buffer-pool-2 (.getBufferPool (db/primary-db node-2))]
           (bp-test/put-edn buffer-pool-1 (util/->path "alice") :alice)
           (bp-test/put-edn buffer-pool-2 (util/->path "alice") :alice)
           (Thread/sleep 1000)
@@ -138,7 +137,7 @@
 (t/deftest ^:google-cloud node-level-test
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
-      (let [^RemoteBufferPool buffer-pool (bp/<-node node)]
+      (let [^RemoteBufferPool buffer-pool (.getBufferPool (db/primary-db node))]
         (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
                              [:put-docs :bar {:xt/id "bar2"}]
                              [:put-docs :bar {:xt/id "bar3"}]])
@@ -161,5 +160,5 @@
       (tu/flush-block! node #xt/duration "PT5M")
 
       ;; Ensure some files written to buffer-pool 
-      (let [^RemoteBufferPool buffer-pool (bp/<-node node)]
+      (let [^RemoteBufferPool buffer-pool (.getBufferPool (db/primary-db node))]
         (t/is (seq (.listAllObjects buffer-pool)))))))

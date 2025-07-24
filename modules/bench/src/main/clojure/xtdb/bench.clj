@@ -6,7 +6,7 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
-            [xtdb.database :as db]
+            [xtdb.db-catalog :as db]
             [xtdb.log :as xt-log]
             [xtdb.logging :as logging]
             [xtdb.node :as xtn]
