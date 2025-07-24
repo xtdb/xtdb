@@ -2,7 +2,8 @@
   (:require [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [cognitect.transit :as transit])
+            [cognitect.transit :as transit]
+            [xtdb.error :as err])
   (:import [xtdb.table TableRef]
            xtdb.util.NormalForm))
 
@@ -39,10 +40,13 @@
   (^xtdb.table.TableRef [db-name schema table]
    (TableRef. (some-> db-name str) (or (some-> schema str) "public") (str table))))
 
-(defn ref->sym [^TableRef table-ref]
-  ;; only a test util - although it's currently used in pg and info-schema
-  (assert (= "xtdb" (.getDbName table-ref)) "TableRef must be from the xtdb database")
-  (symbol (.getSchemaName table-ref) (.getTableName table-ref)))
+(defn ref->schema+table [table-ref-or-sym]
+  (cond
+    (symbol? table-ref-or-sym) table-ref-or-sym
+    (instance? TableRef table-ref-or-sym) (let [^TableRef table-ref table-ref-or-sym]
+                                            (symbol (.getSchemaName table-ref) (.getTableName table-ref)))
+    :else (throw (err/fault ::invalid-table-ref
+                            (format "Expected a TableRef or a symbol, got: %s" (pr-str table-ref-or-sym))))))
 
 (def transit-read-handlers
   {"xt/table" (transit/read-handler (fn [{:keys [db-name schema-name table-name]}]

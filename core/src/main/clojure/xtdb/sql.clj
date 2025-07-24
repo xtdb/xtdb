@@ -607,9 +607,12 @@
     (let [tn (some-> (.tableOrQueryName ctx) (.tableName))
           sn (identifier-sym (.schemaName tn))
           tn (identifier-sym (.identifier tn))
+          table (table/->ref default-db sn tn)
+
           table-alias (or (identifier-sym (.tableAlias ctx)) tn)
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           cols (some-> (.tableProjection ctx) (->table-projection))]
+
       (or (when-not sn
             (when-let [{:keys [plan], cte-cols :col-syms} (get ctes tn)]
               (when (or (seq (.querySystemTimePeriodSpecification ctx))
@@ -618,8 +621,8 @@
               (->DerivedTable plan table-alias unique-table-alias
                               (->insertion-ordered-set (or cols cte-cols)))))
 
-          (let [[sn table-cols] (or (when-let [;; TODO multi-db
-                                               table-cols (get table-info (table/->ref default-db sn tn))]
+          (let [[sn table-cols] (or (when-let [table-cols (or (get table-info table)
+                                                              (get table-info (table/ref->schema+table table)))]
                                       [sn table-cols])
 
                                     (when-not sn
@@ -2746,13 +2749,15 @@
           table-name (identifier-sym (.tableName ctx))
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
           table-name (util/with-default-schema table-name)
+          table (table/->ref default-db table-name)
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
           {:keys [for-valid-time], vt-projection :projection} (some-> (.dmlStatementValidTimeExtents ctx)
                                                                       (.accept (->DmlValidTimeExtentsVisitor env scope)))
 
-          table-cols (if-let [cols (get table-info (table/->ref default-db table-name))]
+          table-cols (if-let [cols (or (get table-info table)
+                                       (get table-info (table/ref->schema+table table)))]
                        cols
                        (do
                          (add-warning! env (->BaseTableNotFound nil table-name))
@@ -2806,13 +2811,15 @@
           table-name (identifier-sym (.tableName ctx))
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
           table-name (util/with-default-schema table-name)
+          table (table/->ref default-db table-name)
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
           {:keys [for-valid-time], vt-projection :projection} (some-> (.dmlStatementValidTimeExtents ctx)
                                                                       (.accept (->DmlValidTimeExtentsVisitor env scope)))
 
-          table-cols (if-let [cols (get table-info (table/->ref default-db table-name))]
+          table-cols (if-let [cols (or (get table-info table)
+                                       (get table-info (table/ref->schema+table table)))]
                        cols
                        (do
                          (add-warning! env (->BaseTableNotFound nil table-name))
@@ -2846,9 +2853,11 @@
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           table-name (util/with-default-schema table-name)
+          table (table/->ref default-db table-name)
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
-          table-cols (if-let [cols (get table-info (table/->ref default-db table-name))]
+          table-cols (if-let [cols (or (get table-info table)
+                                       (get table-info (table/ref->schema+table table)))]
                        cols
                        (do
                          (add-warning! env (->BaseTableNotFound nil table-name))
@@ -2906,7 +2915,7 @@
 (defn xform-table-info [table-info]
   (into {}
         (for [[table cns] (merge info-schema/table-info
-                                 '{#xt/table xt/txs #{_id committed error system_time}}
+                                 '{xt/txs #{_id committed error system_time}}
                                  table-info)]
           [table (->> cns
                       (map ->col-sym)

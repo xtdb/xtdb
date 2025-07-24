@@ -572,11 +572,11 @@
 
         nil))))
 
-(defn- add-tx-row! [^LiveIndex$Tx live-idx-tx, ^TransactionKey tx-key, ^Throwable t]
+(defn- add-tx-row! [db-name ^LiveIndex$Tx live-idx-tx, ^TransactionKey tx-key, ^Throwable t]
   (let [tx-id (.getTxId tx-key)
         system-time-µs (time/instant->micros (.getSystemTime tx-key))
 
-        live-table (.liveTable live-idx-tx #xt/table xt/txs)
+        live-table (.liveTable live-idx-tx (table/->ref db-name 'xt/txs))
         doc-writer (.getDocWriter live-table)]
 
     (.logPut live-table (util/->iid tx-id) system-time-µs Long/MAX_VALUE
@@ -608,7 +608,7 @@
          opts))
 
 (defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
-                               db, ^LiveIndex live-index, table-catalog
+                               ^Database db, ^LiveIndex live-index, table-catalog
                                ^Timer tx-timer
                                ^Counter tx-error-counter]
   Indexer$ForDatabase
@@ -616,7 +616,8 @@
 
   (indexTx [this msg-id msg-ts tx-ops-rdr
             system-time default-tz _user]
-    (let [lc-tx (.getLatestCompletedTx live-index)
+    (let [db-name (.getName db)
+          lc-tx (.getLatestCompletedTx live-index)
           default-system-time (or (when-let [lc-sys-time (some-> lc-tx (.getSystemTime))]
                                     (when-not (neg? (compare lc-sys-time msg-ts))
                                       (.plusNanos lc-sys-time 1000)))
@@ -636,7 +637,7 @@
           (util/with-open [live-idx-tx (.startTx live-index tx-key)]
             (when tx-error-counter
               (.increment tx-error-counter))
-            (add-tx-row! live-idx-tx tx-key err)
+            (add-tx-row! db-name live-idx-tx tx-key err)
             (.commit live-idx-tx))
 
           (serde/->tx-aborted msg-id default-system-time err))
@@ -648,7 +649,7 @@
               (do
                 (.abort live-idx-tx)
                 (util/with-open [live-idx-tx (.startTx live-index tx-key)]
-                  (add-tx-row! live-idx-tx tx-key skipped-exn)
+                  (add-tx-row! db-name live-idx-tx tx-key skipped-exn)
                   (.commit live-idx-tx))
 
                 (serde/->tx-aborted msg-id system-time skipped-exn))
@@ -700,13 +701,13 @@
                     (util/with-open [live-idx-tx (.startTx live-index tx-key)]
                       (when tx-error-counter
                         (.increment tx-error-counter))
-                      (add-tx-row! live-idx-tx tx-key e)
+                      (add-tx-row! db-name live-idx-tx tx-key e)
                       (.commit live-idx-tx))
 
                     (serde/->tx-aborted msg-id system-time e))
 
                   (do
-                    (add-tx-row! live-idx-tx tx-key nil)
+                    (add-tx-row! db-name live-idx-tx tx-key nil)
                     (.commit live-idx-tx)
                     (serde/->tx-committed msg-id system-time)))))))))))
 

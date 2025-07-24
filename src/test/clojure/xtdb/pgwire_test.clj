@@ -2401,7 +2401,8 @@ ORDER BY 1,2;")
     (jdbc/execute! conn ["INSERT INTO bar RECORDS {_id: 2}"])
 
     (t/is (= [["public" "bar"]
-              ["public" "foo"]]
+              ["public" "foo"]
+              ["xt" "txs"]]
            (map (juxt :Schema :Name)
                 (q conn [display-tables-query]))))))
 
@@ -2414,7 +2415,8 @@ ORDER BY 1,2;")
 
        (send "\\d\n")
        (t/is (= [["Schema" "Name" "Type" "Owner"]
-                 ["public" "foo" "table" "xtdb"]]
+                 ["public" "foo" "table" "xtdb"]
+                 ["xt" "txs" "table" "xtdb"]]
                 (read)))))))
 
 (t/deftest select-snapshot-token

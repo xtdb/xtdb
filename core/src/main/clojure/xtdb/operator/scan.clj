@@ -47,7 +47,6 @@
                                    :select ::lp/column-expression))))
 
 (definterface IScanEmitter
-  (close [])
   (emitScan [^xtdb.database.Database db scan-expr scan-fields param-fields]))
 
 (defn ->scan-cols [{:keys [columns], {:keys [table]} :scan-opts}]
@@ -174,8 +173,10 @@
             (let [col-name (str col-name)]
               ;; TODO move to fields here
               (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
-                      (get-in info-schema/derived-tables [table (symbol col-name)])
-                      (get-in info-schema/template-tables [table (symbol col-name)])
+                      (-> (info-schema/derived-table table)
+                          (get (symbol col-name)))
+                      (-> (info-schema/template-table table)
+                          (get (symbol col-name)))
                       (types/merge-fields (.getField table-catalog table col-name)
                                           (some-> (.getLiveIndex snap)
                                                   (.liveTable table)
@@ -184,57 +185,55 @@
     (->> scan-cols
          (into {} (map (juxt identity ->field))))))
 
-(defmethod ig/init-key ::scan-emitter [_ {:keys [^BufferAllocator allocator, info-schema]}]
-  (let [table->template-rel+trie (info-schema/table->template-rel+tries allocator)]
-    (reify
-      IScanEmitter
-      (emitScan [_ db {:keys [columns], {:keys [^TableRef table] :as scan-opts} :scan-opts} scan-fields param-fields]
-        (let [^PageMetadata$Factory metadata-mgr (.getMetadataManager db)
-              ^BufferPool buffer-pool (.getBufferPool db)
-              ^TrieCatalog trie-catalog (.getTrieCatalog db)
-              ^TableCatalog table-catalog (.getTableCatalog db)
-              col-names (->> columns
-                             (into #{} (map (fn [[col-type arg]]
-                                              (case col-type
-                                                :column arg
-                                                :select (key (first arg)))))))
-              fields (->> col-names
-                          (into {} (map (juxt identity
-                                              (fn [col-name]
-                                                (get scan-fields [table col-name]))))))
+(defmethod ig/init-key ::scan-emitter [_ {:keys [info-schema]}]
+  (reify IScanEmitter
+    (emitScan [_ db {:keys [columns], {:keys [^TableRef table] :as scan-opts} :scan-opts} scan-fields param-fields]
+      (let [^PageMetadata$Factory metadata-mgr (.getMetadataManager db)
+            ^BufferPool buffer-pool (.getBufferPool db)
+            ^TrieCatalog trie-catalog (.getTrieCatalog db)
+            ^TableCatalog table-catalog (.getTableCatalog db)
+            col-names (->> columns
+                           (into #{} (map (fn [[col-type arg]]
+                                            (case col-type
+                                              :column arg
+                                              :select (key (first arg)))))))
+            fields (->> col-names
+                        (into {} (map (juxt identity
+                                            (fn [col-name]
+                                              (get scan-fields [table col-name]))))))
 
-              col-names (into #{} (map str) col-names)
+            col-names (into #{} (map str) col-names)
 
-              selects (->> (for [[tag arg] columns
-                                 :when (= tag :select)
-                                 :let [[col-name pred] (first arg)]]
-                             (MapEntry/create (str col-name) pred))
+            selects (->> (for [[tag arg] columns
+                               :when (= tag :select)
+                               :let [[col-name pred] (first arg)]]
+                           (MapEntry/create (str col-name) pred))
+                         (into {}))
+
+            col-preds (->> (for [[col-name select-form] selects]
+                             ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
+                             (let [input-types {:col-types (update-vals fields types/field->col-type)
+                                                :param-types (update-vals param-fields types/field->col-type)}]
+                               (MapEntry/create col-name
+                                                (expr/->expression-selection-spec (expr/form->expr select-form input-types)
+                                                                                  input-types))))
                            (into {}))
 
-              col-preds (->> (for [[col-name select-form] selects]
-                               ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
-                               (let [input-types {:col-types (update-vals fields types/field->col-type)
-                                                  :param-types (update-vals param-fields types/field->col-type)}]
-                                 (MapEntry/create col-name
-                                                  (expr/->expression-selection-spec (expr/form->expr select-form input-types)
-                                                                                    input-types))))
-                             (into {}))
+            metadata-args (vec (for [[col-name select] selects
+                                     :when (not (types/temporal-column? col-name))]
+                                 select))
 
-              metadata-args (vec (for [[col-name select] selects
-                                       :when (not (types/temporal-column? col-name))]
-                                   select))
+            row-count (.rowCount table-catalog table)]
 
-              row-count (.rowCount table-catalog table)]
+        {:fields fields
+         :stats {:row-count row-count}
+         :->cursor (fn [{:keys [allocator, ^Snapshot snapshot, snapshot-token, schema, args]}]
+                     (let [derived-table-schema (info-schema/derived-table table)
+                           template-table? (boolean (info-schema/template-table table))]
+                       (if (and derived-table-schema (not template-table?))
+                         (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args)
 
-          {:fields fields
-           :stats {:row-count row-count}
-           :->cursor (fn [{:keys [allocator, ^Snapshot snapshot, snapshot-token, schema, args]}]
-                       (if (and (info-schema/derived-tables table) (not (info-schema/template-tables table)))
-                         (let [derived-table-schema (info-schema/derived-tables table)]
-                           (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args))
-
-                         (let [template-table? (info-schema/template-tables table)
-                               iid-bb (selects->iid-byte-buffer selects args)
+                         (let [iid-bb (selects->iid-byte-buffer selects args)
                                col-preds (cond-> col-preds
                                            iid-bb (assoc "_iid" (IidSelector. iid-bb)))
                                metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) (update-vals fields types/field->col-type) args)
@@ -266,7 +265,7 @@
 
                                                                   live-table-snap (conj (-> (trie/->Segment (.getLiveTrie live-table-snap))
                                                                                             (assoc :memory-rel (.getLiveRelation live-table-snap))))
-                                                                  template-table? (conj (let [[memory-rel trie] (table->template-rel+trie table)]
+                                                                  template-table? (conj (let [[memory-rel trie] (info-schema/table-template info-schema table)]
                                                                                           (-> (trie/->Segment trie)
                                                                                               (assoc :memory-rel memory-rel)))))]
                                                    (->> (HashTrieKt/toMergePlan segments (->path-pred iid-arrow-buf))
@@ -289,13 +288,7 @@
                                             col-names col-preds
                                             temporal-bounds
                                             (.iterator ^Iterable merge-tasks)
-                                            schema args))))))}))
-
-      (close [_]
-        (->> table->template-rel+trie vals (map first) util/close)))))
-
-(defmethod ig/halt-key! ::scan-emitter [_ ^IScanEmitter scan-emmiter]
-  (.close scan-emmiter))
+                                            schema args)))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db scan-fields, param-fields]}]
   (.emitScan scan-emitter db scan-expr scan-fields param-fields))

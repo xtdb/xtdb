@@ -293,20 +293,18 @@
               :nspname "pg_catalog"}
              {:nspowner 1376455703,
               :oid 1106696632,
-              :nspname "public"}}
+              :nspname "public"}
+             {:oid 683075021,
+              :nspname "xt",
+              :nspowner 1376455703}}
            (set (xt/q tu/*node*
                       "SELECT oid, nspname, nspowner, nspacl
                        FROM pg_catalog.pg_namespace")))))
 (deftest test-schemata
-  (t/is (= #{{:catalog-name "xtdb",
-              :schema-name "information_schema",
-              :schema-owner "xtdb"}
-             {:catalog-name "xtdb",
-              :schema-name "pg_catalog",
-              :schema-owner "xtdb"}
-             {:catalog-name "xtdb",
-              :schema-name "public",
-              :schema-owner "xtdb"}}
+  (t/is (= #{{:catalog-name "xtdb", :schema-name "information_schema", :schema-owner "xtdb"}
+             {:catalog-name "xtdb", :schema-name "pg_catalog", :schema-owner "xtdb"}
+             {:catalog-name "xtdb", :schema-name "public", :schema-owner "xtdb"}
+             {:catalog-name "xtdb", :schema-name "xt", :schema-owner "xtdb"}}
            (set (xt/q tu/*node*
                       "SELECT catalog_name, schema_name, schema_owner
                        FROM information_schema.schemata")))))
