@@ -99,7 +99,7 @@
 
       (.endStruct sql-writer))))
 
-(defn- ->docs-op-writer [^VectorWriter op-writer]
+(defn- ->docs-op-writer [db-name, ^VectorWriter op-writer]
   (let [iids-writer (.vectorFor op-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
         iid-writer (some-> iids-writer
                            (.getListElements (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
@@ -108,7 +108,7 @@
         valid-to-writer (.vectorFor op-writer "_valid_to" types/nullable-temporal-field-type)
         table-doc-writers (HashMap.)]
     (fn write-put! [{:keys [table-name docs valid-from valid-to]} opts]
-      (let [table (table/->ref "xtdb" table-name)] ; TODO multi-db
+      (let [table (table/->ref db-name table-name)]
         (when (forbidden-table? table) (throw (forbidden-table-ex table)))
 
         (let [^VectorWriter table-doc-writer
@@ -135,13 +135,13 @@
 
         (.endStruct op-writer)))))
 
-(defn- ->put-writer [^VectorWriter op-writer]
-  (->docs-op-writer (.vectorFor op-writer "put-docs" (FieldType/notNullable #xt.arrow/type :struct))))
+(defn- ->put-writer [db-name, ^VectorWriter op-writer]
+  (->docs-op-writer db-name (.vectorFor op-writer "put-docs" (FieldType/notNullable #xt.arrow/type :struct))))
 
-(defn- ->patch-writer [^VectorWriter op-writer]
-  (->docs-op-writer (.vectorFor op-writer "patch-docs" (FieldType/notNullable #xt.arrow/type :struct))))
+(defn- ->patch-writer [db-name, ^VectorWriter op-writer]
+  (->docs-op-writer db-name (.vectorFor op-writer "patch-docs" (FieldType/notNullable #xt.arrow/type :struct))))
 
-(defn- ->delete-writer [^VectorWriter op-writer]
+(defn- ->delete-writer [db-name, ^VectorWriter op-writer]
   (let [delete-writer (.vectorFor op-writer "delete-docs" (FieldType/notNullable #xt.arrow/type :struct))
         table-writer (.vectorFor delete-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
         iids-writer (.vectorFor delete-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
@@ -150,7 +150,7 @@
         valid-from-writer (.vectorFor delete-writer "_valid_from" types/nullable-temporal-field-type)
         valid-to-writer (.vectorFor delete-writer "_valid_to" types/nullable-temporal-field-type)]
     (fn write-delete! [{:keys [table-name doc-ids valid-from valid-to]}]
-      (let [table (table/->ref "xtdb" table-name)] ; TODO multi-db
+      (let [table (table/->ref db-name table-name)]
         (when (forbidden-table? table) (throw (forbidden-table-ex table)))
         (when (seq doc-ids)
           (.writeObject table-writer (str (table/ref->schema+table table)))
@@ -164,14 +164,14 @@
 
           (.endStruct delete-writer))))))
 
-(defn- ->erase-writer [^VectorWriter op-writer]
+(defn- ->erase-writer [db-name, ^VectorWriter op-writer]
   (let [erase-writer (.vectorFor op-writer "erase-docs" (FieldType/notNullable #xt.arrow/type :struct))
         table-writer (.vectorFor erase-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
         iids-writer (.vectorFor erase-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
         iid-writer (some-> iids-writer
                            (.getListElements (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))]
     (fn [{:keys [table-name doc-ids]}]
-      (let [table (table/->ref "xtdb" table-name)] ; TODO multi-db
+      (let [table (table/->ref db-name table-name)]
         (when (forbidden-table? table) (throw (forbidden-table-ex table)))
         (when (seq doc-ids)
           (.writeObject table-writer (str (table/ref->schema+table table)))
@@ -182,13 +182,13 @@
 
           (.endStruct erase-writer))))))
 
-(defn write-tx-ops! [^BufferAllocator allocator, ^VectorWriter op-writer, tx-ops, {:keys [default-tz]}]
+(defn write-tx-ops! [^BufferAllocator allocator, ^VectorWriter op-writer, tx-ops, {:keys [default-db default-tz]}]
   (let [!write-sql! (delay (->sql-writer op-writer allocator))
         !write-sql-byte-args! (delay (->sql-byte-args-writer op-writer))
-        !write-put! (delay (->put-writer op-writer))
-        !write-patch! (delay (->patch-writer op-writer))
-        !write-delete! (delay (->delete-writer op-writer))
-        !write-erase! (delay (->erase-writer op-writer))]
+        !write-put! (delay (->put-writer default-db op-writer))
+        !write-patch! (delay (->patch-writer default-db op-writer))
+        !write-delete! (delay (->delete-writer default-db op-writer))
+        !write-erase! (delay (->erase-writer default-db op-writer))]
 
     (doseq [tx-op tx-ops]
       (condp instance? tx-op
@@ -206,8 +206,8 @@
         EraseDocs (@!write-erase! tx-op)
         (throw (err/illegal-arg :invalid-tx-op {:tx-op tx-op}))))))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz]
-                                                                                {:keys [user]} :authn :as opts}]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops
+                                             {:keys [^Instant system-time, default-tz], {:keys [user]} :authn, :as opts}]
   (with-open [rel (Relation/open allocator tx-schema)]
     (let [ops-list-writer (.get rel "tx-ops")
 
@@ -296,15 +296,17 @@
                  (not (instance? TxOp tx-op)) tx-ops/parse-tx-op)))))
 
 (defn submit-tx ^long
-  [{:keys [^BufferAllocator allocator, ^DatabaseCatalog db-cat, default-tz]} tx-ops {:keys [system-time] :as opts}]
+  [{:keys [^BufferAllocator allocator, ^DatabaseCatalog db-cat, default-tz]} tx-ops {:keys [default-db, system-time] :as opts}]
 
-  (let [db (.getPrimary db-cat) ; TODO multi-db
+  (let [^Database db (or (first (.databaseOrNull db-cat default-db))
+                         (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" default-db)
+                                               {:db-name default-db})))
         log (.getLog db)
         default-tz (:default-tz opts default-tz)]
     (util/rethrowing-cause
       (let [^Log$MessageMetadata message-meta @(.appendMessage log
                                                                (Log$Message$Tx. (serialize-tx-ops allocator (->TxOps tx-ops)
-                                                                                                  (-> (select-keys opts [:authn])
+                                                                                                  (-> (select-keys opts [:authn :default-db])
                                                                                                       (assoc :default-tz (:default-tz opts default-tz)
                                                                                                              :system-time (some-> system-time time/expect-instant))))))]
         (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset message-meta))))))
@@ -335,13 +337,13 @@
   ([^Database db, token]
    (when token
      (-> @(.awaitAsync (.getLogProcessor db) (-> (basis/<-tx-basis-str token)
-                                                 (get-in ["xtdb" 0])))
+                                                 (get-in [(.getName db) 0])))
          (util/rethrowing-cause))))
 
   ([^Database db, token ^Duration timeout]
    (when token
      (-> @(cond-> (.awaitAsync (.getLogProcessor db) (-> (basis/<-tx-basis-str token)
-                                                         (get-in ["xtdb" 0])))
+                                                         (get-in [(.getName db) 0])))
             timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))
          (util/rethrowing-cause)))))
 

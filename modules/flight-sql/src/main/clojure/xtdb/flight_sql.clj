@@ -80,7 +80,7 @@
                                          (update fsql-tx :dml conj dml))))
                 (throw (UnsupportedOperationException. "unknown tx")))
 
-              (xtp/execute-tx node [dml] {})))
+              (xtp/execute-tx node [dml] {:default-db "xtdb"}))) ; TODO multi-db
 
           (handle-get-stream [^IResultCursor cursor, ^FlightProducer$ServerStreamListener listener]
             (try
@@ -150,7 +150,7 @@
         (try
           (let [sql (.toStringUtf8 (.getQueryBytes cmd))
                 ticket-handle (new-id)
-                pq (.prepareQuery q-src sql db snap-src {})
+                pq (.prepareQuery q-src sql db snap-src {:default-db "xtdb"}) ; TODO multi-db
                 cursor (.openQuery pq {})
                 ticket (Ticket. (-> (doto (FlightSql$TicketStatementQuery/newBuilder)
                                       (.setStatementHandle ticket-handle))
@@ -201,7 +201,7 @@
       (createPreparedStatement [_ req _ctx listener]
         (let [ps-id (new-id)
               sql (.toStringUtf8 (.getQueryBytes req))
-              pq (.prepareQuery q-src sql db snap-src {})
+              pq (.prepareQuery q-src sql db snap-src {:default-db "xtdb"}) ; TODO multi-db
               ps (cond-> {:id ps-id, :sql sql
                           :fsql-tx-id (when (.hasTransactionId req)
                                         (.getTransactionId req))}
@@ -245,7 +245,7 @@
                  (.getAction req))
 
             (try
-              (xtp/execute-tx node dml {})
+              (xtp/execute-tx node dml {:default-db "xtdb"}) ; TODO multi-db
               (.onCompleted listener)
 
               (catch Throwable t

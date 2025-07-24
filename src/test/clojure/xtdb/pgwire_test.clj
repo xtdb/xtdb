@@ -15,6 +15,7 @@
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgwire]
+            [xtdb.pgwire :as pgw]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -36,8 +37,8 @@
 (set! *warn-on-reflection* false) ; gagh! lazy. don't do this.
 (set! *unchecked-math* false)
 
-(def ^:dynamic ^:private *port* nil)
-(def ^:dynamic ^:private ^xtdb.api.DataSource *server* nil)
+(def ^:dynamic *port* nil)
+(def ^:dynamic ^xtdb.api.DataSource *server* nil)
 
 (defn- in-system-tz ^java.time.ZonedDateTime [^ZonedDateTime zdt]
   (.withZoneSameInstant zdt (ZoneId/systemDefault)))
@@ -86,7 +87,7 @@
                                                               :drain-wait 250}
                                                              opts))))
 
-(defn- jdbc-conn
+(defn jdbc-conn
   (^Connection [] (jdbc-conn nil))
   (^Connection [opts]
    (-> ^DataSource$ConnectionBuilder
@@ -95,11 +96,18 @@
 
                (-> (.createConnectionBuilder *server*)
                    (.user "xtdb")
-                   (.port *port*))
+                   (.port *port*)
+                   (.database (:dbname opts "xtdb")))
 
-               opts)
+               (filter (comp string? key) opts))
 
        (.build))))
+
+(defn with-playground [f]
+  (util/with-open [server (pgw/open-playground)]
+    (binding [*port* (:port server)
+              *server* server]
+      (f))))
 
 (defn- exec [^Connection conn ^String sql]
   (.execute (.createStatement conn) sql))

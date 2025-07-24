@@ -664,7 +664,8 @@
                              :current-time system-time
                              :default-tz default-tz
                              :tx-key tx-key
-                             :indexer this}
+                             :indexer this
+                             :default-db (.getName db)}
 
                     !put-docs-idxer (delay (->put-docs-indexer live-idx-tx tx-ops-rdr db system-time tx-opts))
                     !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src db snap-src system-time tx-opts))

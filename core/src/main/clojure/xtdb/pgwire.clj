@@ -33,7 +33,7 @@
            [java.security KeyStore]
            [java.time Clock Duration ZoneId]
            [java.util Map]
-           [java.util.concurrent ConcurrentHashMap ExecutorService Executors TimeUnit]
+           [java.util.concurrent ExecutorService Executors TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
@@ -51,7 +51,7 @@
 ;; https://www.postgresql.org/docs/current/protocol-message-formats.html
 
 (defrecord Server [^BufferAllocator allocator
-                   port read-only?
+                   port read-only? playground?
 
                    ^ServerSocket accept-socket
                    ^Thread accept-thread
@@ -62,9 +62,7 @@
 
                    server-state
 
-                   authn-rules
-
-                   !tmp-nodes]
+                   authn-rules]
   DataSource
   (createConnectionBuilder [_]
     (DataSource$ConnectionBuilder. "localhost" port))
@@ -102,13 +100,9 @@
           (when-not (.awaitTermination thread-pool 5 TimeUnit/SECONDS)
             (log/error "Could not shutdown thread pool gracefully" {:port port})))
 
-        (when !tmp-nodes
-          (log/debug "closing tmp nodes")
-          (util/close !tmp-nodes))
-
         (util/close allocator)
 
-        (log/infof "Server%sstopped." (if read-only? " (read-only) " " "))))))
+        (log/infof "%s stopped." (if read-only? "Read-only server" "Server"))))))
 
 ;; all postgres client IO arrives as either an untyped (startup) or typed message
 
@@ -299,38 +293,45 @@
         (doto (cmd-send-ready)))))
 
 (defn cmd-startup-pg30 [{:keys [frontend server] :as conn} startup-opts]
-  (let [{:keys [->node]} server
-        user (get startup-opts "user")
+  (let [{:keys [node playground?]} server
         db-name (get startup-opts "database")
-        {:keys [node] :as conn} (assoc conn :node (->node db-name))
+        db-cat (db/<-node node)
+        db (first (or (.databaseOrNull db-cat db-name)
+                      (when playground?
+                        (log/debug "creating playground database" (pr-str db-name))
+                        (.createDatabase db-cat db-name))
+                      (throw (err-invalid-catalog db-name))))
+
+        user (get startup-opts "user")
+        conn (assoc conn :node node, :default-db db-name, :db db)
         authn (authn/<-node node)]
-    (if node
-      (condp = (.methodFor authn user (pgio/host-address frontend))
-        #xt.authn/method :trust
-        (do
-          (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
-          (startup-ok conn startup-opts))
 
-        #xt.authn/method :password
-        (do
-          ;; asking for a password, we only have :trust and :password for now
-          (pgio/cmd-write-msg conn pgio/msg-auth {:result 3})
+    (condp = (.methodFor authn user (pgio/host-address frontend))
+      #xt.authn/method :trust
+      (do
+        (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
+        (startup-ok conn startup-opts))
 
-          ;; we go idle until we receive a message
-          (when-let [{:keys [msg-name] :as msg} (pgio/read-client-msg! frontend)]
-            (if (not= :msg-password msg-name)
-              (throw (err-invalid-auth-spec (str "password authentication failed for user: " user)))
+      #xt.authn/method :password
+      (do
+        ;; asking for a password, we only have :trust and :password for now
+        (pgio/cmd-write-msg conn pgio/msg-auth {:result 3})
 
-              (if (.verifyPassword authn user (:password msg))
-                (do
-                  (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
-                  (startup-ok conn startup-opts))
+        ;; we go idle until we receive a message
+        (when-let [{:keys [msg-name] :as msg} (pgio/read-client-msg! frontend)]
+          (if (not= :msg-password msg-name)
+            (throw (err-invalid-auth-spec (str "password authentication failed for user: " user)))
 
-                (throw (err-invalid-passwd (str "password authentication failed for user: " user)))))))
+            (if (.verifyPassword authn user (:password msg))
+              (do
+                (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
+                (startup-ok conn startup-opts))
 
-        (throw (err-invalid-auth-spec (str "no authentication record found for user: " user))))
+              (throw (err-invalid-passwd (str "password authentication failed for user: " user)))))))
 
-      (throw (err-invalid-catalog db-name)))))
+      (throw (err-invalid-auth-spec (str "no authentication record found for user: " user))))
+
+    conn))
 
 (defn cmd-startup-cancel [conn msg-in]
   (let [{:keys [process-id]} ((:read pgio/io-cancel-request) msg-in)
@@ -441,7 +442,7 @@
 
     :else (throw (pgio/err-protocol-violation (format "invalid timezone '%s'" (str tz))))))
 
-(defn cmd-begin [{:keys [node conn-state]} tx-opts {:keys [args]}]
+(defn cmd-begin [{:keys [node conn-state db]} tx-opts {:keys [args]}]
   (swap! conn-state
          (fn [{:keys [session await-token] :as st}]
            (let [await-token (if-let [[_ tok] (find tx-opts :await-token)]
@@ -450,7 +451,7 @@
                  {:keys [^Clock clock]} session]
 
              (when-not (= :read-write (:access-mode tx-opts))
-               (xt-log/await-db (db/primary-db node) await-token #xt/duration "PT30S"))
+               (xt-log/await-db db await-token #xt/duration "PT30S"))
 
              (-> st
                  (update :transaction
@@ -464,7 +465,6 @@
                                   :implicit? false}
                                  (into (:characteristics session))
                                  (into (-> tx-opts
-                                           (dissoc :await-token)
                                            (update :default-tz #(some-> % (apply-args args) (coerce->tz)))
                                            (update :system-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
                                            (update :current-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
@@ -476,7 +476,7 @@
   (when counter
     (.increment counter)))
 
-(defn cmd-commit [{:keys [node conn-state] :as conn}]
+(defn cmd-commit [{:keys [node conn-state default-db] :as conn}]
   (let [{:keys [transaction session]} @conn-state
         {:keys [failed dml-buf system-time access-mode default-tz async?]} transaction
         {:keys [parameters]} session]
@@ -488,7 +488,8 @@
         (when (= :read-write access-mode)
           (let [tx-opts {:default-tz default-tz
                          :system-time (some-> system-time (time/->instant {:default-tz default-tz}))
-                         :authn {:user (get parameters "user")}}]
+                         :authn {:user (get parameters "user")}
+                         :default-db default-db}]
             (if async?
               (let [tx-id (xtp/submit-tx node dml-buf tx-opts)]
                 (swap! conn-state assoc :await-token (xtp/await-token node), :latest-submitted-tx {:tx-id tx-id}))
@@ -803,10 +804,10 @@
 
 (defn- show-var-query [variable]
   (case variable
-    "latest_completed_txs" (-> '[:table [{:db-name ?_0, :part ?_1, :tx_id ?_2, :system_time ?_3}]]
-                               (with-meta {:param-count 4}))
-    "latest_submitted_txs" (-> '[:table [{:db-name ?_0, :part ?_1, :tx_id ?_2}]]
-                               (with-meta {:param-count 3}))
+    "latest_completed_txs" (-> '[:table ?_0]
+                               (with-meta {:param-count 1}))
+    "latest_submitted_txs" (-> '[:table ?_0]
+                               (with-meta {:param-count 1}))
     "latest_submitted_tx" (-> '[:select (not (nil? tx_id))
                                 [:table [{:tx_id ?_0, :system_time ?_1,
                                           :committed ?_2, :error ?_3,
@@ -818,15 +819,20 @@
 
 (defn- show-var-param-types [variable]
   (case variable
-    "latest_completed_txs" [:utf8 :i32 :i64 types/temporal-col-type]
-    "latest_submitted_txs" [:utf8 :i32 :i64]
+    "latest_completed_txs" [[:list [:struct {'db_name :utf8
+                                             'part :i32
+                                             'tx_id :i64
+                                             'system_time types/temporal-col-type}]]]
+    "latest_submitted_txs" [[:list [:struct {'db_name :utf8
+                                             'part :i32
+                                             'tx_id :i64}]]]
     "latest_submitted_tx" [:i64 types/temporal-col-type :bool :transit :utf8]
     "await_token" [:utf8]
     "standard_conforming_strings" [:bool]
 
     [:utf8]))
 
-(defn- prep-stmt [{:keys [node, conn-state] :as conn} {:keys [statement-type param-oids] :as stmt}]
+(defn- prep-stmt [{:keys [node conn-state default-db] :as conn} {:keys [statement-type param-oids] :as stmt}]
   (case statement-type
     (:query :execute :show-variable)
     (try
@@ -838,7 +844,8 @@
             query-opts {:await-token await-token
                         :tx-timeout (Duration/ofMinutes 1)
                         :default-tz (.getZone clock)
-                        :explain? explain?}
+                        :explain? explain?
+                        :default-db default-db}
 
             ^PreparedQuery pq (case statement-type
                                 (:query :execute) (xtp/prepare-sql node parsed-query query-opts)
@@ -992,14 +999,17 @@
         :show-variable (let [{:keys [variable]} stmt]
                          (util/with-close-on-catch [cursor (->cursor (case variable
                                                                        "await_token" [await-token]
-                                                                       "latest_completed_txs" (for [[db-name parts] (xtp/latest-completed-txs node)
-                                                                                                    [part-idx {:keys [tx-id system-time]}] (map vector (range) parts)
-                                                                                                    arg [db-name (int part-idx) tx-id system-time]]
-                                                                                                arg)
-                                                                       "latest_submitted_txs" (for [[db-name parts] (xtp/latest-submitted-tx-ids node)
-                                                                                                    [part-idx tx-id] (map vector (range) parts)
-                                                                                                    arg [db-name (int part-idx) tx-id]]
-                                                                                                arg)
+                                                                       "latest_completed_txs" [(for [[db-name parts] (xtp/latest-completed-txs node)
+                                                                                                     [part-idx {:keys [tx-id system-time]}] (map vector (range) parts)]
+                                                                                                 {:db_name db-name
+                                                                                                  :part (int part-idx)
+                                                                                                  :tx_id tx-id
+                                                                                                  :system_time system-time})]
+                                                                       "latest_submitted_txs" [(for [[db-name parts] (xtp/latest-submitted-tx-ids node)
+                                                                                                     [part-idx tx-id] (map vector (range) parts)]
+                                                                                                 {:db_name db-name
+                                                                                                  :part (int part-idx)
+                                                                                                  :tx_id tx-id})]
                                                                        "latest_submitted_tx" (mapv (into {} (assoc (:latest-submitted-tx @conn-state)
                                                                                                                    :await-token await-token))
                                                                                                    [:tx-id :system-time :committed? :error :await-token])
@@ -1456,12 +1466,6 @@
 
                 (recur))))))
 
-(defn- ->tmp-node [^Map !tmp-nodes, db-name]
-  (.computeIfAbsent !tmp-nodes db-name
-                    (fn [db-name]
-                      (log/debug "starting tmp-node" (pr-str db-name))
-                      (xtn/start-node {:server nil}))))
-
 (defn- connect
   "Starts and runs a connection on the current thread until it closes.
 
@@ -1469,7 +1473,7 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [{:keys [server-state, port, allocator, query-error-counter, tx-error-counter, ^Counter total-connections-counter] :as server} ^Socket conn-socket]
+  [{:keys [node server-state, port, allocator, query-error-counter, tx-error-counter, ^Counter total-connections-counter] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
@@ -1478,8 +1482,7 @@
                                                                               :clock (:clock @server-state)}})
                                                  !closing? (atom false)]
                                              (try
-                                               (-> (map->Connection {:cid cid,
-                                                                     :server server,
+                                               (-> (map->Connection {:cid cid, :node node, :server server,
                                                                      :frontend (pgio/->socket-frontend conn-socket),
                                                                      :!closing? !closing?
                                                                      :allocator (util/->child-allocator allocator (str "pg-conn-" cid))
@@ -1567,15 +1570,14 @@
 (defn serve
   "Creates and starts a PostgreSQL wire-compatible server.
 
-  node: if provided, uses the given node for all connections; otherwise, creates a transient, in-memory node for each new connection
-
   Options:
 
   :port (default 0, opening the socket on an unused port).
   :num-threads (bounds the number of client connections, default 42)
+  :playground? (default false) - if true, the server will create a new in-memory database if it doesn't already exist.
   "
   (^Server [node] (serve node {}))
-  (^Server [node {:keys [allocator host port num-threads drain-wait ssl-ctx metrics-registry read-only?]
+  (^Server [node {:keys [allocator host port num-threads drain-wait ssl-ctx metrics-registry read-only? playground?]
                   :or {host (InetAddress/getLoopbackAddress)
                        port 0
                        num-threads 42
@@ -1586,9 +1588,8 @@
            query-error-counter (when metrics-registry (metrics/add-counter metrics-registry "query.error"))
            tx-error-counter (when metrics-registry (metrics/add-counter metrics-registry "tx.error"))
            total-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.total_connections"))
-           !tmp-nodes (when-not node
-                        (ConcurrentHashMap.))
            server (map->Server {:allocator allocator
+                                :node node
                                 :host host
                                 :port port
                                 :read-only? read-only?
@@ -1609,13 +1610,9 @@
                                                                     "integer_datetimes" "on"
                                                                     "standard_conforming_strings" "on"}}))
 
-                                :ssl-ctx ssl-ctx
+                                :playground? playground?
 
-                                :!tmp-nodes !tmp-nodes
-                                :->node (fn [db-name]
-                                          (cond
-                                            (nil? node) (->tmp-node !tmp-nodes db-name)
-                                            (= db-name "xtdb") node))})
+                                :ssl-ctx ssl-ctx})
 
            server (assoc server
                          :query-error-counter query-error-counter
@@ -1682,8 +1679,8 @@
                                                                                       :port port
                                                                                       :read-only? read-only?
                                                                                       :allocator (util/->child-allocator allocator "pgwire"))))]
-                  (log/infof "Server%sstarted at postgres://%s:%d"
-                             (if read-only? " (read-only) " " ")
+                  (log/infof "%s started at postgres://%s:%d"
+                             (if read-only? "Read-only server" "Server")
                              (.getHostAddress host)
                              port)
                   srv)))]
@@ -1697,9 +1694,10 @@
   (^xtdb.pgwire.Server [] (open-playground nil))
 
   (^xtdb.pgwire.Server [opts]
-   (let [{:keys [^InetAddress host, port] :as srv} (serve nil (merge opts
-                                                                     {:host nil
-                                                                      :allocator (RootAllocator.)}))]
-     (log/infof "Playground started at postgres://%s:%d" (.getHostAddress host) port)
-     srv)))
-
+   (util/with-close-on-catch [node (xtn/start-node)]
+     (let [{:keys [^InetAddress host, port] :as srv} (serve node (merge {:host nil}
+                                                                        opts
+                                                                        {:allocator (util/->child-allocator (:allocator node) "playground")
+                                                                         :playground? true}))]
+       (log/infof "Playground started at postgres://%s:%d" (.getHostAddress host) port)
+       srv))))

@@ -213,9 +213,10 @@
   ([query {:keys [node args preserve-pages? with-col-types? key-fn] :as query-opts
            :or {key-fn (serde/read-key-fn :kebab-case-keyword)}}]
    (let [allocator (:allocator node *allocator*)
-         query-opts (cond-> query-opts
-                      node (-> (update :await-token (fnil identity (xtp/await-token node)))
-                               (doto (-> :await-token (->> (xt-log/await-db (db/primary-db node)))))))
+         query-opts (-> query-opts
+                        (update :default-db (fnil identity "xtdb"))
+                        (cond-> node (-> (update :await-token (fnil identity (xtp/await-token node)))
+                                         (doto (-> :await-token (->> (xt-log/await-db (db/primary-db node))))))))
 
          db (some-> node db/primary-db)
 
@@ -386,6 +387,6 @@
   "Like xtdb.api/q, but also returns the result type."
   ([node query] (q-sql node query {}))
   ([node query opts]
-   (let [^PreparedQuery prepared-q (xtp/prepare-sql node query opts)]
+   (let [^PreparedQuery prepared-q (xtp/prepare-sql node query (merge {:default-db "xtdb"} opts))]
      {:res (xt/q node query opts)
       :res-type (mapv (juxt #(.getName ^Field %) types/field->col-type) (.getColumnFields prepared-q []))})))

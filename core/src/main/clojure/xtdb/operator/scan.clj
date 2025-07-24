@@ -242,8 +242,9 @@
                                                      (fn [fvt]
                                                        (or fvt [:at [:now]]))))
                                live-table-snap (some-> (.getLiveIndex snapshot) (.liveTable table))
-                               temporal-bounds (->temporal-bounds allocator args scan-opts (-> (basis/<-time-basis-str snapshot-token)
-                                                                                               (get-in ["xtdb" 0])))]
+                               temporal-bounds (->temporal-bounds allocator args scan-opts
+                                                                  (-> (basis/<-time-basis-str snapshot-token)
+                                                                      (get-in [(.getName db) 0])))]
                            (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                              (let [merge-tasks (util/with-open [page-metadatas (LinkedList.)]
                                                  (let [segments (cond-> (mapv (fn [{:keys [^String trie-key]}]

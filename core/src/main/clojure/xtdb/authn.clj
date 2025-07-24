@@ -12,7 +12,8 @@
 
 (defn verify-pw [^IQuerySource q-src, db, ^Snapshot$Source snap-src, user password]
   (when password
-    (with-open [res (-> (.prepareQuery q-src "SELECT passwd AS encrypted FROM pg_user WHERE username = ?" db snap-src {})
+    (with-open [res (-> (.prepareQuery q-src "SELECT passwd AS encrypted FROM pg_user WHERE username = ?"
+                                       db snap-src {:default-db "xtdb"})
                         (.openQuery {:args [user]}))]
 
       (when-let [{:keys [encrypted]} (first (.toList (q/cursor->stream res {:key-fn #xt/key-fn :kebab-case-keyword})))]

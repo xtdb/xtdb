@@ -13,4 +13,7 @@ interface DatabaseCatalog : AutoCloseable, ILookup {
     override fun valAt(key: Any?, notFound: Any?) = databaseOrNull(key as DatabaseName) ?: notFound
     
     val primary: Database get() = this["xtdb"]!![0]
+
+    // TODO will eventually take config
+    fun createDatabase(dbName: DatabaseName): List<Database>
 }

@@ -44,7 +44,8 @@
 
 (defn- with-query-opts-defaults [query-opts {:keys [default-tz]}]
   (-> (into {:default-tz default-tz,
-             :key-fn (serde/read-key-fn :snake-case-string)}
+             :key-fn (serde/read-key-fn :snake-case-string)
+             :default-db "xtdb"}
             query-opts)
       (update :current-time #(some-> % (time/->instant)))))
 
@@ -100,7 +101,7 @@
 
   (execute-tx [this tx-ops opts]
     (let [tx-id (xtp/submit-tx this tx-ops opts)]
-      (or (let [db (.getPrimary db-cat) ; TODO multi-db
+      (or (let [^Database db (first (.databaseOrNull db-cat (:default-db opts)))
                 ^TransactionResult tx-res (-> @(.awaitAsync (.getLogProcessor db) tx-id)
                                               (util/rethrowing-cause))]
             (when (and tx-res
@@ -166,8 +167,8 @@
      :await-token (xtp/await-token this)})
 
   xtp/PLocalNode
-  (prepare-sql [this query query-opts]
-    (let [db (.getPrimary db-cat) ; TODO multi-db
+  (prepare-sql [this query {:keys [default-db] :as query-opts}]
+    (let [^Database db (first (.databaseOrNull db-cat default-db))
           ast (cond
                 (instance? Sql$DirectlyExecutableStatementContext query) query
                 (string? query) (antlr/parse-statement query)
@@ -181,7 +182,7 @@
       (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
   (prepare-xtql [this query query-opts]
-    (let [db (.getPrimary db-cat) ; TODO multi-db
+    (let [^Database db (first (.databaseOrNull db-cat (:default-db query-opts)))
           {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
           ast (cond
                 (sequential? query) (xtql/parse-query query nil)
@@ -193,7 +194,7 @@
       (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
   (prepare-ra [this plan query-opts]
-    (let [db (.getPrimary db-cat) ; TODO multi-db
+    (let [^Database db (first (.databaseOrNull db-cat (:default-db query-opts)))
           {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (xt-log/await-db db await-token tx-timeout)
 

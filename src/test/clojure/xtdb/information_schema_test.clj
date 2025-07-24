@@ -1,12 +1,17 @@
 (ns xtdb.information-schema-test
   (:require [clojure.set :as set]
             [clojure.test :as t :refer [deftest]]
+            [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.authn :as authn]
             [xtdb.compactor :as c]
+            [xtdb.db-catalog :as db]
             [xtdb.information-schema :as i-s]
+            [xtdb.pgwire :as pgw]
+            [xtdb.pgwire-test :as pgw-test]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]))
+            [xtdb.time :as time]
+            [xtdb.util :as util]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
 
@@ -470,3 +475,39 @@
                                     "pgwire.total_connections"}
                                   (into #{} (map :name) res)))
           "at least has these ones, maybe others")))
+
+(t/deftest test-multi-db
+  (pgw-test/with-playground
+    (fn []
+      (with-open [xt-conn (pgw-test/jdbc-conn {:dbname "xtdb"})]
+        (xt/submit-tx xt-conn [[:put-docs :foo {:xt/id "xtdb"}]])
+
+        (with-open [new-db-conn (pgw-test/jdbc-conn {:dbname "new-db"})]
+          (xt/execute-tx new-db-conn [[:put-docs :foo {:xt/id :new-db}]])
+          (t/is (= [{:xt/id "xtdb"}] (xt/q xt-conn ["SELECT * FROM foo"])))
+          (t/is (= [{:xt/id :new-db}] (xt/q new-db-conn ["SELECT * FROM foo"])))
+
+          ;; TODO make all databases visible in pg_database, not just the current one
+          ;;
+          (t/testing "adds database to pg_database"
+            (t/is (= [#_{:datname "new-db"} {:datname "xtdb"}]
+                     (jdbc/execute! xt-conn ["SELECT datname FROM pg_catalog.pg_database ORDER BY datname"])))
+
+            (t/is (= [{:datname "new-db"} #_{:datname "xtdb"}]
+                     (jdbc/execute! new-db-conn ["SELECT datname FROM pg_catalog.pg_database ORDER BY datname"]))))
+
+          (t/testing "information_schema queries"
+            (t/is (= #{{:table-catalog "new-db", :table-schema "information_schema"}
+                       {:table-catalog "new-db", :table-schema "pg_catalog"}
+                       {:table-catalog "new-db", :table-schema "public"}
+                       {:table-catalog "new-db", :table-schema "xt"}}
+                     (set (xt/q new-db-conn "FROM information_schema.columns SELECT DISTINCT table_catalog, table_schema")))
+                  "query information_schema from new-db")
+
+            (t/is (= [{:table-catalog "new-db", :table-schema "public", :table-name "foo", :column-name "_id", :data-type ":keyword"}]
+                     (xt/q new-db-conn "FROM information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
+                  "query information_schema from new-db")
+
+            (t/is (= [{:table-catalog "xtdb", :table-schema "public", :table-name "foo", :column-name "_id", :data-type ":utf8"}]
+                     (xt/q xt-conn "FROM information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
+                  "query information_schema from xtdb")))))))

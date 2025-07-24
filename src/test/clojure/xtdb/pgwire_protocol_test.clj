@@ -69,16 +69,17 @@
                                                                                   "client_encoding" "UTF8"
                                                                                   "DateStyle" "ISO"
                                                                                   "IntervalStyle" "ISO_8601"}})
-                                                :->node {"xtdb" (-> tu/*node*
-                                                                    (assoc :authn (authn/->UserTableAuthn authn-rules
-                                                                                                          (util/component tu/*node* :xtdb.query/query-source)
-                                                                                                          db
-                                                                                                          (.getLiveIndex db))))}}
+                                                :node (-> tu/*node*
+                                                          (assoc :authn (authn/->UserTableAuthn authn-rules
+                                                                                                (util/component tu/*node* :xtdb.query/query-source)
+                                                                                                db
+                                                                                                (.getLiveIndex db))))}
                                        :allocator tu/*allocator*
                                        :frontend frontend
                                        :cid -1
                                        :!closing? (atom false)
-                                       :conn-state (atom {:session {:clock (Clock/systemUTC)}})})]
+                                       :conn-state (atom {:session {:clock (Clock/systemUTC)}})
+                                       :default-db "xtdb"})]
      (try
        (pgwire/cmd-startup-pg30 conn startup-opts)
        (catch Exception e

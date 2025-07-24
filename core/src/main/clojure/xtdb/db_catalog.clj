@@ -59,37 +59,47 @@
          :xtdb.log/processor (assoc opts :indexer-conf indexer-conf)}
         (doto ig/load-namespaces))))
 
+(defn- open-db [db-name base]
+  (let [sys (try
+               (-> (db-system db-name base)
+                   ig/prep
+                   ig/init)
+               (catch clojure.lang.ExceptionInfo e
+                 (try
+                   (ig/halt! (:system (ex-data e)))
+                   (catch Throwable t
+                     (let [^Throwable e (or (ex-cause e) e)]
+                       (throw (doto e (.addSuppressed t))))))
+
+                 (throw (ex-cause e))))]
+    {:db (try
+           (-> ^Database (::for-query sys)
+               (.withComponents (:xtdb.log/processor sys)
+                                (:xtdb.compactor/for-db sys)))
+           (catch Throwable t
+             (ig/halt! sys)
+             (throw t)))
+     :sys sys}))
+
 (defmethod ig/init-key :xtdb/db-catalog [_ {:keys [base]}]
   (let [!dbs (HashMap.)
-        sys (try
-              (-> (db-system "xtdb" base)
-                  ig/prep
-                  ig/init)
-              (catch clojure.lang.ExceptionInfo e
-                (try
-                  (ig/halt! (:system (ex-data e)))
-                  (catch Throwable t
-                    (let [^Throwable e (or (ex-cause e) e)]
-                      (throw (doto e (.addSuppressed t))))))
+        primary (open-db "xtdb" base)]
 
-                (throw (ex-cause e))))
-
-        primary (try
-                  (-> ^Database (::for-query sys)
-                      (.withComponents (:xtdb.log/processor sys)
-                                       (:xtdb.compactor/for-db sys)))
-                  (catch Throwable t
-                    (ig/halt! sys)
-                    (throw t)))]
-
-    (.put !dbs "xtdb" [{:db primary, :sys sys}])
+    (.put !dbs "xtdb" [primary])
 
     (reify DatabaseCatalog
-      (getPrimary [_] primary)
+      (getPrimary [_] (:db primary))
 
       (getDatabaseNames [_] (set (keys !dbs)))
 
-      (databaseOrNull [_ db-name] (mapv :db (.get !dbs db-name)))
+      (databaseOrNull [_ db-name]
+        (some->> (.get !dbs db-name)
+                 (mapv :db)))
+
+      (createDatabase [_ db-name]
+        (util/with-close-on-catch [db (open-db db-name base)]
+          (.put !dbs db-name [db])
+          [(:db db)]))
 
       (close [_]
         (doseq [[_ dbs] !dbs

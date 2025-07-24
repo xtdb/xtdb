@@ -211,10 +211,7 @@
   (prepareQuery [this query db snap-src {:keys [default-tz] :as query-opts}]
     (let [parsed-query (parse-query query)
           !table-info (atom (scan/tables-with-cols snap-src))
-          default-tz (or default-tz expr/*default-tz*)
-          query-opts (-> query-opts
-                         ;; TODO multi-db
-                         (update :default-db (fnil identity "xtdb")))]
+          default-tz (or default-tz expr/*default-tz*)]
       (letfn [(plan-query* [table-info]
                 (-plan-query this parsed-query query-opts table-info))]
 
@@ -263,7 +260,7 @@
                             expr/*default-tz* default-tz
                             expr/*snapshot-token* (or (some-> (:snapshot-token planned-query snapshot-token) (expr->value {:args args}))
                                                       (when-let [sys-time (some-> snap .getTxBasis .getSystemTime)]
-                                                        (basis/->time-basis-str {"xtdb" [sys-time]})))
+                                                        (basis/->time-basis-str {(.getName db) [sys-time]})))
                             expr/*await-token* await-token]
 
                     (validate-snapshot-not-before expr/*snapshot-token* snap)
