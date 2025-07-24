@@ -4,7 +4,7 @@
             [xtdb.bench :as b])
   (:import (java.time Duration)))
 
-(defn patch-existing-docs-stage [{:keys [patch-count]}]
+(defn patch-existing-docs-stage [{:keys [doc-count patch-count]}]
   {:t :do
    :stage :patch-existing-docs
    :tasks [{:t :call
@@ -12,11 +12,31 @@
                  (log/info "Patching" patch-count "existing documents...")
                  (let [times (doall
                               (for [i (range patch-count)]
-                                (let [id (+ 50000 i)
+                                (let [id (rand-int doc-count)
                                       start-time (System/nanoTime)]
-                                  (xt/execute-tx node [(str "PATCH INTO foo RECORDS {_id: " id ", c: 'c" i "'}")])
+                                  (xt/execute-tx node [(format "PATCH INTO foo RECORDS {_id: %s, c:'%s'}" id i)])
                                   (/ (- (System/nanoTime) start-time) 1000000.0))))]
                    (b/log-report worker {:stage "patch-existing-average-ms"
+                                         :average-time-ms (/ (reduce + times) (count times))})))}]})
+
+(defn patch-multiple-existing-docs-stage [{:keys [doc-count patch-count]}]
+  {:t :do
+   :stage :patch-multiple-docs
+   :tasks [{:t :call
+            :f (fn [{:keys [node] :as worker}]
+                 (log/info "Patching" patch-count "multiple documents...")
+                 (let [times (doall
+                              (for [i (range patch-count)]
+                                (let [id-1 (rand-int doc-count)
+                                      id-2 (rand-int doc-count)
+                                      id-3 (rand-int doc-count)
+                                      start-time (System/nanoTime)]
+                                  (xt/execute-tx node [(format "PATCH INTO foo RECORDS {_id: %s, c:'%s'}, {_id: %s, c:'%s'}, {_id: %s, c:'%s'}"
+                                                               id-1 i
+                                                               id-2 i
+                                                               id-3 i)])
+                                  (/ (- (System/nanoTime) start-time) 1000000.0))))]
+                   (b/log-report worker {:stage "patch-multiple-average-ms"
                                          :average-time-ms (/ (reduce + times) (count times))})))}]})
 
 (defn patch-non-existing-docs-stage [{:keys [patch-count]}]
@@ -46,7 +66,7 @@
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :patch [_ {:keys [doc-count patch-count seed no-load?]
-                                    :or {doc-count 500000 patch-count 10 seed 0}}]
+                                    :or {doc-count 500000 patch-count 10 seed 0} :as opts}]
   (log/info {:doc-count doc-count :patch-count patch-count})
   
   {:title "PATCH Performance Benchmark"
@@ -78,5 +98,6 @@
                              :stage :compact
                              :tasks [{:t :call :f (fn [{:keys [node]}] (b/compact! node))}]}])}
            
-           (patch-existing-docs-stage {:patch-count patch-count})
-           (patch-non-existing-docs-stage {:patch-count patch-count})]})
+           (patch-existing-docs-stage opts) 
+           (patch-multiple-existing-docs-stage opts)
+           (patch-non-existing-docs-stage opts)]})
