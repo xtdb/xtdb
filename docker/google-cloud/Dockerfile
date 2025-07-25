@@ -9,7 +9,6 @@ WORKDIR /usr/local/lib/xtdb
 
 ENTRYPOINT ["java", \
     "-Dclojure.main.report=stderr", \
-    "-Dlogback.configurationFile=logback.xml", \
     "--add-opens=java.base/java.nio=ALL-UNNAMED", \
     "-Dio.netty.tryReflectionSetAccessible=true", \
     "-cp","xtdb-google-cloud.jar", \
