@@ -1410,28 +1410,28 @@
                           {:msg-name msg-name})))
 
 (defn handle-msg [{:keys [cid conn-state] :as conn} {:keys [msg-name] :as msg}]
-  (try
-    (log/trace "Read client msg" {:cid cid, :msg msg})
+  (err/wrap-anomaly {}
+    (try
+      (log/trace "Read client msg" {:cid cid, :msg msg})
 
-    (err/wrap-anomaly {}
       (if (and (:skip-until-sync? @conn-state) (not= :msg-sync msg-name))
         (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg})
-        (handle-msg* conn msg)))
+        (handle-msg* conn msg))
 
-    (catch Interrupted e (throw e))
+      (catch Interrupted e (throw e))
 
-    (catch Throwable e
-      (log/debug e "error processing message: " (ex-message e))
-      (swap! conn-state
-             (fn [{:keys [transaction protocol] :as cs}]
-               (cond-> cs
-                 ;; error seen while in :extended mode, start skipping messages until sync received
-                 (= :extended protocol) (assoc :skip-until-sync? true)
+      (catch Throwable e
+        (log/debug e "error processing message: " (ex-message e))
+        (swap! conn-state
+          (fn [{:keys [transaction protocol] :as cs}]
+            (cond-> cs
+              ;; error seen while in :extended mode, start skipping messages until sync received
+              (= :extended protocol) (assoc :skip-until-sync? true)
 
-                 ;; mark a transaction (if open as failed), for now we will consider all errors to do this
-                 transaction (update :transaction assoc :failed true, :err e))))
+              ;; mark a transaction (if open as failed), for now we will consider all errors to do this
+              transaction (update :transaction assoc :failed true, :err e))))
 
-      (send-ex conn e))))
+        (send-ex conn e)))))
 
 (defn- conn-loop [{:keys [cid, server, conn-state],
                    {:keys [^Socket socket] :as frontend} :frontend,
