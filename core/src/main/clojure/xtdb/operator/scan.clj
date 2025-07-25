@@ -57,6 +57,7 @@
        :select (key (first col-arg)))]))
 
 (def ^:dynamic *column->pushdown-bloom* {})
+(def ^:dynamic *iid-set* nil)
 
 (defn ->temporal-bounds [^BufferAllocator alloc, ^RelationReader args,
                          {:keys [for-valid-time for-system-time]}, ^Instant snapshot-token]
@@ -232,8 +233,9 @@
                            template-table? (boolean (info-schema/template-table table))]
                        (if (and derived-table-schema (not template-table?))
                          (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args)
-
-                         (let [iid-bb (selects->iid-byte-buffer selects args)
+                         (let [iid-pushdown-bloom (get *column->pushdown-bloom* '_iid)
+                               iid-bb (or (selects->iid-byte-buffer selects args)
+                                          (when (= (count *iid-set*) 1) (first *iid-set*)))
                                col-preds (cond-> col-preds
                                            iid-bb (assoc "_iid" (IidSelector. iid-bb)))
                                metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) (update-vals fields types/field->col-type) args)
@@ -284,12 +286,13 @@
                                                                                                 (MergePlanPage$Memory. memory-rel trie node)))
                                                                                             temporal-bounds)]
                                                                            (ScanCursor$MergeTask. leaves (.getPath mpt)))))))))]
-
                                (ScanCursor. allocator (RootCache. allocator buffer-pool)
                                             col-names col-preds
                                             temporal-bounds
                                             (.iterator ^Iterable merge-tasks)
-                                            schema args)))))))}))))
+                                            schema args
+                                            (when (> (count *iid-set*) 1)
+                                              iid-pushdown-bloom))))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db scan-fields, param-fields]}]
   (.emitScan scan-emitter db scan-expr scan-fields param-fields))

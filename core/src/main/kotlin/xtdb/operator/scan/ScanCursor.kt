@@ -4,6 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.ICursor
 import xtdb.bitemporal.PolygonCalculator
+import xtdb.bloom.bloomHashes
 import xtdb.operator.SelectionSpec
 import xtdb.time.TEMPORAL_COL_NAMES
 import xtdb.trie.ColumnName
@@ -11,6 +12,8 @@ import xtdb.trie.EventRowPointer
 import xtdb.util.TemporalBounds
 import xtdb.vector.MultiVectorRelationFactory
 import xtdb.arrow.RelationReader
+import xtdb.bloom.BloomFilter
+import xtdb.bloom.contains
 import xtdb.vector.RelationWriter
 import java.util.*
 import java.util.Comparator.comparing
@@ -25,6 +28,7 @@ class ScanCursor(
     private val mergeTasks: Iterator<MergeTask>,
 
     private val schema: Map<String, Any>, private val args: RelationReader,
+    private val iidPushdownBloom: BloomFilter?
 ) : ICursor<RelationReader> {
 
     class MergeTask(val pages: List<MergePlanPage>, val path: ByteArray)
@@ -34,10 +38,14 @@ class ScanCursor(
     private fun RelationReader.maybeSelect(iidPred: SelectionSpec?) =
         if (iidPred != null) select(iidPred.select(al, this, this@ScanCursor.schema, args)) else this
 
+    private fun checkBloomFilter(leafReader: RelationReader, eventIndex: Int, bloomFilter: BloomFilter): Boolean {
+        val iidCol = leafReader.vectorForOrNull("_iid") ?: return true
+        return bloomFilter.contains(bloomHashes(iidCol, eventIndex))
+    }
+
     override fun tryAdvance(action: Consumer<in RelationReader>): Boolean {
         val isValidPtr = ArrowBufPointer()
         val iidPred = colPreds["_iid"]
-
         while (mergeTasks.hasNext()) {
             rootCache.reset()
 
@@ -55,16 +63,20 @@ class ScanCursor(
 
                 val contentRelFactory = MultiVectorRelationFactory(leafReaders, colNames.toList())
 
+                val skipBloomCheck = iidPushdownBloom == null || "_iid" !in colNames
+
                 leafReaders.forEachIndexed { idx, leafReader ->
-                    EventRowPointer(leafReader, taskPath)
-                        .takeIf { it.isValid(isValidPtr, taskPath) }
-                        ?.let { mergeQueue.add(LeafPointer(it, idx)) }
+                    val evPtr = EventRowPointer(leafReader, taskPath)
+                    if (!evPtr.isValid(isValidPtr, taskPath)) return@forEachIndexed
+                    val passesBloomFilter = skipBloomCheck || checkBloomFilter(leafReader, evPtr.index, iidPushdownBloom)
+                    if (passesBloomFilter) mergeQueue.add(LeafPointer(evPtr, idx))
                 }
+
 
                 while (true) {
                     val leafPtr = mergeQueue.poll() ?: break
                     val evPtr = leafPtr.evPtr
-
+                    
                     polygonCalculator.calculate(evPtr)
                         ?.takeIf { evPtr.op == "put" }
                         ?.let { polygon ->
