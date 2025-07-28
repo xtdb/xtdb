@@ -12,6 +12,7 @@ import xtdb.trie.HashTrie.Companion.bucketFor
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.function.IntBinaryOperator
+import java.util.function.IntUnaryOperator
 
 private const val LOG_LIMIT = 64
 private const val PAGE_LIMIT = 1024
@@ -35,7 +36,7 @@ class MemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader) 
         fun add(trie: MemoryHashTrie, newIdx: Int): Node
         fun addIfNotPresent(trie: MemoryHashTrie, newIdx: Int, comparator: IntBinaryOperator): Node
         fun findCandidates(hash: ByteArray): IntArray
-        fun findValue(hash: ByteArray, idx: Int, comparator: IntBinaryOperator, removeOnMatch: Boolean): Int
+        fun findValue(hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean): Int
 
         fun compactLogs(trie: MemoryHashTrie): Node
     }
@@ -57,19 +58,19 @@ class MemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader) 
     fun addIfNotPresent(trie: MemoryHashTrie, newIdx: Int, comparator: IntBinaryOperator): MemoryHashTrie =
         MemoryHashTrie(rootNode.addIfNotPresent(this, newIdx, comparator), hashReader)
 
+    private fun intToByteArray(hash: Int): ByteArray = ByteBuffer.allocate(Int.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).putInt(hash).array()
+
     fun findCandidates (hash: ByteArray) : IntArray = rootNode.findCandidates(hash)
 
-    fun findCandidates(value: Int) : IntArray =
-        findCandidates(ByteBuffer.allocate(Int.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).putInt(value).array())
+    fun findCandidates(hash: Int) : IntArray =
+        findCandidates(intToByteArray(hash))
 
     // This assumes the trie has been compacted
-    fun findValue (hash: ByteArray, idx: Int, comparator: IntBinaryOperator, removeOnMatch: Boolean) : Int =
-        rootNode.findValue(hash, idx, comparator, removeOnMatch)
+    fun findValue (hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean) : Int =
+        rootNode.findValue(hash, comparator, removeOnMatch)
 
-    fun findValue(hash: Int, idx: Int, comparator: IntBinaryOperator, removeOnMatch: Boolean) : Int =
-        findValue(ByteBuffer.allocate(Int.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).putInt(hash).array(), idx, comparator, removeOnMatch)
-
-
+    fun findValue(hash: Int, comparator: IntUnaryOperator, removeOnMatch: Boolean) : Int =
+        findValue(intToByteArray(hash), comparator, removeOnMatch)
 
     @Suppress("unused")
     fun withIidReader(hashReader: VectorReader) = MemoryHashTrie(rootNode, hashReader)
@@ -134,10 +135,10 @@ class MemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader) 
             return child.findCandidates(hash)
         }
 
-        override fun findValue(hash: ByteArray, idx: Int, comparator: IntBinaryOperator, removeOnMatch: Boolean ): Int {
+        override fun findValue(hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean ): Int {
             val bucket = bucketFor(hash, path.size).toInt()
             val child = hashChildren[bucket] ?: return -1
-            return child.findValue(hash, idx, comparator, removeOnMatch)
+            return child.findValue(hash, comparator, removeOnMatch)
         }
 
         override fun compactLogs(trie: MemoryHashTrie) =
@@ -268,13 +269,13 @@ class MemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader) 
             return data
         }
 
-        override fun findValue(hash: ByteArray, idx: Int, comparator: IntBinaryOperator, removeOnMatch: Boolean): Int {
+        override fun findValue(hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean): Int {
             val data = when (deletions) {
                 null -> data
                 else -> data.filter { !deletions!!.contains(it) }.toIntArray()
             }
             for( testIdx in data) {
-                if (comparator.applyAsInt(idx, testIdx) == 1) {
+                if (comparator.applyAsInt(testIdx) == 1) {
                     if (removeOnMatch) {
                         deletions = (deletions ?: RoaringBitmap()).apply { add(testIdx) }
                     }

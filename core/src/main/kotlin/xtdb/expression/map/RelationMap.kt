@@ -16,6 +16,7 @@ import xtdb.toSymbol
 import xtdb.trie.MemoryHashTrie
 import xtdb.util.Hasher
 import xtdb.util.requiringResolve
+import java.util.function.IntUnaryOperator
 
 class RelationMap(
     val allocator: BufferAllocator,
@@ -165,7 +166,7 @@ class RelationMap(
 
             override fun addIfNotPresent(inIdx: Int): Int {
                 val hashCode = hasher.hashCode(inIdx)
-                val outIdx = buildHashTrie.findValue(hashCode, inIdx, comparatorLazy, false)
+                val outIdx = buildHashTrie.findValue(hashCode, { testIdx -> comparatorLazy.applyAsInt(inIdx, testIdx)}, false)
                 // TODO this can be made more efficient by searching and inserting at the same time
                 return if (outIdx >= 0) {
                     outIdx
@@ -217,7 +218,7 @@ class RelationMap(
             // TODO one could very likely do a similar thing to a merge sort phase with the buildHashTrie and a probeHashTrie
             override fun indexOf(inIdx: Int, removeOnMatch: Boolean): Int{
                 val hashCode = hasher.hashCode(inIdx)
-                return buildHashTrie.findValue(hashCode, inIdx, comparator, removeOnMatch)
+                return buildHashTrie.findValue(hashCode, { testIdx -> comparator.applyAsInt(inIdx, testIdx) }, removeOnMatch)
             }
 
             override fun forEachMatch(inIdx: Int, c: IntConsumer) {
