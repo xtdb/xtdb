@@ -622,12 +622,14 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                  [:put-docs :album {:xt/id :album-1 :name "foo-album"}]])
 
 
-  (t/is (= [{:name "foo-album", :tracks ["foo1" "foo2"]}]
-           (xt/q tu/*node*
-                 "SELECT a.name, ARRAY_AGG(t.name) AS tracks
+  (t/is (= {:name "foo-album", :tracks #{"foo1" "foo2"}}
+           (-> (xt/q tu/*node*
+                     "SELECT a.name, ARRAY_AGG(t.name) AS tracks
                   FROM track AS t, album AS a
                   WHERE t.album = a._id
-                  GROUP BY a.name"))
+                  GROUP BY a.name")
+               first
+               (update :tracks set)))
         "array-agg")
 
   #_ ;;TODO parser needs to be adpated #2948
