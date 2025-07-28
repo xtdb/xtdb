@@ -1,11 +1,12 @@
 (ns xtdb.table-catalog
-  (:require [integrant.core :as ig]
+  (:require [clojure.set :as set]
+            [integrant.core :as ig]
+            [xtdb.error :as err]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
            (com.google.protobuf ByteString)
-           (io.netty.buffer ByteBuf)
            [java.nio ByteBuffer]
            [java.nio.file Path]
            [java.util ArrayList Map]
@@ -58,9 +59,18 @@
                (update-vals #(-> (.toByteArray ^ByteString %) HyperLogLog/toHLL)))}))
 
 (defn- merge-fields [old-fields new-fields]
-  (->> (merge-with types/merge-fields old-fields new-fields)
-       (map (fn [[col-name field]] [col-name (types/field-with-name field col-name)]))
-       (into {})))
+  (cond
+    (nil? old-fields) (into {} new-fields)
+    (nil? new-fields) (into {} old-fields)
+
+    :else (->> (for [col-name (set/union (set (keys old-fields))
+                                         (set (keys new-fields)))]
+                 [col-name (-> (types/merge-fields (or (get old-fields col-name)
+                                                       (types/->field col-name #xt.arrow/type :null true))
+                                                   (or (get new-fields col-name)
+                                                       (types/->field col-name #xt.arrow/type :null true)))
+                               (types/field-with-name col-name))])
+               (into {}))))
 
 (defn- merge-hlls [old-hlls new-hlls]
   (merge-with #(HyperLogLog/combine %1 %2) old-hlls new-hlls))
