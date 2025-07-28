@@ -1,6 +1,6 @@
 (ns xtdb.table-catalog
-  (:require [integrant.core :as ig]
-            [xtdb.db-catalog :as db]
+  (:require [clojure.set :as set]
+            [integrant.core :as ig]
             [xtdb.table :as table]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
@@ -55,9 +55,18 @@
                (update-vals #(-> (.toByteArray ^ByteString %) HyperLogLog/toHLL)))}))
 
 (defn- merge-fields [old-fields new-fields]
-  (->> (merge-with types/merge-fields old-fields new-fields)
-       (map (fn [[col-name field]] [col-name (types/field-with-name field col-name)]))
-       (into {})))
+  (cond
+    (nil? old-fields) (into {} new-fields)
+    (nil? new-fields) (into {} old-fields)
+
+    :else (->> (for [col-name (set/union (set (keys old-fields))
+                                         (set (keys new-fields)))]
+                 [col-name (-> (types/merge-fields (or (get old-fields col-name)
+                                                       (types/->field col-name #xt.arrow/type :null true))
+                                                   (or (get new-fields col-name)
+                                                       (types/->field col-name #xt.arrow/type :null true)))
+                               (types/field-with-name col-name))])
+               (into {}))))
 
 (defn- merge-hlls [old-hlls new-hlls]
   (merge-with #(HyperLogLog/combine %1 %2) old-hlls new-hlls))

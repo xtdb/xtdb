@@ -1102,3 +1102,25 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (xt/q tu/*node* "SELECT f._id, f.name, b.name AS bar_name
                                FROM foo f
                                JOIN bar b ON f._id = b._id"))))
+
+(t/deftest test-field-mismatch-4595
+  (binding [c/*ignore-signal-block?* true]
+    (xt/execute-tx tu/*node* [[:put-docs :system {:xt/id 1}]])
+    (xt/execute-tx tu/*node* [[:put-docs :device {:xt/id 2, :system_id 1, :foo "foo"}]])
+
+    (tu/finish-block! tu/*node*)
+
+    (xt/execute-tx tu/*node* [[:put-docs :device {:xt/id 3, :system_id 1, :bar "bar"}]])
+
+    (tu/finish-block! tu/*node*)
+
+    (t/is (= {:res [{:xt/id 2, :foo "foo"} {:xt/id 3, :bar "bar"}],
+              :col-types '{_id :i64
+                           bar [:union #{:utf8 :null}]
+                           foo [:union #{:utf8 :null}]}}
+             (tu/query-ra '[:scan {:table #xt/table device} [_id foo bar]]
+                          {:node tu/*node*
+                           :with-col-types? true})))
+
+    (t/is (= [{:xt/id 1}]
+             (xt/q tu/*node* "FROM system WHERE EXISTS(FROM device WHERE system._id = device.system_id)")))))
