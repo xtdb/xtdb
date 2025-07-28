@@ -5,6 +5,7 @@ package xtdb.api.log
 import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
+import xtdb.database.DatabaseName
 import xtdb.log.proto.*
 import xtdb.log.proto.LogMessage.MessageCase
 import xtdb.trie.BlockIndex
@@ -79,6 +80,9 @@ interface Log : AutoCloseable {
                                 MessageCase.TRIES_ADDED ->
                                     TriesAdded(msg.triesAdded.storageVersion, msg.triesAdded.triesList)
 
+                                MessageCase.CREATE_DB ->
+                                    CreateDatabase(msg.createDb.dbName)
+
                                 else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
                             }
                         }
@@ -96,6 +100,14 @@ interface Log : AutoCloseable {
                 triesAdded = triesAdded {
                     storageVersion = this@TriesAdded.storageVersion
                     tries.addAll(this@TriesAdded.tries)
+                }
+            }
+        }
+
+        data class CreateDatabase(val dbName: DatabaseName) : ProtobufMessage() {
+            override fun toLogMessage() = logMessage {
+                createDb = createDatabase {
+                    dbName = this@CreateDatabase.dbName
                 }
             }
         }

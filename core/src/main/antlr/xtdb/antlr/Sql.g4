@@ -52,8 +52,11 @@ directlyExecutableStatement
     | SHOW AWAIT_TOKEN # ShowAwaitTokenStatement
     | SHOW SNAPSHOT_TOKEN # ShowSnapshotTokenStatement
     | SHOW CLOCK_TIME # ShowClockTimeStatement
+
     | CREATE USER userName WITH PASSWORD password=characterString # CreateUserStatement
     | ALTER USER userName WITH PASSWORD password=characterString # AlterUserStatement
+
+    | CREATE DATABASE dbName=identifier # CreateDatabaseStatement
     ;
 
 executeArgs : ('(' expr (',' expr)* ')')? ;

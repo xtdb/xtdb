@@ -32,11 +32,10 @@
            [java.nio.file Path]
            [java.security KeyStore]
            [java.time Clock Duration ZoneId]
-           [java.util Map]
            [java.util.concurrent ExecutorService Executors TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.antlr.v4.runtime ParserRuleContext)
-           (org.apache.arrow.memory BufferAllocator RootAllocator)
+           (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            (xtdb.api DataSource DataSource$ConnectionBuilder ServerConfig Xtdb$Config)
@@ -777,6 +776,9 @@
                                            :query (subsql ctx)
                                            :parsed-query ctx})
 
+                                        (visitCreateDatabaseStatement [_ ctx]
+                                          {:statement-type :create-db, :db-name (sql/identifier-sym (.dbName ctx))})
+
                                         (visitShowVariableStatement [_ ctx]
                                           {:statement-type :query, :query sql, :parsed-query ctx})
 
@@ -1219,6 +1221,14 @@
       (inc-error-counter! query-error-counter)
       (throw e))))
 
+(defn- cmd-create-db [{:keys [node db default-db]} {:keys [db-name]}]
+  (when-not (= "xtdb" default-db)
+    (throw (err/incorrect ::invalid-db "CREATE DATABASE is only allowed on the primary database 'xtdb'"
+                          {:db default-db})))
+
+  (xtp/create-db! node db-name)
+  (xt-log/await-db db (xtp/await-token node) #xt/duration "PT30S"))
+
 (defn execute-portal [{:keys [conn-state] :as conn} {:keys [statement-type canned-response parameter value session-characteristics tx-characteristics] :as portal}]
   (verify-permissibility conn portal)
 
@@ -1281,6 +1291,10 @@
                                                        :transit-msgpack :binary)]
                                      {:copy-format copy-format
                                       :column-formats [copy-format]})))
+
+    :create-db (do
+                 (cmd-create-db conn portal)
+                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "CREATE DATABASE"}))
 
     (throw (UnsupportedOperationException. (pr-str {:portal portal})))))
 

@@ -22,7 +22,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api IndexerConfig TransactionKey Xtdb$Config)
-           (xtdb.api.log Log Log$Factory Log$Message$Tx Log$MessageMetadata)
+           (xtdb.api.log Log Log$Factory Log$Message$CreateDatabase Log$Message$Tx Log$MessageMetadata)
            (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
@@ -320,13 +320,20 @@
    :block-flush-duration (.getFlushDuration indexer-conf)
    :skip-txs (.getSkipTxs indexer-conf)})
 
-(defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry]} :base
+(defmethod ig/init-key :xtdb.log/processor [_ {{:keys [db-cat meter-registry]} :base
                                                :keys [allocator db indexer compactor block-flush-duration skip-txs] :as deps}]
   (when deps
-    (LogProcessor. allocator meter-registry db indexer compactor block-flush-duration (set skip-txs))))
+    (LogProcessor. allocator meter-registry db-cat db indexer compactor block-flush-duration (set skip-txs))))
 
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
   (util/close log-processor))
+
+(defn create-db! ^long [{:keys [^DatabaseCatalog db-cat]} db-name]
+  (let [db (.getPrimary db-cat)
+        log (.getLog db)]
+    (util/rethrowing-cause
+      (let [^Log$MessageMetadata message-meta @(.appendMessage log (Log$Message$CreateDatabase. (str db-name)))]
+        (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset message-meta))))))
 
 (defn await-db
   ;; TODO this should probably be await-node given it's taking a multi-db token

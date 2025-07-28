@@ -16,6 +16,7 @@ import xtdb.arrow.asChannel
 import xtdb.catalog.BlockCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.Database
+import xtdb.database.DatabaseCatalog
 import xtdb.error.Interrupted
 import xtdb.table.TableRef
 import xtdb.util.MsgIdUtil.msgIdToEpoch
@@ -38,6 +39,7 @@ private val LOG = LogProcessor::class.logger
 class LogProcessor(
     allocator: BufferAllocator,
     meterRegistry: MeterRegistry,
+    private val dbCatalog: DatabaseCatalog,
     private val db: Database,
     private val indexer: Indexer.ForDatabase,
     private val compactor: Compactor.ForDatabase,
@@ -188,6 +190,11 @@ class LogProcessor(
                             msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
                                 trieCatalog.addTries(TableRef.parse(db.name, tableName), tries, record.logTimestamp)
                             }
+                        null
+                    }
+
+                    is Message.CreateDatabase -> {
+                        dbCatalog.createDatabase(msg.dbName)
                         null
                     }
                 }

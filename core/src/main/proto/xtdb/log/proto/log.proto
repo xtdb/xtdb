@@ -8,6 +8,7 @@ message LogMessage {
     oneof message {
         FlushBlock flush_block = 1;
         TriesAdded tries_added = 2;
+        CreateDatabase create_db = 3;
     }
 }
 
@@ -48,4 +49,8 @@ message TrieDetails {
     TrieMetadata trie_metadata = 4;
     TrieState trie_state = 5;
     int64 garbage_as_of = 6;
+}
+
+message CreateDatabase {
+    string db_name = 1;
 }

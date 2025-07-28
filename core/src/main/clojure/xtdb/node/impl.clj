@@ -200,6 +200,9 @@
 
       (.prepareQuery q-src plan db (.getLiveIndex db) query-opts)))
 
+  (create-db! [this db-name]
+    (xt-log/create-db! this db-name))
+
   Closeable
   (close [_]
     (when close-fn
