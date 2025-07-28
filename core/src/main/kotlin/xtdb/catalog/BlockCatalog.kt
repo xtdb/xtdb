@@ -18,23 +18,26 @@ import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
+import kotlin.io.path.extension
 
 private val LOGGER = LoggerFactory.getLogger(BlockCatalog::class.java)
 
 class BlockCatalog(private val dbName: DatabaseName, private val bp: BufferPool) {
 
-    @Volatile
-    private var latestBlock: Block? =
-        bp.listAllObjects(blocksPath).lastOrNull()?.key
-            ?.let { blockKey -> Block.parseFrom(bp.getByteArray(blockKey)) }
-
-    fun blockFromLatest(distance: Int): Block? =
-        bp.listAllObjects(blocksPath).toList().dropLast(maxOf(0, distance-1)).lastOrNull()?.key
-            ?.let { blockKey -> Block.parseFrom(bp.getByteArray(blockKey)) }
-
     companion object {
         private val blocksPath = "blocks".asPath
     }
+
+    private val allBlockFiles get() = bp.listAllObjects(blocksPath).filter { it.key.fileName.extension == "binpb" }
+
+    @Volatile
+    private var latestBlock: Block? =
+        allBlockFiles.lastOrNull()?.key
+            ?.let { blockKey -> Block.parseFrom(bp.getByteArray(blockKey)) }
+
+    fun blockFromLatest(distance: Int): Block? =
+        allBlockFiles.toList().dropLast(maxOf(0, distance - 1)).lastOrNull()?.key
+            ?.let { blockKey -> Block.parseFrom(bp.getByteArray(blockKey)) }
 
     fun finishBlock(
         blockIndex: BlockIndex,
