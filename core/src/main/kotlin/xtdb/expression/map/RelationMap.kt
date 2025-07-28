@@ -166,12 +166,25 @@ class RelationMap(
 
             override fun addIfNotPresent(inIdx: Int): Int {
                 val hashCode = hasher.hashCode(inIdx)
-                val outIdx = buildHashTrie.findValue(hashCode, { testIdx -> comparatorLazy.applyAsInt(inIdx, testIdx)}, false)
-                // TODO this can be made more efficient by searching and inserting at the same time
-                return if (outIdx >= 0) {
-                    outIdx
+                val outIdxHashColumn = hashColumn.valueCount
+                val (insertedIdx, newTrie) = buildHashTrie.addIfNotPresent(
+                    hashCode,
+                    outIdxHashColumn,
+                    { testIdx -> comparatorLazy.applyAsInt(inIdx, testIdx) },
+                    {
+                        hashColumn.writeInt(hashCode)
+                        val outIdx = rowCopier.copyRow(inIdx)
+
+                        assert(outIdx == outIdxHashColumn) {
+                            "Expected outIdx $outIdx to match hashColumn valueCount $outIdxHashColumn"
+                        }
+                    }
+                )
+                if (insertedIdx == outIdxHashColumn) {
+                    buildHashTrie = newTrie
+                    return returnedIdx(outIdxHashColumn)
                 } else {
-                   add(inIdx)
+                    return insertedIdx
                 }
             }
         }

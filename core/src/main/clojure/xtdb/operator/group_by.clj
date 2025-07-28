@@ -67,8 +67,7 @@
     (let [row-count (.getRowCount in-rel)
           builder (.buildFromRelation rel-map in-rel)]
       (dotimes [idx row-count]
-        (.writeInt group-mapping (RelationMap/insertedIdx (.addIfNotPresent builder idx)))
-        (.compactHashTrie rel-map))
+        (.writeInt group-mapping (RelationMap/insertedIdx (.addIfNotPresent builder idx))))
 
       group-mapping))
 
@@ -445,8 +444,7 @@
                                         (.set builders group-idx builder)
                                         builder))]
                       (when (neg? (.addIfNotPresent builder idx))
-                        (.add distinct-idxs idx))
-                      (.compactHashTrie rel-map)))))
+                        (.add distinct-idxs idx))))))
               (let [distinct-idxs (.toArray (.build distinct-idxs))]
                 (.aggregate agg-spec
                             (vr/rel-reader [(.select in-vec distinct-idxs)])

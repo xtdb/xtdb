@@ -34,7 +34,8 @@ class MemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader) 
 
     sealed interface Node : HashTrie.Node<Node> {
         fun add(trie: MemoryHashTrie, newIdx: Int): Node
-        fun addIfNotPresent(trie: MemoryHashTrie, newIdx: Int, comparator: IntBinaryOperator): Node
+        fun addIfNotPresent(trie: MemoryHashTrie, hash: ByteArray, newIdx: Int, comparator: IntUnaryOperator, onAddition: Runnable): Pair<Int, Node?>
+
         fun findCandidates(hash: ByteArray): IntArray
         fun findValue(hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean): Int
 
@@ -55,10 +56,12 @@ class MemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader) 
 
     operator fun plus(idx: Int) = MemoryHashTrie(rootNode.add(this, idx), hashReader)
 
-    fun addIfNotPresent(trie: MemoryHashTrie, newIdx: Int, comparator: IntBinaryOperator): MemoryHashTrie =
-        MemoryHashTrie(rootNode.addIfNotPresent(this, newIdx, comparator), hashReader)
-
     private fun intToByteArray(hash: Int): ByteArray = ByteBuffer.allocate(Int.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).putInt(hash).array()
+
+    fun addIfNotPresent(hash: Int, newIdx: Int, comparator: IntUnaryOperator, onAddition: Runnable): Pair<Int, MemoryHashTrie>  {
+        val (idx, node) = rootNode.addIfNotPresent(this, intToByteArray(hash), newIdx, comparator, onAddition)
+        return Pair(idx, node?.let { MemoryHashTrie(it, hashReader) } ?: this)
+    }
 
     fun findCandidates (hash: ByteArray) : IntArray = rootNode.findCandidates(hash)
 
@@ -113,20 +116,27 @@ class MemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader) 
             return Branch(logLimit, pageLimit, path, newChildren)
         }
 
-        override fun addIfNotPresent(trie: MemoryHashTrie, newIdx: Int, comparator: IntBinaryOperator): Node {
-            val bucket = trie.bucketFor(newIdx, path.size, addPtr)
+        override fun addIfNotPresent(trie: MemoryHashTrie, hash: ByteArray, newIdx: Int, comparator: IntUnaryOperator, onAddition: Runnable): Pair<Int, Node?> {
+            val bucket = bucketFor(hash, path.size).toInt()
+            var existingIdx = -1
 
             val newChildren = hashChildren.indices
                 .map { childIdx ->
                     var child = hashChildren[childIdx]
                     if (bucket == childIdx) {
                         child = child ?: Leaf(logLimit, pageLimit, conjPath(path, childIdx.toByte()))
-                        child = child.addIfNotPresent(trie, newIdx, comparator)
+                        val res = child.addIfNotPresent(trie, hash, newIdx, comparator, onAddition)
+                        if (res.second == null) {
+                            return res
+                        } else {
+                            existingIdx = res.first
+                            child = res.second
+                        }
                     }
                     child
                 }.toTypedArray()
 
-            return Branch(logLimit, pageLimit, path, newChildren)
+            return Pair(existingIdx, Branch(logLimit, pageLimit, path, newChildren))
         }
 
         override fun findCandidates(hash: ByteArray): IntArray {
@@ -250,16 +260,18 @@ class MemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader) 
             return if (logCount == logLimit) newLeaf.compactLogs(trie) else newLeaf
         }
 
-        override fun addIfNotPresent(trie: MemoryHashTrie, newIdx: Int, comparator: IntBinaryOperator): Node {
+        override fun addIfNotPresent(trie: MemoryHashTrie, hash: ByteArray, newIdx: Int, comparator: IntUnaryOperator, onAddition: Runnable): Pair<Int, Node?> {
             when (val node = compactLogs(trie)) {
-                is Branch -> return node.addIfNotPresent(trie, newIdx, comparator)
+                is Branch -> return node.addIfNotPresent(trie, hash, newIdx, comparator, onAddition)
                 is Leaf -> {
+                    // TODO could filter on hash as well
                     for (testIdx in node.data) {
-                        if (comparator.applyAsInt(newIdx, testIdx) == 1) {
-                            return node
+                        if (comparator.applyAsInt(testIdx) == 1) {
+                           return Pair(testIdx, null)
                         }
                     }
-                    return node.add(trie, newIdx)
+                    onAddition.run()
+                    return Pair(newIdx, node.add(trie, newIdx))
                 }
             }
         }
@@ -274,6 +286,7 @@ class MemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader) 
                 null -> data
                 else -> data.filter { !deletions!!.contains(it) }.toIntArray()
             }
+            // TODO could filter on hash as well
             for( testIdx in data) {
                 if (comparator.applyAsInt(testIdx) == 1) {
                     if (removeOnMatch) {
