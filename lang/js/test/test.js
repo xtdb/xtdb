@@ -14,7 +14,6 @@ beforeEach (async () => {
     host: process.env.PG_HOST || "localhost",
     port: process.env.PG_PORT || 5439,
     database: uuid.v4().toString(),
-    fetch_types: false, // currently required https://github.com/xtdb/xtdb/issues/3607
     types: {
       bool: {to: 16},
       int: {
@@ -30,8 +29,6 @@ beforeEach (async () => {
       }
     }
   })
-
-  await sql`SELECT 1` // HACK https://github.com/porsager/postgres/issues/751
 })
 
 afterEach(async () => {

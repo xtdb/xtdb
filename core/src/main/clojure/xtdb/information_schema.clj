@@ -62,9 +62,9 @@
   (def ^:private pg-catalog-tables
     '{pg_catalog/pg_tables {schemaname :utf8, tablename :utf8, tableowner :utf8, tablespace :null}
       pg_catalog/pg_type {oid :i32, typname :utf8, typnamespace :i32, typowner :i32
-                          typtype :utf8, typbasetype :i32, typnotnull :bool, typtypmod :i32
+                          typcategory :utf8, typtype :utf8, typbasetype :i32, typnotnull :bool, typtypmod :i32
                           typsend :utf8, typreceive :utf8, typinput :utf8, typoutput :utf8
-                          typrelid :i32, typelem :i32}
+                          typrelid :i32, typelem :i32, typarray :i32}
       pg_catalog/pg_class {oid :i32, relname :utf8, relnamespace :i32, relkind :utf8, relam :i32, relchecks :i32
                            relhasindex :bool, relhasrules :bool, relhastriggers :bool, relrowsecurity :bool
                            relforcerowsecurity :bool, relispartition :bool, reltablespace :i32, reloftype :i32
@@ -229,17 +229,20 @@
      :reltoastrelid (int 0)}))
 
 (defn pg-type []
-  (for [{:keys [oid typname typsend typreceive typelem typinput typoutput]} (vals (dissoc pg-types/pg-types :default :null))]
+  (for [{:keys [oid typname typsend typreceive typelem typinput typoutput] :as typ} (vals (dissoc pg-types/pg-types :default :null))]
     {:oid (int oid)
      :typname typname
      :typnamespace (name->oid "pg_catalog")
      :typowner (name->oid "xtdb")
      :typtype "b"
+     :typcategory (some-> typ :typcategory name first str/upper-case)
      :typbasetype (int 0)
      :typnotnull false
      :typtypmod (int -1)
      :typrelid (int 0) ; zero for non composite types (or pg_class ref for composite types)
      :typelem (int (or typelem 0))
+     :typarray (int (or (some-> typ :typarray pg-types/pg-types :oid)
+                        0))
      :typsend typsend
      :typreceive typreceive
      :typinput (or typinput "")
