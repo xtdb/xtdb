@@ -189,29 +189,41 @@
 
 (deftest test-pg-type
   (xt/submit-tx tu/*node* test-data)
-  (t/is (= (set (for [[oid typname] [
-                                     [114 "json"] [3802 "jsonb"] [16384 "transit"]
-                                     [2950 "uuid"]
-                                     [1043 "varchar"] [25 "text"]
-                                     [16 "boolean"] [21 "int2"] [23 "int4"] [20 "int8"]
-                                     [700 "float4"] [701 "float8"] [1700 "numeric"]
-                                     [1082 "date"] [1083 "time"] [1114 "timestamp"] [1184 "timestamptz"] [3910 "tstz-range"] [1186 "interval"]
-                                     [2205 "regclass"] [24 "regproc"]
-                                     [1007 "_int4"] [1016 "_int8"]
-                                     [17 "bytea"]
-                                     [1009 "_text"]
-                                     [11111 "keyword"]]]
-                  {:typtypmod -1,
-                   :oid oid,
-                   :typtype "b",
-                   :typowner 1376455703,
-                   :typnotnull false,
-                   :typname typname,
-                   :typnamespace 2125819141,
-                   :typbasetype 0}))
-           (set (xt/q tu/*node*
-                      "SELECT oid, typname, typnamespace, typowner, typtype, typbasetype, typnotnull, typtypmod
-                       FROM pg_catalog.pg_type")))))
+
+  (let [results (xt/q tu/*node* "SELECT * FROM pg_catalog.pg_type")]
+    (t/is (= (set (for [[oid typname] [[114 "json"] [3802 "jsonb"] [16384 "transit"]
+                                       [2950 "uuid"]
+                                       [1043 "varchar"] [25 "text"]
+                                       [16 "boolean"] [21 "int2"] [23 "int4"] [20 "int8"]
+                                       [700 "float4"] [701 "float8"] [1700 "numeric"]
+                                       [1082 "date"] [1083 "time"] [1114 "timestamp"] [1184 "timestamptz"] [3910 "tstz-range"] [1186 "interval"]
+                                       [2205 "regclass"] [24 "regproc"]
+                                       [1007 "_int4"] [1016 "_int8"]
+                                       [17 "bytea"]
+                                       [1009 "_text"]
+                                       [11111 "keyword"]]]
+                    {:typtypmod -1,
+                     :oid oid,
+                     :typtype "b",
+                     :typowner 1376455703,
+                     :typnotnull false,
+                     :typname typname,
+                     :typnamespace 2125819141,
+                     :typbasetype 0}))
+             (set (->> results
+                    (map #(select-keys % [:oid :typname :typnamespace :typowner :typtype :typbasetype :typnotnull :typtypmod]))))))
+
+    (t/is (= #{"A" "B" "D" "N" "R" "S" "T" "U"}
+             (->> results (map :typcategory) set)))
+
+    (t/testing "typarray roundtrips through typelem"
+      (let [array-elem-types (filter (comp not zero? :typarray) results)
+            types-by-oid (-> (group-by :oid results)
+                           (update-vals first))]
+        (t/is (seq array-elem-types))
+        (t/is (= (map :oid array-elem-types)
+                 (map #(-> % :typarray types-by-oid :typelem) array-elem-types)))))))
+
 (deftest test-pg-description
   (t/is (= []
            (xt/q tu/*node*
