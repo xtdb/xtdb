@@ -1389,31 +1389,35 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
                            [:sql "INSERT INTO baz (_id, _valid_from, _valid_to) VALUES (5, DATE '2020-01-03', DATE '2020-01-06')"]
                            [:sql "INSERT INTO baz (_id, _valid_from, _valid_to) VALUES (6, DATE '2020-01-01', DATE '2020-01-02')"]])
 
-  (t/is (= [{:foo 2, :bar 4} {:foo 2, :bar 3} {:foo 1, :bar 3}]
-           (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
+  (t/is (= #{{:foo 2, :bar 4} {:foo 2, :bar 3} {:foo 1, :bar 3}}
+           (-> (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
                             SELECT foo._id foo, bar._id bar
                             FROM foo, bar
-                            WHERE OVERLAPS(foo._valid_time, bar._valid_time)")))
+                            WHERE OVERLAPS(foo._valid_time, bar._valid_time)")
+               set)))
 
-  (t/is (= [{:foo 2, :baz 5} {:foo 1, :baz 6}]
-           (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
+  (t/is (= #{{:foo 2, :baz 5} {:foo 1, :baz 6}}
+           (-> (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
                             SELECT foo._id foo, baz._id baz
                             FROM foo, baz
-                            WHERE OVERLAPS(foo._valid_time, baz._valid_time)")))
+                            WHERE OVERLAPS(foo._valid_time, baz._valid_time)")
+               set)))
 
-  (t/is (= [{:bar 4, :baz 5} {:bar 3, :baz 5} {:bar 3, :baz 6}]
-           (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
+  (t/is (= #{{:bar 4, :baz 5} {:bar 3, :baz 5} {:bar 3, :baz 6}}
+           (-> (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
                             SELECT bar._id bar, baz._id baz
                             FROM bar, baz
-                            WHERE OVERLAPS(bar._valid_time, baz._valid_time)")))
+                            WHERE OVERLAPS(bar._valid_time, baz._valid_time)")
+               set)))
 
-  (t/is (= [{:foo 2, :bar 4, :baz 5}
-            {:foo 2, :bar 3, :baz 5}
-            {:foo 1, :bar 3, :baz 6}]
-           (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
+  (t/is (= #{{:foo 2, :bar 4, :baz 5}
+             {:foo 2, :bar 3, :baz 5}
+             {:foo 1, :bar 3, :baz 6}}
+           (-> (xt/q tu/*node* "SETTING DEFAULT VALID_TIME ALL
                             SELECT foo._id foo, bar._id bar, baz._id baz
                             FROM foo, bar, baz
-                            WHERE OVERLAPS(foo._valid_time, bar._valid_time, baz._valid_time)"))))
+                            WHERE OVERLAPS(foo._valid_time, bar._valid_time, baz._valid_time)")
+               set))))
 
 (t/deftest test-dollar-quoted-strings
   (t/is (= "" (sql/plan-expr "$$$$")))
