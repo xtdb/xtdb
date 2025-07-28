@@ -10,7 +10,7 @@
 (t/use-fixtures :each tu/with-node)
 
 (defn- ->worker [node]
-  (into (b/->Worker node (Random. 112) (Clock/systemUTC) (random-uuid) (System/getProperty "user.name"))
+  (into (b/->Worker node (Random. 112) (Clock/systemUTC) (random-uuid) (System/getProperty "user.name") nil)
         (am/->initial-state)))
 
 (deftest generate-user-test

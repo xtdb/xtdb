@@ -15,7 +15,7 @@
             [xtdb.util :as util])
   (:import (com.google.common.collect MinMaxPriorityQueue)
            (io.micrometer.core.instrument Timer)
-           (java.io File)
+           (java.io File Writer)
            (java.lang.management ManagementFactory)
            (java.time Clock Duration InstantSource)
            java.time.Duration
@@ -32,7 +32,7 @@
         (log/error t (str "Error while executing " f))
         (throw t)))))
 
-(defrecord Worker [node random clock bench-id jvm-id])
+(defrecord Worker [node random clock bench-id jvm-id bench-log-wrt])
 
 (defn current-timestamp ^java.time.Instant [worker]
   (.instant ^Clock (:clock worker)))
@@ -141,8 +141,13 @@
                   (.getPhysicalProcessorCount cpu)
                   (double (/ (.getMaxFreq cpu) 1e9)))}))
 
-(defn log-report [{:keys [bench-id jvm-id] :as _worker} report]
-  (println (json/write-str (assoc report :bench-id bench-id :jvm-id jvm-id))))
+(defn log-report [{:keys [bench-id jvm-id ^Writer bench-log-wrt] :as _worker} report]
+  (let [log-record (json/write-str (assoc report :bench-id bench-id :jvm-id jvm-id))]
+    (println log-record)
+    (when bench-log-wrt
+      (binding [*out* bench-log-wrt]
+        (println log-record)
+        (.flush bench-log-wrt)))))
 
 (def ^:dynamic *registry* nil)
 
@@ -273,20 +278,21 @@
 
       (wrap-task task)))
 
-(defn compile-benchmark [{:keys [title seed ->state], :or {seed 0}, :as benchmark}]
+(defn compile-benchmark [{:keys [bench-log-file title seed ->state], :or {seed 0}, :as benchmark}]
   (let [fns (mapv compile-task (:tasks benchmark))]
     (fn run-benchmark [node]
-      (let [worker (into (->Worker node (Random. seed) (Clock/systemUTC) (random-uuid) (System/getProperty "user.name"))
-                         (cond
-                           (vector? ->state) (apply (first ->state) (rest ->state))
-                           (fn? ->state) (->state)))
-            start-ms (System/currentTimeMillis)]
-        (doseq [f fns]
-          (f worker))
+      (util/with-open [bench-log-wrt (when bench-log-file (io/writer bench-log-file))]
+        (let [worker (into (->Worker node (Random. seed) (Clock/systemUTC) (random-uuid) (System/getProperty "user.name") bench-log-wrt)
+                           (cond
+                             (vector? ->state) (apply (first ->state) (rest ->state))
+                             (fn? ->state) (->state)))
+              start-ms (System/currentTimeMillis)]
+          (doseq [f fns]
+            (f worker))
 
-        (log-report worker {:benchmark title
-                            :system (get-system-info)
-                            :time-taken-ms (- (System/currentTimeMillis) start-ms)})))))
+          (log-report worker {:benchmark title
+                              :system (get-system-info)
+                              :time-taken-ms (- (System/currentTimeMillis) start-ms)}))))))
 
 (defn sync-node
   ([node] (sync-node node nil))
@@ -318,8 +324,9 @@
     benchmark-type)
   :default ::default)
 
-(defn run-benchmark [benchmark {:keys [node-dir no-load? config-file]}]
-  (let [benchmark-fn (compile-benchmark benchmark)]
+(defn run-benchmark [benchmark {:keys [node-dir no-load? config-file bench-log-file]}]
+  (let [benchmark-fn (compile-benchmark (-> benchmark
+                                            (assoc :bench-log-file bench-log-file)))]
     (if config-file
       (do
         (log/info "Running node from config file:" config-file)
@@ -358,7 +365,10 @@
     :id :config-file
     :parse-fn io/file
     :validate [if-it-exists "Config file doesn't exist"
-               #(contains? #{"yaml"} (util/file-extension %)) "Config file must be .yaml"]]])
+               #(contains? #{"yaml"} (util/file-extension %)) "Config file must be .yaml"]]
+   [nil "--bench-log-file BENCH_LOG_FILE" "Log file that saves the benchmark results in JSON format"
+    :id :bench-log-file
+    :parse-fn io/file]])
 
 (defn -main [benchmark-type & args]
   (util/install-uncaught-exception-handler!)

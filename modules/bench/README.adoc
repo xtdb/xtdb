@@ -24,6 +24,9 @@ See datasets -> `xtdb.tsbs`.
 
 Add a YourKit snapshot with `-Pyourkit` - you should see a snapshot appear in your snapshot directory (default `~/Snapshots`) when the application shuts down.
 
+
+In case you want to save the JSON benchmark log records to file you can append `-PbenchLogFile=tpch-0.01.log` to the command.
+
 === Running with custom config
 
 You can run the benchmarks with a custom node config by passing `-PconfigFile path/to/config.yaml` to the gradle command.
