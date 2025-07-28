@@ -14,7 +14,6 @@
             [xtdb.logging :as logging]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
-            [xtdb.pgwire :as pgwire]
             [xtdb.pgwire :as pgw]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
@@ -73,7 +72,7 @@
     (f)))
 
 (defn with-server-and-port [f]
-  (let [server (-> tu/*node* :system :xtdb.pgwire/server :read-write)]
+  (let [server (-> tu/*node* :system ::pgw/server :read-write)]
     (binding [*server* server
               *port* (:port server)]
       (f))))
@@ -82,7 +81,7 @@
 
 (defn serve
   (^xtdb.pgwire.Server [] (serve {}))
-  (^xtdb.pgwire.Server [opts] (pgwire/serve tu/*node* (merge {:num-threads 1
+  (^xtdb.pgwire.Server [opts] (pgw/serve tu/*node* (merge {:num-threads 1
                                                               :allocator tu/*allocator*
                                                               :drain-wait 250}
                                                              opts))))
@@ -337,7 +336,7 @@
 
 (deftest server-resources-freed-on-close-test
   (doseq [close-method [#(.close %)]]
-    (with-open [server (pgwire/serve tu/*node* {})]
+    (with-open [server (pgw/serve tu/*node* {})]
       (close-method server)
       (check-server-resources-freed server))))
 
@@ -419,7 +418,7 @@
 (deftest canned-response-test
   ;; quick test for now to confirm canned response mechanism at least doesn't crash!
   ;; this may later be replaced by client driver tests (e.g test sqlalchemy connect & query)
-  (with-redefs [pgwire/canned-responses [{:q "hello!"
+  (with-redefs [pgw/canned-responses [{:q "hello!"
                                           :cols [{:col-name "greet", :pg-type :json}]
                                           :rows (fn [_] [["\"hey!\""]])}]]
     (with-open [conn (jdbc-conn)]
@@ -472,11 +471,11 @@
 ;; (when we introduce read transactions I will probably extend this to short-lived transactions)
 (deftest close-drains-active-extended-queries-before-stopping-test
   (util/with-open [server (serve {:num-threads 10})]
-    (let [parse-sql @#'pgwire/parse-sql
+    (let [parse-sql @#'pgw/parse-sql
           {:keys [!closing?]} server
           latch (CountDownLatch. 10)]
       ;; redefine parse to block when we ping
-      (with-redefs [pgwire/parse-sql
+      (with-redefs [pgw/parse-sql
                     (fn [query]
                       (if-not (str/starts-with? query "select 'ping'")
                         (parse-sql query)
@@ -1280,7 +1279,7 @@
            (q-seq conn ["select oid, typbasetype from pg_type where typname = 'lo'"])))))
 
 (t/deftest test-pg-port
-  (util/with-open [node (xtn/start-node {::pgwire/server {}})]
+  (util/with-open [node (xtn/start-node {::pgw/server {}})]
     (binding [*port* (.getServerPort node)]
       (with-open [conn (jdbc-conn)]
         (t/is (= "ping" (ping conn)))))))
@@ -1816,7 +1815,7 @@
 
 (deftest test-resolve-result-format
   (letfn [(resolve-result-format [fmt type-count]
-            (->> (pgwire/with-result-formats (repeat type-count {}) fmt)
+            (->> (pgw/with-result-formats (repeat type-count {}) fmt)
                  (mapv :result-format)))]
 
     (let [field-count 2]
@@ -1836,7 +1835,7 @@
                (resolve-result-format [:text :binary] field-count))
             "format provided for each field, applies to each by index"))
 
-    (t/is (anomalous? [:incorrect ::pgwire/invalid-result-format nil
+    (t/is (anomalous? [:incorrect ::pgw/invalid-result-format nil
                        {:result-format [:text :binary], :type-count 3}]
                       (resolve-result-format [:text :binary] 3))
           "if more than 1 format is provided and it doesn't match the field count this is invalid")))
@@ -1968,7 +1967,7 @@ ORDER BY t.oid DESC LIMIT 1"
                (jdbc/execute! conn ["SELECT INTERVAL '10:10.123456789' MINUTE TO SECOND(9) i"]))))))
 
 (deftest test-playground
-  (with-open [srv (pgwire/open-playground)]
+  (with-open [srv (pgw/open-playground)]
     (let [{:keys [port]} srv]
       (letfn [(pg-conn [db]
                 {:jdbcUrl (format "jdbc:xtdb://localhost:%d/%s" port db)
