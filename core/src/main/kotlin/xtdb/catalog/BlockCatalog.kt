@@ -7,6 +7,9 @@ import xtdb.api.log.MessageId
 import xtdb.block.proto.Block
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
+import xtdb.database.DatabaseCatalog
+import xtdb.database.proto.DatabaseConfig
+import xtdb.database.proto.databaseConfig
 import xtdb.table.DatabaseName
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
@@ -22,7 +25,11 @@ import kotlin.io.path.extension
 
 private val LOGGER = LoggerFactory.getLogger(BlockCatalog::class.java)
 
-class BlockCatalog(private val dbName: DatabaseName, private val bp: BufferPool) {
+class BlockCatalog(
+    private val dbName: DatabaseName,
+    private val dbCatalog: DatabaseCatalog?,
+    private val bp: BufferPool
+) {
 
     companion object {
         private val blocksPath = "blocks".asPath
@@ -60,6 +67,12 @@ class BlockCatalog(private val dbName: DatabaseName, private val bp: BufferPool)
             }
             this.latestProcessedMsgId = latestProcessedMsgId
             this.tableNames.addAll(tables.map { it.sym.toString() })
+
+            if (dbCatalog != null)
+                databases.addAll(
+                    dbCatalog.databaseNames
+                        .filter { it != "xtdb" }
+                        .map { databaseConfig { this.dbName = it } })
         }
 
         bp.putObject(blocksPath.resolve("b${blockIndex.asLexHex}.binpb"), ByteBuffer.wrap(newBlock.toByteArray()))
@@ -80,6 +93,8 @@ class BlockCatalog(private val dbName: DatabaseName, private val bp: BufferPool)
             ?: latestCompletedTx?.txId
 
     val allTables: List<TableRef> get() = latestBlock?.tableNamesList.orEmpty().map { TableRef.parse(dbName, it) }
+
+    val databases: List<DatabaseConfig> get() = latestBlock?.databasesList.orEmpty()
 
     private fun Path.parseBlockIndex(): Long? =
         Regex("b(\\p{XDigit}+)\\.binpb")

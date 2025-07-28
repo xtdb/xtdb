@@ -1,0 +1,10 @@
+edition = "2023";
+
+package xtdb.database.proto;
+
+option java_multiple_files = true;
+
+message DatabaseConfig {
+    string db_name = 1;
+}
+

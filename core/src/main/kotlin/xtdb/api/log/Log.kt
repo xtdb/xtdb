@@ -6,6 +6,7 @@ import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.database.DatabaseName
+import xtdb.database.proto.databaseConfig
 import xtdb.log.proto.*
 import xtdb.log.proto.LogMessage.MessageCase
 import xtdb.trie.BlockIndex
@@ -106,7 +107,7 @@ interface Log : AutoCloseable {
 
         data class CreateDatabase(val dbName: DatabaseName) : ProtobufMessage() {
             override fun toLogMessage() = logMessage {
-                createDb = createDatabase {
+                createDb = databaseConfig {
                     dbName = this@CreateDatabase.dbName
                 }
             }

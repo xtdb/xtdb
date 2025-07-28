@@ -1,9 +1,13 @@
 (ns xtdb.db-catalog
   (:require [integrant.core :as ig]
+            [xtdb.error :as err]
             [xtdb.util :as util])
-  (:import [java.util HashMap]
+  (:import [java.util HashMap LinkedList]
+           (xtdb.api.log Log)
+           (xtdb.api.storage Storage)
            xtdb.api.Xtdb$Config
-           [xtdb.database Database DatabaseCatalog]))
+           [xtdb.database Database DatabaseCatalog]
+           xtdb.database.proto.DatabaseConfig))
 
 (defmethod ig/init-key ::allocator [_ {{:keys [allocator]} :base, :keys [db-name]}]
   (util/->child-allocator allocator (format "database/%s" db-name)))
@@ -39,7 +43,7 @@
           :indexer (ig/ref :xtdb/indexer)
           :compactor (ig/ref :xtdb/compactor)}})
 
-(defn- db-system [db-name base]
+(defn- db-system [base {:keys [db-name log-conf storage-conf]}]
   (let [^Xtdb$Config conf (get-in base [:config :config])
         indexer-conf (.getIndexer conf)
         opts {:base base, :db-name db-name, :part-idx 0}]
@@ -48,8 +52,8 @@
          :xtdb/table-catalog opts
          :xtdb/trie-catalog opts
          :xtdb.metadata/metadata-manager opts
-         :xtdb/log (assoc opts :factory (.getLog conf))
-         :xtdb/buffer-pool (assoc opts :factory (.getStorage conf))
+         :xtdb/log (assoc opts :factory log-conf)
+         :xtdb/buffer-pool (assoc opts :factory storage-conf)
          :xtdb.indexer/live-index (assoc opts :indexer-conf indexer-conf)
 
          ::for-query opts
@@ -59,9 +63,9 @@
          :xtdb.log/processor (assoc opts :indexer-conf indexer-conf)}
         (doto ig/load-namespaces))))
 
-(defn- open-db [db-name base db-cat]
+(defn- open-db [db-cat base db-config]
   (let [sys (try
-              (-> (db-system db-name (assoc base :db-cat db-cat))
+              (-> (db-system (assoc base :db-cat db-cat) db-config)
                   ig/prep
                   ig/init)
               (catch clojure.lang.ExceptionInfo e
@@ -81,29 +85,49 @@
              (throw t)))
      :sys sys}))
 
+(defn <-DatabaseConfig [^DatabaseConfig db-config]
+  {:db-name (.getDbName db-config)})
+
 (defmethod ig/init-key :xtdb/db-catalog [_ {:keys [base]}]
-  (let [!dbs (HashMap.)
-        db-cat (reify DatabaseCatalog
-                 (getPrimary [this] (first (.databaseOrNull this "xtdb")))
+  (let [!dbs (HashMap.)]
 
-                 (getDatabaseNames [_] (set (keys !dbs)))
+    (util/with-close-on-catch [db-cat (reify DatabaseCatalog
+                                        (getPrimary [this] (first (.databaseOrNull this "xtdb")))
 
-                 (databaseOrNull [_ db-name]
-                   (some->> (.get !dbs db-name)
-                            (mapv :db)))
+                                        (getDatabaseNames [_] (set (keys !dbs)))
 
-                 (createDatabase [this db-name]
-                   (util/with-close-on-catch [db (open-db db-name base this)]
-                     (.put !dbs db-name [db])
-                     [(:db db)]))
+                                        (databaseOrNull [_ db-name]
+                                          (some->> (.get !dbs db-name)
+                                                   (mapv :db)))
 
-                 (close [_]
-                   (doseq [[_ dbs] !dbs
-                           {:keys [sys]} dbs]
-                     (ig/halt! sys))))]
+                                        (createDatabase [this db-name]
+                                          (when (.databaseOrNull this db-name)
+                                            (throw (err/fault ::already-exists (str "Database already exists: " db-name)
+                                                              {:db-name db-name})))
 
-    (.put !dbs "xtdb" [(open-db "xtdb" base db-cat)])
-    db-cat))
+                                          (util/with-close-on-catch [db (open-db this base {:db-name db-name
+                                                                                            :log-conf (Log/getInMemoryLog)
+                                                                                            :storage-conf (Storage/inMemoryStorage)})]
+                                            (:db (.put !dbs db-name [db]))
+                                            [(:db db)]))
+
+                                        (close [_]
+                                          (doseq [[_ dbs] !dbs
+                                                  {:keys [sys]} dbs]
+                                            (ig/halt! sys))))]
+
+      (let [primary-db (let [^Xtdb$Config conf (get-in base [:config :config])]
+                         (open-db db-cat base {:db-name "xtdb"
+                                               :log-conf (.getLog conf)
+                                               :storage-conf (.getStorage conf)}))]
+
+        (.put !dbs "xtdb" [primary-db])
+
+        (doseq [db (.getDatabases (.getBlockCatalog ^Database (:db primary-db)))
+                :let [{:keys [db-name]} (<-DatabaseConfig db)]]
+          (.createDatabase db-cat db-name)))
+
+      db-cat)))
 
 (defmethod ig/halt-key! :xtdb/db-catalog [_ db-cat]
   (util/close db-cat))

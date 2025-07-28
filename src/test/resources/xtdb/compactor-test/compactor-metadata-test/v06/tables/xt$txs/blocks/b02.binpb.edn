@@ -1,13 +1,13 @@
 {:row-count 2,
  :fields
- {"system_time"
-  #xt.arrow/field ["system_time" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
-  "committed"
+ {"committed"
   #xt.arrow/field ["committed" #xt.arrow/field-type [#xt.arrow/type :bool false]],
-  "_id"
-  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]],
   "error"
-  #xt.arrow/field ["error" #xt.arrow/field-type [#xt.arrow/type :transit true]]},
+  #xt.arrow/field ["error" #xt.arrow/field-type [#xt.arrow/type :transit true]],
+  "system_time"
+  #xt.arrow/field ["system_time" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
+  "_id"
+  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]},
  :tries
  [{:trie-key "l00-rc-b00", :data-file-size 2806, :trie-metadata nil}
   {:trie-key "l00-rc-b01", :data-file-size 2806, :trie-metadata nil}

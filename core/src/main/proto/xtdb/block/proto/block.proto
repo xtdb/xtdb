@@ -3,6 +3,7 @@ edition = "2023";
 package xtdb.block.proto;
 
 import "xtdb/log/proto/log.proto";
+import "xtdb/database/proto/db.proto";
 
 option java_multiple_files = true;
 
@@ -23,4 +24,6 @@ message Block {
   TxKey latest_completed_tx = 2;
   int64 latest_processed_msg_id = 4;
   repeated string table_names = 3;
+
+  repeated xtdb.database.proto.DatabaseConfig databases = 5;
 }
