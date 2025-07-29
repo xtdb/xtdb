@@ -36,6 +36,29 @@ This command starts a Postgres wire-compatible endpoint on port 5432.
 
 By default your data will only be stored transiently using a local directory within the Docker container, but you can attach a host volume to preserve your data across container restarts, e.g. by adding `-v /tmp/xtdb-data-dir:/var/lib/xtdb`.
 
+**Running as a non-root user**
+
+The XTDB container runs as a non-root user by default (UID 20000). If you're mounting a host volume (e.g. /tmp/xtdb-data-dir:/var/lib/xtdb), you must ensure the container can write to it:
+
+For Docker, before running the container:
+
+[source,bash]
+----
+sudo chown -R 20000:20000 /tmp/xtdb-data-dir
+----
+
+For Podman, ensure the directory is owned by your user and use `--userns=keep-id`:
+
+[source,bash]
+----
+podman run -it --pull=always \
+  --userns=keep-id \
+  -p 5432:5432 \
+  -p 8080:8080 \
+  -v /tmp/xtdb-data-dir:/var/lib/xtdb \
+  ghcr.io/xtdb/xtdb
+----
+
 After seeing a 'Node started' log message (e.g. `09:00:00 | INFO  xtdb.cli | Node started`) you are able to confirm your XTDB server is running using cURL:
 
 [source,bash]

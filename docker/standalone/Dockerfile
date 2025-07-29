@@ -38,3 +38,9 @@ LABEL org.opencontainers.image.revision=${GIT_SHA}
 
 ADD local_config.yaml local_config.yaml
 ADD build/libs/xtdb-standalone.jar xtdb-standalone.jar
+
+RUN groupadd -g 20000 xtdb && useradd -u 20000 -g 20000 -r xtdb
+RUN mkdir -p /home/xtdb && chown -R xtdb:xtdb /home/xtdb
+RUN chown -R xtdb:xtdb /var/lib/xtdb
+
+USER xtdb
