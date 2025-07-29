@@ -163,7 +163,7 @@
     (let [iid-ptr (ArrowBufPointer. iid-arrow-buf 0 (.capacity iid-arrow-buf))]
       (reify Predicate
         (test [_ path]
-          (zero? (HashTrie/compareToPath iid-ptr path)))))))
+          (zero? (HashTrie/compareToPath iid-ptr path HashTrie/DEFAULT_LEVEL_BITS HashTrie/DEFAULT_LEVEL_MASK)))))))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts

@@ -9,7 +9,7 @@ import xtdb.arrow.VectorReader
 import xtdb.compactor.PageTree
 import xtdb.log.proto.TrieMetadata
 import xtdb.table.TableRef
-import xtdb.trie.HashTrie.Companion.LEVEL_WIDTH
+import xtdb.trie.HashTrie.Companion.DEFAULT_LEVEL_WIDTH
 
 private typealias Selection = IntArray
 
@@ -46,7 +46,7 @@ class TrieWriter(
 
     companion object {
         internal fun Selection.partitionSlices(partIdxs: IntArray) =
-            Array(LEVEL_WIDTH) { partition ->
+            Array(DEFAULT_LEVEL_WIDTH) { partition ->
                 val cur = partIdxs[partition]
                 val nxt = if (partition == partIdxs.lastIndex) size else partIdxs[partition + 1]
 
@@ -57,7 +57,7 @@ class TrieWriter(
             val iidPtr = ArrowBufPointer()
 
             // for each partition, find the starting index in the selection
-            val partIdxs = IntArray(LEVEL_WIDTH) { partition ->
+            val partIdxs = IntArray(DEFAULT_LEVEL_WIDTH) { partition ->
                 var left = 0
                 var right = size
                 var mid: Int
