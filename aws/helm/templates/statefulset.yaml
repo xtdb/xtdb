@@ -25,7 +25,7 @@ spec:
       affinity:
         {{- toYaml .Values.affinity | nindent 8 }}
       securityContext:
-        {{- toYaml .Values.securityContext | nindent 12 }}
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       volumes: 
         - name: "tmp"
           emptyDir: {}
@@ -67,6 +67,8 @@ spec:
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           startupProbe:
             {{- toYaml .Values.startupProbe | nindent 12 }}
           livenessProbe:

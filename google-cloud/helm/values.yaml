@@ -24,13 +24,15 @@ resources:
     memory: "10G"
     ephemeral-storage: 100Gi
 
-securityContext:
+podSecurityContext:
   runAsUser: 20000
   runAsGroup: 20000
   fsGroup: 20000
   runAsNonRoot: true
-  allowPrivilegeEscalation: false
+
+containerSecurityContext:
   readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
   capabilities:
     drop:
       - ALL
