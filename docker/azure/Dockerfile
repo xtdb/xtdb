@@ -37,7 +37,7 @@ ADD azure_config.yaml azure_config.yaml
 ADD azure_config_private_auth.yaml azure_config_private_auth.yaml
 ADD build/libs/xtdb-azure.jar xtdb-azure.jar
 
-RUN groupadd -g 10000 xtdb && useradd -u 10000 -g 10000 -r xtdb
+RUN groupadd -g 20000 xtdb && useradd -u 20000 -g 20000 -r xtdb
 RUN mkdir -p /home/xtdb && chown -R xtdb:xtdb /home/xtdb
 RUN chown -R xtdb:xtdb /var/lib/xtdb
 

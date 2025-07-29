@@ -23,8 +23,10 @@ resources:
     ephemeral-storage: 100Gi
 
 securityContext:
-  runAsUser: 10000
-  runAsGroup: 10000
+  runAsUser: 20000
+  runAsGroup: 20000
+  fsGroup: 20000
+  runAsNonRoot: true
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
   capabilities:
