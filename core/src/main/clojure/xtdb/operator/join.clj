@@ -174,7 +174,7 @@
                                    build-col (.vectorForOrNull build-rel (str build-col-name))
                                    ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
                                (dotimes [build-idx (.getRowCount build-rel)]
-                                 (when (and iid-set (string/includes? (str build-col-name) "iid"))
+                                 (when (and iid-set (= (name build-col-name) "_iid"))
                                    (.add iid-set (.getBytes build-col build-idx)))
                                  (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))))
 
@@ -342,10 +342,12 @@
     (build-phase build-cursor rel-map pushdown-blooms iid-set)
 
     (boolean
-     (or (let [advanced? (boolean-array 1)]
+     (or (let [advanced? (boolean-array 1)
+               probe-iid-keys (filter #(= (name %) "_iid") (.probeKeyColumnNames rel-map))]
            (binding [scan/*column->pushdown-bloom* (cond-> scan/*column->pushdown-bloom*
                                                      (some? pushdown-blooms) (conj (zipmap (.probeKeyColumnNames rel-map) pushdown-blooms)))
-                     scan/*iid-set* iid-set]
+                     scan/*column->iid-set* (cond-> scan/*column->iid-set*
+                                              (some? iid-set) (conj (zipmap probe-iid-keys (repeat iid-set))))] 
              (when-not probe-cursor
                (util/with-close-on-catch [probe-cursor (->probe-cursor)]
                  (set! (.probe-cursor this) probe-cursor)))
