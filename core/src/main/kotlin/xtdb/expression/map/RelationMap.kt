@@ -33,7 +33,8 @@ class RelationMap(
     private val paramTypes: Map<String, Any> = emptyMap(),
     private val args: RelationReader? = null,
     private val withNilRow: Boolean = false,
-    private val pageLimit: Int = 16
+    private val pageLimit: Int = 16,
+    private val level_bits: Int = 2
 ) : AutoCloseable {
 
     private val hashColumn: IntVector
@@ -42,7 +43,7 @@ class RelationMap(
     init {
         hashColumn = IntVector(allocator, "xt/join-hash", false)
         if (withNilRow) hashColumn.writeInt(0)
-        buildHashTrie = MemoryHashTrie.builder(hashColumn.asReader).setPageLimit(pageLimit).build()
+        buildHashTrie = MemoryHashTrie.builder(hashColumn.asReader).setPageLimit(pageLimit).setLevelBits(level_bits).build()
     }
 
 

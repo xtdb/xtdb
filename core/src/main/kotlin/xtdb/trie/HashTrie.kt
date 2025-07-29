@@ -23,6 +23,10 @@ interface HashTrie<N : Node<N>, L : N> {
 
     val leaves get() = rootNode?.leaves ?: emptyList()
 
+    val LEVEL_BITS: Int
+    val LEVEL_WIDTH: Int
+    val LEVEL_MASK: Int
+
     interface Node<N : Node<N>> {
         val path: ByteArray
 
@@ -37,45 +41,57 @@ interface HashTrie<N : Node<N>, L : N> {
         val leaves: List<Node<N>> get() = leafStream().toList()
     }
 
+    fun bucketFor(byteArray: ByteArray, level: Int): Byte = bucketFor(byteArray, level, LEVEL_BITS, LEVEL_MASK)
+    fun bucketFor(pointer: ArrowBufPointer, level: Int): Byte = bucketFor(pointer, level, LEVEL_BITS, LEVEL_MASK)
+    fun compareToPath(pointer: ArrowBufPointer, path: ByteArray): Int = compareToPath(pointer, path, LEVEL_BITS, LEVEL_MASK)
+
     @Suppress("MemberVisibilityCanBePrivate")
     companion object {
 
-        const val LEVEL_BITS: Int = 2
-        const val LEVEL_WIDTH: Int = 1 shl LEVEL_BITS
-        const val LEVEL_MASK: Int = LEVEL_WIDTH - 1
+        const val DEFAULT_LEVEL_BITS: Int = 2
+        const val DEFAULT_LEVEL_WIDTH: Int = 1 shl DEFAULT_LEVEL_BITS
+        const val DEFAULT_LEVEL_MASK: Int = DEFAULT_LEVEL_WIDTH - 1
 
         @JvmStatic
-        fun bucketFor(byteArray: ByteArray, level: Int): Byte {
-            assert(level * LEVEL_BITS < byteArray.size * java.lang.Byte.SIZE)
-            val bitIdx = level * LEVEL_BITS
+        fun bucketFor(byteArray: ByteArray, level: Int, levelBits: Int = DEFAULT_LEVEL_BITS, levelMask: Int = DEFAULT_LEVEL_MASK): Byte {
+            assert(level * levelBits < byteArray.size * java.lang.Byte.SIZE)
+            val bitIdx = level * levelBits
             val byteIdx = bitIdx / java.lang.Byte.SIZE
             val bitOffset = bitIdx % java.lang.Byte.SIZE
 
             val b = byteArray.get(byteIdx)
-            return ((b.toInt() ushr ((java.lang.Byte.SIZE - LEVEL_BITS) - bitOffset)) and LEVEL_MASK).toByte()
+            return ((b.toInt() ushr ((java.lang.Byte.SIZE - levelBits) - bitOffset)) and levelMask).toByte()
         }
 
         @JvmStatic
-        fun bucketFor(pointer: ArrowBufPointer, level: Int): Byte {
-            assert(level * LEVEL_BITS < pointer.length * java.lang.Byte.SIZE)
-            val bitIdx = level * LEVEL_BITS
+        fun bucketFor(pointer: ArrowBufPointer, level: Int, levelBits: Int = DEFAULT_LEVEL_BITS, levelMask: Int = DEFAULT_LEVEL_MASK): Byte {
+            assert(level * levelBits < pointer.length * java.lang.Byte.SIZE)
+            val bitIdx = level * levelBits
             val byteIdx = bitIdx / java.lang.Byte.SIZE
             val bitOffset = bitIdx % java.lang.Byte.SIZE
 
             val b = pointer.buf!!.getByte(pointer.offset + byteIdx)
-            return ((b.toInt() ushr ((java.lang.Byte.SIZE - LEVEL_BITS) - bitOffset)) and LEVEL_MASK).toByte()
+            return ((b.toInt() ushr ((java.lang.Byte.SIZE - levelBits) - bitOffset)) and levelMask).toByte()
         }
 
         @JvmStatic
-        fun compareToPath(pointer: ArrowBufPointer, path: ByteArray): Int {
+        fun compareToPath(pointer: ArrowBufPointer, path: ByteArray, levelBits: Int = DEFAULT_LEVEL_BITS, levelMask: Int = DEFAULT_LEVEL_MASK): Int {
             for (level in path.indices) {
-                val cmp = bucketFor(pointer, level).toInt() compareTo (path[level].toInt())
+                val cmp = bucketFor(pointer, level, levelBits, levelMask).toInt() compareTo (path[level].toInt())
                 if (cmp != 0) return cmp
             }
 
             return 0
         }
     }
+}
+
+abstract class BaseHashTrie<N : Node<N>, L : N>(
+    final override val LEVEL_BITS: Int = HashTrie.DEFAULT_LEVEL_BITS
+) : HashTrie<N, L> {
+
+    final override val LEVEL_WIDTH : Int = 1 shl LEVEL_BITS
+    final override val LEVEL_MASK: Int = LEVEL_WIDTH -1
 }
 
 interface ISegment<N : Node<N>, L : N> {
@@ -105,6 +121,7 @@ fun List<ISegment<*, *>>.toMergePlan(
 ): List<MergePlanTask> {
     val result = mutableListOf<MergePlanTask>()
     val stack = ObjectStack<MergePlanTask>()
+//    val levelWidth = this.first().trie.LEVEL_WIDTH
 
     val initialMpNodes = mapNotNull { seg -> seg.trie.rootNode?.let { MergePlanNode.create(seg, it) } }
     if (initialMpNodes.isNotEmpty()) stack.push(MergePlanTask(initialMpNodes, ByteArray(0)))
@@ -119,7 +136,7 @@ fun List<ISegment<*, *>>.toMergePlan(
             mpNodes.any { it.node is IidBranch || it.node is MemoryHashTrie.Branch } -> {
                 val nodeChildren = mpNodes.map { it.node.hashChildren }
                 // do these in reverse order so that they're on the stack in path-prefix order
-                for (bucketIdx in HashTrie.LEVEL_WIDTH - 1 downTo 0) {
+                for (bucketIdx in HashTrie.DEFAULT_LEVEL_WIDTH - 1 downTo 0) {
                     val newMpNodes = nodeChildren.mapIndexedNotNull { idx, children ->
                         if (children != null) {
                             children[bucketIdx]?.let { MergePlanNode.create(mpNodes[idx].segment, it) }

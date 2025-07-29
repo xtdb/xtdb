@@ -8,7 +8,7 @@ private const val LEAF = "leaf"
 private const val DATA_PAGE_IDX = "data-page-idx"
 
 class ArrowHashTrie(private val nodesVec: Vector) :
-    HashTrie<ArrowHashTrie.Node, ArrowHashTrie.Leaf> {
+    BaseHashTrie<ArrowHashTrie.Node, ArrowHashTrie.Leaf>() {
 
     private val iidBranchVec = nodesVec[BRANCH_IID]
     private val iidBranchElVec = iidBranchVec.listElements

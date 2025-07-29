@@ -83,12 +83,12 @@
                           (.setSafe 0 (util/uuid->bytes uuid1))
                           (.setValueCount 1))]
       (t/is (= [3 0 3 2 0 3 0 3 3 2 1 0 2 3 2 0]
-               (for [x (range 16)]
-                 (HashTrie/bucketFor (.getDataPointer iid-vec 0) x))))
+               (for [^int x (range 16)]
+                 (HashTrie/bucketFor (.getDataPointer iid-vec 0) x HashTrie/DEFAULT_LEVEL_BITS HashTrie/DEFAULT_LEVEL_MASK))))
 
-      (t/is (= 3 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 18)))
-      (t/is (= 0 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 30)))
-      (t/is (= 3 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 63))))))
+      (t/is (= 3 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 18 HashTrie/DEFAULT_LEVEL_BITS HashTrie/DEFAULT_LEVEL_MASK)))
+      (t/is (= 0 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 30 HashTrie/DEFAULT_LEVEL_BITS HashTrie/DEFAULT_LEVEL_MASK)))
+      (t/is (= 3 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 63 HashTrie/DEFAULT_LEVEL_BITS HashTrie/DEFAULT_LEVEL_MASK))))))
 
 (def txs
   [[[:put-docs :hello {:xt/id #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d" :a 1}]
