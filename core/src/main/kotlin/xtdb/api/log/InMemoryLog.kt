@@ -26,7 +26,7 @@ class InMemoryLog(private val instantSource: InstantSource, override val epoch: 
         fun instantSource(instantSource: InstantSource) = apply { this.instantSource = instantSource }
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
 
-        override fun openLog() = InMemoryLog(instantSource, epoch)
+        override fun openLog(clusters: Map<LogClusterAlias, Cluster>) = InMemoryLog(instantSource, epoch)
     }
 
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)

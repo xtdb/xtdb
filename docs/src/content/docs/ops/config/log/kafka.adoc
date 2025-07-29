@@ -39,15 +39,40 @@ To use the Kafka module, include the following in your node configuration:
 
 [source,yaml]
 ----
+# We first declare the Kafka log cluster:
+
+logClusters:
+  # You can define multiple Kafka clusters here, and refer to them by name in the log configuration.
+  # Here we define a single Kafka cluster named "kafkaCluster".
+  kafkaCluster: !Kafka
+    # -- required
+
+    # A comma-separated list of host:port pairs to use for establishing the
+    # initial connection to the Kafka cluster.
+    # (Can be set as an !Env value)
+    bootstrapServers: "localhost:9092"
+
+    # -- optional
+    # The maximum time to block waiting for records to be returned by the Kafka consumer.
+    # pollDuration: "PT1S"
+
+    # Path to a Java properties file containing Kafka connection properties,
+    # supplied directly to the Kafka client.
+    # (Can be set as an !Env value)
+    # propertiesFile: "kafka.properties"
+
+    # A map of Kafka connection properties, supplied directly to the Kafka client.
+    # propertiesMap:
+
+# We then create a log using the Kafka cluster we just defined:
+
 log: !Kafka
   # -- required
 
-  # A comma-separated list of host:port pairs to use for establishing the
-  # initial connection to the Kafka cluster.
-  # (Can be set as an !Env value)
-  bootstrapServers: "localhost:9092"
+  # The name of the Kafka cluster to use for the primary log.
+  cluster: kafkaCluster
 
-  # Name of the Kafka topic to use for the log.
+  # Name of the Kafka topic to use for the primary log.
   # (Can be set as an !Env value)
   topic: "xtdb-log"
 
@@ -55,17 +80,6 @@ log: !Kafka
 
   # Whether or not to automatically create the topic, if it does not already exist.
   # autoCreateTopic: true
-
-  # The maximum time to block waiting for records to be returned by the Kafka consumer.
-  # pollDuration: "PT1S"
-
-  # Path to a Java properties file containing Kafka connection properties,
-  # supplied directly to the Kafka client.
-  # (Can be set as an !Env value)
-  # propertiesFile: "kafka.properties"
-
-  # A map of Kafka connection properties, supplied directly to the Kafka client.
-  # propertiesMap:
 ----
 
 [#auth_example]
@@ -79,14 +93,17 @@ The following piece of node configuration demonstrates the following common use 
 
 [source,yaml]
 ----
+logClusters:
+  kafkaCluster: !Kafka
+    bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+    propertiesMap:
+      sasl.mechanism: PLAIN
+      security.protocol: SASL_SSL
+      sasl.jaas.config: !Env KAFKA_SASL_JAAS_CONFIG
+
 log: !Kafka
-  bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
   topic: !Env XTDB_LOG_TOPIC
   autoCreateTopic: false
-  propertiesMap:
-    sasl.mechanism: PLAIN
-    security.protocol: SASL_SSL
-    sasl.jaas.config: !Env KAFKA_SASL_JAAS_CONFIG
 ----
 
 The `KAFKA_SASL_JAAS_CONFIG` environment variable will likely contain a string similar to the following, and should be passed in as a secret value:

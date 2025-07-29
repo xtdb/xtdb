@@ -276,6 +276,7 @@
          :xtdb.query/query-source {}
          :xtdb/compactor (.getCompactor opts)
          :xtdb.metrics/registry {}
+         :xtdb.log/clusters (.getLogClusters opts)
          :xtdb/db-catalog {}
          :xtdb/authn {:authn-factory (.getAuthn opts)}
          :xtdb.cache/memory (.getMemoryCache opts)

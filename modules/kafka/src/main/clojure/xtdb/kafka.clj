@@ -4,18 +4,19 @@
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import [xtdb.api Xtdb$Config]
-           [xtdb.api.log KafkaLog]))
+           [xtdb.api.log KafkaCluster$ClusterFactory KafkaCluster$LogFactory]))
+
+(defmethod xtn/apply-config! ::cluster
+  [^Xtdb$Config config _ [cluster-alias {:keys [bootstrap-servers poll-duration properties-map properties-file]}]]
+  (doto config
+    (.logCluster (str (symbol cluster-alias))
+                 (cond-> (KafkaCluster$ClusterFactory. bootstrap-servers)
+                   poll-duration (.pollDuration (time/->duration poll-duration))
+                   properties-map (.propertiesMap properties-map)
+                   properties-file (.propertiesFile (util/->path properties-file))))))
 
 (defmethod xtn/apply-config! ::log
-  [^Xtdb$Config config _ {:keys [bootstrap-servers
-                                 topic create-topic?
-                                 poll-duration
-                                 properties-map properties-file
-                                 epoch]}]
+  [^Xtdb$Config config _ {:keys [cluster topic epoch] :as opts}]
   (doto config
-    (.setLog (cond-> (KafkaLog/kafka bootstrap-servers topic)
-               create-topic? (.autoCreateTopic create-topic?)
-               poll-duration (.pollDuration (time/->duration poll-duration))
-               properties-map (.propertiesMap properties-map)
-               properties-file (.propertiesFile (util/->path properties-file))
+    (.setLog (cond-> (KafkaCluster$LogFactory. (str (symbol cluster)) topic (boolean (:create-topic? opts true)))
                epoch (.epoch epoch)))))

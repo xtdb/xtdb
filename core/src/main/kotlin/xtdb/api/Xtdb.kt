@@ -9,6 +9,7 @@ import xtdb.ZoneIdSerde
 import xtdb.api.Authenticator.Factory.UserTable
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Companion.inMemoryLog
+import xtdb.api.log.LogClusterAlias
 import xtdb.api.metrics.HealthzConfig
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage
@@ -37,6 +38,7 @@ interface Xtdb : DataSource, AutoCloseable {
     @Serializable
     data class Config(
         var server: ServerConfig? = ServerConfig(),
+        var logClusters: Map<LogClusterAlias, Log.Cluster.Factory<*>> = emptyMap(),
         var log: Log.Factory = inMemoryLog,
         var storage: Storage.Factory = inMemoryStorage(),
         val memoryCache: MemoryCache.Factory = MemoryCache.Factory(),
@@ -51,7 +53,13 @@ interface Xtdb : DataSource, AutoCloseable {
     ) {
         private val modules: MutableList<XtdbModule.Factory> = mutableListOf()
 
+        fun logClusters(clusters: Map<LogClusterAlias, Log.Cluster.Factory<*>>) = apply { logClusters += clusters }
+
+        fun logCluster(alias: LogClusterAlias, cluster: Log.Cluster.Factory<*>) =
+            apply { logClusters += alias to cluster }
+
         fun log(log: Log.Factory) = apply { this.log = log }
+
         fun storage(storage: Storage.Factory) = apply { this.storage = storage }
 
         fun diskCache(diskCache: DiskCache.Factory?) = apply { this.diskCache = diskCache }

@@ -17,7 +17,16 @@ typealias LogOffset = Long
 typealias LogTimestamp = Instant
 typealias MessageId = Long
 
+typealias LogClusterAlias = String
+
 interface Log : AutoCloseable {
+
+    interface Cluster : AutoCloseable {
+
+        interface Factory<C : Cluster> {
+            fun open(): C
+        }
+    }
     companion object {
         @JvmStatic
         val inMemoryLog get() = InMemoryLog.Factory()
@@ -102,7 +111,7 @@ interface Log : AutoCloseable {
     }
 
     interface Factory {
-        fun openLog(): Log
+        fun openLog(clusters: Map<LogClusterAlias, Cluster>): Log
     }
 
     /*

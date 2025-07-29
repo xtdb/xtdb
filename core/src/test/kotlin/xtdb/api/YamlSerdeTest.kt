@@ -10,7 +10,7 @@ import xtdb.api.Authenticator.Factory.UserTable
 import xtdb.api.Authenticator.Method.PASSWORD
 import xtdb.api.Authenticator.Method.TRUST
 import xtdb.api.Authenticator.MethodRule
-import xtdb.api.log.KafkaLog
+import xtdb.api.log.KafkaCluster
 import xtdb.api.log.LocalLog.Factory
 import xtdb.api.log.Log.Companion.inMemoryLog
 import xtdb.api.module.XtdbModule
@@ -103,14 +103,23 @@ class YamlSerdeTest {
         assertEquals(Factory(path = Paths.get("test-path")), nodeConfig(localConfig).log)
 
         val kafkaConfig = """
-        log: !Kafka
-            bootstrapServers: localhost:9092
+          logClusters:
+            kafkaCluster: !Kafka
+              bootstrapServers: "localhost:9092"
+
+          log: !Kafka
+            cluster: kafkaCluster
             topic: xtdb_topic
             
         """.trimIndent()
 
         assertEquals(
-            KafkaLog.Factory(bootstrapServers = "localhost:9092", topic = "xtdb_topic"),
+            KafkaCluster.ClusterFactory(bootstrapServers = "localhost:9092"),
+            nodeConfig(kafkaConfig).logClusters["kafkaCluster"]
+        )
+
+        assertEquals(
+            KafkaCluster.LogFactory("kafkaCluster", "xtdb_topic"),
             nodeConfig(kafkaConfig).log
         )
     }
@@ -294,26 +303,29 @@ class YamlSerdeTest {
         every { EnvironmentVariableProvider.getEnvVariable("KAFKA_SASL_JAAS_CONFIG") } returns saslConfig
 
         val inputWithEnv = """
-        log: !Kafka
-            bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
-            topic: xtdb_topic
-            propertiesMap:
-                security.protocol: SASL_SSL
-                sasl.mechanism: PLAIN
-                sasl.jaas.config: !Env KAFKA_SASL_JAAS_CONFIG
+            logClusters:
+              kafkaCluster: !Kafka
+                bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+                propertiesMap:
+                    security.protocol: SASL_SSL
+                    sasl.mechanism: PLAIN
+                    sasl.jaas.config: !Env KAFKA_SASL_JAAS_CONFIG
+
+            log: !Kafka
+                cluster: kafkaCluster
+                topic: xtdb_topic
         """.trimIndent()
 
         assertEquals(
-            KafkaLog.Factory(
+            KafkaCluster.ClusterFactory(
                 bootstrapServers = "localhost:9092",
-                topic = "xtdb_topic",
                 propertiesMap = mapOf(
                     "security.protocol" to "SASL_SSL",
                     "sasl.mechanism" to "PLAIN",
                     "sasl.jaas.config" to saslConfig
                 )
             ),
-            nodeConfig(inputWithEnv).log
+            nodeConfig(inputWithEnv).logClusters["kafkaCluster"]
         )
 
         unmockkObject(EnvironmentVariableProvider)

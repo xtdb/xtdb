@@ -180,6 +180,13 @@ val YAML_SERDE = Yaml(
                         polymorphic(Log.Factory::class) { subclass(factory, serializer) }
                     }
 
+                    override fun <F : Log.Cluster.Factory<*>> registerLogClusterFactory(
+                        factory: KClass<F>,
+                        serializer: KSerializer<F>
+                    ) {
+                        polymorphic(Log.Cluster.Factory::class) { subclass(factory, serializer) }
+                    }
+
                     override fun <F : ObjectStore.Factory> registerObjectStore(
                         factory: KClass<F>,
                         serializer: KSerializer<F>,

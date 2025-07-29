@@ -277,6 +277,6 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource, overrid
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
         fun useInstantSourceForNonTx() = apply { this.useInstantSourceForNonTx = true}
 
-        override fun openLog() = LocalLog(path, instantSource, epoch, useInstantSourceForNonTx)
+        override fun openLog(clusters: Map<LogClusterAlias, Cluster>) = LocalLog(path, instantSource, epoch, useInstantSourceForNonTx)
     }
 }

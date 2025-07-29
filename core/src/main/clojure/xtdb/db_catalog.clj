@@ -36,6 +36,7 @@
           :mem-cache (ig/ref :xtdb.cache/memory)
           :disk-cache (ig/ref :xtdb.cache/disk)
           :meter-registry (ig/ref :xtdb.metrics/registry)
+          :log-clusters (ig/ref :xtdb.log/clusters)
           :indexer (ig/ref :xtdb/indexer)
           :compactor (ig/ref :xtdb/compactor)}})
 

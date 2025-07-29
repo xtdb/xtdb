@@ -2,13 +2,17 @@ server:
   host: '*'
   port: 5432
 
+logClusters:
+  kafkaCluster: !Kafka
+    bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+    propertiesMap:
+      sasl.mechanism: !Env KAFKA_SASL_MECHANISM
+      security.protocol: !Env KAFKA_SECURITY_PROTOCOL
+      sasl.jaas.config: !Env KAFKA_SASL_JAAS_CONFIG
+
 log: !Kafka
-  bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+  cluster: kafkaCluster
   topic: !Env XTDB_LOG_TOPIC
-  propertiesMap:
-    sasl.mechanism: !Env KAFKA_SASL_MECHANISM
-    security.protocol: !Env KAFKA_SECURITY_PROTOCOL
-    sasl.jaas.config: !Env KAFKA_SASL_JAAS_CONFIG
 
 storage: !Remote
   objectStore: !Azure

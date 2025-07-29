@@ -1,8 +1,12 @@
 healthz:
   port: 8080
 
+logClusters:
+  kafkaCluster: !Kafka
+    bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+
 log: !Kafka
-  bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+  cluster: kafkaCluster
   topic: !Env XTDB_LOG_TOPIC
 
 storage: !Remote

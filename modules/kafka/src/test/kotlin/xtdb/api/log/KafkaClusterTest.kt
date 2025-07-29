@@ -11,9 +11,7 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.kafka.ConfluentKafkaContainer
-import xtdb.api.log.Log.Message
-import xtdb.api.log.Log.Record
-import xtdb.api.log.Log.Subscriber
+import xtdb.api.log.Log.*
 import xtdb.api.storage.Storage
 import xtdb.log.proto.TrieDetails
 import java.nio.ByteBuffer
@@ -22,7 +20,7 @@ import java.util.Collections.synchronizedList
 import kotlin.time.Duration.Companion.seconds
 
 @Tag("integration")
-class KafkaLogTest {
+class KafkaClusterTest {
     companion object {
         private val container = ConfluentKafkaContainer("confluentinc/cp-kafka:7.8.0")
 
@@ -56,19 +54,23 @@ class KafkaLogTest {
 
         val addedTrieDetails = listOf(trieDetails("foo", 12), trieDetails("bar", 18))
 
-        KafkaLog.kafka(container.bootstrapServers, "test-topic")
+        KafkaCluster.ClusterFactory(container.bootstrapServers)
             .pollDuration(Duration.ofMillis(100))
-            .openLog().use { log ->
-                log.subscribe(subscriber, 0).use { _ ->
-                    val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip()
-                    log.appendMessage(Message.Tx(txPayload)).await()
+            .open().use { cluster ->
+                KafkaCluster.LogFactory("my-cluster", "test-topic")
+                    .openLog(mapOf("my-cluster" to cluster))
+                    .use { log ->
+                        log.subscribe(subscriber, 0).use { _ ->
+                            val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip()
+                            log.appendMessage(Message.Tx(txPayload)).await()
 
-                    log.appendMessage(Message.FlushBlock(12)).await()
+                            log.appendMessage(Message.FlushBlock(12)).await()
 
-                    log.appendMessage(Message.TriesAdded(Storage.VERSION, addedTrieDetails)).await()
+                            log.appendMessage(Message.TriesAdded(Storage.VERSION, addedTrieDetails)).await()
 
-                    while (msgs.flatten().size < 3) delay(100)
-                }
+                            while (msgs.flatten().size < 3) delay(100)
+                        }
+                    }
             }
 
         assertEquals(3, msgs.flatten().size)

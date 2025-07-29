@@ -30,6 +30,9 @@
                          (instance? ZoneId default-tz) default-tz
                          (string? default-tz) (ZoneId/of default-tz)))))
 
+(defmethod apply-config! :log-clusters [config _ opts]
+  (apply-config! config :xtdb.log/clusters opts))
+
 (defmethod apply-config! :log [config _ opts]
   (apply-config! config :xtdb/log opts))
 

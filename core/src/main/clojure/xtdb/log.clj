@@ -22,7 +22,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api IndexerConfig TransactionKey Xtdb$Config)
-           (xtdb.api.log Log Log$Factory Log$Message$Tx Log$MessageMetadata)
+           (xtdb.api.log Log Log$Cluster$Factory Log$Factory Log$Message$Tx Log$MessageMetadata)
            (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
@@ -231,6 +231,23 @@
 
       (.getAsArrowStream rel))))
 
+(defmethod xtn/apply-config! ::clusters [^Xtdb$Config config _ clusters]
+  (doseq [[cluster-alias [tag opts]] clusters]
+    (xtn/apply-config! config
+                       (case tag
+                         :kafka :xtdb.kafka/cluster
+                         tag)
+                       [cluster-alias opts]))
+  config)
+
+(defmethod ig/init-key ::clusters [_ clusters]
+  (util/with-close-on-catch [!clusters (HashMap.)]
+    (doseq [[cluster-alias ^Log$Cluster$Factory factory] clusters]
+      (.put !clusters
+            (str (symbol cluster-alias))
+            (.open factory)))
+    (into {} !clusters)))
+
 (defmethod xtn/apply-config! ::memory-log [^Xtdb$Config config _ {:keys [instant-src epoch]}]
   (doto config
     (.setLog (cond-> (Log/getInMemoryLog)
@@ -250,11 +267,13 @@
                      (case tag
                        :in-memory ::memory-log
                        :local ::local-directory-log
-                       :kafka :xtdb.kafka/log)
+                       :kafka :xtdb.kafka/log
+                       tag)
                      opts))
 
-(defmethod ig/prep-key :xtdb/log [_ {:keys [factory]}]
-  {:block-cat (ig/ref :xtdb/block-catalog)
+(defmethod ig/prep-key :xtdb/log [_ {:keys [base factory]}]
+  {:base base
+   :block-cat (ig/ref :xtdb/block-catalog)
    :factory factory})
 
 (def out-of-sync-log-message
@@ -282,8 +301,9 @@
           (throw (->out-of-sync-exception latest-completed-offset latest-submitted-offset epoch)))
         (log/info "Starting node with a log that has a different epoch than the latest completed tx (This is expected if you are starting a new epoch) - Skipping offset validation.")))))
 
-(defmethod ig/init-key :xtdb/log [_ {:keys [^BlockCatalog block-cat, ^Log$Factory factory]}]
-  (doto (.openLog factory)
+(defmethod ig/init-key :xtdb/log [_ {:keys [^BlockCatalog block-cat, ^Log$Factory factory]
+                                     {:keys [log-clusters]} :base}]
+  (doto (.openLog factory log-clusters)
     (validate-offsets (.getLatestCompletedTx block-cat))))
 
 (defmethod ig/halt-key! :xtdb/log [_ ^Log log]

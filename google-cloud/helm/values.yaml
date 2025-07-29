@@ -65,9 +65,13 @@ xtdbConfig:
       host: '*'
       port: 5432
 
+    logClusters:
+      kafkaCluster: !Kafka
+        bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+
     log: !Kafka
-      bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
-      topic: !Env KAFKA_LOG_TOPIC
+      cluster: kafkaCluster
+      topic: !Env XTDB_LOG_TOPIC
 
     storage: !Remote
       objectStore: !GoogleCloud
