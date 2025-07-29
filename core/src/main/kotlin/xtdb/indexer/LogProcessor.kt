@@ -197,6 +197,10 @@ class LogProcessor(
                         dbCatalog.createDatabase(msg.dbName)
                         null
                     }
+                    is Message.DropDatabase -> {
+                        dbCatalog.dropDatabase(msg.dbName)
+                        null
+                    }
                 }
                 latestProcessedMsgId = msgId
                 watchers.notify(msgId, res)

@@ -12,7 +12,8 @@
   (^xtdb.query.PreparedQuery prepare-xtql [node query query-opts])
   (^xtdb.query.PreparedQuery prepare-ra [node ra-plan query-opts])
 
-  (^void create-db! [node db-name]))
+  (^void create-db! [node db-name])
+  (^void drop-db! [node db-name]))
 
 (defprotocol PStatus
   (latest-submitted-tx-ids [node])

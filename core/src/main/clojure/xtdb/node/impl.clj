@@ -168,7 +168,11 @@
 
   xtp/PLocalNode
   (prepare-sql [this query {:keys [default-db] :as query-opts}]
-    (let [^Database db (first (.databaseOrNull db-cat default-db))
+    ;; TODO this doesn't stop the database from being dropped afterwards,
+    ;; which will cause all sorts of use-after-frees
+    (let [^Database db (or (first (.databaseOrNull db-cat default-db))
+                           (throw (err/incorrect :xtdb.database/not-found (format "Database '%s' does not exist" default-db)
+                                                 {:db-name default-db})))
           ast (cond
                 (instance? Sql$DirectlyExecutableStatementContext query) query
                 (string? query) (antlr/parse-statement query)
@@ -202,6 +206,9 @@
 
   (create-db! [this db-name]
     (xt-log/create-db! this db-name))
+
+  (drop-db! [this db-name]
+    (xt-log/drop-db! this db-name))
 
   Closeable
   (close [_]

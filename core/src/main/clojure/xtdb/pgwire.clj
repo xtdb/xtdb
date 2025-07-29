@@ -291,19 +291,25 @@
         (doto (pgio/cmd-write-msg pgio/msg-backend-key-data {:process-id (:cid conn), :secret-key 0}))
         (doto (cmd-send-ready)))))
 
+(defn- node->db [node db-name]
+  (let [db-cat (db/<-node node)]
+    (first (or (.databaseOrNull db-cat db-name)
+               (throw (err-invalid-catalog db-name))))))
+
 (defn cmd-startup-pg30 [{:keys [frontend server] :as conn} startup-opts]
   (let [{:keys [node playground?]} server
         db-name (get startup-opts "database")
         db-cat (db/<-node node)
-        db (first (or (.databaseOrNull db-cat db-name)
-                      (when playground?
-                        (log/debug "creating playground database" (pr-str db-name))
-                        (.createDatabase db-cat db-name))
-                      (throw (err-invalid-catalog db-name))))
 
         user (get startup-opts "user")
-        conn (assoc conn :node node, :default-db db-name, :db db)
+        conn (assoc conn :node node, :default-db db-name)
         authn (authn/<-node node)]
+
+    (when-not (first (or (.databaseOrNull db-cat db-name)
+                         (when playground?
+                           (log/debug "creating playground database" (pr-str db-name))
+                           (.createDatabase db-cat db-name))))
+      (throw (err-invalid-catalog db-name)))
 
     (condp = (.methodFor authn user (pgio/host-address frontend))
       #xt.authn/method :trust
@@ -441,7 +447,7 @@
 
     :else (throw (pgio/err-protocol-violation (format "invalid timezone '%s'" (str tz))))))
 
-(defn cmd-begin [{:keys [node conn-state db]} tx-opts {:keys [args]}]
+(defn cmd-begin [{:keys [node conn-state default-db]} tx-opts {:keys [args]}]
   (swap! conn-state
          (fn [{:keys [session await-token] :as st}]
            (let [await-token (if-let [[_ tok] (find tx-opts :await-token)]
@@ -450,7 +456,7 @@
                  {:keys [^Clock clock]} session]
 
              (when-not (= :read-write (:access-mode tx-opts))
-               (xt-log/await-db db await-token #xt/duration "PT30S"))
+               (xt-log/await-db (node->db node default-db) await-token #xt/duration "PT30S"))
 
              (-> st
                  (update :transaction
@@ -778,6 +784,8 @@
 
                                         (visitCreateDatabaseStatement [_ ctx]
                                           {:statement-type :create-db, :db-name (sql/identifier-sym (.dbName ctx))})
+                                        (visitDropDatabaseStatement [_ ctx]
+                                          {:statement-type :drop-db, :db-name (sql/identifier-sym (.dbName ctx))})
 
                                         (visitShowVariableStatement [_ ctx]
                                           {:statement-type :query, :query sql, :parsed-query ctx})
@@ -1221,13 +1229,21 @@
       (inc-error-counter! query-error-counter)
       (throw e))))
 
-(defn- cmd-create-db [{:keys [node db default-db]} {:keys [db-name]}]
+(defn- cmd-create-db [{:keys [node default-db]} {:keys [db-name]}]
   (when-not (= "xtdb" default-db)
-    (throw (err/incorrect ::invalid-db "CREATE DATABASE is only allowed on the primary database 'xtdb'"
+    (throw (err/incorrect ::invalid-db "CREATE DATABASE is only allowed from the primary database 'xtdb'"
                           {:db default-db})))
 
   (xtp/create-db! node db-name)
-  (xt-log/await-db db (xtp/await-token node) #xt/duration "PT30S"))
+  (xt-log/await-db (node->db node default-db) (xtp/await-token node) #xt/duration "PT30S"))
+
+(defn- cmd-drop-db [{:keys [node default-db]} {:keys [db-name]}]
+  (when-not (= "xtdb" default-db)
+    (throw (err/incorrect ::invalid-db "DROP DATABASE is only allowed from the primary database 'xtdb'"
+                          {:db default-db})))
+
+  (xtp/drop-db! node db-name)
+  (xt-log/await-db (node->db node default-db) (xtp/await-token node) #xt/duration "PT30S"))
 
 (defn execute-portal [{:keys [conn-state] :as conn} {:keys [statement-type canned-response parameter value session-characteristics tx-characteristics] :as portal}]
   (verify-permissibility conn portal)
@@ -1295,6 +1311,9 @@
     :create-db (do
                  (cmd-create-db conn portal)
                  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "CREATE DATABASE"}))
+    :drop-db (do
+               (cmd-drop-db conn portal)
+               (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "DROP DATABASE"}))
 
     (throw (UnsupportedOperationException. (pr-str {:portal portal})))))
 

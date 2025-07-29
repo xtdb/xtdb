@@ -7,6 +7,7 @@ import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.database.DatabaseName
 import xtdb.database.proto.databaseConfig
+import xtdb.database.proto.dropDatabase
 import xtdb.log.proto.*
 import xtdb.log.proto.LogMessage.MessageCase
 import xtdb.trie.BlockIndex
@@ -84,6 +85,9 @@ interface Log : AutoCloseable {
                                 MessageCase.CREATE_DB ->
                                     CreateDatabase(msg.createDb.dbName)
 
+                                MessageCase.DROP_DB ->
+                                    DropDatabase(msg.dropDb.dbName)
+
                                 else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
                             }
                         }
@@ -109,6 +113,14 @@ interface Log : AutoCloseable {
             override fun toLogMessage() = logMessage {
                 createDb = databaseConfig {
                     dbName = this@CreateDatabase.dbName
+                }
+            }
+        }
+
+        data class DropDatabase(val dbName: DatabaseName) : ProtobufMessage() {
+            override fun toLogMessage() = logMessage {
+                dropDb = dropDatabase {
+                    dbName = this@DropDatabase.dbName
                 }
             }
         }

@@ -57,6 +57,7 @@ directlyExecutableStatement
     | ALTER USER userName WITH PASSWORD password=characterString # AlterUserStatement
 
     | CREATE DATABASE dbName=identifier # CreateDatabaseStatement
+    | DROP DATABASE dbName=identifier # DropDatabaseStatement
     ;
 
 executeArgs : ('(' expr (',' expr)* ')')? ;

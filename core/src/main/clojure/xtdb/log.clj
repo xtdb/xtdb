@@ -22,7 +22,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api IndexerConfig TransactionKey Xtdb$Config)
-           (xtdb.api.log Log Log$Factory Log$Message$CreateDatabase Log$Message$Tx Log$MessageMetadata)
+           (xtdb.api.log Log Log$Factory Log$Message$CreateDatabase Log$Message$DropDatabase Log$Message$Tx Log$MessageMetadata)
            (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
@@ -333,6 +333,13 @@
         log (.getLog db)]
     (util/rethrowing-cause
       (let [^Log$MessageMetadata message-meta @(.appendMessage log (Log$Message$CreateDatabase. (str db-name)))]
+        (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset message-meta))))))
+
+(defn drop-db! ^long [{:keys [^DatabaseCatalog db-cat]} db-name]
+  (let [db (.getPrimary db-cat)
+        log (.getLog db)]
+    (util/rethrowing-cause
+      (let [^Log$MessageMetadata message-meta @(.appendMessage log (Log$Message$DropDatabase. (str db-name)))]
         (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset message-meta))))))
 
 (defn await-db

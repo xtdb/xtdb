@@ -64,7 +64,7 @@ class BlockCatalogTest {
                 assertBlockCount(bufferPool, table2BlockPath, 10)
 
                 // Create BlockCatalog instance
-                val catalog = BlockCatalog("xtdb",bufferPool)
+                val catalog = BlockCatalog("xtdb", null, bufferPool)
 
                 // Validate that the latest block is correct
                 val latestBlockIndex = catalog.currentBlockIndex

@@ -8,3 +8,7 @@ message DatabaseConfig {
     string db_name = 1;
 }
 
+message DropDatabase {
+    string db_name = 1;
+}
+

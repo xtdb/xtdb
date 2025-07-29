@@ -16,4 +16,6 @@ interface DatabaseCatalog : AutoCloseable, ILookup {
 
     // TODO will eventually take config
     fun createDatabase(dbName: DatabaseName): List<Database>
+
+    fun dropDatabase(dbName: DatabaseName)
 }

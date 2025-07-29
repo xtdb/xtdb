@@ -102,14 +102,27 @@
 
                                         (createDatabase [this db-name]
                                           (when (.databaseOrNull this db-name)
-                                            (throw (err/fault ::already-exists (str "Database already exists: " db-name)
-                                                              {:db-name db-name})))
+                                            (throw (err/incorrect ::already-exists (str "Database already exists: " db-name)
+                                                                  {:db-name db-name})))
 
                                           (util/with-close-on-catch [db (open-db this base {:db-name db-name
                                                                                             :log-conf (Log/getInMemoryLog)
                                                                                             :storage-conf (Storage/inMemoryStorage)})]
                                             (:db (.put !dbs db-name [db]))
                                             [(:db db)]))
+
+                                        (dropDatabase [this db-name]
+                                          (when (= "xtdb" db-name)
+                                            (throw (err/incorrect ::cannot-drop-primary (str "Cannot drop primary database: " db-name)
+                                                                  {:db-name db-name})))
+
+                                          (when-not (.databaseOrNull this db-name)
+                                            (throw (err/incorrect ::does-not-exist (str "Database does not exist: " db-name)
+                                                                  {:db-name db-name})))
+
+                                          (when-let [dbs (.remove !dbs db-name)]
+                                            (doseq [{:keys [sys]} dbs]
+                                              (ig/halt! sys))))
 
                                         (close [_]
                                           (doseq [[_ dbs] !dbs
