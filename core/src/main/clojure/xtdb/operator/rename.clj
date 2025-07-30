@@ -26,7 +26,10 @@
   (tryAdvance [_ c]
     (binding [scan/*column->pushdown-bloom* (->> (for [[k v] scan/*column->pushdown-bloom*]
                                                    [(get col-name-reverse-mapping k) v])
-                                                 (into {}))]
+                                                 (into {}))
+              scan/*column->iid-set* (->> (for [[k v] scan/*column->iid-set*]
+                                            [(get col-name-reverse-mapping k) v])
+                                          (into {}))] 
       (.tryAdvance in-cursor
                    (fn [^RelationReader in-rel]
                      (let [out-cols (LinkedList.)]
@@ -59,6 +62,9 @@
      :->cursor (fn [opts]
                  (binding [scan/*column->pushdown-bloom* (->> (for [[k v] scan/*column->pushdown-bloom*]
                                                                 [(get col-name-reverse-mapping k) v])
-                                                              (into {}))]
+                                                              (into {}))
+                           scan/*column->iid-set* (->> (for [[k v] scan/*column->iid-set*]
+                                                         [(get col-name-reverse-mapping k) v])
+                                                       (into {}))]
                    (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
                      (RenameCursor. in-cursor col-name-mapping col-name-reverse-mapping))))}))

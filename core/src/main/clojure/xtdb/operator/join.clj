@@ -1,7 +1,7 @@
 (ns xtdb.operator.join
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
-            [clojure.string]
+            [clojure.string :as string]
             [clojure.walk :as walk]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
@@ -14,7 +14,7 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import [clojure.lang IFn]
-           (java.util ArrayList Iterator List)
+           (java.util ArrayList HashSet Iterator List Set)
            (java.util.function IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
@@ -160,7 +160,7 @@
 (defmethod lp/emit-expr :cross-join [join-expr args]
   (emit-cross-join (emit-join-children join-expr args)))
 
-(defn- build-phase [^ICursor build-cursor, ^IRelationMap rel-map, pushdown-blooms]
+(defn- build-phase [^ICursor build-cursor, ^IRelationMap rel-map, pushdown-blooms, ^Set iid-set]
   (.forEachRemaining build-cursor
                      (fn [^RelationReader build-rel]
                        (let [rel-map-builder (.buildFromRelation rel-map build-rel)
@@ -174,6 +174,8 @@
                                    build-col (.vectorForOrNull build-rel (str build-col-name))
                                    ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
                                (dotimes [build-idx (.getRowCount build-rel)]
+                                 (when (and iid-set (= (name build-col-name) "_iid"))
+                                   (.add iid-set (.getBytes build-col build-idx)))
                                  (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
@@ -327,25 +329,29 @@
          (join-rels join-type probe-rel rel-map))))
 
 (deftype JoinCursor [^BufferAllocator allocator, ^ICursor build-cursor,
-                     ^:unsynchronized-mutable ^ICursor probe-cursor 
+                     ^:unsynchronized-mutable ^ICursor probe-cursor
                      ^:unsynchronized-mutable ^RelationWriter nil-rel-writer
                      ^IFn ->probe-cursor
                      ^IRelationMap rel-map
                      ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
+                     ^Set iid-set
                      join-type]
   ICursor
   (tryAdvance [this c]
-    (build-phase build-cursor rel-map pushdown-blooms)
+    (build-phase build-cursor rel-map pushdown-blooms iid-set)
 
     (boolean
-     (or (let [advanced? (boolean-array 1)]
+     (or (let [advanced? (boolean-array 1)
+               probe-iid-keys (filter #(= (name %) "_iid") (.probeKeyColumnNames rel-map))]
            (binding [scan/*column->pushdown-bloom* (cond-> scan/*column->pushdown-bloom*
-                                                     (some? pushdown-blooms) (conj (zipmap (.probeKeyColumnNames rel-map) pushdown-blooms)))]
+                                                     (some? pushdown-blooms) (conj (zipmap (.probeKeyColumnNames rel-map) pushdown-blooms)))
+                     scan/*column->iid-set* (cond-> scan/*column->iid-set*
+                                              (some? iid-set) (conj (zipmap probe-iid-keys (repeat iid-set))))] 
              (when-not probe-cursor
                (util/with-close-on-catch [probe-cursor (->probe-cursor)]
                  (set! (.probe-cursor this) probe-cursor)))
-             
+
              (when (and matched-build-idxs (not nil-rel-writer))
                (util/with-close-on-catch [nil-rel-writer (emap/->nillable-rel-writer allocator (.probeFields rel-map))]
                  (set! (.nil-rel-writer this) nil-rel-writer)))
@@ -365,7 +371,7 @@
            (let [build-rel (.getBuiltRelation rel-map)
                  build-row-count (long (.getRowCount build-rel))
                  unmatched-build-idxs (RoaringBitmap/flip matched-build-idxs 0 build-row-count)]
-             
+
              ;; Only need to remove the nil-row-idx for full outer joins
              (when (= join-type ::full-outer-join)
                (.remove unmatched-build-idxs emap/nil-row-idx))
@@ -405,7 +411,7 @@
                          join-type]
   ICursor
   (tryAdvance [this c]
-    (build-phase build-cursor rel-map pushdown-blooms)
+    (build-phase build-cursor rel-map pushdown-blooms nil)
 
     (boolean
      (let [advanced? (boolean-array 1)]
@@ -514,7 +520,8 @@
     {:fields (projection-specs->fields output-projections)
      :->cursor (fn [{:keys [allocator args] :as opts}]
                  (let [pushdown-blooms (when pushdown-blooms? (->pushdown-blooms probe-key-col-names))
-                       matched-build-idxs (when matched-build-idxs? (RoaringBitmap.))]
+                       matched-build-idxs (when matched-build-idxs? (RoaringBitmap.))
+                       iid-set (HashSet.)]
                    (util/with-close-on-catch [build-cursor (->build-cursor opts)
                                               relation-map (emap/->relation-map allocator {:build-fields build-fields
                                                                                            :build-key-col-names build-key-col-names
@@ -528,7 +535,7 @@
                      (project/->project-cursor opts
                                                (if (= join-type ::mark-join)
                                                  (MarkJoinCursor. allocator build-cursor nil (partial ->probe-cursor opts) relation-map matched-build-idxs mark-col-name pushdown-blooms join-type)
-                                                 (JoinCursor. allocator build-cursor nil nil (partial ->probe-cursor opts) relation-map matched-build-idxs pushdown-blooms join-type))
+                                                 (JoinCursor. allocator build-cursor nil nil (partial ->probe-cursor opts) relation-map matched-build-idxs pushdown-blooms iid-set join-type))
                                                output-projections))))}))
 
 (defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]
