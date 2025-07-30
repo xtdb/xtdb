@@ -40,6 +40,8 @@ By default your data will only be stored transiently using a local directory wit
 
 The XTDB container runs as a non-root user by default (UID 20000). If you're mounting a host volume (e.g. /tmp/xtdb-data-dir:/var/lib/xtdb), you must ensure the container can write to it:
 
+NOTE: This currently applies only to nightly and edge releases. Tagged release images (e.g. 2.0.0) still run as root by default.
+
 For Docker, before running the container:
 
 [source,bash]
