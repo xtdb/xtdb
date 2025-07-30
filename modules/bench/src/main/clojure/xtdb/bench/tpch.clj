@@ -4,8 +4,10 @@
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
             [xtdb.test-util :as tu])
-  (:import (java.time Duration)
-           (java.util AbstractMap)))
+  (:import (java.time Duration)))
+
+(def qs (-> (into #{} (range (count tpch-ra/queries)))
+            (disj 20)))
 
 (defn query-tpch [stage-name i]
   (let [q (nth tpch-ra/queries i)
@@ -20,13 +22,13 @@
                      (catch Exception e
                        (.printStackTrace e))))}]}))
 
-
 (defn queries-stage [stage-name]
   {:t :do, :stage stage-name
    :tasks (vec (concat [{:t :call :f (fn [{:keys [!state]}]
                                        (swap! !state assoc :bf-stats-start (System/currentTimeMillis)))}]
 
-                       (for [i (range (count tpch-ra/queries))]
+                       (for [i (range (count tpch-ra/queries))
+                             :when (contains? qs i)]
                          (query-tpch stage-name i))
 
                        [{:t :call :f (fn [{:keys [!state] :as worker}]
