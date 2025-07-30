@@ -15,6 +15,8 @@ dependencies {
     api(project(":modules:xtdb-datasets"))
     api(project(":modules:xtdb-kafka"))
     api(project(":modules:xtdb-aws"))
+    api(project(":modules:xtdb-azure"))
+    api(project(":modules:xtdb-google-cloud"))
 
     api("org.clojure", "data.csv", "1.0.1")
 
