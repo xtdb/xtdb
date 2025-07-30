@@ -359,5 +359,5 @@
          (util/rethrowing-cause)))))
 
 (defn sync-node
-  ([node] (await-db (db/primary-db node)))
-  ([node timeout] (await-db (db/primary-db node) (xtp/await-token node) timeout)))
+  ([node] (.syncAll (db/<-node node)))
+  ([node timeout] (.syncAll (db/<-node node) timeout)))
