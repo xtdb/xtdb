@@ -14,7 +14,7 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import [clojure.lang IFn]
-           (java.util ArrayList Iterator List HashSet)
+           (java.util ArrayList HashSet Iterator List Set)
            (java.util.function IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
@@ -160,7 +160,7 @@
 (defmethod lp/emit-expr :cross-join [join-expr args]
   (emit-cross-join (emit-join-children join-expr args)))
 
-(defn- build-phase [^ICursor build-cursor, ^IRelationMap rel-map, pushdown-blooms, ^HashSet iid-set]
+(defn- build-phase [^ICursor build-cursor, ^IRelationMap rel-map, pushdown-blooms, ^Set iid-set]
   (.forEachRemaining build-cursor
                      (fn [^RelationReader build-rel]
                        (let [rel-map-builder (.buildFromRelation rel-map build-rel)
@@ -335,7 +335,7 @@
                      ^IRelationMap rel-map
                      ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
-                     ^HashSet iid-set
+                     ^Set iid-set
                      join-type]
   ICursor
   (tryAdvance [this c]
