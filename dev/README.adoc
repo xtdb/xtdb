@@ -21,6 +21,7 @@ You do not need to install Gradle to develop XT2 - there is a Gradle https://doc
 
 * Java classes are (re-)compiled automatically when you (re-)start a REPL or run tests
 * Start a REPL with `./gradlew :clojureRepl` (potentially requiring `./gradlew clean :clojureRepl`)
+** `-PreplPort=7888` if you need the REPL on a specific port (e.g. for Clojure MCP)
 * Once you've connected to the REPL, in the `user` namespace, run:
 ** `(dev)` to require and go to the `dev` namespace.
 ** `(go)` to start up the dev node

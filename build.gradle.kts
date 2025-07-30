@@ -191,6 +191,9 @@ allprojects {
                         jvmArgs += twelveGBJvmArgs
                     }
 
+                    if (project.hasProperty("replPort"))
+                        port.set(project.property("replPort").toString().toInt())
+
                     this.jvmArgs = jvmArgs
                 }
 
