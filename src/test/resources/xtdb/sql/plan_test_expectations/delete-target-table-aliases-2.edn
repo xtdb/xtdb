@@ -4,7 +4,7 @@
    (greatest
     _valid_from
     (cast (current-timestamp) [:timestamp-tz :micro "UTC"]))}
-  _valid_to]
+  {_valid_to xtdb/end-of-time}]
  [:project
   [{_iid t1.1/_iid}
    {_valid_from t1.1/_valid_from}

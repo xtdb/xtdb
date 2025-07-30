@@ -2605,7 +2605,7 @@
 
 (def ^:private default-vt-extents-projection
   [{vf-col (list 'greatest vf-col (list 'cast '(current-timestamp) types/temporal-col-type))}
-   vt-col])
+   {vt-col 'xtdb/end-of-time}])
 
 (defrecord EraseTableRef [env table-name table-alias unique-table-alias cols ^Map !reqd-cols]
   Scope
@@ -2725,8 +2725,9 @@
 
   (visitPatchStatement [{{:keys [default-db]} :env, :as this} ctx]
     (let [table (table/->ref default-db (identifier-sym (.tableName ctx)))
-          [vf-expr vt-expr] (some-> (.patchStatementValidTimeExtents ctx)
-                                    (.accept (->PatchValidTimeExtentsVisitor env scope)))]
+          [vf-expr vt-expr] (or (some-> (.patchStatementValidTimeExtents ctx)
+                                        (.accept (->PatchValidTimeExtentsVisitor env scope)))
+                                ['(current-timestamp) time/end-of-time])]
       (->QueryExpr (plan-patch env {:table table
                                     :valid-from vf-expr
                                     :valid-to vt-expr

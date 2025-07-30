@@ -360,3 +360,60 @@
       (t/is (= {:d #xt/date "2020-01-02"} ; Succeeds!
                (with-clock-time "SELECT CURRENT_TIMESTAMP::date AS d"))
             "Casting works because CURRENT_TIMESTAMP is TZ-aware."))))
+
+
+(t/deftest no-portion-of-valid-time-dml-4650
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, _valid_from: ?, _valid_to: ?}" [1 #inst "2010" #inst "2040"]]])
+
+  (xt/execute-tx tu/*node* [[:sql "UPDATE users SET foo = 1 WHERE _id = 1"]])
+
+  (t/is (= [{:xt/id 1,
+             :xt/valid-from #xt/zdt "2010-01-01T00:00Z[UTC]",
+             :xt/valid-to #xt/zdt "2020-01-02T00:00Z[UTC]"}
+            {:xt/id 1,
+             :xt/valid-from #xt/zdt "2020-01-02T00:00Z[UTC]"
+             :foo 1,}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM users FOR ALL VALID_TIME WHERE _id = 1 ORDER BY _valid_from")))
+
+  (xt/execute-tx tu/*node* [[:sql "DELETE FROM users WHERE _id = 1"]])
+
+  (t/is (= [{:xt/id 1,
+             :xt/valid-from #xt/zdt "2010-01-01T00:00Z[UTC]",
+             :xt/valid-to #xt/zdt "2020-01-02T00:00Z[UTC]"}
+            {:xt/id 1,
+             :xt/valid-from #xt/zdt "2020-01-02T00:00Z[UTC]"
+             :xt/valid-to #xt/zdt "2020-01-03T00:00Z[UTC]"
+             :foo 1,}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM users FOR ALL VALID_TIME WHERE _id = 1 ORDER BY _valid_from"))))
+
+(t/deftest patch-gaps-filling-test-4649
+  (xt/execute-tx tu/*node* [[:put-docs {:into :docs,
+                                        :valid-from #inst "2020-01-01T08:00Z",
+                                        :valid-to #inst "2020-01-01T08:05Z"}
+                             {:xt/id 1, :value "first"}]])
+
+  (xt/execute-tx tu/*node* [[:put-docs {:into :docs,
+                                        :valid-from #inst "2020-01-05T00:00Z",
+                                        :valid-to #inst "2020-01-06T00:00Z"}
+                             {:xt/id 1, :value "second"}]])
+
+  (xt/execute-tx tu/*node* [[:patch-docs :docs {:xt/id 1, :newvalue "patched"}]])
+
+  (t/is (= [{:xt/id 1,
+             :value "first",
+             :xt/valid-from #xt/zdt "2020-01-01T08:00Z[UTC]",
+             :xt/valid-to #xt/zdt "2020-01-01T08:05Z[UTC]"}
+            {:xt/id 1,
+             :newvalue "patched",
+             :xt/valid-from #xt/zdt "2020-01-03T00:00Z[UTC]",
+             :xt/valid-to #xt/zdt "2020-01-05T00:00Z[UTC]"}
+            {:xt/id 1,
+             :newvalue "patched",
+             :value "second",
+             :xt/valid-from #xt/zdt "2020-01-05T00:00Z[UTC]",
+             :xt/valid-to #xt/zdt "2020-01-06T00:00Z[UTC]"}
+            {:xt/id 1,
+             :newvalue "patched",
+             :xt/valid-from #xt/zdt "2020-01-06T00:00Z[UTC]"}]
+
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs FOR VALID_TIME ALL ORDER BY _valid_from"))))

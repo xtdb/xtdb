@@ -4,14 +4,16 @@
             [xtdb.logical-plan :as lp]
             [xtdb.time :as time]
             [xtdb.types :as types]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.expression :as expr])
   (:import org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.VectorSchemaRoot
            [xtdb.arrow RelationReader]
            xtdb.operator.PatchGapsCursor))
 
 (s/def ::instantable
-  (s/or :literal ::time/datetime-value
+  (s/or :now #{:now '(current-timestamp)}
+        :literal ::time/datetime-value
         :param ::lp/param))
 
 (s/def ::valid-from (s/nilable ::instantable))
@@ -21,7 +23,8 @@
   (-> (case tag
         :literal value
         :param (-> (.vectorForOrNull args (str value))
-                   (.getObject 0)))
+                   (.getObject 0))
+        :now (expr/current-time))
       (time/->instant opts)))
 
 (defmethod lp/ra-expr :patch-gaps [_]
@@ -41,7 +44,7 @@
                        (if (> valid-from valid-to)
                          (throw (err/incorrect :xtdb.indexer/invalid-valid-times
                                                "Invalid valid times"
-                                               {:valid-from (time/micros->instant  valid-from)
+                                               {:valid-from (time/micros->instant valid-from)
                                                 :valid-to (time/micros->instant valid-to)}))
                          (PatchGapsCursor. inner
                                            (vw/root->writer (VectorSchemaRoot/create (Schema. (for [[nm field] fields]
