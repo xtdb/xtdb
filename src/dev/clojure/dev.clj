@@ -29,6 +29,8 @@
 #_{:clj-kondo/ignore [:unused-namespace :unused-referred-var]}
 (require '[xtdb.logging :refer [set-log-level!]])
 
+(set! *print-namespace-maps* false)
+
 (def dev-node-dir
   (io/file "dev/dev-node"))
 
