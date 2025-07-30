@@ -37,7 +37,7 @@
 
 (t/deftest no-config
   (t/testing "if no config present via file, returns an empty map as the node-opts"
-    (t/is (= {::cli/node-opts {}, ::cli/migrate-from-version nil, ::cli/compactor-only? false} (cli/parse-args [])))))
+    (t/is (= {::cli/node-opts {}, ::cli/compactor-only? false} (cli/parse-args [])))))
 
 (t/deftest test-config
   (letfn [(->system [cli-args]
@@ -77,12 +77,8 @@
     (t/is (= {::cli/playground-port 5055}
              (cli/parse-args ["--playground-port" "5055"]))))
   
-  (t/testing "Migrate from should work as expected"
-    (t/is (= {::cli/migrate-from-version 5, ::cli/node-opts {}, ::cli/compactor-only? false}
-             (cli/parse-args ["--migrate-from" "5"]))))
-
   (t/testing "compaction working as expected"
-    (t/is (= {::cli/migrate-from-version nil, ::cli/node-opts {}, ::cli/compactor-only? true}
+    (t/is (= {::cli/node-opts {}, ::cli/compactor-only? true}
              (cli/parse-args ["--compactor-only"])))))
 
 (defmethod ig/init-key ::bar [_ opts] opts)
