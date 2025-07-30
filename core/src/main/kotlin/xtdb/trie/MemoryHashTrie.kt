@@ -260,12 +260,12 @@ class MemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader, 
         }
 
         override fun addIfNotPresent(trie: MemoryHashTrie, hash: ByteArray, newIdx: Int, comparator: IntUnaryOperator, onAddition: Runnable): Pair<Int, Node?> {
+            val bb = ByteBuffer.wrap(hash)
             when (val node = compactLogs(trie)) {
                 is Branch -> return node.addIfNotPresent(trie, hash, newIdx, comparator, onAddition)
                 is Leaf -> {
-                    // TODO could filter on hash as well
                     for (testIdx in node.data) {
-                        if (comparator.applyAsInt(testIdx) == 1) {
+                        if (trie.hashReader.getBytes(testIdx).compareTo(bb) == 0 && comparator.applyAsInt(testIdx) == 1) {
                            return Pair(testIdx, null)
                         }
                     }
@@ -276,18 +276,18 @@ class MemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader, 
         }
 
         override fun findCandidates(trie: MemoryHashTrie, hash: ByteArray): IntArray {
-            // We could filter data based on hash as well
-            return data
+            val bb = ByteBuffer.wrap(hash)
+            return data.filter { trie.hashReader.getBytes(it).compareTo(bb) == 0 }.toIntArray()
         }
 
         override fun findValue(trie: MemoryHashTrie, hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean): Int {
+            val bb = ByteBuffer.wrap(hash)
             val data = when (deletions) {
                 null -> data
                 else -> data.filter { !deletions!!.contains(it) }.toIntArray()
             }
-            // TODO could filter on hash as well
-            for( testIdx in data) {
-                if (comparator.applyAsInt(testIdx) == 1) {
+            for(testIdx in data) {
+                if (trie.hashReader.getBytes(testIdx).compareTo(bb) == 0 && comparator.applyAsInt(testIdx) == 1) {
                     if (removeOnMatch) {
                         deletions = (deletions ?: RoaringBitmap()).apply { add(testIdx) }
                     }
