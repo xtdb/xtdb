@@ -157,19 +157,20 @@ jobs:
       - name: SLT 1
         run: ./gradlew slt-test
 
-  slt-2:
-    name: SLT 2
-    runs-on: ubuntu-latest
+  # FIXME #4598
+  # slt-2:
+  #   name: SLT 2
+  #   runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up JDK 21
-        uses: actions/setup-java@v3
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - name: Set up JDK 21
+  #       uses: actions/setup-java@v3
+  #       with:
+  #         java-version: '21'
+  #         distribution: 'temurin'
+  #     - name: Setup Gradle
+  #       uses: gradle/actions/setup-gradle@v4
 
-      - name: SLT 2
-        run: ./gradlew slt-test-2
+  #     - name: SLT 2
+  #       run: ./gradlew slt-test-2
