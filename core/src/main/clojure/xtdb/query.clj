@@ -104,11 +104,11 @@
     (-> args (.vectorFor (str expr)) (.getObject 0))
     expr))
 
-(defn- validate-snapshot-not-before [snapshot-token ^Snapshot snap]
+(defn- validate-snapshot-not-before [snapshot-token, ^Database db, ^Snapshot snap]
   (let [snap-tx (.getTxBasis snap)]
     (when snapshot-token
       (let [system-time (-> (basis/<-time-basis-str snapshot-token)
-                            (get-in ["xtdb" 0]))]
+                            (get-in [(.getName db) 0]))]
         (when (and system-time
                    (or (nil? snap-tx)
                        (neg? (compare (.getSystemTime snap-tx) system-time))))
@@ -263,7 +263,7 @@
                                                         (basis/->time-basis-str {(.getName db) [sys-time]})))
                             expr/*await-token* await-token]
 
-                    (validate-snapshot-not-before expr/*snapshot-token* snap)
+                    (validate-snapshot-not-before expr/*snapshot-token* db snap)
 
                     (-> (->cursor {:allocator allocator, :snapshot snap
                                    :default-tz default-tz,

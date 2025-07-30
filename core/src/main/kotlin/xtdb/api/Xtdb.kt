@@ -8,16 +8,12 @@ import kotlinx.serialization.UseSerializers
 import xtdb.ZoneIdSerde
 import xtdb.api.Authenticator.Factory.UserTable
 import xtdb.api.log.Log
-import xtdb.api.log.Log.Companion.inMemoryLog
 import xtdb.api.log.LogClusterAlias
 import xtdb.api.metrics.HealthzConfig
 import xtdb.api.module.XtdbModule
-import xtdb.api.storage.Storage
-import xtdb.api.storage.Storage.inMemoryStorage
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.Database
-import xtdb.database.DatabaseCatalog
 import xtdb.database.DatabaseName
 import xtdb.util.requiringResolve
 import java.nio.file.Files

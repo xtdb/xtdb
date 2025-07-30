@@ -1,5 +1,6 @@
 (ns xtdb.db-catalog
   (:require [integrant.core :as ig]
+            [xtdb.error :as err]
             [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import [java.util HashMap]
@@ -119,32 +120,36 @@
      :sys sys}))
 
 (defmethod ig/init-key :xtdb/db-catalog [_ {:keys [base]}]
-  (let [!dbs (HashMap.)
-        ^Xtdb$Config conf (get-in base [:config :config])
-        db-configs (.getDatabases conf)
-        xtdb-db-config (get db-configs "xtdb")
-        primary (open-db "xtdb" base xtdb-db-config)]
+  (util/with-close-on-catch [!dbs (HashMap.)]
+    (let [^Xtdb$Config conf (get-in base [:config :config])
+          db-configs (-> (.getDatabases conf)
+                         (update-keys (comp util/str->normal-form-str str symbol)))]
 
-    (.put !dbs "xtdb" [primary])
+      (when-not (get db-configs "xtdb")
+        (throw (err/incorrect ::missing-xtdb-database "The 'xtdb' database is required but not found in the configuration.")))
 
-    (reify DatabaseCatalog
-      (getPrimary [_] (:db primary))
+      (doseq [[db-name ^Database$Config db-config] db-configs]
+        (util/with-close-on-catch [db (open-db db-name base db-config)]
+          (.put !dbs db-name [db])))
 
-      (getDatabaseNames [_] (set (keys !dbs)))
+      (reify DatabaseCatalog
+        (getPrimary [this] (first (.databaseOrNull this "xtdb")))
 
-      (databaseOrNull [_ db-name]
-        (some->> (.get !dbs db-name)
-                 (mapv :db)))
+        (getDatabaseNames [_] (set (keys !dbs)))
 
-      (createDatabase [_ db-name]
-        (util/with-close-on-catch [db (open-db db-name base (Database$Config.))]
-          (.put !dbs db-name [db])
-          [(:db db)]))
+        (databaseOrNull [_ db-name]
+          (some->> (.get !dbs db-name)
+                   (mapv :db)))
 
-      (close [_]
-        (doseq [[_ dbs] !dbs
-                {:keys [sys]} dbs]
-          (ig/halt! sys))))))
+        (createDatabase [_ db-name]
+          (util/with-close-on-catch [db (open-db db-name base (Database$Config.))]
+            (.put !dbs db-name [db])
+            [(:db db)]))
+
+        (close [_]
+          (doseq [[_ dbs] !dbs
+                  {:keys [sys]} dbs]
+            (ig/halt! sys)))))))
 
 (defmethod ig/halt-key! :xtdb/db-catalog [_ db-cat]
   (util/close db-cat))

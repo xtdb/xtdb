@@ -50,6 +50,22 @@
                (tu/query-ra '[:scan {:table #xt/table xt_docs} [_id]]
                             {:node node}))))))
 
+(t/deftest ^:integration test-multi-db
+  (let [test-uuid (random-uuid)]
+    (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
+                                      :databases {:xtdb {:log [:kafka {:cluster :my-kafka
+                                                                       :topic (str "xtdb.kafka-test." test-uuid)}]}
+                                                  :secondary {:log [:kafka {:cluster :my-kafka
+                                                                            :topic (str "xtdb.kafka-test-secondary." test-uuid)}]}}})
+                xtdb-conn (.build (.createConnectionBuilder node))
+                secondary-conn (.build (-> (.createConnectionBuilder node)
+                                           (.database "secondary")))]
+      (t/is (xt/submit-tx xtdb-conn [[:put-docs :docs {:xt/id :primary}]]))
+      (t/is (xt/submit-tx secondary-conn [[:put-docs :docs {:xt/id :secondary}]]))
+
+      (t/is (= [{:xt/id :primary}] (xt/q xtdb-conn "SELECT _id FROM docs")))
+      (t/is (= [{:xt/id :secondary}] (xt/q secondary-conn "SELECT _id FROM docs"))))))
+
 (t/deftest ^:integration test-kafka-setup-with-provided-opts
   (let [test-uuid (random-uuid)]
     (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*

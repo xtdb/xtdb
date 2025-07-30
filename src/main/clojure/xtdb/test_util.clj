@@ -3,11 +3,9 @@
             [clojure.test :as t]
             [cognitect.anomalies :as-alias anom]
             [xtdb.api :as xt]
-            [xtdb.block-catalog :as block-cat]
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.indexer :as idx]
-            [xtdb.indexer.live-index :as li]
             [xtdb.log :as xt-log]
             [xtdb.logical-plan :as lp]
             [xtdb.node :as xtn]
@@ -36,6 +34,7 @@
            (xtdb.api.log Log$Message$FlushBlock)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector)
+           xtdb.database.Database
            (xtdb.indexer LiveTable Snapshot Snapshot$Source)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
@@ -123,10 +122,13 @@
 (defn flush-block!
   ([node] (flush-block! node #xt/duration "PT5S"))
   ([node timeout]
-   (let [db (db/primary-db node)
-         log (.getLog db)]
-     @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1)))
-     (xt-log/await-db db (xtp/await-token node) timeout))))
+   (let [db-cat (db/<-node node)]
+     (doseq [db-name (.getDatabaseNames db-cat)
+             ^Database db (.databaseOrNull db-cat db-name)]
+       (let [log (.getLog db)]
+         @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1))))))
+
+   (xt-log/sync-node node timeout)))
 
 (defn open-vec
   (^xtdb.arrow.Vector [^Field field]
