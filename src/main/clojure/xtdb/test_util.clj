@@ -112,7 +112,7 @@
          (time/->instant (.next it)))))))
 
 (defn with-mock-clock [f]
-  (with-opts {:log [:in-memory {:instant-src (->mock-clock)}]} f))
+  (with-opts {:databases {:xtdb {:log [:in-memory {:instant-src (->mock-clock)}]}}} f))
 
 (defn ->tstz-range ^xtdb.types.ZonedDateTimeRange [from to]
   (ZonedDateTimeRange. (time/->zdt from) (some-> to time/->zdt)))
@@ -267,9 +267,9 @@
   (let [instant-src (or instant-src (->mock-clock))
         healthz-port (if (util/port-free? healthz-port) healthz-port (util/free-port))]
     (xtn/start-node (cond-> {:healthz {:port healthz-port}
-                             :log [:local {:path (.resolve node-dir "log"), :instant-src instant-src
-                                           :instant-source-for-non-tx-msgs? instant-source-for-non-tx-msgs?}]
-                             :storage [:local {:path (.resolve node-dir buffers-dir)}]
+                             :databases {:xtdb {:log [:local {:path (.resolve node-dir "log"), :instant-src instant-src
+                                                              :instant-source-for-non-tx-msgs? instant-source-for-non-tx-msgs?}]
+                                                :storage [:local {:path (.resolve node-dir buffers-dir)}]}}
                              :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-block rows-per-block}
                                            (into {} (filter val)))
                              :compactor (->> {:threads compactor-threads}

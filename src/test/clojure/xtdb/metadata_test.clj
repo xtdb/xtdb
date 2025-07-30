@@ -106,7 +106,7 @@
 
 (deftest test-min-max-on-xt-id
   (binding [c/*page-size* 16]
-    (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}}))]
+    (with-open [node (xtn/start-node (assoc tu/*node-opts* :indexer {:page-limit 16}))]
       (xt/execute-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
 
       (tu/finish-block! node)

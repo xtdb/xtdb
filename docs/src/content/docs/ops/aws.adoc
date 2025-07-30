@@ -290,31 +290,33 @@ To use the S3 module, include the following in your node configuration:
 
 [source,yaml]
 ----
-storage: !Remote
-  objectStore: !S3
-    ## -- required
+databases:
+  xtdb:
+    storage: !Remote
+      objectStore: !S3
+        ## -- required
 
-    ## The name of the S3 bucket to use for the object store
-    ## (Can be set as an !Env value)
-    bucket: "my-s3-bucket" 
+        ## The name of the S3 bucket to use for the object store
+        ## (Can be set as an !Env value)
+        bucket: "my-s3-bucket"
 
-    ## -- optional
+        ## -- optional
 
-    ## A file path to prefix all of your files with
-    ## - for example, if "foo" is provided, all XTDB files will be located under a "foo" sub-directory
-    ## (Can be set as an !Env value)
-    # prefix: my-xtdb-node
+        ## A file path to prefix all of your files with
+        ## - for example, if "foo" is provided, all XTDB files will be located under a "foo" sub-directory
+        ## (Can be set as an !Env value)
+        # prefix: my-xtdb-node
 
-    ## Basic credentials for AWS.
-    ## If not provided, will default to AWS's standard credential resolution.
-    ## see: https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html
-    # credentials:
-    #   accessKey: "..."
-    #   secretKey: "..."
+        ## Basic credentials for AWS.
+        ## If not provided, will default to AWS's standard credential resolution.
+        ## see: https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html
+        # credentials:
+        #   accessKey: "..."
+        #   secretKey: "..."
 
-    ## Endpoint URI
-    ## If not provided, will default to the standard S3 endpoint for the resolved region.
-    # endpoint: "https://..."
+        ## Endpoint URI
+        ## If not provided, will default to the standard S3 endpoint for the resolved region.
+        # endpoint: "https://..."
 
 # -- required
 # A local disk path where XTDB can cache files from the remote storage

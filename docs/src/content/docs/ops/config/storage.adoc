@@ -2,6 +2,64 @@
 title: Storage
 ---
 
+.Changelog (last updated v2.1)
+[%collapsible]
+====
+v2.1: multi-database support::
++
+--
+`databases` was introduced in v2.1.
+
+Prior to that, the `storage` key was at the top-level of the configuration, and the `memoryCache` and `diskCache` keys were nested under the local/remote storage:
+
+[source,yaml]
+----
+storage: !Local
+  path: /var/lib/xtdb/storage
+  # maxCacheEntries: 1024
+  # maxCacheBytes: 536870912
+
+# became
+
+databases:
+  xtdb:
+    storage: !Local
+      path: /var/lib/xtdb/storage
+
+memoryCache:
+  # maxSizeRatio: 0.5
+  # maxSizeBytes: 536870912
+----
+
+[source,yaml]
+----
+storage: !Remote
+  objectStore: <ObjectStoreImplementation>
+  localDiskCache: /var/lib/xtdb/remote-cache
+  # maxCacheEntries: 1024
+  # maxCacheBytes: 536870912
+  # maxDiskCachePercentage: 75
+  # maxDiskCacheBytes: 107374182400
+
+# became
+
+databases:
+  xtdb:
+    storage: !Remote
+      objectStore: <ObjectStoreImplementation>
+
+diskCache:
+  path: /var/lib/xtdb/remote-cache
+  # maxSizeRatio: 0.75
+  # maxSizeBytes: 107374182400
+
+memoryCache:
+  # maxSizeRatio: 0.5
+  # maxSizeBytes: 536870912
+----
+--
+====
+
 One of the key components of an XTDB node is the storage module - used to store the data and indexes that make up the database.
 
 We offer the following implementations of the storage module:
@@ -18,7 +76,9 @@ By default, the storage module is configured to use transient, in-memory storage
 [source,yaml]
 ----
 # default, no need to explicitly specify
-# storage: !InMemory
+# databases:
+#   xtdb:
+#     storage: !InMemory
 ----
 
 [#local-disk]
@@ -28,12 +88,14 @@ A persistent storage implementation that writes to a local directory, also maint
 
 [source,yaml]
 ----
-storage: !Local
-  # -- required
+databases:
+  xtdb:
+    storage: !Local
+      # -- required
 
-  # The path to the local directory to persist the data to.
-  # (Can be set as an !Env value)
-  path: /var/lib/xtdb/storage
+      # The path to the local directory to persist the data to.
+      # (Can be set as an !Env value)
+      path: /var/lib/xtdb/storage
 
 ## -- optional
 # configuration for XTDB's in-memory cache
@@ -59,13 +121,14 @@ We achieve this inter-node messaging using a link:log#Remote[**remote log**] imp
 
 [source,yaml]
 ----
-storage: !Remote
-  # -- required
+databases:
+  xtdb:
+    storage: !Remote
+      # -- required
 
-  # Configuration of the Object Store to use for remote storage
-  # Each of these is configured separately - see below for more information.
-  objectStore: <ObjectStoreImplementation>
-
+      # Configuration of the Object Store to use for remote storage
+      # Each of these is configured separately - see below for more information.
+      objectStore: <ObjectStoreImplementation>
 
 ## -- required
 # Local directory to store the working-set cache in.

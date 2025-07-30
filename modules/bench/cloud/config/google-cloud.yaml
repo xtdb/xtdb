@@ -2,14 +2,16 @@ healthz:
   host: '*'
   port: 8080
 
-log: !Local
-  path: !Env XTDB_GCP_LOCAL_LOG_PATH
+databases:
+  xtdb:
+    log: !Local
+      path: !Env XTDB_GCP_LOCAL_LOG_PATH
 
-storage: !Remote
-  objectStore: !GoogleCloud
-    projectId: !Env XTDB_GCP_PROJECT_ID
-    bucket: !Env XTDB_GCP_BUCKET
-    prefix: "xtdb-object-store"
+    storage: !Remote
+      objectStore: !GoogleCloud
+        projectId: !Env XTDB_GCP_PROJECT_ID
+        bucket: !Env XTDB_GCP_BUCKET
+        prefix: "xtdb-object-store"
 
 diskCache:
   path: /var/lib/xtdb/buffers/

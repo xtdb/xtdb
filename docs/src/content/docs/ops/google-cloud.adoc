@@ -246,23 +246,25 @@ To use the Google Cloud module, include the following in your node configuration
 
 [source,yaml]
 ----
-storage: !Remote
-  objectStore: !GoogleCloud
-    ## -- required
+databases:
+  xtdb:
+    storage: !Remote
+      objectStore: !GoogleCloud
+        ## -- required
 
-    # The name of the GCP project containing the bucket
-    # (Can be set as an !Env value)
-    projectId: xtdb-project
+        # The name of the GCP project containing the bucket
+        # (Can be set as an !Env value)
+        projectId: xtdb-project
 
-    # The Cloud Storage bucket to store documents
-    # (Can be set as an !Env value)
-    bucket: xtdb-bucket
+        # The Cloud Storage bucket to store documents
+        # (Can be set as an !Env value)
+        bucket: xtdb-bucket
 
-    ## -- optional
-    # A file path to prefix all files with
-    # - for example, if "foo" is provided, all XTDB files will be under a "foo" sub-directory
-    # (Can be set as an !Env value)
-    # prefix: my-xtdb-node
+        ## -- optional
+        # A file path to prefix all files with
+        # - for example, if "foo" is provided, all XTDB files will be under a "foo" sub-directory
+        # (Can be set as an !Env value)
+        # prefix: my-xtdb-node
 
 # -- required
 # A local disk path where XTDB can cache files from the remote storage

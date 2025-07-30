@@ -7,7 +7,6 @@
             [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgw]
-            [xtdb.protocols :as xtp]
             [xtdb.table-catalog :as table-cat]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
@@ -48,8 +47,8 @@
   {::xtdb {:node-opts {:server {:port 5432
                                 :ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
                                       :keystore-password "password123"}}
-                       :log [:local {:path (io/file dev-node-dir "log")}]
-                       :storage [:local {:path (io/file dev-node-dir "objects")}]
+                       :databases {:xtdb {:log [:local {:path (io/file dev-node-dir "log")}]
+                                          :storage [:local {:path (io/file dev-node-dir "objects")}]}}
                        :healthz {:port 8080}
                        :flight-sql-server {:port 52358}}}})
 

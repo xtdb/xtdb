@@ -16,6 +16,9 @@ import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.inMemoryStorage
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
+import xtdb.database.Database
+import xtdb.database.DatabaseCatalog
+import xtdb.database.DatabaseName
 import xtdb.util.requiringResolve
 import java.nio.file.Files
 import java.nio.file.Path
@@ -39,8 +42,7 @@ interface Xtdb : DataSource, AutoCloseable {
     data class Config(
         var server: ServerConfig? = ServerConfig(),
         var logClusters: Map<LogClusterAlias, Log.Cluster.Factory<*>> = emptyMap(),
-        var log: Log.Factory = inMemoryLog,
-        var storage: Storage.Factory = inMemoryStorage(),
+        var databases: Map<DatabaseName, Database.Config> = mapOf("xtdb" to Database.Config()),
         val memoryCache: MemoryCache.Factory = MemoryCache.Factory(),
         var diskCache: DiskCache.Factory? = null,
         var healthz: HealthzConfig? = null,
@@ -58,9 +60,8 @@ interface Xtdb : DataSource, AutoCloseable {
         fun logCluster(alias: LogClusterAlias, cluster: Log.Cluster.Factory<*>) =
             apply { logClusters += alias to cluster }
 
-        fun log(log: Log.Factory) = apply { this.log = log }
-
-        fun storage(storage: Storage.Factory) = apply { this.storage = storage }
+        fun databases(databases: Map<DatabaseName, Database.Config>) = apply { this.databases += databases }
+        fun database(name: DatabaseName, config: Database.Config) = apply { databases += name to config }
 
         fun diskCache(diskCache: DiskCache.Factory?) = apply { this.diskCache = diskCache }
 

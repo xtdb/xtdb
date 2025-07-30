@@ -33,17 +33,14 @@
 (defmethod apply-config! :log-clusters [config _ opts]
   (apply-config! config :xtdb.log/clusters opts))
 
-(defmethod apply-config! :log [config _ opts]
-  (apply-config! config :xtdb/log opts))
+(defmethod apply-config! :databases [config _ opts]
+  (apply-config! config :xtdb.db-catalog/databases opts))
 
 (defmethod apply-config! :memory-cache [config _ opts]
   (apply-config! config :xtdb.cache/memory opts))
 
 (defmethod apply-config! :disk-cache [config _ opts]
   (apply-config! config :xtdb.cache/disk opts))
-
-(defmethod apply-config! :storage [config _ opts]
-  (apply-config! config :xtdb.buffer-pool/storage opts))
 
 (defmethod apply-config! :indexer [^Xtdb$Config config _ {:keys [rows-per-block page-limit log-limit flush-duration skip-txs]}]
   (cond-> (.getIndexer config)

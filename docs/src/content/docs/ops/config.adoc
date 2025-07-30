@@ -2,24 +2,67 @@
 title: Configuration
 ---
 
-== Components
 
-An XTDB node consists of a number of components.
+.Changelog (last updated v2.1)
+[%collapsible]
+====
+v2.1: multi-database support::
++
+--
+`databases` was introduced in v2.1.
 
-For information on how to configure these and switch out implementations, see their reference documents:
+Prior to that, the `log` and `storage` keys were at the top-level of the configuration:
 
-* link:config/log[Log]
-* link:config/storage[Storage]
-* link:config/modules[Optional Modules]
+[source,yaml]
+----
+log: !Local
+  path: /path/to/log-file
 
-== Configuring using YAML
+storage: !Local
+  path: /path/to/storage-dir
 
-Currently, all of the examples within the reference docs are in YAML.
-Config for the components is done at the top level of the file, i.e. you can specify the following keys, not nested under anything else: `storage`, `log`, `modules`.
+# became
 
-Within the drivers, we offer the ability to provide and configure the node by passing the path to a YAML config file.
+databases:
+  xtdb:
+    log: !Local
+      path: /path/to/log-file
 
-=== Using `!Env`
+    storage: !Local
+      path: /path/to/storage-dir
+----
+
+For more details on the changes to the log and storage configurations, see the link:config/log[Transaction Logs] and link:config/storage[Object Storage] documentation.
+--
+====
+
+XTDB nodes are configured using YAML files.
+
+The two main pluggable components of XTDB are transaction logs and object storage - these can be configured in the `databases` section of the configuration file.
+
+[source,yaml]
+----
+databases:
+  # Currently only one database is supported, named `xtdb`.
+  xtdb:
+    # -- optional
+
+    # transaction log configuration
+    # defaults to an in-memory transaction log
+    log: !Local
+      path: /path/to/log-file
+
+    # object store configuration
+    # defaults to an in-memory object store
+    storage: !Local
+      path: /path/to/storage-dir
+----
+
+If no `databases` section is specified, XTDB will use the default configuration - an in-memory transaction log and an in-memory object store.
+
+For more details on the log and storage configurations, including the available components, see the link:config/logs[Transaction Logs] and link:config/storage[Object Storage] documentation.
+
+== Using `!Env`
 
 For certain keys, we allow the use of environment variables - typically, the keys where we allow this are things that may change *location* across environments. Generally, they are either "paths" or "strings".
 
@@ -27,22 +70,24 @@ When specifying a key, you can use the `!Env` tag to reference an environment va
 
 [source,yaml]
 ----
-storage: !Local
-  path: !Env XTDB_STORAGE_PATH
+databases:
+  xtdb:
+    storage: !Local
+      path: !Env XTDB_STORAGE_PATH
 ----
 
 Any key that we allow the use of `!Env` will be documented as such.
 
-=== Monitoring & Observability
+== Monitoring & Observability
 
 XTDB provides a suite of tools & templates to facilitate monitoring and observability. See link:config/monitoring[Monitoring & Observability].
 
-=== Authentication
+== Authentication
 
 The pg-wire server and the http-server both support authentication which can be configured via authentication rules.
 See link:config/authentication[Authentication].
 
-=== Other configuration:
+== Other configuration:
 
 XTDB nodes accept other optional configuration, as follows:
 
@@ -77,10 +122,21 @@ compactor:
   # Defaults to min(availableProcessors / 2, 1).
   # Set to 0 to disable the compactor.
   threads: 4
+
+modules:
+  # You can enable optional modules by specifying them under the `modules` key.
+  # For example:
+  - !HttpServer
+    # The HTTP server will listen on the specified port.
+    # Default is 3000.
+    port: 3000
 ----
 
-=== CLI flags
+For details on the available modules, see the link:config/modules[modules] documentation.
+
+== CLI flags
 
 The following flags can be passed, either directly to the CLI or via Docker's arguments:
 
+* `-f <file>`, `--file <file>`: specifies the configuration file to use.
 * `--compactor-only`: runs a compactor-only node.

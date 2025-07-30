@@ -805,7 +805,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
         "scan pred"))
 
 (t/deftest copes-with-log-time-going-backwards-3864
-  (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock [#inst "2020" #inst "2019" #inst "2021"])}]})]
+  (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock [#inst "2020" #inst "2019" #inst "2021"])}]}}})]
     (t/is (= {:tx-id 0} (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 0}]])))
     (t/is (= {:tx-id 1} (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 1}]])))
     (t/is (= {:tx-id 2} (xt/submit-tx node [[:put-docs :foo {:xt/id 1, :version 2}]])))
@@ -834,8 +834,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (let [!skiptxid (atom nil)]
     (util/with-tmp-dirs #{path}
       (t/testing "node with no txes skipped:"
-        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
-                                          :storage [:local {:path (str path "/storage")}]})]
+        (with-open [node (xtn/start-node {:databases {:xtdb {:log [:local {:path (str path "/log")}]
+                                                             :storage [:local {:path (str path "/storage")}]}}})]
           (t/testing "Send three transactions"
             (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
             (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
@@ -847,8 +847,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                      (set (xt/q node "SELECT * from xt_docs")))))))
 
       (t/testing "node with txs to skip"
-        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
-                                          :storage [:local {:path (str path "/storage")}]
+        (with-open [node (xtn/start-node {:databases {:xtdb {:log [:local {:path (str path "/log")}]
+                                                             :storage [:local {:path (str path "/storage")}]}}
                                           :indexer {:skip-txs [@!skiptxid]}})]
           (xt-log/sync-node node)
           (t/testing "Can query two back out - skipped one"
@@ -859,8 +859,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
           (tu/finish-block! node)))
 
       (t/testing "node can remove 'txs to skip' after block finished"
-        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
-                                          :storage [:local {:path (str path "/storage")}]})]
+        (with-open [node (xtn/start-node {:databases {:xtdb {:log [:local {:path (str path "/log")}]
+                                                             :storage [:local {:path (str path "/storage")}]}}})]
           (t/testing "Only two results are returned"
             (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
                      (set (xt/q node "SELECT * from xt_docs"))))))))))
@@ -870,8 +870,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (let [!skiptxid (atom nil)]
     (util/with-tmp-dirs #{path}
       (t/testing "node with no txes skipped:"
-        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
-                                          :storage [:local {:path (str path "/storage")}]})]
+        (with-open [node (xtn/start-node {:databases {:xtdb {:log [:local {:path (str path "/log")}]
+                                                             :storage [:local {:path (str path "/storage")}]}}})]
           (t/testing "Send two transactions"
             (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
             (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
@@ -881,8 +881,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                   (get-in [:latest-completed-txs "xtdb" 0 :tx-id]))))))
 
       (t/testing "node with txs to skip"
-        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
-                                          :storage [:local {:path (str path "/storage")}]
+        (with-open [node (xtn/start-node {:databases {:xtdb {:log [:local {:path (str path "/log")}]
+                                                             :storage [:local {:path (str path "/storage")}]}}
                                           :indexer {:skip-txs [@!skiptxid]}
                                           :compactor {:threads 0}})]
 
@@ -898,8 +898,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
           (tu/finish-block! node)))
 
       (t/testing "node can remove 'txs to skip' after block finished"
-        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
-                                          :storage [:local {:path (str path "/storage")}]
+        (with-open [node (xtn/start-node {:databases {:xtdb {:log [:local {:path (str path "/log")}]
+                                                             :storage [:local {:path (str path "/storage")}]}}
                                           :compactor {:threads 0}})]
 
           (t/testing "Latest submitted tx id should still be the one that was skipped"
@@ -962,8 +962,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (t/deftest test-finish-block-bug
   (util/with-tmp-dirs #{path}
-    (with-open [node (xtn/start-node {:log [:local {:path (.resolve path "log")}]
-                                      :storage [:local {:path (.resolve path "objects")}]
+    (with-open [node (xtn/start-node {:databases {:xtdb {:log [:local {:path (.resolve path "log")}]
+                                                         :storage [:local {:path (.resolve path "objects")}]}}
                                       :compactor {:threads 0}})]
       (xt/execute-tx node [[:put-docs :docs {:xt/id :foo}]])
       (xt/execute-tx node [[:put-docs :docs {:xt/id :foo}]])
@@ -973,8 +973,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
       (t/is (= [{:xt/id :foo}]
                (xt/q node "SELECT * FROM docs"))))
 
-    (with-open [node (xtn/start-node {:log [:local {:path (.resolve path "log")}]
-                                      :storage [:local {:path (.resolve path "objects")}]
+    (with-open [node (xtn/start-node {:databases {:xtdb {:log [:local {:path (.resolve path "log")}]
+                                                         :storage [:local {:path (.resolve path "objects")}]}}
                                       :compactor {:threads 0}})]
 
       ;; FAILED - returned {:xt/id :foo} three times

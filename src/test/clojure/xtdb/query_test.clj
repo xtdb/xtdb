@@ -23,7 +23,7 @@
       (f page-metadata))))
 
 (t/deftest test-find-gt-ivan
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 10}}))]
+  (with-open [node (xtn/start-node (assoc tu/*node-opts* :indexer {:rows-per-block 10}))]
     (xt/execute-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]])
 
     (tu/finish-block! node)
@@ -87,7 +87,7 @@
                            {:xt/id :jdt, :name "Jeremy", :ordinal 4}})))))
 
 (t/deftest test-find-eq-ivan
-  (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:rows-per-block 10}}))]
+  (with-open [node (xtn/start-node (assoc tu/*node-opts* :indexer {:rows-per-block 10}))]
     (xt/execute-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]
                          [:put-docs :xt_docs {:name "James", :xt/id :jms}]
                          [:put-docs :xt_docs {:name "Ivan", :xt/id :iva}]])

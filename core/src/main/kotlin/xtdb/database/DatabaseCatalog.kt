@@ -1,6 +1,9 @@
 package xtdb.database
 
 import clojure.lang.ILookup
+import kotlinx.serialization.Serializable
+import xtdb.api.log.Log
+import xtdb.api.storage.Storage
 
 interface DatabaseCatalog : AutoCloseable, ILookup {
     val databaseNames: Collection<DatabaseName>
@@ -14,6 +17,5 @@ interface DatabaseCatalog : AutoCloseable, ILookup {
     
     val primary: Database get() = this["xtdb"]!![0]
 
-    // TODO will eventually take config
     fun createDatabase(dbName: DatabaseName): List<Database>
 }

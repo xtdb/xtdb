@@ -1,3 +1,6 @@
 defaultTz: "America/Los_Angeles"
-log: !Local
-  path: /tmp/test-log
+databases:
+  xtdb:
+    log: !Local
+      path: /tmp/test-log
+    storage: !InMemory

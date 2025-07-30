@@ -98,7 +98,9 @@
 
 (t/deftest test-block-lag-healthy-4364
   (let [port (tu/free-port)]
-    (with-open [_node (xtn/start-node {:healthz {:port port}})]
+    (with-open [_node (xtn/start-node {:databases {:xtdb {:log [:in-memory]
+                                                          :storage [:in-memory]}}
+                                       :healthz {:port port}})]
       (t/testing "server thrown error responds with reasonable message"
         (letfn [(alive-resp []
                   (let [{:keys [status headers]} (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]

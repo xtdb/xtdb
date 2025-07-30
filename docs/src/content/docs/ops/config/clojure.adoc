@@ -2,115 +2,172 @@
 title: Clojure Configuration Cookbook
 ---
 
-This document provides examples for the EDN configuration of XTDB components, to be supplied to `xtdb.api/start-node`.
+.Changelog (last updated v2.1)
+[%collapsible]
+====
+v2.1: multi-database support::
++
+--
+Prior to 2.1, `:log` and `:storage` were top-level keys, and `:databases` was not used.
 
-== Log
-
-Main article: link:/config/log[Log]
-
-[#in-memory-log]
-=== In-Memory
-
-Main article: link:/config/log#_in_memory[in-memory log]
-
-This is the default, and can be omitted.
-
+For example:
 [source,clojure]
 ----
-{:log [:in-memory
-       {;; -- optional
-
-        ;; :instant-src (java.time.InstantSource/system)
-        }]}
+{:log [:in-memory {...}]
+ :storage [:in-memory {...}]}}
 ----
 
-[#local-log]
-=== Local disk
-
-Main article: link:/config/log#_local_disk[local-disk log]
-
-[source,clojure]
-----
-{:log [:local
-       {;; -- required
-        ;; accepts `String`, `File` or `Path`
-        :path "/tmp/log"
-
-        ;; -- optional
-
-        ;; accepts `java.time.InstantSource`
-        ;; :instant-src (InstantSource/system)
-
-        ;; :buffer-size 4096
-        ;; :poll-sleep-duration "PT1S"
-        }]}
-----
-
-[#kafka]
-=== Kafka
-
-Main article: link:/config/log/kafka[Kafka]
-
-[source,clojure]
-----
-{:log [:kafka
-       {;; -- required
-        :bootstrap-servers "localhost:9092"
-        :topic-name "xtdb-log"
-
-        ;; -- optional
-
-        ;; :create-topic? true
-        ;; :poll-duration #xt/duration "PT1S"
-        ;; :properties-file "kafka.properties"
-        ;; :properties-map {}
-        ;; :replication-factor 1
-        ;; :topic-config {}
-        }]}
-----
-
-== Storage
-
-Main article: link:/config/storage[Storage]
-
-[#in-memory-storage]
-=== In-Memory
-
-Main article: link:/config/storage#in-memory[in-memory storage]
-
-This is the default, and should be omitted.
-
-[#local-storage]
-=== Local disk
-
-Main article: link:/config/storage#local-disk[local-disk storage]
+The `:disk-cache` and `:memory-cache` keys were nested under the local/remote storage:
 
 [source,clojure]
 ----
 {:storage [:local
            {;; -- required
 
-            ;; accepts `String`, `File` or `Path`
             :path "/var/lib/xtdb/storage"
 
             ;; -- optional
 
-            ;; :max-cache-bytes 536870912
+            ;; :max-cache-bytes 1024
+            ;; :max-cache-entries 536870912
            }]}
+
+{:storage [:remote {;; --required
+                    :object-store [:object-store-implementation {}]
+
+                    :local-disk-cache "/tmp/local-disk-cache"
+
+                    ;; -- optional
+                    ;; :max-cache-entries 1024
+                    ;; :max-cache-bytes 536870912
+                    ;; :max-disk-cache-percentage 75
+                    ;; :max-disk-cache-bytes 107374182400
+                    }]}
+----
+--
+====
+
+This document provides examples for the EDN configuration of XTDB components, to be supplied to `xtdb.node/start-node`.
+
+See the link:/ops/config[main configuration documentation] for more details.
+
+== Log
+
+Main article: link:/ops/config/log[Log]
+
+[#in-memory-log]
+=== In-Memory
+
+Main article: link:/ops/config/log#_in_memory[in-memory log]
+
+This is the default, and can be omitted.
+
+[source,clojure]
+----
+{:databases
+ {:xtdb
+  {:log [:in-memory
+         {;; -- optional
+
+          ;; :instant-src (java.time.InstantSource/system)
+          }]}}}
+----
+
+[#local-log]
+=== Local disk
+
+Main article: link:/ops/config/log#_local_disk[local-disk log]
+
+[source,clojure]
+----
+{:databases
+ {:xtdb
+  {:log [:local
+         {;; -- required
+          ;; accepts `String`, `File` or `Path`
+          :path "/tmp/log"
+
+          ;; -- optional
+
+          ;; accepts `java.time.InstantSource`
+          ;; :instant-src (InstantSource/system)
+
+          ;; :buffer-size 4096
+          ;; :poll-sleep-duration "PT1S"
+          }]}}}
+----
+
+[#kafka]
+=== Kafka
+
+Main article: link:/ops/config/log/kafka[Kafka]
+
+[source,clojure]
+----
+{:databases
+ {:xtdb
+  {:log [:kafka
+         {;; -- required
+          :bootstrap-servers "localhost:9092"
+          :topic-name "xtdb-log"
+
+          ;; -- optional
+
+          ;; :create-topic? true
+          ;; :poll-duration #xt/duration "PT1S"
+          ;; :properties-file "kafka.properties"
+          ;; :properties-map {}
+          ;; :replication-factor 1
+          ;; :topic-config {}
+          }]}}}
+----
+
+== Storage
+
+Main article: link:/ops/config/storage[Storage]
+
+[#in-memory-storage]
+=== In-Memory
+
+Main article: link:/ops/config/storage#in-memory[in-memory storage]
+
+This is the default, and should be omitted.
+
+[#local-storage]
+=== Local disk
+
+Main article: link:/ops/config/storage#local-disk[local-disk storage]
+
+[source,clojure]
+----
+{:databases
+ {:xtdb
+  {:storage [:local
+             {;; -- required
+
+              ;; accepts `String`, `File` or `Path`
+              :path "/var/lib/xtdb/storage"
+
+              ;; -- optional
+
+              ;; :max-cache-bytes 536870912
+             }]}}}
 ----
 
 [#remote-storage]
 === Remote
 
-Main article: link:/config/storage#remote[remote storage]
+Main article: link:/ops/config/storage#remote[remote storage]
 
 [source,clojure]
 ----
-{:storage [:remote {;; -- required 
-                    
-                    ;; Each object store implementation has its own configuration - 
-                    ;; see below for some examples.
-                    :object-store [:object-store-implementation {}]}]
+{:databases
+ {:xtdb
+  {:storage [:remote {;; -- required 
+                      
+                      ;; Each object store implementation has its own configuration - 
+                      ;; see below for some examples.
+                      :object-store [:object-store-implementation {}]}]}}
 
  ;; -- required for remote storage
  ;; Local directory to store the working-set cache in.
@@ -149,17 +206,19 @@ Main article: link:/ops/aws#storage[S3]
 
 [source,clojure]
 ----
-{:storage [:remote
-           {:object-store [:s3
-                           {;; -- required
-                            :bucket "my-bucket"
+{:databases
+ {:xtdb
+  {:storage [:remote
+             {:object-store [:s3
+                             {;; -- required
+                              :bucket "my-bucket"
 
-                            ;; -- optional
+                              ;; -- optional
 
-                            ;; :prefix "my-xtdb-node"
-                            ;; :configurator (reify S3Configurator
-                            ;;                 ...)
-                           }]}]}
+                              ;; :prefix "my-xtdb-node"
+                              ;; :configurator (reify S3Configurator
+                              ;;                 ...)
+                             }]}]}}}
 ----
 
 [#azure]
@@ -169,19 +228,21 @@ Main article: link:/ops/azure#storage[Azure Blob Storage]
 
 [source,clojure]
 ----
-{:storage [:remote
-           {:object-store [:azure
-                           {;; -- required
-                            ;; --- At least one of storage-account or storage-account-endpoint is required
-                            :storage-account "storage-account"
-                            ;; :storage-account-endpoint "https://storage-account.privatelink.blob.core.windows.net"
-                            :container "xtdb-container"
+{:databases
+ {:xtdb
+  {:storage [:remote
+             {:object-store [:azure
+                             {;; -- required
+                              ;; --- At least one of storage-account or storage-account-endpoint is required
+                              :storage-account "storage-account"
+                              ;; :storage-account-endpoint "https://storage-account.privatelink.blob.core.windows.net"
+                              :container "xtdb-container"
 
-                            ;; -- optional
+                              ;; -- optional
 
-                            ;; :prefix "my-xtdb-node"
-                            ;; :user-managed-identity-client-id "user-managed-identity-client-id"
-                           }]}]}
+                              ;; :prefix "my-xtdb-node"
+                              ;; :user-managed-identity-client-id "user-managed-identity-client-id"
+                             }]}]}}}
 ----
 
 
@@ -192,15 +253,17 @@ Main article: link:/ops/google-cloud#storage[Google Cloud Storage]
 
 [source,clojure]
 ----
-{:storage [:remote
-           {:object-store [:google-cloud
-                           {;; -- required
-                            :project-id "xtdb-project"
-                            :bucket "xtdb-bucket"
+{:databases
+ {:xtdb
+  {:storage [:remote
+             {:object-store [:google-cloud
+                             {;; -- required
+                              :project-id "xtdb-project"
+                              :bucket "xtdb-bucket"
 
-                            ;; -- optional
+                              ;; -- optional
 
-                            ;; :prefix "my-xtdb-node"
-                           }]}]}
+                              ;; :prefix "my-xtdb-node"
+                             }]}]}}}
 ----
 

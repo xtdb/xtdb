@@ -1,6 +1,35 @@
 ---
 title: Log
 ---
+
+.Changelog (last updated v2.1)
+[%collapsible]
+====
+v2.1: multi-database support::
++
+--
+`databases` was introduced in v2.1.
+
+Prior to that, the `log` key was at the top-level of the configuration:
+
+[source,yaml]
+----
+log: !Local
+  path: /var/lib/xtdb/log
+  # bufferSize: 4096
+  # pollSleepDuration: PT0.1S
+
+# became
+
+databases:
+  xtdb:
+    log: !Local
+      path: /var/lib/xtdb/log
+      # bufferSize: 4096
+----
+--
+====
+
 One of the key components of an XTDB node is the log - this is a totally ordered log of all operations that have been applied to the database, generally persistent & shared between nodes.
 
 == Implementations
@@ -19,7 +48,9 @@ By default, the log is a transient, in-memory log:
 [source,yaml]
 ----
 # default, no need to explicitly specify
-# log: !InMemory
+# databases:
+#   xtdb:
+#     log: !InMemory
 ----
 
 If configured as an in-process node, you can also specify an https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html[InstantSource] implementation - this is used to override the local machine's clock when providing a system-time timestamp for each message.
@@ -30,20 +61,19 @@ A single-node persistent log implementation that writes to a local directory.
 
 [source,yaml]
 ----
-log: !Local
-  # -- required
+databases:
+  xtdb:
+    log: !Local
+      # -- required
 
-  # The path to the local directory to store the log in.
-  # (Can be set as an !Env value)
-  path: /var/lib/xtdb/log
+      # The path to the local directory to store the log in.
+      # (Can be set as an !Env value)
+      path: /var/lib/xtdb/log
 
-  # -- optional
+      # -- optional
 
-  # The number of entries of the buffer to use when writing to the log.
-  # bufferSize: 4096
-
-  # The duration to sleep for when polling for new messages written to the log.
-  # pollSleepDuration: PT0.1S
+      # The number of entries of the buffer to use when writing to the log.
+      # bufferSize: 4096
 ----
 
 If configured as an in-process node, you can also specify an https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/InstantSource.html[InstantSource] implementation - this is used to override the local machine's clock when providing a system-time timestamp for each transaction.
@@ -71,8 +101,10 @@ To configure an epoch, specify the `epoch` field inside the node's log configura
 
 [source,yaml]
 ----
-log: !<LogType>
-  epoch: <new-epoch>
+databases:
+  xtdb:
+    log: !<LogType>
+      epoch: <new-epoch>
 ----
 
 Where:

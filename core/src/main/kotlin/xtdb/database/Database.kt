@@ -1,8 +1,10 @@
 package xtdb.database
 
+import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.BufferPool
 import xtdb.api.log.Log
+import xtdb.api.storage.Storage
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
@@ -37,4 +39,13 @@ data class Database(
         this === other || (other is Database && name == other.name && part == other.part)
 
     override fun hashCode() = Objects.hash(name, part)
+
+    @Serializable
+    data class Config(
+        val log: Log.Factory = Log.inMemoryLog,
+        val storage: Storage.Factory = Storage.inMemoryStorage(),
+    ) {
+        fun log(log: Log.Factory) = copy(log = log)
+        fun storage(storage: Storage.Factory) = copy(storage = storage)
+    }
 }

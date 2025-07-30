@@ -1,7 +1,48 @@
 ---
 title: Kafka
 ---
+
+.Changelog (last updated v2.1)
+[%collapsible]
+====
+v2.1: multi-database support::
++
+--
+`databases` and `logClusters` were introduced in v2.1.
+
+Prior to that, the `log` key was at the top-level of the configuration, and the configuration in `logClusters` was within that `log`:
+
+[source,yaml]
+----
+log: !Kafka
+  bootstrapServers: "localhost:9092"
+  topic: "xtdb-log"
+  # autoCreateTopic: true
+  # pollDuration: "PT1S"
+  # propertiesFile: "kafka.properties"
+  # propertiesMap:
+
+# became
+
+logClusters:
+  kafkaCluster: !Kafka
+    bootstrapServers: "localhost:9092"
+    # pollDuration: "PT1S"
+    # propertiesFile: "kafka.properties"
+    # propertiesMap:
+
+databases:
+  xtdb:
+    log: !Kafka
+      cluster: kafkaCluster
+      topic: "xtdb-log"
+      # autoCreateTopic: true
+----
+--
+====
+
 https://kafka.apache.org/[Apache Kafka] can be used as an XTDB message log.
+
 
 == Setup
 
@@ -64,22 +105,24 @@ logClusters:
     # A map of Kafka connection properties, supplied directly to the Kafka client.
     # propertiesMap:
 
-# We then create a log using the Kafka cluster we just defined:
+# For each database, we then create a log using the Kafka cluster we just defined:
 
-log: !Kafka
-  # -- required
+databases:
+  xtdb:
+    log: !Kafka
+      # -- required
 
-  # The name of the Kafka cluster to use for the primary log.
-  cluster: kafkaCluster
+      # The name of the Kafka cluster to use for the primary log.
+      cluster: kafkaCluster
 
-  # Name of the Kafka topic to use for the primary log.
-  # (Can be set as an !Env value)
-  topic: "xtdb-log"
+      # Name of the Kafka topic to use for the primary log.
+      # (Can be set as an !Env value)
+      topic: "xtdb-log"
 
-  # -- optional
+      # -- optional
 
-  # Whether or not to automatically create the topic, if it does not already exist.
-  # autoCreateTopic: true
+      # Whether or not to automatically create the topic, if it does not already exist.
+      # autoCreateTopic: true
 ----
 
 [#auth_example]
@@ -101,9 +144,11 @@ logClusters:
       security.protocol: SASL_SSL
       sasl.jaas.config: !Env KAFKA_SASL_JAAS_CONFIG
 
-log: !Kafka
-  topic: !Env XTDB_LOG_TOPIC
-  autoCreateTopic: false
+databases:
+  xtdb:
+    log: !Kafka
+      topic: !Env XTDB_LOG_TOPIC
+      autoCreateTopic: false
 ----
 
 The `KAFKA_SASL_JAAS_CONFIG` environment variable will likely contain a string similar to the following, and should be passed in as a secret value:

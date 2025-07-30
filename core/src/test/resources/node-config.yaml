@@ -1,12 +1,14 @@
 defaultTz: "America/Los_Angeles"
 server:
   port: 5433
-log: !Local
-  path: /tmp/test-log
+databases:
+  xtdb:
+    log: !Local
+      path: /tmp/test-log
+    storage: !Local
+      path: /tmp/test-storage
 indexer:
   logLimit: 65
   flushDuration: PT4H
-storage: !Local
-  path: /tmp/test-storage
 memoryCache:
   maxSizeBytes: 1025

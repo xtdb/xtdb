@@ -1,9 +1,45 @@
 (ns xtdb.db-catalog
   (:require [integrant.core :as ig]
+            [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import [java.util HashMap]
            xtdb.api.Xtdb$Config
-           [xtdb.database Database DatabaseCatalog]))
+           [xtdb.database Database Database$Config DatabaseCatalog]))
+
+(defmulti ->log-factory
+  #_{:clj-kondo/ignore [:unused-binding]}
+  (fn [tag opts]
+    (when-let [ns (namespace tag)]
+      (doseq [k [(symbol ns)
+                 (symbol (str ns "." (name tag)))]]
+
+        (try
+          (require k)
+          (catch Throwable _))))
+
+    tag))
+
+(defmulti ->storage-factory
+  #_{:clj-kondo/ignore [:unused-binding]}
+  (fn [tag opts]
+    (when-let [ns (namespace tag)]
+      (doseq [k [(symbol ns)
+                 (symbol (str ns "." (name tag)))]]
+
+        (try
+          (require k)
+          (catch Throwable _))))
+
+    tag))
+
+(defmethod xtn/apply-config! ::databases [^Xtdb$Config config _ databases]
+  (doseq [[db-name {:keys [log storage]}] databases]
+    (.database config (str (symbol db-name))
+               (cond-> (Database$Config.)
+                 log (.log (->log-factory (first log) (second log)))
+                 storage (.storage (->storage-factory (first storage) (second storage))))))
+
+  config)
 
 (defmethod ig/init-key ::allocator [_ {{:keys [allocator]} :base, :keys [db-name]}]
   (util/->child-allocator allocator (format "database/%s" db-name)))
@@ -40,7 +76,7 @@
           :indexer (ig/ref :xtdb/indexer)
           :compactor (ig/ref :xtdb/compactor)}})
 
-(defn- db-system [db-name base]
+(defn- db-system [db-name base ^Database$Config db-config]
   (let [^Xtdb$Config conf (get-in base [:config :config])
         indexer-conf (.getIndexer conf)
         opts {:base base, :db-name db-name, :part-idx 0}]
@@ -49,8 +85,8 @@
          :xtdb/table-catalog opts
          :xtdb/trie-catalog opts
          :xtdb.metadata/metadata-manager opts
-         :xtdb/log (assoc opts :factory (.getLog conf))
-         :xtdb/buffer-pool (assoc opts :factory (.getStorage conf))
+         :xtdb/log (assoc opts :factory (.getLog db-config))
+         :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config))
          :xtdb.indexer/live-index (assoc opts :indexer-conf indexer-conf)
 
          ::for-query opts
@@ -60,9 +96,9 @@
          :xtdb.log/processor (assoc opts :indexer-conf indexer-conf)}
         (doto ig/load-namespaces))))
 
-(defn- open-db [db-name base]
+(defn- open-db [db-name base db-config]
   (let [sys (try
-               (-> (db-system db-name base)
+               (-> (db-system db-name base db-config)
                    ig/prep
                    ig/init)
                (catch clojure.lang.ExceptionInfo e
@@ -84,7 +120,10 @@
 
 (defmethod ig/init-key :xtdb/db-catalog [_ {:keys [base]}]
   (let [!dbs (HashMap.)
-        primary (open-db "xtdb" base)]
+        ^Xtdb$Config conf (get-in base [:config :config])
+        db-configs (.getDatabases conf)
+        xtdb-db-config (get db-configs "xtdb")
+        primary (open-db "xtdb" base xtdb-db-config)]
 
     (.put !dbs "xtdb" [primary])
 
@@ -98,7 +137,7 @@
                  (mapv :db)))
 
       (createDatabase [_ db-name]
-        (util/with-close-on-catch [db (open-db db-name base)]
+        (util/with-close-on-catch [db (open-db db-name base (Database$Config.))]
           (.put !dbs db-name [db])
           [(:db db)]))
 

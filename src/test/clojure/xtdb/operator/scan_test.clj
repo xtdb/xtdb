@@ -585,7 +585,8 @@
 
 (deftest test-leaves-are-in-system-order
   (binding [c/*page-size* 1]
-    (with-open [node (xtn/start-node (merge tu/*node-opts* {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]}))]
+    (with-open [node (xtn/start-node (assoc-in tu/*node-opts* [:databases :xtdb]
+                                               {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]}))]
 
       (dotimes [i 2]
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version i}]]))
@@ -601,7 +602,8 @@
   (binding [c/*page-size* 1
             cat/*file-size-target* (* 16 1024)
             c/*ignore-signal-block?* true]
-    (with-open [node (xtn/start-node (merge tu/*node-opts* {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]}))]
+    (with-open [node (xtn/start-node (assoc-in tu/*node-opts* [:databases :xtdb]
+                                               {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]}))]
       ;; 2020 - 2025
       (let [tx-key (last (for [i (range 6)]
                            (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :col i}]])))]
@@ -658,7 +660,8 @@
             cat/*file-size-target* (* 16 1024)
             c/*ignore-signal-block?* true]
     (let [insts (tu/->instants :year)]
-      (with-open [node (xtn/start-node (merge tu/*node-opts* {:log [:in-memory {:instant-src (tu/->mock-clock insts)}]}))]
+      (with-open [node (xtn/start-node (assoc-in tu/*node-opts* [:databases :xtdb]
+                                                 {:log [:in-memory {:instant-src (tu/->mock-clock insts)}]}))]
         ;; versions 2020 - 2025
         (let [tx-key (last (for [[i [start end]] (->> (partition 2 1 insts)
                                                       (take 6)
@@ -767,8 +770,8 @@
   (doseq [bucketing  [RecencyPartition/WEEK RecencyPartition/YEAR]
           clock-step [:second :year]]
     (binding [c/*recency-partition* bucketing]
-      (util/with-open [n1 (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants clock-step))}]})
-                       n2 (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants clock-step))}]})]
+      (util/with-open [n1 (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants clock-step))}]}}})
+                       n2 (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock (tu/->instants clock-step))}]}}})]
         (let [intervals (vec (for [dir [:normal :inverse]
 
                                    ;; could add in some end-of-times here

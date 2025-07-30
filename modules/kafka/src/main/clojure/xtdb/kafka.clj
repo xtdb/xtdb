@@ -1,5 +1,6 @@
 (ns xtdb.kafka
   (:require [xtdb.api :as xt]
+            [xtdb.db-catalog :as db]
             [xtdb.node :as xtn]
             [xtdb.time :as time]
             [xtdb.util :as util])
@@ -15,8 +16,7 @@
                    properties-map (.propertiesMap properties-map)
                    properties-file (.propertiesFile (util/->path properties-file))))))
 
-(defmethod xtn/apply-config! ::log
-  [^Xtdb$Config config _ {:keys [cluster topic epoch] :as opts}]
-  (doto config
-    (.setLog (cond-> (KafkaCluster$LogFactory. (str (symbol cluster)) topic (boolean (:create-topic? opts true)))
-               epoch (.epoch epoch)))))
+(defmethod db/->log-factory :xtdb/kafka
+  [_ {:keys [cluster topic epoch] :as opts}]
+  (cond-> (KafkaCluster$LogFactory. (str (symbol cluster)) topic (boolean (:create-topic? opts true)))
+    epoch (.epoch epoch)))
