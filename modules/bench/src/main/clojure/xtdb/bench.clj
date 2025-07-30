@@ -295,7 +295,7 @@
                               :time-taken-ms (- (System/currentTimeMillis) start-ms)}))))))
 
 (defn sync-node
-  ([node] (sync-node node nil))
+  ([node] (xt-log/sync-node node))
 
   ([node ^Duration timeout]
    (xt-log/sync-node node timeout)))
