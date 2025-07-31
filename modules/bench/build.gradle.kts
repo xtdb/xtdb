@@ -34,4 +34,7 @@ dependencies {
 tasks.shadowJar {
     transform(DataReaderTransformer())
     archiveFileName.set("bench-standalone.jar")
+    setProperty("zip64", true)
+    mergeServiceFiles()
+    transform(DataReaderTransformer())
 }
