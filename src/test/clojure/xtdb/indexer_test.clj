@@ -423,12 +423,11 @@
               (let [db (db/primary-db node2)
                     bp (.getBufferPool db)
                     block-cat (.getBlockCatalog db)
-                    tc (.getTableCatalog db)
-                    lc-tx (xt-log/await-db db first-half-await-token (Duration/ofSeconds 10))]
-                (t/is (= first-half-tx-id (:tx-id lc-tx)))
-                (t/is (= {"xtdb" [(serde/->TxKey (:tx-id lc-tx) (:system-time lc-tx))]}
-                         (xtp/latest-completed-txs node2)))
+                    tc (.getTableCatalog db)]
 
+                (xt-log/await-node node2 first-half-await-token (Duration/ofSeconds 10))
+                (t/is (= first-half-tx-id
+                         (-> (xtp/latest-completed-txs node2) (get-in ["xtdb" 0 :tx-id]))))
 
                 (let [latest-completed-tx (.getLatestCompletedTx block-cat)]
 
@@ -463,14 +462,15 @@
                   (with-open [node3 (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
                     (let [db (db/primary-db node3)
                           bp (.getBufferPool db)]
+                      (xt-log/await-node node3 first-half-await-token (Duration/ofSeconds 10))
                       (t/is (<= first-half-tx-id
-                                (:tx-id (xt-log/await-db db first-half-await-token (Duration/ofSeconds 10)))
+                                (-> (xtp/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))
                                 second-half-tx-id))
 
                       (t/is (= :utf8
                                (types/field->col-type (.getField tc #xt/table device_info "_id"))))
 
-                      (xt-log/await-db (db/primary-db node3) second-half-await-token (Duration/ofSeconds 15))
+                      (xt-log/await-node node3 second-half-await-token (Duration/ofSeconds 15))
                       (t/is (= second-half-tx-id (-> (xtp/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))))
 
                       (Thread/sleep 250); wait for the block to finish writing to disk

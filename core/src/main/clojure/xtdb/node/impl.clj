@@ -179,8 +179,7 @@
 
           {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
 
-      ;; TODO multi-db
-      (xt-log/await-db db await-token tx-timeout)
+      (.awaitAll db-cat await-token tx-timeout)
 
       (.prepareQuery q-src ast db query-opts)))
 
@@ -192,14 +191,16 @@
                 (instance? XtqlQuery query) query
                 :else (throw (err/illegal-arg :xtdb/unsupported-query-type
                                               {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]
-      (xt-log/await-db db await-token tx-timeout)
+
+      (.awaitAll db-cat await-token tx-timeout)
 
       (.prepareQuery q-src ast db query-opts)))
 
   (prepare-ra [this plan query-opts]
     (let [db (.databaseOrNull db-cat (:default-db query-opts))
           {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-      (xt-log/await-db db await-token tx-timeout)
+
+      (.awaitAll db-cat await-token tx-timeout)
 
       (.prepareQuery q-src plan db query-opts)))
 

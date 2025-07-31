@@ -22,7 +22,7 @@
           (let [last-tx-key (tsd/submit-ts-devices node {:size :small})]
 
             (log/info "transactions submitted, last tx" (pr-str last-tx-key))
-            (xt-log/await-db node last-tx-key (Duration/ofMinutes 15))
+            (xt-log/sync-node node (Duration/ofMinutes 15))
             (t/is (= {"xtdb" [last-tx-key]} (xtp/latest-completed-txs node)))
             (tu/finish-block! node))
 

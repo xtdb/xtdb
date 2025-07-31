@@ -442,7 +442,7 @@
 
     :else (throw (pgio/err-protocol-violation (format "invalid timezone '%s'" (str tz))))))
 
-(defn cmd-begin [{:keys [node conn-state db]} tx-opts {:keys [args]}]
+(defn cmd-begin [{:keys [node conn-state]} tx-opts {:keys [args]}]
   (swap! conn-state
          (fn [{:keys [session await-token] :as st}]
            (let [await-token (if-let [[_ tok] (find tx-opts :await-token)]
@@ -451,7 +451,7 @@
                  {:keys [^Clock clock]} session]
 
              (when-not (= :read-write (:access-mode tx-opts))
-               (xt-log/await-db db await-token #xt/duration "PT30S"))
+               (xt-log/await-node node await-token #xt/duration "PT30S"))
 
              (-> st
                  (update :transaction

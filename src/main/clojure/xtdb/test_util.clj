@@ -218,7 +218,7 @@
          query-opts (-> query-opts
                         (update :default-db (fnil identity "xtdb"))
                         (cond-> node (-> (update :await-token (fnil identity (xtp/await-token node)))
-                                         (doto (-> :await-token (->> (xt-log/await-db (db/primary-db node))))))))
+                                         (doto (-> :await-token (->> (xt-log/await-node node)))))))
 
          db (some-> node db/primary-db)
 

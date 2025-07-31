@@ -338,25 +338,10 @@
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
   (util/close log-processor))
 
-(defn await-db
-  ;; TODO this should probably be await-node given it's taking a multi-db token
-  ([^Database db]
-   (-> @(.awaitAsync (.getLogProcessor db))
-       (util/rethrowing-cause)))
-
-  ([^Database db, token]
-   (when token
-     (-> @(.awaitAsync (.getLogProcessor db) (-> (basis/<-tx-basis-str token)
-                                                 (get-in [(.getName db) 0])))
-         (util/rethrowing-cause))))
-
-  ([^Database db, token ^Duration timeout]
-   (when token
-     (-> @(cond-> (.awaitAsync (.getLogProcessor db) (-> (basis/<-tx-basis-str token)
-                                                         (get-in [(.getName db) 0])))
-            timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))
-         (util/rethrowing-cause)))))
+(defn await-node
+  ([node token] (await-node node token nil))
+  ([node token timeout] (.awaitAll (db/<-node node) token timeout)))
 
 (defn sync-node
-  ([node] (.syncAll (db/<-node node)))
+  ([node] (sync-node node nil))
   ([node timeout] (.syncAll (db/<-node node) timeout)))

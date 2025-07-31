@@ -11,6 +11,7 @@ import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.BufferPool
 import xtdb.api.log.Log
+import xtdb.api.log.MessageId
 import xtdb.api.storage.Storage
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
@@ -62,14 +63,22 @@ data class Database(
 
     interface Catalog : ILookup, Seqable {
         companion object {
+            private suspend fun Database.await(msgId: MessageId) = logProcessor.awaitAsync(msgId).await()
+            private suspend fun Database.sync() = await(logProcessor.latestSubmittedMsgId)
+
+            private suspend fun Catalog.awaitAll0(token: String) = coroutineScope {
+                val basis = token.decodeTxBasisToken()
+
+                databaseNames
+                    .mapNotNull { databaseOrNull(it) }
+                    .map { db -> launch { basis[db.name]?.first()?.let { db.await(it) } } }
+                    .joinAll()
+            }
+
             private suspend fun Catalog.syncAll0() = coroutineScope {
                 databaseNames
                     .mapNotNull { databaseOrNull(it) }
-                    .map { db ->
-                        launch {
-                            db.logProcessor.let { it.awaitAsync(it.latestSubmittedMsgId) }.await()
-                        }
-                    }
+                    .map { db -> launch { db.sync() } }
                     .joinAll()
             }
         }
@@ -89,7 +98,13 @@ data class Database(
                 ?.map { MapEntry(it, databaseOrNull(it)) }
                 ?.let { RT.seq(it) }
 
-        fun syncAll() = runBlocking { syncAll0() }
-        fun syncAll(timeout: Duration) = runBlocking { withTimeout(timeout) { syncAll0() } }
+        fun awaitAll(token: String?, timeout: Duration?) = runBlocking {
+            if (token != null)
+                if (timeout == null) awaitAll0(token) else withTimeout(timeout) { awaitAll0(token) }
+        }
+
+        fun syncAll(timeout: Duration?) = runBlocking {
+            if (timeout == null) syncAll0() else withTimeout(timeout) { syncAll0() }
+        }
     }
 }
