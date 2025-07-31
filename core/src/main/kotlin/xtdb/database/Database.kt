@@ -1,5 +1,12 @@
 package xtdb.database
 
+import clojure.lang.*
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.future.await
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.time.withTimeout
 import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.BufferPool
@@ -13,6 +20,7 @@ import xtdb.indexer.LogProcessor
 import xtdb.indexer.Snapshot
 import xtdb.metadata.PageMetadata
 import xtdb.trie.TrieCatalog
+import java.time.Duration
 import java.util.*
 
 typealias DatabaseName = String
@@ -50,5 +58,38 @@ data class Database(
     ) {
         fun log(log: Log.Factory) = copy(log = log)
         fun storage(storage: Storage.Factory) = copy(storage = storage)
+    }
+
+    interface Catalog : ILookup, Seqable {
+        companion object {
+            private suspend fun Catalog.syncAll0() = coroutineScope {
+                databaseNames
+                    .mapNotNull { databaseOrNull(it) }
+                    .map { db ->
+                        launch {
+                            db.logProcessor.let { it.awaitAsync(it.latestSubmittedMsgId) }.await()
+                        }
+                    }
+                    .joinAll()
+            }
+        }
+
+        val databaseNames: Collection<DatabaseName>
+        fun databaseOrNull(dbName: DatabaseName): Database?
+
+        operator fun get(dbName: DatabaseName) = databaseOrNull(dbName)
+
+        val primary: Database get() = this["xtdb"]!!
+
+        override fun valAt(key: Any?) = valAt(key, null)
+        override fun valAt(key: Any?, notFound: Any?) = databaseOrNull(key as DatabaseName) ?: notFound
+
+        override fun seq(): ISeq? =
+            databaseNames.takeIf { it.isNotEmpty() }
+                ?.map { MapEntry(it, databaseOrNull(it)) }
+                ?.let { RT.seq(it) }
+
+        fun syncAll() = runBlocking { syncAll0() }
+        fun syncAll(timeout: Duration) = runBlocking { withTimeout(timeout) { syncAll0() } }
     }
 }

@@ -18,7 +18,7 @@
            (xtdb.api.metrics HealthzConfig)
            xtdb.api.Xtdb$Config
            xtdb.BufferPoolKt
-           (xtdb.database Database DatabaseCatalog)
+           (xtdb.database Database Database$Catalog)
            (xtdb.indexer LogProcessor)))
 
 (defn get-ingestion-error [^LogProcessor log-processor]
@@ -106,7 +106,7 @@
    :db-cat (ig/ref :xtdb/db-catalog)
    :node (ig/ref :xtdb/node)})
 
-(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^InetAddress host, ^long port, meter-registry, ^DatabaseCatalog db-cat]}]
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^InetAddress host, ^long port, meter-registry, ^Database$Catalog db-cat]}]
   (let [db (.getPrimary db-cat)
         ^Server server (-> (handler {:meter-registry meter-registry
                                      :db db

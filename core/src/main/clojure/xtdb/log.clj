@@ -25,7 +25,7 @@
            (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
-           (xtdb.database Database DatabaseCatalog)
+           (xtdb.database Database Database$Catalog)
            xtdb.indexer.LogProcessor
            xtdb.table.TableRef
            (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs)
@@ -306,7 +306,7 @@
                  (not (instance? TxOp tx-op)) tx-ops/parse-tx-op)))))
 
 (defn submit-tx ^long
-  [{:keys [^BufferAllocator allocator, ^DatabaseCatalog db-cat, default-tz]} tx-ops {:keys [default-db, system-time] :as opts}]
+  [{:keys [^BufferAllocator allocator, ^Database$Catalog db-cat, default-tz]} tx-ops {:keys [default-db, system-time] :as opts}]
 
   (let [^Database db (or (.databaseOrNull db-cat default-db)
                          (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" default-db)

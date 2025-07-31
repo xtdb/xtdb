@@ -25,7 +25,7 @@
            (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
-           (xtdb.database Database DatabaseCatalog)
+           (xtdb.database Database Database$Catalog)
            xtdb.error.Anomaly
            (xtdb.query IQuerySource PreparedQuery)))
 
@@ -56,7 +56,7 @@
     (-> (q/cursor->stream cursor query-opts metrics)
         (metrics/wrap-query query-timer))))
 
-(defrecord Node [^BufferAllocator allocator, ^DatabaseCatalog db-cat
+(defrecord Node [^BufferAllocator allocator, ^Database$Catalog db-cat
                  ^IQuerySource q-src
                  ^CompositeMeterRegistry metrics-registry
                  default-tz, ^AtomicReference !await-token
@@ -179,6 +179,7 @@
 
           {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
 
+      ;; TODO multi-db
       (xt-log/await-db db await-token tx-timeout)
 
       (.prepareQuery q-src ast db query-opts)))

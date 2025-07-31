@@ -299,7 +299,7 @@
         db (or (.databaseOrNull db-cat db-name)
                (when playground?
                  (log/debug "creating playground database" (pr-str db-name))
-                 (.createDatabase db-cat db-name))
+                 (db/create-database db-cat db-name))
                (throw (err-invalid-catalog db-name)))
 
         user (get startup-opts "user")

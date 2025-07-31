@@ -3,7 +3,7 @@
             [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import [xtdb.api Xtdb$Config GarbageCollectorConfig]
-           xtdb.database.DatabaseCatalog
+           xtdb.database.Database$Catalog
            [xtdb.garbage_collector GarbageCollector]))
 
 (defmethod xtn/apply-config! :xtdb/garbage-collector [^Xtdb$Config config _
@@ -22,7 +22,7 @@
    :garbage-lifetime (.getGarbageLifetime config)
    :approx-run-interval (.getApproxRunInterval config)})
 
-(defmethod ig/init-key :xtdb/garbage-collector [_ {:keys [^DatabaseCatalog db-cat, enabled? blocks-to-keep garbage-lifetime approx-run-interval]}]
+(defmethod ig/init-key :xtdb/garbage-collector [_ {:keys [^Database$Catalog db-cat, enabled? blocks-to-keep garbage-lifetime approx-run-interval]}]
   ;; TODO multi-db
   (cond-> (GarbageCollector. (.getPrimary db-cat) blocks-to-keep garbage-lifetime approx-run-interval)
     enabled? (.start)))

@@ -3,9 +3,14 @@
             [xtdb.error :as err]
             [xtdb.node :as xtn]
             [xtdb.util :as util])
-  (:import [java.util HashMap]
+  (:import [java.lang AutoCloseable]
+           [java.util HashMap]
            xtdb.api.Xtdb$Config
-           [xtdb.database Database Database$Config DatabaseCatalog]))
+           [xtdb.database Database Database$Catalog Database$Config]))
+
+(defprotocol CreateDatabase
+  ;; currently just used by the playground to create a new in-memory database
+  (create-database [this db-name]))
 
 (defmulti ->log-factory
   #_{:clj-kondo/ignore [:unused-binding]}
@@ -132,17 +137,20 @@
         (util/with-close-on-catch [db (open-db db-name base db-config)]
           (.put !dbs db-name db)))
 
-      (reify DatabaseCatalog
+      (reify
+        Database$Catalog
         (getDatabaseNames [_] (set (keys !dbs)))
 
         (databaseOrNull [_ db-name]
           (:db (.get !dbs db-name)))
 
-        (createDatabase [_ db-name]
+        CreateDatabase
+        (create-database [_ db-name]
           (util/with-close-on-catch [db (open-db db-name base (Database$Config.))]
             (.put !dbs db-name db)
             (:db db)))
 
+        AutoCloseable
         (close [_]
           (doseq [[_ {:keys [sys]}] !dbs]
             (ig/halt! sys)))))))
@@ -150,7 +158,7 @@
 (defmethod ig/halt-key! :xtdb/db-catalog [_ db-cat]
   (util/close db-cat))
 
-(defn <-node ^xtdb.database.DatabaseCatalog [node]
+(defn <-node ^xtdb.database.Database$Catalog [node]
   (:db-cat node))
 
 (defn primary-db ^xtdb.database.Database [node]

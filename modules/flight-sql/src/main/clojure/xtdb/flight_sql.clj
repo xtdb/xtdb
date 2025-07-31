@@ -23,7 +23,7 @@
            [org.apache.arrow.vector.types.pojo Schema]
            [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
            xtdb.arrow.Relation
-           xtdb.database.DatabaseCatalog
+           xtdb.database.Database$Catalog
            xtdb.IResultCursor
            [xtdb.query IQuerySource PreparedQuery]))
 
@@ -271,7 +271,7 @@
                     (some? port) (.port port))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-server [{:keys [allocator q-src ^DatabaseCatalog db-cat] :as node}
+(defn open-server [{:keys [allocator q-src ^Database$Catalog db-cat] :as node}
                    ^FlightSqlServer$Factory factory]
   (let [db (.getPrimary db-cat) ; TODO multi-db
         host (.getHost factory)

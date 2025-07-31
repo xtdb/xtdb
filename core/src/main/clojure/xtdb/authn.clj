@@ -6,7 +6,7 @@
             [xtdb.query :as q])
   (:import [java.io Writer]
            (xtdb.api Authenticator Authenticator$Factory Authenticator$Factory$UserTable Authenticator$Method Authenticator$MethodRule Xtdb$Config)
-           xtdb.database.DatabaseCatalog
+           xtdb.database.Database$Catalog
            (xtdb.query IQuerySource)))
 
 (defn verify-pw [^IQuerySource q-src, db, user password]
@@ -77,7 +77,7 @@
          :db-cat (ig/ref :xtdb/db-catalog)}
         opts))
 
-(defmethod ig/init-key :xtdb/authn [_ {:keys [^Authenticator$Factory authn-factory, q-src, ^DatabaseCatalog db-cat]}]
+(defmethod ig/init-key :xtdb/authn [_ {:keys [^Authenticator$Factory authn-factory, q-src, ^Database$Catalog db-cat]}]
   (let [db (.getPrimary db-cat)]
     (.open authn-factory q-src db)))
 
