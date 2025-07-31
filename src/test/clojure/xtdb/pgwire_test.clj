@@ -629,21 +629,19 @@
          (is (= [["a"] ["42"] ["\"hello!\""] ["[1,2,3]"]] (read))))
 
        (testing "error during plan"
-         (with-redefs [clojure.tools.logging/logf (constantly nil)]
-           (send "slect baz.a from baz;\n")
-           (is (-> (second (read :stderr))
-                   (str/includes? "line 1:0 mismatched input 'slect' expecting"))))
+         (send "slect baz.a from baz;\n")
+         (is (-> (second (read :stderr))
+               (str/includes? "line 1:0 mismatched input 'slect' expecting")))
 
          (testing "query error allows session to continue"
            (send "select 'ping';\n")
            (is (= [["_column_1"] ["ping"]] (read)))))
 
        (testing "error during query execution"
-         (with-redefs [clojure.tools.logging/logf (constantly nil)]
-           (send "select (1 / 0) from (values (42)) a (a);\n")
-           (is (= ["ERROR:  data exception - division by zero"
-                   "DETAIL:  {\"category\":\"cognitect.anomalies\\/incorrect\",\"code\":\"xtdb.expression\\/division-by-zero\",\"message\":\"data exception - division by zero\"}"]
-                  (read :stderr))))
+         (send "select (1 / 0) from (values (42)) a (a);\n")
+         (is (= ["ERROR:  data exception - division by zero"
+                 "DETAIL:  {\"category\":\"cognitect.anomalies\\/incorrect\",\"code\":\"xtdb.expression\\/division-by-zero\",\"message\":\"data exception - division by zero\"}"]
+                (read :stderr)))
 
          (testing "query error allows session to continue"
            (send "select 'ping';\n")
