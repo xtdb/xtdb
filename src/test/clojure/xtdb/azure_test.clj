@@ -3,10 +3,9 @@
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
-            [xtdb.db-catalog :as db]
             [xtdb.buffer-pool-test :as bp-test]
             [xtdb.datasets.tpch :as tpch]
+            [xtdb.db-catalog :as db]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
             [xtdb.object-store-test :as os-test]
@@ -14,7 +13,6 @@
             [xtdb.util :as util])
   (:import (java.nio ByteBuffer)
            (java.nio.file Files)
-           (java.time Duration)
            (xtdb.api.storage ObjectStore Storage)
            (xtdb.azure BlobStorage)
            (xtdb.multipart IMultipartUpload SupportsMultipart)))
@@ -74,13 +72,13 @@
 
 (defn start-kafka-node [local-disk-cache prefix]
   (xtn/start-node
-   {:storage [:remote
-              {:object-store [:azure {:storage-account storage-account
-                                      :container container
-                                      :prefix (util/->path (str "xtdb.azure-test." prefix))}]}]
+   {:databases {:xtdb {:storage [:remote
+                                 {:object-store [:azure {:storage-account storage-account
+                                                         :container container
+                                                         :prefix (util/->path (str "xtdb.azure-test." prefix))}]}]
+                       :log [:kafka {:topic (str "xtdb.kafka-test." prefix)
+                                     :bootstrap-servers "localhost:9092"}]}}
     :disk-cache {:path local-disk-cache}
-    :log [:kafka {:topic (str "xtdb.kafka-test." prefix)
-                  :bootstrap-servers "localhost:9092"}]
     :compactor {:threads 0}}))
 
 (t/deftest ^:azure list-test

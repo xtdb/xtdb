@@ -34,12 +34,12 @@
 
 (defn start-kafka-node [local-disk-cache prefix]
   (xtn/start-node
-   {:storage [:remote
-              {:object-store [:s3 {:bucket bucket
-                                   :prefix (util/->path (str "xtdb.s3-test." prefix))}]}]
-    :disk-cache {:path local-disk-cache}
-    :log [:kafka {:topic (str "xtdb.kafka-test." prefix)
-                  :bootstrap-servers "localhost:9092"}]}))
+   {:databases {:xtdb {:log [:kafka {:topic (str "xtdb.kafka-test." prefix)
+                                     :bootstrap-servers "localhost:9092"}]
+                       :storage [:remote
+                                 {:object-store [:s3 {:bucket bucket
+                                                      :prefix (util/->path (str "xtdb.s3-test." prefix))}]}]}}
+    :disk-cache {:path local-disk-cache}}))
 
 (t/deftest ^:s3 list-test
   (util/with-tmp-dirs #{local-disk-cache}
