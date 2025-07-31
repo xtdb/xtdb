@@ -50,7 +50,7 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn Query)
            (xtdb.arrow RelationReader VectorReader)
-           xtdb.database.Database
+           (xtdb.database Database Database$Catalog)
            (xtdb.indexer Snapshot Snapshot$Source)
            xtdb.operator.scan.IScanEmitter
            (xtdb.query IQuerySource PreparedQuery)
@@ -58,7 +58,7 @@
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, result-fields
                                         current-time, snapshot-token, default-tz,
-                                        ^AutoCloseable snap, ^BufferAllocator al, ^RefCounter ref-ctr, args-to-close]
+                                        snaps, ^BufferAllocator al, ^RefCounter ref-ctr, args-to-close]
   (reify IResultCursor
     (getResultFields [_] result-fields)
     (tryAdvance [_ c]
@@ -81,7 +81,7 @@
       (.release ref-ctr)
       (util/close cursor)
       (util/close args-to-close)
-      (util/close snap)
+      (util/close snaps)
       (util/close al))))
 
 (defn- ->result-fields [ordered-outer-projection fields]
@@ -104,19 +104,20 @@
     (-> args (.vectorFor (str expr)) (.getObject 0))
     expr))
 
-(defn- validate-snapshot-not-before [snapshot-token, ^Database db, ^Snapshot snap]
-  (let [snap-tx (.getTxBasis snap)]
-    (when snapshot-token
-      (let [system-time (-> (basis/<-time-basis-str snapshot-token)
-                            (get-in [(.getName db) 0]))]
-        (when (and system-time
-                   (or (nil? snap-tx)
-                       (neg? (compare (.getSystemTime snap-tx) system-time))))
-          (throw (err/illegal-arg :xtdb/unindexed-tx
-                                  {::err/message (format "system-time (%s) is after the latest completed tx (%s)"
-                                                         (str system-time) (pr-str snap-tx))
-                                   :latest-completed-tx snap-tx
-                                   :system-time system-time})))))))
+(defn- validate-snapshot-not-before [snapshot-token snaps]
+  (when snapshot-token
+    (let [basis (basis/<-time-basis-str snapshot-token)]
+      (doseq [[db-name ^Snapshot snap] snaps]
+        (let [snap-tx (.getTxBasis snap)
+              system-time (get-in basis [db-name 0])]
+          (when (and system-time
+                     (or (nil? snap-tx)
+                         (neg? (compare (.getSystemTime snap-tx) system-time))))
+            (throw (err/incorrect :xtdb/unindexed-tx
+                                  (format "system-time (%s) is after the latest completed tx (%s)"
+                                          (str system-time) (pr-str snap-tx))
+                                  {:latest-completed-tx snap-tx
+                                   :system-time system-time}))))))))
 
 (defn- parse-query [query]
   (cond
@@ -154,21 +155,26 @@
 
     conformed-plan))
 
-(defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache]}, scan-emitter, ^Database db, snap param-fields default-tz]
-  (.get emit-cache {:scan-fields (some-> db (.getTableCatalog)
-                                         (scan/scan-fields snap scan-cols))
-                    :last-known-block (some-> db .getBlockCatalog .getCurrentBlockIndex)
+(defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache]},
+                   scan-emitter, ^Database$Catalog db-cat, snaps
+                   param-fields, {:keys [default-tz]}]
+  (.get emit-cache {:scan-fields (scan/scan-fields db-cat snaps scan-cols)
+
+                    ;; this one is just to reset the cache for up-to-date stats
+                    ;; probably over-zealous
+                    :last-known-blocks (->> (for [db-name (.getDatabaseNames db-cat)]
+                                              [db-name (some-> (.databaseOrNull db-cat db-name) .getBlockCatalog .getCurrentBlockIndex)]))
+
                     :default-tz default-tz
                     :param-fields param-fields}
 
-        (fn [{:keys [scan-fields last-known-block param-fields default-tz]}]
+        (fn [{:keys [scan-fields param-fields default-tz]}]
           (let [{:keys [fields ->cursor]} (binding [expr/*default-tz* default-tz]
                                             (lp/emit-expr conformed-plan
                                                           {:scan-fields scan-fields
                                                            :default-tz default-tz
-                                                           :last-known-block last-known-block
                                                            :param-fields param-fields
-                                                           :db db
+                                                           :db-cat db-cat
                                                            :scan-emitter scan-emitter}))]
 
             {:fields (->result-fields col-names fields)
@@ -208,87 +214,103 @@
                                      (.maximumSize 16)
                                      (.build))})))))
 
-  (prepareQuery [this query dbs {:keys [default-db default-tz] :as query-opts}]
+  (prepareQuery [this query db-cat query-opts]
     (let [parsed-query (parse-query query)
 
-          db (.databaseOrNull dbs default-db)
+          {:keys [default-tz] :as query-opts} (-> query-opts
+                                                  (update :default-tz (fnil identity expr/*default-tz*)))]
+      (letfn [(open-snaps []
+                ;; TODO this opens up a snapshot for *every* db in the catalog
+                ;; when people have 'proper' multi-tenancy, this will be a problem
+                ;; thankfully we can probably figure out what databases may be relevant to the query at parse-time
+                (util/with-close-on-catch [!snaps (HashMap.)]
+                  (doseq [db-name (.getDatabaseNames db-cat)]
+                    (.put !snaps db-name (.openSnapshot (.getSnapSource (.databaseOrNull db-cat db-name)))))
+                  (into {} !snaps)))
 
-          ^Snapshot$Source snap-src (or (some-> db (.getSnapSource))
-                                        ;; tests don't always provide a db - use a dummy snap-src
-                                        (reify Snapshot$Source
-                                          (openSnapshot [_]
-                                            (Snapshot. nil nil {}))))
+              (->table-info []
+                ;; TODO this, too, gets the schema for *every* db in the catalog
+                (->> (.getDatabaseNames db-cat)
+                     (into {} (mapcat (fn [db-name]
+                                        (util/with-open [snap (.openSnapshot (.getSnapSource (.databaseOrNull db-cat db-name)))]
+                                          (.getSchema snap)))))))
 
-          !table-info (atom (scan/tables-with-cols snap-src))
-          default-tz (or default-tz expr/*default-tz*)]
-      (letfn [(plan-query* [table-info]
+              (plan-query* [table-info]
                 (-plan-query this parsed-query query-opts table-info))]
 
-        (reify PreparedQuery
-          (getParamCount [_] (:param-count (plan-query* @!table-info)))
-          (getColumnNames [_] (:col-names (plan-query* @!table-info)))
+        (let [!table-info (atom (->table-info))]
 
-          (getColumnFields [_ param-fields]
-            (let [planned-query (plan-query* @!table-info)]
-              (with-open [snap (.openSnapshot snap-src)]
-                (:fields (emit-query planned-query scan-emitter db snap
-                                     (->> param-fields
-                                          (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity))))
-                                     default-tz)))))
+          (reify PreparedQuery
+            (getParamCount [_] (:param-count (plan-query* @!table-info)))
+            (getColumnNames [_] (:col-names (plan-query* @!table-info)))
 
-          (getWarnings [_] (:warnings (plan-query* @!table-info)))
+            (getColumnFields [_ param-fields]
+              (let [planned-query (plan-query* @!table-info)]
+                (util/with-open [snaps (open-snaps)]
+                  (:fields (emit-query planned-query scan-emitter db-cat snaps
+                                       (->> param-fields
+                                            (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity))))
+                                       query-opts)))))
 
-          (openQuery [_ {:keys [args current-time snapshot-token default-tz close-args? await-token]
-                         :or {default-tz default-tz
-                              close-args? true}}]
-            (util/with-close-on-catch [^BufferAllocator allocator (if allocator
-                                                                    (util/->child-allocator allocator "BoundQuery/openCursor")
-                                                                    (RootAllocator.))
-                                       snap (.openSnapshot snap-src)]
-              (let [table-info (reset! !table-info (.getSchema snap))
-                    planned-query (plan-query* table-info)
-                    args (cond
-                           (instance? RelationReader args) args
-                           (vector? args) (vw/open-args allocator args)
-                           (nil? args) vw/empty-args
-                           :else (throw (ex-info "invalid args"
-                                                 {:type (class args)})))
+            (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
-                    {:keys [fields ->cursor]} (emit-query planned-query scan-emitter db snap (->arg-fields args) default-tz)
-                    current-time (or (some-> (or (:current-time planned-query) current-time)
-                                             (expr->value {:args args})
-                                             (time/->instant {:default-tz default-tz}))
-                                     (expr/current-time))]
+            (openQuery [_ {:keys [args current-time snapshot-token default-tz close-args? await-token]
+                           :or {default-tz default-tz
+                                close-args? true}}]
+              (util/with-close-on-catch [^BufferAllocator allocator (if allocator
+                                                                      (util/->child-allocator allocator "BoundQuery/openCursor")
+                                                                      (RootAllocator.))
+                                         snaps (open-snaps)]
+                (let [query-opts (-> query-opts (assoc :default-tz default-tz))
+                      table-info (reset! !table-info (->table-info))
+                      planned-query (plan-query* table-info)
+                      args (cond
+                             (instance? RelationReader args) args
+                             (vector? args) (vw/open-args allocator args)
+                             (nil? args) vw/empty-args
+                             :else (throw (ex-info "invalid args"
+                                                   {:type (class args)})))
 
-                (when (seq (:warnings planned-query))
-                  (.increment query-warning-counter))
+                      {:keys [fields ->cursor]} (emit-query planned-query scan-emitter db-cat snaps (->arg-fields args) query-opts)
+                      current-time (or (some-> (or (:current-time planned-query) current-time)
+                                               (expr->value {:args args})
+                                               (time/->instant {:default-tz default-tz}))
+                                       (expr/current-time))]
 
-                (.acquire ref-ctr)
-                (try
-                  (binding [expr/*clock* (InstantSource/fixed current-time)
-                            expr/*default-tz* default-tz
-                            expr/*snapshot-token* (or (some-> (:snapshot-token planned-query snapshot-token) (expr->value {:args args}))
-                                                      (when-let [sys-time (some-> snap .getTxBasis .getSystemTime)]
-                                                        (basis/->time-basis-str {(.getName db) [sys-time]})))
-                            expr/*await-token* await-token]
+                  (when (seq (:warnings planned-query))
+                    (.increment query-warning-counter))
 
-                    (validate-snapshot-not-before expr/*snapshot-token* db snap)
+                  (.acquire ref-ctr)
+                  (try
+                    (binding [expr/*clock* (InstantSource/fixed current-time)
+                              expr/*default-tz* default-tz
+                              expr/*snapshot-token* (or (some-> (:snapshot-token planned-query snapshot-token) (expr->value {:args args})
+                                                                (doto (validate-snapshot-not-before snaps)))
 
-                    (-> (->cursor {:allocator allocator, :snapshot snap
-                                   :default-tz default-tz,
-                                   :snapshot-token expr/*snapshot-token*
-                                   :current-time current-time
-                                   :args args
-                                   :schema table-info})
-                        (wrap-cursor fields
-                                     current-time expr/*snapshot-token* default-tz
-                                     allocator snap ref-ctr (when close-args? args))))
+                                                        (some-> (->> (for [[db-name ^Snapshot snap] snaps
+                                                                           :let [sys-time (some-> (.getTxBasis snap) (.getSystemTime))]
+                                                                           :when sys-time]
+                                                                       [db-name [sys-time]])
+                                                                     (into {})
+                                                                     (not-empty))
+                                                                (basis/->time-basis-str)))
+                              expr/*await-token* await-token]
 
-                  (catch Throwable t
-                    (.release ref-ctr)
-                    (when close-args?
-                      (util/close args))
-                    (throw t))))))))))
+                      (-> (->cursor {:allocator allocator,
+                                     :snaps snaps
+                                     :snapshot-token expr/*snapshot-token*
+                                     :current-time current-time
+                                     :args args, :schema table-info
+                                     :default-tz default-tz})
+                          (wrap-cursor fields
+                                       current-time expr/*snapshot-token* default-tz
+                                       allocator snaps ref-ctr (when close-args? args))))
+
+                    (catch Throwable t
+                      (.release ref-ctr)
+                      (when close-args?
+                        (util/close args))
+                      (throw t)))))))))))
 
   AutoCloseable
   (close [_]
