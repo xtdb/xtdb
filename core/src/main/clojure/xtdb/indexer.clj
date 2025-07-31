@@ -371,8 +371,8 @@
                                  (map-indexed (fn [idx ^VectorReader col]
                                                 (.withName col (str "?_" idx))))))))))))
 
-(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, db, snap-src, tx-opts, {:keys [stmt message]}]
-  (let [^PreparedQuery pq (.prepareQuery q-src stmt db snap-src tx-opts)]
+(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, db, tx-opts, {:keys [stmt message]}]
+  (let [^PreparedQuery pq (.prepareQuery q-src stmt db tx-opts)]
     (-> (fn eval-query [^RelationReader args]
           (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
                                              (assoc :args args, :close-args? false)))]
@@ -388,8 +388,8 @@
 
         (wrap-sql-args (.getParamCount pq)))))
 
-(defn- query-indexer [^IQuerySource q-src, db, snap-src, ^RelationIndexer rel-idxer, tx-opts, {:keys [stmt] :as query-opts}]
-  (let [^PreparedQuery pq (.prepareQuery q-src stmt db snap-src tx-opts)]
+(defn- query-indexer [^IQuerySource q-src, db, ^RelationIndexer rel-idxer, tx-opts, {:keys [stmt] :as query-opts}]
+  (let [^PreparedQuery pq (.prepareQuery q-src stmt db tx-opts)]
     (-> (fn eval-query [^RelationReader args]
           (with-open [res (-> (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
                                                  (assoc :args args, :close-args? false))))]
@@ -434,7 +434,7 @@
                  #(.copyRow doc-copier idx))))))
 
 (defn- ->patch-docs-indexer [^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
-                             ^IQuerySource q-src, ^Database db, snap-src, ^Instant system-time
+                             ^IQuerySource q-src, ^Database db, ^Instant system-time
                              tx-opts]
   (let [patch-leg (.vectorFor tx-ops-rdr "patch-docs")
         iids-rdr (.vectorFor patch-leg "iids")
@@ -473,7 +473,7 @@
                                                   "Invalid valid times"
                                                   {:valid-from valid-from, :valid-to valid-to})))
 
-                          (let [pq (.prepareQuery q-src (-> (sql/plan-patch {:table-info (sql/xform-table-info (scan/tables-with-cols snap-src))}
+                          (let [pq (.prepareQuery q-src (-> (sql/plan-patch {:table-info (sql/xform-table-info (scan/tables-with-cols (.getSnapSource db)))}
                                                                             {:table table
                                                                              :valid-from valid-from
                                                                              :valid-to valid-to
@@ -481,7 +481,7 @@
                                                                                                            ?patch_docs]
                                                                                                          '[_iid doc])})
                                                             (lp/rewrite-plan))
-                                                  db snap-src tx-opts)
+                                                  db tx-opts)
                                 args (vr/rel-reader [(SingletonListReader.
                                                       "?patch_docs"
                                                       (RelationAsStructReader.
@@ -529,7 +529,7 @@
                (.endStruct doc-writer)))))
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^LiveIndex$Tx live-idx-tx
-                                              ^VectorReader tx-ops-rdr, ^IQuerySource q-src, ^Database db, snap-src,
+                                              ^VectorReader tx-ops-rdr, ^IQuerySource q-src, ^Database db,
                                               {:keys [tx-key] :as tx-opts}]
   (let [sql-leg (.vectorFor tx-ops-rdr "sql")
         query-rdr (.vectorFor sql-leg "query")
@@ -549,17 +549,17 @@
                     tx-opts (assoc tx-opts :arg-fields (some-> args-arrow-rdr (.getVectorSchemaRoot) (.getSchema) (.getFields)))]
                 (case q-tag
                   :insert (foreach-arg-row args-arrow-rdr
-                                           (query-indexer q-src db snap-src upsert-idxer tx-opts q-args))
+                                           (query-indexer q-src db upsert-idxer tx-opts q-args))
                   :patch (foreach-arg-row args-arrow-rdr
-                                          (query-indexer q-src db snap-src patch-idxer tx-opts q-args))
+                                          (query-indexer q-src db patch-idxer tx-opts q-args))
                   :update (foreach-arg-row args-arrow-rdr
-                                           (query-indexer q-src db snap-src upsert-idxer tx-opts q-args))
+                                           (query-indexer q-src db upsert-idxer tx-opts q-args))
                   :delete (foreach-arg-row args-arrow-rdr
-                                           (query-indexer q-src db snap-src delete-idxer tx-opts q-args))
+                                           (query-indexer q-src db delete-idxer tx-opts q-args))
                   :erase (foreach-arg-row args-arrow-rdr
-                                          (query-indexer q-src db snap-src erase-idxer tx-opts q-args))
+                                          (query-indexer q-src db erase-idxer tx-opts q-args))
                   :assert (foreach-arg-row args-arrow-rdr
-                                           (->assert-idxer q-src db snap-src tx-opts q-args))
+                                           (->assert-idxer q-src db tx-opts q-args))
 
                   :create-user (let [{:keys [username password]} q-args]
                                  (update-pg-user! live-idx-tx tx-key username password))
@@ -654,11 +654,13 @@
 
                 (serde/->tx-aborted msg-id system-time skipped-exn))
 
-              (let [snap-src (reify Snapshot$Source
-                               (openSnapshot [_]
-                                 (util/with-close-on-catch [live-index-snap (.openSnapshot live-idx-tx)]
-                                   (Snapshot. tx-key live-index-snap
-                                              (li/->schema live-index-snap table-catalog)))))
+              (let [db (-> db
+                           (.withSnapSource
+                            (reify Snapshot$Source
+                              (openSnapshot [_]
+                                (util/with-close-on-catch [live-index-snap (.openSnapshot live-idx-tx)]
+                                  (Snapshot. tx-key live-index-snap
+                                             (li/->schema live-index-snap table-catalog)))))))
 
                     tx-opts {:snapshot-token (basis/->time-basis-str {"xtdb" [system-time]})
                              :current-time system-time
@@ -668,30 +670,30 @@
                              :default-db (.getName db)}
 
                     !put-docs-idxer (delay (->put-docs-indexer live-idx-tx tx-ops-rdr db system-time tx-opts))
-                    !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src db snap-src system-time tx-opts))
+                    !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src db system-time tx-opts))
                     !delete-docs-idxer (delay (->delete-docs-indexer live-idx-tx tx-ops-rdr db system-time tx-opts))
                     !erase-docs-idxer (delay (->erase-docs-indexer live-idx-tx tx-ops-rdr db tx-opts))
-                    !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src db snap-src tx-opts))]
+                    !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src db tx-opts))]
 
                 (if-let [e (try
                              (err/wrap-anomaly {}
-                                               (dotimes [tx-op-idx (.getValueCount tx-ops-rdr)]
-                                                 (.recordCallable tx-timer
-                                                                  #(case (.getLeg tx-ops-rdr tx-op-idx)
-                                                                     "xtql" (throw (err/unsupported :xtdb/xtql-dml-removed
-                                                                                                    (str/join ["XTQL DML is no longer supported, as of 2.0.0-beta7. "
-                                                                                                               "Please use SQL DML statements instead - "
-                                                                                                               "see the release notes for more information."])))
-                                                                     "sql" (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
-                                                                     "put-docs" (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
-                                                                     "patch-docs" (.indexOp ^OpIndexer @!patch-docs-idxer tx-op-idx)
-                                                                     "delete-docs" (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
-                                                                     "erase-docs" (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
-                                                                     "call" (throw (err/unsupported :xtdb/tx-fns-removed
-                                                                                                    (str/join ["tx-fns are no longer supported, as of 2.0.0-beta7. "
-                                                                                                               "Please use ASSERTs and SQL DML statements instead - "
-                                                                                                               "see the release notes for more information."]))))))
-                                               nil)
+                               (dotimes [tx-op-idx (.getValueCount tx-ops-rdr)]
+                                 (.recordCallable tx-timer
+                                                  #(case (.getLeg tx-ops-rdr tx-op-idx)
+                                                     "xtql" (throw (err/unsupported :xtdb/xtql-dml-removed
+                                                                                    (str/join ["XTQL DML is no longer supported, as of 2.0.0-beta7. "
+                                                                                               "Please use SQL DML statements instead - "
+                                                                                               "see the release notes for more information."])))
+                                                     "sql" (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
+                                                     "put-docs" (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
+                                                     "patch-docs" (.indexOp ^OpIndexer @!patch-docs-idxer tx-op-idx)
+                                                     "delete-docs" (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
+                                                     "erase-docs" (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
+                                                     "call" (throw (err/unsupported :xtdb/tx-fns-removed
+                                                                                    (str/join ["tx-fns are no longer supported, as of 2.0.0-beta7. "
+                                                                                               "Please use ASSERTs and SQL DML statements instead - "
+                                                                                               "see the release notes for more information."]))))))
+                               nil)
 
                              (catch Anomaly$Caller e e))]
 

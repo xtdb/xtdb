@@ -10,6 +10,7 @@ import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.LogProcessor
+import xtdb.indexer.Snapshot
 import xtdb.metadata.PageMetadata
 import xtdb.trie.TrieCatalog
 import java.util.*
@@ -22,7 +23,9 @@ data class Database(
     val allocator: BufferAllocator,
     val blockCatalog: BlockCatalog, val tableCatalog: TableCatalog, val trieCatalog: TrieCatalog,
     val log: Log, val bufferPool: BufferPool,
-    val metadataManager: PageMetadata.Factory, val liveIndex: LiveIndex,
+
+    // snapSource will mostly be the same as liveIndex - exception being within a transaction
+    val metadataManager: PageMetadata.Factory, val liveIndex: LiveIndex, val snapSource: Snapshot.Source,
 
     private val logProcessorOrNull: LogProcessor?,
     private val compactorOrNull: Compactor.ForDatabase?,
@@ -32,6 +35,8 @@ data class Database(
 
     fun withComponents(logProcessor: LogProcessor?, compactor: Compactor.ForDatabase?) =
         copy(logProcessorOrNull = logProcessor, compactorOrNull = compactor)
+
+    fun withSnapSource(snapSource: Snapshot.Source) = copy(snapSource = snapSource)
 
     override fun equals(other: Any?): Boolean =
         this === other || (other is Database && name == other.name)

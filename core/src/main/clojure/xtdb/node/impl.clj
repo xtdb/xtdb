@@ -181,7 +181,7 @@
 
       (xt-log/await-db db await-token tx-timeout)
 
-      (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
+      (.prepareQuery q-src ast db query-opts)))
 
   (prepare-xtql [this query query-opts]
     (let [db (.databaseOrNull db-cat (:default-db query-opts))
@@ -193,14 +193,14 @@
                                               {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]
       (xt-log/await-db db await-token tx-timeout)
 
-      (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
+      (.prepareQuery q-src ast db query-opts)))
 
   (prepare-ra [this plan query-opts]
     (let [db (.databaseOrNull db-cat (:default-db query-opts))
           {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (xt-log/await-db db await-token tx-timeout)
 
-      (.prepareQuery q-src plan db (.getLiveIndex db) query-opts)))
+      (.prepareQuery q-src plan db query-opts)))
 
   Closeable
   (close [_]

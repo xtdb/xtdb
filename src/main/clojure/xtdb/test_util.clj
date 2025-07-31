@@ -222,18 +222,12 @@
 
          db (some-> node db/primary-db)
 
-         snap-src (if node
-                    (.getLiveIndex db)
-                    (reify Snapshot$Source
-                      (openSnapshot [_]
-                        (Snapshot. nil nil {}))))
-
          ^IQuerySource q-src (if node
                                (util/component node ::q/query-source)
                                (q/->query-source {:allocator allocator
                                                   :ref-ctr (RefCounter.)}))
 
-         ^PreparedQuery pq (.prepareQuery q-src query db snap-src query-opts)]
+         ^PreparedQuery pq (.prepareQuery q-src query db query-opts)]
 
      (util/with-open [^RelationReader args-rel (if args
                                                  (vw/open-args allocator args)

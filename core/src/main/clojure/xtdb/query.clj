@@ -51,7 +51,7 @@
            (xtdb.api.query IKeyFn Query)
            (xtdb.arrow RelationReader VectorReader)
            xtdb.database.Database
-           (xtdb.indexer Snapshot)
+           (xtdb.indexer Snapshot Snapshot$Source)
            xtdb.operator.scan.IScanEmitter
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.util.RefCounter))
@@ -155,8 +155,8 @@
     conformed-plan))
 
 (defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache]}, scan-emitter, ^Database db, snap param-fields default-tz]
-  (.get emit-cache {:scan-fields (when (seq scan-cols)
-                                   (scan/scan-fields (.getTableCatalog db) snap scan-cols))
+  (.get emit-cache {:scan-fields (some-> db (.getTableCatalog)
+                                         (scan/scan-fields snap scan-cols))
                     :last-known-block (some-> db .getBlockCatalog .getCurrentBlockIndex)
                     :default-tz default-tz
                     :param-fields param-fields}
@@ -208,8 +208,15 @@
                                      (.maximumSize 16)
                                      (.build))})))))
 
-  (prepareQuery [this query db snap-src {:keys [default-tz] :as query-opts}]
+  (prepareQuery [this query db {:keys [default-tz] :as query-opts}]
     (let [parsed-query (parse-query query)
+
+          ^Snapshot$Source snap-src (or (some-> db (.getSnapSource))
+                                        ;; tests don't always provide a db - use a dummy snap-src
+                                        (reify Snapshot$Source
+                                          (openSnapshot [_]
+                                            (Snapshot. nil nil {}))))
+
           !table-info (atom (scan/tables-with-cols snap-src))
           default-tz (or default-tz expr/*default-tz*)]
       (letfn [(plan-query* [table-info]

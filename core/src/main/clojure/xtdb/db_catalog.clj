@@ -64,6 +64,7 @@
                                              live-index]}]
   (Database. db-name allocator block-cat table-cat trie-cat
              log buffer-pool metadata-manager live-index
+             live-index ; snap-src
              nil nil))
 
 (defmethod ig/prep-key :xtdb/db-catalog [_ _]

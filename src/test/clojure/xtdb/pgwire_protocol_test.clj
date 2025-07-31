@@ -72,8 +72,7 @@
                                                 :node (-> tu/*node*
                                                           (assoc :authn (authn/->UserTableAuthn authn-rules
                                                                                                 (util/component tu/*node* :xtdb.query/query-source)
-                                                                                                db
-                                                                                                (.getLiveIndex db))))}
+                                                                                                db)))}
                                        :allocator tu/*allocator*
                                        :frontend frontend
                                        :cid -1
