@@ -2956,11 +2956,10 @@
 
   String
   (-plan-expr [sql {:keys [ast-type], :or {ast-type :expr}, :as opts}]
-    (let [parser (antlr/->parser sql)]
-      (-plan-expr (case ast-type
-                    :expr (.expr parser)
-                    :where (.searchCondition (.whereClause parser)))
-                  opts))))
+    (-plan-expr (case ast-type
+                  :expr (antlr/parse-expr sql)
+                  :where (antlr/parse-where sql))
+                opts)))
 
 (defn plan-expr
   ([sql] (plan-expr sql {}))
