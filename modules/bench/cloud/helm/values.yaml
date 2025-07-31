@@ -1,0 +1,61 @@
+benchType: tpch
+
+auctionmark:
+  onlyLoad: false
+  noLoad: true
+  scaleFactor: 0.1
+  nodeCount: 3 # only applies if not onlyLoad
+  threads: 8
+  duration: "PT24H"
+
+tpch: 
+  scaleFactor: 0.01
+
+readings:
+  devices: 10000
+  readings: 10000
+
+xtdbConfig: 
+  # Core environment variables
+  kafkaBootstrapServers: xtdb-benchmark-kafka.cloud-benchmark.svc.cluster.local:9092
+  logTopic: xtdb-log
+  jdkOptions: "-Xmx3000m -Xms3000m -XX:MaxDirectMemorySize=3000m -XX:MaxMetaspaceSize=500m"
+  loggingLevel: info
+  localDiskCache:
+    sizeLimit: "150Gi"
+
+providerConfig:
+  # Set by cloud provider override
+  env: {}
+  podLabels: {}
+  serviceAccountAnnotations: {}
+  nodeSelector: {}
+  nodeConfig:
+  
+image:
+  repository: ghcr.io/xtdb/xtdb-bench
+  pullPolicy: Always
+  tag: "sha-8d029ad"
+
+resources:
+  limits:
+    cpu: "2000m"
+    memory: "10G"
+    ephemeral-storage: 180Gi
+  requests:
+    cpu: "1750m"
+    memory: "10G"
+    ephemeral-storage: 180Gi
+
+# For our bitnami/kafka deployment
+kafka:
+  listeners:
+    client:
+      protocol: PLAINTEXT
+    controller:
+      protocol: PLAINTEXT
+  controller:
+    persistence:
+      size: 50Gi
+    resourcesPreset: medium
+      

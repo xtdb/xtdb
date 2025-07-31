@@ -1,0 +1,10 @@
+apiVersion: v2
+name: xtdb-bench
+description: Helm chart for deploying XTDB benchmarks onto Kubernetes.
+type: application
+version: 0.1.0
+appVersion: "nightly"
+dependencies:
+  - name: kafka
+    version: 32.4.2
+    repository: oci://registry-1.docker.io/bitnamicharts
