@@ -123,9 +123,9 @@
   ([node] (flush-block! node #xt/duration "PT5S"))
   ([node timeout]
    (let [db-cat (db/<-node node)]
-     (doseq [db-name (.getDatabaseNames db-cat)
-             ^Database db (.databaseOrNull db-cat db-name)]
-       (let [log (.getLog db)]
+     (doseq [db-name (.getDatabaseNames db-cat)]
+       (let [db (.databaseOrNull db-cat db-name)
+             log (.getLog db)]
          @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1))))))
 
    (xt-log/sync-node node timeout)))

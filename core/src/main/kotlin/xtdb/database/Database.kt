@@ -12,14 +12,12 @@ import xtdb.indexer.LiveIndex
 import xtdb.indexer.LogProcessor
 import xtdb.metadata.PageMetadata
 import xtdb.trie.TrieCatalog
-import java.util.Objects
+import java.util.*
 
 typealias DatabaseName = String
-typealias DatabasePart = Int
 
 data class Database(
     val name: DatabaseName,
-    val part: DatabasePart,
 
     val allocator: BufferAllocator,
     val blockCatalog: BlockCatalog, val tableCatalog: TableCatalog, val trieCatalog: TrieCatalog,
@@ -36,9 +34,9 @@ data class Database(
         copy(logProcessorOrNull = logProcessor, compactorOrNull = compactor)
 
     override fun equals(other: Any?): Boolean =
-        this === other || (other is Database && name == other.name && part == other.part)
+        this === other || (other is Database && name == other.name)
 
-    override fun hashCode() = Objects.hash(name, part)
+    override fun hashCode() = Objects.hash(name)
 
     @Serializable
     data class Config(

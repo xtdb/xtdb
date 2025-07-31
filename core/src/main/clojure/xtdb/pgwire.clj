@@ -296,11 +296,11 @@
   (let [{:keys [node playground?]} server
         db-name (get startup-opts "database")
         db-cat (db/<-node node)
-        db (first (or (.databaseOrNull db-cat db-name)
-                      (when playground?
-                        (log/debug "creating playground database" (pr-str db-name))
-                        (.createDatabase db-cat db-name))
-                      (throw (err-invalid-catalog db-name))))
+        db (or (.databaseOrNull db-cat db-name)
+               (when playground?
+                 (log/debug "creating playground database" (pr-str db-name))
+                 (.createDatabase db-cat db-name))
+               (throw (err-invalid-catalog db-name)))
 
         user (get startup-opts "user")
         conn (assoc conn :node node, :default-db db-name, :db db)

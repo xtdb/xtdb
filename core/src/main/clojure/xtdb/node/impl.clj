@@ -101,7 +101,7 @@
 
   (execute-tx [this tx-ops opts]
     (let [tx-id (xtp/submit-tx this tx-ops opts)]
-      (or (let [^Database db (first (.databaseOrNull db-cat (:default-db opts)))
+      (or (let [db (.databaseOrNull db-cat (:default-db opts))
                 ^TransactionResult tx-res (-> @(.awaitAsync (.getLogProcessor db) tx-id)
                                               (util/rethrowing-cause))]
             (when (and tx-res
@@ -142,16 +142,18 @@
   (latest-completed-txs [_]
     (->> (.getDatabaseNames db-cat)
          (into {} (map (fn [db-name]
-                         [db-name (->> (.databaseOrNull db-cat db-name)
-                                       (mapv (fn [^Database db]
-                                               (.getLatestCompletedTx (.getLiveIndex db)))))])))))
+                         ;; TODO multi-part
+                         [db-name [(-> (.databaseOrNull db-cat db-name)
+                                       (.getLiveIndex)
+                                       (.getLatestCompletedTx))]])))))
 
   (latest-submitted-tx-ids [_]
     (->> (.getDatabaseNames db-cat)
          (into {} (map (fn [db-name]
-                         [db-name (->> (.databaseOrNull db-cat db-name)
-                                       (mapv (fn [^Database db]
-                                               (.getLatestSubmittedMsgId (.getLogProcessor db)))))])))))
+                         ;; TODO multi-part
+                         [db-name [(-> (.databaseOrNull db-cat db-name)
+                                       (.getLogProcessor)
+                                       (.getLatestSubmittedMsgId))]])))))
 
   (await-token [this]
     (basis/->tx-basis-str (xtp/latest-submitted-tx-ids this)))
@@ -168,7 +170,7 @@
 
   xtp/PLocalNode
   (prepare-sql [this query {:keys [default-db] :as query-opts}]
-    (let [^Database db (first (.databaseOrNull db-cat default-db))
+    (let [db (.databaseOrNull db-cat default-db)
           ast (cond
                 (instance? Sql$DirectlyExecutableStatementContext query) query
                 (string? query) (antlr/parse-statement query)
@@ -182,7 +184,7 @@
       (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
   (prepare-xtql [this query query-opts]
-    (let [^Database db (first (.databaseOrNull db-cat (:default-db query-opts)))
+    (let [db (.databaseOrNull db-cat (:default-db query-opts))
           {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
           ast (cond
                 (sequential? query) (xtql/parse-query query nil)
@@ -194,7 +196,7 @@
       (.prepareQuery q-src ast db (.getLiveIndex db) query-opts)))
 
   (prepare-ra [this plan query-opts]
-    (let [^Database db (first (.databaseOrNull db-cat (:default-db query-opts)))
+    (let [db (.databaseOrNull db-cat (:default-db query-opts))
           {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (xt-log/await-db db await-token tx-timeout)
 

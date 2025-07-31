@@ -48,9 +48,8 @@
 (defmethod ig/halt-key! ::allocator [_ allocator]
   (util/close allocator))
 
-(defmethod ig/prep-key ::for-query [_ {:keys [db-name part-idx]}]
+(defmethod ig/prep-key ::for-query [_ {:keys [db-name]}]
   {:db-name db-name
-   :part-idx part-idx
    :allocator (ig/ref ::allocator)
    :block-cat (ig/ref :xtdb/block-catalog)
    :table-cat (ig/ref :xtdb/table-catalog)
@@ -60,10 +59,10 @@
    :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)
    :live-index (ig/ref :xtdb.indexer/live-index)})
 
-(defmethod ig/init-key ::for-query [_ {:keys [allocator db-name part-idx block-cat table-cat
+(defmethod ig/init-key ::for-query [_ {:keys [allocator db-name block-cat table-cat
                                              trie-cat log buffer-pool metadata-manager
                                              live-index]}]
-  (Database. db-name part-idx allocator block-cat table-cat trie-cat
+  (Database. db-name allocator block-cat table-cat trie-cat
              log buffer-pool metadata-manager live-index
              nil nil))
 
@@ -80,7 +79,7 @@
 (defn- db-system [db-name base ^Database$Config db-config]
   (let [^Xtdb$Config conf (get-in base [:config :config])
         indexer-conf (.getIndexer conf)
-        opts {:base base, :db-name db-name, :part-idx 0}]
+        opts {:base base, :db-name db-name}]
     (-> {::allocator opts
          :xtdb/block-catalog opts
          :xtdb/table-catalog opts
@@ -130,25 +129,21 @@
 
       (doseq [[db-name ^Database$Config db-config] db-configs]
         (util/with-close-on-catch [db (open-db db-name base db-config)]
-          (.put !dbs db-name [db])))
+          (.put !dbs db-name db)))
 
       (reify DatabaseCatalog
-        (getPrimary [this] (first (.databaseOrNull this "xtdb")))
-
         (getDatabaseNames [_] (set (keys !dbs)))
 
         (databaseOrNull [_ db-name]
-          (some->> (.get !dbs db-name)
-                   (mapv :db)))
+          (:db (.get !dbs db-name)))
 
         (createDatabase [_ db-name]
           (util/with-close-on-catch [db (open-db db-name base (Database$Config.))]
-            (.put !dbs db-name [db])
-            [(:db db)]))
+            (.put !dbs db-name db)
+            (:db db)))
 
         (close [_]
-          (doseq [[_ dbs] !dbs
-                  {:keys [sys]} dbs]
+          (doseq [[_ {:keys [sys]}] !dbs]
             (ig/halt! sys)))))))
 
 (defmethod ig/halt-key! :xtdb/db-catalog [_ db-cat]

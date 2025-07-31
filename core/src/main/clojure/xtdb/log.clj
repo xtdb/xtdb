@@ -6,7 +6,6 @@
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
-            [xtdb.protocols :as xtp]
             [xtdb.sql :as sql]
             [xtdb.table :as table]
             [xtdb.time :as time]
@@ -309,7 +308,7 @@
 (defn submit-tx ^long
   [{:keys [^BufferAllocator allocator, ^DatabaseCatalog db-cat, default-tz]} tx-ops {:keys [default-db, system-time] :as opts}]
 
-  (let [^Database db (or (first (.databaseOrNull db-cat default-db))
+  (let [^Database db (or (.databaseOrNull db-cat default-db)
                          (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" default-db)
                                                {:db-name default-db})))
         log (.getLog db)
