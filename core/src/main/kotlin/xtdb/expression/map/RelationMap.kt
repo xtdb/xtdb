@@ -15,6 +15,7 @@ import xtdb.arrow.RelationReader
 import xtdb.arrow.RelationWriter
 import xtdb.arrow.VectorReader
 import xtdb.trie.MemoryHashTrie
+import xtdb.trie.MutableMemoryHashTrie
 import xtdb.util.Hasher
 import xtdb.util.requiringResolve
 import java.util.function.IntUnaryOperator
@@ -39,12 +40,12 @@ class RelationMap(
 ) : AutoCloseable {
 
     private val hashColumn: IntVector
-    private var buildHashTrie : MemoryHashTrie
+    private var buildHashTrie : MutableMemoryHashTrie
 
     init {
         hashColumn = IntVector(allocator, "xt/join-hash", false)
         if (withNilRow) hashColumn.writeInt(0)
-        buildHashTrie = MemoryHashTrie.builder(hashColumn.asReader).setPageLimit(pageLimit).setLevelBits(level_bits).build()
+        buildHashTrie = MutableMemoryHashTrie.builder(hashColumn.asReader).setPageLimit(pageLimit).setLevelBits(level_bits).build()
     }
 
 
@@ -101,7 +102,7 @@ class RelationMap(
         }
 
     fun compactHashTrie() {
-        buildHashTrie = buildHashTrie.compactLogs()
+//        buildHashTrie = buildHashTrie.compactLogs()
     }
 
     @Suppress("NAME_SHADOWING")
