@@ -81,6 +81,20 @@ data class Database(
                     .map { db -> launch { db.sync() } }
                     .joinAll()
             }
+
+            @JvmStatic
+            fun singleton(db: Database) = object : Catalog {
+                override val databaseNames: Collection<DatabaseName> get() = setOf(db.name)
+
+                override fun databaseOrNull(dbName: DatabaseName) = db.takeIf { dbName == it.name }
+            }
+
+            @JvmField
+            val EMPTY = object : Catalog {
+                override val databaseNames: Collection<DatabaseName> = emptySet()
+
+                override fun databaseOrNull(dbName: DatabaseName) = null
+            }
         }
 
         val databaseNames: Collection<DatabaseName>

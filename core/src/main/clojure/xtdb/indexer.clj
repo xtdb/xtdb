@@ -32,7 +32,7 @@
            (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.api.TransactionKey
            (xtdb.arrow RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
-           xtdb.database.Database
+           (xtdb.database Database Database$Catalog)
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.indexer Indexer Indexer$ForDatabase LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
            (xtdb.query IQuerySource PreparedQuery)))
@@ -371,8 +371,8 @@
                                  (map-indexed (fn [idx ^VectorReader col]
                                                 (.withName col (str "?_" idx))))))))))))
 
-(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, db, tx-opts, {:keys [stmt message]}]
-  (let [^PreparedQuery pq (.prepareQuery q-src stmt db tx-opts)]
+(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, db-cat, tx-opts, {:keys [stmt message]}]
+  (let [^PreparedQuery pq (.prepareQuery q-src stmt db-cat tx-opts)]
     (-> (fn eval-query [^RelationReader args]
           (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
                                              (assoc :args args, :close-args? false)))]
@@ -388,8 +388,8 @@
 
         (wrap-sql-args (.getParamCount pq)))))
 
-(defn- query-indexer [^IQuerySource q-src, db, ^RelationIndexer rel-idxer, tx-opts, {:keys [stmt] :as query-opts}]
-  (let [^PreparedQuery pq (.prepareQuery q-src stmt db tx-opts)]
+(defn- query-indexer [^IQuerySource q-src, db-cat, ^RelationIndexer rel-idxer, tx-opts, {:keys [stmt] :as query-opts}]
+  (let [^PreparedQuery pq (.prepareQuery q-src stmt db-cat tx-opts)]
     (-> (fn eval-query [^RelationReader args]
           (with-open [res (-> (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
                                                  (assoc :args args, :close-args? false))))]
@@ -434,8 +434,8 @@
                  #(.copyRow doc-copier idx))))))
 
 (defn- ->patch-docs-indexer [^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
-                             ^IQuerySource q-src, ^Database db, ^Instant system-time
-                             tx-opts]
+                             ^IQuerySource q-src, ^Database$Catalog db-cat, ^Instant system-time
+                             {:keys [default-db] :as tx-opts}]
   (let [patch-leg (.vectorFor tx-ops-rdr "patch-docs")
         iids-rdr (.vectorFor patch-leg "iids")
         iid-rdr (.getListElements iids-rdr)
@@ -446,7 +446,7 @@
 
         system-time-µs (time/instant->micros system-time)]
     (letfn [(->table-idxer [^String table-name]
-              (let [table (table/->ref (.getName db) table-name)]
+              (let [table (table/->ref default-db table-name)]
                 (when (xt-log/forbidden-table? table)
                   (throw (xt-log/forbidden-table-ex table)))
 
@@ -473,7 +473,8 @@
                                                   "Invalid valid times"
                                                   {:valid-from valid-from, :valid-to valid-to})))
 
-                          (let [pq (.prepareQuery q-src (-> (sql/plan-patch {:table-info (sql/xform-table-info (scan/tables-with-cols (.getSnapSource db)))}
+                          (let [table-info (sql/xform-table-info (scan/tables-with-cols (.getSnapSource (.databaseOrNull db-cat default-db))))
+                                pq (.prepareQuery q-src (-> (sql/plan-patch {:table-info table-info}
                                                                             {:table table
                                                                              :valid-from valid-from
                                                                              :valid-to valid-to
@@ -481,7 +482,7 @@
                                                                                                            ?patch_docs]
                                                                                                          '[_iid doc])})
                                                             (lp/rewrite-plan))
-                                                  db tx-opts)
+                                                  db-cat tx-opts)
                                 args (vr/rel-reader [(SingletonListReader.
                                                       "?patch_docs"
                                                       (RelationAsStructReader.
@@ -529,8 +530,8 @@
                (.endStruct doc-writer)))))
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^LiveIndex$Tx live-idx-tx
-                                              ^VectorReader tx-ops-rdr, ^IQuerySource q-src, ^Database db,
-                                              {:keys [tx-key] :as tx-opts}]
+                                              ^VectorReader tx-ops-rdr, ^IQuerySource q-src, db-cat,
+                                              {:keys [default-db tx-key] :as tx-opts}]
   (let [sql-leg (.vectorFor tx-ops-rdr "sql")
         query-rdr (.vectorFor sql-leg "query")
         args-rdr (.vectorFor sql-leg "args")
@@ -545,21 +546,21 @@
         (let [query-str (.getObject query-rdr tx-op-idx)]
           (err/wrap-anomaly {:sql query-str, :tx-op-idx tx-op-idx, :tx-key tx-key}
             (util/with-open [^ArrowReader args-arrow-rdr (open-args-rdr allocator args-rdr tx-op-idx)]
-              (let [[q-tag q-args] (parse-sql/parse-statement query-str {:default-db (.getName db)})
+              (let [[q-tag q-args] (parse-sql/parse-statement query-str {:default-db default-db})
                     tx-opts (assoc tx-opts :arg-fields (some-> args-arrow-rdr (.getVectorSchemaRoot) (.getSchema) (.getFields)))]
                 (case q-tag
                   :insert (foreach-arg-row args-arrow-rdr
-                                           (query-indexer q-src db upsert-idxer tx-opts q-args))
+                                           (query-indexer q-src db-cat upsert-idxer tx-opts q-args))
                   :patch (foreach-arg-row args-arrow-rdr
-                                          (query-indexer q-src db patch-idxer tx-opts q-args))
+                                          (query-indexer q-src db-cat patch-idxer tx-opts q-args))
                   :update (foreach-arg-row args-arrow-rdr
-                                           (query-indexer q-src db upsert-idxer tx-opts q-args))
+                                           (query-indexer q-src db-cat upsert-idxer tx-opts q-args))
                   :delete (foreach-arg-row args-arrow-rdr
-                                           (query-indexer q-src db delete-idxer tx-opts q-args))
+                                           (query-indexer q-src db-cat delete-idxer tx-opts q-args))
                   :erase (foreach-arg-row args-arrow-rdr
-                                          (query-indexer q-src db erase-idxer tx-opts q-args))
+                                          (query-indexer q-src db-cat erase-idxer tx-opts q-args))
                   :assert (foreach-arg-row args-arrow-rdr
-                                           (->assert-idxer q-src db tx-opts q-args))
+                                           (->assert-idxer q-src db-cat tx-opts q-args))
 
                   :create-user (let [{:keys [username password]} q-args]
                                  (update-pg-user! live-idx-tx tx-key username password))
@@ -662,6 +663,8 @@
                                   (Snapshot. tx-key live-index-snap
                                              (li/->schema live-index-snap table-catalog)))))))
 
+                    db-cat (Database$Catalog/singleton db)
+
                     tx-opts {:snapshot-token (basis/->time-basis-str {"xtdb" [system-time]})
                              :current-time system-time
                              :default-tz default-tz
@@ -670,10 +673,10 @@
                              :default-db (.getName db)}
 
                     !put-docs-idxer (delay (->put-docs-indexer live-idx-tx tx-ops-rdr db system-time tx-opts))
-                    !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src db system-time tx-opts))
+                    !patch-docs-idxer (delay (->patch-docs-indexer live-idx-tx tx-ops-rdr q-src db-cat system-time tx-opts))
                     !delete-docs-idxer (delay (->delete-docs-indexer live-idx-tx tx-ops-rdr db system-time tx-opts))
                     !erase-docs-idxer (delay (->erase-docs-indexer live-idx-tx tx-ops-rdr db tx-opts))
-                    !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src db tx-opts))]
+                    !sql-idxer (delay (->sql-indexer allocator live-idx-tx tx-ops-rdr q-src db-cat tx-opts))]
 
                 (if-let [e (try
                              (err/wrap-anomaly {}

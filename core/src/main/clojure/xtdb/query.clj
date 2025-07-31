@@ -208,8 +208,10 @@
                                      (.maximumSize 16)
                                      (.build))})))))
 
-  (prepareQuery [this query db {:keys [default-tz] :as query-opts}]
+  (prepareQuery [this query dbs {:keys [default-db default-tz] :as query-opts}]
     (let [parsed-query (parse-query query)
+
+          db (.databaseOrNull dbs default-db)
 
           ^Snapshot$Source snap-src (or (some-> db (.getSnapSource))
                                         ;; tests don't always provide a db - use a dummy snap-src
