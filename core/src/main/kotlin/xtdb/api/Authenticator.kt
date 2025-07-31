@@ -36,14 +36,14 @@ interface Authenticator : AutoCloseable {
 
         fun rules(rules: List<MethodRule>) = apply { this.rules = rules }
 
-        fun open(querySource: IQuerySource, db: Database): Authenticator
+        fun open(querySource: IQuerySource, dbCatalog: Database.Catalog): Authenticator
 
         @Serializable
         @SerialName("!UserTable")
         data class UserTable(override var rules: List<MethodRule> = DEFAULT_RULES) : Factory {
-            override fun open(querySource: IQuerySource, db: Database): Authenticator =
+            override fun open(querySource: IQuerySource, dbCatalog: Database.Catalog): Authenticator =
                 requiringResolve("xtdb.authn/->user-table-authn")
-                    .invoke(this, querySource, db) as Authenticator
+                    .invoke(this, querySource, dbCatalog) as Authenticator
         }
     }
 }

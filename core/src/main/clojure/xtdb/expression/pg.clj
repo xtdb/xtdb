@@ -16,9 +16,9 @@
         (symbol schema needle)))))
 
 (defn tables [schema]
-  (set/union (set (keys info/table-info))
-             '#{xt/txs}
-             (into #{} (map table/ref->schema+table) (keys schema))))
+  (->> (set/union (set (keys (info/table-info "xtdb")))
+                  (set (keys schema)))
+       (into #{} (map table/ref->schema+table))))
 
 (defn find-table [schema table-name]
   ;; TODO multi-db

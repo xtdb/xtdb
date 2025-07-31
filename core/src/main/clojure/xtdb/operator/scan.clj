@@ -28,6 +28,7 @@
            xtdb.arrow.RelationReader
            (xtdb.bloom BloomUtils)
            xtdb.catalog.TableCatalog
+           xtdb.database.Database$Catalog
            (xtdb.indexer Snapshot Snapshot$Source)
            (xtdb.metadata PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask)
@@ -47,7 +48,7 @@
                                    :select ::lp/column-expression))))
 
 (definterface IScanEmitter
-  (emitScan [^xtdb.database.Database db scan-expr scan-fields param-fields]))
+  (emitScan [^xtdb.database.Database$Catalog db-cat scan-expr scan-fields param-fields]))
 
 (defn ->scan-cols [{:keys [columns], {:keys [table]} :scan-opts}]
   (for [[col-tag col-arg] columns]
@@ -169,8 +170,8 @@
          {:allocator (ig/ref :xtdb/allocator)
           :info-schema (ig/ref :xtdb/information-schema)}))
 
-(defn scan-fields [^TableCatalog table-catalog, ^Snapshot snap scan-cols]
-  (letfn [(->field [[table col-name]]
+(defn scan-fields [^Database$Catalog db-catalog, snaps, scan-cols]
+  (letfn [(->field [[^TableRef table col-name]]
             (let [col-name (str col-name)]
               ;; TODO move to fields here
               (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
@@ -178,18 +179,23 @@
                           (get (symbol col-name)))
                       (-> (info-schema/template-table table)
                           (get (symbol col-name)))
-                      (types/merge-fields (.getField table-catalog table col-name)
-                                          (some-> (.getLiveIndex snap)
-                                                  (.liveTable table)
-                                                  (.columnField col-name))))
+                      (let [db-name (.getDbName table)
+                            ^TableCatalog table-catalog (.getTableCatalog (.databaseOrNull db-catalog db-name))
+                            ^Snapshot snap (get snaps db-name)]
+                        (types/merge-fields (.getField table-catalog table col-name)
+                                            (some-> (.getLiveIndex snap)
+                                                    (.liveTable table)
+                                                    (.columnField col-name)))))
                   (types/field-with-name col-name))))]
     (->> scan-cols
          (into {} (map (juxt identity ->field))))))
 
 (defmethod ig/init-key ::scan-emitter [_ {:keys [info-schema]}]
   (reify IScanEmitter
-    (emitScan [_ db {:keys [columns], {:keys [^TableRef table] :as scan-opts} :scan-opts} scan-fields param-fields]
-      (let [^PageMetadata$Factory metadata-mgr (.getMetadataManager db)
+    (emitScan [_ db-cat {:keys [columns], {:keys [^TableRef table] :as scan-opts} :scan-opts} scan-fields param-fields]
+      (let [db-name (.getDbName table)
+            db (.databaseOrNull db-cat db-name)
+            ^PageMetadata$Factory metadata-mgr (.getMetadataManager db)
             ^BufferPool buffer-pool (.getBufferPool db)
             ^TrieCatalog trie-catalog (.getTrieCatalog db)
             ^TableCatalog table-catalog (.getTableCatalog db)
@@ -228,8 +234,9 @@
 
         {:fields fields
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, ^Snapshot snapshot, snapshot-token, schema, args]}]
-                     (let [derived-table-schema (info-schema/derived-table table)
+         :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args]}]
+                     (let [^Snapshot snapshot (get snaps db-name)
+                           derived-table-schema (info-schema/derived-table table)
                            template-table? (boolean (info-schema/template-table table))]
                        (if (and derived-table-schema (not template-table?))
                          (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args)
@@ -295,5 +302,6 @@
                                             (when (and iid-set (> (count iid-set) 1))
                                               iid-pushdown-bloom))))))))}))))
 
-(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db scan-fields, param-fields]}]
-  (.emitScan scan-emitter db scan-expr scan-fields param-fields))
+(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-fields, param-fields]}]
+  (assert db-cat)
+  (.emitScan scan-emitter db-cat scan-expr scan-fields param-fields))

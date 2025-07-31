@@ -4,7 +4,6 @@
             [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing] :as t]
-            [clojure.tools.logging :as log]
             [honey.sql :as hsql]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as result-set]

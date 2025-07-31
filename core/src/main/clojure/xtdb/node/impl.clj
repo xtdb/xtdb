@@ -170,8 +170,7 @@
 
   xtp/PLocalNode
   (prepare-sql [this query {:keys [default-db] :as query-opts}]
-    (let [db (.databaseOrNull db-cat default-db)
-          ast (cond
+    (let [ast (cond
                 (instance? Sql$DirectlyExecutableStatementContext query) query
                 (string? query) (antlr/parse-statement query)
                 :else (throw (err/illegal-arg :xtdb/unsupported-query-type
@@ -181,11 +180,10 @@
 
       (.awaitAll db-cat await-token tx-timeout)
 
-      (.prepareQuery q-src ast db query-opts)))
+      (.prepareQuery q-src ast db-cat query-opts)))
 
   (prepare-xtql [this query query-opts]
-    (let [db (.databaseOrNull db-cat (:default-db query-opts))
-          {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
+    (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
           ast (cond
                 (sequential? query) (xtql/parse-query query nil)
                 (instance? XtqlQuery query) query
@@ -194,15 +192,14 @@
 
       (.awaitAll db-cat await-token tx-timeout)
 
-      (.prepareQuery q-src ast db query-opts)))
+      (.prepareQuery q-src ast db-cat query-opts)))
 
   (prepare-ra [this plan query-opts]
-    (let [db (.databaseOrNull db-cat (:default-db query-opts))
-          {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+    (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
 
       (.awaitAll db-cat await-token tx-timeout)
 
-      (.prepareQuery q-src plan db query-opts)))
+      (.prepareQuery q-src plan db-cat query-opts)))
 
   Closeable
   (close [_]

@@ -6,13 +6,12 @@
             [xtdb.query :as q])
   (:import [java.io Writer]
            (xtdb.api Authenticator Authenticator$Factory Authenticator$Factory$UserTable Authenticator$Method Authenticator$MethodRule Xtdb$Config)
-           xtdb.database.Database$Catalog
            (xtdb.query IQuerySource)))
 
-(defn verify-pw [^IQuerySource q-src, db, user password]
+(defn verify-pw [^IQuerySource q-src, db-cat, user password]
   (when password
     (with-open [res (-> (.prepareQuery q-src "SELECT passwd AS encrypted FROM pg_user WHERE username = ?"
-                                       db {:default-db "xtdb"})
+                                       db-cat {:default-db "xtdb"})
                         (.openQuery {:args [user]}))]
 
       (when-let [{:keys [encrypted]} (first (.toList (q/cursor->stream res {:key-fn #xt/key-fn :kebab-case-keyword})))]
@@ -60,25 +59,24 @@
 (defmethod xtn/apply-config! ::user-table-authn [^Xtdb$Config config, _, {:keys [rules]}]
   (.authn config (Authenticator$Factory$UserTable. (->rules-cfg rules))))
 
-(defrecord UserTableAuthn [rules q-src db]
+(defrecord UserTableAuthn [rules q-src db-cat]
   Authenticator
   (methodFor [_ user remote-addr]
     (method-for rules {:user user, :remote-addr remote-addr}))
 
   (verifyPassword [_ user password]
-    (verify-pw q-src db user password)))
+    (verify-pw q-src db-cat user password)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn ->user-table-authn [^Authenticator$Factory$UserTable cfg, q-src, db]
-  (->UserTableAuthn (<-rules-cfg (.getRules cfg)) q-src db))
+(defn ->user-table-authn [^Authenticator$Factory$UserTable cfg, q-src, db-cat]
+  (->UserTableAuthn (<-rules-cfg (.getRules cfg)) q-src db-cat))
 
 (defmethod ig/prep-key :xtdb/authn [_ opts]
   (into {:q-src (ig/ref :xtdb.query/query-source)
          :db-cat (ig/ref :xtdb/db-catalog)}
         opts))
 
-(defmethod ig/init-key :xtdb/authn [_ {:keys [^Authenticator$Factory authn-factory, q-src, ^Database$Catalog db-cat]}]
-  (let [db (.getPrimary db-cat)]
-    (.open authn-factory q-src db)))
+(defmethod ig/init-key :xtdb/authn [_ {:keys [^Authenticator$Factory authn-factory, q-src, db-cat]}]
+  (.open authn-factory q-src db-cat))
 
 (defn <-node ^xtdb.api.Authenticator [node] (:authn node))

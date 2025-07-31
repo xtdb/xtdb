@@ -414,3 +414,29 @@
 
   (t/is (= #{{:xt/id "1"} {:xt/id "2"}}
            (set (xt/q tu/*node* "SELECT * FROM test WHERE _id < '3'")))))
+
+(t/deftest test-multi-db-scans
+  (with-open [node (xtn/start-node {:databases {:xtdb {}, :new-db {}}})
+              xtdb-conn (.build (.createConnectionBuilder node))
+              new-db-conn (.build (-> (.createConnectionBuilder node) (.database "new_db")))]
+
+    (xt/execute-tx xtdb-conn [[:put-docs :foo {:xt/id "xtdb-db"}]])
+    (xt/execute-tx new-db-conn [[:put-docs :foo {:xt/id :new-db}]])
+
+    (t/is (= {:res [{:xt/id "xtdb-db"}],
+              :col-types '{_id :utf8}}
+             (tu/query-ra '[:scan {:table #xt/table foo} [_id]]
+                          {:node node, :with-col-types? true})))
+
+    (t/is (= {:res [{:xt/id :new-db}],
+              :col-types '{_id :keyword}}
+             (tu/query-ra '[:scan {:table #xt/table [new_db foo]} [_id]]
+                          {:node node, :default-db "new_db", :with-col-types? true})))
+
+    (t/is (= {:res #{{:xt/id "xtdb-db"} {:xt/id :new-db}},
+              :col-types '{_id [:union #{:utf8 :keyword}]}}
+             (-> (tu/query-ra '[:union-all
+                                [:scan {:table #xt/table [xtdb foo]} [_id]]
+                                [:scan {:table #xt/table [new_db foo]} [_id]]]
+                              {:node node, :with-col-types? true})
+                 (update :res set))))))

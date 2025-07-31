@@ -11,7 +11,8 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import (io.micrometer.core.instrument Counter Gauge MeterRegistry Tag Timer)
+  (:import (com.github.benmanes.caffeine.cache Cache Caffeine)
+           (io.micrometer.core.instrument Counter Gauge MeterRegistry Tag Timer)
            (io.micrometer.core.instrument.distribution ValueAtPercentile)
            [java.lang AutoCloseable]
            [java.time Duration]
@@ -133,14 +134,34 @@
   (defn template-table [table-ref]
     (get template-tables (table/ref->schema+table table-ref)))
 
-  (def table-info
-    (-> (merge derived-tables template-tables)
-        (update-vals (comp set keys))))
+  (def ^:private ^Cache table-info-cache
+    (-> (Caffeine/newBuilder)
+        (.maximumSize 1024)
+        (.build)))
 
-  (def unq-pg-catalog
-    (-> (merge pg-catalog-tables pg-catalog-template-tables)
-        (update-vals keys)
-        (update-keys (comp symbol name))))
+  (defn table-info [default-db]
+    (.get table-info-cache default-db
+          (fn [db-name]
+            (->> (for [[table col-types] (merge derived-tables template-tables)]
+                   [(table/->ref db-name table) (set (keys col-types))])
+                 (into {})))))
+
+  (def ^:private ^Cache table-chains-cache
+    (-> (Caffeine/newBuilder)
+        (.maximumSize 1024)
+        (.build)))
+
+  (defn table-chains [default-db]
+    (.get table-chains-cache default-db
+          (fn [db-name]
+            (->> (keys (table-info db-name))
+                 (into [] (mapcat (fn [^TableRef table]
+                                    (let [db-name (symbol (.getDbName table))
+                                          schema-name (symbol (.getSchemaName table))
+                                          table-name (symbol (.getTableName table))]
+                                      (cond-> [[[db-name schema-name table-name] table]
+                                               [[schema-name table-name] table]]
+                                        (= 'pg_catalog schema-name) (conj [[table-name] table]))))))))))
 
   (def meta-table-schemas
     (-> (merge info-tables pg-catalog-tables pg-catalog-template-tables)
@@ -154,7 +175,7 @@
         (disj 'pg_catalog/pg_user))))
 
 (do
-  (def ^:private internal-schemas
+  (def internal-schemas
     #{"xt" "pg_catalog" "information_schema"})
 
   (def pg-namespaces

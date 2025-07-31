@@ -34,8 +34,8 @@
            (xtdb.api.log Log$Message$FlushBlock)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector)
-           xtdb.database.Database
-           (xtdb.indexer LiveTable Snapshot Snapshot$Source)
+           xtdb.database.Database$Catalog
+           (xtdb.indexer LiveTable)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
            (xtdb.trie MetadataFileWriter)
@@ -220,14 +220,12 @@
                         (cond-> node (-> (update :await-token (fnil identity (xtp/await-token node)))
                                          (doto (-> :await-token (->> (xt-log/await-node node)))))))
 
-         db (some-> node db/primary-db)
-
          ^IQuerySource q-src (if node
                                (util/component node ::q/query-source)
                                (q/->query-source {:allocator allocator
                                                   :ref-ctr (RefCounter.)}))
 
-         ^PreparedQuery pq (.prepareQuery q-src query db query-opts)]
+         ^PreparedQuery pq (.prepareQuery q-src query (or (db/<-node node) Database$Catalog/EMPTY) query-opts)]
 
      (util/with-open [^RelationReader args-rel (if args
                                                  (vw/open-args allocator args)
