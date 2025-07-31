@@ -473,7 +473,9 @@
                                                   "Invalid valid times"
                                                   {:valid-from valid-from, :valid-to valid-to})))
 
-                          (let [table-info (sql/xform-table-info (scan/tables-with-cols (.getSnapSource (.databaseOrNull db-cat default-db))))
+                          (let [table-info (-> (with-open [snap (.openSnapshot (.getSnapSource (.databaseOrNull db-cat default-db)))]
+                                                 (.getSchema snap))
+                                               (sql/xform-table-info default-db))
                                 pq (.prepareQuery q-src (-> (sql/plan-patch {:table-info table-info}
                                                                             {:table table
                                                                              :valid-from valid-from

@@ -18,6 +18,7 @@
             [xtdb.xtql :as xtql]
             [xtdb.xtql.plan :as xtql.plan])
   (:import clojure.lang.MapEntry
+           (com.github.benmanes.caffeine.cache Cache Caffeine)
            (java.net URI)
            (java.time Duration LocalDate LocalTime OffsetTime ZoneOffset)
            (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
@@ -25,7 +26,8 @@
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.antlr Sql$BaseTableContext Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$IntervalQualifierContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlVisitor)
+           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlVisitor)
+           xtdb.table.TableRef
            xtdb.util.StringUtil))
 
 (defn- ->insertion-ordered-set [coll]
@@ -109,9 +111,18 @@
   PlanError
   (error-string [_] (format "Ambiguous column reference: %s" (str/join "." (reverse chain)))))
 
-(defrecord BaseTableNotFound [schema-name table-name]
+(defrecord BaseTableNotFound [table-chain]
   PlanError
-  (error-string [_] (format "Table not found: %s" (str/join "." (filter some? [schema-name table-name])))))
+  (error-string [_] (format "Table not found: %s" (str/join "." (filter some? table-chain)))))
+
+(defrecord AmbiguousTableReference [table-chain table-chains]
+  PlanError
+  (error-string [_]
+    (format "Ambiguous table reference: %s -> %s"
+            (str/join "." table-chain)
+            (->> table-chains
+                 (into #{} (map (fn [^TableRef table]
+                                  (symbol (format "%s.%s.%s" (.getDbName table) (.getSchemaName table) (.getTableName table))))))))))
 
 (defrecord ColumnNotFound [chain]
   PlanError
@@ -224,7 +235,7 @@
              plan
              subqs))
 
-(defrecord CTE [plan col-syms])
+(defrecord CTE [query-name plan col-syms])
 
 (defrecord WithVisitor [env scope]
   SqlVisitor
@@ -241,7 +252,8 @@
 
       (let [{:keys [plan col-syms]} (-> (.subquery ctx)
                                         (.accept (->QueryPlanVisitor env scope)))]
-        (MapEntry/create query-name (->CTE plan col-syms))))))
+        ;; [query-name] so that we only match against table-chains of length 1
+        (MapEntry/create [query-name] (->CTE query-name plan col-syms))))))
 
 (defrecord TableTimePeriodSpecificationVisitor [expr-visitor]
   SqlVisitor
@@ -293,17 +305,17 @@
      sys-time-col? (conj {(->col-sym '_system_time) (list 'period (->col-sym '_system_from) (->col-sym '_system_to))}))
    plan])
 
-(defrecord BaseTable [env, ^Sql$BaseTableContext ctx
-                      schema-name table-name
+(defrecord BaseTable [env, ^TableRef table-ref
                       for-valid-time for-system-time
                       table-alias unique-table-alias cols
                       ^Map !reqd-cols]
   Scope
   (available-cols [_] cols)
 
-  (-find-cols [this [col-name table-name schema-name] excl-cols]
+  (-find-cols [this [col-name table-name schema-name db-name] excl-cols]
     (when (and (or (nil? table-name) (= table-name table-alias))
-               (or (nil? schema-name) (= schema-name (:schema-name this))))
+               (or (nil? schema-name) (= schema-name (symbol (.getSchemaName table-ref))))
+               (or (nil? db-name) (= db-name (symbol (.getDbName table-ref)))))
       (for [col (if col-name
                   (when (or (contains? cols col-name) (types/temporal-column? col-name)
                             (temporal-period-column? col-name))
@@ -315,7 +327,7 @@
                             (->col-sym (str unique-table-alias) (str col)))))))
 
   PlanRelation
-  (plan-rel [{{:keys [valid-time-default sys-time-default default-db]} :env}]
+  (plan-rel [{{:keys [valid-time-default sys-time-default]} :env}]
     (let [reqd-cols (set (.keySet !reqd-cols))
           valid-time-col? (contains? reqd-cols '_valid_time)
           sys-time-col? (contains? reqd-cols '_system_time)
@@ -326,7 +338,7 @@
           for-st (or for-system-time sys-time-default)]
 
       [:rename unique-table-alias
-       (cond-> [:scan (cond-> {:table (table/->ref default-db (or schema-name 'public) table-name)}
+       (cond-> [:scan (cond-> {:table table-ref}
                         for-vt (assoc :for-valid-time for-vt)
                         for-st (assoc :for-system-time for-st))
                 scan-cols]
@@ -598,40 +610,37 @@
 
 (defrecord TableRefVisitor [env scope left-scope]
   SqlVisitor
-  (visitBaseTable [{{:keys [!id-count table-info ctes default-db] :as env} :env} ctx]
-    (let [table-ref (.fromTableRef ctx)
-          sn (identifier-sym (.schemaName table-ref))
-          tn (identifier-sym (.tableName table-ref))
-          table (table/->ref default-db sn tn)
-
-          table-alias (or (identifier-sym (.tableAlias ctx)) tn)
+  (visitBaseTable [{{:keys [!id-count table-chains table-info ctes] :as env} :env} ctx]
+    (let [table-chain (mapv identifier-sym (.identifier (.fromTableRef ctx)))
+          table-alias (or (identifier-sym (.tableAlias ctx)) (peek table-chain))
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           cols (some-> (.tableProjection ctx) (->table-projection))]
 
-      (or (when-not sn
-            (when-let [{:keys [plan], cte-cols :col-syms} (get ctes tn)]
-              (when (or (seq (.querySystemTimePeriodSpecification ctx))
-                        (seq (.queryValidTimePeriodSpecification ctx)))
-                (add-err! env (->PeriodSpecificationDisallowedOnCte tn)))
-              (->DerivedTable plan table-alias unique-table-alias
-                              (->insertion-ordered-set (or cols cte-cols)))))
+      (or (when-let [{:keys [query-name plan], cte-cols :col-syms} (get ctes table-chain)]
+            (when (or (seq (.querySystemTimePeriodSpecification ctx))
+                      (seq (.queryValidTimePeriodSpecification ctx)))
+              (add-err! env (->PeriodSpecificationDisallowedOnCte query-name)))
 
-          (let [[sn table-cols] (or (when-let [table-cols (or (get table-info table)
-                                                              (get table-info (table/ref->schema+table table)))]
-                                      [sn table-cols])
+            (->DerivedTable plan table-alias unique-table-alias
+                            (->insertion-ordered-set (or cols cte-cols))))
 
-                                    (when-not sn
-                                      (when-let [table-cols (get info-schema/unq-pg-catalog tn)]
-                                        ['pg_catalog table-cols]))
+          (let [[table & more-matches] (or (get table-chains table-chain)
+                                           (add-warning! env (->BaseTableNotFound table-chain)))
+                _ (when more-matches
+                    (add-err! env (->AmbiguousTableReference table-chain (cons table more-matches))))
 
-                                    (add-warning! env (->BaseTableNotFound sn tn)))
+                table-cols (get table-info table)
+
                 expr-visitor (->ExprPlanVisitor env (->NoColumnReferenceAllowed "No column reference allowed in table period specification: "))]
+
             (letfn [(<-table-time-period-specification [specs]
                       (case (count specs)
                         0 nil
                         1 (.accept ^ParserRuleContext (first specs) (->TableTimePeriodSpecificationVisitor expr-visitor))
                         :else (add-err! env (->MultipleTimePeriodSpecifications))))]
-              (->BaseTable env ctx sn tn
+
+              ;; HACK we scan `xt.not_found` until a not-found table can be an error, #4467
+              (->BaseTable env (or table #xt/table xt/not_found)
                            (<-table-time-period-specification (.queryValidTimePeriodSpecification ctx))
                            (<-table-time-period-specification (.querySystemTimePeriodSpecification ctx))
                            table-alias unique-table-alias
@@ -2752,7 +2761,7 @@
                                        (get table-info (table/ref->schema+table table)))]
                        cols
                        (do
-                         (add-warning! env (->BaseTableNotFound nil table-name))
+                         (add-warning! env (->BaseTableNotFound [(namespace table-name) (name table-name)]))
                          #{}))
 
           dml-scope (->DmlTableRef env table-name table-alias unique-table-alias for-valid-time table-cols
@@ -2814,7 +2823,7 @@
                                        (get table-info (table/ref->schema+table table)))]
                        cols
                        (do
-                         (add-warning! env (->BaseTableNotFound nil table-name))
+                         (add-warning! env (->BaseTableNotFound [(namespace table-name) (name table-name)]))
                          #{}))
 
           dml-scope (->DmlTableRef env table-name table-alias unique-table-alias for-valid-time table-cols
@@ -2852,7 +2861,7 @@
                                        (get table-info (table/ref->schema+table table)))]
                        cols
                        (do
-                         (add-warning! env (->BaseTableNotFound nil table-name))
+                         (add-warning! env (->BaseTableNotFound [(namespace table-name) (name table-name)]))
                          #{}))
 
           dml-scope (->EraseTableRef env table-name table-alias unique-table-alias table-cols
@@ -2904,14 +2913,13 @@
       (->QueryExpr [:table [(into {} arg-row)]]
                    (vec (keys arg-row))))))
 
-(defn xform-table-info [table-info]
+(defn xform-table-info [table-info default-db]
+  ;; this fn turned up in a profiler the last time I checked, particularly for low-latency queries.
+  ;; plenty happening here that can be cached.
   (into {}
-        (for [[table cns] (merge info-schema/table-info
-                                 '{xt/txs #{_id committed error system_time}}
-                                 table-info)]
+        (for [[table cns] (concat (info-schema/table-info default-db) table-info)]
           [table (->> cns
                       (map ->col-sym)
-                      ^Collection
                       (sort-by identity (fn [s1 s2]
                                           (cond
                                             (= '_id s1) -1
@@ -2919,19 +2927,45 @@
                                             :else (compare s1 s2))))
                       ->insertion-ordered-set)])))
 
+(def ^:private ^Cache table-chains-cache
+  (-> (Caffeine/newBuilder)
+      (.maximumSize 4096)
+      (.build)))
+
+(defn- ->table-chains [table-refs default-db]
+  ;; I suspect this'll light up a profiler too?
+  (-> (into (info-schema/table-chains default-db)
+            (mapcat (fn [table]
+                      (.get table-chains-cache [table default-db]
+                            (fn [[^TableRef table default-db]]
+                              (let [db-name (.getDbName table)
+                                    default-db? (= default-db db-name)
+                                    db-name (symbol db-name)
+                                    schema-name (symbol (.getSchemaName table))
+                                    search-path-schema? (= 'public schema-name)
+                                    table-name (symbol (.getTableName table))]
+                                (cond-> [[[db-name schema-name table-name] table]]
+                                  default-db? (conj [[schema-name table-name] table])
+                                  search-path-schema? (conj [[db-name table-name] table])
+                                  (and default-db? search-path-schema?) (conj [[table-name] table])))))))
+            table-refs)
+      (->> (group-by first))
+      (update-vals #(into #{} (map second) %))))
+
 (defn log-warnings [!warnings]
   (doseq [warning @!warnings]
     (log/debug (error-string warning))))
 
 (defn ->env
   ([] (->env {}))
-  ([{:keys [table-info]}]
+  ([{:keys [table-info default-db], :or {default-db "xtdb"}}]
    {:!errors (atom [])
     :!warnings (atom [])
     :!id-count (atom 0)
     :!param-count (atom 0)
-    :default-db "xtdb" ; TODO multi-db
-    :table-info (xform-table-info table-info)}))
+    :default-db default-db
+    :table-info (xform-table-info table-info default-db)
+    :table-chains (->table-chains (keys table-info) default-db)}))
 
 (defprotocol PlanExpr
   (-plan-expr [sql opts]))
@@ -2975,16 +3009,18 @@
         (-plan-query opts)))
 
   Sql$DirectlyExecutableStatementContext
-  (-plan-query [ctx {:keys [default-db scope table-info arg-fields]}]
+  (-plan-query [ctx {:keys [default-db scope table-info arg-fields]
+                     :or {default-db "xtdb"}}]
     (let [!errors (atom [])
           !warnings (atom [])
           !param-count (atom 0)
-          env {:default-db (or default-db "xtdb")
+          env {:default-db default-db
                :!errors !errors
                :!warnings !warnings
                :!id-count (atom 0)
                :!param-count !param-count
-               :table-info (xform-table-info table-info)
+               :table-info (xform-table-info table-info default-db)
+               :table-chains (->table-chains (keys table-info) default-db)
                ;; NOTE this may not necessarily be provided
                ;; we get it through SQL DML, which is the main case we need it for #3656
                :arg-fields arg-fields}

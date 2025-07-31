@@ -538,7 +538,7 @@ tableTimePeriodSpecification
     | 'FROM' from=expr 'TO' to=expr # TableFromTo
     ;
 
-fromTableRef : (schemaName=identifier '.')? tableName=identifier  ;
+fromTableRef : ((identifier '.')? identifier '.')? identifier ;
 
 columnNameList : columnName (',' columnName)* ;
 

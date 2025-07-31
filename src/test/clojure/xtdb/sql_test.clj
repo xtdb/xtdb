@@ -1055,7 +1055,7 @@
    (=plan-file
     "test-expr-in-equi-join-2"
     (sql/plan "SELECT a FROM a JOIN bar b ON a = b+1"
-              {:table-info {#xt/table a #{"a"}, "bar" #{"b"}}}))))
+              {:table-info {#xt/table a #{"a"}, #xt/table bar #{"b"}}}))))
 
 (t/deftest push-semi-and-anti-joins-down-test
   ;;semi-join was previously been pushed down below the cross join
