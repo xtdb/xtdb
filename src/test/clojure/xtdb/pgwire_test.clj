@@ -82,9 +82,9 @@
 (defn serve
   (^xtdb.pgwire.Server [] (serve {}))
   (^xtdb.pgwire.Server [opts] (pgw/serve tu/*node* (merge {:num-threads 1
-                                                              :allocator tu/*allocator*
-                                                              :drain-wait 250}
-                                                             opts))))
+                                                           :allocator tu/*allocator*
+                                                           :drain-wait 250}
+                                                          opts))))
 
 (defn jdbc-conn
   (^Connection [] (jdbc-conn nil))
@@ -419,8 +419,8 @@
   ;; quick test for now to confirm canned response mechanism at least doesn't crash!
   ;; this may later be replaced by client driver tests (e.g test sqlalchemy connect & query)
   (with-redefs [pgw/canned-responses [{:q "hello!"
-                                          :cols [{:col-name "greet", :pg-type :json}]
-                                          :rows (fn [_] [["\"hey!\""]])}]]
+                                       :cols [{:col-name "greet", :pg-type :json}]
+                                       :rows (fn [_] [["\"hey!\""]])}]]
     (with-open [conn (jdbc-conn)]
       (is (= [{:greet "hey!"}] (q conn ["hello!"]))))))
 
