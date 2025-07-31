@@ -60,21 +60,16 @@
 (defn identifier-sym [^ParserRuleContext ctx]
   (some-> ctx
           (.accept (reify SqlVisitor
-                     (visitSchemaName [this ctx] (-> (.identifier ctx) (.accept this)))
                      (visitAsClause [this ctx] (-> (.columnName ctx) (.accept this)))
-                     (visitQueryName [this ctx] (-> (.identifier ctx) (.accept this)))
 
-                     (visitTableName [this ctx]
-                       (let [tn (-> (.identifier ctx) (.accept this))]
+                     (visitTargetTable [this ctx]
+                       (let [tn (-> (.tableName ctx) (.accept this))]
                          (if-let [sn (some-> (.schemaName ctx) (.accept this))]
                            (symbol (str sn) (str tn))
                            tn)))
 
                      (visitTableAlias [this ctx] (-> (.correlationName ctx) (.accept this)))
                      (visitColumnName [this ctx] (-> (.identifier ctx) (.accept this)))
-                     (visitFieldName [this ctx] (-> (.identifier ctx) (.accept this)))
-                     (visitCorrelationName [this ctx] (-> (.identifier ctx) (.accept this)))
-                     (visitObjectName [this ctx] (-> (.identifier ctx) (.accept this)))
 
                      (visitRegularIdentifier [_ ctx] (symbol (util/str->normal-form-str (.getText ctx))))
 
@@ -604,9 +599,9 @@
 (defrecord TableRefVisitor [env scope left-scope]
   SqlVisitor
   (visitBaseTable [{{:keys [!id-count table-info ctes default-db] :as env} :env} ctx]
-    (let [tn (some-> (.tableOrQueryName ctx) (.tableName))
-          sn (identifier-sym (.schemaName tn))
-          tn (identifier-sym (.identifier tn))
+    (let [table-ref (.fromTableRef ctx)
+          sn (identifier-sym (.schemaName table-ref))
+          tn (identifier-sym (.tableName table-ref))
           table (table/->ref default-db sn tn)
 
           table-alias (or (identifier-sym (.tableAlias ctx)) tn)
@@ -942,24 +937,27 @@
     (list 'multi-field-interval ve start-field leading-precision end-field fractional-precision)
     (list 'single-field-interval ve start-field leading-precision fractional-precision)))
 
-(defn iq-context->iq-map [^Sql$IntervalQualifierContext ctx]
-  (if-let [sdf (.singleDatetimeField ctx)]
-    (let [field (-> (.getChild sdf 0) (.getText) (str/upper-case))
-          fp (some-> (.intervalFractionalSecondsPrecision sdf) (.getText) (parse-long))]
-      {:start-field field
-       :end-field nil :leading-precision 2
-       :fractional-precision (or fp 6)})
+(def IntervalQualifierVisitor
+  (reify SqlVisitor
+    (visitSingleFieldInterval [_ ctx]
+      (let [sdf (.singleDatetimeField ctx)
+            field (-> (.getChild sdf 0) (.getText) (str/upper-case))
+            fp (some-> (.intervalFractionalSecondsPrecision sdf) (.getText) (parse-long))]
+        {:start-field field, :end-field nil
+         :leading-precision 2
+         :fractional-precision (or fp 6)}))
 
-    (let [start-field (-> (.startField ctx) (.nonSecondPrimaryDatetimeField) (.getText) (str/upper-case))
-          ef (-> (.endField ctx) (.singleDatetimeField))
-          end-field (if-let [non-sec-ef (.nonSecondPrimaryDatetimeField ef)]
-                      (-> (.getText non-sec-ef) (str/upper-case))
-                      "SECOND")
-          fp (some-> (.intervalFractionalSecondsPrecision ef) (.getText) (parse-long))]
-      {:start-field start-field
-       :end-field end-field
-       :leading-precision 2
-       :fractional-precision (or fp 6)})))
+    (visitMultiFieldInterval [_ ctx]
+      (let [start-field (-> (.startField ctx) (.getText) (str/upper-case))
+            ef (.endField ctx)
+            end-field (if-let [non-sec-ef (.nonSecondPrimaryDatetimeField ef)]
+                        (-> (.getText non-sec-ef) (str/upper-case))
+                        "SECOND")
+            fp (some-> (.intervalFractionalSecondsPrecision ef) (.getText) (parse-long))]
+        {:start-field start-field
+         :end-field end-field
+         :leading-precision 2
+         :fractional-precision (or fp 6)}))))
 
 (defrecord UnsupportedPrecision[precision]
   PlanError
@@ -1025,7 +1023,7 @@
   (visitIntervalType [_ ctx]
     (let [interval-qualifier (.intervalQualifier ctx)]
       {:cast-type :interval
-       :cast-opts (when interval-qualifier (iq-context->iq-map interval-qualifier))}))
+       :cast-opts (when interval-qualifier (.accept interval-qualifier IntervalQualifierVisitor))}))
 
   (visitKeywordType [_ _] {:cast-type :keyword})
   (visitUuidType [_ _] {:cast-type :uuid})
@@ -1158,7 +1156,7 @@
 
   (visitIntervalLiteral [this ctx]
     (let [csl (some-> (.characterString ctx) (.accept this))
-          iq-map (some-> (.intervalQualifier ctx) (iq-context->iq-map))
+          iq-map (some-> (.intervalQualifier ctx) (.accept IntervalQualifierVisitor))
           interval-expr (if iq-map
                           (->interval-expr csl iq-map)
                           (parse-iso-interval-literal csl env))]
@@ -1315,7 +1313,7 @@
 
   (visitExtractFunction [this ctx]
     (let [extract-field (-> (.extractField ctx) (.getText) (str/upper-case))
-          extract-source (-> (.extractSource ctx) (.expr) (.accept this))]
+          extract-source (-> (.extractSource ctx) (.accept this))]
       (list 'extract extract-field extract-source)))
 
   (visitPositionFunction [this ctx]
@@ -1398,29 +1396,29 @@
   (visitLikePredicate [this ctx]
     (let [like-expr (list 'like
                           (-> (.expr ctx) (.accept this))
-                          (-> (.likePattern ctx) (.exprPrimary) (.accept this)))]
+                          (-> (.likePattern ctx) (.accept this)))]
       (if (.NOT ctx)
         (list 'not like-expr)
         like-expr)))
 
   (visitLikePredicatePart2 [{:keys [pt1] :as this} ctx]
-    (let [cp (-> (.likePattern ctx) (.exprPrimary) (.accept (dissoc this :pt1)))]
+    (let [cp (-> (.likePattern ctx) (.accept (dissoc this :pt1)))]
       (if (.NOT ctx)
         (list 'not (list 'like pt1 cp))
         (list 'like pt1 cp))))
 
   (visitLikeRegexPredicate [this ctx]
     (let [like-expr (list 'like-regex (.accept (.expr ctx) this)
-                          (-> (.xqueryPattern ctx) (.exprPrimary) (.accept this))
-                          (or (some-> (.xqueryOptionFlag ctx) (.exprPrimary) (.accept this)) ""))]
+                          (-> (.xqueryPattern ctx) (.accept this))
+                          (or (some-> (.xqueryOptionFlag ctx) (.accept this)) ""))]
       (if (.NOT ctx)
         (list 'not like-expr)
         like-expr)))
 
   (visitLikeRegexPredicatePart2 [{:keys [pt1] :as this} ctx]
     (let [like-expr (list 'like-regex pt1
-                          (-> (.xqueryPattern ctx) (.exprPrimary) (.accept this))
-                          (or (some-> (.xqueryOptionFlag ctx) (.exprPrimary) (.accept this)) ""))]
+                          (-> (.xqueryPattern ctx) (.accept this))
+                          (or (some-> (.xqueryOptionFlag ctx) (.accept this)) ""))]
       (if (.NOT ctx)
         (list 'not like-expr)
         like-expr)))
@@ -1428,7 +1426,7 @@
   (visitPostgresRegexPredicate [this ctx]
     (let [pro (-> (.postgresRegexOperator ctx) (.getText))
           expr (list 'like-regex (.accept (.expr ctx) this)
-                     (-> (.xqueryPattern ctx) (.exprPrimary) (.accept this))
+                     (-> (.xqueryPattern ctx) (.accept this))
                      (if (#{"~*" "!~*"} pro) "i" ""))]
       (if (#{"!~" "!~*"} pro)
         (list 'not expr)
@@ -1437,7 +1435,7 @@
   (visitPostgresRegexPredicatePart2 [{:keys [pt1] :as this} ctx]
     (let [pro (-> (.postgresRegexOperator ctx) (.getText))
           expr (list 'like-regex pt1
-                     (-> (.xqueryPattern ctx) (.exprPrimary) (.accept this))
+                     (-> (.xqueryPattern ctx) (.accept this))
                      (if (#{"~*" "!~*"} pro) "i" ""))]
       (if (#{"!~" "!~*"} pro)
         (list 'not expr)
@@ -1559,8 +1557,8 @@
 
   (visitDateTruncFunction [this ctx]
     (let [dtp (-> (.dateTruncPrecision ctx) (.getText) (str/upper-case))
-          dts (-> (.dateTruncSource ctx) (.expr) (.accept this))
-          dt-tz (some-> (.dateTruncTimeZone ctx) (.characterString) (.accept this))]
+          dts (-> (.dateTruncSource ctx) (.accept this))
+          dt-tz (some-> (.dateTruncTimeZone ctx) (.accept this))]
       (if dt-tz
         (list 'date_trunc dtp dts dt-tz)
         (list 'date_trunc dtp dts))))
@@ -1568,20 +1566,18 @@
   (visitDateBinFunction [this ctx]
     (xt/template
      (date-bin ~(-> (.intervalLiteral ctx) (.accept this))
-               ~(-> (.expr (.dateBinSource ctx)) (.accept this))
+               ~(-> (.dateBinSource ctx) (.accept this))
                ~@(some-> (.dateBinOrigin ctx)
-                         .expr
                          (.accept this)
                          vector))))
 
   (visitRangeBinsFunction [this ctx]
-    (let [p (-> (.rangeBinsSource ctx) (.expr) (.accept this))]
+    (let [p (-> (.rangeBinsSource ctx) (.accept this))]
       (xt/template
        (range-bins ~(-> (.intervalLiteral ctx) (.accept this))
                    (lower ~p)
                    (upper ~p)
                    ~@(some-> (.dateBinOrigin ctx)
-                             .expr
                              (.accept this)
                              vector)))))
 
@@ -1589,20 +1585,18 @@
     (.accept (.generateSeries ctx) this))
 
   (visitGenerateSeries [this ctx]
-    (xt/template (generate_series ~(.accept (.expr (.seriesStart ctx)) this)
-                                  ~(.accept (.expr (.seriesEnd ctx)) this)
-                                  ~(or (some-> (.seriesStep ctx) (.expr) (.accept this))
+    (xt/template (generate_series ~(.accept (.seriesStart ctx) this)
+                                  ~(.accept (.seriesEnd ctx) this)
+                                  ~(or (some-> (.seriesStep ctx) (.accept this))
                                        1))))
 
   (visitObjectExpr [this ctx] (.accept (.objectConstructor ctx) this))
 
   (visitObjectConstructor [this ctx]
     (->> (for [^Sql$ObjectNameAndValueContext kv (.objectNameAndValue ctx)]
-           (MapEntry/create (keyword (-> (.objectName kv) (.accept this)))
+           (MapEntry/create (keyword (identifier-sym (.objectName kv)))
                             (-> (.expr kv) (.accept this))))
          (into {})))
-
-  (visitObjectName [_ ctx] (identifier-sym (.identifier ctx)))
 
   (visitArrayExpr [this ctx] (.accept (.arrayValueConstructor ctx) this))
 
@@ -1615,9 +1609,9 @@
       (list 'trim-array ve-1 ve-2)))
 
   (visitCharacterSubstringFunction [this ctx]
-    (let [cve (-> (.expr ctx) (.accept this))
-          sp (-> (.startPosition ctx) (.expr) (.accept this))
-          sl (some-> (.stringLength ctx) (.expr) (.accept this))]
+    (let [cve (-> (.substringSource ctx) (.accept this))
+          sp (-> (.startPosition ctx) (.accept this))
+          sl (some-> (.stringLength ctx) (.accept this))]
       (if sl
         (list 'substring cve sp sl)
         (list 'substring cve sp))))
@@ -1627,15 +1621,15 @@
                     "LEADING" 'trim-leading
                     "TRAILING" 'trim-trailing
                     'trim)
-          trim-char (some-> (.trimCharacter ctx) (.expr) (.accept this))
-          nve (-> (.trimSource ctx) (.expr) (.accept this))]
+          trim-char (some-> (.trimCharacter ctx) (.accept this))
+          nve (-> (.trimSource ctx) (.accept this))]
       (list trim-fn nve (or trim-char " "))))
 
   (visitOverlayFunction [this ctx]
     (let [target (-> (.expr ctx 0) (.accept this))
           placing (-> (.expr ctx 1) (.accept this))
-          pos (-> (.startPosition ctx) (.expr) (.accept this))
-          len (some-> (.stringLength ctx) (.expr) (.accept this))]
+          pos (-> (.startPosition ctx) (.accept this))
+          len (some-> (.stringLength ctx) (.accept this))]
       (if len
         (list 'overlay target placing pos len)
         (list 'overlay target placing pos (list 'default-overlay-length placing)))))
@@ -1787,10 +1781,7 @@
     (-> (.windowPartitionColumnReferenceList ctx) (.accept this)))
 
   (visitWindowPartitionColumnReferenceList [this ctx]
-    (mapv #(.accept ^ParserRuleContext % this) (.windowPartitionColumnReference ctx)))
-
-  (visitWindowPartitionColumnReference [this ctx]
-    (-> (.columnReference ctx) (.accept this)))
+    (mapv #(.accept ^ParserRuleContext % this) (.columnReference ctx)))
 
   (visitWindowOrderClause [_this ctx]
     (plan-sort-specification-list (.sortSpecificationList ctx) env scope nil))
@@ -2724,7 +2715,7 @@
       insert-plan))
 
   (visitPatchStatement [{{:keys [default-db]} :env, :as this} ctx]
-    (let [table (table/->ref default-db (identifier-sym (.tableName ctx)))
+    (let [table (table/->ref default-db (identifier-sym (.targetTable ctx)))
           [vf-expr vt-expr] (or (some-> (.patchStatementValidTimeExtents ctx)
                                         (.accept (->PatchValidTimeExtentsVisitor env scope)))
                                 ['(current-timestamp) time/end-of-time])]
@@ -2747,7 +2738,7 @@
 
   (visitUpdateStatement [{{:keys [!id-count table-info default-db]} :env} ctx]
     (let [internal-cols (mapv ->col-sym '[_iid _valid_from _valid_to])
-          table-name (identifier-sym (.tableName ctx))
+          table-name (identifier-sym (.targetTable ctx))
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
           table-name (util/with-default-schema table-name)
           table (table/->ref default-db table-name)
@@ -2772,7 +2763,7 @@
           set-clauses (for [^Sql$SetClauseContext set-clause (->> (.setClauseList ctx) (.setClause))
                             :let [set-target (.setTarget set-clause)]]
                         {(identifier-sym (.columnName set-target))
-                         (.accept (.expr (.updateSource set-clause)) expr-visitor)})
+                         (.accept (.updateSource set-clause) expr-visitor)})
 
           _ (doseq [forbidden-col (->> set-clauses
                                        (into #{} (comp (map (comp key first))
@@ -2809,7 +2800,7 @@
 
   (visitDeleteStatement [{{:keys [!id-count table-info default-db]} :env} ctx]
     (let [internal-cols (mapv ->col-sym '[_iid _valid_from _valid_to])
-          table-name (identifier-sym (.tableName ctx))
+          table-name (identifier-sym (.targetTable ctx))
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
           table-name (util/with-default-schema table-name)
           table (table/->ref default-db table-name)
@@ -2850,7 +2841,7 @@
 
   (visitEraseStatement [{{:keys [!id-count table-info default-db]} :env} ctx]
     (let [internal-cols '[_iid]
-          table-name (identifier-sym (.tableName ctx))
+          table-name (identifier-sym (.targetTable ctx))
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           table-name (util/with-default-schema table-name)
@@ -3027,7 +3018,7 @@
 (defrecord SqlToStaticOpsVisitor [env scope arg-rows]
   SqlVisitor
   (visitInsertStatement [this ctx]
-    (let [table (-> (identifier-sym (.tableName ctx)) (util/with-default-schema))]
+    (let [table (-> (identifier-sym (.targetTable ctx)) (util/with-default-schema))]
       (when-let [rows (-> (.insertColumnsAndSource ctx) (.accept this))]
         (letfn [(->const [v arg-row]
                   (letfn [(->const* [obj]

@@ -16,28 +16,28 @@ multiSqlStatement : directlyExecutableStatement ( ';' directlyExecutableStatemen
 directlyExecutableStatement
     : EXPLAIN? settingQueryVariables? queryExpression #QueryExpr
 
-    | 'INSERT' 'INTO' tableName insertColumnsAndSource returningStatement? #InsertStatement
+    | 'INSERT' 'INTO' targetTable insertColumnsAndSource returningStatement? #InsertStatement
 
-    | 'UPDATE' tableName dmlStatementValidTimeExtents? ( 'AS'? correlationName )?
+    | 'UPDATE' targetTable dmlStatementValidTimeExtents? ( 'AS'? correlationName=identifier )?
       'SET' setClauseList ( 'WHERE' searchCondition )?
       returningStatement?
       #UpdateStatement
       
-    | 'DELETE' 'FROM' tableName dmlStatementValidTimeExtents? ( 'AS'? correlationName )?
+    | 'DELETE' 'FROM' targetTable dmlStatementValidTimeExtents? ( 'AS'? correlationName=identifier )?
       ( 'WHERE' searchCondition )?
       returningStatement?
       #DeleteStatement
 
-    | PATCH INTO tableName patchStatementValidTimeExtents? patchSource #PatchStatement
+    | PATCH INTO targetTable patchStatementValidTimeExtents? patchSource #PatchStatement
 
-    | 'ERASE' 'FROM' tableName ( 'AS'? correlationName )? ('WHERE' searchCondition)? #EraseStatement
+    | 'ERASE' 'FROM' targetTable ( 'AS'? correlationName=identifier )? ('WHERE' searchCondition)? #EraseStatement
 
     | ASSERT condition=expr (',' message=characterString)? #AssertStatement
 
     | PREPARE statementName=identifier AS directlyExecutableStatement #PrepareStatement
     | EXECUTE statementName=identifier executeArgs #ExecuteStatement
 
-    | COPY tableName FROM STDIN opts=copyOpts # CopyInStmt
+    | COPY targetTable FROM STDIN opts=copyOpts # CopyInStmt
     | (START TRANSACTION | BEGIN TRANSACTION?) transactionCharacteristics? # StartTransactionStatement
     | SET TRANSACTION ISOLATION LEVEL levelOfIsolation # SetTransactionStatement
     | COMMIT # CommitStatement
@@ -52,9 +52,11 @@ directlyExecutableStatement
     | SHOW AWAIT_TOKEN # ShowAwaitTokenStatement
     | SHOW SNAPSHOT_TOKEN # ShowSnapshotTokenStatement
     | SHOW CLOCK_TIME # ShowClockTimeStatement
-    | CREATE USER userName WITH PASSWORD password=characterString # CreateUserStatement
-    | ALTER USER userName WITH PASSWORD password=characterString # AlterUserStatement
+    | CREATE USER userName=identifier WITH PASSWORD password=characterString # CreateUserStatement
+    | ALTER USER userName=identifier WITH PASSWORD password=characterString # AlterUserStatement
     ;
+
+targetTable : (schemaName=identifier '.')? tableName=identifier ;
 
 executeArgs : ('(' expr (',' expr)* ')')? ;
 
@@ -115,9 +117,11 @@ characterString
     | DOLLAR_TAG dollarStringText? DM_END_TAG #DollarString
     ;
 
-intervalQualifier : startField 'TO' endField | singleDatetimeField ;
-startField : nonSecondPrimaryDatetimeField ;
-endField : singleDatetimeField ;
+intervalQualifier
+   : startField=nonSecondPrimaryDatetimeField 'TO' endField=singleDatetimeField # MultiFieldInterval
+   | singleDatetimeField # SingleFieldInterval
+   ;
+   
 intervalFractionalSecondsPrecision : UNSIGNED_INTEGER ;
 nonSecondPrimaryDatetimeField : 'YEAR' | 'MONTH' | 'DAY' | 'HOUR' | 'MINUTE' ;
 singleDatetimeField : nonSecondPrimaryDatetimeField | 'SECOND' ( '(' intervalFractionalSecondsPrecision ')' )? ;
@@ -145,15 +149,7 @@ identifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier
     ;
 
-schemaName : identifier ;
-tableName : (identifier | schemaName '.' identifier) ;
 columnName : identifier ;
-correlationName : identifier ;
-
-queryName : identifier ;
-fieldName : identifier ;
-windowName : identifier ;
-userName: identifier;
 
 // §6 Scalar Expressions
 
@@ -196,7 +192,7 @@ withOrWithoutTimeZone
 
 maximumCardinality : UNSIGNED_INTEGER ;
 
-fieldDefinition : fieldName dataType ;
+fieldDefinition : fieldName=identifier dataType ;
 
 /// §6.3 <value expression primary>
 
@@ -205,9 +201,9 @@ expr
     | expr compOp expr # ComparisonPredicate
     | numericExpr NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? numericExpr 'AND' numericExpr # BetweenPredicate
     | expr NOT? 'IN' inPredicateValue # InPredicate
-    | expr 'NOT'? 'LIKE' likePattern ('ESCAPE' likeEscape)? # LikePredicate
-    | expr 'NOT'? 'LIKE_REGEX' xqueryPattern ('FLAG' xqueryOptionFlag)? # LikeRegexPredicate
-    | expr postgresRegexOperator xqueryPattern # PostgresRegexPredicate
+    | expr 'NOT'? 'LIKE' likePattern=exprPrimary ('ESCAPE' likeEscape=exprPrimary)? # LikePredicate
+    | expr 'NOT'? 'LIKE_REGEX' xqueryPattern=exprPrimary ('FLAG' xqueryOptionFlag=exprPrimary)? # LikeRegexPredicate
+    | expr postgresRegexOperator xqueryPattern=exprPrimary # PostgresRegexPredicate
     | expr 'IS' 'NOT'? 'NULL' # NullPredicate
 
     // period predicates
@@ -242,7 +238,7 @@ numericExpr
 exprPrimary
     : '(' expr ')' #WrappedExpr
     | literal # LiteralExpr
-    | exprPrimary '.' fieldName #FieldAccess
+    | exprPrimary '.' fieldName=identifier #FieldAccess
     | exprPrimary '[' expr ']' #ArrayAccess
     | exprPrimary '::' dataType #PostgresCastExpr
     | exprPrimary '||' exprPrimary #ConcatExpr
@@ -266,43 +262,43 @@ exprPrimary
 
     | 'EXISTS' subquery # ExistsPredicate
 
-    | (schemaName '.')? 'HAS_ANY_COLUMN_PRIVILEGE' '('
-        ( userString ',' )?
-        tableString ','
-        privilegeString
+    | (identifier '.')? 'HAS_ANY_COLUMN_PRIVILEGE' '('
+        ( userString=expr ',' )?
+        tableString=expr ','
+        privilegeString=expr
       ')' # HasAnyColumnPrivilegePredicate
 
-    | (schemaName '.')? 'HAS_TABLE_PRIVILEGE' '('
-        ( userString ',' )?
-        tableString ','
-        privilegeString
+    | (identifier '.')? 'HAS_TABLE_PRIVILEGE' '('
+        ( userString=expr ',' )?
+        tableString=expr ','
+        privilegeString=expr
       ')' # HasTablePrivilegePredicate
 
-    | (schemaName '.')? 'HAS_SCHEMA_PRIVILEGE' '('
-        ( userString ',' )?
-        schemaString ','
-        privilegeString
+    | (identifier '.')? 'HAS_SCHEMA_PRIVILEGE' '('
+        ( userString=expr ',' )?
+        schemaString=expr ','
+        privilegeString=expr
       ')' # HasSchemaPrivilegePredicate
 
-    | (schemaName '.')? 'VERSION' '(' ')' #PostgresVersionFunction
+    | (schemaName=identifier '.')? 'VERSION' '(' ')' #PostgresVersionFunction
 
-    | (schemaName '.')? 'PG_GET_USERBYID' '(' relOwner=columnReference ')' # PostgresGetUserByIdFunction
-    | (schemaName '.')? 'PG_TABLE_IS_VISIBLE' '(' columnOid=columnReference ')' # PostgresTableIsVisibleFunction
+    | (identifier '.')? 'PG_GET_USERBYID' '(' relOwner=columnReference ')' # PostgresGetUserByIdFunction
+    | (identifier '.')? 'PG_TABLE_IS_VISIBLE' '(' columnOid=columnReference ')' # PostgresTableIsVisibleFunction
 
     // numeric value functions
     | 'POSITION' '(' expr 'IN' expr ( 'USING' charLengthUnits )? ')' # PositionFunction
-    | 'EXTRACT' '(' extractField 'FROM' extractSource ')' # ExtractFunction
+    | 'EXTRACT' '(' extractField 'FROM' extractSource=expr ')' # ExtractFunction
     | ('CHAR_LENGTH' | 'CHARACTER_LENGTH') '(' expr ('USING' charLengthUnits)? ')' # CharacterLengthFunction
     | fn=identifier '(' ( expr (',' expr)* )? ')' # FunctionCall
 
     // string value functions
     | 'SUBSTRING' '('
-        expr
-        ('FROM'? startPosition ( 'FOR'? stringLength )? ( 'USING' charLengthUnits )?
-         | ',' startPosition (',' stringLength)? )
+        substringSource=expr
+        ('FROM'? startPosition=expr ( 'FOR'? stringLength=expr )? ( 'USING' charLengthUnits )?
+         | ',' startPosition=expr (',' stringLength=expr)? )
       ')' # CharacterSubstringFunction
 
-    | 'TRIM' '(' trimSpecification? trimCharacter? 'FROM'? trimSource ')' # TrimFunction
+    | 'TRIM' '(' trimSpecification? trimCharacter=expr? 'FROM'? trimSource=expr ')' # TrimFunction
 
     | 'URI_SCHEME' '(' expr ')' # UriSchemeFunction
     | 'URI_USER_INFO' '(' expr ')' # UriUserInfoFunction
@@ -315,21 +311,21 @@ exprPrimary
     | 'OVERLAY' '('
         expr
         'PLACING' expr
-        'FROM' startPosition
-        ( 'FOR' stringLength )?
+        'FROM' startPosition=expr
+        ( 'FOR' stringLength=expr )?
         ( 'USING' charLengthUnits )?
       ')' # OverlayFunction
 
     | 'REPLACE' '(' source=expr ',' pattern=expr ',' replacement=expr ')' # ReplaceFunction
     | 'REGEXP_REPLACE' '(' source=expr ',' pattern=characterString ',' replacement=characterString (',' start=integerLiteral ( ',' n=integerLiteral )? )? (',' flags=characterString)? ')' # RegexpReplaceFunction
 
-    | (schemaName '.')? 'CURRENT_USER' # CurrentUserFunction
-    | (schemaName '.')? 'CURRENT_SCHEMA' ('(' ')')? # CurrentSchemaFunction
-    | (schemaName '.')? 'CURRENT_SCHEMAS' '(' expr ')' # CurrentSchemasFunction
-    | (schemaName '.')? 'CURRENT_DATABASE' ('(' ')')? # CurrentDatabaseFunction
-    | (schemaName '.')? 'PG_GET_EXPR' ('(' expr ',' expr (',' expr)? ')')? # PgGetExprFunction
-    | (schemaName '.')? '_PG_EXPANDARRAY' ('(' expr ')')? # PgExpandArrayFunction
-    | (schemaName '.')? 'PG_GET_INDEXDEF' '(' expr (',' expr ',' expr)? ')' # PgGetIndexdefFunction
+    | (identifier '.')? 'CURRENT_USER' # CurrentUserFunction
+    | (identifier '.')? 'CURRENT_SCHEMA' ('(' ')')? # CurrentSchemaFunction
+    | (identifier '.')? 'CURRENT_SCHEMAS' '(' expr ')' # CurrentSchemasFunction
+    | (identifier '.')? 'CURRENT_DATABASE' ('(' ')')? # CurrentDatabaseFunction
+    | (identifier '.')? 'PG_GET_EXPR' ('(' expr ',' expr (',' expr)? ')')? # PgGetExprFunction
+    | (identifier '.')? '_PG_EXPANDARRAY' ('(' expr ')')? # PgExpandArrayFunction
+    | (identifier '.')? 'PG_GET_INDEXDEF' '(' expr (',' expr ',' expr)? ')' # PgGetIndexdefFunction
     | PG_SLEEP '(' sleepSeconds=expr ')' # PgSleepFunction
     | PG_SLEEP_FOR '(' sleepPeriod=expr ')' # PgSleepForFunction
 
@@ -337,9 +333,9 @@ exprPrimary
     | 'CURRENT_SETTING' '(' expr ')' #CurrentSettingFunction
     | 'CURRENT_TIME' ('(' precision ')')? # CurrentTimeFunction
     | LOCAL_TIME ('(' precision ')')? # LocalTimeFunction
-    | 'DATE_TRUNC' '(' dateTruncPrecision ',' dateTruncSource (',' dateTruncTimeZone)? ')' # DateTruncFunction
-    | 'DATE_BIN' '(' intervalLiteral ',' dateBinSource (',' dateBinOrigin)? ')' # DateBinFunction
-    | 'RANGE_BINS' '(' intervalLiteral ',' rangeBinsSource (',' dateBinOrigin)? ')' #RangeBinsFunction
+    | 'DATE_TRUNC' '(' dateTruncPrecision ',' dateTruncSource=expr (',' dateTruncTimeZone=characterString)? ')' # DateTruncFunction
+    | 'DATE_BIN' '(' intervalLiteral ',' dateBinSource=expr (',' dateBinOrigin=expr)? ')' # DateBinFunction
+    | 'RANGE_BINS' '(' intervalLiteral ',' rangeBinsSource=expr (',' dateBinOrigin=expr)? ')' #RangeBinsFunction
     | 'OVERLAPS' '(' expr ( ',' expr )+ ')' # OverlapsFunction
     | ('PERIOD' | 'TSTZRANGE') '(' expr ',' expr ')' # TsTzRangeConstructor
 
@@ -363,9 +359,7 @@ objectConstructor
     | '{' (objectNameAndValue (',' objectNameAndValue)*)? '}'
     ;
 
-objectNameAndValue : objectName ':' expr ;
-
-objectName : identifier ;
+objectNameAndValue : objectName=identifier ':' expr ;
 
 parameterSpecification
     : '?' #DynamicParameter
@@ -381,10 +375,7 @@ columnReference : identifierChain ;
 
 /// generate_series function
 
-generateSeries : (schemaName '.')? 'GENERATE_SERIES' '(' seriesStart ',' seriesEnd (',' seriesStep)? ')' ;
-seriesStart: expr;
-seriesEnd: expr;
-seriesStep: expr;
+generateSeries : (identifier '.')? 'GENERATE_SERIES' '(' seriesStart=expr ',' seriesEnd=expr (',' seriesStep=expr)? ')' ;
 
 /// §6.10 <window function>
 
@@ -395,9 +386,9 @@ windowFunctionType
     | 'NTILE' '(' numberOfTiles ')' # NtileWindowFunction
 
     | ('LEAD' | 'LAG') '('
-        leadOrLagExtent
-        (',' offset (',' defaultExpression)?)?
-      ')' (nullTreatment)? # LeadOrLagWindowFunction
+        leadOrLagExtent=expr
+        (',' offset=UNSIGNED_INTEGER (',' defaultExpression=expr)?)?
+      ')' nullTreatment? # LeadOrLagWindowFunction
 
     | firstOrLastValue '(' expr ')' nullTreatment? # FirstOrLastValueWindowFunction
     | 'NTH_VALUE' '(' expr ',' nthRow ')' fromFirstOrLast? nullTreatment? # NthValueWindowFunction
@@ -406,10 +397,6 @@ windowFunctionType
 rankFunctionType : 'RANK' | 'DENSE_RANK' | 'PERCENT_RANK' | 'CUME_DIST' ;
 
 numberOfTiles : UNSIGNED_INTEGER | parameterSpecification ;
-
-leadOrLagExtent : expr ;
-offset : UNSIGNED_INTEGER ;
-defaultExpression : expr ;
 
 nullTreatment
     : 'RESPECT' 'NULLS' # RespectNulls
@@ -425,7 +412,7 @@ fromFirstOrLast
     | 'FROM' 'LAST' # FromLast
     ;
 
-windowNameOrSpecification : windowName | windowSpecification ;
+windowNameOrSpecification : windowName=identifier | windowSpecification ;
 
 /// §6.11 <nested window function>
 
@@ -457,16 +444,10 @@ whenOperand : predicatePart2 | expr ;
 extractField : primaryDatetimeField | timeZoneField ;
 primaryDatetimeField : nonSecondPrimaryDatetimeField | 'SECOND' ;
 timeZoneField : 'TIMEZONE_HOUR' | 'TIMEZONE_MINUTE' ;
-extractSource : expr ;
 
 /// §6.30 <string value function>
 
-trimSource : expr ;
 trimSpecification : 'LEADING' | 'TRAILING' | 'BOTH' ;
-trimCharacter : expr ;
-
-startPosition : expr ;
-stringLength : expr ;
 
 /// §6.32 <datetime value function>
 
@@ -478,13 +459,6 @@ dateTruncPrecision
     | 'HOUR' | 'MINUTE' | 'SECOND'
     | 'MILLISECOND' | 'MICROSECOND' | 'NANOSECOND'
     ;
-
-dateTruncSource : expr ;
-dateTruncTimeZone : characterString ;
-
-dateBinSource : expr ;
-rangeBinsSource : expr ;
-dateBinOrigin : expr ;
 
 /// §6.34 <interval value function>
 
@@ -530,7 +504,7 @@ fromClause : 'FROM' tableReference (',' tableReference)* ;
 /// §7.6 <table reference>
 
 tableReference
-    : tableOrQueryName (querySystemTimePeriodSpecification | queryValidTimePeriodSpecification)* tableAlias? tableProjection? # BaseTable
+    : fromTableRef (querySystemTimePeriodSpecification | queryValidTimePeriodSpecification)* tableAlias? tableProjection? # BaseTable
     | tableReference joinType? 'JOIN' tableReference joinSpecification # JoinTable
     | tableReference 'CROSS' 'JOIN' tableReference # CrossJoinTable
     | tableReference 'NATURAL' joinType? 'JOIN' tableReference # NaturalJoinTable
@@ -542,9 +516,9 @@ tableReference
     | '(' tableReference ')' # WrappedTableReference
     ;
 
-withOrdinality : ('WITH' 'ORDINALITY') ;
+withOrdinality : 'WITH' 'ORDINALITY' ;
 
-tableAlias : 'AS'? correlationName ;
+tableAlias : 'AS'? correlationName=identifier ;
 tableProjection : '(' columnNameList ')' ;
 
 querySystemTimePeriodSpecification
@@ -564,7 +538,7 @@ tableTimePeriodSpecification
     | 'FROM' from=expr 'TO' to=expr # TableFromTo
     ;
 
-tableOrQueryName : tableName ;
+fromTableRef : (schemaName=identifier '.')? tableName=identifier  ;
 
 columnNameList : columnName (',' columnName)* ;
 
@@ -600,25 +574,21 @@ havingClause : 'HAVING' searchCondition ;
 windowClause : 'WINDOW' windowDefinitionList ;
 windowDefinitionList : windowDefinition (',' windowDefinition)* ;
 windowDefinition : newWindowName 'AS' windowSpecification ;
-newWindowName : windowName ;
+newWindowName : windowName=identifier ;
 
 windowSpecification : '(' windowSpecificationDetails ')' ;
 
-windowSpecificationDetails : (existingWindowName)? (windowPartitionClause)? (windowOrderClause)? (windowFrameClause)? ;
+windowSpecificationDetails : existingWindowName=identifier? windowPartitionClause? windowOrderClause? windowFrameClause? ;
 
-existingWindowName : windowName ;
 windowPartitionClause : 'PARTITION' 'BY' windowPartitionColumnReferenceList ;
-windowPartitionColumnReferenceList : windowPartitionColumnReference (',' windowPartitionColumnReference)* ;
-windowPartitionColumnReference : columnReference ;
+windowPartitionColumnReferenceList : columnReference (',' columnReference)* ;
 windowOrderClause : 'ORDER' 'BY' sortSpecificationList ;
 windowFrameClause : windowFrameUnits windowFrameExtent (windowFrameExclusion)? ;
 windowFrameUnits : 'ROWS' | 'RANGE' | 'GROUPS' ;
 windowFrameExtent : windowFrameStart | windowFrameBetween ;
 windowFrameStart : 'UNBOUNDED' 'PRECEDING' | windowFramePreceding | 'CURRENT' 'ROW' ;
 windowFramePreceding : UNSIGNED_INTEGER 'PRECEDING' ;
-windowFrameBetween : 'BETWEEN' windowFrameBound1 'AND' windowFrameBound2 ;
-windowFrameBound1 : windowFrameBound ;
-windowFrameBound2 : windowFrameBound ;
+windowFrameBetween : 'BETWEEN' windowFrameBound1=windowFrameBound 'AND' windowFrameBound2=windowFrameBound ;
 windowFrameBound : windowFrameStart | 'UNBOUNDED' 'FOLLOWING' | windowFrameFollowing ;
 windowFrameFollowing : UNSIGNED_INTEGER 'FOLLOWING' ;
 
@@ -664,7 +634,7 @@ asClause : 'AS'? columnName ;
 queryExpression : withClause? queryExpressionNoWith ;
 queryExpressionNoWith : queryExpressionBody orderByClause? offsetAndLimit?  ;
 withClause : 'WITH' RECURSIVE? withListElement (',' withListElement)* ;
-withListElement : queryName ('(' columnNameList ')')? 'AS' subquery ;
+withListElement : queryName=identifier ('(' columnNameList ')')? 'AS' subquery ;
 
 queryExpressionBody
     : queryTerm # QueryBodyTerm
@@ -716,9 +686,9 @@ predicatePart2
     : compOp expr # ComparisonPredicatePart2
     | NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? expr 'AND' expr # BetweenPredicatePart2
     | NOT? 'IN' inPredicateValue # InPredicatePart2
-    | 'NOT'? 'LIKE' likePattern ('ESCAPE' likeEscape)? # LikePredicatePart2
-    | 'NOT'? 'LIKE_REGEX' xqueryPattern ('FLAG' xqueryOptionFlag)? # LikeRegexPredicatePart2
-    | postgresRegexOperator xqueryPattern # PostgresRegexPredicatePart2
+    | 'NOT'? 'LIKE' likePattern=exprPrimary ('ESCAPE' likeEscape=exprPrimary)? # LikePredicatePart2
+    | 'NOT'? 'LIKE_REGEX' xqueryPattern=exprPrimary ('FLAG' xqueryOptionFlag=exprPrimary)? # LikeRegexPredicatePart2
+    | postgresRegexOperator xqueryPattern=exprPrimary # PostgresRegexPredicatePart2
     | 'IS' 'NOT'? 'NULL' # NullPredicatePart2
     | compOp quantifier quantifiedComparisonPredicatePart3 # QuantifiedComparisonPredicatePart2
     ;
@@ -735,12 +705,6 @@ inPredicateValue
     | '(' rowValueList ')' # InRowValueList
     ;
 
-likePattern : exprPrimary ;
-likeEscape : exprPrimary ;
-
-xqueryPattern : exprPrimary ;
-xqueryOptionFlag : exprPrimary ;
-
 postgresRegexOperator : '~' | '~*' | '!~' | '!~*' ;
 
 quantifier : 'ALL' | 'SOME' | 'ANY' ;
@@ -748,13 +712,6 @@ quantifier : 'ALL' | 'SOME' | 'ANY' ;
 /// §8.21 <search condition>
 
 searchCondition : expr? (',' expr?)* ;
-
-/// postgres access privilege predicates
-
-userString : expr ;
-tableString : expr ;
-schemaString : expr ;
-privilegeString : expr ;
 
 //// §10 Additional common elements
 
@@ -817,12 +774,10 @@ insertColumnsAndSource
 /// §14.15 <set clause list>
 
 setClauseList : setClause (',' setClause)* ;
-setClause : setTarget '=' updateSource ;
+setClause : setTarget '=' updateSource=expr ;
 
 // TODO SQL:2011 supports updating keys within a struct here
 setTarget : columnName ;
-
-updateSource : expr ;
 
 /// §17.3 <transaction characteristics>
 

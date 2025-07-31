@@ -752,7 +752,7 @@
 
                                         (visitCopyInStmt [this ctx]
                                           (into {:statement-type :copy-in,
-                                                 :table-name (sql/identifier-sym (.tableName ctx))}
+                                                 :table-name (sql/identifier-sym (.targetTable ctx))}
                                                 (map (partial sql/accept-visitor this))
                                                 (some-> (.opts ctx) (.copyOpt))))
 

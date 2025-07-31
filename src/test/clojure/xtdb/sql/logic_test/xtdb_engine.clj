@@ -86,7 +86,7 @@
   SqlVisitor
   (visitInsertStatement [this ctx]
     (-> (.insertColumnsAndSource ctx)
-        (.accept (assoc this :insert-table (keyword (sql/identifier-sym (.tableName ctx)))))))
+        (.accept (assoc this :insert-table (keyword (sql/identifier-sym (.targetTable ctx)))))))
 
   (visitInsertValues [{{:keys [tables]} :node, :keys [insert-table] :as this} ctx]
     (let [this (-> this
