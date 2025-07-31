@@ -110,3 +110,186 @@ If the metrics are not exposed under `localhost:8080` you need to tweak the `.co
 Under `localhost:3001` you are able to access the Grafana UI (`admin` for user and password).
 The XTDB node datasource should be setup, and there should be a dashboard available with some basic metrics.
 If you tweak the dashboard or add a new one, save the changes in the corresponding file in `.config/dashboards/dashboard_name.json`.
+
+== Running the benchmarks on the Cloud
+
+=== Prerequisites
+
+* AWS/Azure/GCP CLI
+* Terraform
+* Helm 3.0+
+
+=== Authentication
+
+Prior to running the benchmarks on the cloud, you need to set up your cloud provider credentials:
+
+AWS::
+[source,bash]
+----
+# Setup a profile named "xtdb-bench"
+aws configure sso --profile xtdb-bench
+# Logon to your profile:
+aws sso login --profile xtdb-bench
+----
+
+Azure::
+[source,bash]
+----
+# Login to Azure
+az login --scope https://management.azure.com//.default
+# Set the subscription
+az account set --subscription "XTDB long-run reliability"
+----
+
+Google Cloud::
+[source,bash]
+----
+# Login to GCP
+gcloud auth login
+# Set the project
+gcloud config set project xtdb-scratch
+----
+
+=== Setup the Infra
+
+We can setup the cloud infra using the "setup-infra.sh" script:
+
+[source,bash]
+----
+./cloud/setup-infra.sh <aws|azure|google-cloud>
+----
+
+This will create the necessary resources for running the benchmarks on the cloud, and log you into the created Kubernetes cluster.
+
+=== Run a benchmark
+
+==== Basic Usage
+
+Run benchmarks using the `run-bench.sh` script:
+
+[source,bash]
+----
+./cloud/run-bench.sh <aws|azure|google-cloud> <benchmark-type> [helm-args...] [--no-cleanup]
+----
+
+==== Benchmark Types
+
+TPC-H::
+[source,bash]
+----
+./cloud/run-bench.sh azure tpch \
+  --set tpch.scaleFactor=0.01
+----
+
+Readings::
+[source,bash]
+----
+./cloud/run-bench.sh azure readings \
+  --set readings.devices=10000 \
+  --set readings.readings=10000
+----
+
+==== Common Configuration Options
+
+===== Custom Docker Image
+
+Override the default image tag to use `nightly` or a specific commit:
+
+[source,bash]
+----
+./cloud/run-bench.sh azure tpch \
+  --set tpch.scaleFactor=0.01 \
+  --set image.tag=nightly
+
+# Or use a specific commit SHA
+./cloud/run-bench.sh azure tpch \
+  --set tpch.scaleFactor=0.01 \
+  --set image.tag=sha-abc1234
+----
+
+===== Skip Cleanup
+
+By default, each run clears the cloud storage bucket and previous helm releases. To skip this cleanup:
+
+[source,bash]
+----
+./cloud/run-bench.sh azure tpch \
+  --set tpch.scaleFactor=0.01 \
+  --no-cleanup
+----
+
+==== Auctionmark (Multi-Stage Benchmark)
+
+Auctionmark typically runs in two stages: an initial load phase and an OLTP phase with multiple nodes/pods.
+
+===== Load Phase
+
+[source,bash]
+----
+./cloud/run-bench.sh azure auctionmark \
+  --set auctionmark.scaleFactor=0.1 \
+  --set auctionmark.onlyLoad=true
+----
+
+===== OLTP Phase
+
+[source,bash]
+----
+./cloud/run-bench.sh azure auctionmark \
+  --set auctionmark.threads=8 \
+  --set auctionmark.duration=PT10M \
+  --no-cleanup
+----
+
+===== Monitoring OLTP Phase
+
+To view logs from individual pods during the OLTP phase:
+
+[source,bash]
+----
+# List all pods
+kubectl get pods -n cloud-benchmark
+
+# View logs from a specific pod (replace <pod-name> with actual pod name)
+kubectl logs -f <pod-name> -n cloud-benchmark
+
+# View logs from all pods with a specific label
+kubectl logs -f -l app.kubernetes.io/name=xtdb-benchmark -n cloud-benchmark
+----
+
+=== Clear Benchmark Data Only
+
+NOTE: Unless --no-cleanup is passed to the run-bench.sh script, this script will get called automatically at the beginning of each benchmark run.
+
+If you need to clear benchmark data without destroying infrastructure, use the clear-bench script:
+
+[source,bash]
+----
+./cloud/clear-bench.sh <aws|azure|google-cloud>
+----
+
+This will:
+
+* Clear the Helm release
+* Delete Kafka PVCs
+* Empty the cloud storage bucket
+
+=== Cleanup the Infra
+
+To fully cleanup the storage, helm deployments and infrastructure on the cloud, you can run the "delete-infra.sh" script:
+
+[source,bash]
+----
+./cloud/delete-infra.sh <aws|azure|google-cloud>
+----
+
+== Extending
+
+If you need to add a new benchmark, you can do the following:
+
+1. Create a new Clojure file in src/main/clojure/xtdb/bench/ for your benchmark implementation
+2. You'll need to build and push the xtdb-bench docker image, you can do this via the "Build xtdb-bench Docker Image" GitHub Actions workflow if you've pushed your changes to the main branch. You'll also need to update the image tag in cloud/helm/values.yaml
+3. Add a gradle task with createBench in build.gradle.kts
+4. Update the cloud/run-bench.sh to include the new benchmark
+5. Create a helm template for the new benchmark in cloud/helm/templates/
+6. Update the cloud/helm/values.yaml with the new benchmark configuration
