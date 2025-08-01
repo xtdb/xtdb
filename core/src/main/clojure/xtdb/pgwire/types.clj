@@ -254,6 +254,7 @@
        :default {:typname "default"
                  :col-type :utf8
                  :oid 0
+                 :typcategory :z-internal
                  :read-text (fn [_env ba] (read-utf8 ba))
                  :read-binary (fn [_env ba] (read-utf8 ba))}
 
@@ -262,6 +263,8 @@
                 :col-type :i64
                 :oid 20
                 :typlen typlen
+                :typcategory :numeric
+                :typarray :_int8
                 :typsend "int8send"
                 :typreceive "int8recv"
                 :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getLong))
@@ -277,6 +280,8 @@
                 :col-type :i32
                 :oid 23
                 :typlen typlen
+                :typcategory :numeric
+                :typarray :_int4
                 :typsend "int4send"
                 :typreceive "int4recv"
                 :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getInt))
@@ -292,6 +297,7 @@
                 :col-type :i16
                 :oid 21
                 :typlen typlen
+                :typcategory :numeric
                 :typsend "int2send"
                 :typreceive "int2recv"
                 :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getShort))
@@ -323,6 +329,7 @@
                   :col-type :f32
                   :oid 700
                   :typlen typlen
+                  :typcategory :numeric
                   :typsend "float4send"
                   :typreceive "float4recv"
                   :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getFloat))
@@ -338,6 +345,7 @@
                   :col-type :f64
                   :oid 701
                   :typlen typlen
+                  :typcategory :numeric
                   :typsend "float8send"
                   :typreceive "float8recv"
                   :read-binary (fn [_env ba] (-> ba ByteBuffer/wrap .getDouble))
@@ -353,6 +361,7 @@
                  :col-type :decimal
                  :oid 1700
                  :typlen -1
+                 :typcategory :numeric
                  :typsend "numeric_send"
                  :typreceive "numeric_recv"
                  :read-binary (fn [_env ba] (NumericBin/decode (ByteBuffer/wrap ba)))
@@ -367,6 +376,7 @@
                 :col-type :uuid
                 :oid 2950
                 :typlen typlen
+                :typcategory :user-defined
                 :typsend "uuid_send"
                 :typreceive "uuid_recv"
                 :typinput "uuid_in"
@@ -384,6 +394,7 @@
                     {:typname "timestamp"
                      :col-type [:timestamp-local :micro]
                      :oid 1114
+                     :typcategory :date
                      :typlen typlen
                      :typsend "timestamp_send"
                      :typreceive "timestamp_recv"
@@ -417,6 +428,7 @@
                        ;;this UTC most likely to be correct, but will have to replan if thats not the case
                        ;;could try to emit expression for zone agnostic tstz
                        :oid 1184
+                       :typcategory :date
                        :typlen typlen
                        :typsend "timestamptz_send"
                        :typreceive "timestamptz_recv"
@@ -456,6 +468,7 @@
 
        :tstz-range {:typname "tstz-range"
                     :oid 3910
+                    :typcategory :range
                     :typsend "range_send"
                     :typreceive "range_recv"
                     :read-binary (fn [_env ba]
@@ -505,6 +518,7 @@
                {:typname "date"
                 :col-type [:date :day]
                 :oid 1082
+                :typcategory :date
                 :typlen typlen
                 :typsend "date_send"
                 :typreceive "date_recv"
@@ -528,6 +542,7 @@
                {:typname "time"
                 :col-type [:time :micro]
                 :oid 1083
+                :typcategory :date
                 :typlen typlen
                 :typsend "time_send"
                 :typreceive "time_recv"
@@ -540,6 +555,7 @@
        :varchar {:typname "varchar"
                  :col-type :utf8
                  :oid 1043
+                 :typcategory :string
                  :typsend "varcharsend"
                  :typreceive "varcharrecv"
                  :read-text (fn [_env ba] (read-utf8 ba))
@@ -558,6 +574,7 @@
        :keyword {:typname "keyword"
                  :col-type :keyword
                  :oid 11111
+                 :typcategory :string
                  :typsend "keywordsend"
                  :typreceive "keywordrecv"
                  :read-text (fn [_env ba] (read-utf8 ba))
@@ -576,6 +593,7 @@
        :bytea {:typname "bytea"
                :col-type :varbinary
                :oid 17
+               :typcategory :user-defined
                :typsend "byteasend"
                :typreceive "bytearecv"
                :read-text (fn [_env ba] ba)
@@ -597,6 +615,8 @@
        :text {:typname "text"
               :col-type :utf8
               :oid 25
+              :typcategory :string
+              :typarray :_text
               :typsend "textsend"
               :typreceive "textrecv"
               :read-text (fn [_env ba] (read-utf8 ba))
@@ -615,6 +635,7 @@
        :regclass {:typname "regclass"
                   :col-type :regclass
                   :oid 2205
+                  :typcategory :numeric
                   :typsend "regclasssend"
                   :typreceive "regclassrecv"
                   ;;skipping read impl, unsure if anything can/would send a regclass param
@@ -635,6 +656,7 @@
        :regproc {:typname "regproc"
                  :col-type :regproc
                  :oid 24
+                 :typcategory :numeric
                  :typsend "regprocsend"
                  :typreceive "regprocrecv"
                  :write-text (fn [_env ^VectorReader rdr idx]
@@ -647,6 +669,7 @@
                  :col-type :bool
                  :typlen 1
                  :oid 16
+                 :typcategory :boolean
                  :typsend "boolsend"
                  :typreceive "boolrecv"
                  :read-binary (fn [_env ba]
@@ -673,6 +696,7 @@
                   :col-type [:interval :month-day-micro]
                   :typlen 16
                   :oid 1186
+                  :typcategory :timespan
                   :typsend "interval_send"
                   :typreceive "interval_recv"
                   :read-binary (fn [_env _ba]
@@ -689,6 +713,7 @@
        ;; json-write-text is essentially the default in send-query-result so no need to specify here
        :json {:typname "json"
               :oid 114
+              :typcategory :user-defined
               :typsend "json_send"
               :typreceive "json_recv"
               :read-text (fn [_env ba]
@@ -701,6 +726,7 @@
 
        :jsonb {:typname "jsonb"
                :oid 3802
+               :typcategory :user-defined
                :typsend "jsonb_send"
                :typreceive "jsonb_recv"
                :read-text (fn [_env ba]
@@ -710,6 +736,7 @@
 
        :transit {:typname "transit"
                  :oid transit-oid
+                 :typcategory :user-defined
                  :typsend "transit_send"
                  :typreceive "transit_recv"
                  :read-text (fn [_env ^bytes ba] (serde/read-transit ba :json))
@@ -725,6 +752,7 @@
                 {:typname "_int4"
                  :typlen typlen
                  :oid oid
+                 :typcategory :array
                  :typelem typelem
                  :typsend "array_send"
                  :typreceive "array_recv"
@@ -767,6 +795,7 @@
                 {:typname "_int8"
                  :typlen typlen
                  :oid oid
+                 :typcategory :array
                  :typelem typelem
                  :typsend "array_send"
                  :typreceive "array_recv"
@@ -806,6 +835,7 @@
                     typelem 25]
                 {:typname "_text"
                  :oid oid
+                 :typcategory :array
                  :typelem typelem
                  :typsend "array_send"
                  :typreceive "array_recv"
