@@ -102,6 +102,7 @@ class RelationMap(
         }
 
     fun compactHashTrie() {
+        buildHashTrie.sortData()
 //        buildHashTrie = buildHashTrie.compactLogs()
     }
 
