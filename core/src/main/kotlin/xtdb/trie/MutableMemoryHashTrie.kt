@@ -1,6 +1,7 @@
 package xtdb.trie
 
 import org.apache.arrow.memory.util.ArrowBufPointer
+import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.FixedSizeBinary
 import org.roaringbitmap.RoaringBitmap
@@ -17,10 +18,17 @@ private const val PAGE_LIMIT = 1024
 // for hashes this is ArrowType.Int
 class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader, levelBits: Int) : BaseHashTrie<MutableMemoryHashTrie.Node, MutableMemoryHashTrie.Leaf>(levelBits) {
 
-    private val max_level : Int
+    private val hashByteWidth : Int
+    private val maxLevel : Int
 
     init {
-        max_level =  when(val type = hashReader.field.type) {
+        hashByteWidth =  when(val type = hashReader.field.type) {
+            is FixedSizeBinary -> type.byteWidth
+            is ArrowType.Int -> 4
+            else -> throw IllegalArgumentException("Unsupported Arrow type for hashReader: ${hashReader.field.type}")
+        }
+
+        maxLevel =  when(val type = hashReader.field.type) {
             is FixedSizeBinary -> type.byteWidth * 8 / LEVEL_BITS
             is ArrowType.Int -> type.bitWidth / LEVEL_BITS
             else -> throw IllegalArgumentException("Unsupported Arrow type for hashReader: ${hashReader.field.type}")
@@ -88,6 +96,11 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
         return if (cmp != 0) cmp else rightIdx compareTo leftIdx
     }
 
+    private fun compare(idx: Int, ptr: ArrowBufPointer, hash: ByteArray) : Int {
+        val buf = hashReader.getPointer(idx, ptr).buf
+        val index = idx * hashByteWidth
+        return ByteFunctionHelpers.compare(buf, index, index + hashByteWidth, hash, 0, hash.size)
+    }
 
     class Branch(
         private val pageLimit: Int,
@@ -159,25 +172,24 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
             return res
         }
 
-        private fun binarySearch(trie: MutableMemoryHashTrie, hash: ByteBuffer): Int {
+        private fun binarySearch(trie: MutableMemoryHashTrie, hash: ByteArray): Int {
+            val ptr = ArrowBufPointer()
             var left = 0
             var right = dataCount - 1
             while (left < right) {
                 val mid = (left + right) / 2
-                val midHash = trie.hashReader.getBytes(data[mid])
-                val cmp = midHash.compareTo(hash)
+                val cmp = trie.compare(data[mid], ptr, hash)
                 if (cmp < 0) left = mid + 1 else right = mid
             }
             if (left < dataCount) {
-                val midHash = trie.hashReader.getBytes(data[left])
-                if (midHash.compareTo(hash) == 0) return left
+                if (trie.compare(data[left], ptr, hash) == 0) return left
             }
             return -1
         }
 
         override fun add(trie: MutableMemoryHashTrie, newIdx: Int): Node {
             if (dataCount >= pageLimit) {
-                return if (path.size < trie.max_level) {
+                return if (path.size < trie.maxLevel) {
                     split(trie).add(trie, newIdx)
                 } else {
                     val newPageLimit = pageLimit * 2
@@ -205,19 +217,19 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
         }
 
         override fun findCandidates(trie: MutableMemoryHashTrie, hash: ByteArray): IntArray {
-            val bb = ByteBuffer.wrap(hash)
-            val idx = binarySearch(trie, bb)
+            val idx = binarySearch(trie, hash)
             if (idx < 0) return IntArray(0)
-            return data.take(dataCount).drop(idx).takeWhile{ trie.hashReader.getBytes(it).compareTo(bb) == 0 }.toIntArray()
+            val ptr = ArrowBufPointer()
+            return data.take(dataCount).drop(idx).takeWhile{ trie.compare(it, ptr, hash) == 0 }.toIntArray()
         }
 
         override fun findValue(trie: MutableMemoryHashTrie, hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean): Int {
-            val bb = ByteBuffer.wrap(hash)
-            val idx = binarySearch(trie, bb)
+            val idx = binarySearch(trie, hash)
             if (idx < 0) return -1
+            val ptr = ArrowBufPointer()
             val data = when (deletions) {
-                null -> data.take(dataCount).drop(idx).takeWhile { trie.hashReader.getBytes(it).compareTo(bb) == 0 } .toIntArray()
-                else -> data.take(dataCount).drop(idx).takeWhile { trie.hashReader.getBytes(it).compareTo(bb) == 0 } .filter { !deletions!!.contains(it) }.toIntArray()
+                null -> data.take(dataCount).drop(idx).takeWhile { trie.compare(it, ptr, hash) == 0 } .toIntArray()
+                else -> data.take(dataCount).drop(idx).takeWhile { trie.compare(it, ptr, hash) == 0 } .filter { !deletions!!.contains(it) }.toIntArray()
             }
             for(testIdx in data) {
                 if (comparator.applyAsInt(testIdx) == 1) {

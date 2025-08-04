@@ -66,22 +66,6 @@ class RelationMap(
         }
     }
 
-    fun RoaringBitmap?.findInHashBitmap(comparator: IntBinaryOperator, idx: Int, removeOnMatch: Boolean): Int {
-        if (this == null) return -1
-
-        val iterator = this.intIterator
-        while (iterator.hasNext()) {
-            val testIdx = iterator.next()
-            if (comparator.applyAsInt(idx, testIdx) == 1) {
-                if (removeOnMatch) {
-                    this.remove(testIdx)
-                }
-                return testIdx
-            }
-        }
-        return -1
-    }
-
     private fun createHasher(cols: List<VectorReader>): IndexHasher {
         val hasher = Hasher.Xx()
         return IndexHasher { index -> cols.foldRight(0) { col, acc -> MurmurHasher.combineHashCode(acc, col.hashCode(index, hasher)) } }
@@ -94,16 +78,9 @@ class RelationMap(
         fun insertedIdx(returnedIdx: Int): Int = if (returnedIdx < 0) -returnedIdx - 1 else returnedIdx
     }
 
-    fun computeHashBitmap(rowHash: Int) =
-        hashToBitmap.get(rowHash) ?: run {
-            val bitmap = RoaringBitmap()
-            hashToBitmap.put(rowHash, bitmap)
-            bitmap
-        }
 
     fun compactHashTrie() {
         buildHashTrie.sortData()
-//        buildHashTrie = buildHashTrie.compactLogs()
     }
 
     @Suppress("NAME_SHADOWING")
