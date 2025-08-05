@@ -23,11 +23,11 @@ internal fun <R> useTempFile(prefix: String, suffix: String, block: (Path) -> R)
 val String.asPath: Path
     get() = Path.of(this)
 
-fun Iterable<AutoCloseable>.closeAll() {
-    forEach { it.close() }
+fun Iterable<AutoCloseable?>.closeAll() {
+    forEach { it?.close() }
 }
 
-fun <K, V : AutoCloseable> Map<K, V>.closeAll() {
+fun <K, V : AutoCloseable?> Map<K, V>.closeAll() {
     values.closeAll()
 }
 
@@ -39,7 +39,7 @@ inline fun <T : AutoCloseable, R> T.closeOnCatch(block: (T) -> R): R =
         throw e
     }
 
-inline fun <C : AutoCloseable, L : Iterable<C>, R> L.closeAllOnCatch(block: (L) -> R): R =
+inline fun <C : AutoCloseable?, L : Iterable<C>, R> L.closeAllOnCatch(block: (L) -> R): R =
     try {
         block(this)
     } catch (e: Throwable) {
@@ -52,4 +52,13 @@ inline fun <C : AutoCloseable, L : Iterable<C>, R> L.useAll(block: (L) -> R): R 
         block(this)
     } finally {
         closeAll()
+    }
+
+inline fun <C, L : Iterable<C>, R : AutoCloseable?> L.safeMap(block: (C) -> R): List<R> =
+    mutableListOf<R>().closeAllOnCatch { els ->
+        for (el in this) {
+            els.add(block(el))
+        }
+
+        els
     }
