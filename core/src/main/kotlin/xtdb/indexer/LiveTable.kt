@@ -75,7 +75,7 @@ constructor(
         txKey: TransactionKey,
         private val newLiveTable: Boolean
     ) : AutoCloseable {
-        private var transientTrie = liveTrie
+        private var transientTrie = liveTrie.asTransient()
         private val systemFrom: InstantMicros = txKey.systemTime.asMicros
 
         fun openSnapshot(): Snapshot = openSnapshot(transientTrie)
@@ -133,7 +133,7 @@ constructor(
             trieMetadataCalculator.update(startPos, pos)
             hllCalculator.update(opWtr.asReader, startPos, pos)
 
-            liveTrie = transientTrie
+            liveTrie = transientTrie.asPersistent()
 
             return this@LiveTable
         }
@@ -160,7 +160,7 @@ constructor(
             wmLiveRel.openAsRoot(al).closeOnCatch { root ->
                 val relReader = RelationReader.from(root)
 
-                val wmLiveTrie = trie.withIidReader(relReader["_iid"])
+                val wmLiveTrie = trie.asPersistent().withIidReader(relReader["_iid"])
 
                 return Snapshot(liveRelation.fields, relReader, wmLiveTrie)
             }

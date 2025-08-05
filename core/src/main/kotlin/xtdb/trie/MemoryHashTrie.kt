@@ -11,10 +11,12 @@ private const val PAGE_LIMIT = 1024
 private const val MAX_LEVEL = 64
 
 class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) : HashTrie<MemoryHashTrie.Node, MemoryHashTrie.Leaf> {
+
     sealed interface Node : HashTrie.Node<Node> {
         fun add(trie: MemoryHashTrie, newIdx: Int): Node
-
         fun compactLogs(trie: MemoryHashTrie): Node
+        fun transient(trie: MemoryHashTrie): Node
+        fun persist(trie: MemoryHashTrie): Node
     }
 
     @Suppress("unused")
@@ -22,11 +24,17 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
         private var logLimit = LOG_LIMIT
         private var pageLimit = PAGE_LIMIT
         private var rootPath = ByteArray(0)
+        private var transient = false
 
         fun setLogLimit(logLimit: Int) = this.apply { this.logLimit = logLimit }
         fun setPageLimit(pageLimit: Int) = this.apply { this.pageLimit = pageLimit }
         fun setRootPath(path: ByteArray) = this.apply { this.rootPath = path }
-        fun build(): MemoryHashTrie = MemoryHashTrie(Leaf(logLimit, pageLimit, rootPath), iidReader)
+        fun setTransient(transient: Boolean) = this.apply { this.transient = transient }
+        fun build(): MemoryHashTrie =
+            MemoryHashTrie(
+                if (transient) LeafTransient(pageLimit, rootPath)
+                else Leaf(logLimit, pageLimit, rootPath),
+                iidReader)
     }
 
     operator fun plus(idx: Int) = MemoryHashTrie(rootNode.add(this, idx), iidReader)
@@ -34,7 +42,10 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
     @Suppress("unused")
     fun withIidReader(iidReader: VectorReader) = MemoryHashTrie(rootNode, iidReader)
 
-    fun compactLogs() = MemoryHashTrie(rootNode = rootNode.compactLogs(this), iidReader)
+    fun compactLogs() = when(rootNode) {
+        is Leaf, is Branch -> MemoryHashTrie(rootNode = rootNode.compactLogs(this), iidReader)
+        else -> throw UnsupportedOperationException("Cannot compact logs on a transient trie")
+    }
 
     private fun bucketFor(idx: Int, level: Int, reusePtr: ArrowBufPointer): Int =
         bucketFor(iidReader.getPointer(idx, reusePtr), level).toInt()
@@ -46,6 +57,17 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
 
         return if (cmp != 0) cmp else rightIdx compareTo leftIdx
     }
+
+    fun asTransient(): MemoryHashTrie {
+        if (rootNode is LeafTransient || rootNode is BranchTransient) return this
+        return MemoryHashTrie(rootNode.transient(this), iidReader)
+    }
+
+    fun asPersistent(): MemoryHashTrie {
+        if (rootNode is Leaf || rootNode is Branch) return this
+        return MemoryHashTrie(rootNode.persist(this), iidReader)
+    }
+
 
     class Branch(
         private val logLimit: Int,
@@ -73,6 +95,45 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
 
         override fun compactLogs(trie: MemoryHashTrie) =
             Branch(logLimit, pageLimit, path, iidChildren.map { child -> child?.compactLogs(trie) }.toTypedArray())
+
+        override fun transient(trie: MemoryHashTrie): Node =
+            BranchTransient(pageLimit, path, iidChildren.map { child -> child?.transient(trie) }.toTypedArray())
+
+        override fun persist(trie: MemoryHashTrie): Node {
+            TODO("Not yet implemented")
+        }
+    }
+
+    class BranchTransient(
+        private val pageLimit: Int,
+        override val path: ByteArray,
+        override val iidChildren: Array<Node?>,
+    ) : Node {
+        private val addPtr = ArrowBufPointer()
+
+        override fun add(trie: MemoryHashTrie, newIdx: Int): Node {
+            val bucket = trie.bucketFor(newIdx, path.size, addPtr)
+
+            if (iidChildren[bucket] == null) {
+                iidChildren[bucket] = LeafTransient(pageLimit, conjPath(path, bucket.toByte()))
+            }
+
+            iidChildren[bucket] = iidChildren[bucket]!!.add(trie, newIdx)
+
+            return this
+        }
+
+        override fun compactLogs(trie: MemoryHashTrie): Node {
+            TODO("Not yet implemented")
+        }
+
+        override fun transient(trie: MemoryHashTrie): Node {
+            TODO("Not yet implemented")
+        }
+
+        override fun persist(trie: MemoryHashTrie): Node =
+            Branch(LOG_LIMIT, pageLimit, path, iidChildren.map { child -> child?.persist(trie) }.toTypedArray())
+
     }
 
     class Leaf(
@@ -171,6 +232,21 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
             } else Leaf(logLimit, pageLimit, path, data, log, logCount)
         }
 
+        override fun transient(trie: MemoryHashTrie): Node =
+            when(val compacted = compactLogs(trie)) {
+                is Leaf -> {
+                    val data = IntArray(pageLimit)
+                    compacted.data.copyInto(data)
+                    LeafTransient(pageLimit, path, data, compacted.data.size)
+                }
+                is Branch -> compacted.transient(trie)
+                else -> throw IllegalStateException("Unexpected node type after compacting logs: $compacted")
+            }
+
+        override fun persist(trie: MemoryHashTrie): Node {
+            TODO("Not yet implemented")
+        }
+
         override fun add(trie: MemoryHashTrie, newIdx: Int): Node {
             var logCount = logCount
             log[logCount++] = newIdx
@@ -178,6 +254,60 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
 
             return if (logCount == logLimit) newLeaf.compactLogs(trie) else newLeaf
         }
+    }
+
+    class LeafTransient(
+        private val pageLimit: Int,
+        override val path: ByteArray,
+        val data: IntArray = IntArray(pageLimit),
+        private var dataCount: Int = 0,
+    ) : Node {
+
+        override val iidChildren = null
+
+        private fun split(trie: MemoryHashTrie): Node {
+            val res = BranchTransient(pageLimit, path, arrayOfNulls(LEVEL_WIDTH))
+            for (i in 0 until dataCount) {
+                res.add(trie, data[i])
+            }
+            return res
+        }
+
+        override fun add(trie: MemoryHashTrie, newIdx: Int): Node {
+            if (dataCount >= pageLimit) {
+                return if (path.size < MAX_LEVEL) {
+                    split(trie).add(trie, newIdx)
+                } else {
+                    val newPageLimit = pageLimit * 2
+                    val newData = IntArray(newPageLimit)
+                    data.copyInto(newData)
+                    newData[dataCount++] = newIdx
+                    return LeafTransient(newPageLimit, path, newData, dataCount)
+                }
+            }
+            data[dataCount++] = newIdx
+            return this
+        }
+
+        override fun compactLogs(trie: MemoryHashTrie): Node {
+            TODO("Not yet implemented")
+        }
+
+        override fun transient(trie: MemoryHashTrie): Node {
+            TODO("Not yet implemented")
+        }
+
+        private fun sortData(trie: MemoryHashTrie) : IntArray {
+            if (dataCount == 0) return IntArray(0)
+            val leftPtr = ArrowBufPointer()
+            val rightPtr = ArrowBufPointer()
+            val tmp = data.take(dataCount).toTypedArray()
+            tmp.sortWith { leftIdx, rightIdx -> trie.compare(leftIdx, rightIdx, leftPtr, rightPtr) }
+            return tmp.toIntArray()
+        }
+
+        override fun persist(trie: MemoryHashTrie): Node =
+            Leaf(LOG_LIMIT, pageLimit, path, sortData(trie))
     }
 
     companion object {

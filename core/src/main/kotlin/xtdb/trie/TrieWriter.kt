@@ -35,6 +35,7 @@ class TrieWriter(
                                 data.forEach { idx -> copier.copyRow(idx) }
                                 metaFileWriter.writeLeaf().also { dataFileWriter.writePage() }
                             }
+                            else -> throw IllegalStateException("Unknown node type: $this")
                         }
 
                     trie.compactLogs().rootNode.writeNode()
