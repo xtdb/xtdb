@@ -50,25 +50,25 @@
    :tasks (->> [{:t :call
                  :batch-size 1000
                  :stage :ingest-batch-1000
-                 :f (fn [{node :sut}]
+                 :f (fn [{:keys [node]}]
                       (do-ingest node :batched_1000 doc-count 1000))}
 
                 {:t :call
                  :batch-size 100
                  :stage :ingest-batch-100
-                 :f (fn [{node :sut}]
+                 :f (fn [{:keys [node]}]
                       (do-ingest node :batched_100 doc-count 100))}
 
                 {:t :call
                  :batch-size 10
                  :stage :ingest-batch-10
-                 :f (fn [{node :sut}]
+                 :f (fn [{:keys [node]}]
                       (do-ingest node :batched_10 doc-count 10))}
 
                 {:t :call
                  :batch-size 1
                  :stage :ingest-batch-1
-                 :f (fn [{node :sut}]
+                 :f (fn [{:keys [node]}]
                       (do-ingest node :batched_1 doc-count 1))}]
 
                (filter (comp batch-sizes :batch-size)))})
