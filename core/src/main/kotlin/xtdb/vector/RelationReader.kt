@@ -7,6 +7,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.Relation
 import xtdb.arrow.Vector.Companion.fromArrow
 import xtdb.util.closeAll
+import xtdb.util.safeMap
 import java.util.function.Function
 import xtdb.arrow.RelationReader as NewRelationReader
 
@@ -25,8 +26,8 @@ class RelationReader private constructor(
 
     override operator fun get(name: String) = vectorFor(name)
 
-    private fun from(f: Function<IVectorReader, IVectorReader>, rowCount: Int): RelationReader =
-        from(vecsMap.values.stream().map(f).toList(), rowCount)
+    private fun from(f: (IVectorReader) -> IVectorReader, rowCount: Int): RelationReader =
+        from(vecsMap.values.safeMap(f), rowCount)
 
     override fun select(idxs: IntArray): RelationReader = from({ vr -> vr.select(idxs) }, idxs.size)
 
