@@ -14,6 +14,9 @@ import xtdb.error.Unsupported
 import xtdb.toFieldType
 import xtdb.toLeg
 import xtdb.util.Hasher
+import xtdb.util.closeAllOnCatch
+import xtdb.util.closeOnCatch
+import xtdb.util.safeMap
 import java.nio.ByteBuffer
 import org.apache.arrow.vector.complex.DenseUnionVector as ArrowDenseUnionVector
 
@@ -331,11 +334,17 @@ class DenseUnionVector private constructor(
     }
 
     override fun openSlice(al: BufferAllocator) =
-        DenseUnionVector(
-            al, name, legVectors.map { it.openSlice(al) },
-            typeBuffer.openSlice(al), offsetBuffer.openSlice(al),
-            valueCount
-        )
+        legVectors.safeMap { it.openSlice(al) }.closeAllOnCatch { legSlices ->
+            typeBuffer.openSlice(al).closeOnCatch { typeSlice ->
+                offsetBuffer.openSlice(al).closeOnCatch { offsetSlice ->
+                    DenseUnionVector(
+                        al, name, legSlices,
+                        typeSlice, offsetSlice,
+                        valueCount
+                    )
+                }
+            }
+        }
 
     override fun maybePromote(al: BufferAllocator, target: FieldType) = this.also {
         if (target.type != type) it.legWriter(target)
