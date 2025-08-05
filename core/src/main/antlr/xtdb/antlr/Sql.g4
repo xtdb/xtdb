@@ -46,7 +46,9 @@ directlyExecutableStatement
     | SET ROLE ( identifier | NONE ) # SetRoleStatement
     | SET TIME ZONE zone=expr # SetTimeZoneStatement
     | SET AWAIT_TOKEN ( TO | '=' ) awaitToken=expr # SetAwaitTokenStatement
+    | SET DATABASE ( TO | '=' ) databaseName=identifier # SetDatabaseStatement
     | SET identifier ( TO | '=' ) literal # SetSessionVariableStatement
+    | USE databaseName=identifier # UseDatabaseStatement
     | SHOW showVariable # ShowVariableStatement
     | SHOW identifier # ShowSessionVariableStatement
     | SHOW AWAIT_TOKEN # ShowAwaitTokenStatement
