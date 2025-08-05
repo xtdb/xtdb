@@ -96,17 +96,13 @@
 
 (comment
   (let [f (b/compile-benchmark (benchmark {:batch-sizes #{1000}}))]
-    (with-open [in-mem (xtn/start-node)
-
-                ^AutoCloseable
+    (with-open [^AutoCloseable
                 node (case :xt-memory
                        :xt-memory (xtn/start-node)
 
                        :xt-local (let [path (util/->path "/tmp/xt-tx-overhead-bench")]
                                    (util/delete-dir path)
                                    (tu/->local-node {:node-dir path}))
-
-                       :xt-conn (jdbc/get-connection in-mem)
 
                        :pg-conn (jdbc/get-connection {:dbtype "postgresql"
                                                       :dbname "postgres"
