@@ -1,8 +1,9 @@
 (ns xtdb.bench.ingest-tx-overhead
   (:require [clojure.tools.logging :as log]
+            [clojure.string :as s]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
-            [xtdb.bench :as bench]
+            [xtdb.bench :as b]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -44,6 +45,17 @@
                                   {:xt/id idx}))
                            batch)]))))
 
+(defmethod b/cli-flags :ingest-tx-overhead [_]
+  [["-dc" "--doc-count DOCUMENT_COUNT" "Number of documents to ingest"
+    :parse-fn parse-long
+    :default 100000]
+
+   ["-bs" "--batch-sizes BATCH_SIZES" "Batch sizes to use for ingestion, e.g. \"1000,100,10,1\" (currently supported: 1000, 100, 10, 1)"
+    :parse-fn #(->> (s/split % #",") (map parse-long) (into #{}))
+    :default #{1000 100 10 1}]
+
+   ["-h" "--help"]])
+
 (defn benchmark [{:keys [seed doc-count batch-sizes], :or {seed 0, doc-count 100000, batch-sizes #{1000 100 10 1}}}]
   {:title "Ingest batch vs individual"
    :seed seed
@@ -73,8 +85,13 @@
 
                (filter (comp batch-sizes :batch-size)))})
 
+(defmethod b/->benchmark :ingest-tx-overhead [_ {:keys [doc-count batch-sizes] :as opts}]
+  (log/info {:doc-count doc-count :batch-sizes batch-sizes})
+  (benchmark opts))
+
+
 (comment
-  (let [f (bench/compile-benchmark (benchmark {:batch-sizes #{1000}}))]
+  (let [f (b/compile-benchmark (benchmark {:batch-sizes #{1000}}))]
     (with-open [in-mem (xtn/start-node)
 
                 ^AutoCloseable

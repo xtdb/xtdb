@@ -568,6 +568,8 @@ createBench("tsbs-iot", mapOf("file" to "--file"))
 
 createBench("patch", mapOf("docCount" to "--doc-count", "patchCount" to "--patch-count"))
 
+createBench("ingestTxOverhead", mapOf("docCount" to "--doc-count", "batchSizes" to "--batch-sizes"))
+
 tasks.dokkaHtmlMultiModule {
     moduleName.set("")
     moduleVersion.set("2.x-SNAPSHOT")

@@ -16,6 +16,10 @@ Readings::
 Products::
 `./gradlew products`
 
+IngestTsOverhead::
+`./gradlew ingest -PdocCount=100000 -PbatchSizes=10,100,1000`
+
+
 TSBS IoT::
 `XTDB_LOGGING_LEVEL_BENCH_TSBS=debug ./gradlew :tsbs-iot -Pfile=/path/to/txs.transit.json`
 +

@@ -376,9 +376,12 @@
 
   (require (case benchmark-type
              "tsbs-iot" 'xtdb.bench.tsbs
+             "ingestTxOverhead" 'xtdb.bench.ingest-tx-overhead
              (symbol (str "xtdb.bench." benchmark-type))))
 
-  (let [benchmark-type (keyword benchmark-type)
+  (let [benchmark-type (case benchmark-type
+                         "ingestTxOverhead" :ingest-tx-overhead
+                         (keyword benchmark-type))
         {:keys [options errors summary]} (cli/parse-opts args (concat (cli-flags benchmark-type)
                                                                       default-cli-flags))]
     (cond
