@@ -248,3 +248,11 @@
 
           (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "duration"}
                    (.getColumnNames page-metadata))))))))
+
+(t/deftest test-missing-type-metadata-4665
+  (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo", :foo 4}]])
+  (tu/finish-block! tu/*node*)
+  (c/compact-all! tu/*node* #xt/duration "PT1S")
+  (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo", :foo 4}]])
+
+  (t/is (= [{:xt/id "foo", :foo 4}] (xt/q tu/*node* "SELECT * FROM xt_docs"))))

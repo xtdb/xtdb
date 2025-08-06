@@ -216,7 +216,7 @@
                  (cont :bool
                        `(boolean
                          (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~col-name ~page-idx-sym)]
-                           (when (and ~col-sym (>= ~expr/idx-sym 0))
+                           (when (and ~col-sym (>= ~expr/idx-sym 0) (not (.isNull ~col-sym ~expr/idx-sym)))
                              (~(symbol f) (.getDouble ~col-sym ~expr/idx-sym) ~val-sym))))))}))
 
 (defmethod ewalk/walk-expr :test-minmax [inner outer expr]
