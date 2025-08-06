@@ -328,6 +328,24 @@
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into (sorted-set) (map :trie-key)))))))))
 
+(t/deftest test-trie-catalog-init-old-and-new-block-files-mixed-4664
+  (let [->trie-details (partial trie/->trie-details #xt/table foo)
+        old-table-blocks {:tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10})
+                                  (->trie-details {:trie-key "l01-rc-b00" :data-file-size 10})
+                                  (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10})]}
+        new-table-blocks {:tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10 :state
+                                                   :garbage :garbage-as-of #xt/instant "2000-01-01T00:00:00Z"})
+                                  (->trie-details {:trie-key "l01-rc-b00" :data-file-size 10 :state :live})
+                                  (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})]}
+
+        cat (cat/trie-catalog-init {#xt/table bar new-table-blocks
+                                    #xt/table foo old-table-blocks})]
+    (t/is (= #{"l00-rc-b01" "l01-rc-b00"}
+             (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+                  (into (sorted-set) (map :trie-key)))
+             (->> (cat/current-tries (cat/trie-state cat #xt/table bar))
+                  (into (sorted-set) (map :trie-key)))))))
+
 (t/deftest test-trie-catalog-init
   (let [->trie-details (partial trie/->trie-details #xt/table foo)]
     ;; old

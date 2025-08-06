@@ -331,7 +331,7 @@
   (.hasTrieState trie-details))
 
 (defn trie-catalog-init [table->table-block]
-  (if (some-> table->table-block first val :tries first new-trie-details?)
+  (if (->> (vals table->table-block) (map (comp first :tries)) (every? new-trie-details?))
     (let [!table-cats (ConcurrentHashMap.)]
       (doseq [[table {:keys [tries]}] table->table-block
               :let [tries (-> (reduce (fn [table-cat ^TrieDetails added-trie]
