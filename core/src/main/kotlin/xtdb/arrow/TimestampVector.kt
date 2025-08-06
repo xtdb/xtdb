@@ -82,6 +82,8 @@ class TimestampTzVector private constructor(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): ZonedDateTime =
         ZonedDateTime.ofInstant(unit.toInstant(getLong(idx)), zone)
 
+    // False positive in Kotlin 2.2.0: bug KT-78352
+    @Suppress("IDENTITY_SENSITIVE_OPERATIONS_WITH_VALUE_TYPE")
     override fun writeObject0(value: Any): Unit =
         when (value) {
             is Instant -> value
