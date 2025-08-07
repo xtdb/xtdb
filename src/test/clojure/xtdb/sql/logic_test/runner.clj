@@ -243,34 +243,36 @@
     (do (when (= :completion script-mode)
           (print-record record))
         ctx)
-    (let [result (execute-query db-engine query variables)
-          result-str (format-result-str sort-mode type-string result)]
-      (when (= :completion script-mode)
-        (print-record (if (and max-result-set-size (> (count (flatten result)) max-result-set-size))
-                        (-> (assoc record :result-set-md5sum (md5 result-str))
-                            (dissoc :result-set))
-                        (-> (assoc record :result-set result-str)
-                            (dissoc :result-set-md5sum)))))
-      (letfn [(report-success []
-                (t/do-report {:type :pass, :file file, :line line})
-                (update-in ctx [:results :success] (fnil inc 0)))
+    (do
+      (log/debugf "Executing query: %s:%s" file line)
+      (let [result (execute-query db-engine query variables)
+            result-str (format-result-str sort-mode type-string result)]
+        (when (= :completion script-mode)
+          (print-record (if (and max-result-set-size (> (count (flatten result)) max-result-set-size))
+                          (-> (assoc record :result-set-md5sum (md5 result-str))
+                              (dissoc :result-set))
+                          (-> (assoc record :result-set result-str)
+                              (dissoc :result-set-md5sum)))))
+        (letfn [(report-success []
+                  (t/do-report {:type :pass, :file file, :line line})
+                  (update-in ctx [:results :success] (fnil inc 0)))
 
-              (report-failure [expected actual]
-                (t/do-report {:type :fail, :expected expected, :actual actual, :file file, :line line})
-                (when (validation-mode?)
-                  (println
-                   (format
-                    "Failure\n<File>\n%s\n\n<Line>\n%s\n\n<Query>\n%s\n\n<Expected>\n%s\n\n<Actual>\n%s\n\n"
-                    file line query expected actual)))
-                (update-in ctx [:results :failure] (fnil inc 0)))]
+                (report-failure [expected actual]
+                  (t/do-report {:type :fail, :expected expected, :actual actual, :file file, :line line})
+                  (when (validation-mode?)
+                    (println
+                     (format
+                      "Failure\n<File>\n%s\n\n<Line>\n%s\n\n<Query>\n%s\n\n<Expected>\n%s\n\n<Actual>\n%s\n\n"
+                      file line query expected actual)))
+                  (update-in ctx [:results :failure] (fnil inc 0)))]
 
-        (if result-set-md5sum
-          (if (= result-set-md5sum (md5 result-str))
-            (report-success)
-            (report-failure result-set-md5sum (md5 result-str)))
-          (if (= result-set result-str)
-            (report-success)
-            (report-failure result-set result-str)))))))
+          (if result-set-md5sum
+            (if (= result-set-md5sum (md5 result-str))
+              (report-success)
+              (report-failure result-set-md5sum (md5 result-str)))
+            (if (= result-set result-str)
+              (report-success)
+              (report-failure result-set result-str))))))))
 
 (defn execute-records [db-engine records]
   (let [ctx (merge {:db-engine db-engine :queries-run 0 :results {}} *opts*)]
