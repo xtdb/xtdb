@@ -20,6 +20,8 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
 
     private val hashByteWidth : Int
     private val maxLevel : Int
+    private val reusePtr1 = ArrowBufPointer()
+    private val reusePtr2 = ArrowBufPointer()
 
     init {
         hashByteWidth =  when(val type = hashReader.field.type) {
@@ -107,10 +109,9 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
         override val path: ByteArray,
         override val hashChildren: Array<Node?>,
     ) : Node {
-        private val addPtr = ArrowBufPointer()
 
         override fun add(trie: MutableMemoryHashTrie, newIdx: Int): Node {
-            val bucket = trie.bucketFor(newIdx, path.size, addPtr)
+            val bucket = trie.bucketFor(newIdx, path.size, trie.reusePtr1)
 
             if (hashChildren[bucket] == null) {
                 hashChildren[bucket] = Leaf(pageLimit, conjPath(path, bucket.toByte()))
@@ -173,16 +174,15 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
         }
 
         private fun binarySearch(trie: MutableMemoryHashTrie, hash: ByteArray): Int {
-            val ptr = ArrowBufPointer()
             var left = 0
             var right = dataCount - 1
             while (left < right) {
                 val mid = (left + right) / 2
-                val cmp = trie.compare(data[mid], ptr, hash)
+                val cmp = trie.compare(data[mid], trie.reusePtr1, hash)
                 if (cmp < 0) left = mid + 1 else right = mid
             }
             if (left < dataCount) {
-                if (trie.compare(data[left], ptr, hash) == 0) return left
+                if (trie.compare(data[left], trie.reusePtr1, hash) == 0) return left
             }
             return -1
         }
@@ -204,11 +204,10 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
         }
 
         override fun addIfNotPresent(trie: MutableMemoryHashTrie, hash: ByteArray, newIdx: Int, comparator: IntUnaryOperator, onAddition: Runnable): Pair<Int, Node?> {
-            val bb = ByteBuffer.wrap(hash)
             // can't use binary search here because we might not be sorted
             for (i in 0 until dataCount) {
                 val testIdx = data[i]
-                if (trie.hashReader.getBytes(testIdx).compareTo(bb) == 0 && comparator.applyAsInt(testIdx) == 1) {
+                if (trie.compare(testIdx, trie.reusePtr1, hash) == 0 && comparator.applyAsInt(testIdx) == 1) {
                     return Pair(testIdx, null)
                 }
             }
@@ -219,17 +218,15 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
         override fun findCandidates(trie: MutableMemoryHashTrie, hash: ByteArray): IntArray {
             val idx = binarySearch(trie, hash)
             if (idx < 0) return IntArray(0)
-            val ptr = ArrowBufPointer()
-            return data.take(dataCount).drop(idx).takeWhile{ trie.compare(it, ptr, hash) == 0 }.toIntArray()
+            return data.take(dataCount).drop(idx).takeWhile{ trie.compare(it, trie.reusePtr1, hash) == 0 }.toIntArray()
         }
 
         override fun findValue(trie: MutableMemoryHashTrie, hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean): Int {
             val idx = binarySearch(trie, hash)
             if (idx < 0) return -1
-            val ptr = ArrowBufPointer()
             val data = when (deletions) {
-                null -> data.take(dataCount).drop(idx).takeWhile { trie.compare(it, ptr, hash) == 0 } .toIntArray()
-                else -> data.take(dataCount).drop(idx).takeWhile { trie.compare(it, ptr, hash) == 0 } .filter { !deletions!!.contains(it) }.toIntArray()
+                null -> data.take(dataCount).drop(idx).takeWhile { trie.compare(it, trie.reusePtr1, hash) == 0 } .toIntArray()
+                else -> data.take(dataCount).drop(idx).takeWhile { trie.compare(it, trie.reusePtr1, hash) == 0 } .filter { !deletions!!.contains(it) }.toIntArray()
             }
             for(testIdx in data) {
                 if (comparator.applyAsInt(testIdx) == 1) {
@@ -244,10 +241,8 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
 
         override fun sortData(trie: MutableMemoryHashTrie) {
             if (dataCount == 0) return
-            val leftPtr = ArrowBufPointer()
-            val rightPtr = ArrowBufPointer()
             val tmp = data.take(dataCount).toTypedArray()
-            tmp.sortWith { leftIdx, rightIdx -> trie.compare(leftIdx, rightIdx, leftPtr, rightPtr) }
+            tmp.sortWith { leftIdx, rightIdx -> trie.compare(leftIdx, rightIdx, trie.reusePtr1, trie.reusePtr2) }
             tmp.forEachIndexed { index, i -> data[index] = i }
         }
     }
