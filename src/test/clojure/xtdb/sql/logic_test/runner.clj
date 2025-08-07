@@ -277,7 +277,8 @@
     (->> records
          (reduce
           (fn [{:keys [queries-run query-limit] :as ctx} {:keys [file line] :as record}]
-
+            (when (Thread/interrupted)
+              (throw (InterruptedException. "Test interrupted")))
             (binding [*current-record* record]
               (t/testing (format "%s L%d" file line)
                 (if (= queries-run query-limit)
