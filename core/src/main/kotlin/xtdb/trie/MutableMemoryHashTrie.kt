@@ -160,7 +160,8 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
         override val path: ByteArray,
         val data: IntArray = IntArray(pageLimit),
         private var dataCount: Int = 0,
-        private var deletions: RoaringBitmap? = null
+        private var deletions: RoaringBitmap? = null,
+        private var sorted: Boolean = false
     ) : Node {
 
         override val hashChildren = null
@@ -215,18 +216,38 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
             return Pair(newIdx, add(trie, newIdx))
         }
 
+        override fun sortData(trie: MutableMemoryHashTrie) {
+            if (dataCount == 0) return
+            val tmp = data.take(dataCount).toTypedArray()
+            tmp.sortWith { leftIdx, rightIdx -> trie.compare(leftIdx, rightIdx, trie.reusePtr1, trie.reusePtr2) }
+            tmp.forEachIndexed { index, i -> data[index] = i }
+            sorted = true
+        }
+
+
         override fun findCandidates(trie: MutableMemoryHashTrie, hash: ByteArray): IntArray {
+            if (dataCount <= 16)
+                return data.take(dataCount).filter { trie.compare(it, trie.reusePtr1, hash) == 0 }.toIntArray()
+            if (!sorted) sortData(trie)
             val idx = binarySearch(trie, hash)
             if (idx < 0) return IntArray(0)
             return data.take(dataCount).drop(idx).takeWhile{ trie.compare(it, trie.reusePtr1, hash) == 0 }.toIntArray()
         }
 
         override fun findValue(trie: MutableMemoryHashTrie, hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean): Int {
-            val idx = binarySearch(trie, hash)
-            if (idx < 0) return -1
-            val data = when (deletions) {
-                null -> data.take(dataCount).drop(idx).takeWhile { trie.compare(it, trie.reusePtr1, hash) == 0 } .toIntArray()
-                else -> data.take(dataCount).drop(idx).takeWhile { trie.compare(it, trie.reusePtr1, hash) == 0 } .filter { !deletions!!.contains(it) }.toIntArray()
+            val data = if (dataCount <= 16) {
+                when (deletions) {
+                    null -> data.take(dataCount).filter { trie.compare(it, trie.reusePtr1, hash) == 0 }
+                    else -> data.take(dataCount).filter { trie.compare(it, trie.reusePtr1, hash) == 0 } .filter { !deletions!!.contains(it) }
+                }
+            } else {
+                if (!sorted) sortData(trie)
+                val idx = binarySearch(trie, hash)
+                if (idx < 0) return -1
+                when (deletions) {
+                    null -> data.take(dataCount).drop(idx).takeWhile { trie.compare(it, trie.reusePtr1, hash) == 0 }
+                    else -> data.take(dataCount).drop(idx).takeWhile { trie.compare(it, trie.reusePtr1, hash) == 0 } .filter { !deletions!!.contains(it) }
+                }
             }
             for(testIdx in data) {
                 if (comparator.applyAsInt(testIdx) == 1) {
@@ -239,12 +260,6 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
             return -1
         }
 
-        override fun sortData(trie: MutableMemoryHashTrie) {
-            if (dataCount == 0) return
-            val tmp = data.take(dataCount).toTypedArray()
-            tmp.sortWith { leftIdx, rightIdx -> trie.compare(leftIdx, rightIdx, trie.reusePtr1, trie.reusePtr2) }
-            tmp.forEachIndexed { index, i -> data[index] = i }
-        }
     }
 
     companion object {

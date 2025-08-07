@@ -80,7 +80,7 @@ class RelationMap(
 
 
     fun compactHashTrie() {
-        buildHashTrie.sortData()
+        // buildHashTrie.sortData()
     }
 
     @Suppress("NAME_SHADOWING")
