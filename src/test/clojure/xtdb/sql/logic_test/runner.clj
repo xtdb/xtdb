@@ -391,11 +391,11 @@
               (assoc total-results :name "Total"))))
 
     (when (> failure max-failures)
-      (println "Failure count (" failure ") above expected (" max-failures ")")
+      (log/errorf "Failure count (%d) above expected (%d)" failure max-failures)
       (System/exit 1))
 
     (when (> error max-errors)
-      (println "Error count (" error ") above expected (" max-errors ")")
+      (log/errorf "Error count (%d) above expected (%d)" error max-errors)
       (System/exit 1))))
 
 (def cli-options
@@ -416,7 +416,7 @@
     (if (seq errors)
       (binding [*out* *err*]
         (doseq [error errors]
-          (println error))
+          (log/warn error))
         (System/exit 1))
       (binding [*opts* {:script-mode (if verify
                                        :validation
@@ -438,7 +438,7 @@
                                             results (:results (execute-records *db-engine* (parse-script script-name (slurp script-name))))]
                                         (assoc results :time (math/round (/ (double (- ^long (. System (nanoTime)) start-time)) 1000000.0)))))]]
           (when (validation-mode?)
-            (println "Running " script-name))
+            (log/info "Running" script-name))
           (case db
             "xtdb" (tu/with-mock-clock
                      (fn []
@@ -460,12 +460,12 @@
 
         (when max-failures
           (when (> failure max-failures)
-            (println "Failure count (" failure ") above expected (" max-failures ")")
+            (log/errorf "Failure count (%d) above expected (%d)" failure max-failures)
             (System/exit 1)))
 
         (when max-errors
           (when (> error max-errors)
-            (println "Error count (" error ") above expected (" max-errors ")")
+            (log/errorf "Error count (%d) above expected (%d)" error max-errors)
             (System/exit 1)))))))
 
 (comment
