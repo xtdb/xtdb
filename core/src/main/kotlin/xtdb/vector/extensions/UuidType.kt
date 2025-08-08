@@ -12,6 +12,6 @@ object UuidType : XtExtensionType("uuid", FixedSizeBinary(16)) {
 
     override fun deserialize(serializedData: String) = this
 
-    override fun getNewVector(name: String, fieldType: FieldType, allocator: BufferAllocator): FieldVector =
+    override fun getNewVector(name: String, fieldType: FieldType, allocator: BufferAllocator) =
         UuidVector(name, allocator, fieldType)
 }

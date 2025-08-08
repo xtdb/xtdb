@@ -1,18 +1,20 @@
 package xtdb.vector.extensions
 
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.TimeStampMicroTZVector
 import org.apache.arrow.vector.complex.FixedSizeListVector
 import org.apache.arrow.vector.types.TimeUnit.MICROSECOND
 import org.apache.arrow.vector.types.pojo.ArrowType.FixedSizeList
 import org.apache.arrow.vector.types.pojo.ArrowType.Timestamp
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.time.InstantUtil.asMicros
+import xtdb.time.microsAsInstant
 import xtdb.types.ZonedDateTimeRange
 import xtdb.vector.from
-import java.time.Instant.EPOCH
-import java.time.ZoneOffset.UTC
+import java.time.ZoneId
 import java.time.ZonedDateTime
-import java.time.temporal.ChronoUnit.MICROS
+import kotlin.apply
 
 class TsTzRangeVector(name: String, allocator: BufferAllocator, fieldType: FieldType) :
     XtExtensionVector<FixedSizeListVector>(
@@ -29,13 +31,13 @@ class TsTzRangeVector(name: String, allocator: BufferAllocator, fieldType: Field
     }
 
     companion object {
-        private val elField =
-            Field("\$data\$", FieldType.notNullable(Timestamp(MICROSECOND, "UTC")), null)
+        private val elFieldType = FieldType.notNullable(Timestamp(MICROSECOND, "UTC"))
+        private val elField = Field("\$data\$", elFieldType, null)
 
         val tsTzRangeField = Field("tsTzRange", FieldType.nullable(TsTzRangeType), listOf(elField))
     }
 
-    private fun Long.toZdt(): ZonedDateTime = EPOCH.plus(this, MICROS).atZone(UTC)
+    private fun Long.toZdt(): ZonedDateTime = microsAsInstant.atZone(ZoneId.of("UTC"))
 
     override fun getObject0(index: Int): ZonedDateTimeRange =
         from(underlyingVector.dataVector).let { elVec ->
@@ -44,4 +46,16 @@ class TsTzRangeVector(name: String, allocator: BufferAllocator, fieldType: Field
                 elVec.getLong(index * 2 + 1).takeUnless { it == Long.MAX_VALUE }?.toZdt()
             )
         }
+
+    fun setObject(idx: Int, v: ZonedDateTimeRange) {
+        underlyingVector.startNewValue(idx)
+
+        underlyingVector.addOrGetVector<TimeStampMicroTZVector>(elFieldType).vector.apply {
+            val from = v.from
+            setSafe(idx * 2, if (from == null) Long.MIN_VALUE else from.toInstant().asMicros)
+
+            val to = v.to
+            setSafe(idx * 2 + 1, if (to == null) Long.MAX_VALUE else to.toInstant().asMicros)
+        }
+    }
 }

@@ -20,4 +20,8 @@ class TransitVector(name: String, allocator: BufferAllocator, fieldType: FieldTy
     private fun transitReader(v: ByteArray): Reader = TRANSIT_MSGPACK_READER.invoke(ByteArrayInputStream(v)) as Reader
 
     override fun getObject0(index: Int): Any = transitReader(underlyingVector[index]).read()
+
+    fun setObject(idx: Int, v: Any) {
+        underlyingVector.setSafe(idx, requiringResolve("xtdb.serde/write-transit")(v) as ByteArray)
+    }
 }

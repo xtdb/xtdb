@@ -36,13 +36,12 @@ class XtExtensionVectorTest {
     fun `test ExtensionVector TransferPair` () {
         val uuidField = Field("uuid", FieldType.notNullable(UuidType), emptyList())
         UuidType.getNewVector("uuid", FieldType.nullable(UuidType), al).use {  uuidVector ->
-            val writer = writerFor(uuidVector)
             val uuid1 = UUID.randomUUID()
             val uuid2 = UUID.randomUUID()
 
-            writer.writeObject(uuid1)
-            writer.writeObject(uuid2)
-            writer.asReader
+            uuidVector.setObject(0, uuid1)
+            uuidVector.setObject(1, uuid2)
+            uuidVector.valueCount = 2
 
             val newVector = uuidVector
                 .getTransferPair(uuidField, al)
@@ -66,10 +65,8 @@ class XtExtensionVectorTest {
     @Test
     fun `test ExtensionVector hashCode` () {
         UuidVector("uuid", al, FieldType.notNullable(UuidType)).use {  uuidVector ->
-            val writer = writerFor(uuidVector)
-
-            writer.writeObject(UUID.randomUUID())
-            writer.asReader
+            uuidVector.setObject(0, UUID.randomUUID())
+            uuidVector.valueCount = 1
 
             val rdr = from(uuidVector)
             val hasher = Hasher.Xx()
@@ -77,10 +74,8 @@ class XtExtensionVectorTest {
         }
 
         TransitVector("transit", al, FieldType.notNullable(TransitType)).use {  transitVector ->
-            val writer = writerFor(transitVector)
-
-            writer.writeObject(ClojureForm(clojure.lang.Symbol.create("foo")))
-            writer.asReader
+            transitVector.setObject(0, ClojureForm(clojure.lang.Symbol.create("foo")))
+            transitVector.valueCount = 1
 
             val rdr = from(transitVector)
             val hasher = Hasher.Xx()
@@ -89,10 +84,8 @@ class XtExtensionVectorTest {
         }
 
         TsTzRangeVector("tstzrange", al, FieldType.notNullable(TsTzRangeType)).use {  tstzrangeVector ->
-            val writer = writerFor(tstzrangeVector)
-
-            writer.writeObject(ZonedDateTimeRange(ZonedDateTime.now(), ZonedDateTime.now()))
-            writer.asReader
+            tstzrangeVector.setObject(0, ZonedDateTimeRange(ZonedDateTime.now(), ZonedDateTime.now()))
+            tstzrangeVector.valueCount = 1
 
             val rdr = from(tstzrangeVector)
             val hasher = Hasher.Xx()

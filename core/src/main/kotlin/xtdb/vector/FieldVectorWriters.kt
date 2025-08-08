@@ -345,11 +345,8 @@ private class FixedSizeBinaryVectorWriter(override val vector: FixedSizeBinaryVe
 
     override fun writeBytes(v: ByteBuffer) {
         val pos = v.position()
-
         val idx = valueCount++
-        vector.setIndexDefined(idx)
-        vector.dataBuffer.setBytes((idx * vector.byteWidth).toLong(), v)
-
+        vector.setBytes(idx, v)
         v.position(pos)
     }
 
@@ -492,7 +489,7 @@ internal class UriVectorWriter(vector: UriVector) : ExtensionVectorWriter(vector
 internal class TransitVectorWriter(vector: TransitVector) : ExtensionVectorWriter(vector, null) {
     override fun writeObject0(obj: Any) =
         when (obj) {
-            is ClojureForm, is RuntimeException, is IllegalArgumentException,
+            is ClojureForm, is RuntimeException
                 -> super.writeObject0(requiringResolve("xtdb.serde/write-transit")(obj) as ByteArray)
 
             else -> throw InvalidWriteObjectException(field.fieldType, obj)

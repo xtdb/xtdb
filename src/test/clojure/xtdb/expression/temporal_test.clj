@@ -1395,13 +1395,13 @@
   (letfn [(f [from to]
             (et/project1 '(period x y)
                          {:x from, :y to}))]
-    (let [from #xt/zoned-date-time "2020-01-01T00:00Z"
-          to #xt/zoned-date-time "2022-01-01T00:00Z"]
+    (let [from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"
+          to #xt/zoned-date-time "2022-01-01T00:00Z[UTC]"]
       (t/is (= (tu/->tstz-range from to)
                (f from to))))
 
-    (let [from #xt/zoned-date-time "2030-01-01T00:00Z"
-          to #xt/zoned-date-time "2020-01-01T00:00Z"]
+    (let [from #xt/zoned-date-time "2030-01-01T00:00Z[UTC]"
+          to #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"]
       (t/is
        (thrown-with-msg?
         RuntimeException
@@ -1409,12 +1409,12 @@
         (f from to))))
 
     (t/testing "other date-time types"
-      (t/is (= #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z"
-                               #xt/zoned-date-time "2020-01-02T00:00Z"]
+      (t/is (= #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z[UTC]"
+                               #xt/zoned-date-time "2020-01-02T00:00Z[UTC]"]
                (f #xt/date "2020-01-01" #xt/date "2020-01-02"))
             "date/date")
 
-      (t/is (= #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z" nil]
+      (t/is (= #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z[UTC]" nil]
                (f #xt/date "2020-01-01" nil))
             "date/nil")
 
@@ -1422,18 +1422,18 @@
                         (f nil #xt/date "2020-01-01"))
             "nil/date")
 
-      (t/is (= #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z"
-                               #xt/zoned-date-time "2020-01-02T01:23:45Z"]
+      (t/is (= #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z[UTC]"
+                               #xt/zoned-date-time "2020-01-02T01:23:45Z[UTC]"]
                (f #xt/date "2020-01-01" #xt/date-time "2020-01-02T01:23:45"))
             "date/ts")
 
-      (t/is (= #xt/tstz-range [#xt/zoned-date-time "2020-01-01T01:23:45Z"
-                               #xt/zoned-date-time "2020-01-02T00:00Z"]
+      (t/is (= #xt/tstz-range [#xt/zoned-date-time "2020-01-01T01:23:45Z[UTC]"
+                               #xt/zoned-date-time "2020-01-02T00:00Z[UTC]"]
                (f #xt/date-time "2020-01-01T01:23:45" #xt/date "2020-01-02"))
             "ts/date")
 
-      (t/is (= #xt/tstz-range [#xt/zoned-date-time "2020-01-01T11:07:08Z"
-                               #xt/zoned-date-time "2020-01-02T01:23:45Z"]
+      (t/is (= #xt/tstz-range [#xt/zoned-date-time "2020-01-01T11:07:08Z[UTC]"
+                               #xt/zoned-date-time "2020-01-02T01:23:45Z[UTC]"]
                (f #xt/zoned-date-time "2020-01-01T06:07:08-05:00[America/New_York]",
                   #xt/date-time "2020-01-02T01:23:45"))
             "tstz/ts"))))
@@ -1780,29 +1780,29 @@
             "contains"))))
 
 (t/deftest test-period-intersection-3493
-  (t/is (= (tu/->tstz-range #xt/zoned-date-time "2021-01-01T00:00Z"
-                            #xt/zoned-date-time "2022-01-01T00:00Z")
+  (t/is (= (tu/->tstz-range #xt/zoned-date-time "2021-01-01T00:00Z[UTC]"
+                            #xt/zoned-date-time "2022-01-01T00:00Z[UTC]")
            (et/project1 '(* p1 p2)
                         {:p1 (tu/->tstz-range #inst "2020-01-01", #inst "2022-01-01")
                          :p2 (tu/->tstz-range #inst "2021-01-01", #inst "2023-01-01")}))
         "overlaps")
 
-  (t/is (= (tu/->tstz-range #xt/zoned-date-time "2020-01-01T00:00Z"
-                            #xt/zoned-date-time "2022-01-01T00:00Z")
+  (t/is (= (tu/->tstz-range #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"
+                            #xt/zoned-date-time "2022-01-01T00:00Z[UTC]")
            (et/project1 '(* p1 p2)
                         {:p1 (tu/->tstz-range #inst "2020-01-01", #inst "2022-01-01")
                          :p2 (tu/->tstz-range #inst "2020-01-01", #inst "2022-01-01")}))
         "equals")
 
-  (t/is (= (tu/->tstz-range #xt/zoned-date-time "2020-01-01T00:00Z"
-                            #xt/zoned-date-time "2022-01-01T00:00Z")
+  (t/is (= (tu/->tstz-range #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"
+                            #xt/zoned-date-time "2022-01-01T00:00Z[UTC]")
            (et/project1 '(* p1 p2)
                         {:p1 (tu/->tstz-range #inst "2020-01-01", #inst "2022-01-01")
                          :p2 (tu/->tstz-range #inst "2020-01-01", #inst "2024-01-01")}))
         "starts")
 
-  (t/is (= (tu/->tstz-range #xt/zoned-date-time "2021-01-01T00:00Z"
-                            #xt/zoned-date-time "2022-01-01T00:00Z")
+  (t/is (= (tu/->tstz-range #xt/zoned-date-time "2021-01-01T00:00Z[UTC]"
+                            #xt/zoned-date-time "2022-01-01T00:00Z[UTC]")
            (et/project1 '(* p1 p2)
                         {:p1 (tu/->tstz-range #inst "2020-01-01", #inst "2023-01-01")
                          :p2 (tu/->tstz-range #inst "2021-01-01", #inst "2022-01-01")}))
