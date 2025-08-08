@@ -5,7 +5,9 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import java.util.function.IntPredicate
+  (:import java.util.List
+           java.util.function.IntPredicate
+           org.apache.arrow.memory.BufferAllocator
            (xtdb.arrow RelationReader Vector VectorReader)
            (xtdb.arrow.metadata MetadataFlavour MetadataFlavour$Bytes MetadataFlavour$Numeric MetadataFlavour$Presence)
            (xtdb.bloom BloomUtils)
@@ -136,13 +138,12 @@
             simplify-and-or-expr)
     :call (call-meta-expr expr opts)))
 
-(defn- ->bloom-hashes [allocator expr ^RelationReader params]
+(defn- ->bloom-hashes [^BufferAllocator allocator, expr ^RelationReader params]
   (vec
    (for [{:keys [value-expr]} (->> (ewalk/expr-seq expr) (filter :bloom-hash-sym))]
      (case (:op value-expr)
        :literal (let [lit (:literal value-expr)]
-                  (with-open [tmp-vec (Vector/fromField allocator (-> (vw/value->col-type lit) (types/col-type->field)))]
-                    (.writeObject tmp-vec lit)
+                  (with-open [tmp-vec (Vector/fromList allocator "lit", ^List (vector lit))]
                     (BloomUtils/bloomHashes tmp-vec 0)))
 
        :param (BloomUtils/bloomHashes (.vectorFor params (str (:param value-expr))) 0)))))
