@@ -26,23 +26,13 @@ class RootWriter(private val root: VectorSchemaRoot) : IRelationWriter {
     // dynamic column creation unsupported in RootWriters
     override fun vectorFor(name: String, fieldType: FieldType) = vectorFor(name)
 
-    override fun syncRowCount() {
+    override fun openDirectSlice(al: BufferAllocator): Relation {
         root.syncSchema()
         root.rowCount = rowCount
-
-        writers.values.forEach {
-            it.asReader
-        }
-    }
-
-    override fun openDirectSlice(al: BufferAllocator): Relation {
-        syncRowCount()
+        writers.values.forEach { it.asReader }
         return Relation.fromRoot(al, root)
     }
 
-    override fun close() {
-        writers.values.forEach { it.close() }
-    }
-
-    override val asReader get() = RelationReader.from(vectors.map { it.asReader }, rowCount)
+    override val asReader: RelationReader
+        get() = super.asReader.also { root.rowCount = rowCount }
 }

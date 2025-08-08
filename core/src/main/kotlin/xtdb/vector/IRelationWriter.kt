@@ -14,22 +14,10 @@ interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<St
      * This is incremented either by using the [IRelationWriter.rowCopier], or by explicitly calling [IRelationWriter.endRow]
      */
     override var rowCount: Int
-    override val schema get() = Schema(vectors.map { it.field })
-
-    override fun endRow(): Int
 
     override fun vectorForOrNull(name: String): IVectorWriter?
     override fun vectorFor(name: String): IVectorWriter = vectorForOrNull(name) ?: error("missing vector: $name")
     override fun vectorFor(name: String, fieldType: FieldType): IVectorWriter
-
-    /**
-     * This method syncs the value counts on the underlying writers/root (e.g. [org.apache.arrow.vector.VectorSchemaRoot.setRowCount])
-     * so that all the values written become visible through the Arrow Java API.
-     * We don't call this after every write because (for composite vectors, and especially unions) it's not the cheapest call.
-     */
-    fun syncRowCount() = this.forEach {
-        it.value.asReader
-    }
 
     override fun rowCopier(rel: RelationReader): RowCopier {
         val copiers = rel.vectors.map {
@@ -42,21 +30,8 @@ interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<St
         }
     }
 
-    override fun append(rel: RelationReader) {
-        rel.vectors.forEach { vectorFor(it.name, it.fieldType).append(it) }
-        rowCount += rel.rowCount
-    }
+    override fun openSlice(al: BufferAllocator) = asReader.openSlice(al)
+    override fun openDirectSlice(al: BufferAllocator) = asReader.openDirectSlice(al)
 
-    override fun openSlice(al: BufferAllocator) = toReader().openSlice(al)
-    override fun openDirectSlice(al: BufferAllocator) = toReader().openDirectSlice(al)
-
-    fun toReader() =
-        RelationReader.from(this.map { ValueVectorReader.from(it.value.apply {
-            this.asReader
-        }.vector) }, rowCount)
-
-    override fun clear() {
-        this.forEach { it.value.clear() }
-        rowCount = 0
-    }
+    override val asReader get() = RelationReader.from(vectors.map { it.asReader }, rowCount)
 }

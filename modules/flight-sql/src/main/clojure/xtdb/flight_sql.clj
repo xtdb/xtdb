@@ -92,7 +92,7 @@
                                      (fn [in-rel]
                                        (.clear out-wtr)
                                        (vw/append-rel out-wtr in-rel)
-                                       (.syncRowCount out-wtr)
+                                       (.getAsReader out-wtr) ; for syncRowCount
                                        (.putNext listener))))
 
                 (.completed listener))

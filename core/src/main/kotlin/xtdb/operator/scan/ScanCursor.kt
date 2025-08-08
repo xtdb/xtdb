@@ -107,7 +107,7 @@ class ScanCursor(
                 val rel = contentRelFactory.realize()
                     .let { rel ->
                         if (contentCols.isNullOrEmpty() || !temporalCols.isNullOrEmpty())
-                            RelationReader.concatCols(rel, outRel.toReader())
+                            RelationReader.concatCols(rel, outRel.asReader)
                         else rel
                     }
                     .let { rel ->

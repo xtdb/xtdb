@@ -35,8 +35,6 @@ class RelationWriter(private val allocator: BufferAllocator) : IRelationWriter {
                     writers[name] = it
                 }
 
-    override val asReader get() = RelationReader.from(vectors.map { it.asReader }, rowCount)
-
     override fun close() {
         writers.values.forEach(IVectorWriter::close)
     }

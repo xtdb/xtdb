@@ -56,7 +56,8 @@
 
     (when live-table-tx
       (with-open [live-rel (.openDirectSlice (doto (.getLiveRelation live-table-tx)
-                                               (.syncRowCount))
+                                               ;; for syncRowCount
+                                               (.getAsReader))
                                              allocator)
                   wtr (.openArrowWriter buffer-pool (.resolve crash-dir "live-table.arrow") live-rel)]
         (.writePage wtr)

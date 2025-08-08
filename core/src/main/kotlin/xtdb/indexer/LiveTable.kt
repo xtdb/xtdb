@@ -179,7 +179,7 @@ constructor(
     )
 
     fun finishBlock(blockIdx: BlockIndex): FinishedBlock? {
-        liveRelation.syncRowCount()
+        liveRelation.forEach { it.value.asReader }
         val rowCount = liveRelation.rowCount
         if (rowCount == 0) return null
         val trieKey = Trie.l0Key(blockIdx).toString()

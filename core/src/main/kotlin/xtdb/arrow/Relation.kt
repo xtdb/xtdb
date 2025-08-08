@@ -388,17 +388,4 @@ class Relation(
                 Vector.fromList(al,normalKey, col.value)
             }.closeAllOnCatch { Relation(al, it, it.firstOrNull()?.valueCount ?: 0) }
     }
-
-    /**
-     * Resets the row count and all vectors, leaving the buffers allocated.
-     */
-    override fun clear() {
-        vecs.forEach { (_, vec) -> vec.clear() }
-        rowCount = 0
-    }
-
-    override fun close() {
-        vecs.closeAll()
-        rowCount = 0
-    }
 }

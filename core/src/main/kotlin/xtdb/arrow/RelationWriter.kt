@@ -4,9 +4,12 @@ import clojure.lang.Keyword
 import clojure.lang.Symbol
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.toFieldType
+import xtdb.util.closeAll
 import xtdb.util.normalForm
 
 interface RelationWriter : RelationReader {
+
+    override var rowCount: Int
 
     override val vectors: Collection<VectorWriter>
     override fun vectorForOrNull(name: String): VectorWriter?
@@ -26,14 +29,9 @@ interface RelationWriter : RelationReader {
     }
 
     fun append(rel: RelationReader) {
-        val copier = rowCopier(rel)
-        repeat(rel.rowCount) { copier.copyRow(it) }
+        rel.vectors.forEach { vectorFor(it.name, it.fieldType).append(it) }
+        rowCount += rel.rowCount
     }
-
-    /**
-     * Resets the row count and all vectors, leaving the buffers allocated.
-     */
-    fun clear()
 
     fun writeRow(row: Map<*, *>) {
         row.forEach { (k, v) ->
@@ -61,4 +59,17 @@ interface RelationWriter : RelationReader {
     }
 
     val asReader: RelationReader get() = this
+
+    /**
+     * Resets the row count and all vectors, leaving the buffers allocated.
+     */
+    fun clear() {
+        vectors.forEach { it.clear() }
+        rowCount = 0
+    }
+
+    override fun close() {
+        vectors.closeAll()
+        rowCount = 0
+    }
 }
