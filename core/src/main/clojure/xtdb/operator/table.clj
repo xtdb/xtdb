@@ -15,8 +15,7 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            (xtdb ICursor)
-           (xtdb.arrow ListExpression Relation RelationReader RelationWriter VectorWriter)
-           (xtdb.vector IRelationWriter)))
+           (xtdb.arrow ListExpression Relation RelationReader RelationWriter VectorWriter)))
 
 (defmethod lp/ra-expr :table [_]
   (s/cat :op #{:table}
@@ -69,7 +68,7 @@
                                            (.add field-set struct-key))
 
                                          {:ks ks
-                                          :write-row! (fn write-param-row! [{:keys [^RelationReader args]}, ^IRelationWriter out-rel]
+                                          :write-row! (fn write-param-row! [{:keys [^RelationReader args]}, ^RelationWriter out-rel]
                                                         (let [param-rdr (.vectorForOrNull args (str row-arg))]
                                                           (.writeRow out-rel (.getObject param-rdr 0))))})
 

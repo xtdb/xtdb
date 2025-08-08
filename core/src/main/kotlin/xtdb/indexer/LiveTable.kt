@@ -6,7 +6,9 @@ import org.apache.arrow.vector.types.pojo.Field
 import xtdb.BufferPool
 import xtdb.api.TransactionKey
 import xtdb.arrow.RelationReader
+import xtdb.arrow.RelationWriter
 import xtdb.arrow.VectorReader
+import xtdb.arrow.VectorWriter
 import xtdb.log.proto.TrieMetadata
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
@@ -15,9 +17,6 @@ import xtdb.types.Fields
 import xtdb.util.HLL
 import xtdb.util.RowCounter
 import xtdb.util.closeOnCatch
-import xtdb.vector.IRelationWriter
-import xtdb.vector.IVectorWriter
-import xtdb.vector.asReader
 import java.nio.ByteBuffer
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
@@ -36,14 +35,14 @@ constructor(
         operator fun invoke(iidWtr: VectorReader): MemoryHashTrie
     }
 
-    val liveRelation: IRelationWriter = Trie.openLogDataWriter(al)
+    val liveRelation: RelationWriter = Trie.openLogDataWriter(al)
 
     private val iidWtr = liveRelation.vectorFor("_iid")
     private val systemFromWtr = liveRelation.vectorFor("_system_from")
     private val validFromWtr = liveRelation.vectorFor("_valid_from")
     private val validToWtr = liveRelation.vectorFor("_valid_to")
 
-    var liveTrie: MemoryHashTrie = liveTrieFactory(iidWtr.vector.asReader)
+    var liveTrie: MemoryHashTrie = liveTrieFactory(iidWtr.asReader)
 
     private val iidRdr = iidWtr.asReader
 
@@ -79,8 +78,8 @@ constructor(
         private val systemFrom: InstantMicros = txKey.systemTime.asMicros
 
         fun openSnapshot(): Snapshot = openSnapshot(transientTrie)
-        val docWriter: IVectorWriter = putWtr
-        val liveRelation: IRelationWriter = this@LiveTable.liveRelation
+        val docWriter: VectorWriter = putWtr
+        val liveRelation: RelationWriter = this@LiveTable.liveRelation
 
         private val startPos = liveRelation.rowCount
 
@@ -148,7 +147,7 @@ constructor(
 
     fun startTx(txKey: TransactionKey, newLiveTable: Boolean) = Tx(txKey, newLiveTable)
 
-    private val IRelationWriter.fields
+    private val RelationWriter.fields
         get() = this.vectorFor("op").vectorFor("put").field
             .also { assert(it.type is ArrowType.Struct) }
             .children
@@ -179,7 +178,7 @@ constructor(
     )
 
     fun finishBlock(blockIdx: BlockIndex): FinishedBlock? {
-        liveRelation.forEach { it.value.asReader }
+        liveRelation.vectors.forEach { it.asReader }
         val rowCount = liveRelation.rowCount
         if (rowCount == 0) return null
         val trieKey = Trie.l0Key(blockIdx).toString()

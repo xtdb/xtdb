@@ -4,21 +4,21 @@ import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.vector.NullVector
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.ICursor
+import xtdb.arrow.RelationReader
+import xtdb.arrow.RelationWriter
 import xtdb.error.Incorrect
 import xtdb.trie.ColumnName
 import xtdb.types.Fields.BOOL
-import xtdb.vector.IRelationWriter
-import xtdb.arrow.RelationReader
 import xtdb.vector.ValueVectorReader
 
 sealed interface ApplyMode {
     fun accept(
-        dependentCursor: ICursor<RelationReader>, dependentOutWriter: IRelationWriter, idxs: IntArrayList, inIdx: Int
+        dependentCursor: ICursor<RelationReader>, dependentOutWriter: RelationWriter, idxs: IntArrayList, inIdx: Int
     )
 
     class MarkJoin(private val columnName: ColumnName) : ApplyMode {
         override fun accept(
-            dependentCursor: ICursor<RelationReader>, dependentOutWriter: IRelationWriter,
+            dependentCursor: ICursor<RelationReader>, dependentOutWriter: RelationWriter,
             idxs: IntArrayList, inIdx: Int
         ) {
             idxs.add(inIdx)
@@ -41,7 +41,7 @@ sealed interface ApplyMode {
 
     class CrossJoin(private val dependentFields: List<Field>) : ApplyMode {
         override fun accept(
-            dependentCursor: ICursor<RelationReader>, dependentOutWriter: IRelationWriter,
+            dependentCursor: ICursor<RelationReader>, dependentOutWriter: RelationWriter,
             idxs: IntArrayList, inIdx: Int
         ) {
             dependentFields.forEach { dependentOutWriter.vectorFor(it.name, it.fieldType) }
@@ -55,7 +55,7 @@ sealed interface ApplyMode {
 
     class LeftJoin(private val dependentFields: List<Field>) : ApplyMode {
         override fun accept(
-            dependentCursor: ICursor<RelationReader>, dependentOutWriter: IRelationWriter,
+            dependentCursor: ICursor<RelationReader>, dependentOutWriter: RelationWriter,
             idxs: IntArrayList, inIdx: Int
         ) {
             dependentFields.forEach { dependentOutWriter.vectorFor(it.name, it.fieldType) }
@@ -81,7 +81,7 @@ sealed interface ApplyMode {
 
     data object SemiJoin : ApplyMode {
         override fun accept(
-            dependentCursor: ICursor<RelationReader>, dependentOutWriter: IRelationWriter,
+            dependentCursor: ICursor<RelationReader>, dependentOutWriter: RelationWriter,
             idxs: IntArrayList, inIdx: Int
         ) {
             var match = false
@@ -99,7 +99,7 @@ sealed interface ApplyMode {
 
     data object AntiJoin : ApplyMode {
         override fun accept(
-            dependentCursor: ICursor<RelationReader>, dependentOutWriter: IRelationWriter,
+            dependentCursor: ICursor<RelationReader>, dependentOutWriter: RelationWriter,
             idxs: IntArrayList, inIdx: Int
         ) {
             var match = false
@@ -119,7 +119,7 @@ sealed interface ApplyMode {
                 throw Incorrect(message = "cardinality violation", errorCode = "xtdb.single-join/cardinality-violation")
 
         override fun accept(
-            dependentCursor: ICursor<RelationReader>, dependentOutWriter: IRelationWriter,
+            dependentCursor: ICursor<RelationReader>, dependentOutWriter: RelationWriter,
             idxs: IntArrayList, inIdx: Int
         ) {
             dependentFields.forEach { dependentOutWriter.vectorFor(it.name, it.fieldType) }

@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.arrow.RelationWriter
 import xtdb.table.TableRef
 import xtdb.types.Fields
 import xtdb.types.NamelessField
@@ -13,14 +14,12 @@ import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
 import xtdb.util.closeOnCatch
-import xtdb.vector.IRelationWriter
 import xtdb.vector.RootWriter
 import java.nio.file.Path
 import java.time.LocalDate
 import java.time.format.DateTimeFormatterBuilder
 import java.time.format.SignStyle
 import java.time.temporal.ChronoField
-import kotlin.io.resolve
 
 typealias Level = Long
 typealias InstantMicros = Long
@@ -126,6 +125,6 @@ object Trie {
     fun openLogDataWriter(
         allocator: BufferAllocator,
         dataSchema: Schema = dataRelSchema(Fields.Struct())
-    ): IRelationWriter =
+    ): RelationWriter =
         VectorSchemaRoot.create(dataSchema, allocator).closeOnCatch { root -> RootWriter(root) }
 }
