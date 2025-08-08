@@ -190,10 +190,19 @@
          :col-types (s/? (s/map-of simple-symbol? some?))
          :pages vector?))
 
+(defn rows->fields [rows]
+  (->> (for [col-name (into #{} (mapcat keys) rows)]
+         [(symbol col-name) (-> rows
+                                (->> (into #{} (map (fn [row]
+                                                      (types/col-type->field (vw/value->col-type (get row col-name))))))
+                                     (apply types/merge-fields))
+                                (types/field-with-name (str (symbol col-name))))])
+       (into {})))
+
 (defmethod lp/emit-expr ::pages [{:keys [col-types pages stats]} _args]
   (let [fields (or (some->> col-types (into {} (map (fn [[col-name col-type]]
                                                       [col-name (types/col-type->field col-name col-type)]))))
-                   (vw/rows->fields (into [] cat pages)))
+                   (rows->fields (into [] cat pages)))
         ^Schema schema (Schema. (for [[col-name field] fields]
                                   (types/field-with-name field (str col-name))))]
     {:fields fields

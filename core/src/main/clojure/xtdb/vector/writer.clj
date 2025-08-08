@@ -145,15 +145,6 @@
 
     v))
 
-(defn rows->fields [rows]
-  (->> (for [col-name (into #{} (mapcat keys) rows)]
-         [(symbol col-name) (-> rows
-                                (->> (into #{} (map (fn [row]
-                                                      (types/col-type->field (value->col-type (get row col-name))))))
-                                     (apply types/merge-fields))
-                                (types/field-with-name (str (symbol col-name))))])
-       (into {})))
-
 (defn ->vec-writer ^xtdb.vector.IVectorWriter [^BufferAllocator allocator, ^String col-name, ^FieldType field-type]
   (->writer (.createNewSingleVector field-type col-name allocator nil)))
 
