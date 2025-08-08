@@ -158,6 +158,7 @@ allprojects {
             testRuntimeOnly(libs.junit.platform.launcher)
             testImplementation(libs.testcontainers)
             testImplementation(libs.testcontainers.kafka)
+            testImplementation(libs.testcontainers.keycloak)
             testImplementation(libs.testcontainers.minio)
         }
 

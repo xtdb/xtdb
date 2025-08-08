@@ -87,6 +87,7 @@ jetty-alpn-server = { group = "org.eclipse.jetty", name = "jetty-alpn-server", v
 testcontainers = { group = "org.testcontainers", name = "testcontainers", version.ref = "testcontainers" }
 testcontainers-kafka = { group = "org.testcontainers", name = "kafka", version.ref = "testcontainers" }
 testcontainers-minio = { group = "org.testcontainers", name = "minio", version.ref = "testcontainers" }
+testcontainers-keycloak={ group="com.github.dasniko", name="testcontainers-keycloak", version="3.4.0" }
 
 micrometer-core = { group = "io.micrometer", name = "micrometer-core", version.ref = "micrometer" }
 micrometer-registry-prometheus = { group = "io.micrometer", name = "micrometer-registry-prometheus", version.ref = "micrometer" }

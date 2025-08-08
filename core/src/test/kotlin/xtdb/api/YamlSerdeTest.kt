@@ -6,9 +6,9 @@ import io.mockk.unmockkObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import xtdb.api.Authenticator.Factory.OpenIdConnect
 import xtdb.api.Authenticator.Factory.UserTable
-import xtdb.api.Authenticator.Method.PASSWORD
-import xtdb.api.Authenticator.Method.TRUST
+import xtdb.api.Authenticator.Method.*
 import xtdb.api.Authenticator.MethodRule
 import xtdb.api.log.KafkaCluster
 import xtdb.api.log.LocalLog.Factory
@@ -25,6 +25,7 @@ import xtdb.cache.DiskCache
 import xtdb.gcp.CloudStorage.Companion.googleCloudStorage
 import xtdb.util.asPath
 import java.net.InetAddress
+import java.net.URL
 import java.nio.file.Paths
 
 class YamlSerdeTest {
@@ -400,6 +401,42 @@ class YamlSerdeTest {
             ),
             nodeConfig(input).authn
         )
+    }
+
+    @Test
+    fun testOidcConfigDecoding() {
+        mockkObject(EnvironmentVariableProvider)
+        every { EnvironmentVariableProvider.getEnvVariable("OIDC_CLIENT_SECRET") } returns "my-secret-key"
+
+        val input = """
+        authn: !OpenIdConnect
+          issuerUrl: http://localhost:8080/realms/master
+          clientId: xtdb-client
+          clientSecret: !Env OIDC_CLIENT_SECRET
+          rules:
+              - user: xtdb
+                method: PASSWORD
+                remoteAddress: 127.0.0.1
+              - user: oid-client  
+                method: CLIENT_CREDENTIALS
+              - method: DEVICE_AUTH
+        """.trimIndent()
+
+        assertEquals(
+            OpenIdConnect(
+                issuerUrl = URL("http://localhost:8080/realms/master"),
+                clientId = "xtdb-client", 
+                clientSecret = "my-secret-key",
+                rules = listOf(
+                    MethodRule(PASSWORD, user = "xtdb", remoteAddress = "127.0.0.1"),
+                    MethodRule(CLIENT_CREDENTIALS, user = "oid-client"),
+                    MethodRule(DEVICE_AUTH)
+                )
+            ),
+            nodeConfig(input).authn
+        )
+
+        unmockkObject(EnvironmentVariableProvider)
     }
 
     @Test
