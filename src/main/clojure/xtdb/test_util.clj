@@ -1,7 +1,6 @@
 (ns xtdb.test-util
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
-            [clojure.tools.logging :as log]
             [cognitect.anomalies :as-alias anom]
             [xtdb.api :as xt]
             [xtdb.db-catalog :as db]
@@ -24,7 +23,7 @@
            java.nio.file.attribute.FileAttribute
            (java.time Duration Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
            (java.time.temporal ChronoUnit)
-           (java.util LinkedList List TimeZone)
+           (java.util LinkedList List)
            (java.util.function IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
@@ -42,11 +41,6 @@
            (xtdb.trie MetadataFileWriter)
            xtdb.types.ZonedDateTimeRange
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)))
-
-(when (System/getenv "XTDB_RANDOMIZE_TZ")
-  (let [^String tz (rand-nth (vec (ZoneId/getAvailableZoneIds)))]
-    (log/info "Setting default time zone to" tz)
-    (TimeZone/setDefault (TimeZone/getTimeZone tz))))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
