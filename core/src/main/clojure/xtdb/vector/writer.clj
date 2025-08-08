@@ -1,7 +1,6 @@
 (ns xtdb.vector.writer
   (:require [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.util :as util])
   (:import (clojure.lang Keyword)
            (java.math BigDecimal)
            java.net.URI
@@ -9,14 +8,14 @@
            (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZonedDateTime)
            (java.util Date List Map Set UUID)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector ValueVector VectorSchemaRoot)
-           (org.apache.arrow.vector.types.pojo Field FieldType)
+           (org.apache.arrow.vector ValueVector)
+           (org.apache.arrow.vector.types.pojo Field FieldType Schema)
            (xtdb.arrow Relation RelationReader RelationWriter)
            xtdb.error.Anomaly
            xtdb.time.Interval
            xtdb.Types
            (xtdb.types ClojureForm ZonedDateTimeRange)
-           (xtdb.vector FieldVectorWriters RootWriter)))
+           (xtdb.vector FieldVectorWriters OldRelationWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -158,11 +157,11 @@
 (defn ->vec-writer ^xtdb.vector.IVectorWriter [^BufferAllocator allocator, ^String col-name, ^FieldType field-type]
   (->writer (.createNewSingleVector field-type col-name allocator nil)))
 
-(defn ->rel-writer ^xtdb.arrow.RelationWriter [^BufferAllocator allocator]
-  (xtdb.vector.RelationWriter. allocator))
-
-(defn root->writer ^xtdb.arrow.RelationWriter [^VectorSchemaRoot root]
-  (RootWriter. root))
+(defn ->rel-writer
+  (^xtdb.arrow.RelationWriter [^BufferAllocator allocator]
+   (OldRelationWriter. allocator))
+  (^xtdb.arrow.RelationWriter [^BufferAllocator allocator, ^Schema schema]
+   (OldRelationWriter. allocator schema)))
 
 (defmulti open-vec (fn [_allocator col-name-or-field _vs]
                      (if (instance? Field col-name-or-field)
@@ -190,9 +189,6 @@
     (Relation/openFromRows allocator [args-map])))
 
 (def empty-args RelationReader/DUAL)
-
-(defn open-rel ^xtdb.arrow.Relation [^BufferAllocator al]
-  (Relation. al))
 
 (defn vec-wtr->rdr ^xtdb.arrow.VectorReader [^xtdb.arrow.VectorWriter w]
   (.getAsReader w))

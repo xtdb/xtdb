@@ -92,11 +92,10 @@
                                     (types/field-with-name (str field-name))
                                     (types/->nullable-field)))
                               fields))]
-    (util/with-close-on-catch [root (VectorSchemaRoot/create schema allocator)]
-      (let [rel-writer (vw/root->writer root)]
-        (doto (.rowCopier rel-writer (->nil-rel (keys fields)))
-          (.copyRow 0))
-        rel-writer))))
+    (util/with-close-on-catch [rel-writer (vw/->rel-writer allocator schema)]
+      (doto (.rowCopier rel-writer (->nil-rel (keys fields)))
+        (.copyRow 0))
+      rel-writer)))
 
 (def nil-row-idx 0)
 
@@ -117,25 +116,24 @@
                                          (cond-> (-> field (types/field-with-name (str field-name)))
                                            with-nil-row? types/->nullable-field))))))]
 
-    (util/with-close-on-catch [root (VectorSchemaRoot/create schema allocator)]
-      (let [rel-writer (vw/root->writer root)]
-        (when with-nil-row?
-          (doto (.rowCopier rel-writer (->nil-rel (keys build-fields)))
-            (.copyRow 0)))
+    (util/with-close-on-catch [rel-writer (vw/->rel-writer allocator schema)]
+      (when with-nil-row?
+        (doto (.rowCopier rel-writer (->nil-rel (keys build-fields)))
+          (.copyRow 0)))
 
-        (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.vectorFor rel-writer (str %))) build-key-col-names)]
-          (RelationMap. allocator
-                        (update-keys build-fields str)
-                        (map str build-key-col-names)
-                        (update-keys probe-fields str)
-                        (map str probe-key-col-names)
-                        (boolean store-full-build-rel?)
-                        rel-writer
-                        build-key-cols
-                        (boolean nil-keys-equal?)
-                        theta-expr
-                        (update-keys param-types str)
-                        args
-                        (boolean with-nil-row?)
-                        64
-                        4))))))
+      (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.vectorFor rel-writer (str %))) build-key-col-names)]
+        (RelationMap. allocator
+                      (update-keys build-fields str)
+                      (map str build-key-col-names)
+                      (update-keys probe-fields str)
+                      (map str probe-key-col-names)
+                      (boolean store-full-build-rel?)
+                      rel-writer
+                      build-key-cols
+                      (boolean nil-keys-equal?)
+                      theta-expr
+                      (update-keys param-types str)
+                      args
+                      (boolean with-nil-row?)
+                      64
+                      4)))))

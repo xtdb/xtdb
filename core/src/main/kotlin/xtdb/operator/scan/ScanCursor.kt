@@ -14,7 +14,7 @@ import xtdb.vector.MultiVectorRelationFactory
 import xtdb.arrow.RelationReader
 import xtdb.bloom.BloomFilter
 import xtdb.bloom.contains
-import xtdb.vector.RelationWriter
+import xtdb.vector.OldRelationWriter
 import java.util.*
 import java.util.Comparator.comparing
 import java.util.function.Consumer
@@ -54,7 +54,7 @@ class ScanCursor(
             val mergeQueue = PriorityQueue<LeafPointer>(comparing({ it.evPtr }, EventRowPointer.comparator()))
             val polygonCalculator = PolygonCalculator(temporalBounds)
 
-            RelationWriter(al).use { outRel ->
+            OldRelationWriter(al).use { outRel ->
                 val bitemporalConsumer = BitemporalConsumer(outRel, colNames)
                 val leafReaders = task.pages.map { it.loadPage(rootCache).maybeSelect(iidPred) }
 

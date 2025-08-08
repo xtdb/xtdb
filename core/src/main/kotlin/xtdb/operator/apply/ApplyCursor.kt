@@ -4,7 +4,7 @@ import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.ICursor
 import xtdb.arrow.RelationReader
-import xtdb.vector.RelationWriter
+import xtdb.vector.OldRelationWriter
 import java.util.function.Consumer
 
 class ApplyCursor(
@@ -16,7 +16,7 @@ class ApplyCursor(
     override fun tryAdvance(c: Consumer<in RelationReader>) =
         independentCursor.tryAdvance { inRel ->
             val idxs = IntArrayList()
-            RelationWriter(al).use { depOutWriter ->
+            OldRelationWriter(al).use { depOutWriter ->
                 repeat(inRel.rowCount) { inIdx ->
                     depCursorFactory.open(inRel, inIdx).use { depCursor ->
                         mode.accept(depCursor, depOutWriter, idxs, inIdx)

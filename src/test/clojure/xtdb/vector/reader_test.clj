@@ -5,10 +5,11 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
+  (:import [java.util List]
+           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            (org.apache.arrow.vector.types.pojo FieldType)
            (xtdb.arrow ValueReader VectorIndirection VectorPosition)
-           (xtdb.vector IndirectMultiVectorReader RelationWriter)))
+           (xtdb.vector IndirectMultiVectorReader OldRelationWriter)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -41,8 +42,8 @@
                                                                         (types/col-type->field :f64))))]
         (util/with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)
                          rel-wtr2 (vw/->rel-writer tu/*allocator*)
-                         rel-wtr3 (RelationWriter. tu/*allocator*
-                                                   [(vw/->writer (.createVector combined-field tu/*allocator*))])]
+                         rel-wtr3 (OldRelationWriter. tu/*allocator*
+                                                      ^List (vector (vw/->writer (.createVector combined-field tu/*allocator*))))]
           (let [my-column-wtr1 (.vectorFor rel-wtr1 "my-column" (FieldType/notNullable #xt.arrow/type :struct))
                 my-column-wtr2 (.vectorFor rel-wtr2 "my-column" (FieldType/notNullable #xt.arrow/type :struct))]
             (.writeObject my-column-wtr1 {"foo" 42 "bar" "forty-two"})
@@ -108,11 +109,10 @@
 
         (t/is (= [{:my-column [42 43]} {:my-column ["forty-two" "forty-three"]}]
                  (.toMaps (vw/rel-wtr->rdr rel-wtr3))))
-        (t/is (= (types/->field "my-column" #xt.arrow/type :union false
-                                (types/->field "list" #xt.arrow/type :list false
-                                               (types/->field "$data$" #xt.arrow/type :union false
-                                                              (types/col-type->field :i64)
-                                                              (types/col-type->field :utf8))))
+        (t/is (= (types/->field "my-column" #xt.arrow/type :list false
+                                (types/->field "$data$" #xt.arrow/type :union false
+                                               (types/col-type->field :i64)
+                                               (types/col-type->field :utf8)))
                  (.getField (.vectorFor rel-wtr3 "my-column"))))))
 
     (t/testing "set"
@@ -136,11 +136,10 @@
 
           (t/is (= [{:my-column #{42 43}} {:my-column #{"forty-two" "forty-three"}}]
                    (.toMaps (vw/rel-wtr->rdr rel-wtr3))))
-          (t/is (= (types/->field "my-column" #xt.arrow/type :union false
-                                  (types/->field "set" #xt.arrow/type :set false
-                                                 (types/->field "$data$" #xt.arrow/type :union false
-                                                                (types/col-type->field :i64)
-                                                                (types/col-type->field :utf8))))
+          (t/is (= (types/->field "my-column" #xt.arrow/type :set false
+                                  (types/->field "$data$" #xt.arrow/type :union false
+                                                 (types/col-type->field :i64)
+                                                 (types/col-type->field :utf8)))
                    (.getField (.vectorFor rel-wtr3 "my-column")))))))))
 
 (deftest copying-union-legs-with-different-types-throws

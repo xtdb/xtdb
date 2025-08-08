@@ -141,7 +141,7 @@
      :else (throw (err/incorrect ::invalid-vec {:col-name-or-field col-name-or-field})))))
 
 (defn open-rel
-  (^xtdb.arrow.Relation [] (vw/open-rel *allocator*))
+  (^xtdb.arrow.Relation [] (Relation. *allocator*))
 
   (^xtdb.arrow.RelationReader [rows-or-cols]
    (cond

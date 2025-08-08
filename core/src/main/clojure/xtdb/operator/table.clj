@@ -127,8 +127,7 @@
      :->out-rel (fn [{:keys [allocator] :as opts}]
                   (let [row-count (count rows)]
                     (when (pos? row-count)
-                      (util/with-close-on-catch [root (VectorSchemaRoot/create (Schema. (or (vals fields) [])) allocator)
-                                                 out-rel (vw/root->writer root)]
+                      (util/with-close-on-catch [out-rel (vw/->rel-writer allocator (Schema. (or (vals fields) [])))]
                         (doseq [{:keys [write-row!]} out-rows]
                           (write-row! opts out-rel))
 

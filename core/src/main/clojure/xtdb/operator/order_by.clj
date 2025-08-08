@@ -20,7 +20,7 @@
            (org.apache.arrow.vector.types.pojo Field)
            (xtdb.arrow Relation Relation$Loader Relation$UnloadMode RelationReader RowCopier)
            xtdb.ICursor
-           (xtdb.vector RelationWriter)))
+           xtdb.vector.OldRelationWriter))
 
 (s/def ::direction #{:asc :desc})
 (s/def ::null-ordering #{:nulls-first :nulls-last})
@@ -221,8 +221,8 @@
                     false)))]
         (if-not (nil? reader)
           (load-next-batch)
-          (with-open [rel-writer (RelationWriter. allocator (for [^Field field static-fields]
-                                                              (vw/->writer (.createVector field allocator))))]
+          (with-open [rel-writer (OldRelationWriter. allocator ^List (vec (for [^Field field static-fields]
+                                                                            (vw/->writer (.createVector field allocator)))))]
             (while (and (<= (.getRowCount rel-writer) ^int *block-size*)
                         (.tryAdvance in-cursor
                                      (fn [^RelationReader src-rel]

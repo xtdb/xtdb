@@ -113,7 +113,7 @@ interface IVectorWriter : VectorWriter, AutoCloseable {
 
 internal val UNION_FIELD_TYPE = FieldType.notNullable(ArrowType.Union(UnionMode.Dense, null))
 
-internal fun IVectorWriter.populateWithAbsents(pos: Int) =
+internal fun VectorWriter.populateWithAbsents(pos: Int) =
     repeat(pos - valueCount) { writeObject(null) }
 
 internal data class FieldMismatch(val src: FieldType, val dest: FieldType) :
@@ -124,7 +124,7 @@ internal data class FieldMismatch(val src: FieldType, val dest: FieldType) :
         append("${dest.type} ${if (dest.isNullable) "nullable" else "not null"}")
     })
 
-internal fun IVectorWriter.checkFieldType(src: FieldType) {
+internal fun VectorWriter.checkFieldType(src: FieldType) {
     val dest = field.fieldType
     if (dest.type != src.type || (src.isNullable && !dest.isNullable))
         throw FieldMismatch(src, dest)

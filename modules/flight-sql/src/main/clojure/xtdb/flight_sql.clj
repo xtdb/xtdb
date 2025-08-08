@@ -12,7 +12,7 @@
             [xtdb.vector.writer :as vw])
   (:import [com.google.protobuf Any ByteString]
            [java.nio ByteBuffer]
-           [java.util ArrayList HashMap Map]
+           [java.util ArrayList HashMap List Map]
            [java.util.concurrent ConcurrentHashMap]
            [java.util.function BiFunction]
            [org.apache.arrow.flight FlightEndpoint FlightInfo FlightProducer$ServerStreamListener FlightProducer$StreamListener FlightServer FlightServer$Builder FlightServerMiddleware FlightServerMiddleware$Factory FlightServerMiddleware$Key FlightStream Location PutResult Result Ticket]
@@ -25,7 +25,8 @@
            xtdb.arrow.Relation
            xtdb.database.Database$Catalog
            xtdb.IResultCursor
-           [xtdb.query IQuerySource PreparedQuery]))
+           [xtdb.query IQuerySource PreparedQuery]
+           [xtdb.vector OldRelationWriter]))
 
 (defn- new-id ^com.google.protobuf.ByteString []
   (ByteString/copyFrom (util/uuid->bytes (random-uuid))))
@@ -87,12 +88,12 @@
               (with-open [vsr (VectorSchemaRoot/create (Schema. (.getResultFields cursor)) allocator)]
                 (.start listener vsr)
 
-                (let [out-wtr (vw/root->writer vsr)]
+                (let [out-wtr (OldRelationWriter. allocator ^List (mapv vw/->writer (.getFieldVectors vsr)))]
                   (.forEachRemaining cursor
                                      (fn [in-rel]
                                        (.clear out-wtr)
                                        (vw/append-rel out-wtr in-rel)
-                                       (.getAsReader out-wtr) ; for syncRowCount
+                                       (.setRowCount vsr (.getRowCount out-wtr))
                                        (.putNext listener))))
 
                 (.completed listener))

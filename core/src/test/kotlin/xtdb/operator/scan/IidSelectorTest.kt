@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test
 import xtdb.arrow.VectorWriter
 import xtdb.types.Fields.IID
 import xtdb.arrow.RelationReader
-import xtdb.vector.RelationWriter
+import xtdb.vector.OldRelationWriter
 import java.nio.ByteBuffer
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -41,7 +41,7 @@ class IidSelectorTest {
         val iidSel = IidSelector(ByteBuffer.wrap(search.toByteArray()))
 
         fun testUuids(vararg uuids: Uuid) =
-            RelationWriter(al).use { rel ->
+            OldRelationWriter(al).use { rel ->
                 val iids = rel.vectorFor("_iid", IID.fieldType)
 
                 for (uuid in uuids) {

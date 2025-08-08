@@ -6,8 +6,9 @@ import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.RelationReader
 import xtdb.arrow.RelationWriter
 import xtdb.arrow.RowCopier
+import xtdb.arrow.VectorWriter
 
-interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<String, IVectorWriter>> {
+interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<String, VectorWriter>> {
     /**
      * Maintains the next position to be written to.
      *
@@ -15,13 +16,9 @@ interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<St
      */
     override var rowCount: Int
 
-    override fun vectorForOrNull(name: String): IVectorWriter?
-    override fun vectorFor(name: String): IVectorWriter = vectorForOrNull(name) ?: error("missing vector: $name")
-    override fun vectorFor(name: String, fieldType: FieldType): IVectorWriter
-
     override fun rowCopier(rel: RelationReader): RowCopier {
         val copiers = rel.vectors.map {
-            it.rowCopier(vectorFor(it.name, UNION_FIELD_TYPE))
+            it.rowCopier(vectorFor(it.name, it.fieldType))
         }
 
         return RowCopier { srcIdx ->

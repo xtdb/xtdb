@@ -19,7 +19,7 @@
            (xtdb ICursor)
            (xtdb.arrow IntVector RelationReader)
            (xtdb.operator.group_by IGroupMapper)
-           (xtdb.vector RelationWriter)))
+           (xtdb.vector OldRelationWriter)))
 
 (s/def ::window-name symbol?)
 
@@ -111,8 +111,8 @@
 
        (let [window-groups (gensym "window-groups")]
          ;; TODO we likely want to do some retaining here instead of copying
-         (util/with-open [rel-wtr (RelationWriter. allocator (for [^Field field static-fields]
-                                                               (vw/->writer (.createVector field allocator))))
+         (util/with-open [rel-wtr (OldRelationWriter. allocator ^List (vec (for [^Field field static-fields]
+                                                                             (vw/->writer (.createVector field allocator)))))
                           group-mapping (IntVector. allocator (str window-groups) false)]
 
            (.forEachRemaining in-cursor (fn [in-rel]

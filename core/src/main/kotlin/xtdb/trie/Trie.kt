@@ -2,7 +2,6 @@ package xtdb.trie
 
 import com.carrotsearch.hppc.ByteArrayList
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.RelationWriter
@@ -13,8 +12,7 @@ import xtdb.types.Schema
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
-import xtdb.util.closeOnCatch
-import xtdb.vector.RootWriter
+import xtdb.vector.OldRelationWriter
 import java.nio.file.Path
 import java.time.LocalDate
 import java.time.format.DateTimeFormatterBuilder
@@ -125,6 +123,5 @@ object Trie {
     fun openLogDataWriter(
         allocator: BufferAllocator,
         dataSchema: Schema = dataRelSchema(Fields.Struct())
-    ): RelationWriter =
-        VectorSchemaRoot.create(dataSchema, allocator).closeOnCatch { root -> RootWriter(root) }
+    ): RelationWriter = OldRelationWriter(allocator, dataSchema)
 }

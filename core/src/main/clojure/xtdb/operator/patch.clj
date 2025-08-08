@@ -47,8 +47,8 @@
                                                {:valid-from (time/micros->instant valid-from)
                                                 :valid-to (time/micros->instant valid-to)}))
                          (PatchGapsCursor. inner
-                                           (vw/root->writer (VectorSchemaRoot/create (Schema. (for [[nm field] fields]
-                                                                                                (types/field-with-name field (str nm))))
-                                                                                     allocator))
+                                           (vw/->rel-writer allocator
+                                                            (Schema. (for [[nm field] fields]
+                                                                       (types/field-with-name field (str nm)))))
                                            valid-from
                                            valid-to))))}))))
