@@ -36,7 +36,7 @@ class StructVectorWriterTest {
 
         writerFor(StructVector.empty("foo", al)).use { w ->
             objs.forEach { w.writeObject(it) }
-            assertEquals(objs, w.toReader().toList())
+            assertEquals(objs, w.asReader.toList())
         }
     }
 
@@ -56,7 +56,7 @@ class StructVectorWriterTest {
                 dest.rowCopier(srcVec).apply {
                     copyRow(0); copyRow(1)
                 }
-                assertEquals(objs, dest.toReader().toList())
+                assertEquals(objs, dest.asReader.toList())
             }
         }
     }
@@ -73,13 +73,13 @@ class StructVectorWriterTest {
                 objs.forEach { writeObject(it) }
             }
 
-            assertEquals(objs, w.toReader().toList())
+            assertEquals(objs, w.asReader.toList())
 
             writerFor(StructVector.empty("dest", al)).use { dest ->
                 dest.rowCopier(srcVec).apply {
                     copyRow(0); copyRow(1)
                 }
-                assertEquals(objs, dest.toReader().toList())
+                assertEquals(objs, dest.asReader.toList())
             }
         }
     }
@@ -94,7 +94,7 @@ class StructVectorWriterTest {
 
         writerFor(StructVector.empty("foo", al)).use { w ->
             objs.forEach { w.writeObject(it) }
-            assertEquals(objs, w.toReader().toList())
+            assertEquals(objs, w.asReader.toList())
         }
     }
 

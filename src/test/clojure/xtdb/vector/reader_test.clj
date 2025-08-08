@@ -328,8 +328,8 @@
           (.writeObject struct-int-wrt {:bar 42})
           (.writeObject struct-str-wrt {:bar "forty-two"}))
 
-        (.syncValueCount struct-int-wrt)
-        (.syncValueCount struct-str-wrt))
+        (.getAsReader struct-int-wrt)
+        (.getAsReader struct-str-wrt))
 
       (with-open [wtr (vw/->vec-writer tu/*allocator* "my-new-struct" (FieldType/notNullable #xt.arrow/type :struct))]
         (.promoteChildren wtr struct-int-field)

@@ -3,7 +3,6 @@
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.buffer-pool]
-            [xtdb.db-catalog :as db]
             [xtdb.metrics :as metrics]
             [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]

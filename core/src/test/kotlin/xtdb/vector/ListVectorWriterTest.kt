@@ -59,7 +59,7 @@ class ListVectorWriterTest {
 
         writerFor(ListVector.empty("foo", al)).use { w ->
             lists.forEach { w.writeObject(it) }
-            assertEquals(lists, w.toReader().toList())
+            assertEquals(lists, w.asReader.toList())
         }
     }
 
@@ -76,7 +76,7 @@ class ListVectorWriterTest {
                 dest.rowCopier(srcVec).apply {
                     copyRow(0); copyRow(1)
                 }
-                assertEquals(lists, dest.toReader().toList())
+                assertEquals(lists, dest.asReader.toList())
                 assertEquals(
                     Field(
                         "dest", FieldType.nullable(LIST_TYPE),
@@ -105,13 +105,13 @@ class ListVectorWriterTest {
                 lists.forEach { writeObject(it) }
             }
 
-            assertEquals(lists, w.toReader().toList())
+            assertEquals(lists, w.asReader.toList())
 
             writerFor(ListVector.empty("dest", al)).use { dest ->
                 dest.rowCopier(srcVec).apply {
                     copyRow(0); copyRow(1)
                 }
-                assertEquals(lists, dest.toReader().toList())
+                assertEquals(lists, dest.asReader.toList())
             }
         }
     }
@@ -160,7 +160,7 @@ class ListVectorWriterTest {
                 ), w.field
             )
 
-            assertEquals(lists, w.toReader().toList())
+            assertEquals(lists, w.asReader.toList())
         }
     }
 
@@ -171,7 +171,7 @@ class ListVectorWriterTest {
 
             listWtr.writeObject(obj)
 
-            assertEquals(listOf(obj), listWtr.toReader().toList())
+            assertEquals(listOf(obj), listWtr.asReader.toList())
             assertEquals(PROMOTES_STRUCTS_FIELD, listWtr.field)
         }
     }
