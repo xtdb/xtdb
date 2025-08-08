@@ -27,7 +27,9 @@ interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<St
      * so that all the values written become visible through the Arrow Java API.
      * We don't call this after every write because (for composite vectors, and especially unions) it's not the cheapest call.
      */
-    fun syncRowCount() = this.forEach { it.value.syncValueCount() }
+    fun syncRowCount() = this.forEach {
+        it.value.asReader
+    }
 
     override fun rowCopier(rel: RelationReader): RowCopier {
         val copiers = rel.vectors.map {
@@ -49,7 +51,9 @@ interface IRelationWriter : RelationWriter, AutoCloseable, Iterable<Map.Entry<St
     override fun openDirectSlice(al: BufferAllocator) = toReader().openDirectSlice(al)
 
     fun toReader() =
-        RelationReader.from(this.map { ValueVectorReader.from(it.value.apply { syncValueCount() }.vector) }, rowCount)
+        RelationReader.from(this.map { ValueVectorReader.from(it.value.apply {
+            this.asReader
+        }.vector) }, rowCount)
 
     override fun clear() {
         this.forEach { it.value.clear() }

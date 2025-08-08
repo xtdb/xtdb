@@ -185,7 +185,7 @@ class IndirectMultiVectorReader(
             copier.copyRow(i)
         }
 
-        writer.syncValueCount()
+        writer.asReader
         return ValueVectorReader.from(vector)
     }
 

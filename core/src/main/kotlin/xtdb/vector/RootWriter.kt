@@ -30,7 +30,9 @@ class RootWriter(private val root: VectorSchemaRoot) : IRelationWriter {
         root.syncSchema()
         root.rowCount = rowCount
 
-        writers.values.forEach { it.syncValueCount() }
+        writers.values.forEach {
+            it.asReader
+        }
     }
 
     override fun openDirectSlice(al: BufferAllocator): Relation {

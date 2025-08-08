@@ -74,7 +74,7 @@ class IndirectMultiVectorReaderTest {
         val vectorWriter = writerFor(resVec)
         val rowCopier = indirectRdr.rowCopier(vectorWriter)
         r.map { rowCopier.copyRow(it) }
-        vectorWriter.syncValueCount()
+        vectorWriter.asReader
         assertEquals(r.toList(), r.map { resVec[it] })
 
         rdr1.close()
@@ -106,8 +106,8 @@ class IndirectMultiVectorReaderTest {
             if (i % 2 == 0) structVec1Writer.writeObject(m1)
             else structVec2Writer.writeObject(m2)
         }
-        structVec1Writer.syncValueCount()
-        structVec2Writer.syncValueCount()
+        structVec1Writer.asReader
+        structVec2Writer.asReader
 
         val rdr1 = ValueVectorReader.structVector(structVec1)
         val rdr2 = ValueVectorReader.structVector(structVec2)
@@ -129,7 +129,7 @@ class IndirectMultiVectorReaderTest {
         val vectorWriter = writerFor(resVec)
         val rowCopier = indirectRdr.rowCopier(vectorWriter)
         r.map { rowCopier.copyRow(it) }
-        vectorWriter.syncValueCount()
+        vectorWriter.asReader
         val resRdr = ValueVectorReader.structVector(resVec)
         assertEquals(expected, r.map { resRdr.getObject(it) })
 
@@ -148,7 +148,7 @@ class IndirectMultiVectorReaderTest {
         stringVecWriter.writeObject("first")
         stringVecWriter.writeObject("second")
         intVec.valueCount = 2
-        stringVecWriter.syncValueCount()
+        stringVecWriter.asReader
 
         val rdr1 = ValueVectorReader.intVector(intVec)
         val rdr2 = ValueVectorReader.varCharVector(stringVec)
@@ -171,7 +171,7 @@ class IndirectMultiVectorReaderTest {
         val vectorWriter = writerFor(resVec)
         val rowCopier = indirectRdr.rowCopier(vectorWriter)
         r.map { rowCopier.copyRow(it) }
-        vectorWriter.syncValueCount()
+        vectorWriter.asReader
         val resRdr = ValueVectorReader.denseUnionVector(resVec)
         assertEquals(expected, r.map { resRdr.getObject(it) })
 
@@ -198,8 +198,8 @@ class IndirectMultiVectorReaderTest {
         duvVectorWriter.writeObject("fifth")
 
         intVec.valueCount = 2
-        stringVecWriter.syncValueCount()
-        duvVectorWriter.syncValueCount()
+        stringVecWriter.asReader
+        duvVectorWriter.asReader
 
         val rdr1 = ValueVectorReader.intVector(intVec)
         val rdr2 = ValueVectorReader.varCharVector(stringVec)
@@ -222,7 +222,7 @@ class IndirectMultiVectorReaderTest {
         val vectorWriter = writerFor(resVec)
         val rowCopier = indirectRdr.rowCopier(vectorWriter)
         r.map { rowCopier.copyRow(it) }
-        vectorWriter.syncValueCount()
+        vectorWriter.asReader
         val resRdr = ValueVectorReader.denseUnionVector(resVec)
         assertEquals(expected, r.map { resRdr.getObject(it) })
 
@@ -276,7 +276,7 @@ class IndirectMultiVectorReaderTest {
         val vectorWriter = writerFor(resVec)
         val rowCopier = indirectRdr.rowCopier(vectorWriter)
         r.map { rowCopier.copyRow(it) }
-        vectorWriter.syncValueCount()
+        vectorWriter.asReader
         val resRdr = ValueVectorReader.denseUnionVector(resVec)
         assertEquals(expected, r.map { resRdr.getObject(it) })
 

@@ -32,13 +32,9 @@ interface IVectorWriter : VectorWriter, AutoCloseable {
      * we don't call this after every write because (for composite vectors, and especially unions)
      * it's not the cheapest call.
      */
-    fun syncValueCount() {
-        vector.valueCount = this.valueCount
-    }
-
     override val asReader: VectorReader
         get() {
-            syncValueCount()
+            vector.valueCount = this.valueCount
             return ValueVectorReader.from(vector)
         }
 
@@ -137,7 +133,7 @@ internal fun IVectorWriter.checkFieldType(src: FieldType) {
 internal fun IVectorWriter.promote(fieldType: FieldType, al: BufferAllocator): FieldVector {
     val field = this.field
 
-    syncValueCount()
+    asReader
 
     return when {
         fieldType.type == ArrowType.Null.INSTANCE || (field.type == fieldType.type && fieldType.isNullable) ->

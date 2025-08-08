@@ -174,9 +174,7 @@ class IndirectVectorReader implements IVectorReader {
             copier.copyRow(i);
         }
 
-        writer.syncValueCount();
-
-        return ValueVectorReader.from(vector);
+        return writer.getAsReader();
     }
 
     @Override

@@ -46,7 +46,7 @@ class ExtensionVectorTest {
            Vector.fromField(al, field).use { newVector ->
                val writer = writerFor(oldVector)
                writer.writeObject(value)
-               writer.syncValueCount()
+               writer.asReader
                newVector.writeObject(value)
 
                val rdr = from(oldVector)

@@ -47,7 +47,7 @@ class DenseUnionVectorWriterTest {
                 destWriter.rowCopier(srcVec).apply { copyRow(0); copyRow(1) }
             }
 
-            destWriter.syncValueCount()
+            destWriter.asReader
 
             assertEquals(
                 Field(

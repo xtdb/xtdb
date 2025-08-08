@@ -142,7 +142,7 @@
     (doseq [v vs]
       (.writeObject writer v))
 
-    (.syncValueCount writer)
+    (.getAsReader writer)
 
     v))
 

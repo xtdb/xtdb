@@ -42,7 +42,7 @@ class XtExtensionVectorTest {
 
             writer.writeObject(uuid1)
             writer.writeObject(uuid2)
-            writer.syncValueCount()
+            writer.asReader
 
             val newVector = uuidVector
                 .getTransferPair(uuidField, al)
@@ -69,7 +69,7 @@ class XtExtensionVectorTest {
             val writer = writerFor(uuidVector)
 
             writer.writeObject(UUID.randomUUID())
-            writer.syncValueCount()
+            writer.asReader
 
             val rdr = from(uuidVector)
             val hasher = Hasher.Xx()
@@ -80,7 +80,7 @@ class XtExtensionVectorTest {
             val writer = writerFor(transitVector)
 
             writer.writeObject(ClojureForm(clojure.lang.Symbol.create("foo")))
-            writer.syncValueCount()
+            writer.asReader
 
             val rdr = from(transitVector)
             val hasher = Hasher.Xx()
@@ -92,7 +92,7 @@ class XtExtensionVectorTest {
             val writer = writerFor(tstzrangeVector)
 
             writer.writeObject(ZonedDateTimeRange(ZonedDateTime.now(), ZonedDateTime.now()))
-            writer.syncValueCount()
+            writer.asReader
 
             val rdr = from(tstzrangeVector)
             val hasher = Hasher.Xx()
