@@ -19,6 +19,19 @@
     (t/is (= [{:foo-id 5, :baz-id 5}]
              (xt/q tu/*node* sql {:table-info {#xt/table bar #{"_id"}}})))))
 
+(t/deftest test-with-mat-clause
+  (let [sql "WITH MATERIALIZED foo AS (SELECT _id FROM bar WHERE _id = 5)
+             SELECT foo._id foo_id, baz._id baz_id
+             FROM foo, foo AS baz"]
+    (t/is (=plan-file
+           "with/test-with-mat-clause"
+           (sql/plan sql {:table-info {#xt/table bar #{"_id"}}})))
+
+    (xt/execute-tx tu/*node* [[:put-docs :bar {:xt/id 3} {:xt/id 5}]])
+
+    (t/is (= [{:foo-id 5, :baz-id 5}]
+             (xt/q tu/*node* sql {:table-info {#xt/table bar #{"_id"}}})))))
+
 (t/deftest disallow-period-specs-on-ctes-3440
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
 

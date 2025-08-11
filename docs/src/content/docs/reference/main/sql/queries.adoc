@@ -46,9 +46,13 @@ return rr.Diagram(rr.Stack(rr.Sequence(rr.Optional("<with clause>", "skip"), "<q
 === <with clause>
 [railroad]
 ----
-const withClause = rr.Sequence("<query name>", rr.Optional("AS", "skip"), "(", "<query>", ")")
+const withClause = rr.Sequence(rr.Optional("MATERIALIZED", "skip"), "<query name>", rr.Optional("AS", "skip"), "(", "<query>", ")")
 return rr.Diagram(rr.Sequence("WITH", rr.OneOrMore(withClause, ",")))
 ----
+
+* `WITH` clauses in XTDB are 'optimization fences' - XTDB will not attempt to optimize an outer query into a `WITH` clause, or across `WITH` clauses.
+* Supply `MATERIALIZED` to eagerly materialize a `WITH` clause, so that the results can be re-used multiple times in the same query.
+* `WITH RECURSIVE` is not yet supported in XTDB.
 
 === <query term>
 [railroad]

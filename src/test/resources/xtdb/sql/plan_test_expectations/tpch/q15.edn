@@ -1,4 +1,4 @@
-[:let
+[:let-mat
  [revenue.4
   [:project
    [{supplier_no l.1/l_suppkey} {total_revenue _sum_out_2}]

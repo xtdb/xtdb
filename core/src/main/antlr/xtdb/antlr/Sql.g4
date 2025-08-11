@@ -634,7 +634,7 @@ asClause : 'AS'? columnName ;
 queryExpression : withClause? queryExpressionNoWith ;
 queryExpressionNoWith : queryExpressionBody orderByClause? offsetAndLimit?  ;
 withClause : 'WITH' RECURSIVE? withListElement (',' withListElement)* ;
-withListElement : queryName=identifier ('(' columnNameList ')')? 'AS' subquery ;
+withListElement : MATERIALIZED? queryName=identifier ('(' columnNameList ')')? 'AS' subquery ;
 
 queryExpressionBody
     : queryTerm # QueryBodyTerm

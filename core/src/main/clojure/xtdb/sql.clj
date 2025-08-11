@@ -235,12 +235,14 @@
              plan
              subqs))
 
-(defrecord CTE [query-name cte-id plan col-syms])
+(defrecord CTE [materialized? query-name cte-id plan col-syms])
 
 (defrecord WithVisitor [env scope]
   SqlVisitor
   (visitWithClause [this ctx]
-    (assert (not (.RECURSIVE ctx)) "Recursive CTEs are not supported yet")
+    (when (.RECURSIVE ctx)
+      (throw (err/unsupported ::recursive-ctes "Recursive CTEs are not supported yet")))
+
     (->> (.withListElement ctx)
          (reduce (fn [ctes ^ParserRuleContext wle]
                    (conj ctes (.accept wle (update-in this [:env :ctes] (fnil into {}) ctes))))
@@ -254,7 +256,9 @@
                                         (.accept (->QueryPlanVisitor env scope)))]
         ;; [query-name] so that we only match against table-chains of length 1
         (MapEntry/create [query-name]
-                         (->CTE query-name (symbol (str query-name "." (swap! !id-count inc))) plan col-syms))))))
+                         (->CTE (boolean (.MATERIALIZED ctx))
+                                query-name (symbol (str query-name "." (swap! !id-count inc)))
+                                plan col-syms))))))
 
 (defrecord TableTimePeriodSpecificationVisitor [expr-visitor]
   SqlVisitor
@@ -2294,10 +2298,11 @@
   (visitQueryExpression [this ctx]
     (let [ctes (some-> (.withClause ctx)
                        (.accept (->WithVisitor env scope)))]
-      (reduce (fn [{:keys [plan col-syms] :as acc} {:keys [cte-id], cte-plan :plan}]
-                (->QueryExpr [:let [cte-id cte-plan]
-                              plan]
-                             col-syms))
+      (reduce (fn [{:keys [plan col-syms]} {:keys [materialized? cte-id], cte-plan :plan}]
+                (let [op (if materialized? :let-mat :let)]
+                  (->QueryExpr [op [cte-id cte-plan]
+                                plan]
+                               col-syms)))
               (.accept (.queryExpressionNoWith ctx)
                          (-> this
                              (update-in [:env :ctes] (fnil into {}) ctes)))

@@ -88,8 +88,8 @@
   (case op
     :relation #{}
 
-    :let (let [{[_ bind-rel] :binding, :keys [relation]} expr]
-           #{bind-rel relation})
+    (:let :let-mat) (let [{[_ bind-rel] :binding, :keys [relation]} expr]
+                      #{bind-rel relation})
 
     (let [spec (s/describe (ra-expr [op]))]
       (case (first spec)
@@ -274,6 +274,9 @@
       (:ordinality-column opts) (conj (:ordinality-column opts)))
 
     [:let _ relation]
+    (relation-columns relation)
+
+    [:let-mat _ relation]
     (relation-columns relation)
 
     [:relation _ opts] (:col-names opts)
