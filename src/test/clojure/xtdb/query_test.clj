@@ -212,55 +212,6 @@
                   '{_system_to (> (coalesce _system_to xtdb/end-of-time) ?system_time2)}))
             "as of tt2"))))
 
-(t/deftest test-fixpoint-operator
-  (t/testing "factorial"
-    (t/is (= [{:a 0, :b 1}
-              {:a 1, :b 1}
-              {:a 2, :b 2}
-              {:a 3, :b 6}
-              {:a 4, :b 24}
-              {:a 5, :b 120}
-              {:a 6, :b 720}
-              {:a 7, :b 5040}
-              {:a 8, :b 40320}]
-             (tu/query-ra '[:fixpoint Fact
-                            [:table ?table]
-                            [:select
-                             (<= a 8)
-                             [:project
-                              [{a (+ a 1)}
-                               {b (* (+ a 1) b)}]
-                              Fact]]]
-                          {:args {:table [{:a 0 :b 1}]}}))))
-
-  (t/testing "transitive closure"
-    (t/is (= [{:x "a", :y "b"}
-              {:x "b", :y "c"}
-              {:x "c", :y "d"}
-              {:x "d", :y "a"}
-              {:x "d", :y "b"}
-              {:x "a", :y "c"}
-              {:x "b", :y "d"}
-              {:x "c", :y "a"}
-              {:x "c", :y "b"}
-              {:x "d", :y "c"}
-              {:x "a", :y "d"}
-              {:x "b", :y "a"}
-              {:x "b", :y "b"}
-              {:x "c", :y "c"}
-              {:x "d", :y "d"}
-              {:x "a", :y "a"}]
-             (tu/query-ra '[:fixpoint Path
-                            [:table ?table]
-                            [:project [x y]
-                             [:join [{z z}]
-                              [:rename {y z} Path]
-                              [:rename {x z} Path]]]]
-                          {:args {:table [{:x "a" :y "b"}
-                                          {:x "b" :y "c"}
-                                          {:x "c" :y "d"}
-                                          {:x "d" :y "a"}]}})))))
-
 (t/deftest test-assignment-operator
   (t/is (= [{:a 1 :b 1}]
            (tu/query-ra '[:assign [X [:table ?x]

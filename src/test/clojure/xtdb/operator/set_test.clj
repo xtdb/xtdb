@@ -154,24 +154,6 @@
                             [[{:a nil}, {:a nil}]
                              [{:a nil}]]]])))))
 
-(t/deftest test-fixpoint
-  (t/is (= [[{:a 0, :b 1}]
-            [{:a 1, :b 1}]
-            [{:a 2, :b 2}]
-            [{:a 3, :b 6}]
-            [{:a 4, :b 24}]
-            [{:a 5, :b 120}]
-            [{:a 6, :b 720}]
-            [{:a 7, :b 5040}]
-            [{:a 8, :b 40320}]]
-           (tu/query-ra [:fixpoint 'R {:incremental? true}
-                         [::tu/pages [[{:a 0 :b 1}]]]
-                         '[:select (<= a 8)
-                           [:project [{a (+ a 1)}
-                                      {b (* (+ a 1) b)}]
-                            R]]]
-                        {:preserve-pages? true}))))
-
 (t/deftest first-tuple-in-rhs-is-taken-into-account-test
   (t/is
    (= {:res [{:x1 2}], :col-types '{x1 :i64}}

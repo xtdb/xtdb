@@ -31,15 +31,6 @@
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
-(s/def ::incremental? boolean?)
-
-(defmethod lp/ra-expr :fixpoint [_]
-  (s/cat :op #{:μ :mu :fixpoint}
-         :mu-variable ::lp/relation
-         :opts (s/? (s/keys :opt-un [::incremental?]))
-         :base ::lp/ra-expression
-         :recursive ::lp/ra-expression))
-
 (defmethod lp/ra-expr :relation [_]
   (s/and ::lp/relation
          (s/conformer (fn [rel]
@@ -198,86 +189,6 @@
 (definterface ICursorFactory
   (^xtdb.ICursor createCursor []))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface IFixpointCursorFactory
-  (^xtdb.ICursor createCursor [^xtdb.operator.set.ICursorFactory cursor-factory]))
-
-;; https://core.ac.uk/download/pdf/11454271.pdf "Algebraic optimization of recursive queries"
-;; http://webdam.inria.fr/Alice/pdfs/Chapter-14.pdf "Recursion and Negation"
-
-(defn ->fixpoint-cursor-factory [rel]
-  (reify ICursorFactory
-    (createCursor [_]
-      (let [rels-queue (LinkedList. [rel])]
-        (reify
-          ICursor
-          (tryAdvance [_ c]
-            (if-let [rel (.poll rels-queue)]
-              (do
-                (.accept c rel)
-                true)
-              false))
-
-          (close [_]))))))
-
-(deftype FixpointCursor [^BufferAllocator allocator
-                         ^ICursor base-cursor
-                         ^IFixpointCursorFactory recursive-cursor-factory
-                         ^RelationMap rel-map
-                         ^boolean incremental?
-                         ^:unsynchronized-mutable ^ints new-idxs
-                         ^:unsynchronized-mutable ^ICursor recursive-cursor
-                         ^:unsynchronized-mutable continue?]
-  ICursor
-  (tryAdvance [this c]
-    (if-not (or continue? recursive-cursor)
-      false
-
-      (let [advanced? (boolean-array 1)
-            inner-c (fn [^RelationReader in-rel]
-                      (when (pos? (.getRowCount in-rel))
-                        (let [rel-builder (.buildFromRelation rel-map in-rel)
-                              new-idxs (IntStream/builder)]
-                          (dotimes [idx (.getRowCount in-rel)]
-                            (let [map-idx (.addIfNotPresent rel-builder idx)]
-                              (when (neg? map-idx)
-                                (.add new-idxs (RelationMap/insertedIdx map-idx)))))
-
-                          (let [new-idxs (.toArray (.build new-idxs))]
-                            (when-not (empty? new-idxs)
-                              (.accept c (-> (.getBuiltRelation rel-map) (.select new-idxs)))
-                              (set! (.continue? this) true)
-                              (set! (.new-idxs this) new-idxs)
-                              (aset advanced? 0 true))))))]
-
-        (.tryAdvance base-cursor inner-c)
-
-        (or (aget advanced? 0)
-            (do
-              (while (and (not (aget advanced? 0)) continue?)
-                (when-let [recursive-cursor (or recursive-cursor
-                                                (when continue?
-                                                  (set! (.continue? this) false)
-                                                  (let [cursor (.createCursor recursive-cursor-factory
-                                                                              (->fixpoint-cursor-factory (cond-> (.getBuiltRelation rel-map)
-                                                                                                           incremental? (.select new-idxs))))]
-                                                    (set! (.recursive-cursor this) cursor)
-                                                    cursor)))]
-
-
-                  (while (and (not (aget advanced? 0))
-                              (let [more? (.tryAdvance recursive-cursor inner-c)]
-                                (when-not more?
-                                  (util/try-close recursive-cursor)
-                                  (set! (.recursive-cursor this) nil))
-                                more?)))))
-              (aget advanced? 0))))))
-
-  (close [_]
-    (util/try-close rel-map)
-    (util/try-close recursive-cursor)
-    (util/try-close base-cursor)))
-
 (defmethod lp/emit-expr :relation [{:keys [relation]}
                                    {:keys [relation-variable->fields] :as _opts}]
   {:fields (get relation-variable->fields relation)
@@ -285,29 +196,6 @@
                (let [^ICursorFactory cursor-factory (get relation-variable->cursor-factory relation)]
                  (assert cursor-factory (str "can't find " relation, (pr-str relation-variable->cursor-factory)))
                  (.createCursor cursor-factory)))})
-
-(defmethod lp/emit-expr :fixpoint [{:keys [mu-variable base recursive], {:keys [incremental?]} :opts} args]
-  (let [{base-fields :fields, ->base-cursor :->cursor} (lp/emit-expr base args)
-
-        {recursive-fields :fields, ->recursive-cursor :->cursor}
-        (lp/emit-expr recursive (update args :relation-variable->fields (fnil assoc {}) mu-variable base-fields))
-
-        ;; HACK I think `:col-types` needs to be a fixpoint as well?
-        fields (union-fields base-fields recursive-fields)]
-    {:fields fields
-     :->cursor
-     (fn [{:keys [allocator] :as opts}]
-       (FixpointCursor. allocator
-                        (->base-cursor opts)
-                        (reify IFixpointCursorFactory
-                          (createCursor [_ cursor-factory]
-                            (->recursive-cursor (update opts :relation-variable->cursor-factory (fnil assoc {}) mu-variable cursor-factory))))
-                        (emap/->relation-map allocator {:build-fields fields
-                                                        :key-col-names (set (keys fields))})
-                        (boolean incremental?)
-                        #_new-idxs nil
-                        #_recursive-cursor nil
-                        #_continue? true))}))
 
 (defmethod lp/emit-expr :assign [{:keys [bindings relation]}
                                  {:keys [relation-variable->fields relation-variable->cursor-factory] :as args}]

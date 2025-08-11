@@ -267,9 +267,6 @@
     [:union-all lhs _]
     (relation-columns lhs)
 
-    [:fixpoint _ base _]
-    (relation-columns base)
-
     [:unnest columns relation]
     (conj (relation-columns relation) (key (first columns)))
 
