@@ -31,7 +31,14 @@
          :opts (s/keys :req-un [::col-names])))
 
 (defmethod lp/emit-expr :relation [{:keys [relation]} emit-opts]
-  (let [{:keys [fields stats]} (get-in emit-opts [:let-bindings relation])]
+  (let [{:keys [fields stats]} (or (get-in emit-opts [:let-bindings relation])
+                                   (let [available (set (keys (:let-bindings emit-opts)))]
+                                     (throw (err/fault ::missing-relation
+                                                       (format "Can't find relation '%s', available %s"
+                                                               relation available)
+                                                       {:relation relation
+                                                        :available available}))))]
+
     {:fields fields, :stats stats
      :->cursor (fn [opts]
                  (let [^ICursor$Factory cursor-factory (or (get-in opts [:let-bindings relation])
