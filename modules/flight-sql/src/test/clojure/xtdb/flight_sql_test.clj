@@ -3,12 +3,13 @@
             [next.jdbc :as jdbc]
             [xtdb.flight-sql]
             [xtdb.test-util :as tu]
-            [xtdb.types :as types])
+            [xtdb.types :as types]
+            [xtdb.vector.writer :as vw])
   (:import (org.apache.arrow.adbc.core AdbcConnection)
            org.apache.arrow.adbc.driver.flightsql.FlightSqlDriver
            (org.apache.arrow.flight CallOption FlightClient FlightEndpoint FlightInfo Location)
            (org.apache.arrow.flight.sql FlightSqlClient)
-           (org.apache.arrow.vector VectorSchemaRoot)
+           (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
            xtdb.api.FlightSqlServer
            xtdb.arrow.Relation))
@@ -112,30 +113,41 @@
              (set (-> (.execute *client* "SELECT users._id, users.name FROM users" empty-call-opts)
                       (flight-info->rows)))))))
 
+(defn populate-root ^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root rows]
+  (.clear root)
+
+  (let [field-vecs (.getFieldVectors root)
+        row-count (count rows)]
+    (doseq [^FieldVector field-vec field-vecs]
+      (vw/write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
+
+    (.setRowCount root row-count)
+    root))
+
 (t/deftest test-prepared-stmts
   (with-open [ps (.prepare *client* "INSERT INTO users (_id, name) VALUES (?, ?)" empty-call-opts)
               param-root (VectorSchemaRoot/create (Schema. [(types/col-type->field '_id :utf8) (types/col-type->field 'name :utf8)]) tu/*allocator*)]
     (.setParameters ps param-root)
 
-    (tu/populate-root param-root [{:_id "jms", :name "James"}
-                                  {:_id "mat", :name "Matt"}])
+    (populate-root param-root [{:_id "jms", :name "James"}
+                               {:_id "mat", :name "Matt"}])
     (.executeUpdate ps empty-call-opts)
 
-    (tu/populate-root param-root [{:_id "hak", :name "Håkan"}
-                                  {:_id "wot", :name "Dan"}])
+    (populate-root param-root [{:_id "hak", :name "Håkan"}
+                               {:_id "wot", :name "Dan"}])
     (.executeUpdate ps empty-call-opts))
 
   (with-open [ps (.prepare *client* "SELECT users.name FROM users WHERE users._id >= ?" empty-call-opts)
               param-root (VectorSchemaRoot/create (Schema. [(types/col-type->field '$1 :utf8)]) tu/*allocator*)]
     (.setParameters ps param-root)
 
-    (tu/populate-root param-root [{:$1 "l"}])
+    (populate-root param-root [{:$1 "l"}])
     (t/is (= #{{:name "Matt"}
                {:name "Dan"}}
              (set (-> (.execute ps empty-call-opts)
                       (flight-info->rows)))))
 
-    (tu/populate-root param-root [{:$1 "j"}])
+    (populate-root param-root [{:$1 "j"}])
     (t/is (= #{{:name "James"}
                {:name "Matt"}
                {:name "Dan"}}
@@ -151,13 +163,13 @@
                   param-root (VectorSchemaRoot/create (Schema. [(types/col-type->field '_id :utf8) (types/col-type->field 'name :utf8)]) tu/*allocator*)]
         (.setParameters ps param-root)
 
-        (tu/populate-root param-root [{:_id "jms", :name "James"}
+        (populate-root param-root [{:_id "jms", :name "James"}
                                       {:_id "mat", :name "Matt"}])
         (.executeUpdate ps empty-call-opts)
 
         (t/is (= #{} (q)))
 
-        (tu/populate-root param-root [{:_id "hak", :name "Håkan"}
+        (populate-root param-root [{:_id "hak", :name "Håkan"}
                                       {:_id "wot", :name "Dan"}])
         (.executeUpdate ps empty-call-opts)
 

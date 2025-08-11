@@ -11,9 +11,9 @@ interface IResultCursor<E> : ICursor<E> {
         private val inner: IResultCursor<E>,
         private val counter: Counter
     ) : IResultCursor<E> by inner {
-        override fun tryAdvance(action: Consumer<in E>): Boolean =
+        override fun tryAdvance(c: Consumer<in E>): Boolean =
             try {
-                inner.tryAdvance(action)
+                inner.tryAdvance(c)
             } catch (e: Throwable) {
                 counter.increment()
                 throw e

@@ -2,20 +2,15 @@
   (:require [clojure.test :as t]
             [xtdb.coalesce :as coalesce]
             [xtdb.test-util :as tu]
-            [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import xtdb.ICursor
-           org.apache.arrow.vector.types.pojo.Schema
-           org.apache.arrow.vector.types.Types$MinorType))
+  (:import xtdb.ICursor))
 
 (t/use-fixtures :each tu/with-allocator)
 
-(def ^:private schema (Schema. [(types/->field "foo" (.getType Types$MinorType/VARCHAR) false)]))
-
 (t/deftest test-coalesce
   (letfn [(coalesced-counts [counts]
-            (with-open [^ICursor cursor (util/with-close-on-catch [inner (tu/->cursor schema (for [cnt counts]
-                                                                                               (repeat cnt {:foo "foo"})))]
+            (with-open [^ICursor cursor (util/with-close-on-catch [inner (tu/->cursor (for [cnt counts]
+                                                                                        (repeat cnt {:foo "foo"})))]
                                           (-> inner
                                               (coalesce/->coalescing-cursor tu/*allocator*
                                                                             {:pass-through 5, :ideal-min-page-size 10})))]

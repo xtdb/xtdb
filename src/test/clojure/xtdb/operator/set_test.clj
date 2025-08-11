@@ -151,7 +151,8 @@
     (t/is (= [{}]
              (tu/query-ra [:distinct
                            [::tu/pages '{a :null}
-                            [{:a nil}, {:a nil}, {:a nil}]]])))))
+                            [[{:a nil}, {:a nil}]
+                             [{:a nil}]]]])))))
 
 (t/deftest test-fixpoint
   (t/is (= [[{:a 0, :b 1}]

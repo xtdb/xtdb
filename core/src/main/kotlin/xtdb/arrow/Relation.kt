@@ -20,10 +20,8 @@ import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.Relation.UnloadMode.FILE
 import xtdb.arrow.Relation.UnloadMode.STREAM
 import xtdb.arrow.Vector.Companion.fromField
-import xtdb.toFieldType
 import xtdb.trie.FileSize
 import xtdb.types.NamelessField
-import xtdb.util.closeAll
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
 import xtdb.util.normalForm
@@ -49,6 +47,9 @@ class Relation(
 
     constructor(al: BufferAllocator, vectors: List<Vector>, rowCount: Int)
             : this(al, vectors.associateByTo(linkedMapOf()) { it.name }, rowCount)
+
+    constructor(al: BufferAllocator, schema: Schema)
+            : this(al, schema.fields.safeMap { fromField(al, it) }, 0)
 
     override fun vectorForOrNull(name: String) = vecs[name]
     override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
@@ -173,7 +174,7 @@ class Relation(
             return ByteBuffer.wrap(baos.toByteArray())
         }
 
-    private fun load(recordBatch: ArrowRecordBatch) {
+    fun load(recordBatch: ArrowRecordBatch) {
         val nodes = recordBatch.nodes.toMutableList()
         val buffers = recordBatch.buffers.toMutableList()
         vecs.values.forEach { it.loadPage(nodes, buffers) }
@@ -385,7 +386,7 @@ class Relation(
                     else -> throw IllegalArgumentException("Column name must be a string, keyword or symbol")
                 }
 
-                Vector.fromList(al,normalKey, col.value)
+                Vector.fromList(al, normalKey, col.value)
             }.closeAllOnCatch { Relation(al, it, it.firstOrNull()?.valueCount ?: 0) }
     }
 }

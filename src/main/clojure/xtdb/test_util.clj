@@ -15,7 +15,6 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang ExceptionInfo)
            java.net.ServerSocket
@@ -23,11 +22,10 @@
            java.nio.file.attribute.FileAttribute
            (java.time Duration Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
            (java.time.temporal ChronoUnit)
-           (java.util LinkedList List)
+           (java.util List)
            (java.util.function IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb BufferPool ICursor)
            (xtdb.api TransactionKey)
@@ -38,6 +36,7 @@
            (xtdb.indexer LiveTable)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
+           (xtdb.test PagesCursor)
            (xtdb.trie MetadataFileWriter)
            xtdb.types.ZonedDateTimeRange
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)))
@@ -156,34 +155,10 @@
 (defn open-args ^xtdb.arrow.RelationReader [args]
   (vw/open-args *allocator* args))
 
-(defn populate-root ^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root rows]
-  (.clear root)
-
-  (let [field-vecs (.getFieldVectors root)
-        row-count (count rows)]
-    (doseq [^FieldVector field-vec field-vecs]
-      (vw/write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
-
-    (.setRowCount root row-count)
-    root))
-
 (defn ->cursor
-  (^xtdb.ICursor [^Schema schema, pages] (->cursor *allocator* schema pages))
-
-  (^xtdb.ICursor [^BufferAllocator allocator ^Schema schema, pages]
-   (let [pages (LinkedList. pages)
-         root (VectorSchemaRoot/create schema allocator)]
-     (reify ICursor
-       (tryAdvance [_ c]
-         (if-let [page (some-> (.poll pages) vec)]
-           (do
-             (populate-root root page)
-             (.accept c (vr/<-root root))
-             true)
-           false))
-
-       (close [_]
-         (.close root))))))
+  (^xtdb.ICursor [pages] (->cursor *allocator* pages))
+  (^xtdb.ICursor [^BufferAllocator allocator, pages] (->cursor allocator nil pages))
+  (^xtdb.ICursor [^BufferAllocator allocator, schema pages] (PagesCursor. allocator schema pages)))
 
 (defmethod lp/ra-expr ::pages [_]
   (s/cat :op #{::pages}
@@ -256,9 +231,7 @@
       (let [pages [[{:name "foo", :age 20}
                     {:name "bar", :age 25}]
                    [{:name "baz", :age 30}]]]
-        (with-open [cursor (->cursor (Schema. [(types/col-type->field "name" :utf8)
-                                               (types/col-type->field "age" :i64)])
-                                     pages)]
+        (with-open [cursor (->cursor pages)]
 
           (t/is (= pages (<-cursor cursor))))))))
 

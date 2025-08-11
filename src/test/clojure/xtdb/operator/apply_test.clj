@@ -6,17 +6,17 @@
 
 (t/deftest test-apply-operator
   (letfn [(q [mode]
-            (tu/query-ra [:apply mode '{c-id ?c-id}
+            (tu/query-ra [:apply mode '{c_id ?c_id}
                           [::tu/pages
-                           [[{:c-id "c1", :c-name "Alan"}
-                             {:c-id "c2", :c-name "Bob"}
-                             {:c-id "c3", :c-name "Charlie"}]]]
-                          [:select '(= o-customer-id ?c-id)
+                           [[{:c_id "c1", :c_name "Alan"}
+                             {:c_id "c2", :c_name "Bob"}
+                             {:c_id "c3", :c_name "Charlie"}]]]
+                          [:select '(= o_customer_id ?c_id)
                            [::tu/pages
-                            [[{:o-customer-id "c1", :o-value 12.34}
-                              {:o-customer-id "c1", :o-value 14.80}]
-                             [{:o-customer-id "c2", :o-value 91.46}
-                              {:o-customer-id "c4", :o-value 55.32}]]]]]
+                            [[{:o_customer_id "c1", :o_value 12.34}
+                              {:o_customer_id "c1", :o_value 14.80}]
+                             [{:o_customer_id "c2", :o_value 91.46}
+                              {:o_customer_id "c4", :o_value 55.32}]]]]]
                          {}))]
 
     (t/is (= [{:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 12.34}
@@ -42,17 +42,17 @@
   (t/is (= {:res [{:c-id "c1", :c-name "Alan", :match true}
                   {:c-id "c2", :c-name "Bob", :match true}
                   {:c-id "c3", :c-name "Charlie", :match false}]
-            :col-types '{c-id :utf8, c-name :utf8, match [:union #{:null :bool}]}}
-           (-> (tu/query-ra [:apply '{:mark-join {match (= ?c-id o-customer-id)}} '{c-id ?c-id}
+            :col-types '{c_id :utf8, c_name :utf8, match [:union #{:null :bool}]}}
+           (-> (tu/query-ra [:apply '{:mark-join {match (= ?c_id o_customer_id)}} '{c_id ?c_id}
                              [::tu/pages
-                              [[{:c-id "c1", :c-name "Alan"}
-                                {:c-id "c2", :c-name "Bob"}
-                                {:c-id "c3", :c-name "Charlie"}]]]
+                              [[{:c_id "c1", :c_name "Alan"}
+                                {:c_id "c2", :c_name "Bob"}
+                                {:c_id "c3", :c_name "Charlie"}]]]
                              [::tu/pages
-                              [[{:o-customer-id "c1"}
-                                {:o-customer-id "c1"}
-                                {:o-customer-id "c2"}
-                                {:o-customer-id "c4"}]]]]
+                              [[{:o_customer_id "c1"}
+                                {:o_customer_id "c1"}
+                                {:o_customer_id "c2"}
+                                {:o_customer_id "c4"}]]]]
                             {:with-col-types? true}))))
 
   (t/is (= {:res [{:x 0}]

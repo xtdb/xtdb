@@ -47,8 +47,9 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
 
     fun toMaps() = toMaps(KEBAB_CASE_KEYWORD)
 
-    fun toMaps(keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD) =
+    fun <K> toMaps(keyFn: IKeyFn<K>): List<Map<K, *>> =
         List(rowCount) { idx ->
+            @Suppress("UNCHECKED_CAST")
             PersistentHashMap.create(
                 vectors
                     .associate {
@@ -58,7 +59,7 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
                         )
                     }
                     .filterValues { it != null }
-            ) as Map<*, *>
+            ) as Map<K, *>
         }
 
     private class FromCols(

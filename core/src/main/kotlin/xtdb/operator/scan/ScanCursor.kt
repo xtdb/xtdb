@@ -43,7 +43,7 @@ class ScanCursor(
         return bloomFilter.contains(bloomHashes(iidCol, eventIndex))
     }
 
-    override fun tryAdvance(action: Consumer<in RelationReader>): Boolean {
+    override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
         val isValidPtr = ArrowBufPointer()
         val iidPred = colPreds["_iid"]
         while (mergeTasks.hasNext()) {
@@ -118,7 +118,7 @@ class ScanCursor(
                     }
 
                 if (rel.rowCount > 0) {
-                    action.accept(rel)
+                    c.accept(rel)
                     return true
                 }
             }
