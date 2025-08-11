@@ -5,12 +5,10 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import (java.util LinkedList)
-           java.util.stream.IntStream
-           org.apache.arrow.memory.BufferAllocator
+  (:import java.util.stream.IntStream
            (xtdb.arrow RelationReader)
            (xtdb.expression.map RelationMap)
-           xtdb.ICursor))
+           (xtdb ICursor ICursor$Factory)))
 
 (defmethod lp/ra-expr :distinct [_]
   (s/cat :op #{:δ :distinct}
@@ -185,17 +183,13 @@
                                                                                  :key-col-names (set (keys inner-fields))
                                                                                  :nil-keys-equal? true})))})))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface ICursorFactory
-  (^xtdb.ICursor createCursor []))
-
 (defmethod lp/emit-expr :relation [{:keys [relation]}
                                    {:keys [relation-variable->fields] :as _opts}]
   {:fields (get relation-variable->fields relation)
    :->cursor (fn [{:keys [relation-variable->cursor-factory] :as _opts}]
-               (let [^ICursorFactory cursor-factory (get relation-variable->cursor-factory relation)]
+               (let [^ICursor$Factory cursor-factory (get relation-variable->cursor-factory relation)]
                  (assert cursor-factory (str "can't find " relation, (pr-str relation-variable->cursor-factory)))
-                 (.createCursor cursor-factory)))})
+                 (.open cursor-factory)))})
 
 (defmethod lp/emit-expr :assign [{:keys [bindings relation]}
                                  {:keys [relation-variable->fields relation-variable->cursor-factory] :as args}]
@@ -216,8 +210,8 @@
                                   (->> relations
                                        (reduce (fn [acc {:keys [variable ->cursor]}]
                                                  (-> acc
-                                                     (assoc variable (reify ICursorFactory
-                                                                       (createCursor [_]
-                                                                         (->cursor
-                                                                          (assoc opts :relation-variable->cursor-factory acc)))))))
+                                                     (assoc variable
+                                                            (reify ICursor$Factory
+                                                              (open [_]
+                                                                (->cursor (assoc opts :relation-variable->cursor-factory acc)))))))
                                                relation-variable->cursor-factory)))))}))

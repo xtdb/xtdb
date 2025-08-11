@@ -9,6 +9,10 @@ import java.util.function.Consumer
 import java.util.stream.StreamSupport
 
 interface ICursor<E> : Spliterator<E>, AutoCloseable {
+    interface Factory<E> {
+        fun open(): ICursor<E>
+    }
+
     override fun tryAdvance(c: Consumer<in E>): Boolean
     override fun trySplit(): Spliterator<E>? = null
     override fun characteristics() = Spliterator.IMMUTABLE
