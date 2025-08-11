@@ -1,4 +1,4 @@
-WITH revenue AS
+WITH MATERIALIZED revenue AS
   (SELECT
     l.l_suppkey AS supplier_no,
     SUM(l.l_extendedprice * (1 - l.l_discount)) AS total_revenue

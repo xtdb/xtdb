@@ -235,25 +235,30 @@
              plan
              subqs))
 
-(defrecord CTE [query-name plan col-syms])
+(defrecord CTE [materialized? query-name cte-id plan col-syms])
 
 (defrecord WithVisitor [env scope]
   SqlVisitor
-  (visitWithClause [{{:keys [ctes]} :env, :as this} ctx]
-    (assert (not (.RECURSIVE ctx)) "Recursive CTEs are not supported yet")
+  (visitWithClause [this ctx]
+    (when (.RECURSIVE ctx)
+      (throw (err/unsupported ::recursive-ctes "Recursive CTEs are not supported yet")))
+
     (->> (.withListElement ctx)
          (reduce (fn [ctes ^ParserRuleContext wle]
-                   (conj ctes (.accept wle (assoc-in this [:env :ctes] ctes))))
-                 (or ctes {}))))
+                   (conj ctes (.accept wle (update-in this [:env :ctes] (fnil into {}) ctes))))
+                 {})))
 
-  (visitWithListElement [_ ctx]
+  (visitWithListElement [{{:keys [!id-count]} :env} ctx]
     (let [query-name (identifier-sym (.queryName ctx))]
       (assert (nil? (.columnNameList ctx)) "Column aliases are not supported yet")
 
       (let [{:keys [plan col-syms]} (-> (.subquery ctx)
                                         (.accept (->QueryPlanVisitor env scope)))]
         ;; [query-name] so that we only match against table-chains of length 1
-        (MapEntry/create [query-name] (->CTE query-name plan col-syms))))))
+        (MapEntry/create [query-name]
+                         (->CTE (boolean (.MATERIALIZED ctx))
+                                query-name (symbol (str query-name "." (swap! !id-count inc)))
+                                plan col-syms))))))
 
 (defrecord TableTimePeriodSpecificationVisitor [expr-visitor]
   SqlVisitor
@@ -616,12 +621,12 @@
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           cols (some-> (.tableProjection ctx) (->table-projection))]
 
-      (or (when-let [{:keys [query-name plan], cte-cols :col-syms} (get ctes table-chain)]
+      (or (when-let [{:keys [query-name cte-id], cte-cols :col-syms} (get ctes table-chain)]
             (when (or (seq (.querySystemTimePeriodSpecification ctx))
                       (seq (.queryValidTimePeriodSpecification ctx)))
               (add-err! env (->PeriodSpecificationDisallowedOnCte query-name)))
 
-            (->DerivedTable plan table-alias unique-table-alias
+            (->DerivedTable [:relation cte-id {:col-names cte-cols}] table-alias unique-table-alias
                             (->insertion-ordered-set (or cols cte-cols))))
 
           (let [[table & more-matches] (or (get table-chains table-chain)
@@ -2291,11 +2296,17 @@
   (visitWrappedQuery [this ctx] (-> (.queryExpressionNoWith ctx) (.accept this)))
 
   (visitQueryExpression [this ctx]
-    (.accept (.queryExpressionNoWith ctx)
-             (-> this
-                 (assoc-in [:env :ctes] (or (some-> (.withClause ctx)
-                                                    (.accept (->WithVisitor env scope)))
-                                            (:ctes env))))))
+    (let [ctes (some-> (.withClause ctx)
+                       (.accept (->WithVisitor env scope)))]
+      (reduce (fn [{:keys [plan col-syms]} {:keys [materialized? cte-id], cte-plan :plan}]
+                (let [op (if materialized? :let-mat :let)]
+                  (->QueryExpr [op [cte-id cte-plan]
+                                plan]
+                               col-syms)))
+              (.accept (.queryExpressionNoWith ctx)
+                         (-> this
+                             (update-in [:env :ctes] (fnil into {}) ctes)))
+              (vals (reverse ctes)))))
 
   (visitQueryExpressionNoWith [{:keys [env] :as this} ctx]
     (let [order-by-ctx (.orderByClause ctx)

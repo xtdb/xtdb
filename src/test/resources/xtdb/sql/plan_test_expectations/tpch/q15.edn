@@ -1,75 +1,62 @@
-[:project
- [{s_suppkey s.4/s_suppkey}
-  {s_name s.4/s_name}
-  {s_address s.4/s_address}
-  {s_phone s.4/s_phone}
-  {total_revenue revenue.5/total_revenue}]
- [:order-by
-  [[s.4/s_suppkey {:direction :asc, :null-ordering :nulls-last}]]
+[:let-mat
+ [revenue.4
   [:project
-   [s.4/s_suppkey
-    s.4/s_name
-    s.4/s_address
-    s.4/s_phone
-    revenue.5/total_revenue]
-   [:select
-    (= revenue.5/total_revenue _sq_6)
-    [:single-join
-     []
-     [:mega-join
-      [{s.4/s_suppkey revenue.5/supplier_no}]
-      [[:rename
-        s.4
-        [:scan
-         {:table #xt/table supplier}
-         [s_name s_address s_phone s_suppkey]]]
-       [:rename
-        revenue.5
-        [:project
-         [{supplier_no l.1/l_suppkey} {total_revenue _sum_out_2}]
-         [:group-by
-          [l.1/l_suppkey {_sum_out_2 (sum _sum_in_3)}]
-          [:map
-           [{_sum_in_3 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]
-           [:rename
-            l.1
-            [:scan
-             {:table #xt/table lineitem}
-             [{l_shipdate
-               (and
-                (<
-                 l_shipdate
-                 (+
-                  #xt/date "1996-01-01"
-                  (single-field-interval "3" "MONTH" 2 6)))
-                (>= l_shipdate #xt/date "1996-01-01"))}
-              l_extendedprice
-              l_suppkey
-              l_discount]]]]]]]]]
-     [:project
-      [{_sq_6 _max_out_8}]
-      [:group-by
-       [{_max_out_8 (max revenue.7/total_revenue)}]
-       [:rename
-        revenue.7
-        [:project
-         [{supplier_no l.1/l_suppkey} {total_revenue _sum_out_2}]
-         [:group-by
-          [l.1/l_suppkey {_sum_out_2 (sum _sum_in_3)}]
-          [:map
-           [{_sum_in_3 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]
-           [:rename
-            l.1
-            [:scan
-             {:table #xt/table lineitem}
-             [{l_shipdate
-               (and
-                (<
-                 l_shipdate
-                 (+
-                  #xt/date "1996-01-01"
-                  (single-field-interval "3" "MONTH" 2 6)))
-                (>= l_shipdate #xt/date "1996-01-01"))}
-              l_extendedprice
-              l_suppkey
-              l_discount]]]]]]]]]]]]]]
+   [{supplier_no l.1/l_suppkey} {total_revenue _sum_out_2}]
+   [:group-by
+    [l.1/l_suppkey {_sum_out_2 (sum _sum_in_3)}]
+    [:map
+     [{_sum_in_3 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]
+     [:rename
+      l.1
+      [:scan
+       {:table #xt/table lineitem}
+       [{l_shipdate
+         (and
+          (<
+           l_shipdate
+           (+
+            #xt/date "1996-01-01"
+            (single-field-interval "3" "MONTH" 2 6)))
+          (>= l_shipdate #xt/date "1996-01-01"))}
+        l_extendedprice
+        l_suppkey
+        l_discount]]]]]]]
+ [:project
+  [{s_suppkey s.5/s_suppkey}
+   {s_name s.5/s_name}
+   {s_address s.5/s_address}
+   {s_phone s.5/s_phone}
+   {total_revenue revenue.6/total_revenue}]
+  [:order-by
+   [[s.5/s_suppkey {:direction :asc, :null-ordering :nulls-last}]]
+   [:project
+    [s.5/s_suppkey
+     s.5/s_name
+     s.5/s_address
+     s.5/s_phone
+     revenue.6/total_revenue]
+    [:select
+     (= revenue.6/total_revenue _sq_7)
+     [:single-join
+      []
+      [:mega-join
+       [{s.5/s_suppkey revenue.6/supplier_no}]
+       [[:rename
+         s.5
+         [:scan
+          {:table #xt/table supplier}
+          [s_name s_address s_phone s_suppkey]]]
+        [:rename
+         revenue.6
+         [:relation
+          revenue.4
+          {:col-names [supplier_no total_revenue]}]]]]
+      [:project
+       [{_sq_7 _max_out_9}]
+       [:group-by
+        [{_max_out_9 (max revenue.8/total_revenue)}]
+        [:rename
+         revenue.8
+         [:relation
+          revenue.4
+          {:col-names [supplier_no total_revenue]}]]]]]]]]]]

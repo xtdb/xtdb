@@ -28,9 +28,11 @@
      (binding [*print-namespace-maps* false]
        (when regen-expected-files?
          (when-not (io/resource exp-plan-file-path#)
-           (Files/createFile (util/->path (format "src/test/resources/%s" exp-plan-file-path#))
+           (Files/createFile (doto (util/->path (format "src/test/resources/%s" exp-plan-file-path#))
+                               (-> .toFile io/make-parents))
                              (make-array FileAttribute 0)))
          (spit (io/resource exp-plan-file-path#) (with-out-str (clojure.pprint/pprint actual-plan#))))
+
        (if-let [exp-plan-file# (io/resource exp-plan-file-path#)]
          (let [exp-plan# (read-string (slurp exp-plan-file#))
                result# (= exp-plan# actual-plan#)]
@@ -44,7 +46,7 @@
                            :expected (list '~'= exp-plan-file-name# actual-plan#)
                            :actual (list '~'not (list '~'= exp-plan# actual-plan#))}))
            result#)
-         (spit (io/resource "xtdb/sql/plan_test_expectations/")
+         (spit (io/resource (str "xtdb/sql/plan_test_expectations/" exp-plan-file-name#))
                (with-out-str (clojure.pprint/pprint actual-plan#)))))))
 
 (t/deftest test-basic-queries
@@ -1388,14 +1390,6 @@
            (sql/plan "SELECT 1 FROM tab0 JOIN tab2 ON TRUE"
                      {:table-info {#xt/table tab0 #{}, #xt/table tab2 #{}}}))))
 
-(t/deftest test-with-clause
-  (t/is (=plan-file
-         "test-with-clause"
-         (sql/plan "WITH foo AS (SELECT id FROM bar WHERE id = 5)
-                    SELECT foo.id foo_id, baz.id baz_id
-                    FROM foo, foo AS baz"
-                   {:table-info {#xt/table bar #{"id"}}}))))
-
 (t/deftest test-delimited-identifiers-in-insert-column-list-2549
   (t/is (=plan-file
          "test-delimited-identifiers-in-insert-column-list-2549"
@@ -1996,17 +1990,6 @@
     (t/is (anomalous? [:incorrect nil
                        #"Cannot UPDATE _system_to column"]
                       (f "UPDATE table SET _system_to = DATE '2024-01-01' WHERE _id = 1")))))
-
-(t/deftest disallow-period-specs-on-ctes-3440
-  (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
-
-  (t/is (anomalous? [:incorrect nil
-                     #"Period specifications not allowed on CTE reference: my_cte"]
-                    (xt/q tu/*node* "WITH my_cte AS (SELECT * FROM docs) SELECT * FROM my_cte FOR SYSTEM_TIME AS OF TIMESTAMP '2024-01-01'")))
-
-  (t/is (anomalous? [:incorrect nil
-                     #"Period specifications not allowed on CTE reference: my_cte"]
-                    (xt/q tu/*node* "WITH my_cte AS (SELECT * FROM docs) SELECT * FROM my_cte FOR VALID_TIME AS OF TIMESTAMP '2024-01-01'"))))
 
 (t/deftest test-assert-3445
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 1}]])
@@ -2641,24 +2624,6 @@ UNION ALL
                             FROM nested_table nt,
                             LATERAL (FROM UNNEST(nt.nest) AS foo(id)) t(a)"))))
 
-(t/deftest cte-exporting-valid-time-4054
-  (xt/submit-tx tu/*node* [[:put-docs {:into :docs :valid-from #inst "2020" :valid-to #inst "2050"} {:xt/id 1}]])
-
-  (t/is (= [{:xt/valid-time #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z" #xt/zoned-date-time "2050-01-01T00:00Z"]}]
-           (xt/q tu/*node*
-                 "SELECT _valid_time
-                  FROM (SELECT _valid_time
-                        FROM docs) t")))
-
-  (t/is (= [{:xt/system-time #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z" nil]}]
-           (xt/q tu/*node*
-                 "WITH data AS (
-                     SELECT _system_time
-                     FROM docs
-                  )
-                  SELECT _system_time
-                  FROM data"))))
-
 (t/deftest test-period-predicate-optimisations-4054
   (t/testing "plans should only contain optimised versions of period predicates"
     (t/is (=plan-file
@@ -2925,33 +2890,6 @@ UNION ALL
       (doseq [[expected result] (map vector expected-res res)]
         (t/is (compare-decimals expected result)
               (str "Expected: " expected ", but got: " result))))))
-
-(t/deftest iseq-from-symbol-bug-4378
-  (t/is (anomalous? [:incorrect nil #"Subquery arity error"]
-                    (sql/plan "
-WITH dates AS (
-  SELECT TIMESTAMP '2023-01-01T00:00:00Z' AS d
-  UNION ALL
-  SELECT TIMESTAMP '2023-01-02T00:00:00Z'
-),
-system_range AS (
-  SELECT
-    'a' AS _id,
-    period(TIMESTAMP '2022-12-31T00:00:00Z', TIMESTAMP '2023-01-02T00:00:00Z') AS valid_time_intersection
-  UNION ALL
-  SELECT
-    'b',
-    period(TIMESTAMP '2023-01-02T00:00:00Z', TIMESTAMP '2023-01-03T00:00:00Z')
-)
-
-SELECT
-  dates.d,
-  (
-    SELECT COUNT(DISTINCT v._id), dates.d, v._id
-    FROM system_range AS v
-    WHERE v.valid_time_intersection CONTAINS (dates.d + INTERVAL 'PT0M')
-  ) AS member_count
-FROM dates"))))
 
 (t/deftest inline-xtql
   (xt/submit-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1, x: 'foo'}"

@@ -26,22 +26,22 @@
       (with-args {:ship-date (LocalDate/parse "1998-09-02")})))
 
 (def q2-minimum-cost-supplier
-  (-> '[:assign [PartSupp [:join [{s_suppkey ps_suppkey}]
-                           [:join [{n_nationkey s_nationkey}]
-                            [:join [{n_regionkey r_regionkey}]
-                             [:scan {:for-valid-time [:at :now] :table #xt/table nation} [n_name n_regionkey n_nationkey]]
-                             [:scan {:for-valid-time [:at :now] :table #xt/table region} [r_regionkey {r_name (= r_name ?region)}]]]
-                            [:scan {:for-valid-time [:at :now] :table #xt/table supplier} [s_nationkey s_suppkey s_acctbal s_name s_address s_phone s_comment]]]
-                           [:scan {:for-valid-time [:at :now] :table #xt/table partsupp} [ps_suppkey ps_partkey ps_supplycost]]]]
+  (-> '[:let-mat [PartSupp [:join [{s_suppkey ps_suppkey}]
+                            [:join [{n_nationkey s_nationkey}]
+                             [:join [{n_regionkey r_regionkey}]
+                              [:scan {:table #xt/table nation} [n_name n_regionkey n_nationkey]]
+                              [:scan {:table #xt/table region} [r_regionkey {r_name (= r_name ?region)}]]]
+                             [:scan {:table #xt/table supplier} [s_nationkey s_suppkey s_acctbal s_name s_address s_phone s_comment]]]
+                            [:scan {:table #xt/table partsupp} [ps_suppkey ps_partkey ps_supplycost]]]]
         [:top {:limit 100}
          [:order-by [[s_acctbal {:direction :desc}] [n_name] [s_name] [p_partkey]]
           [:project [s_acctbal s_name n_name p_partkey p_mfgr s_address s_phone s_comment]
            [:join [{ps_partkey ps_partkey} {ps_supplycost min_ps_supplycost}]
             [:join [{ps_partkey p_partkey}]
-             PartSupp
-             [:scan {:for-valid-time [:at :now] :table #xt/table part} [p_partkey p_mfgr {p_size (= p_size ?size)} {p_type (like p_type "%BRASS")}]]]
+             [:relation PartSupp {:col-names [ps_partkey ps_supplycost]}]
+             [:scan {:table #xt/table part} [p_partkey p_mfgr {p_size (= p_size ?size)} {p_type (like p_type "%BRASS")}]]]
             [:group-by [ps_partkey {min_ps_supplycost (min ps_supplycost)}]
-             PartSupp]]]]]]
+             [:relation PartSupp {:col-names [ps_partkey ps_supplycost]}]]]]]]]
       (with-args {:region "EUROPE"
                   ;; :type "BRASS"
                   :size 15})))
@@ -228,20 +228,20 @@
                   :end-date (LocalDate/parse "1994-01-01")})))
 
 (def q11-important-stock-identification
-  (-> '[:assign [PartSupp [:project [ps_partkey {value (* ps_supplycost ps_availqty)}]
-                           [:join [{s_suppkey ps_suppkey}]
-                            [:join [{n_nationkey s_nationkey}]
-                             [:scan {:for-valid-time [:at :now] :table #xt/table nation} [n_nationkey {n_name (= n_name ?nation)}]]
-                             [:scan {:for-valid-time [:at :now] :table #xt/table supplier} [s_nationkey s_suppkey]]]
-                            [:scan {:for-valid-time [:at :now] :table #xt/table partsupp} [ps_partkey ps_suppkey ps_supplycost ps_availqty]]]]]
+  (-> '[:let-mat [PartSupp [:project [ps_partkey {value (* ps_supplycost ps_availqty)}]
+                            [:join [{s_suppkey ps_suppkey}]
+                             [:join [{n_nationkey s_nationkey}]
+                              [:scan {:for-valid-time [:at :now] :table #xt/table nation} [n_nationkey {n_name (= n_name ?nation)}]]
+                              [:scan {:for-valid-time [:at :now] :table #xt/table supplier} [s_nationkey s_suppkey]]]
+                             [:scan {:for-valid-time [:at :now] :table #xt/table partsupp} [ps_partkey ps_suppkey ps_supplycost ps_availqty]]]]]
         [:order-by [[value {:direction :desc}]]
          [:project [ps_partkey value]
           [:join [(> value total)]
            [:group-by [ps_partkey {value (sum value)}]
-            PartSupp]
+            [:relation PartSupp {:col-names [ps_partkey value]}]]
            [:project [{total (* total ?fraction)}]
             [:group-by [{total (sum value)}]
-             PartSupp]]]]]]
+             [:relation PartSupp {:col-names [ps_partkey value]}]]]]]]]
       (with-args {:nation "GERMANY"
                   :fraction 0.0001})))
 
@@ -303,20 +303,20 @@
                   :end-date (LocalDate/parse "1995-10-01")})))
 
 (def q15-top-supplier
-  (-> '[:assign [Revenue [:group-by [supplier_no {total_revenue (sum disc_price)}]
-                          [:rename {l_suppkey supplier_no}
-                           [:project [l_suppkey {disc_price (* l_extendedprice (- 1 l_discount))}]
-                            [:scan {:for-valid-time [:at :now] :table #xt/table lineitem}
-                             [l_suppkey l_extendedprice l_discount
-                              {l_shipdate (and (>= l_shipdate ?start_date)
-                                               (< l_shipdate ?end_date))}]]]]]]
+  (-> '[:let-mat [Revenue [:group-by [supplier_no {total_revenue (sum disc_price)}]
+                           [:rename {l_suppkey supplier_no}
+                            [:project [l_suppkey {disc_price (* l_extendedprice (- 1 l_discount))}]
+                             [:scan {:for-valid-time [:at :now] :table #xt/table lineitem}
+                              [l_suppkey l_extendedprice l_discount
+                               {l_shipdate (and (>= l_shipdate ?start_date)
+                                                (< l_shipdate ?end_date))}]]]]]]
         [:project [s_suppkey s_name s_address s_phone total_revenue]
          [:join [{total_revenue max_total_revenue}]
           [:join [{supplier_no s_suppkey}]
-           Revenue
+           [:relation Revenue {:col-names [supplier_no total_revenue]}]
            [:scan {:for-valid-time [:at :now] :table #xt/table supplier} [s_suppkey s_name s_address s_phone]]]
           [:group-by [{max_total_revenue (max total_revenue)}]
-           Revenue]]]]
+           [:relation Revenue {:col-names [supplier_no total_revenue]}]]]]]
       (with-args {:start-date (LocalDate/parse "1996-01-01")
                   :end-date (LocalDate/parse "1996-04-01")})))
 
@@ -436,51 +436,51 @@
                   :nation "CANADA"})))
 
 (def q21-suppliers-who-kept-orders-waiting
-  (-> '[:assign [L1 [:join [{l1/l_orderkey l2/l_orderkey} (<> l1/l_suppkey l2/l_suppkey)]
-                     [:join [{l1/l_suppkey s_suppkey}]
-                      [:join [{l1/l_orderkey o_orderkey}]
-                       [:rename l1
-                        [:select (> l_receiptdate l_commitdate)
-                         [:scan {:for-valid-time [:at :now], :table #xt/table lineitem}
-                          [l_orderkey l_suppkey l_receiptdate l_commitdate]]]]
-                       [:scan {:for-valid-time [:at :now], :table #xt/table orders}
-                        [o_orderkey {o_orderstatus (= o_orderstatus "F")}]]]
-                      [:semi-join [{s_nationkey n_nationkey}]
-                       [:scan {:for-valid-time [:at :now], :table #xt/table supplier}
-                        [s_nationkey s_suppkey s_name]]
-                       [:scan {:for-valid-time [:at :now], :table #xt/table nation}
-                        [n_nationkey {n_name (= n_name ?nation)}]]]]
-                     [:rename l2
-                      [:scan {:for-valid-time [:at :now], :table #xt/table lineitem}
-                       [l_orderkey l_suppkey]]]]]
+  (-> '[:let-mat [L1 [:join [{l1/l_orderkey l2/l_orderkey} (<> l1/l_suppkey l2/l_suppkey)]
+                      [:join [{l1/l_suppkey s_suppkey}]
+                       [:join [{l1/l_orderkey o_orderkey}]
+                        [:rename l1
+                         [:select (> l_receiptdate l_commitdate)
+                          [:scan {:for-valid-time [:at :now], :table #xt/table lineitem}
+                           [l_orderkey l_suppkey l_receiptdate l_commitdate]]]]
+                        [:scan {:for-valid-time [:at :now], :table #xt/table orders}
+                         [o_orderkey {o_orderstatus (= o_orderstatus "F")}]]]
+                       [:semi-join [{s_nationkey n_nationkey}]
+                        [:scan {:for-valid-time [:at :now], :table #xt/table supplier}
+                         [s_nationkey s_suppkey s_name]]
+                        [:scan {:for-valid-time [:at :now], :table #xt/table nation}
+                         [n_nationkey {n_name (= n_name ?nation)}]]]]
+                      [:rename l2
+                       [:scan {:for-valid-time [:at :now], :table #xt/table lineitem}
+                        [l_orderkey l_suppkey]]]]]
         [:top {:limit 100}
          [:order-by [[numwait {:direction :desc}] [s_name]]
           [:group-by [s_name {numwait (row-count)}]
            [:distinct
             [:project [s_name l1/l_orderkey]
              [:anti-join [{l1/l_orderkey l3/l_orderkey}]
-              L1
+              [:relation L1 {:col-names [l_orderkey l_suppkey l_receiptdate l_commitdate]}]
               [:join [{l1/l_orderkey l3/l_orderkey} (<> l3/l_suppkey l1/l_suppkey)]
-               L1
+               [:relation L1 {:col-names [l_orderkey l_suppkey l_receiptdate l_commitdate]}]
                [:select (> l3/l_receiptdate l3/l_commitdate)
                 [:rename l3
                  [:scan {:for-valid-time [:at :now] :table #xt/table lineitem} [l_orderkey l_suppkey l_receiptdate l_commitdate]]]]]]]]]]]]
       (with-args {:nation "SAUDI ARABIA"})))
 
 (def q22-global-sales-opportunity
-  (-> '[:assign [Customer [:semi-join [{cntrycode cntrycode}]
-                           [:project [c_custkey {cntrycode (substring c_phone 1 2)} c_acctbal]
-                            [:scan {:for-valid-time [:at :now], :table #xt/table customer}
-                             [c_custkey c_phone c_acctbal]]]
-                           [:table ?cntrycodes]]]
+  (-> '[:let-mat [Customer [:semi-join [{cntrycode cntrycode}]
+                            [:project [c_custkey {cntrycode (substring c_phone 1 2)} c_acctbal]
+                             [:scan {:for-valid-time [:at :now], :table #xt/table customer}
+                              [c_custkey c_phone c_acctbal]]]
+                            [:table ?cntrycodes]]]
         [:order-by [[cntrycode]]
          [:group-by [cntrycode {numcust (row-count)} {totacctbal (sum c_acctbal)}]
           [:anti-join [{c_custkey o_custkey}]
            [:join [(> c_acctbal avg_acctbal)]
-            Customer
+            [:relation Customer {:col-names [c_custkey cntrycode c_acctbal]}]
             [:group-by [{avg_acctbal (avg c_acctbal)}]
              [:select (> c_acctbal 0.0)
-              Customer]]]
+              [:relation Customer {:col-names [c_custkey cntrycode c_acctbal]}]]]]
            [:scan {:for-valid-time [:at :now], :table #xt/table orders}
             [o_custkey]]]]]]
       (with-args {:cntrycodes [{:cntrycode "13"}

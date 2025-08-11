@@ -1,0 +1,11 @@
+[:let
+ [foo.2
+  [:project
+   [{_id bar.1/_id}]
+   [:rename bar.1 [:scan {:table #xt/table bar} [{_id (= _id 5)}]]]]]
+ [:project
+  [{foo_id foo.3/_id} {baz_id baz.4/_id}]
+  [:mega-join
+   []
+   [[:rename foo.3 [:relation foo.2 {:col-names [_id]}]]
+    [:rename baz.4 [:relation foo.2 {:col-names [_id]}]]]]]]

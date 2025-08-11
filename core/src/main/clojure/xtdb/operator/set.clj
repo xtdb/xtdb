@@ -29,19 +29,6 @@
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
-(defmethod lp/ra-expr :relation [_]
-  (s/and ::lp/relation
-         (s/conformer (fn [rel]
-                        {:op :relation, :relation rel})
-                      :relation)))
-
-(defmethod lp/ra-expr :assign [_]
-  (s/cat :op #{:← :assign}
-         :bindings (s/and vector?
-                          (s/* (s/cat :variable ::lp/relation,
-                                      :value ::lp/ra-expression)))
-         :relation ::lp/ra-expression))
-
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn- union-fields [left-fields right-fields]
@@ -182,36 +169,3 @@
                                                                                 {:build-fields inner-fields
                                                                                  :key-col-names (set (keys inner-fields))
                                                                                  :nil-keys-equal? true})))})))
-
-(defmethod lp/emit-expr :relation [{:keys [relation]}
-                                   {:keys [relation-variable->fields] :as _opts}]
-  {:fields (get relation-variable->fields relation)
-   :->cursor (fn [{:keys [relation-variable->cursor-factory] :as _opts}]
-               (let [^ICursor$Factory cursor-factory (get relation-variable->cursor-factory relation)]
-                 (assert cursor-factory (str "can't find " relation, (pr-str relation-variable->cursor-factory)))
-                 (.open cursor-factory)))})
-
-(defmethod lp/emit-expr :assign [{:keys [bindings relation]}
-                                 {:keys [relation-variable->fields relation-variable->cursor-factory] :as args}]
-  (let [{:keys [rel-var->fields relations]}
-        (->> bindings
-             (reduce (fn [{:keys [rel-var->fields relations]} {:keys [variable value]}]
-                       (let [{:keys [fields ->cursor]} (lp/emit-expr value (assoc args :relation-variable->fields rel-var->fields))]
-                         {:rel-var->fields (assoc rel-var->fields variable fields)
-
-                          :relations (conj relations {:variable variable, :->cursor ->cursor})}))
-                     {:rel-var->fields relation-variable->fields
-                      :relations []}))
-
-        {:keys [fields ->cursor]} (lp/emit-expr relation (assoc args :relation-variable->fields rel-var->fields))]
-    {:col-types fields
-     :->cursor (fn [opts]
-                 (->cursor (assoc opts :relation-variable->cursor-factory
-                                  (->> relations
-                                       (reduce (fn [acc {:keys [variable ->cursor]}]
-                                                 (-> acc
-                                                     (assoc variable
-                                                            (reify ICursor$Factory
-                                                              (open [_]
-                                                                (->cursor (assoc opts :relation-variable->cursor-factory acc)))))))
-                                               relation-variable->cursor-factory)))))}))

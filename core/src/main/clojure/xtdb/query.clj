@@ -17,6 +17,7 @@
             xtdb.operator.csv
             xtdb.operator.group-by
             xtdb.operator.join
+            xtdb.operator.let
             xtdb.operator.list
             xtdb.operator.order-by
             xtdb.operator.patch
