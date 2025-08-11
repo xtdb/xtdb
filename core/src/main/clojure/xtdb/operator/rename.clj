@@ -2,7 +2,6 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [xtdb.logical-plan :as lp]
-            [xtdb.operator.scan :as scan]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
@@ -20,25 +19,18 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (deftype RenameCursor [^ICursor in-cursor
-                       ^Map #_#_<Symbol, Symbol> col-name-mapping
-                       ^Map #_#_<Symbol, Symbol> col-name-reverse-mapping]
+                       ^Map #_#_<Symbol, Symbol> col-name-mapping]
   ICursor
   (tryAdvance [_ c]
-    (binding [scan/*column->pushdown-bloom* (->> (for [[k v] scan/*column->pushdown-bloom*]
-                                                   [(get col-name-reverse-mapping k) v])
-                                                 (into {}))
-              scan/*column->iid-set* (->> (for [[k v] scan/*column->iid-set*]
-                                            [(get col-name-reverse-mapping k) v])
-                                          (into {}))] 
-      (.tryAdvance in-cursor
-                   (fn [^RelationReader in-rel]
-                     (let [out-cols (LinkedList.)]
+    (.tryAdvance in-cursor
+                 (fn [^RelationReader in-rel]
+                   (let [out-cols (LinkedList.)]
 
-                       (doseq [^VectorReader in-col in-rel
-                               :let [col-name (str (get col-name-mapping (symbol (.getName in-col))))]]
-                         (.add out-cols (.withName in-col col-name)))
+                     (doseq [^VectorReader in-col in-rel
+                             :let [col-name (str (get col-name-mapping (symbol (.getName in-col))))]]
+                       (.add out-cols (.withName in-col col-name)))
 
-                       (.accept c (vr/rel-reader out-cols (.getRowCount in-rel))))))))
+                     (.accept c (vr/rel-reader out-cols (.getRowCount in-rel)))))))
 
   (close [_]
     (util/try-close in-cursor)))
@@ -60,11 +52,8 @@
                                          val)))))
      :stats (:stats emitted-child-relation)
      :->cursor (fn [opts]
-                 (binding [scan/*column->pushdown-bloom* (->> (for [[k v] scan/*column->pushdown-bloom*]
-                                                                [(get col-name-reverse-mapping k) v])
-                                                              (into {}))
-                           scan/*column->iid-set* (->> (for [[k v] scan/*column->iid-set*]
-                                                         [(get col-name-reverse-mapping k) v])
-                                                       (into {}))]
+                 (let [opts (-> opts
+                                (update :pushdown-blooms update-keys #(get col-name-reverse-mapping %))
+                                (update :pushdown-iids update-keys #(get col-name-reverse-mapping %)))]
                    (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
-                     (RenameCursor. in-cursor col-name-mapping col-name-reverse-mapping))))}))
+                     (RenameCursor. in-cursor col-name-mapping))))}))

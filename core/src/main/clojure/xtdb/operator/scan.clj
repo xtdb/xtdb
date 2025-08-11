@@ -33,7 +33,7 @@
            (xtdb.metadata PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask)
            xtdb.table.TableRef
-           (xtdb.trie ArrowHashTrie$Leaf Bucketer HashTrie HashTrieKt MergePlanNode MergePlanTask Trie TrieCatalog)
+           (xtdb.trie ArrowHashTrie$Leaf Bucketer HashTrieKt MergePlanNode MergePlanTask Trie TrieCatalog)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (s/def ::table ::table/ref)
@@ -56,9 +56,6 @@
      (case col-tag
        :column col-arg
        :select (key (first col-arg)))]))
-
-(def ^:dynamic *column->pushdown-bloom* {})
-(def ^:dynamic *column->iid-set* {})
 
 (defn ->temporal-bounds [^BufferAllocator alloc, ^RelationReader args,
                          {:keys [for-valid-time for-system-time]}, ^Instant snapshot-token]
@@ -143,8 +140,8 @@
                   (util/->iid eid)
                   dummy-iid)))))))))
 
-(defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^PageMetadata page-metadata ^String col-name]
-  (when-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
+(defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^PageMetadata page-metadata, pushdown-blooms, ^String col-name]
+  (when-let [^MutableRoaringBitmap pushdown-bloom (get pushdown-blooms (symbol col-name))]
     (let [metadata-rdr (.getMetadataLeafReader page-metadata)
           bloom-rdr (-> (.vectorForOrNull metadata-rdr "columns")
                         (.getListElements)
@@ -235,16 +232,18 @@
 
         {:fields fields
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args]}]
+         :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids]}]
                      (let [^Snapshot snapshot (get snaps db-name)
                            derived-table-schema (info-schema/derived-table table)
                            template-table? (boolean (info-schema/template-table table))]
                        (if (and derived-table-schema (not template-table?))
                          (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args)
-                         (let [iid-pushdown-bloom (get *column->pushdown-bloom* '_iid)
-                               iid-set (get *column->iid-set* '_iid)
+
+                         (let [iid-pushdown-bloom (get pushdown-blooms '_iid)
+                               iid-set (get pushdown-iids '_iid)
                                iid-bb (or (selects->iid-byte-buffer selects args)
-                                          (when (and iid-set (= (count iid-set) 1)) (first iid-set)))
+                                          (when (and iid-set (= (count iid-set) 1))
+                                            (first iid-set)))
                                col-preds (cond-> col-preds
                                            iid-bb (assoc "_iid" (IidSelector. iid-bb)))
                                metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) (update-vals fields types/field->col-type) args)
@@ -256,6 +255,7 @@
                                temporal-bounds (->temporal-bounds allocator args scan-opts
                                                                   (-> (basis/<-time-basis-str snapshot-token)
                                                                       (get-in [(.getName db) 0])))]
+
                            (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                              (let [merge-tasks (util/with-open [page-metadatas (LinkedList.)]
                                                  (let [segments (cond-> (mapv (fn [{:keys [^String trie-key]}]
@@ -265,7 +265,7 @@
                                                                                   (into (trie/->Segment (.getTrie page-metadata))
                                                                                         {:data-file-path (Trie/dataFilePath table trie-key)
                                                                                          :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
-                                                                                                                  (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred page-metadata col-name)]
+                                                                                                                  (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred page-metadata pushdown-blooms col-name)]
                                                                                                                     (.and page-idx-pred bloom-page-idx-pred)
                                                                                                                     page-idx-pred))
                                                                                                                 (.build metadata-pred page-metadata)

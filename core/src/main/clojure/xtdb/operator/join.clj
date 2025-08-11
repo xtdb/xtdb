@@ -160,7 +160,7 @@
 (defmethod lp/emit-expr :cross-join [join-expr args]
   (emit-cross-join (emit-join-children join-expr args)))
 
-(defn- build-phase [^ICursor build-cursor, ^RelationMap rel-map, pushdown-blooms, ^Set iid-set]
+(defn- build-phase [^ICursor build-cursor, ^RelationMap rel-map, pushdown-blooms, ^Set pushdown-iids]
   (.forEachRemaining build-cursor
                      (fn [^RelationReader build-rel]
                        (let [rel-map-builder (.buildFromRelation rel-map build-rel)
@@ -174,8 +174,8 @@
                                    build-col (.vectorForOrNull build-rel (str build-col-name))
                                    ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
                                (dotimes [build-idx (.getRowCount build-rel)]
-                                 (when (and iid-set (= (name build-col-name) "_iid"))
-                                   (.add iid-set (.getBytes build-col build-idx)))
+                                 (when (and pushdown-iids (= (name build-col-name) "_iid"))
+                                   (.add pushdown-iids (.getBytes build-col build-idx)))
                                  (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
@@ -335,37 +335,36 @@
                      ^RelationMap rel-map
                      ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
-                     ^Set iid-set
+                     ^Set pushdown-iids
                      join-type]
   ICursor
   (tryAdvance [this c]
-    (build-phase build-cursor rel-map pushdown-blooms iid-set)
+    (when-not probe-cursor
+      (build-phase build-cursor rel-map pushdown-blooms pushdown-iids)
+
+      (let [probe-key-cols (.getProbeKeyColumnNames rel-map)
+            probe-iid-keys (filter #(= (name %) "_iid") probe-key-cols)]
+        (set! (.probe-cursor this)
+              (->probe-cursor (when pushdown-blooms
+                                (zipmap (map symbol probe-key-cols) pushdown-blooms))
+                              (when pushdown-iids
+                                (zipmap probe-iid-keys (repeat pushdown-iids)))))))
+
+    (when (and matched-build-idxs (not nil-rel-writer))
+      (util/with-close-on-catch [nil-rel-writer (emap/->nillable-rel-writer allocator (.getProbeFields rel-map))]
+        (set! (.nil-rel-writer this) nil-rel-writer)))
 
     (boolean
-     (or (let [advanced? (boolean-array 1)
-               probe-key-columns (.getProbeKeyColumnNames rel-map)
-               probe-iid-keys (filter #(= (name %) "_iid") probe-key-columns)]
-           (binding [scan/*column->pushdown-bloom* (cond-> scan/*column->pushdown-bloom*
-                                                     (some? pushdown-blooms) (conj (zipmap (map symbol probe-key-columns) pushdown-blooms)))
-                     scan/*column->iid-set* (cond-> scan/*column->iid-set*
-                                              (some? iid-set) (conj (zipmap probe-iid-keys (repeat iid-set))))]
-             (when-not probe-cursor
-               (util/with-close-on-catch [probe-cursor (->probe-cursor)]
-                 (set! (.probe-cursor this) probe-cursor)))
-
-             (when (and matched-build-idxs (not nil-rel-writer))
-               (util/with-close-on-catch [nil-rel-writer (emap/->nillable-rel-writer allocator (.getProbeFields rel-map))]
-                 (set! (.nil-rel-writer this) nil-rel-writer)))
-
-             (while (and (not (aget advanced? 0))
-                         (.tryAdvance ^ICursor (.probe-cursor this)
-                                      (fn [^RelationReader probe-rel]
-                                        (when (pos? (.getRowCount probe-rel))
-                                          (with-open [out-rel (-> (probe-phase join-type probe-rel rel-map matched-build-idxs)
-                                                                  (.openSlice allocator))]
-                                            (when (pos? (.getRowCount out-rel))
-                                              (aset advanced? 0 true)
-                                              (.accept c out-rel)))))))))
+     (or (let [advanced? (boolean-array 1)]
+           (while (and (not (aget advanced? 0))
+                       (.tryAdvance ^ICursor (.probe-cursor this)
+                                    (fn [^RelationReader probe-rel]
+                                      (when (pos? (.getRowCount probe-rel))
+                                        (with-open [out-rel (-> (probe-phase join-type probe-rel rel-map matched-build-idxs)
+                                                                (.openSlice allocator))]
+                                          (when (pos? (.getRowCount out-rel))
+                                            (aset advanced? 0 true)
+                                            (.accept c out-rel))))))))
            (aget advanced? 0))
 
          (when matched-build-idxs
@@ -414,27 +413,27 @@
   (tryAdvance [this c]
     (build-phase build-cursor rel-map pushdown-blooms nil)
 
+    (when-not probe-cursor
+      (set! (.probe-cursor this)
+            (->probe-cursor (zipmap (map symbol (.getProbeKeyColumnNames rel-map))
+                                    pushdown-blooms)
+                            nil)))
+
     (boolean
      (let [advanced? (boolean-array 1)]
-       (binding [scan/*column->pushdown-bloom* (conj scan/*column->pushdown-bloom*
-                                                     (zipmap (map symbol (.getProbeKeyColumnNames rel-map)) pushdown-blooms))]
-         (when-not probe-cursor
-           (util/with-close-on-catch [probe-cursor (->probe-cursor)]
-             (set! (.probe-cursor this) probe-cursor)))
+       (while (and (not (aget advanced? 0))
+                   (.tryAdvance ^ICursor (.probe-cursor this)
+                                (fn [^RelationReader probe-rel]
+                                  (let [row-count (.getRowCount probe-rel)]
+                                    (when (pos? row-count)
+                                      (aset advanced? 0 true)
 
-         (while (and (not (aget advanced? 0))
-                     (.tryAdvance ^ICursor (.probe-cursor this)
-                                  (fn [^RelationReader probe-rel]
-                                    (let [row-count (.getRowCount probe-rel)]
-                                      (when (pos? row-count)
-                                        (aset advanced? 0 true)
-
-                                        (with-open [mark-col (doto (BitVector. (name mark-col-name) allocator)
-                                                               (.allocateNew row-count)
-                                                               (.setValueCount row-count))]
-                                          (mark-join-probe-phase rel-map probe-rel mark-col)
-                                          (let [out-cols (conj (seq probe-rel) (vr/vec->reader mark-col))]
-                                            (.accept c (vr/rel-reader out-cols row-count)))))))))))
+                                      (with-open [mark-col (doto (BitVector. (name mark-col-name) allocator)
+                                                             (.allocateNew row-count)
+                                                             (.setValueCount row-count))]
+                                        (mark-join-probe-phase rel-map probe-rel mark-col)
+                                        (let [out-cols (conj (seq probe-rel) (vr/vec->reader mark-col))]
+                                          (.accept c (vr/rel-reader out-cols row-count))))))))))
        (aget advanced? 0))))
 
   (close [_]
@@ -520,24 +519,28 @@
 
     {:fields (projection-specs->fields output-projections)
      :->cursor (fn [{:keys [allocator args] :as opts}]
-                 (let [pushdown-blooms (when pushdown-blooms? (->pushdown-blooms probe-key-col-names))
-                       matched-build-idxs (when matched-build-idxs? (RoaringBitmap.))
-                       iid-set (HashSet.)]
-                   (util/with-close-on-catch [build-cursor (->build-cursor opts)
-                                              relation-map (emap/->relation-map allocator {:build-fields build-fields
-                                                                                           :build-key-col-names build-key-col-names
-                                                                                           :probe-fields probe-fields
-                                                                                           :probe-key-col-names probe-key-col-names
-                                                                                           :store-full-build-rel? true
-                                                                                           :with-nil-row? with-nil-row?
-                                                                                           :theta-expr theta-expr
-                                                                                           :param-fields param-fields
-                                                                                           :args args})]
-                     (project/->project-cursor opts
-                                               (if (= join-type ::mark-join)
-                                                 (MarkJoinCursor. allocator build-cursor nil (partial ->probe-cursor opts) relation-map matched-build-idxs mark-col-name pushdown-blooms join-type)
-                                                 (JoinCursor. allocator build-cursor nil nil (partial ->probe-cursor opts) relation-map matched-build-idxs pushdown-blooms iid-set join-type))
-                                               output-projections))))}))
+                 (util/with-close-on-catch [build-cursor (->build-cursor opts)
+                                            relation-map (emap/->relation-map allocator {:build-fields build-fields
+                                                                                         :build-key-col-names build-key-col-names
+                                                                                         :probe-fields probe-fields
+                                                                                         :probe-key-col-names probe-key-col-names
+                                                                                         :store-full-build-rel? true
+                                                                                         :with-nil-row? with-nil-row?
+                                                                                         :theta-expr theta-expr
+                                                                                         :param-fields param-fields
+                                                                                         :args args})]
+                   (letfn [(->probe-cursor-with-pushdowns [our-pushdown-blooms our-pushdown-iids]
+                             (->probe-cursor (cond-> opts
+                                               our-pushdown-blooms (update :pushdown-blooms (fnil into {}) our-pushdown-blooms)
+                                               our-pushdown-iids (update :pushdown-iids (fnil into {}) our-pushdown-iids))))]
+                     (let [pushdown-blooms (when pushdown-blooms? (->pushdown-blooms probe-key-col-names))
+                           matched-build-idxs (when matched-build-idxs? (RoaringBitmap.))
+                           pushdown-iids (HashSet.)]
+                       (project/->project-cursor opts
+                                                 (if (= join-type ::mark-join)
+                                                   (MarkJoinCursor. allocator build-cursor nil ->probe-cursor-with-pushdowns relation-map matched-build-idxs mark-col-name pushdown-blooms join-type)
+                                                   (JoinCursor. allocator build-cursor nil nil ->probe-cursor-with-pushdowns relation-map matched-build-idxs pushdown-blooms pushdown-iids join-type))
+                                                 output-projections)))))}))
 
 (defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]
   (emit-join-expr (emit-join-children join-expr args) args join-impl))
