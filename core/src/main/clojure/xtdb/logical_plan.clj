@@ -77,8 +77,7 @@
 (defmulti ra-expr
   (fn [expr]
     (cond
-      (vector? expr) (first expr)
-      (symbol? expr) :relation))
+      (vector? expr) (first expr)))
   :default ::default)
 
 (s/def ::ra-expression (s/multi-spec ra-expr :op))
@@ -89,8 +88,8 @@
   (case op
     :relation #{}
 
-    :assign (let [{:keys [bindings relation]} expr]
-              (into #{relation} (map :value) bindings))
+    :let (let [{[_ bind-rel] :binding, :keys [relation]} expr]
+           #{bind-rel relation})
 
     (let [spec (s/describe (ra-expr [op]))]
       (case (first spec)
@@ -274,8 +273,10 @@
     (cond-> (conj (relation-columns relation) (val (first columns)))
       (:ordinality-column opts) (conj (:ordinality-column opts)))
 
-    [:assign _ relation]
+    [:let _ relation]
     (relation-columns relation)
+
+    [:relation _ opts] (:col-names opts)
 
     [:apply mode _ independent-relation dependent-relation]
     (-> (relation-columns independent-relation)

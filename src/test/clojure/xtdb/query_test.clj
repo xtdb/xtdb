@@ -212,23 +212,6 @@
                   '{_system_to (> (coalesce _system_to xtdb/end-of-time) ?system_time2)}))
             "as of tt2"))))
 
-(t/deftest test-assignment-operator
-  (t/is (= [{:a 1 :b 1}]
-           (tu/query-ra '[:assign [X [:table ?x]
-                                   Y [:table ?y]]
-                          [:join [{a b}] X Y]]
-                        {:args {:x [{:a 1}]
-                                :y [{:b 1}]}})))
-
-  (t/testing "can see earlier assignments"
-    (t/is (= [{:a 1 :b 1}]
-             (tu/query-ra '[:assign [X [:table ?x]
-                                     Y [:join [{a b}] X [:table ?y]]
-                                     X Y]
-                            X]
-                          {:args {:x [{:a 1}]
-                                  :y [{:b 1}]}})))))
-
 (t/deftest test-project-row-number
   (t/is (= [{:a 12, :row-num 1}, {:a 0, :row-num 2}, {:a 100, :row-num 3}]
            (tu/query-ra '[:project [a {row-num (row-number)}]
