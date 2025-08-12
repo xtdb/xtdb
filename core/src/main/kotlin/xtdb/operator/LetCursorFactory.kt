@@ -10,7 +10,7 @@ import xtdb.util.closeAll
 import xtdb.util.closeAllOnCatch
 import java.util.function.Consumer
 
-class LetMatCursorFactory(
+class LetCursorFactory(
     private val al: BufferAllocator, private val boundCursor: ICursor<RelationReader>,
 ) : ICursor.Factory<RelationReader>, AutoCloseable {
 
@@ -56,7 +56,7 @@ class LetMatCursorFactory(
     fun wrapBodyCursor(bodyCursor: ICursor<RelationReader>) = object : ICursor<RelationReader> by bodyCursor {
         override fun close() {
             bodyCursor.close()
-            this@LetMatCursorFactory.close()
+            this@LetCursorFactory.close()
         }
     }
 

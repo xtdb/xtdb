@@ -2303,7 +2303,7 @@
                        (.accept (->WithVisitor env scope)))]
       (reduce (fn [{:keys [plan col-syms] :as acc} {:keys [materialized? cte-id], cte-plan :plan}]
                 (if materialized?
-                  (->QueryExpr [:let-mat [cte-id cte-plan]
+                  (->QueryExpr [:let [cte-id cte-plan]
                                 plan]
                                col-syms)
                   acc))

@@ -1,4 +1,4 @@
-[:let-mat
+[:let
  [foo.2
   [:project
    [{_id bar.1/_id}]
