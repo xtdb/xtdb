@@ -8,7 +8,6 @@
             [xtdb.expression.map :as emap]
             [xtdb.logical-plan :as lp]
             [xtdb.operator.project :as project]
-            [xtdb.operator.scan :as scan]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -19,14 +18,14 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.BitVector
-           (org.apache.arrow.vector.types.pojo Field)
+           (org.apache.arrow.vector.types.pojo Field Schema)
            (org.roaringbitmap.buffer MutableRoaringBitmap)
            org.roaringbitmap.RoaringBitmap
            (xtdb ICursor)
            (xtdb.arrow RelationReader RelationWriter)
            (xtdb.bloom BloomUtils)
-           (xtdb.expression.map RelationMap)
-           (xtdb.operator ProjectionSpec)))
+           (xtdb.operator ProjectionSpec)
+           (xtdb.operator.join JoinRelationMap)))
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
@@ -160,15 +159,13 @@
 (defmethod lp/emit-expr :cross-join [join-expr args]
   (emit-cross-join (emit-join-children join-expr args)))
 
-(defn- build-phase [^ICursor build-cursor, ^RelationMap rel-map, pushdown-blooms, ^Set pushdown-iids]
+(defn- build-phase [^ICursor build-cursor, ^JoinRelationMap rel-map, pushdown-blooms, ^Set pushdown-iids]
   (.forEachRemaining build-cursor
                      (fn [^RelationReader build-rel]
-                       (let [rel-map-builder (.buildFromRelation rel-map build-rel)
-                             build-key-col-names (vec (.getBuildKeyColumnNames rel-map))]
-                         (dotimes [build-idx (.getRowCount build-rel)]
-                           (.add rel-map-builder build-idx))
+                       (.append rel-map build-rel)
 
-                         (when pushdown-blooms
+                       (when pushdown-blooms
+                         (let [build-key-col-names (vec (.getBuildKeyColumnNames rel-map))]
                            (dotimes [col-idx (count build-key-col-names)]
                              (let [build-col-name (nth build-key-col-names col-idx)
                                    build-col (.vectorForOrNull build-rel (str build-col-name))
@@ -189,7 +186,7 @@
   The selections represent matched rows in both underlying relations.
 
   The selections will have the same size."
-  [^RelationReader probe-rel ^RelationMap rel-map]
+  [^RelationReader probe-rel ^JoinRelationMap rel-map]
   (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
         matching-build-idxs (IntStream/builder)
         matching-probe-idxs (IntStream/builder)]
@@ -207,7 +204,7 @@
   "Takes a relation (probe-rel) and its mapped relation (via rel-map) and returns a relation with the columns of both."
   [join-type
    ^RelationReader probe-rel
-   ^RelationMap rel-map
+   ^JoinRelationMap rel-map
    [^ints probe-sel, ^ints build-sel :as _selection]]
   (let [built-rel (.getBuiltRelation rel-map)
         selected-probe-rel (.select probe-rel probe-sel)
@@ -218,7 +215,7 @@
 
 (defn- probe-semi-join-select
   "Returns a single selection of the probe relation, that represents matches for a semi-join."
-  ^ints [^RelationReader probe-rel, ^RelationMap rel-map]
+  ^ints [^RelationReader probe-rel, ^JoinRelationMap rel-map]
   (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
         matching-probe-idxs (IntStream/builder)]
     (dotimes [probe-idx (.getRowCount probe-rel)]
@@ -229,19 +226,19 @@
 (defmethod probe-phase ::inner-join
   [join-type
    ^RelationReader probe-rel
-   ^RelationMap rel-map
+   ^JoinRelationMap rel-map
    _matched-build-idxs]
   (join-rels join-type probe-rel rel-map (probe-inner-join-select probe-rel rel-map)))
 
 (defmethod probe-phase ::semi-join
   [_join-type
    ^RelationReader probe-rel
-   ^RelationMap rel-map
+   ^JoinRelationMap rel-map
    _matched-build-idxs]
   (.select probe-rel (probe-semi-join-select probe-rel rel-map)))
 
 (defmethod probe-phase ::anti-semi-join
-  [_join-type, ^RelationReader probe-rel, ^RelationMap rel-map, _matched-build-idxs]
+  [_join-type, ^RelationReader probe-rel, ^JoinRelationMap rel-map, _matched-build-idxs]
   (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
         matching-probe-idxs (IntStream/builder)]
     (dotimes [probe-idx (.getRowCount probe-rel)]
@@ -253,7 +250,7 @@
 (defmethod probe-phase ::mark-join
   [_join-type
    ^RelationReader probe-rel
-   ^RelationMap rel-map
+   ^JoinRelationMap rel-map
    _matched-build-idxs]
   (.select probe-rel (probe-semi-join-select probe-rel rel-map)))
 
@@ -294,7 +291,7 @@
 (defmethod probe-phase ::outer-join
   [join-type
    ^RelationReader probe-rel
-   ^RelationMap rel-map
+   ^JoinRelationMap rel-map
    ^RoaringBitmap matched-build-idxs]
   (->> (probe-outer-join-select join-type probe-rel rel-map matched-build-idxs)
        (join-rels join-type probe-rel rel-map)))
@@ -302,7 +299,7 @@
 (defmethod probe-phase ::single-join
   [join-type
    ^RelationReader probe-rel
-   ^RelationMap rel-map
+   ^JoinRelationMap rel-map
    _matched-build-idxs]
 
   (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
@@ -332,7 +329,7 @@
                      ^:unsynchronized-mutable ^ICursor probe-cursor
                      ^:unsynchronized-mutable ^RelationWriter nil-rel-writer
                      ^IFn ->probe-cursor
-                     ^RelationMap rel-map
+                     ^JoinRelationMap rel-map
                      ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
                      ^Set pushdown-iids
@@ -393,7 +390,7 @@
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
-(defn- mark-join-probe-phase [^RelationMap rel-map, ^RelationReader probe-rel, ^BitVector mark-col]
+(defn- mark-join-probe-phase [^JoinRelationMap rel-map, ^RelationReader probe-rel, ^BitVector mark-col]
   (let [rel-prober (.probeFromRelation rel-map probe-rel)]
     (dotimes [idx (.getRowCount probe-rel)]
       (let [match-res (.matches rel-prober idx)]
@@ -404,7 +401,7 @@
 (deftype MarkJoinCursor [^BufferAllocator allocator ^ICursor build-cursor,
                          ^:unsynchronized-mutable ^ICursor probe-cursor
                          ^IFn ->probe-cursor
-                         ^RelationMap rel-map
+                         ^JoinRelationMap rel-map
                          ^RoaringBitmap matched-build-idxs
                          mark-col-name
                          pushdown-blooms
@@ -466,6 +463,32 @@
 (defn- ->pushdown-blooms [key-col-names]
   (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
 
+(defn ->join-relation-map ^xtdb.operator.join.JoinRelationMap
+  [^BufferAllocator allocator,
+   {:keys [key-col-names build-fields probe-fields
+           with-nil-row? theta-expr param-fields args]
+    :as opts}]
+  (let [param-types (update-vals param-fields types/field->col-type)
+        build-key-col-names (get opts :build-key-col-names key-col-names)
+        probe-key-col-names (get opts :probe-key-col-names key-col-names)
+
+        schema (Schema. (->> build-fields
+                             (mapv (fn [[field-name field]]
+                                     (cond-> (-> field (types/field-with-name (str field-name)))
+                                       with-nil-row? types/->nullable-field)))))]
+
+    (JoinRelationMap. allocator schema
+                      (update-keys build-fields str)
+                      (map str build-key-col-names)
+                      (update-keys probe-fields str)
+                      (map str probe-key-col-names)
+                      theta-expr
+                      (update-keys param-types str)
+                      args
+                      (boolean with-nil-row?)
+                      64
+                      4)))
+
 (defn- emit-join-expr {:style/indent 2}
   [{:keys [condition left right]}
    {:keys [param-fields]}
@@ -520,11 +543,10 @@
     {:fields (projection-specs->fields output-projections)
      :->cursor (fn [{:keys [allocator args] :as opts}]
                  (util/with-close-on-catch [build-cursor (->build-cursor opts)
-                                            relation-map (emap/->relation-map allocator {:build-fields build-fields
+                                            relation-map (->join-relation-map allocator {:build-fields build-fields
                                                                                          :build-key-col-names build-key-col-names
                                                                                          :probe-fields probe-fields
                                                                                          :probe-key-col-names probe-key-col-names
-                                                                                         :store-full-build-rel? true
                                                                                          :with-nil-row? with-nil-row?
                                                                                          :theta-expr theta-expr
                                                                                          :param-fields param-fields

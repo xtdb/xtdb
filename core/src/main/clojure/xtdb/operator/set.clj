@@ -3,12 +3,14 @@
             [xtdb.error :as err]
             [xtdb.expression.map :as emap]
             [xtdb.logical-plan :as lp]
+            [xtdb.operator.join :as join]
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import java.util.stream.IntStream
+           (xtdb ICursor)
            (xtdb.arrow RelationReader)
            (xtdb.expression.map RelationMap)
-           (xtdb ICursor ICursor$Factory)))
+           (xtdb.operator.join JoinRelationMap)))
 
 (defmethod lp/ra-expr :distinct [_]
   (s/cat :op #{:δ :distinct}
@@ -75,15 +77,13 @@
 
 (deftype IntersectionCursor [^ICursor left-cursor
                              ^ICursor right-cursor
-                             ^RelationMap rel-map
+                             ^JoinRelationMap rel-map
                              difference?]
   ICursor
   (tryAdvance [_ c]
     (.forEachRemaining right-cursor
                        (fn [^RelationReader in-rel]
-                         (let [builder (.buildFromRelation rel-map in-rel)]
-                           (dotimes [idx (.getRowCount in-rel)]
-                             (.add builder idx)))))
+                         (.append rel-map in-rel)))
 
     (boolean
      (let [advanced? (boolean-array 1)]
@@ -118,9 +118,9 @@
         {:fields fields
          :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                      (IntersectionCursor. left-cursor right-cursor
-                                          (emap/->relation-map allocator
-                                                               {:build-fields left-fields
-                                                                :key-col-names (set (keys fields))})
+                                          (join/->join-relation-map allocator
+                                                                    {:build-fields left-fields
+                                                                     :key-col-names (set (keys fields))})
                                           false))}))))
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
@@ -130,8 +130,8 @@
         {:fields fields
          :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                      (IntersectionCursor. left-cursor right-cursor
-                                          (emap/->relation-map allocator {:build-fields left-fields
-                                                                          :key-col-names (set (keys fields))})
+                                          (join/->join-relation-map allocator {:build-fields left-fields
+                                                                               :key-col-names (set (keys fields))})
                                           true))}))))
 
 (deftype DistinctCursor [^ICursor in-cursor
