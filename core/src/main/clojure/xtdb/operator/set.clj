@@ -112,7 +112,7 @@
         {:fields fields
          :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                      (IntersectionCursor. left-cursor right-cursor
-                                          (join/->join-relation-map allocator
+                                          (join/->relation-map allocator
                                                                     {:build-fields left-fields
                                                                      :key-col-names (set (keys fields))})
                                           false))}))))
@@ -124,7 +124,7 @@
         {:fields fields
          :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                      (IntersectionCursor. left-cursor right-cursor
-                                          (join/->join-relation-map allocator {:build-fields left-fields
-                                                                               :key-col-names (set (keys fields))})
+                                          (join/->relation-map allocator {:build-fields left-fields
+                                                                          :key-col-names (set (keys fields))})
                                           true))}))))
 

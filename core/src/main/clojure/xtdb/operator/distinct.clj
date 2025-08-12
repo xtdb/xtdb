@@ -3,14 +3,13 @@
             [xtdb.expression.map :as emap]
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.util :as util])
   (:import java.util.stream.IntStream
-           (xtdb ICursor)
-           (xtdb.arrow RelationReader)
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.types.pojo.Schema
-           (xtdb.operator.distinct DistinctRelationMap)))
+           (xtdb ICursor)
+           (xtdb.arrow RelationReader)
+           (xtdb.operator.distinct DistinctRelationMap DistinctRelationMap$ComparatorFactory)))
 
 (defmethod lp/ra-expr :distinct [_]
   (s/cat :op #{:δ :distinct}
@@ -49,7 +48,9 @@
            nil-keys-equal?
            param-fields args]
     :as opts}]
-  (let [param-types (update-vals param-fields types/field->col-type)
+  (let [param-types (-> param-fields
+                        (update-keys str)
+                        (update-vals types/field->col-type))
         build-key-col-names (get opts :build-key-col-names key-col-names)
 
         schema (Schema. (-> build-fields
@@ -57,18 +58,16 @@
                             (->> (mapv (fn [[field-name field]]
                                          (-> field (types/field-with-name (str field-name))))))))]
 
-    (util/with-close-on-catch [rel-writer (vw/->rel-writer allocator schema)]
-      (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.vectorFor rel-writer (str %))) build-key-col-names)]
-        (DistinctRelationMap. allocator
-                              (map str build-key-col-names)
-                              (boolean store-full-build-rel?)
-                              rel-writer
-                              build-key-cols
-                              (boolean nil-keys-equal?)
-                              (update-keys param-types str)
-                              args
-                              64
-                              4)))))
+    (DistinctRelationMap. allocator schema
+                          (map str build-key-col-names)
+                          (boolean store-full-build-rel?)
+                          (reify DistinctRelationMap$ComparatorFactory
+                            (buildEqui [_ build-col in-col]
+                              (emap/->equi-comparator build-col in-col
+                                                      args
+                                                      {:nil-keys-equal? nil-keys-equal?
+                                                       :param-types param-types})))
+                          64 4)))
 
 (defmethod lp/emit-expr :distinct [{:keys [relation]} args]
   (lp/unary-expr (lp/emit-expr relation args)

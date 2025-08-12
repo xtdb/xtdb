@@ -59,7 +59,7 @@
        params)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn ->theta-comparator [probe-rel build-rel theta-expr params {:keys [build-fields probe-fields param-types]}]
+(defn ->theta-comparator [build-rel probe-rel theta-expr params {:keys [build-fields probe-fields param-types]}]
   (let [col-types (update-vals (merge build-fields probe-fields) types/field->col-type)
         f (build-comparator (->> (expr/form->expr theta-expr {:col-types col-types, :param-types param-types})
                                  (expr/prepare-expr)
@@ -68,11 +68,11 @@
                                                           (= op :variable)
                                                           (into (let [{:keys [variable]} expr]
                                                                   (if (contains? probe-fields variable)
-                                                                    {:rel left-rel, :idx left-idx}
-                                                                    {:rel right-rel, :idx right-idx})))))))
+                                                                    {:rel right-rel, :idx right-idx}
+                                                                    {:rel left-rel, :idx left-idx})))))))
                             {:var->col-type col-types, :param-types param-types})]
-    (f probe-rel
-       build-rel
+    (f build-rel
+       probe-rel
        pg-class-schema-hack
        params)))
 

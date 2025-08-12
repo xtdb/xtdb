@@ -25,7 +25,7 @@
            (xtdb.arrow RelationReader RelationWriter)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
-           (xtdb.operator.join JoinRelationMap)))
+           (xtdb.operator.join JoinRelationMap JoinRelationMap$ComparatorFactory)))
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
@@ -93,7 +93,7 @@
 (defn emit-join-children [join-expr args]
   (-> join-expr
       (update :left #(lp/emit-expr % args))
-      (update :right #(lp/emit-expr % args))) )
+      (update :right #(lp/emit-expr % args))))
 
 (defn- cross-product ^xtdb.arrow.RelationReader [^RelationReader left-rel, ^RelationReader right-rel]
   (let [left-row-count (.getRowCount left-rel)
@@ -328,7 +328,7 @@
 (deftype JoinCursor [^BufferAllocator allocator, ^ICursor build-cursor,
                      ^:unsynchronized-mutable ^ICursor probe-cursor
                      ^:unsynchronized-mutable ^RelationWriter nil-rel-writer
-                     ^IFn ->probe-cursor
+                     ^IFn ->probe-cursor, probe-fields
                      ^JoinRelationMap rel-map
                      ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
@@ -348,7 +348,7 @@
                                 (zipmap probe-iid-keys (repeat pushdown-iids)))))))
 
     (when (and matched-build-idxs (not nil-rel-writer))
-      (util/with-close-on-catch [nil-rel-writer (emap/->nillable-rel-writer allocator (.getProbeFields rel-map))]
+      (util/with-close-on-catch [nil-rel-writer (emap/->nillable-rel-writer allocator probe-fields)]
         (set! (.nil-rel-writer this) nil-rel-writer)))
 
     (boolean
@@ -463,7 +463,7 @@
 (defn- ->pushdown-blooms [key-col-names]
   (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
 
-(defn ->join-relation-map ^xtdb.operator.join.JoinRelationMap
+(defn ->relation-map ^xtdb.operator.join.JoinRelationMap
   [^BufferAllocator allocator,
    {:keys [key-col-names build-fields probe-fields
            with-nil-row? theta-expr param-fields args]
@@ -478,16 +478,23 @@
                                        with-nil-row? types/->nullable-field)))))]
 
     (JoinRelationMap. allocator schema
-                      (update-keys build-fields str)
                       (map str build-key-col-names)
-                      (update-keys probe-fields str)
                       (map str probe-key-col-names)
-                      theta-expr
-                      (update-keys param-types str)
-                      args
+                      (reify JoinRelationMap$ComparatorFactory
+                        (buildEqui [_ build-col probe-col]
+                          (emap/->equi-comparator build-col probe-col args
+                                                  {:nil-keys-equal? with-nil-row?
+                                                   :param-types param-types}))
+
+                        (buildTheta [_ build-rel probe-rel]
+                          (when theta-expr
+                            (emap/->theta-comparator build-rel probe-rel theta-expr args
+                                                     {:nil-keys-equal? with-nil-row?
+                                                      :build-fields build-fields
+                                                      :probe-fields probe-fields
+                                                      :param-types param-types}))))
                       (boolean with-nil-row?)
-                      64
-                      4)))
+                      64 4)))
 
 (defn- emit-join-expr {:style/indent 2}
   [{:keys [condition left right]}
@@ -543,14 +550,14 @@
     {:fields (projection-specs->fields output-projections)
      :->cursor (fn [{:keys [allocator args] :as opts}]
                  (util/with-close-on-catch [build-cursor (->build-cursor opts)
-                                            relation-map (->join-relation-map allocator {:build-fields build-fields
-                                                                                         :build-key-col-names build-key-col-names
-                                                                                         :probe-fields probe-fields
-                                                                                         :probe-key-col-names probe-key-col-names
-                                                                                         :with-nil-row? with-nil-row?
-                                                                                         :theta-expr theta-expr
-                                                                                         :param-fields param-fields
-                                                                                         :args args})]
+                                            relation-map (->relation-map allocator {:build-fields build-fields
+                                                                                    :probe-fields probe-fields
+                                                                                    :build-key-col-names build-key-col-names
+                                                                                    :probe-key-col-names probe-key-col-names
+                                                                                    :with-nil-row? with-nil-row?
+                                                                                    :theta-expr theta-expr
+                                                                                    :param-fields param-fields
+                                                                                    :args args})]
                    (letfn [(->probe-cursor-with-pushdowns [our-pushdown-blooms our-pushdown-iids]
                              (->probe-cursor (cond-> opts
                                                our-pushdown-blooms (update :pushdown-blooms (fnil into {}) our-pushdown-blooms)
@@ -561,7 +568,7 @@
                        (project/->project-cursor opts
                                                  (if (= join-type ::mark-join)
                                                    (MarkJoinCursor. allocator build-cursor nil ->probe-cursor-with-pushdowns relation-map matched-build-idxs mark-col-name pushdown-blooms join-type)
-                                                   (JoinCursor. allocator build-cursor nil nil ->probe-cursor-with-pushdowns relation-map matched-build-idxs pushdown-blooms pushdown-iids join-type))
+                                                   (JoinCursor. allocator build-cursor nil nil ->probe-cursor-with-pushdowns probe-fields relation-map matched-build-idxs pushdown-blooms pushdown-iids join-type))
                                                  output-projections)))))}))
 
 (defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]
