@@ -273,9 +273,6 @@
     (cond-> (conj (relation-columns relation) (val (first columns)))
       (:ordinality-column opts) (conj (:ordinality-column opts)))
 
-    [:let _ relation]
-    (relation-columns relation)
-
     [:let-mat _ relation]
     (relation-columns relation)
 

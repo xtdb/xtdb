@@ -621,12 +621,15 @@
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           cols (some-> (.tableProjection ctx) (->table-projection))]
 
-      (or (when-let [{:keys [query-name cte-id], cte-cols :col-syms} (get ctes table-chain)]
+      (or (when-let [{:keys [materialized? query-name cte-id plan], cte-cols :col-syms} (get ctes table-chain)]
             (when (or (seq (.querySystemTimePeriodSpecification ctx))
                       (seq (.queryValidTimePeriodSpecification ctx)))
               (add-err! env (->PeriodSpecificationDisallowedOnCte query-name)))
 
-            (->DerivedTable [:relation cte-id {:col-names cte-cols}] table-alias unique-table-alias
+            (->DerivedTable (if materialized?
+                              [:relation cte-id {:col-names cte-cols}]
+                              plan)
+                            table-alias unique-table-alias
                             (->insertion-ordered-set (or cols cte-cols))))
 
           (let [[table & more-matches] (or (get table-chains table-chain)
@@ -2298,11 +2301,12 @@
   (visitQueryExpression [this ctx]
     (let [ctes (some-> (.withClause ctx)
                        (.accept (->WithVisitor env scope)))]
-      (reduce (fn [{:keys [plan col-syms]} {:keys [materialized? cte-id], cte-plan :plan}]
-                (let [op (if materialized? :let-mat :let)]
-                  (->QueryExpr [op [cte-id cte-plan]
+      (reduce (fn [{:keys [plan col-syms] :as acc} {:keys [materialized? cte-id], cte-plan :plan}]
+                (if materialized?
+                  (->QueryExpr [:let-mat [cte-id cte-plan]
                                 plan]
-                               col-syms)))
+                               col-syms)
+                  acc))
               (.accept (.queryExpressionNoWith ctx)
                          (-> this
                              (update-in [:env :ctes] (fnil into {}) ctes)))
