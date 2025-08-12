@@ -1,7 +1,6 @@
 (ns xtdb.operator.set
   (:require [clojure.spec.alpha :as s]
             [xtdb.error :as err]
-            [xtdb.expression.map :as emap]
             [xtdb.logical-plan :as lp]
             [xtdb.operator.join :as join]
             [xtdb.types :as types]
@@ -9,7 +8,6 @@
   (:import java.util.stream.IntStream
            (xtdb ICursor)
            (xtdb.arrow RelationReader)
-           (xtdb.expression.map RelationMap)
            (xtdb.operator.join JoinRelationMap)))
 
 (defmethod lp/ra-expr :intersect [_]

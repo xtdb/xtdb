@@ -8,10 +8,9 @@
   (:import (java.util Map)
            java.util.function.IntBinaryOperator
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector NullVector VectorSchemaRoot)
+           (org.apache.arrow.vector NullVector)
            (org.apache.arrow.vector.types.pojo Schema)
-           (xtdb.arrow RelationReader VectorReader)
-           (xtdb.expression.map RelationMap)))
+           (xtdb.arrow RelationReader VectorReader)))
 
 (def ^:private left-rel (gensym 'left-rel))
 (def ^:private left-vec (gensym 'left-vec))
@@ -99,41 +98,3 @@
 
 (def nil-row-idx 0)
 
-(defn ->relation-map ^xtdb.expression.map.RelationMap
-  [^BufferAllocator allocator,
-   {:keys [key-col-names store-full-build-rel?
-           build-fields probe-fields
-           with-nil-row? nil-keys-equal?
-           theta-expr param-fields args]
-    :as opts}]
-  (let [param-types (update-vals param-fields types/field->col-type)
-        build-key-col-names (get opts :build-key-col-names key-col-names)
-        probe-key-col-names (get opts :probe-key-col-names key-col-names)
-
-        schema (Schema. (-> build-fields
-                            (cond-> (not store-full-build-rel?) (select-keys build-key-col-names))
-                            (->> (mapv (fn [[field-name field]]
-                                         (cond-> (-> field (types/field-with-name (str field-name)))
-                                           with-nil-row? types/->nullable-field))))))]
-
-    (util/with-close-on-catch [rel-writer (vw/->rel-writer allocator schema)]
-      (when with-nil-row?
-        (doto (.rowCopier rel-writer (->nil-rel (keys build-fields)))
-          (.copyRow 0)))
-
-      (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.vectorFor rel-writer (str %))) build-key-col-names)]
-        (RelationMap. allocator
-                      (update-keys build-fields str)
-                      (map str build-key-col-names)
-                      (update-keys probe-fields str)
-                      (map str probe-key-col-names)
-                      (boolean store-full-build-rel?)
-                      rel-writer
-                      build-key-cols
-                      (boolean nil-keys-equal?)
-                      theta-expr
-                      (update-keys param-types str)
-                      args
-                      (boolean with-nil-row?)
-                      64
-                      4)))))

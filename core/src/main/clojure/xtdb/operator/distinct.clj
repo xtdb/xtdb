@@ -2,18 +2,22 @@
   (:require [clojure.spec.alpha :as s]
             [xtdb.expression.map :as emap]
             [xtdb.logical-plan :as lp]
-            [xtdb.util :as util])
+            [xtdb.types :as types]
+            [xtdb.util :as util]
+            [xtdb.vector.writer :as vw])
   (:import java.util.stream.IntStream
            (xtdb ICursor)
            (xtdb.arrow RelationReader)
-           (xtdb.expression.map RelationMap)))
+           org.apache.arrow.memory.BufferAllocator
+           org.apache.arrow.vector.types.pojo.Schema
+           (xtdb.operator.distinct DistinctRelationMap)))
 
 (defmethod lp/ra-expr :distinct [_]
   (s/cat :op #{:δ :distinct}
          :relation ::lp/ra-expression))
 
 (deftype DistinctCursor [^ICursor in-cursor
-                         ^RelationMap rel-map]
+                         ^DistinctRelationMap rel-map]
   ICursor
   (tryAdvance [_ c]
     (let [advanced? (boolean-array 1)]
@@ -38,12 +42,40 @@
     (util/try-close rel-map)
     (util/try-close in-cursor)))
 
+(defn ->relation-map ^DistinctRelationMap
+  [^BufferAllocator allocator,
+   {:keys [key-col-names store-full-build-rel?
+           build-fields
+           nil-keys-equal?
+           param-fields args]
+    :as opts}]
+  (let [param-types (update-vals param-fields types/field->col-type)
+        build-key-col-names (get opts :build-key-col-names key-col-names)
+
+        schema (Schema. (-> build-fields
+                            (cond-> (not store-full-build-rel?) (select-keys build-key-col-names))
+                            (->> (mapv (fn [[field-name field]]
+                                         (-> field (types/field-with-name (str field-name))))))))]
+
+    (util/with-close-on-catch [rel-writer (vw/->rel-writer allocator schema)]
+      (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.vectorFor rel-writer (str %))) build-key-col-names)]
+        (DistinctRelationMap. allocator
+                              (map str build-key-col-names)
+                              (boolean store-full-build-rel?)
+                              rel-writer
+                              build-key-cols
+                              (boolean nil-keys-equal?)
+                              (update-keys param-types str)
+                              args
+                              64
+                              4)))))
+
 (defmethod lp/emit-expr :distinct [{:keys [relation]} args]
   (lp/unary-expr (lp/emit-expr relation args)
                  (fn [inner-fields]
                    {:fields inner-fields
                     :->cursor (fn [{:keys [allocator]} in-cursor]
-                                (DistinctCursor. in-cursor (emap/->relation-map allocator
-                                                                                {:build-fields inner-fields
-                                                                                 :key-col-names (set (keys inner-fields))
-                                                                                 :nil-keys-equal? true})))})))
+                                (DistinctCursor. in-cursor (->relation-map allocator
+                                                                           {:build-fields inner-fields
+                                                                            :key-col-names (set (keys inner-fields))
+                                                                            :nil-keys-equal? true})))})))

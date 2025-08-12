@@ -4,6 +4,7 @@
             [xtdb.expression :as expr]
             [xtdb.expression.map :as emap]
             [xtdb.logical-plan :as lp]
+            [xtdb.operator.distinct :as distinct]
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -18,7 +19,8 @@
            (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb ICursor)
            (xtdb.arrow IntVector RelationReader VectorReader VectorWriter)
-           (xtdb.expression.map RelationMap RelationMapBuilder)))
+           (xtdb.expression.map RelationMapBuilder)
+           xtdb.operator.distinct.DistinctRelationMap))
 
 (s/def ::aggregate-expr
   (s/or :nullary (s/cat :f simple-symbol?)
@@ -59,7 +61,7 @@
     (.close group-mapping)))
 
 (deftype GroupMapper [^List group-col-names
-                      ^RelationMap rel-map
+                      ^DistinctRelationMap rel-map
                       ^VectorWriter group-mapping]
   IGroupMapper
   (groupMapping [_ in-rel]
@@ -67,7 +69,7 @@
     (let [row-count (.getRowCount in-rel)
           builder (.buildFromRelation rel-map in-rel)]
       (dotimes [idx row-count]
-        (.writeInt group-mapping (RelationMap/insertedIdx (.addIfNotPresent builder idx))))
+        (.writeInt group-mapping (DistinctRelationMap/insertedIdx (.addIfNotPresent builder idx))))
 
       group-mapping))
 
@@ -83,9 +85,9 @@
   (let [gm-vec (IntVector. allocator "group-mapping" false)]
     (if-let [group-col-names (not-empty (set (keys group-fields)))]
       (GroupMapper. group-col-names
-                    (emap/->relation-map allocator {:build-fields group-fields
-                                                    :build-key-col-names (vec group-col-names)
-                                                    :nil-keys-equal? true})
+                    (distinct/->relation-map allocator {:build-fields group-fields
+                                                        :build-key-col-names (vec group-col-names)
+                                                        :nil-keys-equal? true})
                     gm-vec)
       (NullGroupMapper. gm-vec))))
 
@@ -432,9 +434,9 @@
               (dotimes [idx (.getValueCount in-vec)]
                 (let [group-idx (.getInt group-mapping idx)]
                   (while (<= (.size rel-maps) group-idx)
-                    (.add rel-maps (emap/->relation-map al {:build-fields {from-name (types/col-type->field from-type)}
-                                                            :build-key-col-names [from-name]})))
-                  (let [^RelationMap rel-map (nth rel-maps group-idx)]
+                    (.add rel-maps (distinct/->relation-map al {:build-fields {from-name (types/col-type->field from-type)}
+                                                                :build-key-col-names [from-name]})))
+                  (let [^DistinctRelationMap rel-map (nth rel-maps group-idx)]
                     (while (<= (.size builders) group-idx)
                       (.add builders nil))
 
