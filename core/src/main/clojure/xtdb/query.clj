@@ -15,6 +15,7 @@
             xtdb.operator.apply
             xtdb.operator.arrow
             xtdb.operator.csv
+            xtdb.operator.distinct
             xtdb.operator.group-by
             xtdb.operator.join
             xtdb.operator.let
