@@ -100,16 +100,15 @@
 
 (defn- expect-eid [eid]
   (if-not (eid? eid)
-    (throw (err/illegal-arg :xtdb.tx/invalid-eid
-                            {::err/message "expected xt/id", :xt/id eid}))
+    (throw (err/incorrect :xtdb.tx/invalid-eid "expected :xt/id or \"_id\""))
     eid))
 
 (defn- expect-doc [doc]
   (when-not (map? doc)
-    (throw (err/illegal-arg :xtdb.tx/expected-doc
-                            {::err/message "expected doc map", :doc doc})))
+    (throw (err/incorrect :xtdb.tx/expected-doc "expected doc map" {:doc doc})))
 
-  (expect-eid (or (:xt/id doc) (get doc "xt/id")))
+  (expect-eid (or (:xt/id doc) (get doc "_id")
+                  (throw (err/incorrect :missing-id "expected :xt/id or \"_id\" in doc" {:doc doc}))))
 
   doc)
 
