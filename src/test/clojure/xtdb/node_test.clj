@@ -5,18 +5,21 @@
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
             [xtdb.compactor :as c]
+            [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.log :as xt-log]
             [xtdb.logging :as logging]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.node :as xtn]
             [xtdb.node.impl] ;;TODO probably move internal methods to main node interface
+            [xtdb.object-store :as os]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.util :as util])
-  (:import [java.time ZoneId ZonedDateTime]
+  (:import [java.nio.file Path]
+           [java.time ZoneId ZonedDateTime]
            [xtdb.api ServerConfig Xtdb$Config]
            xtdb.types.RegClass))
 
@@ -1124,3 +1127,26 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
     (t/is (= [{:xt/id 1}]
              (xt/q tu/*node* "FROM system WHERE EXISTS(FROM device WHERE system._id = device.system_id)")))))
+
+(t/deftest test-unconsumed-nodes-4675
+  ;; a :: nullable i64
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :a 1}, {:xt/id 2}]])
+  (tu/flush-block! tu/*node*)
+
+  ;; a :: null in this block
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 3, :a nil}]])
+  (tu/flush-block! tu/*node*)
+
+  (c/compact-all! tu/*node* #xt/duration "PT1S")
+
+  (t/is (= ["l00-rc-b00.arrow" "l00-rc-b01.arrow" "l01-rc-b00.arrow"
+
+            ;; previously this one failed to compact with 'unconsumed nodes' error.
+            "l01-rc-b01.arrow"]
+
+           (->> (.listAllObjects (.getBufferPool (db/primary-db tu/*node*))
+                                 (util/->path "tables/public$docs/meta/"))
+                (mapv (comp str #(.getFileName ^Path %) :key os/<-StoredObject)))))
+
+  (t/is (= [{:xt/id 1, :a 1} {:xt/id 2} {:xt/id 3}]
+           (xt/q tu/*node* "SELECT * FROM docs ORDER BY _id"))))

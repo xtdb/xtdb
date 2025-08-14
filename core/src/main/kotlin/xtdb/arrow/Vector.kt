@@ -19,9 +19,7 @@ import org.apache.arrow.vector.types.pojo.DictionaryEncoding
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
-import xtdb.toArrowType
 import xtdb.toFieldType
-import xtdb.toLeg
 import xtdb.trie.ColumnName
 import xtdb.types.Fields
 import xtdb.util.Hasher
@@ -74,12 +72,14 @@ sealed class Vector : VectorReader, VectorWriter {
     internal abstract fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
     internal abstract fun loadFromArrow(vec: ValueVector)
 
-    internal open fun maybePromote(al: BufferAllocator, target: FieldType): Vector {
-        if (target.type != type) return DenseUnionVector.promote(al, this, target)
-
-        nullable = nullable || target.isNullable
-        return this
-    }
+    internal open fun maybePromote(al: BufferAllocator, target: FieldType): Vector =
+        // if it's a NullVector coming in, don't promote - we can just set ourselves to nullable. #4675
+        if (target.type != type && target.type != NULL_TYPE)
+            DenseUnionVector.promote(al, this, target)
+        else {
+            nullable = nullable || target.isNullable
+            this
+        }
 
     override fun rowCopier(dest: VectorWriter): RowCopier {
         if (dest is DenseUnionVector.LegVector) return dest.rowCopierFrom(this)
