@@ -36,6 +36,7 @@ jobs:
 
       - name: Test
         run: ./gradlew test
+        timeout-minutes: 10
 
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v4
@@ -123,6 +124,7 @@ jobs:
 
       - name: Integration Test
         run: ./gradlew integration-test
+        timeout-minutes: 15
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v4
         if: success() || failure() # always run even if the previous step fails
@@ -156,6 +158,7 @@ jobs:
 
       - name: SLT 1
         run: ./gradlew slt-test
+        timeout-minutes: 20
 
   # FIXME #4598
   # slt-2:
@@ -174,3 +177,4 @@ jobs:
 
   #     - name: SLT 2
   #       run: ./gradlew slt-test-2
+  #       timeout-minutes: 40
