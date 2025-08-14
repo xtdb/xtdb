@@ -1402,6 +1402,22 @@
 
     (cmd-send-ready conn)))
 
+(defmethod handle-msg* :msg-copy-fail [{:keys [conn-state] :as conn} _msg]
+  (when-let [{:keys [copy-file write-ch]} (:copy @conn-state)]
+    (try
+      (util/close write-ch)
+      (catch Exception e
+        (log/debug e "Error closing COPY write channel during failure")))
+
+    (try
+      (util/delete-file copy-file)
+      (catch Exception e
+        (log/debug e "Error deleting COPY file during failure")))
+
+    (swap! conn-state dissoc :copy))
+
+  (cmd-send-ready conn))
+
 ;; ignore password messages, we are authenticated when getting here
 (defmethod handle-msg* :msg-password [_conn _msg])
 
