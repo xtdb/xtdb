@@ -1,9 +1,13 @@
 package xtdb.trie
 
 import com.carrotsearch.hppc.ObjectStack
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
+import xtdb.arrow.Relation
 import xtdb.trie.ArrowHashTrie.IidBranch
 import xtdb.trie.HashTrie.Node
+import xtdb.util.closeOnCatch
+import java.nio.file.Path
 import java.util.*
 import java.util.function.Predicate
 import java.util.stream.Stream
@@ -92,6 +96,29 @@ interface ISegment<N : Node<N>, L : N> {
         override val trie: HashTrie<N, L>,
         override val dataRel: DataRel<L>
     ) : ISegment<N, L>
+
+    class LocalSegment(
+        al: BufferAllocator, dataFile: Path, metaFile: Path
+    ) : ISegment<ArrowHashTrie.Node, ArrowHashTrie.Leaf>, AutoCloseable {
+
+        private val metaRel: Relation
+        override val trie: HashTrie<ArrowHashTrie.Node, ArrowHashTrie.Leaf>
+        override val dataRel = DataRel.LocalFile(al, dataFile)
+
+        init {
+            Relation.loader(al, metaFile).use { loader ->
+                loader.loadPage(0, al).closeOnCatch { metaRel ->
+                    this.metaRel = metaRel
+                    trie = ArrowHashTrie(metaRel["nodes"])
+                }
+            }
+        }
+
+        override fun close() {
+            dataRel.close()
+            metaRel.close()
+        }
+    }
 }
 
 data class MergePlanNode<N : Node<N>, L : N>(val segment: ISegment<N, L>, val node: L) {

@@ -2,6 +2,7 @@ package xtdb.compactor
 
 import com.carrotsearch.hppc.ByteArrayList
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
@@ -13,8 +14,7 @@ import xtdb.trie.*
 import xtdb.trie.Trie.dataRelSchema
 import xtdb.types.Fields.mergeFields
 import xtdb.types.withName
-import xtdb.util.closeOnCatch
-import xtdb.util.openReadableChannel
+import xtdb.util.*
 import java.nio.file.Path
 import java.time.LocalDate
 import java.util.*
@@ -119,7 +119,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
         override fun iterator() = results.iterator()
 
         override fun close() {
-            results.forEach { it.close() }
+            results.closeAll()
             dir?.deleteExisting()
         }
     }
@@ -226,4 +226,38 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
     }
 
     override fun close() = outWriters.close()
+}
+
+/**
+ *  Utility function to call SegmentMerge manually
+ */
+internal fun main() {
+    val dir = "/tmp/downloads/compactor-error".asPath
+    val files = listOf("l01-rc-b2c74.arrow", "l00-rc-b2c75.arrow")
+
+    try {
+        RootAllocator().use { al ->
+            SegmentMerge(al).use { segMerge ->
+                files.safeMap { fileName ->
+                    ISegment.LocalSegment(
+                        al,
+                        dir.resolve("data").resolve(fileName),
+                        dir.resolve("meta").resolve(fileName)
+                    )
+                }.useAll { segments ->
+                    segMerge.mergeSegments(
+                        segments, null, SegmentMerge.RecencyPartitioning.Partition
+                    ).use { results ->
+                        with(segMerge) {
+                            // here's probably where you want to do something other than printing the schema :)
+                            results.forEach { it.openAllAsRelation().use { rel -> println(rel.schema) } }
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e: Throwable) {
+        e.printStackTrace()
+        throw e
+    }
 }

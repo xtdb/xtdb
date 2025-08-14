@@ -9,6 +9,7 @@ import xtdb.compactor.resolveSameSystemTimeEvents
 import xtdb.table.TableRef
 import xtdb.trie.Trie.dataFilePath
 import xtdb.util.closeAll
+import xtdb.util.closeOnCatch
 import java.nio.file.Path
 
 interface DataRel<L> : AutoCloseable {
@@ -38,6 +39,31 @@ interface DataRel<L> : AutoCloseable {
 
         @JvmStatic
         fun live(liveRel: RelationReader) = Live(liveRel)
+    }
+
+    class LocalFile(al: BufferAllocator, dataFile: Path) : DataRel<ArrowHashTrie.Leaf> {
+
+        private val loader: Relation.Loader
+        override val schema: Schema
+        private val dataRel: Relation
+
+        init {
+            Relation.loader(al, dataFile).closeOnCatch { loader ->
+                this.loader = loader
+                schema = loader.schema
+                dataRel = Relation(al, schema)
+            }
+        }
+
+        override fun loadPage(leaf: ArrowHashTrie.Leaf): RelationReader {
+            loader.loadPage(leaf.dataPageIndex, dataRel)
+            return dataRel
+        }
+
+        override fun close() {
+            dataRel.close()
+            loader.close()
+        }
     }
 
     class Arrow(
