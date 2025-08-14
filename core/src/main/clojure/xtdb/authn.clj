@@ -106,6 +106,21 @@
          :db-cat (ig/ref :xtdb/db-catalog)}
         opts))
 
+(defn- validate-oidc-config [config discovery-url]
+  (let [{:keys [token_endpoint userinfo_endpoint]} config]
+    (cond
+      (not token_endpoint)
+      (throw (err/incorrect :xtdb/oidc-config-discovery-error
+                            (format "OIDC configuration missing required token_endpoint from %s" discovery-url)
+                            {:body config}))
+      
+      (not userinfo_endpoint)
+      (throw (err/incorrect :xtdb/oidc-config-discovery-error
+                            (format "OIDC configuration missing required userinfo_endpoint from %s" discovery-url)
+                            {:body config}))
+      
+      :else config)))
+
 (defn discover-oidc-config [issuer-url]
   (let [discovery-url (str issuer-url "/.well-known/openid-configuration")]
     (try
@@ -113,7 +128,7 @@
                                             {:throw-exceptions false
                                              :as :json})]
         (if (= 200 status)
-          body
+          (validate-oidc-config body discovery-url)
           (throw (err/incorrect :xtdb/oidc-config-discovery-error
                                 (format "Failed to discover OIDC configuration from %s: %s" discovery-url (:error body))
                                 {:status status, :body body}))))
@@ -189,8 +204,11 @@
     (throw (err/incorrect :xtdb/authn-failed "No valid token or refresh token available for refresh"))))
 
 (defn oauth-device-info [{:keys [oidc-config client-id client-secret]}]
-  (let [device-endpoint (:device_authorization_endpoint oidc-config)
-        {:keys [status body]} (http/post device-endpoint
+  (let [device-endpoint (:device_authorization_endpoint oidc-config)]
+    (when-not device-endpoint
+      (throw (err/incorrect :xtdb/authn-failed
+                            "OIDC provider does not support device authorization flow - missing device_authorization_endpoint")))
+    (let [{:keys [status body]} (http/post device-endpoint
                                          {:form-params {:client_id client-id
                                                         :client_secret client-secret
                                                         :scope "openid"}
@@ -202,7 +220,7 @@
        :interval (:interval body)}
       (throw (err/incorrect :xtdb/authn-failed
                             (format "Failed to obtain device info from %s: %s" device-endpoint (:error body))
-                            {:status status, :body body})))))
+                            {:status status, :body body}))))))
 
 
 (defrecord DeviceAuthResponse [authn url device-code ^Duration interval]
@@ -271,16 +289,11 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->oidc-authn [^Authenticator$Factory$OpenIdConnect cfg]
-  (let [oidc-config (discover-oidc-config (.getIssuerUrl cfg))]
-    (when-not oidc-config
-      (throw (IllegalArgumentException. (str "Failed to fetch OIDC configuration from: " (.getIssuerUrl cfg)))))
+  (let [oidc-config (discover-oidc-config (.getIssuerUrl cfg))] 
     (->OpenIdConnect oidc-config (.getClientId cfg) (.getClientSecret cfg) (<-rules-cfg (.getRules cfg)))))
 
 (defmethod xtn/apply-config! ::openid-connect-authn [^Xtdb$Config config, _, {:keys [issuer-url client-id client-secret rules]}]
-  (let [oidc-config (discover-oidc-config issuer-url)]
-    (when-not oidc-config
-      (throw (IllegalArgumentException. (str "Failed to fetch OIDC configuration from: " issuer-url))))
-    (.authn config (Authenticator$Factory$OpenIdConnect. (.toURL (URI. issuer-url)) client-id client-secret (->rules-cfg rules)))))
+   (.authn config (Authenticator$Factory$OpenIdConnect. (.toURL (URI. issuer-url)) client-id client-secret (->rules-cfg rules))))
 
 (defmethod ig/init-key :xtdb/authn [_ {:keys [^Authenticator$Factory authn-factory, q-src, db-cat]}]
   (.open authn-factory q-src db-cat))
