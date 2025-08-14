@@ -41,6 +41,8 @@
   [l2h-tries l1h-tries {:keys [^long file-size-target]}]
 
   (->> l1h-tries
+       (take-while #(= :live (:state %)))
+       reverse
 
        (reductions (fn [[acc-tries acc-size] {:keys [^long data-file-size] :as trie}]
                      [(conj acc-tries trie) (+ acc-size data-file-size)])
@@ -57,13 +59,7 @@
 (defn- l2h-compaction-jobs [table table-tries opts]
   (for [[[level recency _part] {l1h-tries :live+nascent}] table-tries
         :when (and recency (= level 1))
-        :let [input-tries (l2h-input-files (-> (get-in table-tries [[2 recency []] :live+nascent])
-                                               (->> (take-while #(= :live (:state %))))
-                                               reverse)
-                                           (-> l1h-tries
-                                               (->> (take-while #(= :live (:state %))))
-                                               reverse)
-                                           opts)]
+        :let [input-tries (l2h-input-files (get-in table-tries [[2 recency []] :live+nascent]) l1h-tries opts)]
         :when input-tries]
     (->Job table (mapv :trie-key input-tries) (byte-array 0)
            (Trie$Key. 2 recency nil (:block-idx (last input-tries)))
