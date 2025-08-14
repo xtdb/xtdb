@@ -34,7 +34,7 @@
               (t/is (= 1 (:test result))))))
         
         (t/testing "failed password authentication"
-          (t/is (thrown-with-msg? PSQLException #"password authentication failed for user: test-user"
+          (t/is (thrown-with-msg? PSQLException #"Password authentication failed for user: test-user"
                                   (jdbc/get-connection (assoc ds-spec :password "wrong-password")))))))))
 
 (t/deftest ^:integration test-oidc-client-credentials
@@ -52,7 +52,7 @@
                      :port port
                      :dbname "xtdb"
                      :user "oid-client"
-                     :password (authn-test/encode-client-creds client-id client-secret)}]
+                     :password (format "%s:%s" client-id client-secret)}]
 
         (t/testing "successful client credentials authentication"
           (with-open [conn (jdbc/get-connection ds-spec)]
@@ -60,13 +60,13 @@
               (t/is (= "authenticated" (:status result))))))
 
         
-        (t/testing "failed client credentials authentication with badly encoded credentials"
-          (t/is (thrown-with-msg? PSQLException #"ERROR: client credentials error: Invalid base64 encoding: Illegal base64 character 2d"
-                                  (jdbc/get-connection (assoc ds-spec :password "bad-client:bad-secret")))))
+        (t/testing "failed client credentials authentication with badly written credentials"
+          (t/is (thrown-with-msg? PSQLException #"Client credentials must be provided in the format 'client-id:client-secret'"
+                            (jdbc/get-connection (assoc ds-spec :password "too:many:colons")))))
 
         (t/testing "failed client credentials authentication with non-existent credentials"
-          (t/is (thrown-with-msg? PSQLException #"client credentials authentication failed for user: oid-client"
-                                  (jdbc/get-connection (assoc ds-spec :password (authn-test/encode-client-creds "bad-client" "bad-secret"))))))))))
+          (t/is (thrown-with-msg? PSQLException #"Client credentials authentication failed for client: bad-client"
+                                  (jdbc/get-connection (assoc ds-spec :password "bad-client:bad-secret")))))))))
 
 (t/deftest ^:integration test-oidc-session-management
   (authn-test/seed! authn-test/container)
@@ -92,16 +92,12 @@
               (t/is (= 2 (:second_query result2))))))
         
         (t/testing "multiple concurrent connections work"
-          (let [conn1 (jdbc/get-connection ds-spec)
-                conn2 (jdbc/get-connection ds-spec)]
-            (try
-              (let [result1 (jdbc/execute-one! conn1 ["SELECT 'conn1' as source"])
-                    result2 (jdbc/execute-one! conn2 ["SELECT 'conn2' as source"])]
-                (t/is (= "conn1" (:source result1)))
-                (t/is (= "conn2" (:source result2))))
-              (finally
-                (.close conn1)
-                (.close conn2)))))))))
+          (with-open [conn1 (jdbc/get-connection ds-spec)
+                      conn2 (jdbc/get-connection ds-spec)]
+            (let [result1 (jdbc/execute-one! conn1 ["SELECT 'conn1' as source"])
+                  result2 (jdbc/execute-one! conn2 ["SELECT 'conn2' as source"])]
+              (t/is (= "conn1" (:source result1)))
+              (t/is (= "conn2" (:source result2))))))))))
 
 (t/deftest ^:integration test-oidc-multiple-auth-methods
   (let [{:keys [clients]} (authn-test/seed! authn-test/container) 
@@ -124,7 +120,7 @@
       
       (t/testing "client credentials flow works"
         (let [ds-spec {:dbtype "postgresql" :host "localhost" :port port :dbname "xtdb"
-                       :user "oid-client" :password (authn-test/encode-client-creds client-id client-secret)}]
+                       :user "oid-client" :password (format "%s:%s" client-id client-secret)}]
           (with-open [conn (jdbc/get-connection ds-spec)]
             (let [result (jdbc/execute-one! conn ["SELECT 'client-creds-auth' as method"])]
               (t/is (= "client-creds-auth" (:method result)))))))
@@ -135,7 +131,7 @@
           (t/is (thrown? Exception (jdbc/get-connection password-ds-spec))))))))
 
 (t/deftest ^:integration test-oidc-client-credentials-token-expiry
-  (let [clients (:clients (authn-test/seed! authn-test/container :expires-in 3))
+  (let [clients (:clients (authn-test/seed! authn-test/container {:access-token-lifespan (int 2)}))
         {:keys [client-id client-secret]} (:test clients)
         port (tu/free-port)
         oidc-config [:openid-connect {:issuer-url (str (.getAuthServerUrl authn-test/container) "/realms/master")
@@ -149,7 +145,7 @@
                      :port port
                      :dbname "xtdb"
                      :user "oid-client"
-                     :password (authn-test/encode-client-creds client-id client-secret)}]
+                     :password (format "%s:%s" client-id client-secret)}]
         
         (t/testing "token expiry and automatic refresh works"
           ;; Initial connection should work

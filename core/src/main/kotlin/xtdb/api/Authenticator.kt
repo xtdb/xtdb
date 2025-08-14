@@ -12,27 +12,59 @@ import xtdb.database.Database
 import xtdb.query.IQuerySource
 import xtdb.util.requiringResolve
 import java.net.URL
-import clojure.lang.IPersistentMap
+import xtdb.error.Unsupported
+import java.time.Instant
+
+interface AuthResult {
+    val userId: String
+}
+
+interface OAuthResult : AuthResult {
+    val expiresAt: Instant
+    fun withExpiry(expiresAt: Instant): OAuthResult
+}
+
+data class SimpleResult(
+    override val userId: String
+) : AuthResult
+
+data class OAuthPasswordResult(
+    override val userId: String,
+    override var expiresAt: Instant,
+    val accessToken: String,
+    val refreshToken: String
+) : OAuthResult {
+    override fun withExpiry(expiresAt: Instant) = copy(expiresAt = expiresAt)
+}
+
+data class OAuthClientCredentialsResult(
+    override val userId: String,
+    override var expiresAt: Instant,
+    val accessToken: String,
+    val clientId: String,
+    val clientSecret: String
+) : OAuthResult {
+    override fun withExpiry(expiresAt: Instant) = copy(expiresAt = expiresAt)
+}
 
 val DEFAULT_RULES = listOf(MethodRule(TRUST))
 
 interface Authenticator : AutoCloseable {
     fun methodFor(user: String?, remoteAddress: String?): Method
 
-    fun verifyPassword(user: String, password: String): IPersistentMap? =
-        throw UnsupportedOperationException("password auth not supported")
+    fun verifyPassword(user: String, password: String): AuthResult =
+        throw Unsupported(errorCode="verifyPassword")
 
     interface DeviceAuthResponse {
         val url: URL
-        fun await(): IPersistentMap?
+        fun await(): OAuthPasswordResult
     }
 
     fun startDeviceAuth(user: String): DeviceAuthResponse =
-        throw UnsupportedOperationException("device auth not supported")
+        throw Unsupported(errorCode="startDeviceAuth")
 
-    @Throws(IllegalArgumentException::class)
-    fun verifyClientCredentials(clientCredentials: String): IPersistentMap? =
-        throw UnsupportedOperationException("client credentials auth not supported")
+    fun verifyClientCredentials(clientId: String, clientSecret: String): OAuthClientCredentialsResult =
+        throw Unsupported(errorCode="verifyClientCredentials")
 
     override fun close() = Unit
 

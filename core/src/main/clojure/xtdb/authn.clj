@@ -1,28 +1,47 @@
 (ns xtdb.authn
-  (:require [buddy.hashers :as hashers]
-            [clojure.string :as string]
+  (:require [buddy.hashers :as hashers] 
             [integrant.core :as ig]
             [hato.client :as http]
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
-            [xtdb.query :as q])
+            [xtdb.query :as q]
+            [xtdb.error :as err])
   (:import [java.io Writer]
-           (xtdb.api Authenticator Authenticator$Factory Authenticator$Factory$UserTable Authenticator$Method Authenticator$MethodRule Xtdb$Config)
+           (xtdb.api Authenticator Authenticator$DeviceAuthResponse Authenticator$Factory Authenticator$Factory$OpenIdConnect 
+                     Authenticator$Factory$UserTable Authenticator$Method Authenticator$MethodRule Xtdb$Config
+                     SimpleResult OAuthPasswordResult OAuthClientCredentialsResult OAuthResult) 
            (xtdb.query IQuerySource)
            [java.net URI]
-           [java.time Duration]
-           [java.util Base64]
-           (xtdb.api Authenticator Authenticator$DeviceAuthResponse Authenticator$Factory Authenticator$Factory$OpenIdConnect Authenticator$Factory$UserTable Authenticator$Method Authenticator$MethodRule Xtdb$Config)))
+           [java.time Duration Instant]))
+
+(defn verify-pw
+  [^IQuerySource q-src db-cat user password]
+  (when-not password
+    (throw (err/incorrect :xtdb/authn-failed (format "password authentication failed for user: %s" user))))
+
+  (with-open [res (-> (.prepareQuery q-src
+                                     "SELECT passwd AS encrypted FROM pg_user WHERE username = ?"
+                                     db-cat {:default-db "xtdb"})
+                      (.openQuery {:args [user]}))]
+    (let [{:keys [encrypted]} (first (.toList (q/cursor->stream res {:key-fn #xt/key-fn :kebab-case-keyword})))]
+      (if (and encrypted (:valid (hashers/verify password encrypted)))
+        user
+        (throw (err/incorrect :xtdb/authn-failed (format "password authentication failed for user: %s" user)))))))
 
 (defn verify-pw [^IQuerySource q-src, db-cat, user password]
-  (when password
+  (if-not password
+    (throw (err/incorrect :xtdb/authn-failed
+                          (format "password authentication failed for user: %s" user)))
     (with-open [res (-> (.prepareQuery q-src "SELECT passwd AS encrypted FROM pg_user WHERE username = ?"
                                        db-cat {:default-db "xtdb"})
                         (.openQuery {:args [user]}))]
-
-      (when-let [{:keys [encrypted]} (first (.toList (q/cursor->stream res {:key-fn #xt/key-fn :kebab-case-keyword})))]
-        (when (:valid (hashers/verify password encrypted))
-          user)))))
+      (if-let [{:keys [encrypted]} (first (.toList (q/cursor->stream res {:key-fn #xt/key-fn :kebab-case-keyword})))]
+        (if (:valid (hashers/verify password encrypted))
+          user
+          (throw (err/incorrect :xtdb/authn-failed
+                                (format "password authentication failed for user: %s" user))))
+        (throw (err/incorrect :xtdb/authn-failed
+                              (format "password authentication failed for user: %s" user)))))))
 
 (defn- method-for [rules {:keys [remote-addr user]}]
   (some (fn [{rule-user :user, rule-address :address, :keys [method]}]
@@ -75,8 +94,8 @@
     (method-for rules {:user user, :remote-addr remote-addr}))
 
   (verifyPassword [_ user password]
-    (when-let [user-id (verify-pw q-src db-cat user password)]
-      {:user-id user-id})))
+    (let [user-id (verify-pw q-src db-cat user password)]
+      (SimpleResult. user-id))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->user-table-authn [^Authenticator$Factory$UserTable cfg, q-src, db-cat]
@@ -88,100 +107,103 @@
         opts))
 
 (defn discover-oidc-config [issuer-url]
-  (try
-    (let [discovery-url (str issuer-url "/.well-known/openid-configuration")
-          {:keys [status body]} (http/get discovery-url
-                                          {:throw-exceptions false
-                                           :as :json})]
-      (when (= 200 status)
-        body))
-    (catch Exception e
-      (throw (IllegalArgumentException. (format "Failed to discover OIDC configuration from %s: %s" issuer-url (.getMessage e)))))))
+  (let [discovery-url (str issuer-url "/.well-known/openid-configuration")]
+    (try
+      (let [{:keys [status body]} (http/get discovery-url
+                                            {:throw-exceptions false
+                                             :as :json})]
+        (if (= 200 status)
+          body
+          (throw (err/incorrect :xtdb/oidc-config-discovery-error
+                                (format "Failed to discover OIDC configuration from %s: %s" discovery-url (:error body))
+                                {:status status, :body body}))))
+      (catch Exception e
+        (throw (err/incorrect :xtdb/oidc-config-discovery-error 
+                              (format "Error thrown when fetching OIDC configuration from %s: %s" discovery-url (.getMessage e))
+                              {:exception e}))))))
 
-(defn oauth-token [{:keys [oidc-config client-id client-secret]} opts] 
-  (let [token-endpoint (:token_endpoint oidc-config)]
-    (when token-endpoint
-      (http/post token-endpoint
-                 {:form-params (into {:client_id client-id
-                                      :client_secret client-secret}
-                                     opts)
-                  :throw-exceptions false
-                  :coerce :always
-                  :as :json}))))
+(defn calculate-expires-at [{:keys [expires_in]} ^Instant now]
+  (some->> expires_in (.plusSeconds now)))
 
-(defn calulcate-expires-at [oauth-token]
-  (when-let [expires-in (:expires_in oauth-token)]
-    (+ (System/currentTimeMillis) (* expires-in 1000))))
+(defn oauth-token [{:keys [oidc-config client-id client-secret]} opts]
+  (let [token-endpoint (:token_endpoint oidc-config)
+        {:keys [status body]} (http/post token-endpoint
+                                         {:form-params (into {:client_id client-id
+                                                              :client_secret client-secret}
+                                                             opts)
+                                          :throw-exceptions false
+                                          :coerce :always
+                                          :as :json})]
+    {:status status
+     :body {:access-token (:access_token body)
+            :refresh-token (:refresh_token body)
+            :expires-at (calculate-expires-at body (Instant/now))}}))
 
 (defn oauth-userinfo [{:keys [oidc-config]} token]
-  (let [userinfo-endpoint (:userinfo_endpoint oidc-config)]
-    (when userinfo-endpoint
-      (let [{:keys [status body]} (http/get userinfo-endpoint
-                                            {:oauth-token token
-                                             :throw-exceptions false
-                                             :as :json})]
-        (when (= 200 status)
-          body)))))
+  (let [userinfo-endpoint (:userinfo_endpoint oidc-config)
+        {:keys [status body]} (http/get userinfo-endpoint
+                                        {:oauth-token token
+                                         :throw-exceptions false
+                                         :as :json})]
+    (if (= 200 status)
+      {:user-id (:sub body)}
+      (throw (err/incorrect :xtdb/authn-failed
+                            (format "Failed to obtain user info from %s: %s" userinfo-endpoint (:error body))
+                            {:status status, :body body})))))
 
-(defn token-expired? [token-info]
-  (when-let [expires-at (:expires-at token-info)]
-    (< expires-at (System/currentTimeMillis))))
+(defn token-expired? [^OAuthResult auth-result ^Instant now]
+  (when-let [expires-at (.getExpiresAt ^OAuthResult auth-result)]
+    (.isAfter now expires-at)))
 
-(defn refresh-token [authn {:keys [refresh-token client-id client-secret] :as oauth}] 
+;; TODO: Could live in Kotlin
+(defn refresh-token [authn auth-result]
   (cond
-    ;; For password/device auth flows - use refresh token
-    refresh-token
-    (let [{:keys [status body]} (oauth-token authn {:grant_type "refresh_token"
-                                                    :refresh_token (:refresh_token oauth)})]
-      (when (= 200 status)
-        {:expires-at (calulcate-expires-at body)
-         :refresh_token (:refresh_token body)}))
-    
+    ;; For password/device auth flows - use refresh token from OAuthPasswordResult
+    (instance? OAuthPasswordResult auth-result)
+    (let [oauth-result ^OAuthPasswordResult auth-result
+          refresh-token (.getRefreshToken oauth-result)
+          {:keys [status body]} (oauth-token authn {:grant_type "refresh_token"
+                                                    :refresh_token refresh-token})]
+      (if (= 200 status)
+        (.withExpiry oauth-result ^Instant (:expires-at body))
+        (throw (err/incorrect :xtdb/authn-failed
+                              (format "Failed to refresh OAuth token: %s" (:error body))
+                              {:status status, :body body}))))
+
     ;; For client credentials flow - get a fresh token using stored client credentials
-    ;; (Client credentials flow does not use refresh tokens)
-    (and client-id client-secret)
-    (let [{:keys [status body]} (oauth-token authn {:grant_type "client_credentials"
+    (instance? OAuthClientCredentialsResult auth-result)
+    (let [creds-result ^OAuthClientCredentialsResult auth-result
+          client-id (.getClientId creds-result)
+          client-secret (.getClientSecret creds-result)
+          {:keys [status body]} (oauth-token authn {:grant_type "client_credentials"
                                                     :scope "openid"
                                                     :client_id client-id
                                                     :client_secret client-secret})]
-      (when (= 200 status)
-        {:expires-at (calulcate-expires-at body)
-         :client-id client-id
-         :client-secret client-secret}))
-    
-    :else 
-    (throw (IllegalArgumentException. "No valid token or refresh token available for refresh"))))
+      (if (= 200 status)
+        (.withExpiry creds-result ^Instant (:expires-at body))
+        (throw (err/incorrect :xtdb/authn-failed
+                              (format "Failed to refresh client credentials token: %s" (:error body))
+                              {:status status, :body body}))))
+
+    :else
+    (throw (err/incorrect :xtdb/authn-failed "No valid token or refresh token available for refresh"))))
 
 (defn oauth-device-info [{:keys [oidc-config client-id client-secret]}]
-  (let [device-endpoint (:device_authorization_endpoint oidc-config)]
-    (when device-endpoint
-      (let [{:keys [status body]} (http/post device-endpoint
-                                             {:form-params {:client_id client-id
-                                                            :client_secret client-secret
-                                                            :scope "openid"}
-                                              :throw-exceptions false
-                                              :as :json})]
-        (when (= 200 status)
-          body)))))
+  (let [device-endpoint (:device_authorization_endpoint oidc-config)
+        {:keys [status body]} (http/post device-endpoint
+                                         {:form-params {:client_id client-id
+                                                        :client_secret client-secret
+                                                        :scope "openid"}
+                                          :throw-exceptions false
+                                          :as :json})]
+    (if (= 200 status)
+      {:device-code (:device_code body)
+       :verification-uri-complete (:verification_uri_complete body)
+       :interval (:interval body)}
+      (throw (err/incorrect :xtdb/authn-failed
+                            (format "Failed to obtain device info from %s: %s" device-endpoint (:error body))
+                            {:status status, :body body})))))
 
-(defn parse-client-creds [^String credentials]
-  (cond
-    (nil? credentials)
-    {:error "Missing client credentials"}
-    
-    (string/blank? credentials)
-    {:error "Empty client credentials"}
-    
-    :else
-    (try
-      (let [decoded (String. (.decode (Base64/getDecoder) credentials) "UTF-8")
-            parts (string/split decoded #":")]
-        (if (= 2 (count parts))
-          (let [[client-id client-secret] parts]
-            {:client-id client-id :client-secret client-secret})
-          {:error "Credentials must contain exactly 2 parts separated by ':'"}))
-      (catch Exception e
-        {:error (format "Invalid base64 encoding: %s" (.getMessage e))}))))
 
 (defrecord DeviceAuthResponse [authn url device-code ^Duration interval]
   Authenticator$DeviceAuthResponse
@@ -189,18 +211,30 @@
 
   (await [_]
     (loop []
-      (let [{:keys [status body] :as token-response} (oauth-token authn
-                                                                 {:grant_type "urn:ietf:params:oauth:grant-type:device_code"
-                                                                  :device_code device-code})]
+      (let [token-endpoint (get-in authn [:oidc-config :token_endpoint])
+            {:keys [status body]} (http/post token-endpoint
+                                             {:form-params {:client_id (:client-id authn)
+                                                            :client_secret (:client-secret authn)
+                                                            :grant_type "urn:ietf:params:oauth:grant-type:device_code"
+                                                            :device_code device-code}
+                                              :throw-exceptions false
+                                              :coerce :always
+                                              :as :json})]
         (case (long status)
-          200 (let [user-info (oauth-userinfo authn (:access_token body))]
-                {:user-id (:sub user-info)
-                 :oauth-session {:user-info user-info
-                                :expires-at (calulcate-expires-at token-response)
-                                :refresh-token (:refresh_token body)}})
-          400 (when (= "authorization_pending" (:error body))
-                (Thread/sleep interval)
-                (recur)))))))
+          200 (let [access-token (:access_token body)
+                    refresh-token (:refresh_token body)  
+                    expires-at (calculate-expires-at body (Instant/now))
+                    {:keys [user-id]} (oauth-userinfo authn access-token)]
+                (OAuthPasswordResult. user-id expires-at access-token refresh-token))
+          400 (if (= "authorization_pending" (:error body))
+                (do (Thread/sleep (.toMillis interval))
+                    (recur))
+                (throw (err/incorrect :xtdb/authn-failed
+                                      (format "Device authentication failed: %s" (:error body))
+                                      {:status status, :body body})))
+          (throw (err/incorrect :xtdb/authn-failed
+                                (format "Device authentication failed with status %d" status)
+                                {:status status, :body body})))))))
 
 (defrecord OpenIdConnect [oidc-config client-id client-secret rules]
   Authenticator
@@ -209,35 +243,31 @@
 
   (verifyPassword [this user password]
     (let [{:keys [status body]} (oauth-token this {:grant_type "password", :scope "openid"
-                                                   :username user, :password password})] 
-      (when (= status 200)
-        (let [user-info (oauth-userinfo this (:access_token body))]
-          {:user-id (:sub user-info)
-           :oauth-session {:user-info user-info
-                          :expires-at (calulcate-expires-at body)
-                          :refresh-token (:refresh_token body)}}))))
+                                                   :username user, :password password})]
+      (if (= 200 status)
+        (let [{:keys [access-token refresh-token expires-at]} body
+              {:keys [user-id]} (oauth-userinfo this access-token)]
+          (OAuthPasswordResult. user-id expires-at access-token refresh-token))
+        (throw (err/incorrect :xtdb/authn-failed
+                              (format "Password authentication failed for user: %s" user)
+                              {:status status, :body body})))))
 
   (startDeviceAuth [this _user]
-    (let [{:keys [device_code verification_uri_complete interval]} (oauth-device-info this)]
-      (->DeviceAuthResponse this (.toURL (URI. verification_uri_complete))
-                            device_code (Duration/ofSeconds interval))))
+    (let [{:keys [device-code verification-uri-complete interval]} (oauth-device-info this)]
+      (->DeviceAuthResponse this (.toURL (URI. verification-uri-complete)) device-code (Duration/ofSeconds interval))))
 
-  (verifyClientCredentials [this client-credentials]
-    (let [parsed (parse-client-creds client-credentials)] 
-      (if (:error parsed)
-        (throw (IllegalArgumentException. (:error parsed)))
-        (let [{:keys [client-id client-secret]} parsed
-              {:keys [status body]} (oauth-token this {:grant_type "client_credentials",
-                                                       :scope "openid",
-                                                       :client_id client-id
-                                                       :client_secret client-secret})] 
-          (when (= status 200)
-            (let [user-info (oauth-userinfo this (:access_token body))] 
-              {:user-id (:sub user-info)
-               :oauth-session {:user-info user-info
-                               :expires-at (calulcate-expires-at body)
-                               :client-id client-id
-                               :client-secret client-secret}})))))))
+  (verifyClientCredentials [this client-id client-secret]
+    (let [{:keys [status body]} (oauth-token this {:grant_type "client_credentials",
+                                                   :scope "openid",
+                                                   :client_id client-id
+                                                   :client_secret client-secret})]
+      (if (= 200 status)
+        (let [{:keys [access-token expires-at]} body
+              {:keys [user-id]} (oauth-userinfo this access-token)]
+          (OAuthClientCredentialsResult. user-id expires-at access-token client-id client-secret))
+        (throw (err/incorrect :xtdb/authn-failed
+                              (format "Client credentials authentication failed for client: %s" client-id)
+                              {:status status, :body body}))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->oidc-authn [^Authenticator$Factory$OpenIdConnect cfg]

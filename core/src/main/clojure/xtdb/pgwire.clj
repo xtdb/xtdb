@@ -31,15 +31,14 @@
            [java.nio.channels FileChannel]
            [java.nio.file Path]
            [java.security KeyStore]
-           [java.time Clock Duration ZoneId]
-           [java.util Map]
+           [java.time Clock Duration Instant ZoneId]
            [java.util.concurrent ExecutorService Executors TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.antlr.v4.runtime ParserRuleContext)
-           (org.apache.arrow.memory BufferAllocator RootAllocator)
+           (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
-           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder ServerConfig Xtdb$Config)
+           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
            xtdb.arrow.RelationReader
            (xtdb.error Anomaly Incorrect Interrupted)
@@ -239,6 +238,8 @@
                                                          ::error-code (case (:arg-format data)
                                                                         :text "22P02"
                                                                         :binary "22P03")}
+                           :xtdb/invalid-client-credentials {::severity :error, ::error-code "28P01"}
+                           :xtdb/authn-failed {::severity :error, ::error-code "28P01"}
 
                            {::severity :error, ::error-code "08P01"})
 
@@ -249,10 +250,10 @@
           {::severity :error, ::error-code "XX000"})))))
 
 (defn validate-and-refresh-token [{:keys [conn-state ^Authenticator authn]}]
-  (when-let [auth-info (:oauth @conn-state)]
-    (when (authn/token-expired? auth-info)
-      (if-let [refreshed-oauth (authn/refresh-token authn auth-info)]
-        (swap! conn-state assoc :oauth (merge auth-info refreshed-oauth))
+  (when-let [^OAuthResult authn-state (:authn-state @conn-state)]
+    (when (authn/token-expired? authn-state (Instant/now))
+      (if-let [^OAuthResult refreshed-result (authn/refresh-token authn authn-state)]
+        (swap! conn-state assoc :authn-state refreshed-result)
         (throw (err-invalid-auth-spec "Authentication token has expired and could not be refreshed"))))))
 
 (defn send-ex [{:keys [conn-state] :as conn}, ^Throwable ex]
@@ -305,6 +306,21 @@
         (doto (pgio/cmd-write-msg pgio/msg-backend-key-data {:process-id (:cid conn), :secret-key 0}))
         (doto (cmd-send-ready)))))
 
+(defn parse-client-creds [^String credentials]
+  (cond
+    (nil? credentials)
+    (throw (err/incorrect :xtdb/invalid-client-credentials "Client credentials were not provided")) 
+
+    (str/blank? credentials)
+    (throw (err/incorrect :xtdb/invalid-client-credentials "Client credentials were empty"))
+
+    :else
+    (let [parts (str/split credentials #":")]
+      (if (= 2 (count parts))
+        (let [[client-id client-secret] parts]
+          {:client-id client-id :client-secret client-secret})
+        (throw (err/incorrect :xtdb/invalid-client-credentials "Client credentials must be provided in the format 'client-id:client-secret'"))))))
+
 (defn cmd-startup-pg30 [{:keys [frontend server] :as conn} startup-opts]
   (let [{:keys [node ^Authenticator authn playground?]} server
         db-name (get startup-opts "database")
@@ -333,14 +349,12 @@
             (if (not= :msg-password msg-name)
               (throw (err-invalid-auth-spec (str "password authentication failed for user: " user)))
 
-              (if-let [auth-result (.verifyPassword authn user (:password msg))]
-                (let [user-id (:user-id auth-result)
-                      oauth-session (:oauth-session auth-result)]
-                  (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
-                  (when oauth-session
-                    (swap! (:conn-state conn) assoc :oauth oauth-session))
-                  (startup-ok conn (assoc startup-opts "user" user-id)))
-                (throw (err-invalid-passwd (str "password authentication failed for user: " user)))))))
+              (let [auth-result (.verifyPassword authn user (:password msg))
+                    user-id (.getUserId auth-result)]
+                (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
+                (when (instance? OAuthResult auth-result)
+                  (swap! (:conn-state conn) assoc :authn-state auth-result))
+                (startup-ok conn (assoc startup-opts "user" user-id))))))
 
         #xt.authn/method :device-auth
         (let [device-auth-resp (.startDeviceAuth authn user)]
@@ -348,13 +362,10 @@
           (pgio/cmd-send-notice conn (notice (str "\nHello! Please head over here to authenticate:"
                                                   (str "\n\n" (.getUrl device-auth-resp))
                                                   "\n")))
-          (if-let [auth-result (.await device-auth-resp)]
-            (let [user-id (:user-id auth-result)
-                  oauth-session (:oauth-session auth-result)]
-              (when oauth-session
-                (swap! (:conn-state conn) assoc :oauth oauth-session))
-              (startup-ok conn (assoc startup-opts "user" user-id)))
-            (throw (err-invalid-passwd "device authentication failed"))))
+          (let [auth-result (.await device-auth-resp)
+                user-id (.getUserId auth-result)]
+            (swap! (:conn-state conn) assoc :authn-state auth-result)
+            (startup-ok conn (assoc startup-opts "user" user-id))))
 
         #xt.authn/method :client-credentials
         (do
@@ -366,17 +377,12 @@
             (if (not= :msg-password msg-name)
               (throw (err-invalid-auth-spec (str "client credentials authentication failed for user: " user)))
 
-              (try
-                (if-let [auth-result (.verifyClientCredentials authn (:password msg))]
-                  (let [user-id (:user-id auth-result)
-                        oauth-session (:oauth-session auth-result)]
-                    (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
-                    (when oauth-session
-                      (swap! (:conn-state conn) assoc :oauth oauth-session))
-                    (startup-ok conn (assoc startup-opts "user" user-id)))
-                  (throw (err-invalid-passwd (str "client credentials authentication failed for user: " user))))
-                (catch IllegalArgumentException e
-                  (throw (err-invalid-passwd (str "client credentials error: " (.getMessage e)))))))))
+              (let [{:keys [client-id client-secret]} (parse-client-creds (:password msg))
+                    auth-result (.verifyClientCredentials authn client-id client-secret)
+                    user-id (.getUserId auth-result)]
+                (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
+                (swap! (:conn-state conn) assoc :authn-state auth-result)
+                (startup-ok conn (assoc startup-opts "user" user-id))))))
 
         (throw (err-invalid-auth-spec (str "no authentication record found for user: " user))))
       conn)))

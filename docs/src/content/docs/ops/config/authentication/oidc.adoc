@@ -2,17 +2,18 @@
 title: OpenID Connect Authentication
 ---
 
-XTDB integrates with OpenID Connect identity providers (Keycloak, Auth0, Azure AD) for enterprise authentication. OIDC authentication supports multiple OAuth 2.0 flows for different client types.
+XTDB integrates with OpenID Connect identity providers (Keycloak, Auth0, AWS Cognito, Azure Entra) for external authentication. 
+OIDC authentication supports multiple OAuth 2.0 flows for different client types.
 
 == Identity Provider Requirements
 
 **Required Capabilities**::
-- OpenID Connect Discovery (/.well-known/openid_configuration)
-- At least one of the following OAuth 2.0 grant types:
-  * Client Credentials flow (widely supported)
-  * Resource Owner Password Credentials flow (optional, provider-dependent)
-  * Device Authorization Grant flow (optional, provider-dependent)
-- Token refresh capabilities (for flows that support it)
+* OpenID Connect Discovery (/.well-known/openid_configuration)
+* At least one of the following OAuth 2.0 grant types:
+** Client Credentials flow (widely supported)
+** Resource Owner Password Credentials flow (optional, provider-dependent)
+** Device Authorization Grant flow (optional, provider-dependent)
+* Token refresh capabilities (for flows that support it)
 
 == Configuration
 
@@ -55,21 +56,21 @@ authn: !OpenIdConnect
 
 == Authentication Flows
 
-NOTE: Not all OIDC providers support all OAuth 2.0 flows. PASSWORD and DEVICE_AUTH flows require specific provider support and configuration. Check your provider's documentation for supported grant types.
+NOTE: Not all OIDC providers support all OAuth 2.0 flows. 
+PASSWORD and DEVICE_AUTH flows require specific provider support and configuration. 
+Check your provider's documentation for supported grant types.
 
 === CLIENT_CREDENTIALS Method
 
 Uses OAuth Client Credentials flow for service accounts and automated processes.
 
 **Authentication Format**::
-Base64-encoded `client-id:client-secret` used as password.
+`client-id:client-secret` used as password.
 
 **Client Usage**::
 [source,bash]
 ----
-# Encode credentials
-ENCODED=$(echo -n "client-id:client-secret" | base64)
-PGPASSWORD="$ENCODED" psql -h localhost -p 5432 -U oidc-client -d xtdb
+PGPASSWORD="client-id:client-secret" psql -h localhost -p 5432 -U oidc-client -d xtdb
 ----
 
 === PASSWORD Method
@@ -90,17 +91,18 @@ Uses OAuth Device Authorization flow for applications that cannot securely store
 **Flow Process**::
 1. Client requests device code from XTDB
 2. User visits verification URL and enters user code
-3. Client polls XTDB until user completes authentication
+3. XTDB polls identity provider until user completes authentication
 4. Access token issued upon successful authentication
 
 == Token Management
 
 **Validation**::
-Tokens are validated before query and data operations. Connections terminate if validation fails.
+Tokens are validated before query and data operations. 
+Connections terminate if validation fails.
 
 **Refresh**::
-- PASSWORD/DEVICE_AUTH: Automatic refresh using refresh tokens
-- CLIENT_CREDENTIALS: New tokens requested using client credentials
+* PASSWORD/DEVICE_AUTH: Automatic refresh using refresh tokens
+* CLIENT_CREDENTIALS: New tokens requested using client credentials
 
 == Troubleshooting
 
@@ -109,6 +111,3 @@ Verify client ID/secret configuration and issuer URL accessibility.
 
 **Token Expired**::
 Check access token lifespan settings in identity provider.
-
-**Invalid Credentials (Client Credentials)**::
-Verify base64 encoding: `echo -n "client-id:client-secret" | base64`
