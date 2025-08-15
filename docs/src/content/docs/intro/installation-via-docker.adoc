@@ -6,13 +6,13 @@ title: Installation via Docker
 
 == Try Online
 
-If you want to avoid running your own XTDB server locally, you can instantly play with inserting data and querying right now using the link:https://play.xtdb.com/[XT Play] web-based console. The interactive link:/quickstart/sql-overview.html[SQL Quickstart] uses this console to showcase XTDB's SQL dialect and bitemporal capabilities.
+If you want to avoid running your own XTDB server locally, you can instantly play with inserting data and querying right now using the link:https://play.xtdb.com/[XTDB Play] web-based console. The interactive link:/quickstart/sql-overview.html[SQL Quickstart] uses this console to showcase XTDB's SQL dialect and bitemporal capabilities.
 
 Otherwise, let's get XTDB downloaded and running on your own machine...
 
 == Docker Install
 
-XTDB supports production usage via the Postgres wire protocol (so that you can work with various Postgres-compatible tools, drivers etc.) and also has a link:/drivers/clojure[Clojure API].
+XTDB supports production usage via the Postgres wire protocol so that you can work with various Postgres-compatible tools, drivers etc.
 
 You can start a 'standalone' (i.e. non-production, non-distributed) XTDB server using the following command:
 
@@ -34,11 +34,11 @@ docker run -it --pull=always \
 
 This command starts a Postgres wire-compatible endpoint on port 5432.
 
-By default your data will only be stored transiently using a local directory within the Docker container, but you can attach a host volume to preserve your data across container restarts, e.g. by adding `-v /tmp/xtdb-data-dir:/var/lib/xtdb`.
+By default your data will only be stored temporarily using a local directory within the Docker container.
 
-**Running as a non-root user**
+=== (Optional) Mount a host directory
 
-The XTDB container runs as a non-root user by default (UID 20000). If you're mounting a host volume (e.g. /tmp/xtdb-data-dir:/var/lib/xtdb), you must ensure the container can write to it:
+You can attach a host volume to preserve your data across container restarts, e.g. by adding `-v /tmp/xtdb-data-dir:/var/lib/xtdb`, however because the XTDB container runs as a non-root user by default (UID 20000), you must ensure the container can write to it:
 
 NOTE: This currently applies only to nightly and edge releases. Tagged release images (e.g. 2.0.0) still run as root by default.
 
@@ -49,7 +49,7 @@ For Docker, before running the container:
 sudo chown -R 20000:20000 /tmp/xtdb-data-dir
 ----
 
-For Podman, ensure the directory is owned by your user and use `--userns=keep-id`:
+For Podman, ensure the directory is owned by your user and use `--userns=keep-id`, e.g.:
 
 [source,bash]
 ----
@@ -60,6 +60,8 @@ podman run -it --pull=always \
   -v /tmp/xtdb-data-dir:/var/lib/xtdb \
   ghcr.io/xtdb/xtdb
 ----
+
+== Wait for XTDB to start
 
 After seeing a 'Node started' log message (e.g. `09:00:00 | INFO  xtdb.cli | Node started`) you are able to confirm your XTDB server is running using cURL:
 
