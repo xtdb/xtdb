@@ -51,6 +51,9 @@
 (defn ->table-meta-dir ^java.nio.file.Path [table-name]
   (Trie/metaFileDir table-name))
 
+(defn ->trie-table-meta-path [table-name ^TrieDetails trie]
+  (let [{:keys [trie-key]} (parse-trie-key (.getTrieKey trie))]
+    (Trie/metaFilePath table-name trie-key)))
 (defrecord Segment [trie]
   ISegment
   (getTrie [_] trie)
