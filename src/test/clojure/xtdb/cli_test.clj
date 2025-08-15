@@ -41,15 +41,17 @@
                         {:result [tag arg]})))))
 
 (t/deftest no-config
-  (t/is (= {} (parse-args [] cli/node-cli-spec))
+  (t/is (= [{} []] (map (parse-args [] cli/node-cli-spec) [:options :arguments]))
         "if no config present via file, returns an empty map")
 
   (t/is (= {} (cli/file->node-opts nil))
         "if no file provided, returns an empty map as node opts"))
 
 (t/deftest test-config
-  (t/is (= {:file (io/as-file xtdb-cli-edn)}
-           (parse-args ["-f" (str (io/as-file xtdb-cli-edn))] cli/node-cli-spec))
+  (t/is (= {:options {:file (io/as-file xtdb-cli-edn)}
+            :arguments []}
+           (-> (parse-args ["-f" (str (io/as-file xtdb-cli-edn))] cli/node-cli-spec)
+               (select-keys [:options :arguments])))
         "uses CLI supplied EDN file")
 
   (t/testing "uses xtdb.edn if present"
@@ -68,7 +70,7 @@
             "EDN config - #env reader tag fetches from env"))))
 
 (defn- ->node-opts [cli-args]
-  (cli/file->node-opts (:file (parse-args cli-args cli/node-cli-spec))))
+  (cli/file->node-opts (get-in (parse-args cli-args cli/node-cli-spec) [:options :file])))
 
 ;; Expect YAML config file to just return the file - this will get passed to
 ;; start-node and subsequently decoded by the Kotlin API
