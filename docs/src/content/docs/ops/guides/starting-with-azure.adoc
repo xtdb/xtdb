@@ -290,7 +290,6 @@ You can do the same for the following components:
 
 * Postgres Wire Server (on port `5432`)
 * Healthz Server (on port `8080`)
-* HTTP Server (on port `3000`).
 
 To check the status of the XTDB cluster using the forwarded port, run:
 
