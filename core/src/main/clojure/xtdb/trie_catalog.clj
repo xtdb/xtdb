@@ -60,7 +60,11 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defprotocol PTrieCatalog
-  (trie-state [trie-cat table]))
+  (trie-state [trie-cat table])
+
+  (reset->l0! [trie-cat]
+    "DANGER: resets the trie-catalog back to L0,
+     use if compaction has gone awry, and you want to completely recompact."))
 
 (def ^:const branch-factor 4)
 
@@ -265,6 +269,16 @@
                       trie-levels
                       garbage-by-path)))))
 
+(def ^:private no-temporal-metadata
+  (-> (TemporalMetadata/newBuilder)
+      (.setMinValidFrom Long/MIN_VALUE)
+      (.setMaxValidFrom Long/MAX_VALUE)
+      (.setMinValidTo Long/MIN_VALUE)
+      (.setMaxValidTo Long/MAX_VALUE)
+      (.setMinSystemFrom Long/MIN_VALUE)
+      (.setMaxSystemFrom Long/MAX_VALUE)
+      (.build)))
+
 (defrecord CatalogEntry [^LocalDate recency ^TrieMetadata trie-metadata ^TemporalBounds query-bounds]
   Metadata
   (testMetadata [_]
@@ -273,7 +287,12 @@
         ;; the recency of a trie is exclusive, no row in that file has a recency equal to it
         (< min-query-recency recency)
         true)))
-  (getTemporalMetadata [_] (.getTemporalMetadata trie-metadata)))
+
+  (getTemporalMetadata [_]
+    ;; if we reset compaction, we may not have temporal metadata until the next compaction
+    ;; so we need to treat the file as if it contains _anything_
+    (or (some-> trie-metadata .getTemporalMetadata)
+        no-temporal-metadata)))
 
 (defn filter-tries [tries query-bounds]
   (-> (map (comp map->CatalogEntry #(assoc % :query-bounds query-bounds)) tries)
@@ -290,6 +309,23 @@
        :max-system-from (time/micros->instant (.getMaxSystemFrom temporal-metadata))
        :row-count (.getRowCount trie-metadata)
        :iid-bloom (ImmutableRoaringBitmap. (ByteBuffer/wrap (.toByteArray (.getIidBloom trie-metadata))))})))
+
+(defn compacted-trie-keys [{:keys [tries]}]
+  (for [[k tries] tries
+        :when (not= k [0 nil []])
+        [_state tries] tries
+        {:keys [trie-key]} tries]
+    trie-key))
+
+(defn reset->l0 [{:keys [tries]}]
+  (let [l0-tries (->> (get tries [0 nil []])
+                      ;; combine live+nascent & garbage
+                      (into [] (mapcat val)))]
+
+    {:tries {[0 nil []] {:live+nascent (->> l0-tries
+                                            (sort-by :block-idx #(compare %2 %1))
+                                            (map #(assoc % :state :live)))}}
+     :l1h-recencies {}}))
 
 (defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]
   xtdb.trie.TrieCatalog
@@ -319,7 +355,13 @@
                 (remove-garbage tries garbage-trie-keys))))
 
   PTrieCatalog
-  (trie-state [_ table] (.get !table-cats table)))
+  (trie-state [_ table] (.get !table-cats table))
+
+  (reset->l0! [this]
+    (doseq [table (.getTables this)]
+      (.compute !table-cats table
+                (fn [_table table-cat]
+                  (reset->l0 table-cat))))))
 
 (defmethod ig/prep-key :xtdb/trie-catalog [_ opts]
   (into {:buffer-pool (ig/ref :xtdb/buffer-pool)

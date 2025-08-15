@@ -3,7 +3,6 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
@@ -17,7 +16,6 @@
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
-            [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import (java.time Duration)
            xtdb.api.storage.Storage

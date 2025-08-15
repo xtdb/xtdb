@@ -2,11 +2,9 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
-            [xtdb.indexer.live-index :as li]
             xtdb.node.impl
             [xtdb.object-store :as os]
             [xtdb.serde :as serde]
@@ -18,7 +16,8 @@
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            (xtdb.arrow Relation)
-           (xtdb.trie ArrowHashTrie Bucketer ArrowHashTrie$Leaf HashTrie MemoryHashTrie$Leaf)))
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf Bucketer MemoryHashTrie$Leaf)
+           (xtdb.vector IVectorWriter)))
 
 (t/use-fixtures :each tu/with-allocator
   (tu/with-opts {:compactor {:threads 0}})
@@ -48,7 +47,7 @@
 
         (let [live-table (.liveTable live-index #xt/table my-table)
               live-rel (.getLiveRelation live-table)
-              iid-vec (.getVector (.vectorFor live-rel "_iid"))
+              iid-vec (.getVector ^IVectorWriter (.vectorFor live-rel "_iid"))
 
               trie (.getLiveTrie live-table)]
 

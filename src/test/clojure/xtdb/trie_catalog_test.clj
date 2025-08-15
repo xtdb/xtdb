@@ -520,3 +520,18 @@
                    (->>
                     (.listAllObjects bp (util/->path "tables/public$foo"))
                     (map #(str (.getKey ^ObjectStore$StoredObject %)))))))))))
+
+(t/deftest test-compactor-reset
+  (let [table-trie-cat (apply-msgs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10] ["l00-rc-b04" 10]
+                                   ["l01-rc-b00" 10] ["l01-rc-b01" 20] ["l01-rc-b02" 10] ["l01-rc-b03" 20])]
+    (t/is (= #{"l01-rc-b01" "l01-rc-b03" "l00-rc-b04"}
+             (->> (cat/current-tries table-trie-cat)
+                  (into #{} (map :trie-key)))))
+
+    (t/is (= #{"l01-rc-b00" "l01-rc-b01" "l01-rc-b02" "l01-rc-b03"}
+             (set (cat/compacted-trie-keys table-trie-cat))))
+
+    (t/is (= #{"l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03" "l00-rc-b04"}
+             (->> (cat/reset->l0 table-trie-cat)
+                  (cat/current-tries)
+                  (into #{} (map :trie-key)))))))

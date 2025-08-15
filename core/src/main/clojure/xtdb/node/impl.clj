@@ -25,7 +25,7 @@
            (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
-           (xtdb.database Database Database$Catalog)
+           (xtdb.database Database$Catalog)
            xtdb.error.Anomaly
            (xtdb.query IQuerySource PreparedQuery)))
 

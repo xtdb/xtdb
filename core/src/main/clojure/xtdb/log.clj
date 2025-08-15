@@ -2,7 +2,6 @@
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.api :as xt]
-            [xtdb.basis :as basis]
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
@@ -15,13 +14,13 @@
             [xtdb.vector.writer :as vw])
   (:import (java.time Duration Instant)
            (java.util ArrayList HashMap)
-           [java.util.concurrent TimeUnit]
+           java.util.concurrent.TimeUnit
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api IndexerConfig TransactionKey Xtdb$Config)
-           (xtdb.api.log Log Log$Cluster$Factory Log$Factory Log$Message$Tx Log$MessageMetadata)
+           (xtdb.api.log Log Log$Cluster$Factory Log$Factory Log$Message$FlushBlock Log$Message$Tx Log$MessageMetadata)
            (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
@@ -338,6 +337,18 @@
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
   (util/close log-processor))
 
+(defn await-db
+  ([db msg-id] (await-db db msg-id nil))
+  ([^Database db, ^long msg-id, ^Duration timeout]
+   @(cond-> (.awaitAsync (.getLogProcessor db) msg-id)
+      timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
+
+(defn sync-db
+  ([db] (sync-db db nil))
+  ([^Database db, ^Duration timeout]
+   (let [msg-id (.getLatestSubmittedMsgId (.getLogProcessor db))]
+     (await-db db msg-id timeout))))
+
 (defn await-node
   ([node token] (await-node node token nil))
   ([node token timeout] (.awaitAll (db/<-node node) token timeout)))
@@ -345,3 +356,7 @@
 (defn sync-node
   ([node] (sync-node node nil))
   ([node timeout] (.syncAll (db/<-node node) timeout)))
+
+(defn send-flush-block-msg! [^Database db]
+  @(-> (.getLog db)
+       (.appendMessage (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1)))))

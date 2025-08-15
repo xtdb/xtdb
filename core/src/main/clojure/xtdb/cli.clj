@@ -4,6 +4,7 @@
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
+            [xtdb.compactor.reset :as cr]
             [xtdb.error :as err]
             [xtdb.logging :as logging]
             [xtdb.node :as xtn]
@@ -126,6 +127,16 @@
     (util/with-open [_node (xtn/start-node (file->node-opts file))]
       @(shutdown-hook-promise))))
 
+(def reset-compactor-cli-spec
+  [[nil "--dry-run"
+    "Lists files that would be deleted, without actually deleting them"
+    :id :dry-run?]])
+
+(defn- reset-compactor! [args]
+  (let [{:keys [dry-run? file]} (-> (parse-args args reset-compactor-cli-spec)
+                                    (handling-arg-errors-or-help))]
+    (cr/reset-compactor! (file->node-opts file) {:dry-run? dry-run?})))
+
 (defn- print-help []
   (println "TODO print help"))
 
@@ -140,11 +151,21 @@
       "compactor" (start-compactor more-args)
       "playground" (start-playground more-args)
       "node" (start-node more-args)
-      ("help" "-h" "--help") (print-help)
+
+      "reset-compactor" (do
+                          (reset-compactor! more-args)
+                          (System/exit 0))
+
+      ("help" "-h" "--help") (do
+                               (print-help)
+                               (System/exit 0))
 
       (if (or (empty? more-args) (str/starts-with? (first more-args) "-"))
         (start-node args)
-        (print-help)))
+
+        (do
+          (print-help)
+          (System/exit 0))))
 
     (catch Throwable t
       (shutdown-agents)

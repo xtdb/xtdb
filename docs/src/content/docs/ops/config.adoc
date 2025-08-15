@@ -126,14 +126,40 @@ compactor:
 
 == CLI tools/flags
 
+.Changelog (last updated v2.1)
+[%collapsible]
+====
+v2.1: top-level commands::
++
+--
+In v2.1, we changed the CLI to use top-level commands (not dissimilar to Git, for example).
+
+Previously, the playground and compact-only nodes were activated using optional flags - `--playground-port` and `--compact-only` respectively.
+
+`reset-compactor` was also added in v2.1.
+--
+====
+
 You can run various tools by passing arguments - either directly to the CLI or via Docker's arguments:
 
 `node` (default, can be omitted)::
 * `-f <file>`, `--file <file>`: specifies the configuration file to use.
-`compactor`:: Starts a compactor-only node - useful for giving the compaction process more compute resources.
-* `-f <file>`, `--file <file>`: specifies the configuration file to use.
 `playground`:: Starts a playground - an in-memory server that will accept any database name, creating it if required.
 * `-p <port>`, `--port <port>` (default 5432): specifies the port to run the playground server on.
+`compactor`:: Starts a compactor-only node - useful for giving the compaction process more compute resources.
+* `-f <file>`, `--file <file>`: specifies the configuration file to use.
+`reset-compactor`:: Resets the compaction back to L0, deleting any L1+ files - use this if you've encountered a compaction bug and need to reset its state.
++
+--
+. Spin down all of your XT nodes
+. Using your container orchestration tool (e.g. Kubernetes), run a one-shot task with an overriden command: `["reset-compactor"]`.
+  Optionally, specify `--dry-run` to list all of the files to be removed.
+. When the tool has finished, spin up your nodes again.
++
+You may want to also spin up a compactor-only node to help out with the re-compaction.
+
+At the moment, this can only reset all the way back to L0 - finer-grained reset will be added in a later release.
+--
 
 e.g.
 

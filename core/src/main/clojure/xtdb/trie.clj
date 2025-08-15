@@ -109,7 +109,6 @@
          (let [temporal-metadata (.getTemporalMetadata meta-obj)
                take-node? (and (Temporal/intersects temporal-metadata query-bounds)
                                (.testMetadata meta-obj))]
-
            (if take-node?
              (do
                (.add leaves meta-obj)

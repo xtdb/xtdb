@@ -1150,3 +1150,4 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:xt/id 1, :a 1} {:xt/id 2} {:xt/id 3}]
            (xt/q tu/*node* "SELECT * FROM docs ORDER BY _id"))))
+

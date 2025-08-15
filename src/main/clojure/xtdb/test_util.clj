@@ -29,7 +29,6 @@
            (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb BufferPool ICursor)
            (xtdb.api TransactionKey)
-           (xtdb.api.log Log$Message$FlushBlock)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector)
            xtdb.database.Database$Catalog
@@ -123,9 +122,7 @@
   ([node timeout]
    (let [db-cat (db/<-node node)]
      (doseq [db-name (.getDatabaseNames db-cat)]
-       (let [db (.databaseOrNull db-cat db-name)
-             log (.getLog db)]
-         @(.appendMessage log (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1))))))
+       (xt-log/send-flush-block-msg! (.databaseOrNull db-cat db-name))))
 
    (xt-log/sync-node node timeout)))
 
