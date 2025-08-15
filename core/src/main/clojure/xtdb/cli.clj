@@ -132,13 +132,26 @@
     "Lists files that would be deleted, without actually deleting them"
     :id :dry-run?]])
 
-(defn- reset-compactor! [args]
+(defn- reset-compactor! [[db-name & args]]
+  (when-not db-name
+    (binding [*out* *err*]
+      (println "Missing db-name: `reset-compactor <db-name> [opts]`")
+      (System/exit 2)))
+
   (let [{:keys [dry-run? file]} (-> (parse-args args reset-compactor-cli-spec)
                                     (handling-arg-errors-or-help))]
-    (cr/reset-compactor! (file->node-opts file) {:dry-run? dry-run?})))
+    (cr/reset-compactor! (file->node-opts file) db-name {:dry-run? dry-run?})))
 
 (defn- print-help []
-  (println "TODO print help"))
+  (println "--- XTDB ---")
+  (newline)
+  (println "XTDB has several top-level commands to choose from:")
+  (println " * `node` (default, can be omitted): starts an XT node")
+  (println " * `compactor`: runs a compactor-only node")
+  (println " * `playground`: starts a 'playground', an in-memory node which accepts any database name, creating it if required")
+  (println " * `reset-compactor <db-name>`: resets the compacted files on the given node.")
+  (newline)
+  (println "For more information about any command, run `<command> --help`, e.g. `playground --help`"))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn start-node-from-command-line [[cmd & more-args :as args]]
@@ -165,7 +178,7 @@
 
         (do
           (print-help)
-          (System/exit 0))))
+          (System/exit 2))))
 
     (catch Throwable t
       (shutdown-agents)
