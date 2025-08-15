@@ -60,10 +60,15 @@ application {
 }
 
 tasks.named<JavaExec>("run") {
-    if (args.orEmpty().isEmpty()) {
-        args("-m", "xtdb.main", "playground", "--port", "5432")
-    } else {
-        args(listOf("-m", "xtdb.main").plus(args as Iterable<String>))
+    doFirst {
+        @Suppress("USELESS_ELVIS") // for some reason IntelliJ thinks this is non-null, Gradle doesn't.
+        val currentArgs = args ?: emptyList()
+
+        if (currentArgs.isEmpty()) {
+            args("-m", "xtdb.main", "playground", "--port", "5432")
+        } else {
+            args = listOf("-m", "xtdb.main") + currentArgs
+        }
     }
 }
 
