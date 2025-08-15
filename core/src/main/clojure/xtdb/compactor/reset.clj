@@ -15,7 +15,8 @@
   (let [config (doto (xtn/->config node-opts)
                  (-> (.getCompactor) (.threads 0))
                  (.setServer nil)
-                 (as-> config (.setDatabases config (select-keys (.getDatabases config) [db-name]))))]
+                 ;; complains if we don't include `xtdb`
+                 (as-> config (.setDatabases config (select-keys (.getDatabases config) ["xtdb" db-name]))))]
 
     (log/info "Starting a temporary node to catch up with any pending transactions on the tx-log")
 
