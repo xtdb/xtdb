@@ -29,8 +29,24 @@
   (max 0 (- (BufferPoolKt/getLatestAvailableBlockIndex (.getBufferPool db))
             (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1))))
 
+(def index-html-str
+  "<!DOCTYPE html>
+<html>
+<head><title>XTDB Healthz API</title></head>
+<body>
+  <h1>XTDB Healthz API</h1>
+  <p>See <a href=\"https://docs.xtdb.com/ops/config/monitoring.html\">Monitoring</a> and <a href=\"https://docs.xtdb.com/ops/maintenance.html\">Maintenance</a> documentation for details on using this API endpoint.</p>
+</body>
+</html>")
+
 (def router
-  (http/router [["/metrics" {:name :metrics
+  (http/router [["/" {:name :index
+                      :get (fn [_]
+                             {:status 200
+                              :headers {"Content-Type" "text/html; charset=utf-8"}
+                              :body index-html-str})}]
+
+                ["/metrics" {:name :metrics
                              :get (fn [{:keys [^PrometheusMeterRegistry meter-registry]}]
                                     {:status 200,
                                      :headers {"Content-Type" "text/plain; version=0.0.4"}
