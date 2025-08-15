@@ -29,11 +29,11 @@
     (throw (err/incorrect :opts-file-not-found (format "File not found: '%s'" (.getName f))))))
 
 (defn parse-args [args cli-spec]
-  (let [{:keys [errors options summary]} (cli/parse-opts args cli-spec)]
+  (let [{:keys [errors options summary] :as res} (cli/parse-opts args cli-spec)]
     (cond
       errors [:error errors]
       (:help options) [:help summary]
-      :else [:success options])))
+      :else [:success res])))
 
 (defn- handling-arg-errors-or-help [[tag arg]]
   (case tag
@@ -94,8 +94,8 @@
    ["-h" "--help"]])
 
 (defn- start-compactor [args]
-  (let [{:keys [file]} (-> (parse-args args compactor-cli-spec)
-                           (handling-arg-errors-or-help))]
+  (let [{{:keys [file]} :options} (-> (parse-args args compactor-cli-spec)
+                                      (handling-arg-errors-or-help))]
     (log/info "Starting in compact-only mode...")
 
     (util/with-open [_node (xtn/start-compactor (file->node-opts file))]
@@ -111,8 +111,8 @@
    ["-h" "--help"]])
 
 (defn- start-playground [args]
-  (let [{:keys [port]} (-> (parse-args args playground-cli-spec)
-                           (handling-arg-errors-or-help))]
+  (let [{{:keys [port]} :options} (-> (parse-args args playground-cli-spec)
+                                      (handling-arg-errors-or-help))]
     (log/info "Starting in playground mode...")
     (util/with-open [_node (pgw/open-playground {:port port})]
       @(shutdown-hook-promise))))
@@ -128,19 +128,19 @@
       @(shutdown-hook-promise))))
 
 (def reset-compactor-cli-spec
-  [[nil "--dry-run"
+  [config-file-opt
+   [nil "--dry-run"
     "Lists files that would be deleted, without actually deleting them"
-    :id :dry-run?]])
+    :id :dry-run?]
+   ["-h" "--help"]])
 
-(defn- reset-compactor! [[db-name & args]]
-  (when (or (nil? db-name)
-            (str/starts-with? db-name "--"))
-    (binding [*out* *err*]
-      (println "Missing db-name: `reset-compactor <db-name> [opts]`")
-      (System/exit 2)))
-
-  (let [{:keys [dry-run? file]} (-> (parse-args args reset-compactor-cli-spec)
-                                    (handling-arg-errors-or-help))]
+(defn- reset-compactor! [args]
+  (let [{{:keys [dry-run? file]} :options, [db-name] :arguments} (-> (parse-args args reset-compactor-cli-spec)
+                                                                     (handling-arg-errors-or-help))]
+    (when (nil? db-name)
+      (binding [*out* *err*]
+        (println "Missing db-name: `reset-compactor <db-name> [opts]`")
+        (System/exit 2)))
     (cr/reset-compactor! (file->node-opts file) db-name {:dry-run? dry-run?})))
 
 (defn- print-help []
