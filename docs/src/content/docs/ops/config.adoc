@@ -134,9 +134,22 @@ modules:
 
 For details on the available modules, see the link:config/modules[modules] documentation.
 
-== CLI flags
+== CLI tools/flags
 
-The following flags can be passed, either directly to the CLI or via Docker's arguments:
+You can run various tools by passing arguments - either directly to the CLI or via Docker's arguments:
 
+`node` (default, can be omitted)::
 * `-f <file>`, `--file <file>`: specifies the configuration file to use.
-* `--compactor-only`: runs a compactor-only node.
+`compactor`:: Starts a compactor-only node - useful for giving the compaction process more compute resources.
+* `-f <file>`, `--file <file>`: specifies the configuration file to use.
+`playground`:: Starts a playground - an in-memory server that will accept any database name, creating it if required.
+* `-p <port>`, `--port <port>` (default 5432): specifies the port to run the playground server on.
+
+e.g.
+
+* Dockerfile: `CMD ["playground", "--port", "5439"]`
+* docker-compose: `command: ["playground", "--port", "5439"]`
+* Java uberjar: `java -jar xtdb.jar playground --port 5439`
+* Clojure (with `xtdb-core` in your `deps.edn`): `clj -M xtdb.main playground --port 5439`
+
+You can also pass `--help` to any of the commands to get command-specific help.

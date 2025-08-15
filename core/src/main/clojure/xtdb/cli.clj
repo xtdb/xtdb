@@ -1,6 +1,7 @@
 (ns ^:no-doc xtdb.cli
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
             [xtdb.error :as err]
@@ -20,63 +21,50 @@
 (defn edn-read-string [edn-string]
   (edn/read-string {:readers {'env read-env-var}} edn-string))
 
-(def cli-options
-  [["-f" "--file CONFIG_FILE" "Config file to load XTDB options from - EDN, YAML"
-    :parse-fn io/file
-    :validate [if-it-exists "Config file doesn't exist"
-               #(contains? #{"edn" "yaml"} (util/file-extension %)) "Config file must be .edn or .yaml"]]
-
-   [nil "--compactor-only" "Starts a node that only runs the compactor"
-    :id :compactor-only?]
-
-   [nil "--playground" "Starts an XTDB playground on the default port"
-    :id :playground-port
-    :required false]
-
-   [nil "--playground-port PORT" "Starts an XTDB playground"
-    :id :playground-port
-    :parse-fn parse-long]
-
-   [nil "--force" "Confirm any destructive operations without prompting"
-    :id :force?]
-
-   ["-h" "--help"]])
-
 (defn edn-file->config-opts
   [^File f]
   (if (.exists f)
     (edn-read-string (slurp f))
-    (throw (err/illegal-arg :opts-file-not-found
-                            {::err/message (format "File not found: '%s'" (.getName f))}))))
+    (throw (err/incorrect :opts-file-not-found (format "File not found: '%s'" (.getName f))))))
 
-(defn parse-args [args]
-  (let [{:keys [options errors summary]} (cli/parse-opts args cli-options)]
+(defn parse-args [args cli-spec]
+  (let [{:keys [errors options summary]} (cli/parse-opts args cli-spec)]
     (cond
-      (seq errors) {::errors errors}
+      errors [:error errors]
+      (:help options) [:help summary]
+      :else [:success options])))
 
-      (:help options) {::help summary}
+(defn- handling-arg-errors-or-help [[tag arg]]
+  (case tag
+    :error (binding [*out* *err*]
+             (doseq [error arg]
+               (println error))
+             (System/exit 2))
 
-      :else (let [{:keys [file playground-port compactor-only?]} options]
-              (cond
-                (and file playground-port)
-                {::errors ["Cannot specify both a config file and the playground option"]}
+    :help (do
+            (println arg)
+            (System/exit 0))
 
-                (true? playground-port) {::playground-port 5432}
-                (integer? playground-port) {::playground-port playground-port}
+    :success arg))
 
-                :else {::node-opts (let [file-extension (some-> file util/file-extension)
-                                         yaml-file (if (= file-extension "yaml")
-                                                     file
-                                                     (or (some-> (io/file "xtdb.yaml") if-it-exists)
-                                                         (some-> (io/resource "xtdb.yaml") (io/file))))
-                                         edn-file-config (some-> (if (= file-extension "edn")
-                                                                   file (or (some-> (io/file "xtdb.edn") if-it-exists)
-                                                                            (some-> (io/resource "xtdb.edn") (io/file))))
-                                                                 edn-file->config-opts)]
-                                     (or yaml-file edn-file-config {}))
-                       ::compactor-only? (boolean compactor-only?)})))))
+(defn file->node-opts [file]
+  (if-let [^File file (or file
+                          (some-> (io/file "xtdb.yaml") if-it-exists)
+                          (some-> (io/resource "xtdb.yaml") (io/file))
+                          (some-> (io/file "xtdb.yml") if-it-exists)
+                          (some-> (io/resource "xtdb.yml") (io/file))
+                          (some-> (io/file "xtdb.edn") if-it-exists)
+                          (some-> (io/resource "xtdb.edn") (io/file)))]
+    (case (some-> file util/file-extension)
+      ("yaml" "yml") file
+      "edn" (edn-file->config-opts file)
+      (throw (err/incorrect :config-file-not-found (format "File not found: '%s'" (.getName file)))))
 
-(defn- shutdown-hook-promise []
+    {}))
+
+(defn- shutdown-hook-promise
+  "NOTE: Don't register this until the node manages to start up cleanly, so that ctrl-c keeps working as expected in case the node fails to start. "
+  []
   (let [main-thread (Thread/currentThread)
         !shutdown? (promise)]
     (.addShutdownHook (Runtime/getRuntime)
@@ -93,39 +81,70 @@
                                "xtdb.shutdown-hook-thread"))
     !shutdown?))
 
+(def config-file-opt
+  ["-f" "--file CONFIG_FILE" "Config file to load XTDB options from - EDN, YAML"
+   :id :file
+   :parse-fn io/file
+   :validate [if-it-exists "Config file doesn't exist"
+              #(contains? #{"edn" "yaml"} (util/file-extension %)) "Config file must be .edn or .yaml"]])
+
+(def compactor-cli-spec
+  [config-file-opt
+   ["-h" "--help"]])
+
+(defn- start-compactor [args]
+  (let [{:keys [file]} (-> (parse-args args compactor-cli-spec)
+                           (handling-arg-errors-or-help))]
+    (log/info "Starting in compact-only mode...")
+
+    (util/with-open [_node (xtn/start-compactor (file->node-opts file))]
+      (log/info "Compactor started")
+      @(shutdown-hook-promise))))
+
+(def playground-cli-spec
+  [["-p" "--port PORT"
+    :id :port
+    :parse-fn parse-long
+    :default 5432]
+
+   ["-h" "--help"]])
+
+(defn- start-playground [args]
+  (let [{:keys [port]} (-> (parse-args args playground-cli-spec)
+                           (handling-arg-errors-or-help))]
+    (log/info "Starting in playground mode...")
+    (util/with-open [_node (pgw/open-playground {:port port})]
+      @(shutdown-hook-promise))))
+
+(def node-cli-spec
+  [config-file-opt
+   ["-h" "--help"]])
+
+(defn- start-node [args]
+  (let [{:keys [file]} (-> (parse-args args node-cli-spec)
+                           (handling-arg-errors-or-help))]
+    (util/with-open [_node (xtn/start-node (file->node-opts file))]
+      @(shutdown-hook-promise))))
+
+(defn- print-help []
+  (println "TODO print help"))
+
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn start-node-from-command-line [args]
+(defn start-node-from-command-line [[cmd & more-args :as args]]
   (util/install-uncaught-exception-handler!)
 
   (logging/set-from-env! (System/getenv))
 
   (try
-    (let [{::keys [errors help compactor-only? playground-port node-opts force?]} (parse-args args)]
-      (cond
-        errors (binding [*out* *err*]
-                 (doseq [error errors]
-                   (println error))
-                 (System/exit 2))
+    (case cmd
+      "compactor" (start-compactor more-args)
+      "playground" (start-playground more-args)
+      "node" (start-node more-args)
+      ("help" "-h" "--help") (print-help)
 
-        help (do
-               (println help)
-               (System/exit 0))
-
-        :else (util/with-open [_node (cond
-                                       playground-port (do
-                                                         (log/info "Starting in playground mode...")
-                                                         (pgw/open-playground {:port playground-port}))
-                                       compactor-only? (do
-                                                         (log/info "Starting in compact-only mode...")
-                                                         (xtn/start-compactor node-opts))
-                                       :else (xtn/start-node node-opts))]
-                (log/info "Node started")
-                ;; NOTE: This isn't registered until the node manages to start up
-                ;; cleanly, so ctrl-c keeps working as expected in case the node
-                ;; fails to start.
-                @(shutdown-hook-promise)))
-
-      (shutdown-agents))
+      (if (or (empty? more-args) (str/starts-with? (first more-args) "-"))
+        (start-node args)
+        (print-help)))
 
     (catch Throwable t
       (shutdown-agents)
