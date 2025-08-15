@@ -17,6 +17,7 @@ buildscript {
 
 plugins {
     `java-library`
+    application
     id("dev.clojurephant.clojure") version "0.8.0"
     id("io.freefair.aggregate-javadoc-legacy") version "8.13.1"
     kotlin("jvm")
@@ -51,6 +52,20 @@ val twelveGBJvmArgs = listOf(
 )
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+
+application {
+    applicationName = "xtdb"
+    mainClass.set("clojure.main")
+    applicationDefaultJvmArgs = defaultJvmArgs + sixGBJvmArgs
+}
+
+tasks.named<JavaExec>("run") {
+    if (args.orEmpty().isEmpty()) {
+        args("-m", "xtdb.main", "playground", "--port", "5432")
+    } else {
+        args(listOf("-m", "xtdb.main").plus(args as Iterable<String>))
+    }
+}
 
 val buildEnv = "standard"
 

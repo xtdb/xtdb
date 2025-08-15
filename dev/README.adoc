@@ -41,7 +41,7 @@ You do not need to install Gradle to develop XT2 - there is a Gradle https://doc
 
 == XTDB 'playground'
 
-XTDB nodes can be started in 'playground' mode - either through `clj -m xtdb.main playground` or the standalone Docker image, or by running the `playground-config` `ir/set-prep` in the `dev` namespace.
+XTDB nodes can be started in 'playground' mode - either through `./gradlew :run`, `clj -m xtdb.main playground` or the standalone Docker image, or by running the `playground-config` `ir/set-prep` in the `dev` namespace.
 
 In playground mode, to begin with, we only start the pgwire server, without an associated XTDB node.
 Then, whenever a new connection is initiated, we create a new isolated in-memory node for every distinct 'database' specified in the connection parameters.
