@@ -461,7 +461,7 @@ Expr :: <defined separately>
 === Where
 
 The 'where' operator filters rows in a query or unification operator.
-It expects (optionally) many link:../stdlib/predicates[predicates] - rows that match all of the predicates will be returned; rows that fail to match one or more will be filtered out.
+It expects (optionally) many link:/reference/main/stdlib/predicates[predicates] - rows that match all of the predicates will be returned; rows that fail to match one or more will be filtered out.
 
 * Like all other XTQL expressions, `where` respects 'three-valued logic' - if an expression returns either false or null, the row will be filtered out.
 * `where` is short-circuiting - if an earlier predicate doesn't return true for a row, the remaining predicates won't be evaluated.

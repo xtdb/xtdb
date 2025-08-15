@@ -60,7 +60,7 @@ databases:
 
 If no `databases` section is specified, XTDB will use the default configuration - an in-memory transaction log and an in-memory object store.
 
-For more details on the log and storage configurations, including the available components, see the link:config/logs[Transaction Logs] and link:config/storage[Object Storage] documentation.
+For more details on the log and storage configurations, including the available components, see the link:config/log[Transaction Logs] and link:config/storage[Object Storage] documentation.
 
 == Using `!Env`
 

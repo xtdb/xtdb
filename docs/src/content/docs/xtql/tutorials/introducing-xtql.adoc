@@ -177,7 +177,7 @@ include::{test}[tags=joins-xtql-2,indent=0]
 include::{example}[tags=joins-sql-2,indent=0]
 ----
 +
-* We can specify that a certain match is optional using link:../reference/main/xtql/queries.html#_joins[`left-join`]:
+* We can specify that a certain match is optional using link:/reference/main/xtql/queries.html#_joins[`left-join`]:
 +
 [source,clojure]
 ----
@@ -190,7 +190,7 @@ include::{example}[tags=joins-sql-3,indent=0]
 ----
 +
 Here, we're asking to additionally return customers who haven't yet any orders (for which the order-table columns will be absent in the results).
-* Or, we can specify that we only want to return customers who _don't_ have any orders, using link:../reference/main/stdlib/predicates.html#_boolean_functions[`not`] link:../reference/main/xtql/queries.html#_subqueries[`exists?`]:
+* Or, we can specify that we only want to return customers who _don't_ have any orders, using link:/reference/main/stdlib/predicates.html#_boolean_functions[`not`] link:/reference/main/xtql/queries.html#_subqueries[`exists?`]:
 +
 [source,clojure]
 ----
