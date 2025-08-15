@@ -1,17 +1,18 @@
 (ns xtdb.main
   (:gen-class)
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]))
 
 (defn -main [& args]
-  (println (str "Starting XTDB 2.x"
-                (when-let [version (System/getenv "XTDB_VERSION")]
-                  (when-not (str/blank? version)
-                    (str " @ " version)))
-
-                (when-let [git-sha (System/getenv "GIT_SHA")]
-                  (when-not (str/blank? git-sha)
-                    (str " @ "
-                         (-> git-sha
-                             (subs 0 7)))))
-                " ..."))
+  (let [version (some-> (System/getenv "XTDB_VERSION")
+                        str/trim
+                        not-empty)
+      git-sha (some-> (System/getenv "GIT_SHA")
+                      str/trim
+                      not-empty
+                      (subs 0 7))]
+    (log/info (str "Starting XTDB"
+                   (if version (str " " version) " 2.x")
+                   (when git-sha (str " [" git-sha "]"))
+                   " ...")))
   ((requiring-resolve 'xtdb.cli/start-node-from-command-line) args))
