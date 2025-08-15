@@ -173,7 +173,7 @@
                                (print-help)
                                (System/exit 0))
 
-      (if (or (empty? more-args) (str/starts-with? (first more-args) "-"))
+      (if (or (empty? args) (str/starts-with? (first args) "-"))
         (start-node args)
 
         (do
