@@ -133,7 +133,8 @@
     :id :dry-run?]])
 
 (defn- reset-compactor! [[db-name & args]]
-  (when-not db-name
+  (when (or (nil? db-name)
+            (str/starts-with? db-name "--"))
     (binding [*out* *err*]
       (println "Missing db-name: `reset-compactor <db-name> [opts]`")
       (System/exit 2)))
