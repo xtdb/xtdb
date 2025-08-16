@@ -6,6 +6,7 @@
             [clojure.tools.logging :as log]
             [xtdb.compactor.reset :as cr]
             [xtdb.error :as err]
+            [xtdb.help :as help]
             [xtdb.logging :as logging]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgw]
@@ -143,16 +144,6 @@
         (System/exit 2)))
     (cr/reset-compactor! (file->node-opts file) db-name {:dry-run? dry-run?})))
 
-(defn- print-help []
-  (println "--- XTDB ---")
-  (newline)
-  (println "XTDB has several top-level commands to choose from:")
-  (println " * `node` (default, can be omitted): starts an XT node")
-  (println " * `compactor`: runs a compactor-only node")
-  (println " * `playground`: starts a 'playground', an in-memory node which accepts any database name, creating it if required")
-  (println " * `reset-compactor <db-name>`: resets the compacted files on the given node.")
-  (newline)
-  (println "For more information about any command, run `<command> --help`, e.g. `playground --help`"))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn start-node-from-command-line [[cmd & more-args :as args]]
@@ -171,14 +162,14 @@
                           (System/exit 0))
 
       ("help" "-h" "--help") (do
-                               (print-help)
+                               (help/print-help)
                                (System/exit 0))
 
       (if (or (empty? args) (str/starts-with? (first args) "-"))
         (start-node args)
 
         (do
-          (print-help)
+          (help/print-help)
           (System/exit 2))))
 
     (catch Throwable t
