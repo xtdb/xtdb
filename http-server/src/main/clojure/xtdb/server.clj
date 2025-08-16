@@ -345,11 +345,13 @@
                 success-ctx
 
                 #xt.authn/method :password
-                (if (.verifyPassword authn user password)
+                (try 
+                  (.verifyPassword authn user password)
                   success-ctx
-                  (assoc ctx :error (ex-info (str "password authentication failed for user: " user)
-                                             {:type :unauthenticated
-                                              ::status 401})))
+                  (catch Anomaly _
+                    (assoc ctx :error (ex-info (str "password authentication failed for user: " user)
+                                               {:type :unauthenticated
+                                                ::status 401}))))
 
                 (assoc ctx :error (ex-info "authn failed" {:type :unauthenticated
                                                            ::status 401})))))})

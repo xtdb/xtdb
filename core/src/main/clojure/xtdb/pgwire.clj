@@ -31,15 +31,14 @@
            [java.nio.channels FileChannel]
            [java.nio.file Path]
            [java.security KeyStore]
-           [java.time Clock Duration ZoneId]
-           [java.util Map]
+           [java.time Clock Duration Instant ZoneId]
            [java.util.concurrent ExecutorService Executors TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.antlr.v4.runtime ParserRuleContext)
-           (org.apache.arrow.memory BufferAllocator RootAllocator)
+           (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
-           (xtdb.api DataSource DataSource$ConnectionBuilder ServerConfig Xtdb$Config)
+           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
            xtdb.arrow.RelationReader
            (xtdb.error Anomaly Incorrect Interrupted)
@@ -62,7 +61,7 @@
 
                    server-state
 
-                   authn-rules]
+                   ^Authenticator authn]
   DataSource
   (createConnectionBuilder [_]
     (DataSource$ConnectionBuilder. "localhost" port))
@@ -159,6 +158,12 @@
 (defn- err-invalid-passwd [msg] (ex-info msg {::severity :error, ::error-code "28P01"}))
 (defn- err-query-cancelled [msg] (ex-info msg {::severity :error, :error-code "57014"}))
 
+(defn- notice [msg]
+  {:severity "NOTICE"
+   :localized-severity "NOTICE"
+   :sql-state "00000"
+   :message msg})
+
 (defn- notice-warning [msg]
   {:severity "WARNING"
    :localized-severity "WARNING"
@@ -233,6 +238,8 @@
                                                          ::error-code (case (:arg-format data)
                                                                         :text "22P02"
                                                                         :binary "22P03")}
+                           :xtdb/invalid-client-credentials {::severity :error, ::error-code "28P01"}
+                           :xtdb/authn-failed {::severity :error, ::error-code "28P01"}
 
                            {::severity :error, ::error-code "08P01"})
 
@@ -241,6 +248,13 @@
         (do
           (log/error ex "Uncaught exception processing message")
           {::severity :error, ::error-code "XX000"})))))
+
+(defn validate-and-refresh-token [{:keys [conn-state ^Authenticator authn]}]
+  (when-let [^OAuthResult authn-state (:authn-state @conn-state)]
+    (when (authn/token-expired? authn-state (Instant/now))
+      (if-let [^OAuthResult refreshed-result (authn/refresh-token authn authn-state)]
+        (swap! conn-state assoc :authn-state refreshed-result)
+        (throw (err-invalid-auth-spec "Authentication token has expired and could not be refreshed"))))))
 
 (defn send-ex [{:keys [conn-state] :as conn}, ^Throwable ex]
   (let [ex-msg (ex-message ex)
@@ -292,8 +306,23 @@
         (doto (pgio/cmd-write-msg pgio/msg-backend-key-data {:process-id (:cid conn), :secret-key 0}))
         (doto (cmd-send-ready)))))
 
+(defn parse-client-creds [^String credentials]
+  (cond
+    (nil? credentials)
+    (throw (err/incorrect :xtdb/invalid-client-credentials "Client credentials were not provided")) 
+
+    (str/blank? credentials)
+    (throw (err/incorrect :xtdb/invalid-client-credentials "Client credentials were empty"))
+
+    :else
+    (let [parts (str/split credentials #":")]
+      (if (= 2 (count parts))
+        (let [[client-id client-secret] parts]
+          {:client-id client-id :client-secret client-secret})
+        (throw (err/incorrect :xtdb/invalid-client-credentials "Client credentials must be provided in the format 'client-id:client-secret'"))))))
+
 (defn cmd-startup-pg30 [{:keys [frontend server] :as conn} startup-opts]
-  (let [{:keys [node playground?]} server
+  (let [{:keys [node ^Authenticator authn playground?]} server
         db-name (get startup-opts "database")
         db-cat (db/<-node node)
         db (or (.databaseOrNull db-cat db-name)
@@ -301,37 +330,62 @@
                  (log/debug "creating playground database" (pr-str db-name))
                  (db/create-database db-cat db-name))
                (throw (err-invalid-catalog db-name)))
-
         user (get startup-opts "user")
-        conn (assoc conn :node node, :default-db db-name, :db db)
-        authn (authn/<-node node)]
+        conn (assoc conn :node node, :authn authn, :default-db db-name, :db db)]
+    (if authn
+      (condp = (.methodFor authn user (pgio/host-address frontend))
+        #xt.authn/method :trust
+        (do
+          (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
+          (startup-ok conn startup-opts))
 
-    (condp = (.methodFor authn user (pgio/host-address frontend))
-      #xt.authn/method :trust
-      (do
-        (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
-        (startup-ok conn startup-opts))
+        #xt.authn/method :password
+        (do
+          ;; asking for a password
+          (pgio/cmd-write-msg conn pgio/msg-auth {:result 3})
 
-      #xt.authn/method :password
-      (do
-        ;; asking for a password, we only have :trust and :password for now
-        (pgio/cmd-write-msg conn pgio/msg-auth {:result 3})
+          ;; we go idle until we receive a message
+          (when-let [{:keys [msg-name] :as msg} (pgio/read-client-msg! frontend)]
+            (if (not= :msg-password msg-name)
+              (throw (err-invalid-auth-spec (str "password authentication failed for user: " user)))
 
-        ;; we go idle until we receive a message
-        (when-let [{:keys [msg-name] :as msg} (pgio/read-client-msg! frontend)]
-          (if (not= :msg-password msg-name)
-            (throw (err-invalid-auth-spec (str "password authentication failed for user: " user)))
-
-            (if (.verifyPassword authn user (:password msg))
-              (do
+              (let [auth-result (.verifyPassword authn user (:password msg))
+                    user-id (.getUserId auth-result)]
                 (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
-                (startup-ok conn startup-opts))
+                (when (instance? OAuthResult auth-result)
+                  (swap! (:conn-state conn) assoc :authn-state auth-result))
+                (startup-ok conn (assoc startup-opts "user" user-id))))))
 
-              (throw (err-invalid-passwd (str "password authentication failed for user: " user)))))))
+        #xt.authn/method :device-auth
+        (let [device-auth-resp (.startDeviceAuth authn user)]
+          (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
+          (pgio/cmd-send-notice conn (notice (str "\nHello! Please head over here to authenticate:"
+                                                  (str "\n\n" (.getUrl device-auth-resp))
+                                                  "\n")))
+          (let [auth-result (.await device-auth-resp)
+                user-id (.getUserId auth-result)]
+            (swap! (:conn-state conn) assoc :authn-state auth-result)
+            (startup-ok conn (assoc startup-opts "user" user-id))))
 
-      (throw (err-invalid-auth-spec (str "no authentication record found for user: " user))))
+        #xt.authn/method :client-credentials
+        (do
+          ;; asking for client-id/client-secret
+          (pgio/cmd-write-msg conn pgio/msg-auth {:result 3})
 
-    conn))
+          ;; we go idle until we receive a message
+          (when-let [{:keys [msg-name] :as msg} (pgio/read-client-msg! frontend)]
+            (if (not= :msg-password msg-name)
+              (throw (err-invalid-auth-spec (str "client credentials authentication failed for user: " user)))
+
+              (let [{:keys [client-id client-secret]} (parse-client-creds (:password msg))
+                    auth-result (.verifyClientCredentials authn client-id client-secret)
+                    user-id (.getUserId auth-result)]
+                (pgio/cmd-write-msg conn pgio/msg-auth {:result 0})
+                (swap! (:conn-state conn) assoc :authn-state auth-result)
+                (startup-ok conn (assoc startup-opts "user" user-id))))))
+
+        (throw (err-invalid-auth-spec (str "no authentication record found for user: " user))))
+      conn)))
 
 (defn cmd-startup-cancel [conn msg-in]
   (let [{:keys [process-id]} ((:read pgio/io-cancel-request) msg-in)
@@ -1425,14 +1479,18 @@
   (throw (err/unsupported ::unknown-client-msg (str "unknown client message: " msg-name)
                           {:msg-name msg-name})))
 
-(defn handle-msg [{:keys [cid conn-state] :as conn} {:keys [msg-name] :as msg}]
+(defn handle-msg [{:keys [cid ^Authenticator authn conn-state] :as conn} {:keys [msg-name] :as msg}]
   (try
     (log/trace "Read client msg" {:cid cid, :msg msg})
 
     (err/wrap-anomaly {}
       (if (and (:skip-until-sync? @conn-state) (not= :msg-sync msg-name))
         (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg})
-        (handle-msg* conn msg)))
+        (do
+          ;; Validate and refresh tokens for messages that execute queries or handle data
+          (when (and authn #{:msg-simple-query :msg-execute :msg-copy-data :msg-copy-done} msg-name)
+            (validate-and-refresh-token conn))
+          (handle-msg* conn msg))))
 
     (catch Interrupted e (throw e))
 
@@ -1489,7 +1547,7 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [{:keys [node server-state, port, allocator, query-error-counter, tx-error-counter, ^Counter total-connections-counter] :as server} ^Socket conn-socket]
+  [{:keys [node, ^Authenticator authn, server-state, port, allocator, query-error-counter, tx-error-counter, ^Counter total-connections-counter] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
@@ -1498,7 +1556,7 @@
                                                                               :clock (:clock @server-state)}})
                                                  !closing? (atom false)]
                                              (try
-                                               (-> (map->Connection {:cid cid, :node node, :server server,
+                                               (-> (map->Connection {:cid cid, :node node, :authn authn, :server server,
                                                                      :frontend (pgio/->socket-frontend conn-socket),
                                                                      :!closing? !closing?
                                                                      :allocator (util/->child-allocator allocator (str "pg-conn-" cid))
@@ -1606,6 +1664,7 @@
            total-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.total_connections"))
            server (map->Server {:allocator allocator
                                 :node node
+                                :authn (authn/<-node node)
                                 :host host
                                 :port port
                                 :read-only? read-only?

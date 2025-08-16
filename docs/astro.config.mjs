@@ -147,7 +147,13 @@ export default defineConfig({
 
                                 { label: 'Storage', link: '/ops/config/storage' },
                                 { label: 'Monitoring & Observability', link: '/ops/config/monitoring' },
-                                { label: 'Authentication', link: '/ops/config/authentication' }
+                                {
+                                    label: 'Authentication',
+                                    items: [
+                                        { label: 'Overview', link: '/ops/config/authentication' },
+                                        { label: 'OpenID Connect', link: '/ops/config/authentication/oidc' },
+                                    ],
+                                }
                             ]
                         },
                         { label: 'AWS', link: '/ops/aws' },
