@@ -5,7 +5,7 @@
             [xtdb.help :as help]))
 
 (defn- help-requested? [args]
-  (some #(contains? #{"-h" "--help" "help"} %) args))
+  (contains? #{"-h" "--help" "help"} (first args)))
 
 (defn -main [& args]
   (if (help-requested? args)
