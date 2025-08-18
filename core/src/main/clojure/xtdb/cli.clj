@@ -123,8 +123,8 @@
    ["-h" "--help"]])
 
 (defn- start-node [args]
-  (let [{:keys [file]} (-> (parse-args args node-cli-spec)
-                           (handling-arg-errors-or-help))]
+  (let [{{:keys [file]} :options} (-> (parse-args args node-cli-spec)
+                                      (handling-arg-errors-or-help))]
     (util/with-open [_node (xtn/start-node (file->node-opts file))]
       @(shutdown-hook-promise))))
 
