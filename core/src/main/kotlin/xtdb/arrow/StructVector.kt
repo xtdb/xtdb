@@ -15,6 +15,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Incorrect
 import xtdb.toFieldType
+import xtdb.types.Fields
 import xtdb.util.Hasher
 import xtdb.util.normalForm
 import java.util.*
@@ -142,7 +143,7 @@ class StructVector
 
         val srcKeys = src.childWriters.keys
         for (child in childWriters.values) {
-            if (child.name !in srcKeys) child.nullable = true
+            if (child.name !in srcKeys) child.maybePromote(allocator, Fields.NULL.fieldType)
         }
 
         return RowCopier { srcIdx ->
