@@ -134,7 +134,7 @@ interface Compactor : AutoCloseable {
                 } catch (e: InterruptedException) {
                     throw e
                 } catch (e: Throwable) {
-                    LOGGER.error(e) { "error running compaction job: ${table.sym}/$outputTrieKey" }
+                    LOGGER.error(e) { "error running compaction job: ${table.sym}/$outputTrieKey, files in job: '$trieKeys'" }
                     throw e
                 }
 
