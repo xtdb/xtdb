@@ -6,7 +6,7 @@
             [clojure.tools.logging :as log]
             [xtdb.compactor.reset :as cr]
             [xtdb.error :as err]
-            [xtdb.help :as help]
+            [xtdb.cli-help :as cli-help]
             [xtdb.logging :as logging]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgw]
@@ -162,14 +162,14 @@
                           (System/exit 0))
 
       ("help" "-h" "--help") (do
-                               (help/print-help)
+                               (cli-help/print-help)
                                (System/exit 0))
 
       (if (or (empty? args) (str/starts-with? (first args) "-"))
         (start-node args)
 
         (do
-          (help/print-help)
+          (cli-help/print-help)
           (System/exit 2))))
 
     (catch Throwable t

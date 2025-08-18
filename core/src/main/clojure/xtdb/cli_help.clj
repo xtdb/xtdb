@@ -1,7 +1,20 @@
-(ns ^:no-doc xtdb.help)
+(ns ^:no-doc xtdb.cli-help
+  (:require [clojure.string :as str]))
+
+(defn version-string []
+  (let [version (some-> (System/getenv "XTDB_VERSION")
+                        str/trim
+                        not-empty)
+        git-sha (some-> (System/getenv "GIT_SHA")
+                        str/trim
+                        not-empty
+                        (subs 0 7))]
+    (str "XTDB"
+         (if version (str " " version) " 2.x")
+         (when git-sha (str " [" git-sha "]")))))
 
 (defn print-help []
-  (println "--- XTDB ---")
+  (println (str "--- " (version-string) " ---"))
   (newline)
   (println "XTDB has several top-level commands to choose from:")
   (println " * `node` (default, can be omitted): starts an XT node")
