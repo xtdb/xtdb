@@ -106,11 +106,7 @@
         iid-rdr (.getListElements iids-rdr)
         docs-rdr (.vectorFor put-leg "documents")
 
-        ;; HACK: can remove this once we're sure a few more people have migrated their logs
-        ^VectorReader valid-from-rdr (or (.vectorForOrNull put-leg "_valid_from")
-                                         (when (.vectorForOrNull put-leg "xt$valid_from")
-                                           (throw (err/fault ::legacy-log "Legacy log format - see https://github.com/xtdb/xtdb/pull/3675 for more details"))))
-
+        valid-from-rdr (.vectorFor put-leg "_valid_from")
         valid-to-rdr (.vectorFor put-leg "_valid_to")
         system-time-µs (time/instant->micros system-time)
         tables (->> (.getLegNames docs-rdr)
