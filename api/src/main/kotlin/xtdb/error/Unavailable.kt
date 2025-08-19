@@ -5,7 +5,7 @@ import clojure.lang.Keyword
 import clojure.lang.PersistentHashMap
 
 class Unavailable(
-    message: String, data: IPersistentMap = PersistentHashMap.EMPTY, cause: Throwable? = null
+    message: String?, data: IPersistentMap = PersistentHashMap.EMPTY, cause: Throwable? = null
 ) : Anomaly(message, data, cause) {
 
     companion object {

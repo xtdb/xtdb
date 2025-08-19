@@ -13,7 +13,7 @@ sealed class Anomaly(
     override val message: String?, private val data: IPersistentMap, cause: Throwable?,
 ) : RuntimeException(message, cause), IExceptionInfo {
 
-    sealed class Caller(message: String, data: IPersistentMap, cause: Throwable?) : Anomaly(message, data, cause)
+    sealed class Caller(message: String?, data: IPersistentMap, cause: Throwable?) : Anomaly(message, data, cause)
 
     companion object {
         internal val CATEGORY = Keyword.intern("cognitect.anomalies", "category")
