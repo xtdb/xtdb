@@ -1175,11 +1175,11 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            (xt/q tu/*node* "SELECT * FROM docs ORDER BY _id"))))
 
 (t/deftest test-unconsumed-nodes-nullable-into-duv-4675
-  ;; a :: DUV
+  ;; a :: nullable i64
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :a 3}, {:xt/id 2}]])
   (tu/flush-block! tu/*node*)
 
-  ;; a :: null in this block
+  ;; a :: DUV
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 3, :a 4} {:xt/id 4, :a "hello"}]])
   (tu/flush-block! tu/*node*)
 
