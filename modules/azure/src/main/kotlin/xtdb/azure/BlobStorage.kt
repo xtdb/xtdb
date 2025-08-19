@@ -193,7 +193,7 @@ class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, Sup
             try {
                 unwrappingReactorException {
                     client.getBlobClient(prefixedKey)
-                        .upload(BinaryData.fromByteBuffer(buf))
+                        .upload(BinaryData.fromByteBuffer(buf), true)
                 }
             } catch (e: BlobStorageException) {
                 if (e.statusCode == 409)
