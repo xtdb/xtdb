@@ -31,7 +31,7 @@
   `(with-log-levels {~ns ~level} ~@body))
 
 (defn- env-var->log-ns [env-var]
-  (when-let [[_ extras] (re-matches #"xtdb_logging_level(?:_([a-z]+(?:_[a-z]+)*))?" (str/lower-case env-var))]
+  (when-let [[_ extras] (re-matches #"xtdb_logging_level(?:_([a-z\-]+(?:_[a-z\-]+)*))?" (str/lower-case env-var))]
     (->> (into ["xtdb"] (some-> extras (str/split #"_")))
          (str/join ".")
          symbol)))
