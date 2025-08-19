@@ -101,18 +101,6 @@ jobs:
             GIT_SHA=${{ github.sha }}
             XTDB_VERSION=${{ steps.standalone-meta.outputs.version }}
 
-      - name: Push AWS
-        uses: docker/build-push-action@v5
-        with:
-          context: docker/aws
-          platforms: linux/arm64/v8,linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.aws-meta.outputs.tags }}
-          labels: ${{ steps.aws-meta.outputs.labels }}
-          build-args: |
-            GIT_SHA=${{ github.sha }}
-            XTDB_VERSION=${{ steps.aws-meta.outputs.version }}
-
       - name: Push Azure
         uses: docker/build-push-action@v5
         with:
@@ -124,6 +112,18 @@ jobs:
           build-args: |
             GIT_SHA=${{ github.sha }}
             XTDB_VERSION=${{ steps.azure-meta.outputs.version }}
+
+      - name: Push AWS
+        uses: docker/build-push-action@v5
+        with:
+          context: docker/aws
+          platforms: linux/arm64/v8,linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.aws-meta.outputs.tags }}
+          labels: ${{ steps.aws-meta.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            XTDB_VERSION=${{ steps.aws-meta.outputs.version }}
 
       - name: Push Google Cloud
         uses: docker/build-push-action@v5
