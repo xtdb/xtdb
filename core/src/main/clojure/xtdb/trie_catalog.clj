@@ -332,16 +332,22 @@
   (addTries [this table added-tries as-of]
     (.compute !table-cats table
               (fn [_table tries]
-                (reduce (fn [table-cat ^TrieDetails added-trie]
-                          (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
-                            (apply-trie-notification this table-cat
-                                                     (-> parsed-key
-                                                         (assoc :data-file-size (.getDataFileSize added-trie)
-                                                                :trie-metadata (.getTrieMetadata added-trie)))
-                                                     as-of)
-                            table-cat))
-                        (or tries {})
-                        added-tries))))
+                (log/tracef "Adding tries to table '%s': %s" table (mapv #(.getTrieKey ^TrieDetails %) added-tries))
+                (try
+                  (reduce (fn [table-cat ^TrieDetails added-trie]
+                            (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
+                              (apply-trie-notification this table-cat
+                                                       (-> parsed-key
+                                                           (assoc :data-file-size (.getDataFileSize added-trie)
+                                                                  :trie-metadata (.getTrieMetadata added-trie)))
+                                                       as-of)
+                              table-cat))
+                          (or tries {})
+                          added-tries)
+                  (catch InterruptedException e (throw e))
+                  (catch Throwable e
+                    (log/error e "Failed to add tries to table" table)
+                    (throw e))))))
 
   (getTables [_] (set (keys !table-cats)))
 
