@@ -18,7 +18,7 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileReader ArrowReader)
            (org.apache.arrow.vector.types.pojo Field)
-           (xtdb.arrow Relation Relation$Loader Relation$UnloadMode RelationReader RowCopier)
+           (xtdb.arrow Relation Relation$Loader ArrowUnloader$Mode RelationReader RowCopier)
            xtdb.ICursor
            xtdb.vector.OldRelationWriter))
 
@@ -45,7 +45,7 @@
 (defn- write-rel [^BufferAllocator allocator, ^RelationReader rdr, ^OutputStream os]
   (util/with-open [ch (Channels/newChannel os)
                    rel (.openDirectSlice rdr allocator)
-                   unl (.startUnload rel ch Relation$UnloadMode/FILE)]
+                   unl (.startUnload rel ch ArrowUnloader$Mode/FILE)]
     (.writePage unl)
     (.end unl)))
 

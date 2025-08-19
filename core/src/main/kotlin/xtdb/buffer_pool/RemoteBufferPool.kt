@@ -121,7 +121,7 @@ internal class RemoteBufferPool(
                 diskCacheMisses?.increment()
                 getObject(k, tmpFile)
             }.get()
-            .use { entry -> Relation.readFooter(entry.path.openReadableChannel()) }
+            .use { entry -> entry.path.openReadableChannel().readArrowFooter() }
     }
 
     override fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {

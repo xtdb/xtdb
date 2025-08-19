@@ -1,7 +1,7 @@
 package xtdb.arrow
 
 import io.netty.buffer.Unpooled
-import org.apache.arrow.flatbuf.Footer
+import org.apache.arrow.flatbuf.Footer.getRootAsFooter
 import org.apache.arrow.flatbuf.Message
 import org.apache.arrow.flatbuf.RecordBatch
 import org.apache.arrow.memory.ArrowBuf
@@ -11,10 +11,12 @@ import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.vector.ipc.message.ArrowBlock
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
+import org.apache.arrow.vector.ipc.message.MessageSerializer
 import org.apache.arrow.vector.ipc.message.MessageSerializer.IPC_CONTINUATION_TOKEN
 import org.apache.arrow.vector.ipc.message.MessageSerializer.deserializeRecordBatch
 import xtdb.error.Incorrect
 import java.nio.ByteBuffer
+import java.nio.channels.SeekableByteChannel
 import java.nio.charset.StandardCharsets
 
 object ArrowUtil {
@@ -62,18 +64,49 @@ object ArrowUtil {
             throw Incorrect("invalid Arrow IPC file format", errorCode = "xtdb/invalid-arrow-magic")
     }
 
-    fun ArrowBuf.readArrowFooter(): ArrowFooter {
-        this.validateArrowMagic()
+    internal fun ArrowBuf.readArrowFooter(): ArrowFooter {
+        val magicBytes = ByteArray(Int.SIZE_BYTES + MAGIC.size)
+        val footerLengthOffset = capacity() - magicBytes.size
+        getBytes(footerLengthOffset, magicBytes)
 
-        val capacity = capacity()
-        val magicLength = ARROW_MAGIC.size
+        require(MAGIC.contentEquals(magicBytes.copyOfRange(Int.SIZE_BYTES, magicBytes.size))) {
+            "missing magic number at end of Arrow file"
+        }
 
-        val footerSizeOffset = capacity - (Integer.BYTES + magicLength)
-        val footerSize = getInt(footerSizeOffset)
-        val footerPosition = footerSizeOffset - footerSize
+        val footerLength = MessageSerializer.bytesToInt(magicBytes)
+        require(footerLength > 0) { "Footer length must be positive" }
+        require(footerLength + MAGIC.size * 2 + Int.SIZE_BYTES <= capacity()) { "Footer length exceeds file size" }
 
-        val footerBuffer = nioBuffer(footerPosition, footerSize)
-        return ArrowFooter(Footer.getRootAsFooter(footerBuffer))
+        val footerBuffer = ByteBuffer.allocate(footerLength)
+        getBytes(footerLengthOffset - footerLength, footerBuffer)
+        footerBuffer.flip()
+        return ArrowFooter(getRootAsFooter(footerBuffer))
+    }
+
+    internal fun SeekableByteChannel.readArrowFooter(): ArrowFooter {
+        require(size() > MAGIC.size * 2 + 4) { "File is too small to be an Arrow file" }
+
+        val buf = ByteBuffer.allocate(Int.SIZE_BYTES + MAGIC.size)
+        val footerLengthOffset = size() - buf.remaining()
+        position(footerLengthOffset)
+        read(buf)
+        buf.flip()
+
+        val array = buf.array()
+
+        require(MAGIC.contentEquals(array.copyOfRange(Int.SIZE_BYTES, array.size))) {
+            "missing magic number at end of Arrow file"
+        }
+
+        val footerLength = MessageSerializer.bytesToInt(array)
+        require(footerLength > 0) { "Footer length must be positive" }
+        require(footerLength + MAGIC.size * 2 + Int.SIZE_BYTES <= size()) { "Footer length exceeds file size" }
+
+        val footerBuffer = ByteBuffer.allocate(footerLength)
+        position(footerLengthOffset - footerLength)
+        read(footerBuffer)
+        footerBuffer.flip()
+        return ArrowFooter(getRootAsFooter(footerBuffer))
     }
 
     fun ArrowBuf.toArrowRecordBatchView(block: ArrowBlock): ArrowRecordBatch {

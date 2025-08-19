@@ -10,12 +10,9 @@ import xtdb.ArrowWriter
 import xtdb.BufferPool
 import xtdb.IEvictBufferTest
 import xtdb.api.storage.ObjectStore.StoredObject
-import xtdb.api.storage.Storage
-import xtdb.api.storage.Storage.LocalStorageFactory
 import xtdb.api.storage.Storage.arrowFooterCache
-import xtdb.api.storage.Storage.storageRoot
-import xtdb.api.storage.StorageVersion
 import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
+import xtdb.arrow.ArrowUtil.readArrowFooter
 import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.Relation
 import xtdb.cache.MemoryCache
@@ -68,14 +65,14 @@ internal class LocalBufferPool(
         arrowFooterCache.get(key) {
             val path = diskStore.resolve(key).orThrowIfMissing(key)
 
-            Relation.readFooter(path.openReadableChannel())
+            path.openReadableChannel().readArrowFooter()
         }
 
     override fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
         recordBatchRequests?.increment()
         val path = diskStore.resolve(key).orThrowIfMissing(key)
 
-        val footer = arrowFooterCache.get(key) { Relation.readFooter(path.openReadableChannel()) }
+        val footer = arrowFooterCache.get(key) { path.openReadableChannel().readArrowFooter() }
 
         val arrowBlock = footer.recordBatches.getOrNull(idx)
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
@@ -112,7 +109,7 @@ internal class LocalBufferPool(
 
             val filePath = diskStore.resolve(key).also { it.createParentDirectories() }
             tmpPath.moveTo(filePath, StandardCopyOption.ATOMIC_MOVE)
-        } catch (e: ClosedByInterruptException) {
+        } catch (_: ClosedByInterruptException) {
             throw InterruptedException()
         }
     }
@@ -141,7 +138,7 @@ internal class LocalBufferPool(
                     override fun writePage() {
                         try {
                             unloader.writePage()
-                        } catch (e: ClosedByInterruptException) {
+                        } catch (_: ClosedByInterruptException) {
                             throw InterruptedException()
                         }
                     }

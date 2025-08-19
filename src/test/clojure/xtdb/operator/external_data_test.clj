@@ -6,7 +6,7 @@
             [xtdb.util :as util])
   (:import org.apache.arrow.memory.RootAllocator
            org.apache.arrow.vector.types.pojo.Schema
-           xtdb.arrow.Relation))
+           xtdb.arrow.ArrowUnloader$Mode))
 
 (t/use-fixtures :once tu/with-allocator)
 
@@ -56,7 +56,7 @@
                                              (types/col-type->field "a_double" :f64)
                                              (types/col-type->field "an_inst" [:timestamp-tz :micro "UTC"])]))
                 ch (util/->file-channel arrow-path util/write-truncate-open-opts)
-                unl (.startUnload rel ch xtdb.arrow.Relation$UnloadMode/FILE)]
+                unl (.startUnload rel ch ArrowUnloader$Mode/FILE)]
       (doseq [page example-data]
         (doseq [row page]
           (.writeRow rel row))
