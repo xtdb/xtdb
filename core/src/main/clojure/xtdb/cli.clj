@@ -7,6 +7,7 @@
             [xtdb.compactor.reset :as cr]
             [xtdb.error :as err]
             [xtdb.cli-help :as cli-help]
+            [xtdb.empty-struct-l0s :as l0s]
             [xtdb.logging :as logging]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgw]
@@ -144,6 +145,22 @@
         (System/exit 2)))
     (cr/reset-compactor! (file->node-opts file) db-name {:dry-run? dry-run?})))
 
+(def fix-l0s-cli-spec
+  [config-file-opt
+   [nil "--dry-run"
+    "Lists files that would be migrated, without actually migrating them"
+    :id :dry-run?]
+   ["-h" "--help"]])
+
+(defn- fix-l0s! [args]
+  (let [{{:keys [file dry-run?]} :options, [db-name table-name] :arguments} (-> (parse-args args reset-compactor-cli-spec)
+                                                                                (handling-arg-errors-or-help))]
+    (when (or (nil? db-name) (nil? table-name))
+      (binding [*out* *err*]
+        (println "Missing db-name: `fix-l0s <db-name> <table-name> [opts]`")
+        (System/exit 2)))
+
+    (l0s/migrate-l0s! (file->node-opts file) db-name table-name {:dry-run? dry-run?})))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn start-node-from-command-line [[cmd & more-args :as args]]
@@ -160,6 +177,10 @@
       "reset-compactor" (do
                           (reset-compactor! more-args)
                           (System/exit 0))
+
+      "fix-l0s" (do
+                  (fix-l0s! more-args)
+                  (System/exit 0))
 
       ("help" "-h" "--help") (do
                                (cli-help/print-help)
