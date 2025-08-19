@@ -11,7 +11,7 @@ class HllCalculator {
     private val hlls = mutableMapOf<ColumnName, HLL>()
 
     fun update(opRdr: VectorReader, startPos: Int, endPos: Int) {
-        val putRdr = opRdr.vectorFor("put")
+        val putRdr = opRdr.vectorForOrNull("put") ?: return
         val columns = putRdr.keyNames.orEmpty()
         val keyRdrs = columns.map { it to putRdr.vectorFor(it) }
 

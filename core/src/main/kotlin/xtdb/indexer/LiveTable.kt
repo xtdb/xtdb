@@ -47,7 +47,7 @@ constructor(
     private val iidRdr = iidWtr.asReader
 
     private val opWtr = liveRelation.vectorFor("op")
-    private val putWtr = opWtr.vectorFor("put")
+    private val putWtr by lazy { opWtr.vectorFor("put", Fields.Struct().fieldType) }
     private val deleteWtr = opWtr.vectorFor("delete")
     private val eraseWtr = opWtr.vectorFor("erase")
 
@@ -78,7 +78,7 @@ constructor(
         private val systemFrom: InstantMicros = txKey.systemTime.asMicros
 
         fun openSnapshot(): Snapshot = openSnapshot(transientTrie)
-        val docWriter: VectorWriter = putWtr
+        val docWriter: VectorWriter by lazy { putWtr }
         val liveRelation: RelationWriter = this@LiveTable.liveRelation
 
         private val startPos = liveRelation.rowCount
@@ -147,11 +147,14 @@ constructor(
 
     fun startTx(txKey: TransactionKey, newLiveTable: Boolean) = Tx(txKey, newLiveTable)
 
-    private val RelationWriter.fields
-        get() = this.vectorFor("op").vectorFor("put").field
-            .also { assert(it.type is ArrowType.Struct) }
-            .children
-            .associateBy { it.name }
+    private val RelationWriter.fields: Map<String, Field>
+        get() {
+            val putVec = vectorFor("op").vectorForOrNull("put") ?: return emptyMap()
+            return putVec.field
+                .also { assert(it.type is ArrowType.Struct) }
+                .children
+                .associateBy { it.name }
+        }
 
     private fun openSnapshot(trie: MemoryHashTrie): Snapshot {
         // this can be openSlice once liveRel is a new-style relation

@@ -51,8 +51,7 @@
        (mapv tx-ops/parse-tx-op)))
 
 (deftest json-response-test
-  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1}]])
-  (Thread/sleep 100)
+  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1}]])
 
   (t/is (= 1
            (-> (http/request {:accept :json

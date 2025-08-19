@@ -6,7 +6,7 @@
   #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]},
  :tries
  [{:trie-key "l00-rc-b00",
-   :data-file-size 2310,
+   :data-file-size 2302,
    :trie-metadata
    {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
     :max-valid-from #xt/instant "2020-04-01T00:00:00Z",

@@ -37,8 +37,8 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
                 }
             }
 
-            minVec.writeDouble(minValue)
-            maxVec.writeDouble(maxValue)
+            if (minValue != Double.POSITIVE_INFINITY) minVec.writeDouble(minValue)
+            if (maxValue != Double.NEGATIVE_INFINITY) maxVec.writeDouble(maxValue)
             typeVec.endStruct()
         }
     }

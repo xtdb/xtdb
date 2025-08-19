@@ -412,7 +412,7 @@
              :level 1, :trie-state "live", :data-file-size 1382}
 
             {:schema-name "xt", :table-name "txs", :trie-key "l00-rc-b00",
-             :level 0, :trie-state "garbage", :data-file-size 2806}
+             :level 0, :trie-state "garbage", :data-file-size 2798}
 
             {:schema-name "xt", :table-name "txs", :trie-key "l01-rc-b00",
              :level 1, :trie-state "live", :row-count 1, :data-file-size 2806,

@@ -657,3 +657,37 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
                                 :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}],
              :system-time #xt/zoned-date-time "2020-01-02T00:00Z[UTC]"}]
            (xt/q tu/*node* "SELECT * FROM xt.txs WHERE NOT committed"))))
+
+(t/deftest test-copes-with-missing-put
+  (let [node-dir (util/->path "target/indexer-test/copes-with-missing-put")]
+    (util/delete-dir node-dir)
+    (util/with-open [node (tu/->local-node {:node-dir node-dir
+                                            :instant-src (tu/->mock-clock)
+                                            :compactor-threads 0})]
+      (xt/execute-tx node [[:put-docs :docs
+                            {:xt/id "foo", :a 1}
+                            {:xt/id "bar", :b 2}
+                            {:xt/id "baz", :c 3}]])
+      (tu/flush-block! node)
+      (xt/execute-tx node [[:delete-docs :docs "foo"]])
+      (tu/flush-block! node)
+      (xt/execute-tx node [[:erase-docs :docs "bar"]])
+      (tu/flush-block! node)
+      (xt/execute-tx node [[:delete-docs :docs "baz"]
+                           [:erase-docs :docs "baz"]])
+      (tu/flush-block! node)
+
+      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/copes-with-missing-put")))
+                     (.resolve node-dir "objects"))
+
+      (t/is (= [{:xt/id "foo", :a 1,
+                 :xt/valid-from #xt/zdt "2020-01-01Z[UTC]",
+                 :xt/valid-to #xt/zdt "2020-01-02Z[UTC]",
+                 :xt/system-from #xt/zdt "2020-01-01Z[UTC]"}
+                {:xt/id "foo", :a 1,
+                 :xt/valid-from #xt/zdt "2020-01-02Z[UTC]",
+                 :xt/system-from #xt/zdt "2020-01-01Z[UTC]",
+                 :xt/system-to #xt/zdt "2020-01-02Z[UTC]"}]
+               (xt/q node "SELECT *, _valid_from, _valid_to, _system_from, _system_to
+                           FROM docs FOR ALL VALID_TIME FOR ALL SYSTEM_TIME
+                           ORDER BY _system_from, _valid_from"))))))

@@ -104,24 +104,24 @@ object Trie {
         metaFileDir().resolve("$trieKey.arrow")
 
     @JvmStatic
-    fun dataRelSchema(putDocField: Field): Schema =
+    fun dataRelSchema(putDocField: Field?): Schema =
         Schema(
             "_iid" to Fields.IID,
             "_system_from" to Fields.TEMPORAL,
             "_valid_from" to Fields.TEMPORAL,
             "_valid_to" to Fields.TEMPORAL,
             "op" to Fields.Union(
-                "put" to NamelessField(putDocField.fieldType, putDocField.children),
-                "delete" to Fields.NULL,
-                "erase" to Fields.NULL
+                *(listOfNotNull(
+                    putDocField?.let { "put" to NamelessField(it.fieldType, it.children) },
+                    "delete" to Fields.NULL,
+                    "erase" to Fields.NULL
+                ).toTypedArray())
             )
         )
-
-    private fun dataRelSchema(putDocField: NamelessField) = dataRelSchema(putDocField.toArrowField("put"))
 
     @JvmStatic
     fun openLogDataWriter(
         allocator: BufferAllocator,
-        dataSchema: Schema = dataRelSchema(Fields.Struct())
+        dataSchema: Schema = dataRelSchema(null)
     ): RelationWriter = OldRelationWriter(allocator, dataSchema)
 }

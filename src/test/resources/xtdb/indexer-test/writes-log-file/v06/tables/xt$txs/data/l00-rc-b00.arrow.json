@@ -44,6 +44,20 @@
         "typeIds" : [ ]
       },
       "children" : [{
+        "name" : "delete",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "erase",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
         "name" : "put",
         "nullable" : false,
         "type" : {
@@ -89,20 +103,6 @@
             "key" : "ARROW:extension:metadata"
           }]
         }]
-      },{
-        "name" : "delete",
-        "nullable" : true,
-        "type" : {
-          "name" : "null"
-        },
-        "children" : [ ]
-      },{
-        "name" : "erase",
-        "nullable" : true,
-        "type" : {
-          "name" : "null"
-        },
-        "children" : [ ]
       }]
     }]
   },
@@ -131,9 +131,15 @@
     },{
       "name" : "op",
       "count" : 3,
-      "TYPE_ID" : [0,0,0],
+      "TYPE_ID" : [2,2,2],
       "OFFSET" : [0,1,2],
       "children" : [{
+        "name" : "delete",
+        "count" : 0
+      },{
+        "name" : "erase",
+        "count" : 0
+      },{
         "name" : "put",
         "count" : 3,
         "VALIDITY" : [1,1,1],
@@ -159,12 +165,6 @@
           "OFFSET" : [0,0,169,169],
           "DATA" : ["","92aa7e2378742f6572726f7294ab7e3a696e636f7272656374da00227e3a787464622e696e64657865722f696e76616c69642d76616c69642d74696d6573b3496e76616c69642076616c69642074696d657382ac7e3a76616c69642d66726f6d92ae7e2374696d652f696e7374616e74b4323032302d30312d30315430303a30303a30305aaa7e3a76616c69642d746f92a25e34b4323031392d30312d30315430303a30303a30305a",""]
         }]
-      },{
-        "name" : "delete",
-        "count" : 0
-      },{
-        "name" : "erase",
-        "count" : 0
       }]
     }]
   }]
