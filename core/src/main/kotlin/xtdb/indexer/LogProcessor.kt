@@ -25,6 +25,7 @@ import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
+import xtdb.util.trace
 import xtdb.util.warn
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
@@ -133,6 +134,7 @@ class LogProcessor(
 
         records.forEach { record ->
             val msgId = offsetToMsgId(epoch, record.logOffset)
+            LOG.debug("Processing message $msgId, ${record.message.javaClass.simpleName}")
 
             try {
                 val res = when (val msg = record.message) {
@@ -218,6 +220,8 @@ class LogProcessor(
                 )
                 throw CancellationException(e)
             }
+
+            LOG.debug("Processed message $msgId")
         }
     }
 
