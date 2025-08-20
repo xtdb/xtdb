@@ -72,6 +72,7 @@
 (def safe-keyword-gen
   (gen/such-that #(let [n (name %)]
                     (and (not (str/starts-with? n "_"))
+                         (not (str/starts-with? n "-"))
                          (not (#{"_id" "_fn"} n))))
                  gen/keyword
                  100))
