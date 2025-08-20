@@ -255,3 +255,44 @@
               (throw (ex-info "Error"
                               {:seed seed :records1 records1 :records2 records2}
                               t)))))))))
+
+(t/deftest live-erase-live
+  (dotimes [i 1000]
+    (when (= (mod i 100) 0)
+      (println "iteration:" i))
+    (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
+                                      :compactor {:threads 0}})]
+      (let [seed (rand-int Integer/MAX_VALUE)
+            rng (java.util.Random. seed)
+            records1 (random-records rng 4)
+            records2 (random-records rng 4)]
+        (t/testing (str "iteration-" i "-seed-" seed)
+          (try
+            (println "records1:" records1)
+            (println "records2:" records2)
+
+            (xt/execute-tx node [(into [:put-docs :docs] records1)])
+            ;(tu/flush-block! node)
+
+            (xt/execute-tx node [[:erase-docs :docs]])
+
+            (xt/execute-tx node [(into [:put-docs :docs] records2)])
+            ;(tu/flush-block! node)
+
+            ;; TODO: How to catch compaction errors?
+            ;(c/compact-all! node #xt/duration "PT1S")
+
+            ;; TODO: Ensure puts didn't error
+
+            (t/is (= 2 (count (xt/q node "FROM xt.txs"))))
+
+            ;;; TODO: Fix
+            (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
+                  expected-ids (into #{} (map :xt/id (concat records1 records2)))]
+              (t/is (= expected-ids (into #{} (map :xt/id res)))))
+
+            (catch Throwable t
+              (println "seed:" seed)
+              (throw (ex-info "Error"
+                              {:seed seed :records1 records1 :records2 records2}
+                              t)))))))))
