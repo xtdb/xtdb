@@ -1,5 +1,9 @@
 (ns xtdb.baby-deterministic-test
   (:require [clojure.test :as t]
+            [clojure.string :as str]
+            [clojure.test.check :as tc]
+            [clojure.set :as set]
+            [clojure.test.check.generators :as gen]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
@@ -7,292 +11,187 @@
             [xtdb.object-store :as os]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [xtdb.node :as xtn])
+            [xtdb.node :as xtn]
+            [clojure.test.check.properties :as prop])
   (:import [java.nio.file Path]))
 
-(defn rand-between [^java.util.Random rng min max]
-  (+ min (.nextInt rng (- max min))))
+;; Simple/hashable value generators
+(def nil-gen (gen/return nil))
+(def bool-gen gen/boolean)
+(def byte-gen (gen/fmap byte (gen/choose -128 127)))
+(def short-gen (gen/fmap short (gen/choose -32768 32767)))
+(def int-gen gen/int)
+(def long-gen gen/large-integer)
+(def float-gen gen/double) ; TODO: fix
+(def double-gen gen/double)
+(def string-gen gen/string-alphanumeric)
+(def byte-array-gen (gen/fmap byte-array (gen/vector byte-gen 1 10)))
+(def keyword-gen gen/keyword)
+(def uuid-gen gen/uuid)
+(def uri-gen (gen/fmap #(java.net.URI. (str "https://example" % ".com")) 
+                       (gen/choose 1 1000)))
 
-;; Forward declaration for recursion
-(declare rand-map-a-z)
-(declare generate-random-value)
-(declare generate-hashable-value)
+;; Date/time generators
+(def instant-gen 
+  (gen/fmap #(java.time.Instant/ofEpochSecond %) 
+            (gen/choose 0 2147483647)))
 
-;; Simple/hashable value functions
-(def hashable-value-fns
-  [; Based on ->arrow-type in types.clj
-   (constantly nil)
-   (constantly true)
+(def local-date-gen 
+  (gen/fmap java.time.LocalDate/ofEpochDay 
+            (gen/choose 0 50000)))
 
-   (constantly (byte 42))
-   (constantly (short 1000))
-   (constantly 123)
-   (constantly (Long. 456789))
-   (constantly 3.14)
-   (constantly (Double. 2.718))
+(def local-time-gen 
+  (gen/fmap java.time.LocalTime/ofSecondOfDay 
+            (gen/choose 0 86399)))
 
-   (constantly "example string")
-   (constantly (byte-array [1 2 3]))
+(def local-datetime-gen 
+  (gen/let [date local-date-gen
+            time local-time-gen]
+    (java.time.LocalDateTime/of date time)))
 
-   ; TODO: Should we allowed
-   ;(constantly #xt/tstz-range [#xt/zdt "2020-01-02T00:00Z" nil])
-   (constantly :example-keyword)
-   ; TODO: regclass?
-   ; TODO: regproc?
-   (constantly (java.util.UUID/fromString "123e4567-e89b-12d3-a456-426614174000"))
-   (constantly (java.net.URI. "https://example.com"))
-   ; TODO: transit?
+(def offset-datetime-gen 
+  (gen/let [ldt local-datetime-gen
+            offset-hours (gen/choose -12 12)]
+    (java.time.OffsetDateTime/of ldt (java.time.ZoneOffset/ofHours offset-hours))))
 
-   (constantly (java.time.ZonedDateTime/now))
-   (constantly (java.time.OffsetDateTime/now))
-   (constantly (java.time.Instant/now))
-   (constantly (java.time.LocalDateTime/now))
-   (constantly (java.time.LocalDate/now))
-   (constantly (java.time.LocalTime/now))
-   (constantly #xt/duration "PT1S")
-   (constantly #xt/interval "P1YT1S")])
+(def zoned-datetime-gen 
+  (gen/let [ldt local-datetime-gen]
+    (java.time.ZonedDateTime/of ldt (java.time.ZoneId/of "UTC"))))
 
-;; TODO: Ensure nothing are not lazy
-;; TODO: Something better for reaching max depth
+(def duration-gen (gen/return #xt/duration "PT1S"))
+(def interval-gen (gen/return #xt/interval "P1YT1S"))
 
-;; Complex data structure functions (these use depth)
-(def complex-value-fns
-  [;; Recursive List
-   (fn [rng depth]
-     (if (< depth 3)
-       (let [size (rand-between rng 0 4)]
-         (into [] (repeatedly size #(generate-random-value rng (inc depth)))))
-       []))  ; Empty list at max depth
-   
-   ;; Recursive Set  
-   (fn [rng depth]
-     (if (< depth 3)
-       (let [size (rand-between rng 0 4)]
-         (into #{} (repeatedly size #(generate-hashable-value rng))))
-       #{}))  ; Empty set at max depth
-   
-   ;; Recursive Map
-   (fn [rng depth]
-     (if (< depth 3)
-       (rand-map-a-z rng (inc depth))
-       {}))])  ; Empty map at max depth
+;; Simple/hashable value generators
+(def simple-gen
+  (gen/one-of [nil-gen bool-gen byte-gen short-gen int-gen long-gen 
+               float-gen double-gen string-gen byte-array-gen keyword-gen 
+               uuid-gen uri-gen instant-gen local-date-gen local-time-gen 
+               local-datetime-gen offset-datetime-gen zoned-datetime-gen 
+               duration-gen interval-gen]))
 
-;; All value functions combined
-(def all-value-fns (concat hashable-value-fns complex-value-fns))
+(def safe-keyword-gen
+  (gen/such-that #(let [n (name %)]
+                    (and (not (str/starts-with? n "_"))
+                         (not (#{"_id" "_fn"} n))))
+                 gen/keyword
+                 100))
 
-(defn generate-hashable-value [^java.util.Random rng]
-  (let [fn-idx (rand-between rng 0 (count hashable-value-fns))
-        value-fn (nth hashable-value-fns fn-idx)]
-    (value-fn)))
+;; Frequency-based key distribution for realistic overlap
+(def key-gen
+  (gen/frequency
+    [[9 (gen/elements [:a :b :c :d])] ; high overlap
+     [1 safe-keyword-gen]]))               ; completely random keys
 
-(defn generate-random-value [^java.util.Random rng depth]
-  (let [fn-idx (rand-between rng 0 (count all-value-fns))
-        value-fn (nth all-value-fns fn-idx)]
-    (if (>= fn-idx (count hashable-value-fns))
-      ;; Complex type - pass rng and depth
-      (value-fn rng depth)
-      ;; Simple type - call with no args (constantly functions ignore args)
-      (value-fn))))
+;; Recursive value generator - test.check handles depth automatically!
+(def value-gen
+  (gen/recursive-gen
+    (fn [inner-gen]
+      (gen/one-of 
+        [(gen/vector inner-gen 1 4)                    ; Lists
+         ;; Map generation using frequency-based keys
+         (gen/let [num-keys (gen/choose 1 4)
+                   keys (gen/vector-distinct key-gen {:num-elements num-keys})
+                   values (gen/vector inner-gen num-keys)]
+            (zipmap keys values))]))
+    simple-gen))
 
-(defn shuffle-rng [^java.util.Random rng ^java.util.Collection coll]
-  (let [al (java.util.ArrayList. coll)]
-    (java.util.Collections/shuffle al rng)
-    (vec (.toArray al))))
+;; Map generator for records using frequency-based keys
+(def record-map-gen
+  (gen/let [num-keys (gen/choose 1 4)
+            keys (gen/vector-distinct key-gen {:num-elements num-keys})
+            values (gen/vector value-gen num-keys)]
+    (zipmap keys values)))
 
-(defn rand-map-a-z 
-  ([^java.util.Random rng] (rand-map-a-z rng 0))
-  ([^java.util.Random rng depth]
-   (let [;; All possible keys a-z
-         all-keys (map #(keyword (str (char %))) (range (int \a) (inc (int \d))))
-         ;; Randomly decide how many keys to include
-         num-keys (rand-between rng 0 (count all-keys))
-         ;; Randomly select which keys to include
-         selected-keys (take num-keys (shuffle-rng rng all-keys))
-         ;; For each selected key, generate a random value
-         key-value-pairs (map (fn [k]
-                               [k (generate-random-value rng depth)])
-                             selected-keys)]
-     (into {} key-value-pairs))))
+;; Multiple records generator
+(def records-gen
+  (gen/let [num-records (gen/choose 1 5)
+            available-ids (gen/shuffle (range 8))  ; All possible IDs
+            records-data (gen/vector record-map-gen num-records)]
+    (mapv (fn [id data] (assoc data :xt/id id))
+          (take num-records available-ids)
+          records-data)))
 
-(defn random-records [rng max-records]
-  (let [num-records (rand-between rng 1 max-records)]
-    (doall
-      (for [i (shuffle-rng rng (take num-records (range max-records)))]
-        (-> (rand-map-a-z rng)
-            (assoc :xt/id i))))))
+;; Test state generator (for the main test)
+(def test-state-gen
+  (gen/let [records1 records-gen
+            records2 records-gen
+            first-flush? gen/boolean
+            second-flush? gen/boolean
+            compact? gen/boolean
+            ;; Generate erased IDs as subset of records1 IDs
+            all-ids (gen/return (map :xt/id records1))
+            num-to-erase (gen/choose 0 (count all-ids))
+            erased-ids (gen/let [shuffled (gen/shuffle all-ids)]
+                         (gen/return (into #{} (take num-to-erase shuffled))))]
+    {:records1 records1
+     :records2 records2
+     :first-flush? first-flush?
+     :erased-ids erased-ids
+     :second-flush? second-flush?
+     :compact? compact?}))
 
 (comment
-  (let [seed (rand-int 1000)
-        rng (java.util.Random. seed)]
-    (println "seed:" seed)
-    (random-records rng 10)))
+  (gen/sample records-gen 1))
 
-(t/deftest flush-flush-compact
-  (dotimes [i 1000]
-    (when (= (mod i 100) 0)
-      (println "iteration:" i))
+(def live-erase-live-property
+  (prop/for-all [{:keys [records1 records2 first-flush? erased-ids second-flush? compact?]}
+                 test-state-gen]
     (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
                                       :compactor {:threads 0}})]
-      (let [seed (rand-int Integer/MAX_VALUE)
-            rng (java.util.Random. seed)
-            records1 (random-records rng 4)
-            records2 (random-records rng 4)]
-        (t/testing (str "iteration-" i "-seed-" seed)
-          (try
-            ;(println "records1:" records1)
-            ;(println "records2:" records2)
+      (try
+        ;; Execute the test steps
+        (xt/execute-tx node [(into [:put-docs :docs] records1)])
+        
+        (when first-flush?
+          (tu/flush-block! node))
+        
+        (when-not (empty? erased-ids)
+          (xt/execute-tx node [(into [:erase-docs :docs] erased-ids)]))
+        
+        (xt/execute-tx node [(into [:put-docs :docs] records2)])
+        
+        (when second-flush?
+          (tu/flush-block! node))
+        
+        (when compact?
+          (c/compact-all! node #xt/duration "PT1S"))
+        
+        ;; Your assertions (return true if they pass, false if they fail)
+        (and (= (if (not (empty? erased-ids)) 3 2)
+                (count (xt/q node "FROM xt.txs")))
+             
+             (= (->> [(when (or first-flush? second-flush?)
+                        ["l00-rc-b00.arrow"])
+                      (when (and first-flush? second-flush?)
+                        ["l00-rc-b01.arrow"])]
+                     flatten
+                     (remove nil?)
+                     vec)
+                (->> (.listAllObjects (.getBufferPool (db/primary-db node))
+                                      (util/->path "tables/public$docs/meta/"))
+                     (mapv (comp str #(.getFileName ^Path %) :key os/<-StoredObject))))
+             
+             (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
+                   expected-ids (set/union (set/difference (into #{} (map :xt/id records1))
+                                                           (when-not (empty? erased-ids) erased-ids))
+                                           (into #{} (map :xt/id records2)))]
+               (= expected-ids (into #{} (map :xt/id res)))))
 
-            (xt/execute-tx node [(into [:put-docs :docs] records1)])
-            (tu/flush-block! node)
-
-            (xt/execute-tx node [(into [:put-docs :docs] records2)])
-            (tu/flush-block! node)
-
-            ;; TODO: How to catch compaction errors?
-            (c/compact-all! node #xt/duration "PT1S")
-
-            ;; TODO: Ensure puts didn't error
-
-            (t/is (= ["l00-rc-b00.arrow" "l00-rc-b01.arrow"
-                      "l01-r20200106-b01.arrow"
-                      "l01-rc-b00.arrow" "l01-rc-b01.arrow"]
-                     (->> (.listAllObjects (.getBufferPool (db/primary-db node))
-                                           (util/->path "tables/public$docs/meta/"))
-                          (mapv (comp str #(.getFileName ^Path %) :key os/<-StoredObject)))))
-
-            (t/is (= 2 (count (xt/q node "FROM xt.txs"))))
-
-            ;;; TODO: Fix
-            (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
-                  expected-ids (into #{} (map :xt/id (concat records1 records2)))]
-              (t/is (= expected-ids (into #{} (map :xt/id res)))))
-
-            (catch Throwable t
-              (println "seed:" seed)
-              (throw (ex-info "Error"
-                              {:seed seed :records1 records1 :records2 records2}
-                              t)))))))))
-
-(t/deftest flush-live
-  (dotimes [i 1000]
-    (when (= (mod i 100) 0)
-      (println "iteration:" i))
+        (catch Throwable t
+          (println "Error during test execution:" (.getMessage t))
+          false)))))
+(comment
+  (t/deftest osm-test
     (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
                                       :compactor {:threads 0}})]
-      (let [seed (rand-int Integer/MAX_VALUE)
-            rng (java.util.Random. seed)
-            records1 (random-records rng 4)
-            records2 (random-records rng 4)]
-        (t/testing (str "iteration-" i "-seed-" seed)
-          (try
-            ;(println "records1:" records1)
-            ;(println "records2:" records2)
+      (xt/execute-tx node [[:put-docs :docs
+                            {:a nil :A nil :b nil :xt/id 0}
+                            {:a nil :xt/id 1}]])
 
-            (xt/execute-tx node [(into [:put-docs :docs] records1)])
-            (tu/flush-block! node)
+      (xt/execute-tx node [[:put-docs :docs
+                            {:a nil :xt/id 0}]])
 
-            (xt/execute-tx node [(into [:put-docs :docs] records2)])
-            ;(tu/flush-block! node)
+      (t/is (= [{:xt/id 0}] (xt/q node "SELECT * FROM docs ORDER BY _id"))))))
 
-            ;; TODO: How to catch compaction errors?
-            ;(c/compact-all! node #xt/duration "PT1S")
-
-            ;; TODO: Ensure puts didn't error
-
-            (t/is (= ["l00-rc-b00.arrow"]
-                     (->> (.listAllObjects (.getBufferPool (db/primary-db node))
-                                           (util/->path "tables/public$docs/meta/"))
-                          (mapv (comp str #(.getFileName ^Path %) :key os/<-StoredObject)))))
-
-            (t/is (= 2 (count (xt/q node "FROM xt.txs"))))
-
-            ;;; TODO: Fix
-            (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
-                  expected-ids (into #{} (map :xt/id (concat records1 records2)))]
-              (t/is (= expected-ids (into #{} (map :xt/id res)))))
-
-            (catch Throwable t
-              (println "seed:" seed)
-              (throw (ex-info "Error"
-                              {:seed seed :records1 records1 :records2 records2}
-                              t)))))))))
-
-(t/deftest live-live
-  (dotimes [i 1000]
-    (when (= (mod i 100) 0)
-      (println "iteration:" i))
-    (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
-                                      :compactor {:threads 0}})]
-      (let [seed (rand-int Integer/MAX_VALUE)
-            rng (java.util.Random. seed)
-            records1 (random-records rng 4)
-            records2 (random-records rng 4)]
-        (t/testing (str "iteration-" i "-seed-" seed)
-          (try
-            ;(println "records1:" records1)
-            ;(println "records2:" records2)
-
-            (xt/execute-tx node [(into [:put-docs :docs] records1)])
-            ;(tu/flush-block! node)
-
-            (xt/execute-tx node [(into [:put-docs :docs] records2)])
-            ;(tu/flush-block! node)
-
-            ;; TODO: How to catch compaction errors?
-            ;(c/compact-all! node #xt/duration "PT1S")
-
-            ;; TODO: Ensure puts didn't error
-
-            (t/is (= 2 (count (xt/q node "FROM xt.txs"))))
-
-            ;;; TODO: Fix
-            (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
-                  expected-ids (into #{} (map :xt/id (concat records1 records2)))]
-              (t/is (= expected-ids (into #{} (map :xt/id res)))))
-
-            (catch Throwable t
-              (println "seed:" seed)
-              (throw (ex-info "Error"
-                              {:seed seed :records1 records1 :records2 records2}
-                              t)))))))))
-
-(t/deftest live-erase-live
-  (dotimes [i 1000]
-    (when (= (mod i 100) 0)
-      (println "iteration:" i))
-    (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
-                                      :compactor {:threads 0}})]
-      (let [seed (rand-int Integer/MAX_VALUE)
-            rng (java.util.Random. seed)
-            records1 (random-records rng 4)
-            records2 (random-records rng 4)]
-        (t/testing (str "iteration-" i "-seed-" seed)
-          (try
-            (println "records1:" records1)
-            (println "records2:" records2)
-
-            (xt/execute-tx node [(into [:put-docs :docs] records1)])
-            ;(tu/flush-block! node)
-
-            (xt/execute-tx node [[:erase-docs :docs]])
-
-            (xt/execute-tx node [(into [:put-docs :docs] records2)])
-            ;(tu/flush-block! node)
-
-            ;; TODO: How to catch compaction errors?
-            ;(c/compact-all! node #xt/duration "PT1S")
-
-            ;; TODO: Ensure puts didn't error
-
-            (t/is (= 2 (count (xt/q node "FROM xt.txs"))))
-
-            ;;; TODO: Fix
-            (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
-                  expected-ids (into #{} (map :xt/id (concat records1 records2)))]
-              (t/is (= expected-ids (into #{} (map :xt/id res)))))
-
-            (catch Throwable t
-              (println "seed:" seed)
-              (throw (ex-info "Error"
-                              {:seed seed :records1 records1 :records2 records2}
-                              t)))))))))
+(comment
+  (tc/quick-check 100 live-erase-live-property))
