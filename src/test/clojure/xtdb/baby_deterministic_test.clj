@@ -139,48 +139,44 @@
                  test-state-gen]
     (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
                                       :compactor {:threads 0}})]
-      (try
-        ;; Execute the test steps
-        (xt/execute-tx node [(into [:put-docs :docs] records1)])
-        
-        (when first-flush?
-          (tu/flush-block! node))
-        
-        (when-not (empty? erased-ids)
-          (xt/execute-tx node [(into [:erase-docs :docs] erased-ids)]))
-        
-        (xt/execute-tx node [(into [:put-docs :docs] records2)])
-        
-        (when second-flush?
-          (tu/flush-block! node))
-        
-        (when compact?
-          (c/compact-all! node #xt/duration "PT1S"))
-        
-        ;; Your assertions (return true if they pass, false if they fail)
-        (and (= (if (not (empty? erased-ids)) 3 2)
-                (count (xt/q node "FROM xt.txs")))
-             
-             (= (->> [(when (or first-flush? second-flush?)
-                        ["l00-rc-b00.arrow"])
-                      (when (and first-flush? second-flush?)
-                        ["l00-rc-b01.arrow"])]
-                     flatten
-                     (remove nil?)
-                     vec)
-                (->> (.listAllObjects (.getBufferPool (db/primary-db node))
-                                      (util/->path "tables/public$docs/meta/"))
-                     (mapv (comp str #(.getFileName ^Path %) :key os/<-StoredObject))))
-             
-             (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
-                   expected-ids (set/union (set/difference (into #{} (map :xt/id records1))
-                                                           (when-not (empty? erased-ids) erased-ids))
-                                           (into #{} (map :xt/id records2)))]
-               (= expected-ids (into #{} (map :xt/id res)))))
+      ;; Execute the test steps
+      (xt/execute-tx node [(into [:put-docs :docs] records1)])
+      
+      (when first-flush?
+        (tu/flush-block! node))
+      
+      (when-not (empty? erased-ids)
+        (xt/execute-tx node [(into [:erase-docs :docs] erased-ids)]))
+      
+      (xt/execute-tx node [(into [:put-docs :docs] records2)])
+      
+      (when second-flush?
+        (tu/flush-block! node))
+      
+      (when compact?
+        (c/compact-all! node #xt/duration "PT1S"))
+      
+      ;; Your assertions (return true if they pass, false if they fail)
+      (and (= (if (not (empty? erased-ids)) 3 2)
+              (count (xt/q node "FROM xt.txs")))
+           
+           (= (->> [(when (or first-flush? second-flush?)
+                      ["l00-rc-b00.arrow"])
+                    (when (and first-flush? second-flush?)
+                      ["l00-rc-b01.arrow"])]
+                   flatten
+                   (remove nil?)
+                   vec)
+              (->> (.listAllObjects (.getBufferPool (db/primary-db node))
+                                    (util/->path "tables/public$docs/meta/"))
+                   (mapv (comp str #(.getFileName ^Path %) :key os/<-StoredObject))))
+           
+           (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
+                 expected-ids (set/union (set/difference (into #{} (map :xt/id records1))
+                                                         (when-not (empty? erased-ids) erased-ids))
+                                         (into #{} (map :xt/id records2)))]
+             (= expected-ids (into #{} (map :xt/id res))))))))
 
-        (catch Throwable t
-          (println "Error during test execution:" (.getMessage t))
-          false)))))
 (comment
   (t/deftest osm-test
     (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
