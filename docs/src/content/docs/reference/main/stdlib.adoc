@@ -6,6 +6,7 @@ XTDB provides a rich standard library of predicates and functions:
 
 * link:/reference/main/stdlib/predicates[Predicates]
 * link:/reference/main/stdlib/numeric[Numeric functions]
+* link:/reference/main/stdlib/vector[Vector functions]
 * link:/reference/main/stdlib/string[String functions]
 * link:/reference/main/stdlib/temporal[Temporal functions]
 * link:/reference/main/stdlib/aggregates[Aggregate functions]

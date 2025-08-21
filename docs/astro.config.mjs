@@ -54,6 +54,8 @@ export default defineConfig({
                             ],
                         },
 
+                        'tutorials/vector-similarity',
+
                         {
                             label: 'Industry Use-cases',
                             collapsed: true,
@@ -106,6 +108,7 @@ export default defineConfig({
                                 { label: 'Overview', link: '/reference/main/stdlib' },
                                 { label: 'Predicates', link: '/reference/main/stdlib/predicates' },
                                 { label: 'Numeric functions', link: '/reference/main/stdlib/numeric' },
+                                { label: 'Vector functions', link: '/reference/main/stdlib/vector' },
                                 { label: 'String functions', link: '/reference/main/stdlib/string' },
                                 { label: 'Temporal functions', link: '/reference/main/stdlib/temporal' },
                                 { label: 'URI functions', link: '/reference/main/stdlib/uri' },

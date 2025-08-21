@@ -1,0 +1,141 @@
+---
+title: Vector functions
+---
+
+XTDB provides vector functions for similarity calculations and vector operations commonly used in machine learning and data science applications.
+
+Notes:
+
+* All vector functions require arrays of floating-point numbers (f64)
+* Vector dimensions must match between input arrays
+* If dimensions mismatch, a runtime exception will be thrown
+* If any input expression is null, the result will also be null
+* Zero vectors are handled gracefully (cosine distance returns 1.0)
+
+== Vector similarity functions
+
+`DOT_PRODUCT(vec1, vec2)`:: 
+Computes the dot product (inner product) of two vectors. Returns the sum of the products of corresponding elements: Σ(a[i] × b[i])
++
+[source,sql]
+----
+SELECT DOT_PRODUCT(ARRAY[1.0, 2.0, 3.0], ARRAY[4.0, 5.0, 6.0]); 
+-- Result: 32.0 (1×4 + 2×5 + 3×6)
+----
+
+`L2_DISTANCE(vec1, vec2)`:: 
+Computes the L2 (Euclidean) distance between two vectors. Returns the square root of the sum of squared differences: √Σ((a[i] - b[i])²)
++
+[source,sql]
+----
+SELECT L2_DISTANCE(ARRAY[3.0, 4.0], ARRAY[0.0, 0.0]);
+-- Result: 5.0 (√(3² + 4²))
+----
+
+`COSINE_DISTANCE(vec1, vec2)`:: 
+Computes the cosine distance between two vectors. Returns 1 - cosine_similarity, where cosine_similarity = dot_product / (||a|| × ||b||). Values range from 0 (identical direction) to 2 (opposite directions).
++
+[source,sql]
+----
+-- Orthogonal vectors (90 degrees apart)
+SELECT COSINE_DISTANCE(ARRAY[1.0, 0.0], ARRAY[0.0, 1.0]);
+-- Result: 1.0
+
+-- Identical vectors (0 degrees apart)  
+SELECT COSINE_DISTANCE(ARRAY[1.0, 2.0], ARRAY[1.0, 2.0]);
+-- Result: 0.0
+
+-- Opposite vectors (180 degrees apart)
+SELECT COSINE_DISTANCE(ARRAY[1.0, 0.0], ARRAY[-1.0, 0.0]);
+-- Result: 2.0
+----
+
+== Common use cases
+
+=== Document similarity search
+
+Find documents similar to a query using cosine distance:
+
+[source,sql]
+----
+-- Find top 5 most similar documents to a query embedding
+SELECT doc_id, title, 
+       COSINE_DISTANCE(embedding, ARRAY[0.1, 0.8, 0.3, 0.9]) AS distance
+FROM documents 
+ORDER BY distance 
+LIMIT 5;
+----
+
+=== Recommendation systems
+
+Use dot product for recommendation scoring with normalized vectors:
+
+[source,sql]
+----
+-- Find items with highest similarity scores
+SELECT item_id, name,
+       DOT_PRODUCT(user_preferences, item_features) AS score
+FROM items
+WHERE score > 0.5
+ORDER BY score DESC;
+----
+
+=== Clustering and classification
+
+Use L2 distance to find nearest neighbors:
+
+[source,sql]
+----
+-- Find data points within radius of 2.0 from a center point
+SELECT point_id, coordinates,
+       L2_DISTANCE(coordinates, ARRAY[0.0, 0.0, 0.0]) AS distance
+FROM data_points
+WHERE distance <= 2.0;
+----
+
+=== Image similarity
+
+Compare RGB color vectors:
+
+[source,sql]
+----
+-- Find images with similar color profiles
+SELECT image_id, avg_color,
+       COSINE_DISTANCE(avg_color, ARRAY[0.8, 0.2, 0.1]) AS color_distance  
+FROM images
+WHERE color_distance < 0.3
+ORDER BY color_distance;
+----
+
+== Performance considerations
+
+=== Exact nearest neighbor search
+
+XTDB's vector functions provide *exact nearest neighbor search* with perfect recall. This means:
+
+* All vector similarity queries perform a *full table scan*
+* Every vector in the table is compared against the query vector
+* Results are guaranteed to be mathematically precise
+* Query time scales linearly with the number of vectors (O(n))
+
+[IMPORTANT]
+====
+For large datasets (millions+ vectors), exact search may become slow. XTDB may support approximate vector indexes (like HNSW, IVF, or LSH) in future releases, which trade some accuracy for significantly improved query speed.
+====
+
+=== Optimization tips
+
+* Vector functions are optimized for large dimensions (100+)
+* For small vectors (< 10 dimensions), consider standard arithmetic operations
+* Cosine distance normalizes vectors internally, making it scale-invariant
+* L2 distance is sensitive to vector magnitude and scale
+* Dot product is fastest but requires normalized vectors for similarity
+* Consider pre-filtering with other columns before vector similarity calculations
+* Use `LIMIT` clauses to reduce result set size when finding top-k similar items
+
+== Mathematical relationships
+
+* For unit vectors: `DOT_PRODUCT(a, b) = 1 - COSINE_DISTANCE(a, b)`
+* L2 distance satisfies the triangle inequality
+* Cosine distance is symmetric: `COSINE_DISTANCE(a, b) = COSINE_DISTANCE(b, a)`
+* All functions are commutative in their arguments
