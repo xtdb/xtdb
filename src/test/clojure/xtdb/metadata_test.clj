@@ -134,11 +134,9 @@
         (t/testing "L0"
           (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))]
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+              (t/is (= 4 (.rowIndex page-metadata "_id" 0)))
+
               (let [page-idx-pred (.build literal-selector page-metadata)]
-
-                (t/is (= #{"_iid" "_valid_to" "_valid_from" "_system_from" "_id"}
-                         (.getColumnNames page-metadata)))
-
                 (doseq [page-idx relevant-pages]
                   (t/is (true? (.test page-idx-pred page-idx))))))))
 
@@ -146,10 +144,6 @@
           (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
               (let [page-idx-pred (.build literal-selector page-metadata)]
-
-                (t/is (= #{"_iid" "_valid_to" "_valid_from" "_id" "_system_from"}
-                         (.getColumnNames page-metadata)))
-
                 (doseq [page-idx relevant-pages]
                   (t/is (true? (.test page-idx-pred page-idx))
                         (str "page" page-idx)))))))))))
@@ -178,8 +172,7 @@
       (let [meta-file-path (Trie/metaFilePath "public$xt_docs" ^String (trie/->l0-trie-key 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
           (let [page-idx-pred (.build true-selector page-metadata)]
-            (t/is (= #{"_iid" "_system_from" "_valid_from" "_valid_to" "_id" "boolean_or_int"}
-                     (.getColumnNames page-metadata)))
+            (t/is (= 4 (.rowIndex page-metadata "boolean_or_int" 0)))
 
             (t/is (true? (.test page-idx-pred 0)))))))
 
@@ -189,8 +182,7 @@
       (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
           (let [page-idx-pred (.build true-selector page-metadata)]
-            (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "boolean_or_int"}
-                     (.getColumnNames page-metadata)))
+            (t/is (= 4 (.rowIndex page-metadata "boolean_or_int" 0)))
 
             (t/is (true? (.test page-idx-pred 0)))))))))
 
@@ -204,27 +196,19 @@
       (tu/finish-block! node)
       (c/compact-all! node #xt/duration "PT1S")
 
+      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
+                     (.resolve node-dir (str "objects/" Storage/STORAGE_ROOT "/tables/")))
+
       (let [metadata-mgr (.getMetadataManager (db/primary-db node))]
         (t/testing "L0"
           (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))]
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
-              (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
-
-                             (.resolve node-dir (str "objects/" Storage/STORAGE_ROOT "/tables/")))
-
-              (t/is (= #{"_iid" "_system_from" "_valid_from" "_valid_to"
-                         "_id" "$data$" "colours"}
-                       (.getColumnNames page-metadata))))))
+              (t/is (= 6 (.rowIndex page-metadata "colours" 0))))))
 
         (t/testing "L1"
           (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
-              (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
-
-                             (.resolve node-dir (str "objects/" Storage/STORAGE_ROOT "/tables/")))
-
-              (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "colours" "utf8"}
-                       (.getColumnNames page-metadata))))))))))
+              (t/is (= 6 (.rowIndex page-metadata "colours" 0))))))))))
 
 (t/deftest test-duration-metadata-4198
   (let [node-dir (util/->path "target/test-duration-metadata")]
@@ -239,15 +223,14 @@
       (tu/finish-block! node)
       (c/compact-all! node #xt/duration "PT1S")
 
+      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/duration")))
+                     (.resolve node-dir (str "objects/" Storage/STORAGE_ROOT "/tables/"))
+                     #"l01.*")
+
       (let [metadata-mgr (.getMetadataManager (db/primary-db node))
             meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
-          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/duration")))
-                         (.resolve node-dir (str "objects/" Storage/STORAGE_ROOT "/tables/"))
-                         #"l01.*")
-
-          (t/is (= #{"_iid" "_id" "_system_from" "_valid_from" "_valid_to" "duration"}
-                   (.getColumnNames page-metadata))))))))
+          (t/is (= 4 (.rowIndex page-metadata "duration" 0))))))))
 
 (t/deftest test-missing-type-metadata-4665
   (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo", :foo 4}]])

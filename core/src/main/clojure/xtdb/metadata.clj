@@ -1,6 +1,5 @@
 (ns xtdb.metadata
   (:require [integrant.core :as ig]
-            [xtdb.db-catalog :as db]
             [xtdb.util :as util])
   (:import xtdb.BufferPool
            (xtdb.metadata PageMetadata)))

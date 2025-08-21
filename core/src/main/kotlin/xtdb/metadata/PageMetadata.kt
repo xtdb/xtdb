@@ -4,16 +4,12 @@ import com.carrotsearch.hppc.ObjectIntHashMap
 import com.carrotsearch.hppc.ObjectIntMap
 import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
-import com.google.protobuf.Mixin
 import org.apache.arrow.memory.BufferAllocator
-import org.roaringbitmap.buffer.ImmutableRoaringBitmap
 import xtdb.BufferPool
-import xtdb.TEMPORAL_COL_TYPE
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorReader
 import xtdb.log.proto.TemporalMetadata
 import xtdb.time.MICRO_HZ
-import xtdb.toLeg
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.ColumnName
 import xtdb.util.closeOnCatch
@@ -24,16 +20,7 @@ import kotlin.math.floor
 
 private typealias PageIdxsMap = ObjectIntMap<PageMetadata.PageIndexKey>
 
-class PageMetadata private constructor(
-    private val rel: Relation,
-
-    /**
-     * the set of column names in this metadata file for this table (i.e. not necessarily all of them).
-     */
-    val columnNames: Set<ColumnName>,
-
-    private val pageIdxs: PageIdxsMap
-) : AutoCloseable {
+class PageMetadata private constructor(private val rel: Relation, private val pageIdxs: PageIdxsMap) : AutoCloseable {
 
     val trie = ArrowHashTrie(rel["nodes"])
 
@@ -63,16 +50,6 @@ class PageMetadata private constructor(
     fun rowIndex(columnName: String, pageIdx: Int) =
         pageIdxs.getOrDefault(PageIndexKey(columnName, pageIdx), -1)
 
-    fun iidBloomBitmap(pageIdx: Int): ImmutableRoaringBitmap? {
-        val bloomReader = metadataLeafReader["columns"].listElements["bloom"]
-
-        val bloomVecIdx = pageIdxs[PageIndexKey("bloom", pageIdx)]
-        if (bloomReader.isNull(bloomVecIdx)) return null
-
-        TODO("type error?!")
-//        return readBloom(bloomReader, bloomVecIdx)
-    }
-
     fun temporalMetadata(pageIdx: Int): TemporalMetadata {
         // it seems in some tests we have files without any temporal values in...?
         val minReader = requireNotNull(minReader)
@@ -92,15 +69,11 @@ class PageMetadata private constructor(
             .build()
     }
 
-    override fun close() {
-        rel.close()
-    }
+    override fun close() = rel.close()
 
     class Factory(al: BufferAllocator, private val bp: BufferPool, cacheSize: Long) : AutoCloseable {
-        internal data class PageIdxCacheEntry(val colNames: Set<ColumnName>, val pageIdxs: PageIdxsMap)
-
         companion object {
-            private fun readPageIdxs(metadataReader: VectorReader): PageIdxCacheEntry {
+            private fun readPageIdxs(metadataReader: VectorReader): PageIdxsMap {
                 val pageIdxs: PageIdxsMap = ObjectIntHashMap()
                 val dataPageIdxReader = metadataReader["data-page-idx"]
 
@@ -127,11 +100,11 @@ class PageMetadata private constructor(
                     }
                 }
 
-                return PageIdxCacheEntry(colNames, pageIdxs)
+                return pageIdxs
             }
         }
 
-        private val pageIdxCache: Cache<Path, PageIdxCacheEntry> =
+        private val pageIdxCache: Cache<Path, PageIdxsMap> =
             Caffeine.newBuilder().maximumSize(cacheSize).build()
 
         private val al = al.openChildAllocator("metadata-mgr")
@@ -142,8 +115,8 @@ class PageMetadata private constructor(
                 Relation.fromRecordBatch(al, footer.schema, rb).closeOnCatch { rel ->
                     val metadataReader = rel["nodes"]["leaf"]
 
-                    val (colNames, pageIdxs) = pageIdxCache.get(metaFilePath) { readPageIdxs(metadataReader) }
-                    PageMetadata(rel, colNames, pageIdxs)
+                    val pageIdxs = pageIdxCache.get(metaFilePath) { readPageIdxs(metadataReader) }
+                    PageMetadata(rel, pageIdxs)
                 }
             }
 
