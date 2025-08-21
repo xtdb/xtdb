@@ -14,7 +14,7 @@ const { toc, isMobile = false, depth = 0 } = Astro.props;
     {
         toc.map((heading) => (
             <li>
-                <a href={'#' + heading.slug}>
+                <a href={'#' + heading.slug} data-no-swup>
                     <span set:html={heading.text} />
                 </a>
                 {heading.children.length > 0 && (
