@@ -30,9 +30,7 @@ class ArrowHashTrie(private val nodesVec: Vector) : HashTrie<ArrowHashTrie.Node,
             }
     }
 
-    inner class Leaf(override val path: ByteArray, private val leafOffset: Int) : Node {
-        val dataPageIndex get() = dataPageIdxVec.getInt(leafOffset)
-
+    class Leaf(override val path: ByteArray, val dataPageIndex: Int) : Node {
         override val hashChildren = null
     }
 
@@ -40,7 +38,7 @@ class ArrowHashTrie(private val nodesVec: Vector) : HashTrie<ArrowHashTrie.Node,
         when (nodesVec.getLeg(idx)) {
             NIL -> null
             BRANCH_IID -> IidBranch(path, idx)
-            LEAF -> Leaf(path, idx)
+            LEAF -> Leaf(path, dataPageIdxVec.getInt(idx))
             else -> error("unknown leg: ${nodesVec.getLeg(idx)}")
         }
 
