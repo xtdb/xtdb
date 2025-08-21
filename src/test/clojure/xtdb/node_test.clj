@@ -323,7 +323,7 @@ WHERE foo._id = 1"]])
                            [:sql "INSERT INTO bar (_id, x) VALUES (1, 1), (2, 3)"]])
 
   (t/is (= [{:foo 1, :x 1}, {:foo 2, :x 2}]
-           (xt/q tu/*node* "SELECT foo._id foo, foo.x FROM foo LEFT JOIN bar USING (_id, x)")))
+           (xt/q tu/*node* "SELECT _id foo, x FROM foo LEFT JOIN bar USING (_id, x) ORDER BY _id")))
 
   #_ ; FIXME #2302
   (t/is (= []

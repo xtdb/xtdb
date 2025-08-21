@@ -25,7 +25,6 @@ import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
-import xtdb.util.trace
 import xtdb.util.warn
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration

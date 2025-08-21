@@ -8,7 +8,7 @@
   (:import java.util.stream.IntStream
            (xtdb ICursor)
            (xtdb.arrow RelationReader)
-           (xtdb.operator.join JoinRelationMap)))
+           (xtdb.operator.join BuildSide ProbeSide)))
 
 (defmethod lp/ra-expr :intersect [_]
   (s/cat :op #{:∩ :intersect}
@@ -69,28 +69,26 @@
                      :->cursor (fn [_opts left-cursor right-cursor]
                                  (UnionAllCursor. left-cursor right-cursor))})))
 
-(deftype IntersectionCursor [^ICursor left-cursor
-                             ^ICursor right-cursor
-                             ^JoinRelationMap rel-map
+(deftype IntersectionCursor [^ICursor left-cursor, ^ICursor right-cursor
+                             ^BuildSide build-side, ->probe-side
                              difference?]
   ICursor
   (tryAdvance [_ c]
     (.forEachRemaining right-cursor
                        (fn [^RelationReader in-rel]
-                         (.append rel-map in-rel)))
+                         (.append build-side in-rel)))
 
     (boolean
      (let [advanced? (boolean-array 1)]
        (while (and (not (aget advanced? 0))
                    (.tryAdvance left-cursor
                                 (fn [^RelationReader in-rel]
-                                  (let [row-count (.getRowCount in-rel)
-                                        prober (.probeFromRelation rel-map in-rel)]
-
+                                  (let [row-count (.getRowCount in-rel)]
                                     (when (pos? row-count)
-                                      (let [idxs (IntStream/builder)]
+                                      (let [^ProbeSide probe-side (->probe-side in-rel)
+                                            idxs (IntStream/builder)]
                                         (dotimes [idx row-count]
-                                          (when (cond-> (not= -1 (.indexOf prober idx true))
+                                          (when (cond-> (not= -1 (.indexOf probe-side idx true))
                                                   difference? not)
                                             (.add idxs idx)))
 
@@ -101,30 +99,41 @@
        (aget advanced? 0))))
 
   (close [_]
-    (util/try-close rel-map)
+    (util/try-close build-side)
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
 (defmethod lp/emit-expr :intersect [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
     (fn [left-fields right-fields]
-      (let [fields (union-fields left-fields right-fields)]
+      (let [fields (union-fields left-fields right-fields)
+            key-col-names (set (keys fields))]
         {:fields fields
          :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
-                     (IntersectionCursor. left-cursor right-cursor
-                                          (join/->relation-map allocator
-                                                                    {:build-fields left-fields
-                                                                     :key-col-names (set (keys fields))})
-                                          false))}))))
+                     (let [build-side (join/->build-side allocator
+                                                         {:fields left-fields
+                                                          :key-col-names key-col-names})]
+
+                       (IntersectionCursor. left-cursor right-cursor
+                                            build-side (join/->probe-side build-side
+                                                                          {:fields right-fields
+                                                                           :key-col-names key-col-names})
+                                            false)))}))))
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
     (fn [left-fields right-fields]
-      (let [fields (union-fields left-fields right-fields)]
+      (let [fields (union-fields left-fields right-fields)
+            key-col-names (set (keys fields))]
         {:fields fields
          :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
-                     (IntersectionCursor. left-cursor right-cursor
-                                          (join/->relation-map allocator {:build-fields left-fields
-                                                                          :key-col-names (set (keys fields))})
-                                          true))}))))
+                     (let [build-side (join/->build-side allocator
+                                                         {:fields left-fields
+                                                          :key-col-names key-col-names})]
 
+                       (IntersectionCursor. left-cursor right-cursor
+                                            build-side (join/->probe-side build-side
+                                                                          {:build-fields left-fields
+                                                                           :probe-fields right-fields
+                                                                           :key-col-names key-col-names})
+                                            true)))}))))

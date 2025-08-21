@@ -3,7 +3,6 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.expression.map :as emap]
             [xtdb.logical-plan :as lp]
@@ -12,8 +11,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import [clojure.lang IFn]
-           (java.util ArrayList HashSet Iterator List Set)
+  (:import (java.util ArrayList HashSet Iterator List Set)
            (java.util.function IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
@@ -25,7 +23,7 @@
            (xtdb.arrow RelationReader RelationWriter)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
-           (xtdb.operator.join JoinRelationMap JoinRelationMap$ComparatorFactory)))
+           (xtdb.operator.join BuildSide ProbeSide ProbeSide$ComparatorFactory)))
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
@@ -159,13 +157,13 @@
 (defmethod lp/emit-expr :cross-join [join-expr args]
   (emit-cross-join (emit-join-children join-expr args)))
 
-(defn- build-phase [^ICursor build-cursor, ^JoinRelationMap rel-map, pushdown-blooms, ^Set pushdown-iids]
+(defn- build-phase [^BuildSide build-side, ^ICursor build-cursor, pushdown-blooms, ^Set pushdown-iids]
   (.forEachRemaining build-cursor
                      (fn [^RelationReader build-rel]
-                       (.append rel-map build-rel)
+                       (.append build-side build-rel)
 
                        (when pushdown-blooms
-                         (let [build-key-col-names (vec (.getBuildKeyColumnNames rel-map))]
+                         (let [build-key-col-names (vec (.getKeyColNames build-side))]
                            (dotimes [col-idx (count build-key-col-names)]
                              (let [build-col-name (nth build-key-col-names col-idx)
                                    build-col (.vectorForOrNull build-rel (str build-col-name))
@@ -177,7 +175,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^xtdb.arrow.RelationReader probe-phase
-  (fn [join-type probe-rel rel-map matched-build-idxs]
+  (fn [join-type probe-side matched-build-idxs]
     join-type))
 
 (defn- probe-inner-join-select
@@ -186,13 +184,12 @@
   The selections represent matched rows in both underlying relations.
 
   The selections will have the same size."
-  [^RelationReader probe-rel ^JoinRelationMap rel-map]
-  (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
-        matching-build-idxs (IntStream/builder)
+  [^ProbeSide probe-side]
+  (let [matching-build-idxs (IntStream/builder)
         matching-probe-idxs (IntStream/builder)]
 
-    (dotimes [probe-idx (.getRowCount probe-rel)]
-      (.forEachMatch rel-map-prober probe-idx
+    (dotimes [probe-idx (.getRowCount probe-side)]
+      (.forEachMatch probe-side probe-idx
                      (reify IntConsumer
                        (accept [_ build-idx]
                          (.add matching-build-idxs build-idx)
@@ -200,136 +197,38 @@
 
     [(.toArray (.build matching-probe-idxs)) (.toArray (.build matching-build-idxs))]))
 
-(defn- join-rels
-  "Takes a relation (probe-rel) and its mapped relation (via rel-map) and returns a relation with the columns of both."
-  [join-type
-   ^RelationReader probe-rel
-   ^JoinRelationMap rel-map
-   [^ints probe-sel, ^ints build-sel :as _selection]]
-  (let [built-rel (.getBuiltRelation rel-map)
-        selected-probe-rel (.select probe-rel probe-sel)
-        selected-build-rel (.select built-rel build-sel)]
+(defn- join-rels [join-type, ^RelationReader build-rel, ^RelationReader probe-rel, [^ints build-sel, ^ints probe-sel]]
+  (let [selected-build-rel (.select build-rel build-sel)
+        selected-probe-rel (.select probe-rel probe-sel)]
     (vr/rel-reader (if (= join-type ::left-outer-join-flipped)
                      (concat selected-probe-rel selected-build-rel)
                      (concat selected-build-rel selected-probe-rel)))))
 
-(defn- probe-semi-join-select
-  "Returns a single selection of the probe relation, that represents matches for a semi-join."
-  ^ints [^RelationReader probe-rel, ^JoinRelationMap rel-map]
-  (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
-        matching-probe-idxs (IntStream/builder)]
-    (dotimes [probe-idx (.getRowCount probe-rel)]
-      (when-not (neg? (.indexOf rel-map-prober probe-idx false))
-        (.add matching-probe-idxs probe-idx)))
-    (.toArray (.build matching-probe-idxs))))
+(defmethod probe-phase ::inner-join [_join-type, ^ProbeSide probe-side, _matched-build-idxs]
+  (.innerJoin probe-side))
 
-(defmethod probe-phase ::inner-join
-  [join-type
-   ^RelationReader probe-rel
-   ^JoinRelationMap rel-map
-   _matched-build-idxs]
-  (join-rels join-type probe-rel rel-map (probe-inner-join-select probe-rel rel-map)))
+(defmethod probe-phase ::semi-join [_join-type, ^ProbeSide probe-side, _matched-build-idxs]
+  (.semiJoin probe-side))
 
-(defmethod probe-phase ::semi-join
-  [_join-type
-   ^RelationReader probe-rel
-   ^JoinRelationMap rel-map
-   _matched-build-idxs]
-  (.select probe-rel (probe-semi-join-select probe-rel rel-map)))
-
-(defmethod probe-phase ::anti-semi-join
-  [_join-type, ^RelationReader probe-rel, ^JoinRelationMap rel-map, _matched-build-idxs]
-  (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
-        matching-probe-idxs (IntStream/builder)]
-    (dotimes [probe-idx (.getRowCount probe-rel)]
-      (when (neg? (.matches rel-map-prober probe-idx))
-        (.add matching-probe-idxs probe-idx)))
-
-    (.select probe-rel (.toArray (.build matching-probe-idxs)))))
-
-(defmethod probe-phase ::mark-join
-  [_join-type
-   ^RelationReader probe-rel
-   ^JoinRelationMap rel-map
-   _matched-build-idxs]
-  (.select probe-rel (probe-semi-join-select probe-rel rel-map)))
-
-(defn- int-array-concat
-  ^ints [^ints arr1 ^ints arr2]
-  (let [ret-arr (int-array (+ (alength arr1) (alength arr2)))]
-    (System/arraycopy arr1 0 ret-arr 0 (alength arr1))
-    (System/arraycopy arr2 0 ret-arr (alength arr1) (alength arr2))
-    ret-arr))
-
-(defn- probe-outer-join-select [join-type ^RelationReader probe-rel, rel-map, ^RoaringBitmap matched-build-idxs]
-  (let [[probe-sel build-sel] (probe-inner-join-select probe-rel rel-map)
-
-        _ (when matched-build-idxs (.add matched-build-idxs ^ints build-sel))
-
-        probe-bm (RoaringBitmap/bitmapOf probe-sel)
-        probe-int-stream (IntStream/builder)
-        build-int-stream (IntStream/builder)
-
-        _ (when-not (= join-type ::left-outer-join-flipped)
-            (dotimes [idx (.getRowCount probe-rel)]
-              (when-not (.contains probe-bm idx)
-                (.add probe-int-stream idx)
-                (.add build-int-stream emap/nil-row-idx))))
-
-        extra-probe-sel (.toArray (.build probe-int-stream))
-        extra-build-sel (.toArray (.build build-int-stream))
-
-        full-probe-sel (int-array-concat probe-sel extra-probe-sel)
-        full-build-sel (int-array-concat build-sel extra-build-sel)]
-
-    [full-probe-sel full-build-sel]))
+(defmethod probe-phase ::anti-semi-join [_join-type, ^ProbeSide probe-side, _matched-build-idxs]
+  (.antiJoin probe-side))
 
 (derive ::full-outer-join ::outer-join)
 (derive ::left-outer-join ::outer-join)
 (derive ::left-outer-join-flipped ::outer-join)
 
-(defmethod probe-phase ::outer-join
-  [join-type
-   ^RelationReader probe-rel
-   ^JoinRelationMap rel-map
-   ^RoaringBitmap matched-build-idxs]
-  (->> (probe-outer-join-select join-type probe-rel rel-map matched-build-idxs)
-       (join-rels join-type probe-rel rel-map)))
+(defmethod probe-phase ::outer-join [join-type, ^ProbeSide probe-side, matched-build-idxs]
+  (.outerJoin probe-side matched-build-idxs (= join-type ::left-outer-join-flipped)))
 
-(defmethod probe-phase ::single-join
-  [join-type
-   ^RelationReader probe-rel
-   ^JoinRelationMap rel-map
-   _matched-build-idxs]
+(defmethod probe-phase ::single-join [_join-type, ^ProbeSide probe-side, _matched-build-idxs]
+  (.singleJoin probe-side))
 
-  (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
-        matching-build-idxs (IntStream/builder)
-        matching-probe-idxs (IntStream/builder)]
-
-    (dotimes [probe-idx (.getRowCount probe-rel)]
-      (let [!matched (boolean-array 1)]
-        (.forEachMatch rel-map-prober probe-idx
-                       (reify IntConsumer
-                         (accept [_ build-idx]
-                           (if-not (aget !matched 0)
-                             (do
-                               (aset !matched 0 true)
-                               (.add matching-build-idxs build-idx)
-                               (.add matching-probe-idxs probe-idx))
-                             (throw (err/incorrect :xtdb.single-join/cardinality-violation
-                                                   "cardinality violation"))))))
-        (when-not (aget !matched 0)
-          (.add matching-probe-idxs probe-idx)
-          (.add matching-build-idxs emap/nil-row-idx))))
-
-    (->> [(.toArray (.build matching-probe-idxs)) (.toArray (.build matching-build-idxs))]
-         (join-rels join-type probe-rel rel-map))))
-
-(deftype JoinCursor [^BufferAllocator allocator, ^ICursor build-cursor,
+(deftype JoinCursor [^BufferAllocator allocator,
+                     ^BuildSide build-side, ^ICursor build-cursor,
+                     probe-fields probe-key-cols
+                     ->probe-cursor, ->probe-side
                      ^:unsynchronized-mutable ^ICursor probe-cursor
                      ^:unsynchronized-mutable ^RelationWriter nil-rel-writer
-                     ^IFn ->probe-cursor, probe-fields
-                     ^JoinRelationMap rel-map
                      ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
                      ^Set pushdown-iids
@@ -337,10 +236,9 @@
   ICursor
   (tryAdvance [this c]
     (when-not probe-cursor
-      (build-phase build-cursor rel-map pushdown-blooms pushdown-iids)
+      (build-phase build-side build-cursor pushdown-blooms pushdown-iids)
 
-      (let [probe-key-cols (.getProbeKeyColumnNames rel-map)
-            probe-iid-keys (filter #(= (name %) "_iid") probe-key-cols)]
+      (let [probe-iid-keys (filter #(= (name %) "_iid") probe-key-cols)]
         (set! (.probe-cursor this)
               (->probe-cursor (when pushdown-blooms
                                 (zipmap (map symbol probe-key-cols) pushdown-blooms))
@@ -357,15 +255,16 @@
                        (.tryAdvance ^ICursor (.probe-cursor this)
                                     (fn [^RelationReader probe-rel]
                                       (when (pos? (.getRowCount probe-rel))
-                                        (with-open [out-rel (-> (probe-phase join-type probe-rel rel-map matched-build-idxs)
-                                                                (.openSlice allocator))]
-                                          (when (pos? (.getRowCount out-rel))
-                                            (aset advanced? 0 true)
-                                            (.accept c out-rel))))))))
+                                        (let [^ProbeSide probe-side (->probe-side probe-rel)]
+                                          (with-open [out-rel (-> (probe-phase join-type probe-side matched-build-idxs)
+                                                                  (.openSlice allocator))]
+                                            (when (pos? (.getRowCount out-rel))
+                                              (aset advanced? 0 true)
+                                              (.accept c out-rel)))))))))
            (aget advanced? 0))
 
          (when matched-build-idxs
-           (let [build-rel (.getBuiltRelation rel-map)
+           (let [build-rel (.getBuiltRel build-side)
                  build-row-count (long (.getRowCount build-rel))
                  unmatched-build-idxs (RoaringBitmap/flip matched-build-idxs 0 build-row-count)]
 
@@ -380,39 +279,30 @@
                (let [nil-rel (vw/rel-wtr->rdr nil-rel-writer)
                      build-sel (.toArray unmatched-build-idxs)
                      probe-sel (int-array (alength build-sel))]
-                 (.accept c (join-rels join-type nil-rel rel-map [probe-sel build-sel]))
+                 (.accept c (join-rels join-type build-rel nil-rel [build-sel probe-sel]))
                  true)))))))
 
   (close [_]
     (run! #(.clear ^MutableRoaringBitmap %) pushdown-blooms)
-    (util/try-close rel-map)
+    (util/try-close build-side)
     (util/try-close nil-rel-writer)
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
-(defn- mark-join-probe-phase [^JoinRelationMap rel-map, ^RelationReader probe-rel, ^BitVector mark-col]
-  (let [rel-prober (.probeFromRelation rel-map probe-rel)]
-    (dotimes [idx (.getRowCount probe-rel)]
-      (let [match-res (.matches rel-prober idx)]
-        (if (zero? match-res)
-          (.setNull mark-col idx)
-          (.set mark-col idx (case match-res 1 1, -1 0)))))))
-
-(deftype MarkJoinCursor [^BufferAllocator allocator ^ICursor build-cursor,
+(deftype MarkJoinCursor [^BufferAllocator allocator,
+                         ^BuildSide build-side, ^ICursor build-cursor,
+                         ->probe-cursor, ->probe-side,
                          ^:unsynchronized-mutable ^ICursor probe-cursor
-                         ^IFn ->probe-cursor
-                         ^JoinRelationMap rel-map
                          ^RoaringBitmap matched-build-idxs
                          mark-col-name
-                         pushdown-blooms
-                         join-type]
+                         pushdown-blooms]
   ICursor
   (tryAdvance [this c]
-    (build-phase build-cursor rel-map pushdown-blooms nil)
+    (build-phase build-side build-cursor pushdown-blooms nil)
 
     (when-not probe-cursor
       (set! (.probe-cursor this)
-            (->probe-cursor (zipmap (map symbol (.getProbeKeyColumnNames rel-map))
+            (->probe-cursor (zipmap (map symbol (.getKeyColNames build-side))
                                     pushdown-blooms)
                             nil)))
 
@@ -421,21 +311,22 @@
        (while (and (not (aget advanced? 0))
                    (.tryAdvance ^ICursor (.probe-cursor this)
                                 (fn [^RelationReader probe-rel]
-                                  (let [row-count (.getRowCount probe-rel)]
+                                  (let [^ProbeSide probe-side (->probe-side probe-rel)
+                                        row-count (.getRowCount probe-rel)]
                                     (when (pos? row-count)
                                       (aset advanced? 0 true)
 
                                       (with-open [mark-col (doto (BitVector. (name mark-col-name) allocator)
                                                              (.allocateNew row-count)
                                                              (.setValueCount row-count))]
-                                        (mark-join-probe-phase rel-map probe-rel mark-col)
+                                        (.mark probe-side mark-col)
                                         (let [out-cols (conj (seq probe-rel) (vr/vec->reader mark-col))]
                                           (.accept c (vr/rel-reader out-cols row-count))))))))))
        (aget advanced? 0))))
 
   (close [_]
     (run! #(.clear ^MutableRoaringBitmap %) pushdown-blooms)
-    (util/try-close rel-map)
+    (util/try-close build-side)
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
@@ -463,38 +354,31 @@
 (defn- ->pushdown-blooms [key-col-names]
   (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
 
-(defn ->relation-map ^xtdb.operator.join.JoinRelationMap
-  [^BufferAllocator allocator,
-   {:keys [key-col-names build-fields probe-fields
-           with-nil-row? theta-expr param-fields args]
-    :as opts}]
-  (let [param-types (update-vals param-fields types/field->col-type)
-        build-key-col-names (get opts :build-key-col-names key-col-names)
-        probe-key-col-names (get opts :probe-key-col-names key-col-names)
-
-        schema (Schema. (->> build-fields
+(defn ->build-side ^xtdb.operator.join.BuildSide [^BufferAllocator allocator,
+                                                  {:keys [fields, key-col-names, with-nil-row?]}]
+  (let [schema (Schema. (->> fields
                              (mapv (fn [[field-name field]]
                                      (cond-> (-> field (types/field-with-name (str field-name)))
                                        with-nil-row? types/->nullable-field)))))]
+    (BuildSide. allocator schema (map str key-col-names) (boolean with-nil-row?))))
 
-    (JoinRelationMap. allocator schema
-                      (map str build-key-col-names)
-                      (map str probe-key-col-names)
-                      (reify JoinRelationMap$ComparatorFactory
-                        (buildEqui [_ build-col probe-col]
-                          (emap/->equi-comparator build-col probe-col args
-                                                  {:nil-keys-equal? with-nil-row?
-                                                   :param-types param-types}))
+(defn ->probe-side [build-side {:keys [build-fields probe-fields key-col-names theta-expr param-fields args with-nil-row?]}]
+  (let [param-types (update-vals param-fields types/field->col-type)]
+    (fn ^xtdb.operator.join.ProbeSide [probe-rel]
+      (ProbeSide. build-side probe-rel (map str key-col-names)
+                  (reify ProbeSide$ComparatorFactory
+                    (buildEqui [_ build-col probe-col]
+                      (emap/->equi-comparator build-col probe-col args
+                                              {:nil-keys-equal? with-nil-row?
+                                               :param-types param-types}))
 
-                        (buildTheta [_ build-rel probe-rel]
-                          (when theta-expr
-                            (emap/->theta-comparator build-rel probe-rel theta-expr args
-                                                     {:nil-keys-equal? with-nil-row?
-                                                      :build-fields build-fields
-                                                      :probe-fields probe-fields
-                                                      :param-types param-types}))))
-                      (boolean with-nil-row?)
-                      64 4)))
+                    (buildTheta [_ build-rel probe-rel]
+                      (when theta-expr
+                        (emap/->theta-comparator build-rel probe-rel theta-expr args
+                                                 {:nil-keys-equal? with-nil-row?
+                                                  :build-fields build-fields
+                                                  :probe-fields probe-fields
+                                                  :param-types param-types}))))))))
 
 (defn- emit-join-expr {:style/indent 2}
   [{:keys [condition left right]}
@@ -550,25 +434,34 @@
     {:fields (projection-specs->fields output-projections)
      :->cursor (fn [{:keys [allocator args] :as opts}]
                  (util/with-close-on-catch [build-cursor (->build-cursor opts)
-                                            relation-map (->relation-map allocator {:build-fields build-fields
-                                                                                    :probe-fields probe-fields
-                                                                                    :build-key-col-names build-key-col-names
-                                                                                    :probe-key-col-names probe-key-col-names
-                                                                                    :with-nil-row? with-nil-row?
-                                                                                    :theta-expr theta-expr
-                                                                                    :param-fields param-fields
-                                                                                    :args args})]
+                                            build-side (->build-side allocator {:fields build-fields
+                                                                                :key-col-names build-key-col-names
+                                                                                :with-nil-row? with-nil-row?})]
                    (letfn [(->probe-cursor-with-pushdowns [our-pushdown-blooms our-pushdown-iids]
                              (->probe-cursor (cond-> opts
                                                our-pushdown-blooms (update :pushdown-blooms (fnil into {}) our-pushdown-blooms)
                                                our-pushdown-iids (update :pushdown-iids (fnil into {}) our-pushdown-iids))))]
                      (let [pushdown-blooms (when pushdown-blooms? (->pushdown-blooms probe-key-col-names))
                            matched-build-idxs (when matched-build-idxs? (RoaringBitmap.))
-                           pushdown-iids (HashSet.)]
+                           pushdown-iids (HashSet.)
+                           ->probe-side (->probe-side build-side
+                                                      {:build-fields build-fields
+                                                       :probe-fields probe-fields
+                                                       :with-nil-row? with-nil-row?
+                                                       :key-col-names probe-key-col-names
+                                                       :theta-expr theta-expr
+                                                       :param-fields param-fields
+                                                       :args args})]
                        (project/->project-cursor opts
                                                  (if (= join-type ::mark-join)
-                                                   (MarkJoinCursor. allocator build-cursor nil ->probe-cursor-with-pushdowns relation-map matched-build-idxs mark-col-name pushdown-blooms join-type)
-                                                   (JoinCursor. allocator build-cursor nil nil ->probe-cursor-with-pushdowns probe-fields relation-map matched-build-idxs pushdown-blooms pushdown-iids join-type))
+                                                   (MarkJoinCursor. allocator build-side build-cursor
+                                                                    ->probe-cursor-with-pushdowns ->probe-side nil
+                                                                    matched-build-idxs mark-col-name pushdown-blooms)
+                                                   (JoinCursor. allocator build-side build-cursor
+                                                                probe-fields probe-key-col-names
+                                                                ->probe-cursor-with-pushdowns ->probe-side nil
+                                                                nil
+                                                                matched-build-idxs pushdown-blooms pushdown-iids join-type))
                                                  output-projections)))))}))
 
 (defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]
