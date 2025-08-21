@@ -1,6 +1,5 @@
 package xtdb.trie
 
-import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.vector.types.pojo.ArrowType
@@ -9,6 +8,7 @@ import org.roaringbitmap.RoaringBitmap
 import xtdb.arrow.VectorReader
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.function.IntConsumer
 import java.util.function.IntUnaryOperator
 
 private const val PAGE_LIMIT = 1024
@@ -36,7 +36,7 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
         fun add(trie: MutableMemoryHashTrie, newIdx: Int): Node
         fun addIfNotPresent(trie: MutableMemoryHashTrie, hash: ByteArray, newIdx: Int, comparator: IntUnaryOperator, onAddition: Runnable): Pair<Int, Node?>
 
-        fun findCandidates(trie: MutableMemoryHashTrie, hash: ByteArray): IntArrayList
+        fun forEachMatch(trie: MutableMemoryHashTrie, hash: ByteArray, c: IntConsumer)
         fun findValue(trie: MutableMemoryHashTrie, hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean): Int
 
         fun sortData(trie: MutableMemoryHashTrie)
@@ -63,10 +63,9 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
         return Pair(idx, node?.let { MutableMemoryHashTrie(it, hashReader, bucketer.levelBits) } ?: this)
     }
 
-    fun findCandidates (hash: ByteArray) : IntArrayList = rootNode.findCandidates(this, hash)
+    fun forEachMatch(hash: ByteArray, c: IntConsumer) = rootNode.forEachMatch(this, hash, c)
 
-    fun findCandidates(hash: Int) : IntArrayList =
-        findCandidates(intToByteArray(hash))
+    fun forEachMatch(hash: Int, c: IntConsumer) = forEachMatch(intToByteArray(hash), c)
 
     // This assumes the trie has been compacted
     fun findValue (hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean) : Int =
@@ -132,10 +131,10 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
             return Pair(res.first, this)
         }
 
-        override fun findCandidates(trie: MutableMemoryHashTrie, hash: ByteArray): IntArrayList {
+        override fun forEachMatch(trie: MutableMemoryHashTrie, hash: ByteArray, c: IntConsumer) {
             val bucket = trie.bucketer.bucketFor(hash, path.size).toInt()
-            val child = hashChildren[bucket] ?: return IntArrayList(0)
-            return child.findCandidates(trie, hash)
+            val child = hashChildren[bucket] ?: return
+            return child.forEachMatch(trie, hash, c)
         }
 
         override fun findValue(trie: MutableMemoryHashTrie, hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean ): Int {
@@ -222,22 +221,23 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
 
         // Beware that this method doesn't honour deletions (see findValue below)
         // Any operator that uses these methods through RelationMapProber either uses one or the other, hence no need to check deletions in this case.
-        override fun findCandidates(trie: MutableMemoryHashTrie, hash: ByteArray): IntArrayList {
-            val res = IntArrayList()
+        override fun forEachMatch(trie: MutableMemoryHashTrie, hash: ByteArray, c: IntConsumer) {
             if (dataCount <= 16) {
                 for (i in 0 until dataCount) {
-                    if (trie.compare(data[i], trie.reusePtr1, hash) == 0) res.add(data[i])
+                    if (trie.compare(data[i], trie.reusePtr1, hash) == 0) c.accept(data[i])
                 }
-               return res
+               return
             }
+
             if (!sorted) sortData(trie)
             var idx = binarySearch(trie, hash)
-            if (idx < 0) return res
+            if (idx < 0) return
+
             while (idx < dataCount && trie.compare(data[idx], trie.reusePtr1, hash) == 0) {
-                res.add(data[idx])
+                c.accept(data[idx])
                 idx++
             }
-            return res
+            return
         }
 
         override fun findValue(trie: MutableMemoryHashTrie, hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean): Int {

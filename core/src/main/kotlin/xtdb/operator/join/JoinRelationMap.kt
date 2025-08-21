@@ -108,10 +108,9 @@ class JoinRelationMap(
 
             override fun forEachMatch(probeIdx: Int, c: IntConsumer) {
                 val hashCode = hasher.hashCode(probeIdx)
-                val candidates = buildHashTrie.findCandidates(hashCode)
-                for (i in 0 until candidates.size()) {
-                    if (comparator.applyAsInt(candidates[i], probeIdx) == 1) {
-                        c.accept(candidates[i])
+                buildHashTrie.forEachMatch(hashCode) { matchIdx ->
+                    if (comparator.applyAsInt(matchIdx, probeIdx) == 1) {
+                        c.accept(matchIdx)
                     }
                 }
             }
