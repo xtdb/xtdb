@@ -1,0 +1,18 @@
+# XTDB Benchmark - {{ .Values.benchType }}
+
+You are now running the {{ .Values.benchType }} benchmark with the following settings:
+
+{{- if eq .Values.benchType "readings" }}
+readings:
+{{ toYaml .Values.readings | indent 2 }}
+{{- else if eq .Values.benchType "tpch" }}
+tpch:
+{{ toYaml .Values.tpch | indent 2 }}
+{{- else if eq .Values.benchType "auctionmark" }}
+auctionmark:
+{{ toYaml .Values.auctionmark | indent 2 }}
+{{- end }}
+
+To view the logs of the node, use:
+
+kubectl logs job.batch/{{ .Values.benchType }} --namespace cloud-benchmark -f

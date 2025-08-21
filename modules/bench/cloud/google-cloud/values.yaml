@@ -1,0 +1,47 @@
+providerConfig:
+  # GCP/GKE specific configuration
+  env:
+    GCP_PROJECT_ID: "xtdb-scratch"
+    GCP_BUCKET: "xtdb-gcp-benchmark-bucket"
+  serviceAccountAnnotations:
+    iam.gke.io/gcp-service-account: "<service_account_email>"
+  nodeSelector:
+    node_pool: xtdb-pool
+
+  # We mount and use the below YAML for configuring the XTDB nodes and their modules.
+  # The !Env values are set by Environment Variables 
+  # See the XTDB configuration documentation for options: https://docs.xtdb.com/ops/config.html
+  nodeConfig: |-
+    server:
+      host: '*'
+      port: 5432
+
+    logClusters:
+      kafkaCluster: !Kafka
+        bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+        propertiesMap:
+          max.request.size: 5242880
+
+    databases:
+      xtdb:
+        log: !Kafka
+          cluster: kafkaCluster
+          topic: !Env XTDB_LOG_TOPIC
+
+        storage: !Remote
+          objectStore: !GoogleCloud
+            projectId: !Env GCP_PROJECT_ID
+            bucket: !Env GCP_BUCKET
+            prefix: "xtdb-object-store"
+
+    diskCache:
+      path: /var/lib/xtdb/buffers/disk-cache
+
+    healthz:
+      host: '*'
+      port: 8080
+
+  kafka:
+    controller:
+      nodeSelector:
+        node_pool: xtdb-pool

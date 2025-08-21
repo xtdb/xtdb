@@ -1,0 +1,51 @@
+providerConfig:
+  # Kubernetes required settings for azure
+  env:
+    AZURE_STORAGE_ACCOUNT: "xtdbazurebenchmark"
+    AZURE_STORAGE_CONTAINER: "xtdbazurebenchmarkcontainer"
+    AZURE_USER_MANAGED_IDENTITY_CLIENT_ID: "<user_assigned_managed_identity_client_id>"
+  podLabels:
+    azure.workload.identity/use: "true"
+  serviceAccountAnnotations:
+    azure.workload.identity/client-id: "<user_assigned_managed_identity_client_id>"
+  nodeSelector:
+    node_pool: xtdbpool
+  # We mount and use the below YAML for configuring the XTDB nodes and their modules.
+  # The !Env values are set by Environment Variables
+  # See the XTDB configuration documentation for options: https://docs.xtdb.com/ops/config.html
+  nodeConfig: |-
+    server:
+      host: '*'
+      port: 5432
+
+    logClusters:
+      kafkaCluster: !Kafka
+        bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+        propertiesMap:
+          max.request.size: 5242880
+
+    databases:
+      xtdb:
+        log: !Kafka
+          cluster: kafkaCluster
+          topic: !Env XTDB_LOG_TOPIC
+
+        storage: !Remote
+          objectStore: !Azure
+            storageAccount: !Env AZURE_STORAGE_ACCOUNT
+            container: !Env AZURE_STORAGE_CONTAINER
+            prefix: "xtdb-object-store"
+            userManagedIdentityClientId: !Env AZURE_USER_MANAGED_IDENTITY_CLIENT_ID
+
+    diskCache:
+      path: /var/lib/xtdb/buffers/disk-cache
+
+    healthz:
+      host: '*'
+      port: 8080
+
+kafka:
+  controller:
+    nodeSelector:
+      node_pool: xtdbpool
+

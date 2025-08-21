@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: xtdb-env-config
+  namespace: {{ .Release.Namespace }}
+data:
+  KAFKA_BOOTSTRAP_SERVERS: {{ .Values.xtdbConfig.kafkaBootstrapServers | quote }}
+  XTDB_LOG_TOPIC: {{ .Values.xtdbConfig.logTopic | quote }}
+  JDK_JAVA_OPTIONS: {{ .Values.xtdbConfig.jdkOptions | quote }}
+  XTDB_LOGGING_LEVEL: {{ .Values.xtdbConfig.loggingLevel | quote }}
+  {{- with .Values.providerConfig.env }}
+  {{- range $key, $val := . }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}
+  {{- end }}
