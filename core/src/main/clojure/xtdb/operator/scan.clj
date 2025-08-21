@@ -33,7 +33,7 @@
            (xtdb.metadata PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask)
            xtdb.table.TableRef
-           (xtdb.trie ArrowHashTrie$Leaf Bucketer HashTrieKt MergePlanNode MergePlanTask Trie TrieCatalog)
+           (xtdb.trie ArrowHashTrie$Leaf Bucketer MergePlan MergePlanNode MergePlanTask Trie TrieCatalog)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (s/def ::table ::table/ref)
@@ -280,7 +280,7 @@
                                                                   template-table? (conj (let [[memory-rel trie] (info-schema/table-template info-schema table)]
                                                                                           (-> (trie/->Segment trie)
                                                                                               (assoc :memory-rel memory-rel)))))]
-                                                   (->> (HashTrieKt/toMergePlan segments (->path-pred iid-arrow-buf))
+                                                   (->> (MergePlan/toMergePlan segments (->path-pred iid-arrow-buf))
                                                         (into [] (keep (fn [^MergePlanTask mpt]
                                                                          (when-let [leaves (trie/filter-meta-objects
                                                                                             (for [^MergePlanNode mpn (.getMpNodes mpt)

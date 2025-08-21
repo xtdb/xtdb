@@ -9,7 +9,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.withTimeout
-import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.api.storage.Storage
 import xtdb.arrow.Relation
