@@ -390,7 +390,6 @@ dependencies {
     projectDep(":modules:xtdb-datasets")
     projectDep(":modules:xtdb-flight-sql")
     projectDep(":modules:xtdb-kafka-connect")
-    projectDep(":cloud-benchmark")
 
     api(libs.slf4j.api)
     api(libs.logback.classic)
