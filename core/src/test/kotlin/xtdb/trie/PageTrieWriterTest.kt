@@ -8,8 +8,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.arrow.FixedSizeBinaryVector
 import xtdb.arrow.VectorReader
-import xtdb.trie.TrieWriter.Companion.iidPartitions
-import xtdb.trie.TrieWriter.Companion.partitionSlices
+import xtdb.trie.PageTrieWriter.Companion.iidPartitions
+import xtdb.trie.PageTrieWriter.Companion.partitionSlices
 import java.nio.ByteBuffer
 import java.util.*
 
@@ -28,7 +28,7 @@ internal fun <V> usingIidReader(allocator: BufferAllocator, iids: List<UUID>, f:
         f(vec)
     }
 
-internal class TrieWriterTest {
+internal class PageTrieWriterTest {
 
     private lateinit var allocator: BufferAllocator
 

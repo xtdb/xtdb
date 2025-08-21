@@ -51,7 +51,7 @@ constructor(
     private val deleteWtr = opWtr.vectorFor("delete")
     private val eraseWtr = opWtr.vectorFor("erase")
 
-    private val trieWriter = TrieWriter(al, bp, calculateBlooms = false)
+    private val trieWriter = LiveTrieWriter(al, bp, calculateBlooms = false)
     private val trieMetadataCalculator = TrieMetadataCalculator(
         iidRdr, validFromWtr.asReader, validToWtr.asReader, systemFromWtr.asReader
     )

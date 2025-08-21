@@ -77,7 +77,7 @@ interface Compactor : AutoCloseable {
             private val mm = db.metadataManager
             private val trieCatalog = db.trieCatalog
 
-            private val trieWriter = TrieWriter(al, bp, calculateBlooms = true)
+            private val trieWriter = PageTrieWriter(al, bp, calculateBlooms = true)
             private val segMerge = SegmentMerge(al)
 
             private fun Job.trieDetails(trieKey: TrieKey, dataFileSize: FileSize, trieMetadata: TrieMetadata?) =
