@@ -31,10 +31,6 @@ private fun ByteArray.toPathPredicate() =
         Arrays.equals(this, 0, len, pagePath, 0, len)
     }
 
-@Suppress("UNCHECKED_CAST")
-private fun <L> MergePlanNode<L>.loadDataPage(): RelationReader? =
-    segment.dataRel?.loadPage(node as L)
-
 /**
  * A function to do bitemporal resolution for events with the same system-time (same transaction). See #4303
  */
@@ -143,6 +139,9 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
 
     private val outWriters = OutWriters(al)
 
+    @Suppress("UNCHECKED_CAST")
+    private fun <L> MergePlanNode<L>.openPage() = segment.openPage(node as L)
+
     private fun MergePlanTask.merge(outWriter: OutWriter, pathFilter: ByteArray?) {
         val isValidPtr = ArrowBufPointer()
 
@@ -150,41 +149,45 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
         val path = path.let { if (pathFilter == null || it.size > pathFilter.size) it else pathFilter }
         val mergeQueue = PriorityQueue(Comparator.comparing(QueueElem::evPtr, EventRowPointer.comparator()))
 
-        for (dataReader in mpNodes.mapNotNull { it.loadDataPage() }) {
-            val evPtr = EventRowPointer(dataReader, path)
-            val rowCopier = outWriter.rowCopier(dataReader)
+        mpNodes
+            .safeMap { it.openPage() }
+            .useAll { rels ->
+                for (rel in rels) {
+                    val evPtr = EventRowPointer(rel, path)
+                    val rowCopier = outWriter.rowCopier(rel)
 
-            if (evPtr.isValid(isValidPtr, path))
-                mergeQueue.add(QueueElem(evPtr, rowCopier))
-        }
-
-        var seenErase = false
-        val iidPtr = ArrowBufPointer()
-
-        val polygonCalculator = PolygonCalculator()
-
-        while (true) {
-            val elem = mergeQueue.poll() ?: break
-            val (evPtr, rowCopier) = elem
-
-            if (polygonCalculator.currentIidPtr != evPtr.getIidPointer(iidPtr)) seenErase = false
-
-            when (val polygon = polygonCalculator.calculate(evPtr)) {
-                null -> {
-                    if (!seenErase) rowCopier.copyRow(MAX_LONG, evPtr.index)
-                    seenErase = true
+                    if (evPtr.isValid(isValidPtr, path))
+                        mergeQueue.add(QueueElem(evPtr, rowCopier))
                 }
 
-                else -> rowCopier.copyRow(polygon.recency, evPtr.index)
+                var seenErase = false
+                val iidPtr = ArrowBufPointer()
+
+                val polygonCalculator = PolygonCalculator()
+
+                while (true) {
+                    val elem = mergeQueue.poll() ?: break
+                    val (evPtr, rowCopier) = elem
+
+                    if (polygonCalculator.currentIidPtr != evPtr.getIidPointer(iidPtr)) seenErase = false
+
+                    when (val polygon = polygonCalculator.calculate(evPtr)) {
+                        null -> {
+                            if (!seenErase) rowCopier.copyRow(MAX_LONG, evPtr.index)
+                            seenErase = true
+                        }
+
+                        else -> rowCopier.copyRow(polygon.recency, evPtr.index)
+                    }
+
+                    evPtr.nextIndex()
+
+                    if (evPtr.isValid(isValidPtr, path))
+                        mergeQueue.add(elem)
+                }
+
+                outWriter.endPage(ByteArrayList.from(*this.path))
             }
-
-            evPtr.nextIndex()
-
-            if (evPtr.isValid(isValidPtr, path))
-                mergeQueue.add(elem)
-        }
-
-        outWriter.endPage(ByteArrayList.from(*this.path))
     }
 
     sealed interface RecencyPartitioning {
@@ -202,7 +205,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
     ): Results {
         val mergedPutField = mergeFields(
             segments.mapNotNull { seg ->
-                seg.dataRel!!.schema
+                seg.schema
                     .findField("op")
                     .children
                     .find { it.name == "put" && it.children.isNotEmpty() }
@@ -240,7 +243,7 @@ internal fun main() {
         RootAllocator().use { al ->
             SegmentMerge(al).use { segMerge ->
                 files.safeMap { fileName ->
-                    ISegment.LocalSegment(
+                    ISegment.Local(
                         al,
                         dir.resolve("data").resolve(fileName),
                         dir.resolve("meta").resolve(fileName)

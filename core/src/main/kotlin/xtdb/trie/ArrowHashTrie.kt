@@ -7,7 +7,9 @@ private const val BRANCH_IID = "branch-iid"
 private const val LEAF = "leaf"
 private const val DATA_PAGE_IDX = "data-page-idx"
 
-class ArrowHashTrie(private val nodesVec: Vector) : HashTrie<ArrowHashTrie.Leaf> {
+class ArrowHashTrie @JvmOverloads constructor(
+    private val nodesVec: Vector, private val closeNodesVec: Boolean = false
+) : HashTrie<ArrowHashTrie.Leaf>, AutoCloseable {
 
     private val iidBranchVec = nodesVec[BRANCH_IID]
     private val iidBranchElVec = iidBranchVec.listElements
@@ -43,5 +45,9 @@ class ArrowHashTrie(private val nodesVec: Vector) : HashTrie<ArrowHashTrie.Leaf>
         }
 
     override val rootNode get() = forIndex(ByteArray(0), nodesVec.valueCount - 1)
+
+    override fun close() {
+        if (closeNodesVec) nodesVec.close()
+    }
 }
 

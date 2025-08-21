@@ -19,10 +19,9 @@
             [xtdb.util :as util])
   (:import (java.time Duration)
            xtdb.api.storage.Storage
-           (xtdb.arrow RelationReader)
            [xtdb.block.proto TableBlock]
            (xtdb.compactor RecencyPartition)
-           (xtdb.trie DataRel Trie)))
+           (xtdb.trie ISegment Trie)))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -491,12 +490,10 @@
               ;; TODO this doseq seems to return nothing, so nothing gets tested?
               (doseq [{:keys [^String trie-key]} (map trie/parse-trie-file-path meta-files)]
                 (util/with-open [page-meta (.openPageMetadata meta-mgr (Trie/metaFilePath table-name trie-key))
-                                 ^DataRel data-rel (first (DataRel/openRels tu/*allocator* bp table-name [trie-key]))]
-
-                  ;; checking that every page relation has a positive row count
-                  (t/is (empty? (->> (mapv #(.loadPage data-rel %) (.getLeaves (.getTrie page-meta)))
-                                     (map #(.getRowCount ^RelationReader %))
-                                     (filter zero?)))))))))))))
+                                 seg (ISegment/openSegment bp tu/*allocator* table-name trie-key)]
+                  (doseq [leaf (.getLeaves (.getTrie page-meta))]
+                    (with-open [rel (.openPage seg leaf)]
+                      (t/is (pos? (.getRowCount rel))))))))))))))
 
 (t/deftest test-l2-compaction-badly-distributed
   (let [node-dir (util/->path "target/compactor/test-l2-compaction-badly-distributed")]

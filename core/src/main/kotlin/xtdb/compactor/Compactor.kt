@@ -16,11 +16,9 @@ import xtdb.compactor.PageTree.Companion.asTree
 import xtdb.database.Database
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.TrieMetadata
-import xtdb.metadata.PageMetadata
 import xtdb.table.TableRef
 import xtdb.trie.*
-import xtdb.trie.ISegment.Segment
-import xtdb.trie.Trie.metaFilePath
+import xtdb.trie.ISegment.Companion.openSegment
 import xtdb.util.*
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
@@ -74,7 +72,6 @@ interface Compactor : AutoCloseable {
 
             private val log = db.log
             private val bp = db.bufferPool
-            private val mm = db.metadataManager
             private val trieCatalog = db.trieCatalog
 
             private val trieWriter = PageTrieWriter(al, bp, calculateBlooms = true)
@@ -92,41 +89,33 @@ interface Compactor : AutoCloseable {
                 try {
                     LOGGER.debug("compacting '${table.sym}' '$trieKeys' -> $outputTrieKey")
 
-                    DataRel.openRels(al, bp, table, trieKeys).useAll { dataRels ->
-                        mutableListOf<PageMetadata>().useAll { pageMetadatas ->
-                            for (trieKey in trieKeys) {
-                                pageMetadatas.add(mm.openPageMetadata(table.metaFilePath(trieKey)))
-                            }
+                    trieKeys.safeMap { bp.openSegment(al, table, it) }.useAll { segs ->
 
-                            val segments = (pageMetadatas zip dataRels)
-                                .map { (pageMetadata, dataRel) -> Segment(pageMetadata.trie, dataRel) }
+                        val recencyPartitioning =
+                            if (partitionedByRecency) SegmentMerge.RecencyPartitioning.Partition
+                            else SegmentMerge.RecencyPartitioning.Preserve(outputTrieKey.recency)
 
-                            val recencyPartitioning =
-                                if (partitionedByRecency) SegmentMerge.RecencyPartitioning.Partition
-                                else SegmentMerge.RecencyPartitioning.Preserve(outputTrieKey.recency)
+                        segMerge.mergeSegments(segs, part, recencyPartitioning, this@Impl.recencyPartition)
+                            .useAll { mergeRes ->
+                                mergeRes.map {
+                                    it.openForRead().use { mergeReadCh ->
+                                        Relation.loader(al, mergeReadCh).use { loader ->
+                                            val trieKey = outputTrieKey.copy(recency = it.recency).toString()
 
-                            segMerge.mergeSegments(segments, part, recencyPartitioning, this@Impl.recencyPartition)
-                                .useAll { mergeRes ->
-                                    mergeRes.map {
-                                        it.openForRead().use { mergeReadCh ->
-                                            Relation.loader(al, mergeReadCh).use { loader ->
-                                                val trieKey = outputTrieKey.copy(recency = it.recency).toString()
+                                            val (dataFileSize, trieMetadata) =
+                                                trieWriter.writePageTree(
+                                                    table, trieKey,
+                                                    loader, it.leaves.asTree,
+                                                    pageSize
+                                                )
 
-                                                val (dataFileSize, trieMetadata) =
-                                                    trieWriter.writePageTree(
-                                                        table, trieKey,
-                                                        loader, it.leaves.asTree,
-                                                        pageSize
-                                                    )
+                                            LOGGER.debug("compacted '${table.sym}' -> '$outputTrieKey'")
 
-                                                LOGGER.debug("compacted '${table.sym}' -> '$outputTrieKey'")
-
-                                                trieDetails(trieKey, dataFileSize, trieMetadata)
-                                            }
+                                            trieDetails(trieKey, dataFileSize, trieMetadata)
                                         }
                                     }
                                 }
-                        }
+                            }
                     }
                 } catch (e: ClosedByInterruptException) {
                     throw InterruptedException(e.message)

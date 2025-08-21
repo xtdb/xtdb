@@ -1,4 +1,5 @@
 @file:JvmName("MergePlan")
+
 package xtdb.trie
 
 import com.carrotsearch.hppc.ObjectStack

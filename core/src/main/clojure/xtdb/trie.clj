@@ -87,8 +87,7 @@
 
 (defrecord Segment [trie]
   ISegment
-  (getTrie [_] trie)
-  (getDataRel [this] (:data-rel this)))
+  (getTrie [_] trie))
 
 (defn ->live-trie ^MemoryHashTrie [log-limit page-limit iid-rdr]
   (-> (doto (MemoryHashTrie/builder iid-rdr)
