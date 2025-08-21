@@ -155,22 +155,16 @@ class Relation(
     }
 
     class Loader(private val arrowFileLoader: ArrowFileLoader) : AutoCloseable {
-        inner class Page(private val idx: Int) {
-            fun load(rel: Relation) {
-                arrowFileLoader.openPage(idx).use { rel.load(it) }
-            }
-        }
 
         val schema: Schema get() = arrowFileLoader.schema
-        val pages = List(arrowFileLoader.pageCount) { Page(it) }
-        val pageCount get() = pages.size
+        val pageCount get() = arrowFileLoader.pageCount
 
         private var lastPageIndex = -1
 
-        fun loadPage(idx: Int, al: BufferAllocator) = open(al, schema).also { loadPage(idx, it) }
+        fun loadPage(idx: Int, al: BufferAllocator) = open(al, schema).closeOnCatch { loadPage(idx, it); it }
 
         fun loadPage(idx: Int, rel: Relation) {
-            pages[idx].load(rel)
+            arrowFileLoader.openPage(idx).use { rel.load(it) }
             lastPageIndex = idx
         }
 
@@ -194,7 +188,7 @@ class Relation(
         fun loader(al: BufferAllocator, bytes: ByteArray) = loader(al, bytes.asChannel)
 
         @JvmStatic
-        fun loader(al: BufferAllocator, path: Path): Loader = loader(al, Files.newByteChannel(path, READ))
+        fun loader(al: BufferAllocator, path: Path) = loader(al, Files.newByteChannel(path, READ))
 
         @JvmStatic
         fun loader(buf: ArrowBuf) = Loader(ArrowFileLoader.openFromArrowBuf(buf))
@@ -227,6 +221,7 @@ class Relation(
             Relation(al).closeOnCatch { rel -> rel.also { for (row in rows) it.writeRow(row) } }
 
         @JvmStatic
+        @Suppress("unused") // util if we ever need it
         fun openFromCols(al: BufferAllocator, cols: Map<*, List<*>>): Relation =
             cols.entries.safeMap { col ->
                 val normalKey = when (val k = col.key) {
