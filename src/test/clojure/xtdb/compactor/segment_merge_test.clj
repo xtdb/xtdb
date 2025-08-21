@@ -33,8 +33,8 @@
       (with-open [live-rel0 (.openDirectSlice (.getLiveRelation lt0) tu/*allocator*)
                   live-rel1 (.openDirectSlice (.getLiveRelation lt1) tu/*allocator*)]
 
-        (let [segments [(ISegment$Memory. tu/*allocator* (.compactLogs (.getLiveTrie lt0)) live-rel0)
-                        (ISegment$Memory. tu/*allocator* (.compactLogs (.getLiveTrie lt1)) live-rel1)]]
+        (let [segments [(ISegment$Memory. (.compactLogs (.getLiveTrie lt0)) live-rel0)
+                        (ISegment$Memory. (.compactLogs (.getLiveTrie lt1)) live-rel1)]]
 
           (t/testing "merge segments"
             (util/with-open [results (.mergeSegments seg-merge segments nil (SegmentMerge$RecencyPartitioning$Preserve. nil))]

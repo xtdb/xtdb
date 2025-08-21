@@ -18,7 +18,7 @@ import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.TrieMetadata
 import xtdb.table.TableRef
 import xtdb.trie.*
-import xtdb.trie.ISegment.Companion.openSegment
+import xtdb.trie.ISegment.BufferPoolSegment.Companion.open
 import xtdb.util.*
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
@@ -72,6 +72,7 @@ interface Compactor : AutoCloseable {
 
             private val log = db.log
             private val bp = db.bufferPool
+            private val mm = db.metadataManager
             private val trieCatalog = db.trieCatalog
 
             private val trieWriter = PageTrieWriter(al, bp, calculateBlooms = true)
@@ -89,7 +90,7 @@ interface Compactor : AutoCloseable {
                 try {
                     LOGGER.debug("compacting '${table.sym}' '$trieKeys' -> $outputTrieKey")
 
-                    trieKeys.safeMap { bp.openSegment(al, table, it) }.useAll { segs ->
+                    trieKeys.safeMap { open(bp, mm, table, it) }.useAll { segs ->
 
                         val recencyPartitioning =
                             if (partitionedByRecency) SegmentMerge.RecencyPartitioning.Partition

@@ -7,13 +7,17 @@
   (:import (org.apache.arrow.memory RootAllocator)
            xtdb.arrow.Relation
            xtdb.operator.scan.MergePlanPage
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf MergePlan MergePlanNode MergePlanTask)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf ISegment MergePlan MergePlanNode MergePlanTask)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (defn- ->arrow-hash-trie [^Relation meta-rel]
   (ArrowHashTrie. (.get meta-rel "nodes")))
+
+(defrecord TestSegment [seg trie]
+  ISegment
+  (getTrie [_] trie))
 
 (defn- merge-plan-nodes->path+pages [mp-nodes]
   (->> mp-nodes
@@ -41,12 +45,9 @@
               {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :log, :page-idx 0}]}
               {:path [0 2], :pages [{:seg :log, :page-idx 0}]}
               {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :log, :page-idx 0}]}]
-             (->> (MergePlan/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
-                                              (assoc :seg :t1))
-                                          (-> (trie/->Segment (->arrow-hash-trie log-rel))
-                                              (assoc :seg :log))
-                                          (-> (trie/->Segment (->arrow-hash-trie log2-rel))
-                                              (assoc :seg :log2))]
+             (->> (MergePlan/toMergePlan [(->TestSegment :t1 (->arrow-hash-trie t1-rel))
+                                          (->TestSegment :log (->arrow-hash-trie log-rel))
+                                          (->TestSegment :log2 (->arrow-hash-trie log2-rel))]
                                          nil)
                   (merge-plan-nodes->path+pages)))))
 
@@ -71,10 +72,8 @@
               {:path [0 3 3],
                :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3}]}]
 
-             (->> (MergePlan/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
-                                              (assoc :seg :t1))
-                                          (-> (trie/->Segment (->arrow-hash-trie t2-rel))
-                                              (assoc :seg :t2))]
+             (->> (MergePlan/toMergePlan [(->TestSegment :t1 (->arrow-hash-trie t1-rel))
+                                          (->TestSegment :t2 (->arrow-hash-trie t2-rel))]
                                          nil)
                   (merge-plan-nodes->path+pages))))))
 

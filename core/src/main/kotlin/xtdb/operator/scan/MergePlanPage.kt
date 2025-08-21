@@ -6,20 +6,9 @@ import xtdb.log.proto.TemporalMetadata
 import xtdb.metadata.PageMetadata
 import xtdb.trie.MemoryHashTrie
 import xtdb.arrow.RelationReader
+import xtdb.metadata.UNBOUND_TEMPORAL_METADATA
 import java.nio.file.Path
 import java.util.function.IntPredicate
-import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
-import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
-
-private val UNBOUND_TEMPORAL_METADATA =
-    TemporalMetadata.newBuilder()
-        .setMinValidFrom(MIN_LONG)
-        .setMaxValidFrom(MAX_LONG)
-        .setMinValidTo(MIN_LONG)
-        .setMaxValidTo(MAX_LONG)
-        .setMinSystemFrom(MIN_LONG)
-        .setMaxSystemFrom(MAX_LONG)
-        .build()
 
 interface Metadata {
     fun testMetadata(): Boolean

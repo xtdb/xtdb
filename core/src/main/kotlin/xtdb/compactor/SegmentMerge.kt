@@ -140,7 +140,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
     private val outWriters = OutWriters(al)
 
     @Suppress("UNCHECKED_CAST")
-    private fun <L> MergePlanNode<L>.openPage() = segment.openPage(node as L)
+    private fun <L> MergePlanNode<L>.openPage() = segment.openPage(al, node as L)
 
     private fun MergePlanTask.merge(outWriter: OutWriter, pathFilter: ByteArray?) {
         val isValidPtr = ArrowBufPointer()

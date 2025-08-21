@@ -21,7 +21,7 @@
            xtdb.api.storage.Storage
            [xtdb.block.proto TableBlock]
            (xtdb.compactor RecencyPartition)
-           (xtdb.trie ISegment Trie)))
+           (xtdb.trie ISegment ISegment$BufferPoolSegment Trie)))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -490,7 +490,7 @@
               ;; TODO this doseq seems to return nothing, so nothing gets tested?
               (doseq [{:keys [^String trie-key]} (map trie/parse-trie-file-path meta-files)]
                 (util/with-open [page-meta (.openPageMetadata meta-mgr (Trie/metaFilePath table-name trie-key))
-                                 seg (ISegment/openSegment bp tu/*allocator* table-name trie-key)]
+                                 seg (ISegment$BufferPoolSegment/open bp meta-mgr table-name trie-key)]
                   (doseq [leaf (.getLeaves (.getTrie page-meta))]
                     (with-open [rel (.openPage seg leaf)]
                       (t/is (pos? (.getRowCount rel))))))))))))))
