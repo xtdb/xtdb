@@ -432,6 +432,9 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation(kotlin("test-junit5"))
 
+    // For Healthz Test
+    testImplementation("clj-http", "clj-http","3.12.3")
+
     // for AWS profiles (managing datasets)
     devImplementation("software.amazon.awssdk", "sts", "2.16.76")
     devImplementation("software.amazon.awssdk", "sso", "2.16.76")
