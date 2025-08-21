@@ -90,7 +90,7 @@ This allows for very declarative yet terse method of specifying join conditions;
 === Aggregate
 
 The 'aggregate' operator aggregates rows in a query according to a list of aggregate specs.
-An aggregate spec is either a grouping variable/column or (new) column plus and link:#_expressions[expression].
+An aggregate spec is either a grouping variable/column or (new) column plus an link:#_expressions[expression].
 
 The available aggregate functions are documented link:../stdlib/aggregates[here].
 

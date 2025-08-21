@@ -262,7 +262,7 @@ include::{example}[tags=aggr-sql-1,indent=0]
 When we've found the documents we're interested in, it's common to then want a tree of related information.
 For example, if a user is reading an article, we might also want to show them details about the author as well as any comments.
 
-(Users of existing EDN Datalog databases may already be familiar with link:../reference/main/xtql/queries.html#_subqueries['pull'] - in XTQL, because subqueries are a first-class concept, we rely on extensively on these to express a more powerful/composable behaviour.)
+(Users of existing EDN Datalog databases may already be familiar with link:../reference/main/xtql/queries.html#_subqueries['pull'] - in XTQL, because subqueries are a first-class concept, we rely extensively on these to express a more powerful/composable behaviour.)
 
 [source,clojure]
 ----

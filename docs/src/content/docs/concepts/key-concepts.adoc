@@ -68,7 +68,7 @@ image::/images/docs/bitemp-viz.webp["Bitemporal Visualizer", align="center", wid
 
 This definition of the bitemporal model was first defined by Richard Snodgrass and Christian Jensen as the "Bitemporal Conceptual Data Model" in 1994 and was (much) later adopted as the basis of the ISO SQL:2011 standard.
 
-The bitemporal features defined in the SQL:2011 standard lack significant adoption and introduced many complexities for users. XTDB simplifies those features by making bitemporality ubiquitous and easy. For instance, XTDB and maintains a built-in 'WITHOUT OVERLAPS' constraint which ensures that the 'rectangles' in this model never overlap, and also maintains a temporal index to accelerate various kinds of temporal queries (including the default 'as of now' query context).
+The bitemporal features defined in the SQL:2011 standard lack significant adoption and introduced many complexities for users. XTDB simplifies those features by making bitemporality ubiquitous and easy. For instance, XTDB maintains a built-in 'WITHOUT OVERLAPS' constraint which ensures that the 'rectangles' in this model never overlap, and also maintains a temporal index to accelerate various kinds of temporal queries (including the default 'as of now' query context).
 
 Alongside a specialized temporal index, XTDB offers a set of temporal operators based on Allen interval algebra for understanding the intersections of bitemporal data (e.g. `OVERLAPS`, `CONTAINS`, `PRECEDES`).
 
