@@ -184,7 +184,6 @@
                      ->probe-cursor, ->probe-side
                      ^:unsynchronized-mutable ^ICursor probe-cursor
                      ^:unsynchronized-mutable ^RelationWriter nil-rel-writer
-                     ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
                      ^Set pushdown-iids
                      ^JoinType join-type]
@@ -200,7 +199,7 @@
                               (when pushdown-iids
                                 (zipmap probe-iid-keys (repeat pushdown-iids)))))))
 
-    (when (and matched-build-idxs (not nil-rel-writer))
+    (when (and (.getMatchedBuildIdxs build-side) (not nil-rel-writer))
       (util/with-close-on-catch [nil-rel-writer (emap/->nillable-rel-writer allocator probe-fields)]
         (set! (.nil-rel-writer this) nil-rel-writer)))
 
@@ -217,10 +216,11 @@
                                             (.accept c out-rel))))))))
            (aget advanced? 0))
 
-         (when matched-build-idxs
+         (when-let [matched-build-idxs (.getMatchedBuildIdxs build-side)]
            (let [build-rel (.getBuiltRel build-side)
                  build-row-count (long (.getRowCount build-rel))
                  unmatched-build-idxs (RoaringBitmap/flip matched-build-idxs 0 build-row-count)]
+
 
              ;; Only need to remove the nil-row-idx for full outer joins
              (when (= (.getOuterJoinType join-type) JoinType$OuterJoinType/FULL)
@@ -247,7 +247,6 @@
                          ^BuildSide build-side, ^ICursor build-cursor,
                          ->probe-cursor, ->probe-side,
                          ^:unsynchronized-mutable ^ICursor probe-cursor
-                         ^RoaringBitmap matched-build-idxs
                          mark-col-name
                          pushdown-blooms]
   ICursor
@@ -309,12 +308,14 @@
   (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
 
 (defn ->build-side ^xtdb.operator.join.BuildSide [^BufferAllocator allocator,
-                                                  {:keys [fields, key-col-names, with-nil-row?]}]
+                                                  {:keys [fields, key-col-names, matched-build-idxs?, with-nil-row?]}]
   (let [schema (Schema. (->> fields
                              (mapv (fn [[field-name field]]
                                      (cond-> (-> field (types/field-with-name (str field-name)))
                                        with-nil-row? types/->nullable-field)))))]
-    (BuildSide. allocator schema (map str key-col-names) (boolean with-nil-row?))))
+    (BuildSide. allocator schema (map str key-col-names)
+                (when matched-build-idxs? (RoaringBitmap.))
+                (boolean with-nil-row?) )))
 
 (defn ->probe-side [build-side {:keys [build-fields probe-fields key-col-names theta-expr param-fields args with-nil-row?]}]
   (let [param-types (update-vals param-fields types/field->col-type)]
@@ -390,13 +391,13 @@
                  (util/with-close-on-catch [build-cursor (->build-cursor opts)
                                             build-side (->build-side allocator {:fields build-fields
                                                                                 :key-col-names build-key-col-names
-                                                                                :with-nil-row? with-nil-row?})]
+                                                                                :with-nil-row? with-nil-row?
+                                                                                :matched-build-idxs? matched-build-idxs?})]
                    (letfn [(->probe-cursor-with-pushdowns [our-pushdown-blooms our-pushdown-iids]
                              (->probe-cursor (cond-> opts
                                                our-pushdown-blooms (update :pushdown-blooms (fnil into {}) our-pushdown-blooms)
                                                our-pushdown-iids (update :pushdown-iids (fnil into {}) our-pushdown-iids))))]
                      (let [pushdown-blooms (when pushdown-blooms? (->pushdown-blooms probe-key-col-names))
-                           matched-build-idxs (when matched-build-idxs? (RoaringBitmap.))
                            pushdown-iids (HashSet.)
                            ->probe-side (->probe-side build-side
                                                       {:build-fields build-fields
@@ -410,17 +411,17 @@
                                                  (if (= join-type ::mark-join)
                                                    (MarkJoinCursor. allocator build-side build-cursor
                                                                     ->probe-cursor-with-pushdowns ->probe-side nil
-                                                                    matched-build-idxs mark-col-name pushdown-blooms)
+                                                                    mark-col-name pushdown-blooms)
                                                    (JoinCursor. allocator build-side build-cursor
                                                                 probe-fields probe-key-col-names
                                                                 ->probe-cursor-with-pushdowns ->probe-side nil
                                                                 nil
-                                                                matched-build-idxs pushdown-blooms pushdown-iids
+                                                                pushdown-blooms pushdown-iids
                                                                 (case join-type
                                                                   ::inner-join JoinType/INNER
-                                                                  ::left-outer-join (JoinType/leftOuter matched-build-idxs)
-                                                                  ::left-outer-join-flipped (JoinType/leftOuterFlipped matched-build-idxs)
-                                                                  ::full-outer-join (JoinType/fullOuter matched-build-idxs)
+                                                                  ::left-outer-join JoinType/LEFT_OUTER
+                                                                  ::left-outer-join-flipped JoinType/LEFT_OUTER_FLIPPED
+                                                                  ::full-outer-join JoinType/FULL_OUTER
                                                                   ::semi-join JoinType/SEMI
                                                                   ::anti-semi-join JoinType/ANTI
                                                                   ::single-join JoinType/SINGLE)))

@@ -2,6 +2,7 @@ package xtdb.operator.join
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Schema
+import org.roaringbitmap.RoaringBitmap
 import xtdb.arrow.IntVector
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
@@ -14,7 +15,7 @@ import java.util.function.IntUnaryOperator
 internal const val NULL_ROW_IDX = 0
 
 class BuildSide @JvmOverloads constructor(
-    val al: BufferAllocator, val schema: Schema, val keyColNames: List<String>,
+    val al: BufferAllocator, val schema: Schema, val keyColNames: List<String>, val matchedBuildIdxs: RoaringBitmap?,
     withNilRow: Boolean, pageLimit: Int = 64, levelBits: Int = 4
 ) : AutoCloseable {
     private val relWriter = OldRelationWriter(al, schema)
@@ -57,6 +58,8 @@ class BuildSide @JvmOverloads constructor(
     }
 
     val builtRel get() = relWriter.asReader
+
+    fun addMatch(idx: Int) = matchedBuildIdxs?.add(idx)
 
     fun indexOf(hashCode: Int, cmp: IntUnaryOperator, removeOnMatch: Boolean): Int =
         buildHashTrie.findValue(hashCode, cmp, removeOnMatch)

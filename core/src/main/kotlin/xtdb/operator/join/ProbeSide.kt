@@ -42,7 +42,7 @@ class ProbeSide(
             hasher.hashCode(probeIdx),
             { buildIdx -> comparator.applyAsInt(buildIdx, probeIdx) },
             removeOnMatch
-        )
+        ).also { if (it >= 0) buildSide.addMatch(it) }
 
     fun forEachMatch(probeIdx: Int, c: IntConsumer) {
         val hashCode = hasher.hashCode(probeIdx)
@@ -50,6 +50,7 @@ class ProbeSide(
         buildSide.forEachMatch(hashCode) { idx ->
             if (comparator.applyAsInt(idx, probeIdx) == 1) {
                 c.accept(idx)
+                buildSide.addMatch(idx)
             }
         }
     }

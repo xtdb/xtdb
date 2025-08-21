@@ -2,7 +2,6 @@ package xtdb.operator.join
 
 import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.vector.BitVector
-import org.roaringbitmap.RoaringBitmap
 import xtdb.arrow.RelationReader
 import xtdb.error.Incorrect
 import xtdb.operator.join.JoinType.OuterJoinType.*
@@ -16,7 +15,7 @@ fun interface JoinType {
         LEFT, LEFT_FLIPPED, FULL
     }
 
-    class Outer(private val matchedBuildIdxs: RoaringBitmap?, override val outerJoinType: OuterJoinType) : JoinType {
+    class Outer(override val outerJoinType: OuterJoinType) : JoinType {
 
         override fun ProbeSide.probe(): RelationReader {
             val matchingBuildIdxs = IntArrayList()
@@ -36,8 +35,6 @@ fun interface JoinType {
                     matchingProbeIdxs.add(probeIdx)
                 }
             }
-
-            matchedBuildIdxs?.add(*matchingBuildIdxs.toArray())
 
             val outBuild = buildRel.select(matchingBuildIdxs.toArray())
             val outProbe = probeRel.select(matchingProbeIdxs.toArray())
@@ -69,14 +66,14 @@ fun interface JoinType {
             )
         }
 
-        @JvmStatic
-        fun leftOuter(matchedBuildIdxs: RoaringBitmap?) = Outer(matchedBuildIdxs, LEFT)
+        @JvmField
+        val LEFT_OUTER = Outer(LEFT)
 
-        @JvmStatic
-        fun leftOuterFlipped(matchedBuildIdxs: RoaringBitmap?) = Outer(matchedBuildIdxs, LEFT_FLIPPED)
+        @JvmField
+        val LEFT_OUTER_FLIPPED = Outer(LEFT_FLIPPED)
 
-        @JvmStatic
-        fun fullOuter(matchedBuildIdxs: RoaringBitmap?) = Outer(matchedBuildIdxs, FULL)
+        @JvmField
+        val FULL_OUTER = Outer(FULL)
 
         @JvmStatic
         fun ProbeSide.mark(markCol: BitVector) {
