@@ -12,8 +12,6 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.util ArrayList HashSet Iterator List Set)
-           (java.util.function IntConsumer)
-           (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.BitVector
            (org.apache.arrow.vector.types.pojo Field Schema)
@@ -23,7 +21,7 @@
            (xtdb.arrow RelationReader RelationWriter)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
-           (xtdb.operator.join BuildSide ProbeSide ProbeSide$ComparatorFactory)))
+           (xtdb.operator.join BuildSide JoinType JoinType$OuterJoinType ProbeSide ProbeSide$ComparatorFactory)))
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
@@ -173,55 +171,12 @@
                                    (.add pushdown-iids (.getBytes build-col build-idx)))
                                  (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))))
 
-#_{:clj-kondo/ignore [:unused-binding]}
-(defmulti ^xtdb.arrow.RelationReader probe-phase
-  (fn [join-type probe-side matched-build-idxs]
-    join-type))
-
-(defn- probe-inner-join-select
-  "Returns a pair of selections [probe-sel, build-sel].
-
-  The selections represent matched rows in both underlying relations.
-
-  The selections will have the same size."
-  [^ProbeSide probe-side]
-  (let [matching-build-idxs (IntStream/builder)
-        matching-probe-idxs (IntStream/builder)]
-
-    (dotimes [probe-idx (.getRowCount probe-side)]
-      (.forEachMatch probe-side probe-idx
-                     (reify IntConsumer
-                       (accept [_ build-idx]
-                         (.add matching-build-idxs build-idx)
-                         (.add matching-probe-idxs probe-idx)))))
-
-    [(.toArray (.build matching-probe-idxs)) (.toArray (.build matching-build-idxs))]))
-
-(defn- join-rels [join-type, ^RelationReader build-rel, ^RelationReader probe-rel, [^ints build-sel, ^ints probe-sel]]
+(defn- join-rels [^JoinType join-type, ^RelationReader build-rel, ^RelationReader probe-rel, [^ints build-sel, ^ints probe-sel]]
   (let [selected-build-rel (.select build-rel build-sel)
         selected-probe-rel (.select probe-rel probe-sel)]
-    (vr/rel-reader (if (= join-type ::left-outer-join-flipped)
+    (vr/rel-reader (if (= JoinType$OuterJoinType/LEFT_FLIPPED (.getOuterJoinType join-type))
                      (concat selected-probe-rel selected-build-rel)
                      (concat selected-build-rel selected-probe-rel)))))
-
-(defmethod probe-phase ::inner-join [_join-type, ^ProbeSide probe-side, _matched-build-idxs]
-  (.innerJoin probe-side))
-
-(defmethod probe-phase ::semi-join [_join-type, ^ProbeSide probe-side, _matched-build-idxs]
-  (.semiJoin probe-side))
-
-(defmethod probe-phase ::anti-semi-join [_join-type, ^ProbeSide probe-side, _matched-build-idxs]
-  (.antiJoin probe-side))
-
-(derive ::full-outer-join ::outer-join)
-(derive ::left-outer-join ::outer-join)
-(derive ::left-outer-join-flipped ::outer-join)
-
-(defmethod probe-phase ::outer-join [join-type, ^ProbeSide probe-side, matched-build-idxs]
-  (.outerJoin probe-side matched-build-idxs (= join-type ::left-outer-join-flipped)))
-
-(defmethod probe-phase ::single-join [_join-type, ^ProbeSide probe-side, _matched-build-idxs]
-  (.singleJoin probe-side))
 
 (deftype JoinCursor [^BufferAllocator allocator,
                      ^BuildSide build-side, ^ICursor build-cursor,
@@ -232,7 +187,7 @@
                      ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
                      ^Set pushdown-iids
-                     join-type]
+                     ^JoinType join-type]
   ICursor
   (tryAdvance [this c]
     (when-not probe-cursor
@@ -255,12 +210,11 @@
                        (.tryAdvance ^ICursor (.probe-cursor this)
                                     (fn [^RelationReader probe-rel]
                                       (when (pos? (.getRowCount probe-rel))
-                                        (let [^ProbeSide probe-side (->probe-side probe-rel)]
-                                          (with-open [out-rel (-> (probe-phase join-type probe-side matched-build-idxs)
-                                                                  (.openSlice allocator))]
-                                            (when (pos? (.getRowCount out-rel))
-                                              (aset advanced? 0 true)
-                                              (.accept c out-rel)))))))))
+                                        (with-open [out-rel (-> (.probe join-type (->probe-side probe-rel))
+                                                                (.openSlice allocator))]
+                                          (when (pos? (.getRowCount out-rel))
+                                            (aset advanced? 0 true)
+                                            (.accept c out-rel))))))))
            (aget advanced? 0))
 
          (when matched-build-idxs
@@ -269,7 +223,7 @@
                  unmatched-build-idxs (RoaringBitmap/flip matched-build-idxs 0 build-row-count)]
 
              ;; Only need to remove the nil-row-idx for full outer joins
-             (when (= join-type ::full-outer-join)
+             (when (= (.getOuterJoinType join-type) JoinType$OuterJoinType/FULL)
                (.remove unmatched-build-idxs emap/nil-row-idx))
 
              (when-not (.isEmpty unmatched-build-idxs)
@@ -319,7 +273,7 @@
                                       (with-open [mark-col (doto (BitVector. (name mark-col-name) allocator)
                                                              (.allocateNew row-count)
                                                              (.setValueCount row-count))]
-                                        (.mark probe-side mark-col)
+                                        (JoinType/mark probe-side mark-col)
                                         (let [out-cols (conj (seq probe-rel) (vr/vec->reader mark-col))]
                                           (.accept c (vr/rel-reader out-cols row-count))))))))))
        (aget advanced? 0))))
@@ -461,7 +415,15 @@
                                                                 probe-fields probe-key-col-names
                                                                 ->probe-cursor-with-pushdowns ->probe-side nil
                                                                 nil
-                                                                matched-build-idxs pushdown-blooms pushdown-iids join-type))
+                                                                matched-build-idxs pushdown-blooms pushdown-iids
+                                                                (case join-type
+                                                                  ::inner-join JoinType/INNER
+                                                                  ::left-outer-join (JoinType/leftOuter matched-build-idxs)
+                                                                  ::left-outer-join-flipped (JoinType/leftOuterFlipped matched-build-idxs)
+                                                                  ::full-outer-join (JoinType/fullOuter matched-build-idxs)
+                                                                  ::semi-join JoinType/SEMI
+                                                                  ::anti-semi-join JoinType/ANTI
+                                                                  ::single-join JoinType/SINGLE)))
                                                  output-projections)))))}))
 
 (defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]

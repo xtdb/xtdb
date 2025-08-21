@@ -1,11 +1,7 @@
 package xtdb.operator.join
 
-import com.carrotsearch.hppc.IntArrayList
-import org.apache.arrow.vector.BitVector
-import org.roaringbitmap.RoaringBitmap
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
-import xtdb.error.Incorrect
 import xtdb.expression.map.IndexHasher
 import java.util.function.IntBinaryOperator
 import java.util.function.IntConsumer
@@ -20,7 +16,7 @@ class ProbeSide(
         fun buildTheta(buildRel: RelationReader, probeRel: RelationReader): IntBinaryOperator?
     }
 
-    private val buildRel = buildSide.builtRel
+    internal val buildRel = buildSide.builtRel
     val rowCount = probeRel.rowCount
 
     private val probeKeyCols = keyColNames.map { probeRel[it] }
@@ -70,106 +66,4 @@ class ProbeSide(
         return acc
     }
 
-    fun innerJoin(): RelationReader {
-        val matchingBuildIdxs = IntArrayList()
-        val matchingProbeIdxs = IntArrayList()
-
-        repeat(rowCount) { probeIdx ->
-            forEachMatch(probeIdx) { buildIdx ->
-                matchingBuildIdxs.add(buildIdx)
-                matchingProbeIdxs.add(probeIdx)
-            }
-        }
-
-        return RelationReader.concatCols(
-            buildRel.select(matchingBuildIdxs.toArray()),
-            probeRel.select(matchingProbeIdxs.toArray())
-        )
-    }
-
-    fun outerJoin(matchedBuildIdxs: RoaringBitmap?, isFlippedLeftOuterJoin: Boolean): RelationReader {
-        val matchingBuildIdxs = IntArrayList()
-        val matchingProbeIdxs = IntArrayList()
-
-        repeat(rowCount) { probeIdx ->
-            var matched = false
-
-            forEachMatch(probeIdx) { buildIdx ->
-                matched = true
-                matchingBuildIdxs.add(buildIdx)
-                matchingProbeIdxs.add(probeIdx)
-            }
-
-            if (!isFlippedLeftOuterJoin && !matched) {
-                matchingBuildIdxs.add(NULL_ROW_IDX)
-                matchingProbeIdxs.add(probeIdx)
-            }
-        }
-
-        matchedBuildIdxs?.add(*matchingBuildIdxs.toArray())
-
-        val outBuild = buildRel.select(matchingBuildIdxs.toArray())
-        val outProbe = probeRel.select(matchingProbeIdxs.toArray())
-
-        return if (isFlippedLeftOuterJoin)
-            RelationReader.concatCols(outProbe, outBuild)
-        else
-            RelationReader.concatCols(outBuild, outProbe)
-    }
-
-    internal val semiJoinSelection
-        get() =
-            IntArrayList().let { sel ->
-                repeat(rowCount) { if (indexOf(it, false) >= 0) sel.add(it) }
-
-                sel.toArray()
-            }
-
-    fun semiJoin() = probeRel.select(semiJoinSelection)
-
-    internal val antiJoinSelection
-        get() = IntArrayList().let { sel ->
-            repeat(rowCount) { if (matches(it) < 0) sel.add(it) }
-
-            sel.toArray()
-        }
-
-    fun antiJoin() = probeRel.select(antiJoinSelection)
-
-    fun mark(markCol: BitVector) {
-        repeat(rowCount) { probeIdx ->
-            when (matches(probeIdx)) {
-                0 -> markCol.setNull(probeIdx)
-                1 -> markCol.set(probeIdx, 1)
-                -1 -> markCol.set(probeIdx, 0)
-            }
-        }
-    }
-
-    fun singleJoin(): RelationReader {
-        val matchingBuildIdxs = IntArrayList()
-        val matchingProbeIdxs = IntArrayList()
-
-        repeat(rowCount) { probeIdx ->
-            var matched = false
-            forEachMatch(probeIdx) { buildIdx ->
-                if (matched)
-                    throw Incorrect("cardinality violation", "xtdb.single-join/cardinality-violation")
-                matched = true
-
-                matchingBuildIdxs.add(buildIdx)
-                matchingProbeIdxs.add(probeIdx)
-            }
-
-            if (!matched) {
-                matchingBuildIdxs.add(NULL_ROW_IDX)
-                matchingProbeIdxs.add(probeIdx)
-            }
-        }
-
-        return RelationReader.concatCols(
-            buildRel.select(matchingBuildIdxs.toArray()),
-            probeRel.select(matchingProbeIdxs.toArray())
-        )
-    }
 }
