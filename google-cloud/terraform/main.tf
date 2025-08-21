@@ -103,5 +103,6 @@ module "kubernetes_engine" {
 
   # We don't need to create a service account for the GKE cluster - we've already created one
   create_service_account = false
+  deletion_protection    = var.deletion_protection
 }
 

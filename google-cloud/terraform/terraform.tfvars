@@ -19,6 +19,7 @@ vpc_subnet_region = "us-central1"
 kubernetes_cluster_name   = "xtdb-cluster"
 kubernetes_cluster_region = "us-central1"
 kubernetes_cluster_zones  = ["us-central1-a"]
+deletion_protection       = true
 
 ## GKE Node Pool Settings
 ### Initial node count for the default node pool

@@ -135,3 +135,8 @@ variable "application_node_pool_local_ephemeral_ssd_count" {
   type        = number
   default     = 1
 }
+variable "deletion_protection" {
+  description = "Whether to enable deletion protection on the GKE cluster."
+  type        = bool
+  default     = true
+}
