@@ -5,50 +5,51 @@ package xtdb.trie
 import com.carrotsearch.hppc.ObjectStack
 import java.util.function.Predicate
 
-data class MergePlanNode<L>(val segment: ISegment<L>, val node: HashTrie.Node<L>) {
-    companion object {
-        @Suppress("UNCHECKED_CAST")
-        fun <L> create(segment: ISegment<L>, node: HashTrie.Node<*>): MergePlanNode<L> =
-            MergePlanNode(segment, node as HashTrie.Node<L>)
-    }
+private data class SegmentNode<L>(val segment: ISegment<L>, val node: HashTrie.Node<L>) {
+    val children: List<SegmentNode<L>?>?
+        get() = node.hashChildren?.map { it?.let { SegmentNode(segment, it) } }
+
+    @Suppress("UNCHECKED_CAST")
+    val page get() = segment.page(node as L)
 }
 
-class MergePlanTask(val mpNodes: List<MergePlanNode<*>>, val path: ByteArray)
+private fun <L> ISegment<L>.toSegmentNode() = trie.rootNode?.let { node -> SegmentNode(this, node) }
+
+private class WorkTask(val segNodes: List<SegmentNode<*>>, val path: ByteArray)
+
+class MergeTask(val pages: List<ISegment.Page>, val path: ByteArray)
 
 // IMPORTANT - Tries (i.e. segments) and nodes need to be returned in system time order
-fun List<ISegment<*>>.toMergePlan(pathPred: Predicate<ByteArray>?): List<MergePlanTask> {
-    val result = mutableListOf<MergePlanTask>()
-    val stack = ObjectStack<MergePlanTask>()
+fun List<ISegment<*>>.toMergePlan(pathPred: Predicate<ByteArray>?): List<MergeTask> {
+    val result = mutableListOf<MergeTask>()
 
-    val initialMpNodes = mapNotNull { seg -> seg.trie.rootNode?.let { MergePlanNode.create(seg, it) } }
-    if (initialMpNodes.isNotEmpty()) stack.push(MergePlanTask(initialMpNodes, ByteArray(0)))
+    val initialSegNodes = this.mapNotNull { seg -> seg.toSegmentNode() }
+    if (initialSegNodes.isEmpty()) return emptyList()
+
+    val stack = ObjectStack<WorkTask>()
+
+    stack.push(WorkTask(initialSegNodes, ByteArray(0)))
 
     while (!stack.isEmpty) {
-        val mergePlanTask = stack.pop()
-        val mpNodes = mergePlanTask.mpNodes
+        val workTask = stack.pop()
+        val segNodes = workTask.segNodes
+        if (pathPred != null && !pathPred.test(workTask.path)) continue
 
-        when {
-            pathPred != null && !pathPred.test(mergePlanTask.path) -> null
-
-            mpNodes.any { it.node is ArrowHashTrie.IidBranch || it.node is MemoryHashTrie.Branch } -> {
-                val nodeChildren = mpNodes.map { it.node.hashChildren }
-                // do these in reverse order so that they're on the stack in path-prefix order
-                for (bucketIdx in DEFAULT_LEVEL_WIDTH - 1 downTo 0) {
-                    val newMpNodes = nodeChildren.mapIndexedNotNull { idx, children ->
-                        if (children != null) {
-                            children[bucketIdx]?.let { MergePlanNode.create(mpNodes[idx].segment, it) }
-                        } else {
-                            mpNodes[idx]
-                        }
-                    }
-
-                    if (newMpNodes.isNotEmpty())
-                        stack.push(MergePlanTask(newMpNodes, conjPath(mergePlanTask.path, bucketIdx.toByte())))
+        val nodeChildren = segNodes.map { it to it.children }
+        if (nodeChildren.any { (_, children) -> children != null }) {
+            // do these in reverse order so that they're on the stack in path-prefix order
+            for (bucketIdx in (0..<DEFAULT_LEVEL_WIDTH).reversed()) {
+                val newSegNodes = nodeChildren.mapNotNull { (segNode, children) ->
+                    // children == null iff this is a leaf
+                    // children[bucketIdx] is null iff this is a branch but without any values in this bucket.
+                    if (children != null) children[bucketIdx] else segNode
                 }
-            }
 
-            else -> result += mergePlanTask
-        }
+                if (newSegNodes.isNotEmpty())
+                    stack.push(WorkTask(newSegNodes, conjPath(workTask.path, bucketIdx.toByte())))
+            }
+        } else result += MergeTask(segNodes.map { it.page }, workTask.path)
     }
+
     return result
 }

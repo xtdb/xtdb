@@ -6,6 +6,7 @@ import xtdb.BufferPool
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.compactor.resolveSameSystemTimeEvents
+import xtdb.log.proto.TemporalMetadata
 import xtdb.metadata.MetadataPredicate
 import xtdb.metadata.PageMetadata
 import xtdb.table.TableRef
@@ -22,7 +23,16 @@ interface ISegment<L> : AutoCloseable {
 
     val pageMetadata: PageMetadata?
 
-    fun openPage(al: BufferAllocator, leaf: L): RelationReader
+    /**
+     * Implementations of DataPage should be able to out-live the related Segment
+     */
+    interface Page {
+        val schema: Schema
+
+        fun openDataPage(al: BufferAllocator): RelationReader
+    }
+
+    fun page(leaf: L): Page
 
     class BufferPoolSegment private constructor(
         private val bp: BufferPool, override val pageMetadata: PageMetadata,
@@ -30,20 +40,37 @@ interface ISegment<L> : AutoCloseable {
     ) : ISegment<ArrowHashTrie.Leaf> {
         val dataFilePath = table.dataFilePath(trieKey)
         override val trie get() = pageMetadata.trie
-        private val level = Trie.parseKey(trieKey).level
+        private val resolveSameSystemTimeEvents = Trie.parseKey(trieKey).level == 0L
 
         override val schema: Schema = bp.getFooter(dataFilePath).schema
 
-        override fun openPage(al: BufferAllocator, leaf: ArrowHashTrie.Leaf): RelationReader =
-            bp.getRecordBatch(dataFilePath, leaf.dataPageIndex).use { rb ->
-                Relation.fromRecordBatch(al, schema, rb)
-                    .let { standardRel ->
-                        if (level == 0L)
-                            resolveSameSystemTimeEvents(al, standardRel)
-                                .also { standardRel.close() }
-                        else standardRel
-                    }
-            }
+        class Page(
+            private val bp: BufferPool,
+            val dataFilePath: Path, override val schema: Schema,
+            val pageIndex: Int,
+            val pageIdxPredicate: IntPredicate?,
+            val temporalMetadata: TemporalMetadata,
+            private val resolveSameSystemTimeEvents: Boolean
+
+        ) : ISegment.Page {
+            override fun openDataPage(al: BufferAllocator): RelationReader =
+                bp.getRecordBatch(dataFilePath, pageIndex).use { rb ->
+                    Relation.fromRecordBatch(al, schema, rb)
+                        .let { standardRel ->
+                            if (resolveSameSystemTimeEvents)
+                                resolveSameSystemTimeEvents(al, standardRel)
+                                    .also { standardRel.close() }
+                            else standardRel
+                        }
+                }
+        }
+
+        override fun page(leaf: ArrowHashTrie.Leaf) =
+            Page(
+                bp, dataFilePath, schema, leaf.dataPageIndex,
+                pageIdxPredicate, pageMetadata.temporalMetadata(leaf.dataPageIndex),
+                resolveSameSystemTimeEvents
+            )
 
         override fun close() = pageMetadata.close()
 
@@ -65,38 +92,26 @@ interface ISegment<L> : AutoCloseable {
         }
     }
 
-    class Memory @JvmOverloads constructor(
-        override val trie: MemoryHashTrie, val rel: RelationReader, val closeRel: Boolean = true
-    ) : ISegment<MemoryHashTrie.Leaf> {
+    /**
+     * @param rel NOTE: borrows `rel`, doesn't close it.
+     */
+    class Memory(override val trie: MemoryHashTrie, val rel: RelationReader) : ISegment<MemoryHashTrie.Leaf> {
         override val schema: Schema get() = rel.schema
 
         override val pageMetadata: PageMetadata? = null
 
-        override fun openPage(al: BufferAllocator, leaf: MemoryHashTrie.Leaf) =
-            rel.select(leaf.data).openSlice(al)
+        // this one is the exception to the rule - nothing in the Memory class that needs closing,
+        // so DataPage can be an inner object.
+        inner class Page(val leaf: MemoryHashTrie.Leaf) : ISegment.Page {
+            override val schema: Schema get() = this@Memory.schema
 
-        override fun close() {
-            if (closeRel)
-                rel.close()
+            fun loadPage() = rel.select(leaf.mergeSort(trie))
+
+            override fun openDataPage(al: BufferAllocator) = loadPage().openSlice(al)
         }
-    }
 
-    class Local(
-        al: BufferAllocator, dataFile: Path, metaFile: Path
-    ) : ISegment<ArrowHashTrie.Leaf>,
-        AutoCloseable {
+        override fun page(leaf: MemoryHashTrie.Leaf) = Page(leaf)
 
-        override val pageMetadata = PageMetadata.open(al, metaFile)
-        override val trie get() = pageMetadata.trie
-        private val dataLoader = Relation.loader(al, dataFile)
-        override val schema: Schema get() = dataLoader.schema
-
-        override fun openPage(al: BufferAllocator, leaf: ArrowHashTrie.Leaf): RelationReader =
-            dataLoader.loadPage(leaf.dataPageIndex, al).openSlice(al)
-
-        override fun close() {
-            pageMetadata.close()
-            dataLoader.close()
-        }
+        override fun close() = Unit
     }
 }

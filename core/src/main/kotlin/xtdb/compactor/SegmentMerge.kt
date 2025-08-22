@@ -4,13 +4,16 @@ import com.carrotsearch.hppc.ByteArrayList
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
+import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.bitemporal.PolygonCalculator
 import xtdb.compactor.OutWriter.OutWriters
 import xtdb.compactor.OutWriter.RecencyRowCopier
 import xtdb.compactor.RecencyPartition.WEEK
+import xtdb.metadata.PageMetadata
 import xtdb.trie.*
+import xtdb.trie.ISegment.Page
 import xtdb.trie.Trie.dataRelSchema
 import xtdb.types.Fields.mergeFields
 import xtdb.types.withName
@@ -139,18 +142,14 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
 
     private val outWriters = OutWriters(al)
 
-    @Suppress("UNCHECKED_CAST")
-    private fun <L> MergePlanNode<L>.openPage() = segment.openPage(al, node as L)
-
-    private fun MergePlanTask.merge(outWriter: OutWriter, pathFilter: ByteArray?) {
+    private fun MergeTask.merge(outWriter: OutWriter, pathFilter: ByteArray?) {
         val isValidPtr = ArrowBufPointer()
 
-        val mpNodes = mpNodes
         val path = path.let { if (pathFilter == null || it.size > pathFilter.size) it else pathFilter }
         val mergeQueue = PriorityQueue(Comparator.comparing(QueueElem::evPtr, EventRowPointer.comparator()))
 
-        mpNodes
-            .safeMap { it.openPage() }
+        pages
+            .safeMap { it.openDataPage(al) }
             .useAll { rels ->
                 for (rel in rels) {
                     val evPtr = EventRowPointer(rel, path)
@@ -232,9 +231,34 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
     override fun close() = outWriters.close()
 }
 
-/**
- *  Utility function to call SegmentMerge manually
+/*
+ *  Utilities to call SegmentMerge manually
  */
+
+private class LocalSegment(
+    al: BufferAllocator, dataFile: Path, metaFile: Path
+) : ISegment<ArrowHashTrie.Leaf>, AutoCloseable {
+
+    override val pageMetadata = PageMetadata.open(al, metaFile)
+    override val trie get() = pageMetadata.trie
+    private val dataLoader = Relation.loader(al, dataFile)
+    override val schema: Schema get() = dataLoader.schema
+
+    // in the utility, we keep the Segments open throughout,
+    // so can be excused for the dataLoader being used 'outside its lifetime'
+    override fun page(leaf: ArrowHashTrie.Leaf) = object : Page {
+        override val schema: Schema get() = this@LocalSegment.schema
+
+        override fun openDataPage(al: BufferAllocator) =
+            dataLoader.loadPage(leaf.dataPageIndex, al).openSlice(al)
+    }
+
+    override fun close() {
+        pageMetadata.close()
+        dataLoader.close()
+    }
+}
+
 internal fun main() {
     val dir = "/tmp/downloads/compactor-error".asPath
     val files = listOf("l01-rc-b2c74.arrow", "l00-rc-b2c75.arrow")
@@ -243,7 +267,7 @@ internal fun main() {
         RootAllocator().use { al ->
             SegmentMerge(al).use { segMerge ->
                 files.safeMap { fileName ->
-                    ISegment.Local(
+                    LocalSegment(
                         al,
                         dir.resolve("data").resolve(fileName),
                         dir.resolve("meta").resolve(fileName)

@@ -7,7 +7,7 @@
   (:import (org.apache.arrow.memory RootAllocator)
            xtdb.arrow.Relation
            xtdb.operator.scan.MergePlanPage
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf ISegment MergePlan MergePlanNode MergePlanTask)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf ISegment ISegment$Page MergePlan MergeTask)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -15,22 +15,20 @@
 (defn- ->arrow-hash-trie [^Relation meta-rel]
   (ArrowHashTrie. (.get meta-rel "nodes")))
 
+(defrecord TestPage [seg page-idx]
+  ISegment$Page)
+
 (defrecord TestSegment [seg trie]
   ISegment
-  (getTrie [_] trie))
+  (getTrie [_] trie)
 
-(defn- merge-plan-nodes->path+pages [mp-nodes]
-  (->> mp-nodes
-       (map (fn [^MergePlanTask merge-plan-node]
-              (let [path (.getPath merge-plan-node)
-                    mp-nodes (.getMpNodes merge-plan-node)]
-                {:path (vec path)
-                 :pages (mapv (fn [^MergePlanNode merge-plan-node]
-                                (let [segment (.getSegment merge-plan-node)
-                                      ^ArrowHashTrie$Leaf node (.getNode merge-plan-node)]
-                                  {:seg (:seg segment), :page-idx (.getDataPageIndex node)}))
-                              mp-nodes)})))
-       (sort-by :path)))
+  (page [_ leaf]
+    (->TestPage seg (.getDataPageIndex ^ArrowHashTrie$Leaf leaf))))
+
+(defn- <-MergeTask [^MergeTask merge-task]
+  {:path (vec (.getPath merge-task))
+   :pages (mapv (partial into {})
+                (.getPages merge-task))})
 
 (deftest test-merge-plan-with-nil-nodes-2700
   (with-open [al (RootAllocator.)
@@ -49,7 +47,8 @@
                                           (->TestSegment :log (->arrow-hash-trie log-rel))
                                           (->TestSegment :log2 (->arrow-hash-trie log2-rel))]
                                          nil)
-                  (merge-plan-nodes->path+pages)))))
+                  (mapv <-MergeTask)
+                  (sort-by :path)))))
 
   (with-open [al (RootAllocator.)
               t1-rel (tu/open-arrow-hash-trie-rel al [[nil 0 nil 1] 2 nil 3])
@@ -75,7 +74,8 @@
              (->> (MergePlan/toMergePlan [(->TestSegment :t1 (->arrow-hash-trie t1-rel))
                                           (->TestSegment :t2 (->arrow-hash-trie t2-rel))]
                                          nil)
-                  (merge-plan-nodes->path+pages))))))
+                  (mapv <-MergeTask)
+                  (sort-by :path))))))
 
 (defrecord MockMergePlanPage [page metadata-matches? temporal-metadata]
   MergePlanPage

@@ -33,7 +33,7 @@
            (xtdb.metadata MetadataPredicate PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask)
            xtdb.table.TableRef
-           (xtdb.trie ArrowHashTrie$Leaf Bucketer ISegment$BufferPoolSegment ISegment$Memory MergePlan MergePlanNode MergePlanTask Trie TrieCatalog)
+           (xtdb.trie ArrowHashTrie$Leaf Bucketer ISegment$Page ISegment$BufferPoolSegment ISegment$BufferPoolSegment$Page ISegment$Memory MergePlan MergeTask TrieCatalog)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (s/def ::table ::table/ref)
@@ -277,34 +277,27 @@
                              (when live-table-snap
                                (.add !segments
                                      (ISegment$Memory. (.getLiveTrie live-table-snap)
-                                                       (.getLiveRelation live-table-snap)
-                                                       false ; closeRel
-                                                       )))
+                                                       (.getLiveRelation live-table-snap))))
 
                              (when template-table?
                                (.add !segments
                                      (let [[memory-rel trie] (info-schema/table-template info-schema table)]
-                                       (ISegment$Memory. trie memory-rel
-                                                         false ; closeRel
-                                                         ))))
+                                       (ISegment$Memory. trie memory-rel))))
 
                              (let [merge-tasks (->> (MergePlan/toMergePlan !segments (->path-pred iid-arrow-buf))
-                                                    (into [] (keep (fn [^MergePlanTask mpt]
+                                                    (into [] (keep (fn [^MergeTask mt]
                                                                      (when-let [leaves (trie/filter-meta-objects
-                                                                                        (for [^MergePlanNode mpn (.getMpNodes mpt)
-                                                                                              :let [seg (.getSegment mpn)
-                                                                                                    node (.getNode mpn)]]
-                                                                                          (if (instance? ISegment$BufferPoolSegment seg)
-                                                                                            (let [^ISegment$BufferPoolSegment bp-seg seg]
+                                                                                        (for [^ISegment$Page page (.getPages mt)]
+                                                                                          (if (instance? ISegment$BufferPoolSegment$Page page)
+                                                                                            (let [^ISegment$BufferPoolSegment$Page bp-page page]
                                                                                               (MergePlanPage$Arrow. buffer-pool
-                                                                                                                    (.getDataFilePath bp-seg)
-                                                                                                                    (.getPageIdxPredicate bp-seg)
-                                                                                                                    (.getDataPageIndex ^ArrowHashTrie$Leaf node)
-                                                                                                                    (.getPageMetadata bp-seg)))
-                                                                                            (let [^ISegment$Memory seg seg]
-                                                                                              (MergePlanPage$Memory. (.getRel seg) (.getTrie seg) node))))
+                                                                                                                    (.getDataFilePath bp-page)
+                                                                                                                    (.getPageIdxPredicate bp-page)
+                                                                                                                    (.getPageIndex bp-page)
+                                                                                                                    (.getTemporalMetadata bp-page)))
+                                                                                            (MergePlanPage$Memory. page)))
                                                                                         temporal-bounds)]
-                                                                       (ScanCursor$MergeTask. leaves (.getPath mpt)))))))]
+                                                                       (ScanCursor$MergeTask. leaves (.getPath mt)))))))]
                                (ScanCursor. allocator (RootCache. allocator buffer-pool)
                                             col-names col-preds
                                             temporal-bounds

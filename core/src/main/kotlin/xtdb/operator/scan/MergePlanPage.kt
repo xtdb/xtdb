@@ -2,11 +2,12 @@ package xtdb.operator.scan
 
 import org.apache.arrow.vector.VectorLoader
 import xtdb.BufferPool
+import xtdb.arrow.RelationReader
 import xtdb.log.proto.TemporalMetadata
 import xtdb.metadata.PageMetadata
-import xtdb.trie.MemoryHashTrie
-import xtdb.arrow.RelationReader
 import xtdb.metadata.UNBOUND_TEMPORAL_METADATA
+import xtdb.trie.ISegment
+import xtdb.trie.MemoryHashTrie
 import java.nio.file.Path
 import java.util.function.IntPredicate
 
@@ -23,7 +24,7 @@ interface MergePlanPage : Metadata {
         private val dataFilePath: Path,
         private val pageIdxPred: IntPredicate,
         private val pageIdx: Int,
-        private val pageMetadata: PageMetadata
+        override val temporalMetadata: TemporalMetadata
     ) : MergePlanPage {
         override fun loadPage(rootCache: RootCache): RelationReader =
             bp.getRecordBatch(dataFilePath, pageIdx).use { rb ->
@@ -33,14 +34,10 @@ interface MergePlanPage : Metadata {
             }
 
         override fun testMetadata() = pageIdxPred.test(pageIdx)
-
-        override val temporalMetadata get() = pageMetadata.temporalMetadata(pageIdx)
     }
 
-    class Memory(
-        private val liveRel: RelationReader, private val trie: MemoryHashTrie, private val leaf: MemoryHashTrie.Leaf
-    ) : MergePlanPage {
-        override fun loadPage(rootCache: RootCache): RelationReader = liveRel.select(leaf.mergeSort(trie))
+    class Memory(private val page: ISegment.Memory.Page) : MergePlanPage {
+        override fun loadPage(rootCache: RootCache) = page.loadPage()
 
         override fun testMetadata() = true
 
