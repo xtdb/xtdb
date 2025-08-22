@@ -20,8 +20,8 @@ class ArrowHashTrie(private val nodesVec: Vector) : HashTrie<ArrowHashTrie.Node,
         private val startIdx = iidBranchVec.getListStartIndex(branchVecIdx)
         private val count = iidBranchVec.getListCount(branchVecIdx)
 
-        override val hashChildren: Array<Node?>
-            get() = Array(count) { childBucket ->
+        override val hashChildren: List<Node?>
+            get() = List(count) { childBucket ->
                 val childIdx = childBucket + startIdx
                 if (iidBranchElVec.isNull(childIdx))
                     null

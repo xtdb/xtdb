@@ -16,15 +16,16 @@ private const val PAGE_LIMIT = 1024
 // hashReader is assumed to be a fixed-width vector
 // for iids this is ArrowType.FixedSizeBinary(16)
 // for hashes this is ArrowType.Int
-class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader, levelBits: Int) : HashTrie<MutableMemoryHashTrie.Node, MutableMemoryHashTrie.Leaf> {
+class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader, levelBits: Int) :
+    HashTrie<MutableMemoryHashTrie.Node, MutableMemoryHashTrie.Leaf> {
     private val bucketer = Bucketer(levelBits)
 
-    private val hashByteWidth : Int = when(val type = hashReader.field.type) {
+    private val hashByteWidth: Int = when (val type = hashReader.field.type) {
         is FixedSizeBinary -> type.byteWidth
         is ArrowType.Int -> 4
         else -> throw IllegalArgumentException("Unsupported Arrow type for hashReader: ${hashReader.field.type}")
     }
-    private val maxLevel : Int = when(val type = hashReader.field.type) {
+    private val maxLevel: Int = when (val type = hashReader.field.type) {
         is FixedSizeBinary -> type.byteWidth * 8 / bucketer.levelBits
         is ArrowType.Int -> type.bitWidth / bucketer.levelBits
         else -> throw IllegalArgumentException("Unsupported Arrow type for hashReader: ${hashReader.field.type}")
@@ -34,10 +35,21 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
 
     sealed interface Node : HashTrie.Node<Node> {
         fun add(trie: MutableMemoryHashTrie, newIdx: Int): Node
-        fun addIfNotPresent(trie: MutableMemoryHashTrie, hash: ByteArray, newIdx: Int, comparator: IntUnaryOperator, onAddition: Runnable): Pair<Int, Node?>
+        fun addIfNotPresent(
+            trie: MutableMemoryHashTrie,
+            hash: ByteArray,
+            newIdx: Int,
+            comparator: IntUnaryOperator,
+            onAddition: Runnable
+        ): Pair<Int, Node?>
 
         fun forEachMatch(trie: MutableMemoryHashTrie, hash: ByteArray, c: IntConsumer)
-        fun findValue(trie: MutableMemoryHashTrie, hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean): Int
+        fun findValue(
+            trie: MutableMemoryHashTrie,
+            hash: ByteArray,
+            comparator: IntUnaryOperator,
+            removeOnMatch: Boolean
+        ): Int
 
         fun sortData(trie: MutableMemoryHashTrie)
     }
@@ -56,9 +68,15 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
 
     operator fun plus(idx: Int) = MutableMemoryHashTrie(rootNode.add(this, idx), hashReader, bucketer.levelBits)
 
-    private fun intToByteArray(hash: Int): ByteArray = ByteBuffer.allocate(Int.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).putInt(hash).array()
+    private fun intToByteArray(hash: Int): ByteArray =
+        ByteBuffer.allocate(Int.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).putInt(hash).array()
 
-    fun addIfNotPresent(hash: Int, newIdx: Int, comparator: IntUnaryOperator, onAddition: Runnable): Pair<Int, MutableMemoryHashTrie>  {
+    fun addIfNotPresent(
+        hash: Int,
+        newIdx: Int,
+        comparator: IntUnaryOperator,
+        onAddition: Runnable
+    ): Pair<Int, MutableMemoryHashTrie> {
         val (idx, node) = rootNode.addIfNotPresent(this, intToByteArray(hash), newIdx, comparator, onAddition)
         return Pair(idx, node?.let { MutableMemoryHashTrie(it, hashReader, bucketer.levelBits) } ?: this)
     }
@@ -68,17 +86,17 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
     fun forEachMatch(hash: Int, c: IntConsumer) = forEachMatch(intToByteArray(hash), c)
 
     // This assumes the trie has been compacted
-    fun findValue (hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean) : Int =
+    fun findValue(hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean): Int =
         rootNode.findValue(this, hash, comparator, removeOnMatch)
 
-    fun findValue(hash: Int, comparator: IntUnaryOperator, removeOnMatch: Boolean) : Int =
+    fun findValue(hash: Int, comparator: IntUnaryOperator, removeOnMatch: Boolean): Int =
         findValue(intToByteArray(hash), comparator, removeOnMatch)
 
     @Suppress("unused")
     fun withIidReader(hashReader: VectorReader) = MutableMemoryHashTrie(rootNode, hashReader, bucketer.levelBits)
 
     fun sortData() {
-       rootNode.sortData(this)
+        rootNode.sortData(this)
     }
 
     private fun bucketFor(idx: Int, level: Int, reusePtr: ArrowBufPointer): Int =
@@ -92,7 +110,7 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
         return if (cmp != 0) cmp else rightIdx compareTo leftIdx
     }
 
-    private fun compare(idx: Int, ptr: ArrowBufPointer, hash: ByteArray) : Int {
+    private fun compare(idx: Int, ptr: ArrowBufPointer, hash: ByteArray): Int {
         val buf = hashReader.getPointer(idx, ptr).buf
         val index = idx * hashByteWidth
         return ByteFunctionHelpers.compare(buf, index, index + hashByteWidth, hash, 0, hash.size)
@@ -101,7 +119,7 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
     class Branch(
         private val pageLimit: Int,
         override val path: ByteArray,
-        override val hashChildren: Array<Node?>,
+        override val hashChildren: MutableList<Node?>,
     ) : Node {
 
         override fun add(trie: MutableMemoryHashTrie, newIdx: Int): Node {
@@ -116,7 +134,13 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
             return this
         }
 
-        override fun addIfNotPresent(trie: MutableMemoryHashTrie, hash: ByteArray, newIdx: Int, comparator: IntUnaryOperator, onAddition: Runnable): Pair<Int, Node?> {
+        override fun addIfNotPresent(
+            trie: MutableMemoryHashTrie,
+            hash: ByteArray,
+            newIdx: Int,
+            comparator: IntUnaryOperator,
+            onAddition: Runnable
+        ): Pair<Int, Node?> {
             val bucket = trie.bucketer.bucketFor(hash, path.size).toInt()
 
             if (hashChildren[bucket] == null) {
@@ -137,7 +161,12 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
             return child.forEachMatch(trie, hash, c)
         }
 
-        override fun findValue(trie: MutableMemoryHashTrie, hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean ): Int {
+        override fun findValue(
+            trie: MutableMemoryHashTrie,
+            hash: ByteArray,
+            comparator: IntUnaryOperator,
+            removeOnMatch: Boolean
+        ): Int {
             val bucket = trie.bucketer.bucketFor(hash, path.size).toInt()
             val child = hashChildren[bucket] ?: return -1
             return child.findValue(trie, hash, comparator, removeOnMatch)
@@ -161,7 +190,7 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
         override val hashChildren = null
 
         private fun split(trie: MutableMemoryHashTrie): Node {
-            val res = Branch(pageLimit, path, arrayOfNulls(trie.bucketer.levelWidth))
+            val res = Branch(pageLimit, path, MutableList(trie.bucketer.levelWidth) { null })
             for (i in 0 until dataCount) {
                 res.add(trie, data[i])
             }
@@ -198,7 +227,13 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
             return this
         }
 
-        override fun addIfNotPresent(trie: MutableMemoryHashTrie, hash: ByteArray, newIdx: Int, comparator: IntUnaryOperator, onAddition: Runnable): Pair<Int, Node?> {
+        override fun addIfNotPresent(
+            trie: MutableMemoryHashTrie,
+            hash: ByteArray,
+            newIdx: Int,
+            comparator: IntUnaryOperator,
+            onAddition: Runnable
+        ): Pair<Int, Node?> {
             // can't use binary search here because we might not be sorted
             for (i in 0 until dataCount) {
                 val testIdx = data[i]
@@ -226,7 +261,7 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
                 for (i in 0 until dataCount) {
                     if (trie.compare(data[i], trie.reusePtr1, hash) == 0) c.accept(data[i])
                 }
-               return
+                return
             }
 
             if (!sorted) sortData(trie)
@@ -240,11 +275,21 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
             return
         }
 
-        override fun findValue(trie: MutableMemoryHashTrie, hash: ByteArray, comparator: IntUnaryOperator, removeOnMatch: Boolean): Int {
+        override fun findValue(
+            trie: MutableMemoryHashTrie,
+            hash: ByteArray,
+            comparator: IntUnaryOperator,
+            removeOnMatch: Boolean
+        ): Int {
             if (dataCount <= 16) {
-                for(i in 0 until dataCount) {
+                for (i in 0 until dataCount) {
                     val testIdx = data[i]
-                    if (trie.compare(testIdx, trie.reusePtr1, hash) == 0 && deletions?.contains(testIdx) != true && comparator.applyAsInt(testIdx) == 1) {
+                    if (trie.compare(
+                            testIdx,
+                            trie.reusePtr1,
+                            hash
+                        ) == 0 && deletions?.contains(testIdx) != true && comparator.applyAsInt(testIdx) == 1
+                    ) {
                         if (removeOnMatch) {
                             deletions = (deletions ?: RoaringBitmap()).apply { add(testIdx) }
                         }

@@ -12,6 +12,11 @@ internal fun conjPath(path: ByteArray, idx: Byte): ByteArray {
     return childPath
 }
 
+
+private fun <N : Node<N>> Node<N>.leafStream(): Stream<Node<N>> =
+    hashChildren?.let { it.stream().flatMap { child -> child?.leafStream() } } ?: Stream.of(this)
+
+
 interface HashTrie<N : Node<N>, L : N> {
     val rootNode: N?
 
@@ -20,13 +25,7 @@ interface HashTrie<N : Node<N>, L : N> {
     interface Node<N : Node<N>> {
         val path: ByteArray
 
-        val hashChildren: Array<N?>?
-
-        fun leafStream(): Stream<out Node<N>> =
-            when {
-                hashChildren != null -> Arrays.stream(hashChildren).flatMap { child -> child?.leafStream() }
-                else -> Stream.of(this)
-            }
+        val hashChildren: List<N?>?
 
         val leaves: List<Node<N>> get() = leafStream().toList()
     }

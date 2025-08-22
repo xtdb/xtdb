@@ -52,28 +52,27 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
         private val logLimit: Int,
         private val pageLimit: Int,
         override val path: ByteArray,
-        override val hashChildren: Array<Node?>,
+        override val hashChildren: List<Node?>,
     ) : Node {
         private val addPtr = ArrowBufPointer()
 
         override fun add(trie: MemoryHashTrie, newIdx: Int): Node {
             val bucket = trie.bucketFor(newIdx, path.size, addPtr)
 
-            val newChildren = hashChildren.indices
-                .map { childIdx ->
-                    var child = hashChildren[childIdx]
-                    if (bucket == childIdx) {
-                        child = child ?: Leaf(logLimit, pageLimit, conjPath(path, childIdx.toByte()))
-                        child = child.add(trie, newIdx)
-                    }
-                    child
-                }.toTypedArray()
+            val newChildren = List(hashChildren.size) { childIdx ->
+                var child = hashChildren[childIdx]
+                if (bucket == childIdx) {
+                    child = child ?: Leaf(logLimit, pageLimit, conjPath(path, childIdx.toByte()))
+                    child = child.add(trie, newIdx)
+                }
+                child
+            }
 
             return Branch(logLimit, pageLimit, path, newChildren)
         }
 
         override fun compactLogs(trie: MemoryHashTrie) =
-            Branch(logLimit, pageLimit, path, hashChildren.map { child -> child?.compactLogs(trie) }.toTypedArray())
+            Branch(logLimit, pageLimit, path, hashChildren.map { child -> child?.compactLogs(trie) })
     }
 
     class Leaf(
@@ -165,7 +164,7 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
                         if (childBucket == null) null
                         else
                             Leaf(logLimit, pageLimit, conjPath(path, childIdx.toByte()), childBucket)
-                    }.toTypedArray()
+                    }
 
                 Branch(logLimit, pageLimit, path, childNodes)
 
