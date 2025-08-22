@@ -1,0 +1,230 @@
+---
+title: Vector Similarity and ML with XTDB
+description: Learn how to use XTDB's vector functions for machine learning and AI applications including document similarity, recommendation systems, and semantic search.
+---
+
+import { Query, Txs, Xtplay } from 'xtplay-components';
+import { Aside } from '@astrojs/starlight/components';
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+XTDB provides built-in vector functions that make it easy to build machine learning and AI applications directly in SQL. This tutorial demonstrates how to use vector similarity functions for document search, recommendation systems, and semantic search applications.
+
+## Vector Functions Overview
+
+XTDB supports three core vector similarity functions:
+
+- **`DOT_PRODUCT(vec1, vec2)`** - Computes the dot product, useful for normalized vectors
+- **`L2_DISTANCE(vec1, vec2)`** - Euclidean distance, good for clustering and nearest neighbors
+- **`COSINE_DISTANCE(vec1, vec2)`** - Cosine distance, excellent for document and semantic similarity
+
+<Aside>
+All vector functions require arrays of floating-point numbers (f64) with matching dimensions.
+</Aside>
+
+## Document Similarity Search
+
+Let's build a semantic search system using document embeddings:
+
+<Xtplay>
+<Txs systemTime="2024-01-01" txs={`
+-- Insert documents with their text embeddings (simplified 3D for demo)
+INSERT INTO documents VALUES
+  ('doc1', 'Introduction to Machine Learning', [0.8, 0.6, 0.1]),
+  ('doc2', 'Advanced Deep Learning Techniques', [0.9, 0.5, 0.2]),
+  ('doc3', 'Cooking Pasta Recipes', [0.1, 0.2, 0.9]),
+  ('doc4', 'Neural Network Architectures', [0.85, 0.55, 0.15]),
+  ('doc5', 'Italian Cuisine Guide', [0.15, 0.25, 0.85])
+RECORDS AS (doc_id, title, embedding)
+`} />
+
+<Query q={`
+-- Find documents most similar to a "machine learning" query
+SELECT doc_id, title,
+       COSINE_DISTANCE(embedding, ARRAY[0.8, 0.5, 0.1]) AS similarity_score
+FROM documents
+ORDER BY similarity_score
+LIMIT 3
+`} />
+</Xtplay>
+
+The cosine distance measures how similar document vectors are regardless of their magnitude, making it perfect for text similarity.
+
+## Recommendation System
+
+Build a recommendation engine using user preferences and item features:
+
+<Xtplay>
+<Txs systemTime="2024-01-02" txs={`
+-- User preference vectors and item feature vectors
+INSERT INTO users VALUES
+  ('alice', [0.9, 0.1, 0.7, 0.3]),  -- Prefers tech, dislikes cooking
+  ('bob', [0.2, 0.8, 0.1, 0.9])     -- Prefers cooking, likes sports
+RECORDS AS (user_id, preferences);
+
+INSERT INTO items VALUES
+  ('laptop', [1.0, 0.0, 0.8, 0.1]),     -- Tech product
+  ('cookbook', [0.0, 1.0, 0.1, 0.2]),   -- Cooking item  
+  ('running_shoes', [0.1, 0.1, 0.2, 1.0]) -- Sports item
+RECORDS AS (item_id, features)
+`} />
+
+<Query q={`
+-- Generate recommendations for Alice using dot product
+SELECT u.user_id, i.item_id,
+       DOT_PRODUCT(u.preferences, i.features) AS recommendation_score
+FROM users u, items i  
+WHERE u.user_id = 'alice'
+  AND DOT_PRODUCT(u.preferences, i.features) > 0.5
+ORDER BY recommendation_score DESC
+`} />
+</Xtplay>
+
+Dot product works well for recommendation scoring when vectors represent preferences and features.
+
+## Clustering and Classification
+
+Use L2 distance to find data points within clusters:
+
+<Xtplay>
+<Txs systemTime="2024-01-03" txs={`
+-- Data points in 2D space for clustering
+INSERT INTO data_points VALUES
+  ('p1', [1.0, 1.0]),
+  ('p2', [1.2, 0.8]),
+  ('p3', [0.9, 1.1]),
+  ('p4', [5.0, 5.0]),
+  ('p5', [5.1, 4.9]),
+  ('p6', [4.8, 5.2])
+RECORDS AS (point_id, coordinates)
+`} />
+
+<Query q={`
+-- Find all points within radius 2.0 of center point [1.0, 1.0]
+SELECT point_id, coordinates,
+       L2_DISTANCE(coordinates, ARRAY[1.0, 1.0]) AS distance_from_center
+FROM data_points
+WHERE L2_DISTANCE(coordinates, ARRAY[1.0, 1.0]) <= 2.0
+ORDER BY distance_from_center
+`} />
+</Xtplay>
+
+L2 distance gives you the straight-line distance between points, perfect for geometric clustering.
+
+## Time-Series Vector Analytics
+
+XTDB's temporal features combined with vector functions enable powerful time-series ML analytics:
+
+<Xtplay>
+<Txs systemTime="2024-01-04" txs={`
+-- Store embeddings with temporal validity
+INSERT INTO product_embeddings 
+  (_id, product_name, category_embedding, _valid_from) VALUES
+  ('prod1', 'Smartphone', [0.8, 0.2, 0.1, 0.9], DATE '2024-01-01'),
+  ('prod1', 'Smartphone', [0.85, 0.25, 0.15, 0.95], DATE '2024-06-01') -- Updated embedding
+`} />
+
+<Query q={`
+-- Find how product similarity evolved over time
+WITH historical_similarity AS (
+  SELECT product_name,
+         COSINE_DISTANCE(category_embedding, ARRAY[0.8, 0.2, 0.1, 0.9]) AS similarity,
+         _valid_from
+  FROM product_embeddings FOR ALL VALID_TIME
+)
+SELECT * FROM historical_similarity ORDER BY _valid_from
+`} />
+</Xtplay>
+
+## Performance Tips
+
+<Aside type="caution">
+XTDB's vector functions perform **exact nearest neighbor search** with full table scans. While this guarantees perfect accuracy, query time scales linearly with dataset size (O(n)). For very large datasets (millions+ vectors), consider pre-filtering or pagination strategies.
+</Aside>
+
+When working with vector functions in production:
+
+1. **Normalize vectors** when using dot product for similarity
+2. **Use appropriate dimensions** (common sizes: 128, 256, 512, 1024)
+3. **Pre-filter data** with other columns before vector calculations
+4. **Use LIMIT clauses** to control result set sizes
+5. **Consider cosine distance** for scale-invariant similarity
+6. **Use L2 distance** for geometric/spatial relationships
+7. **Batch similar queries** to minimize repeated full scans
+
+## Advanced Patterns
+
+### Similarity Threshold Filtering
+
+<Xtplay>
+<Query q={`
+-- Find documents above similarity threshold
+SELECT d1.doc_id AS query_doc, d2.doc_id AS similar_doc,
+       COSINE_DISTANCE(d1.embedding, d2.embedding) AS distance
+FROM documents d1, documents d2
+WHERE d1.doc_id = 'doc1'
+  AND d2.doc_id != d1.doc_id
+  AND COSINE_DISTANCE(d1.embedding, d2.embedding) < 0.5  -- Similarity threshold
+ORDER BY distance
+`} />
+</Xtplay>
+
+### Query Optimization with Pre-filtering
+
+<Xtplay>
+<Txs systemTime="2024-01-06" txs={`
+-- Add metadata for more efficient filtering
+INSERT INTO large_dataset VALUES
+  ('item1', 'tech', 'active', [0.8, 0.1, 0.1]),
+  ('item2', 'tech', 'active', [0.7, 0.2, 0.1]),  
+  ('item3', 'cooking', 'inactive', [0.1, 0.8, 0.1]),
+  ('item4', 'tech', 'active', [0.9, 0.05, 0.05])
+RECORDS AS (item_id, category, status, embedding)
+`} />
+
+<Query q={`
+-- Optimize: Filter by category and status BEFORE vector calculation
+-- This reduces the number of vectors that need distance calculation
+SELECT item_id,
+       COSINE_DISTANCE(embedding, ARRAY[0.8, 0.1, 0.1]) AS similarity
+FROM large_dataset
+WHERE category = 'tech'           -- Pre-filter: reduces candidate set
+  AND status = 'active'           -- Pre-filter: further reduction  
+  AND COSINE_DISTANCE(embedding, ARRAY[0.8, 0.1, 0.1]) < 0.3  -- Vector filter
+ORDER BY similarity
+LIMIT 10                          -- Limit results for faster response
+`} />
+</Xtplay>
+
+### Multi-Modal Similarity
+
+Combine different types of embeddings:
+
+<Xtplay>
+<Txs systemTime="2024-01-05" txs={`
+INSERT INTO multimodal_items VALUES
+  ('item1', [0.1, 0.8, 0.1], [0.9, 0.1, 0.0], [0.5, 0.5, 0.0]),
+  ('item2', [0.2, 0.7, 0.1], [0.8, 0.2, 0.0], [0.6, 0.4, 0.0])
+RECORDS AS (item_id, text_embedding, image_embedding, combined_embedding)
+`} />
+
+<Query q={`
+-- Weighted similarity across modalities
+SELECT item_id,
+  (0.6 * (1 - COSINE_DISTANCE(text_embedding, ARRAY[0.1, 0.8, 0.1])) +
+   0.4 * (1 - COSINE_DISTANCE(image_embedding, ARRAY[0.9, 0.1, 0.0]))) AS weighted_similarity
+FROM multimodal_items
+ORDER BY weighted_similarity DESC
+`} />
+</Xtplay>
+
+## Next Steps
+
+Vector functions in XTDB enable sophisticated AI and ML applications while maintaining the power of SQL and temporal data management. Consider these advanced use cases:
+
+- **Semantic search** across documents and media
+- **Recommendation engines** with collaborative filtering
+- **Fraud detection** using behavioral pattern vectors
+- **Content moderation** with embedding-based classification
+- **A/B testing** with vector-based user segmentation
+
+For more details on vector functions, see the [Vector Functions Reference](/reference/main/stdlib/vector).

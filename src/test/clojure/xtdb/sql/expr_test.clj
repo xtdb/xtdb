@@ -20,6 +20,12 @@
                             :cols #{a b}}
                           (assoc :!reqd-cols (HashMap.)))))
 
+(defn approx=
+  "Helper function for floating-point comparisons with tolerance"
+  ([expected actual] (approx= expected actual 1.0E-10))
+  ([expected actual tolerance]
+   (< (Math/abs ^Float (- expected actual)) tolerance)))
+
 (defn plan-expr-with-foo [expr]
   (sql/plan-expr expr {:scope foo-scope}))
 
@@ -237,6 +243,211 @@
   (t/is (= [{:out "fxxbxr"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', 'x') AS out")))
   (t/is (= [{:out "f o  o b a r"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', ' $1 ') AS out"))))
 
+(t/deftest test-vector-functions-basic
+  ;; Basic functionality tests
+  (t/is (= [{:dp 32.0}] (xt/q tu/*node* "SELECT DOT_PRODUCT(ARRAY[1.0, 2.0, 3.0], ARRAY[4.0, 5.0, 6.0]) AS dp")))
+  (t/is (= [{:l2d (Math/sqrt 2.0)}] (xt/q tu/*node* "SELECT L2_DISTANCE(ARRAY[1.0, 0.0], ARRAY[0.0, 1.0]) AS l2d")))
+  (t/is (= [{:cd 1.0}] (xt/q tu/*node* "SELECT COSINE_DISTANCE(ARRAY[1.0, 0.0], ARRAY[0.0, 1.0]) AS cd"))))
+
+(t/deftest test-dot-product-comprehensive
+  ;; Zero dot product (orthogonal vectors)
+  (t/is (= [{:dp 0.0}] (xt/q tu/*node* "SELECT DOT_PRODUCT(ARRAY[1.0, 0.0], ARRAY[0.0, 1.0]) AS dp")))
+
+  ;; Identical vectors
+  (t/is (= [{:dp 14.0}] (xt/q tu/*node* "SELECT DOT_PRODUCT(ARRAY[1.0, 2.0, 3.0], ARRAY[1.0, 2.0, 3.0]) AS dp")))
+
+  ;; Negative values
+  (t/is (= [{:dp -32.0}] (xt/q tu/*node* "SELECT DOT_PRODUCT(ARRAY[1.0, 2.0, 3.0], ARRAY[-4.0, -5.0, -6.0]) AS dp")))
+
+  ;; Single element vectors
+  (t/is (= [{:dp 15.0}] (xt/q tu/*node* "SELECT DOT_PRODUCT(ARRAY[3.0], ARRAY[5.0]) AS dp")))
+
+  ;; Zero vectors
+  (t/is (= [{:dp 0.0}] (xt/q tu/*node* "SELECT DOT_PRODUCT(ARRAY[0.0, 0.0, 0.0], ARRAY[1.0, 2.0, 3.0]) AS dp"))))
+
+(t/deftest test-l2-distance-comprehensive
+  ;; Distance from origin (Pythagorean theorem: 3-4-5 triangle)
+  (t/is (= [{:l2d 5.0}] (xt/q tu/*node* "SELECT L2_DISTANCE(ARRAY[3.0, 4.0], ARRAY[0.0, 0.0]) AS l2d")))
+
+  ;; Identical vectors (distance = 0)
+  (t/is (= [{:l2d 0.0}] (xt/q tu/*node* "SELECT L2_DISTANCE(ARRAY[1.0, 2.0, 3.0], ARRAY[1.0, 2.0, 3.0]) AS l2d")))
+
+  ;; Unit distance in each dimension
+  (t/is (= [{:l2d (Math/sqrt 3.0)}] (xt/q tu/*node* "SELECT L2_DISTANCE(ARRAY[1.0, 1.0, 1.0], ARRAY[0.0, 0.0, 0.0]) AS l2d")))
+
+  ;; Single dimension
+  (t/is (= [{:l2d 7.0}] (xt/q tu/*node* "SELECT L2_DISTANCE(ARRAY[10.0], ARRAY[3.0]) AS l2d")))
+
+  ;; With negative values
+  (t/is (= [{:l2d (Math/sqrt 8.0)}] (xt/q tu/*node* "SELECT L2_DISTANCE(ARRAY[1.0, -1.0], ARRAY[-1.0, 1.0]) AS l2d"))))
+
+(t/deftest test-cosine-distance-comprehensive
+  ;; Identical vectors (distance = 0)
+  (t/is (= [{:cd 0.0}] (xt/q tu/*node* "SELECT COSINE_DISTANCE(ARRAY[1.0, 2.0, 3.0], ARRAY[1.0, 2.0, 3.0]) AS cd")))
+
+  ;; Parallel vectors (same direction, distance = 0)
+  (t/is (= [{:cd 0.0}] (xt/q tu/*node* "SELECT COSINE_DISTANCE(ARRAY[1.0, 2.0], ARRAY[2.0, 4.0]) AS cd")))
+
+  ;; Opposite vectors (distance = 2)
+  (t/is (= [{:cd 2.0}] (xt/q tu/*node* "SELECT COSINE_DISTANCE(ARRAY[1.0, 0.0], ARRAY[-1.0, 0.0]) AS cd")))
+
+  ;; 45-degree angle vectors - use approximate comparison for floating-point precision
+  (let [expected-distance (- 1.0 (/ (Math/sqrt 2.0) 2.0))
+        result (:cd (first (xt/q tu/*node* "SELECT COSINE_DISTANCE(ARRAY[1.0, 0.0], ARRAY[1.0, 1.0]) AS cd")))]
+    (t/is (approx= expected-distance result 1.0E-15)))
+
+  ;; Zero vector handling (should return max distance = 1.0)
+  (t/is (= [{:cd 1.0}] (xt/q tu/*node* "SELECT COSINE_DISTANCE(ARRAY[0.0, 0.0], ARRAY[1.0, 2.0]) AS cd")))
+  (t/is (= [{:cd 1.0}] (xt/q tu/*node* "SELECT COSINE_DISTANCE(ARRAY[1.0, 2.0], ARRAY[0.0, 0.0]) AS cd"))))
+
+(t/deftest test-vector-functions-edge-cases
+  ;; Very small numbers (use approximate comparison due to floating-point precision)
+  (let [result (:dp (first (xt/q tu/*node* "SELECT DOT_PRODUCT(ARRAY[1.0E-5], ARRAY[1.0E-5]) AS dp")))]
+    (t/is (approx= 1.0E-10 result 1.0E-15)))
+
+  ;; Large numbers
+  (t/is (= [{:dp 2.0E12}] (xt/q tu/*node* "SELECT DOT_PRODUCT(ARRAY[1.0E6], ARRAY[2.0E6]) AS dp")))
+
+  ;; Mixed positive/negative for L2 distance: √((1-(-1))² + ((-1)-1)²) = √(4+4) = 2√2
+  (t/is (= [{:l2d (* 2.0 (Math/sqrt 2.0))}] (xt/q tu/*node* "SELECT L2_DISTANCE(ARRAY[1.0, -1.0], ARRAY[-1.0, 1.0]) AS l2d"))))
+
+(t/deftest test-vector-functions-errors
+  ;; Test dimension mismatch errors
+  (t/is (thrown? Exception (xt/q tu/*node* "SELECT DOT_PRODUCT(ARRAY[1.0, 2.0], ARRAY[1.0, 2.0, 3.0])")))
+  (t/is (thrown? Exception (xt/q tu/*node* "SELECT L2_DISTANCE(ARRAY[1.0], ARRAY[1.0, 2.0])")))
+  (t/is (thrown? Exception (xt/q tu/*node* "SELECT COSINE_DISTANCE(ARRAY[1.0, 2.0, 3.0], ARRAY[1.0, 2.0])"))))
+
+(t/deftest test-vector-functions-with-tables
+  ;; Set up test data with vector columns
+  (xt/execute-tx tu/*node* [[:put-docs :vectors {:id 1, :vec_a [1.0, 0.0, 0.0], :vec_b [0.0, 1.0, 0.0]}]
+                            [:put-docs :vectors {:id 2, :vec_a [1.0, 1.0, 0.0], :vec_b [1.0, -1.0, 0.0]}]
+                            [:put-docs :vectors {:id 3, :vec_a [3.0, 4.0], :vec_b [0.0, 0.0]}]
+                            [:put-docs :vectors {:id 4, :vec_a [2.0, 2.0, 2.0], :vec_b [1.0, 1.0, 1.0]}]])
+
+  ;; Test dot product with table data
+  (t/is (= #{{:id 1, :dp 0.0}
+             {:id 2, :dp 0.0}
+             {:id 4, :dp 6.0}}
+           (set (xt/q tu/*node* "SELECT id, DOT_PRODUCT(vec_a, vec_b) AS dp FROM vectors WHERE id IN (1, 2, 4)"))))
+
+  ;; Test L2 distance with table data
+  (t/is (= [{:id 3, :l2d 5.0}]
+           (xt/q tu/*node* "SELECT id, L2_DISTANCE(vec_a, vec_b) AS l2d FROM vectors WHERE id = 3")))
+
+  ;; Test cosine distance with table data (orthogonal vectors)
+  (t/is (= #{{:id 1, :cd 1.0}
+             {:id 2, :cd 1.0}}
+           (set (xt/q tu/*node* "SELECT id, COSINE_DISTANCE(vec_a, vec_b) AS cd FROM vectors WHERE id IN (1, 2)"))))
+
+  ;; Test finding similar vectors using cosine distance
+  (t/is (= [{:id 4}]
+           (xt/q tu/*node* "SELECT id FROM vectors WHERE COSINE_DISTANCE(vec_a, vec_b) < 0.1"))))
+
+(t/deftest test-vector-functions-mathematical-properties
+  ;; Test mathematical properties and relationships
+
+  ;; Dot product symmetry: a·b = b·a
+  (t/is (= (xt/q tu/*node* "SELECT DOT_PRODUCT(ARRAY[1.0, 2.0, 3.0], ARRAY[4.0, 5.0, 6.0]) AS dp")
+           (xt/q tu/*node* "SELECT DOT_PRODUCT(ARRAY[4.0, 5.0, 6.0], ARRAY[1.0, 2.0, 3.0]) AS dp")))
+
+  ;; L2 distance symmetry: d(a,b) = d(b,a)
+  (t/is (= (xt/q tu/*node* "SELECT L2_DISTANCE(ARRAY[1.0, 2.0], ARRAY[3.0, 4.0]) AS l2d")
+           (xt/q tu/*node* "SELECT L2_DISTANCE(ARRAY[3.0, 4.0], ARRAY[1.0, 2.0]) AS l2d")))
+
+  ;; Cosine distance symmetry: cos_d(a,b) = cos_d(b,a)
+  (t/is (= (xt/q tu/*node* "SELECT COSINE_DISTANCE(ARRAY[1.0, 2.0], ARRAY[3.0, 4.0]) AS cd")
+           (xt/q tu/*node* "SELECT COSINE_DISTANCE(ARRAY[3.0, 4.0], ARRAY[1.0, 2.0]) AS cd")))
+
+  ;; Relationship between dot product and cosine for unit vectors
+  ;; For unit vectors: cosine_similarity = dot_product
+  (let [unit_vec_a [0.6, 0.8]  ; normalized vector with length 1
+        unit_vec_b [0.8, 0.6]] ; normalized vector with length 1
+    (t/is (= (xt/q tu/*node* (format "SELECT DOT_PRODUCT(ARRAY%s, ARRAY%s) AS dot" unit_vec_a unit_vec_b))
+             (xt/q tu/*node* (format "SELECT 1.0 - COSINE_DISTANCE(ARRAY%s, ARRAY%s) AS cos_sim" unit_vec_a unit_vec_b))))))
+
+(t/deftest test-vector-similarity-search
+  ;; Set up test data for similarity search scenarios
+  (xt/execute-tx tu/*node* [[:put-docs :embeddings {:id "doc1", :content "artificial intelligence", :embedding [0.8, 0.6, 0.1]}]
+                            [:put-docs :embeddings {:id "doc2", :content "machine learning", :embedding [0.7, 0.7, 0.2]}]
+                            [:put-docs :embeddings {:id "doc3", :content "data science", :embedding [0.6, 0.8, 0.3]}]
+                            [:put-docs :embeddings {:id "doc4", :content "cooking recipes", :embedding [0.1, 0.2, 0.9]}]
+                            [:put-docs :embeddings {:id "doc5", :content "neural networks", :embedding [0.9, 0.5, 0.1]}]])
+
+  ;; Find most similar documents using cosine distance (smaller = more similar)
+  (let [query_embedding [0.8, 0.5, 0.1]
+        results (xt/q tu/*node* (format "SELECT id, content, COSINE_DISTANCE(embedding, ARRAY%s) AS distance
+                                         FROM embeddings
+                                         ORDER BY distance
+                                         LIMIT 3" query_embedding))]
+    (t/is (= 3 (count results)))
+    ;; First result should be most similar (doc1 or doc5)
+    (t/is (contains? #{"doc1" "doc5"} (:id (first results)))))
+
+  ;; Find documents within a similarity threshold
+  (let [threshold 0.5
+        query_embedding [0.8, 0.6, 0.1]
+        results (xt/q tu/*node* (format "SELECT id FROM embeddings
+                                         WHERE COSINE_DISTANCE(embedding, ARRAY%s) < %s"
+                                         query_embedding threshold))]
+    (t/is (>= (count results) 1)))
+
+  ;; Test dot product for document ranking (higher = more similar for normalized vectors)
+  (let [query_embedding [1.0, 0.0, 0.0]
+        results (xt/q tu/*node* (format "SELECT id, DOT_PRODUCT(embedding, ARRAY%s) AS similarity
+                                         FROM embeddings
+                                         ORDER BY similarity DESC
+                                         LIMIT 2" query_embedding))]
+    (t/is (= 2 (count results)))
+    ;; Should be ordered by descending similarity
+    (t/is (>= (:similarity (first results)) (:similarity (second results))))))
+
+(t/deftest test-vector-functions-performance
+  ;; Test with larger dimensions (common in ML: 128, 256, 512, etc.)
+  (let [large_vec_a (vec (repeat 100 1.0))
+        large_vec_b (vec (repeat 100 2.0))]
+
+    ;; Dot product with large vectors
+    (t/is (= [{:dp 200.0}] (xt/q tu/*node* (format "SELECT DOT_PRODUCT(ARRAY%s, ARRAY%s) AS dp"
+                                                   large_vec_a large_vec_b))))
+
+    ;; L2 distance with large vectors
+    (t/is (= [{:l2d 10.0}] (xt/q tu/*node* (format "SELECT L2_DISTANCE(ARRAY%s, ARRAY%s) AS l2d"
+                                                   large_vec_a large_vec_b))))
+
+    ;; Cosine distance with large vectors
+    (t/is (= [{:cd 0.0}] (xt/q tu/*node* (format "SELECT COSINE_DISTANCE(ARRAY%s, ARRAY%s) AS cd"
+                                                 large_vec_a large_vec_b)))))
+
+  ;; Test with high precision decimals - use approximate comparison
+  (let [result (:dp (first (xt/q tu/*node* "SELECT DOT_PRODUCT(ARRAY[0.1, 0.001], ARRAY[0.1, 0.001]) AS dp")))]
+    (t/is (approx= 0.010001 result))))
+
+(t/deftest test-vector-functions-real-world-scenarios
+  ;; Scenario 1: Image similarity (RGB color vectors)
+  (let [red [1.0, 0.0, 0.0]
+        green [0.0, 1.0, 0.0]
+        yellow [1.0, 1.0, 0.0]]
+    ;; Red and green are orthogonal (cosine distance = 1.0)
+    (t/is (= [{:cd 1.0}] (xt/q tu/*node* (format "SELECT COSINE_DISTANCE(ARRAY%s, ARRAY%s) AS cd" red green))))
+    ;; Yellow is closer to red than green in cosine space
+    (let [red_yellow_dist (:cd (first (xt/q tu/*node* (format "SELECT COSINE_DISTANCE(ARRAY%s, ARRAY%s) AS cd" red yellow))))
+          green_yellow_dist (:cd (first (xt/q tu/*node* (format "SELECT COSINE_DISTANCE(ARRAY%s, ARRAY%s) AS cd" green yellow))))]
+      (t/is (= red_yellow_dist green_yellow_dist)))) ; Both should be equal due to symmetry
+
+  ;; Scenario 2: Text similarity with TF-IDF-like vectors
+  (xt/execute-tx tu/*node* [[:put-docs :documents {:id "tech1", :tfidf [0.8, 0.2, 0.1, 0.9]}]
+                            [:put-docs :documents {:id "tech2", :tfidf [0.7, 0.3, 0.2, 0.8]}]
+                            [:put-docs :documents {:id "sports", :tfidf [0.1, 0.9, 0.8, 0.2]}]])
+
+  ;; Find documents similar to a tech query
+  (let [tech_query [0.9, 0.1, 0.1, 0.9]
+        results (xt/q tu/*node* (format "SELECT id, COSINE_DISTANCE(tfidf, ARRAY%s) AS distance
+                                         FROM documents
+                                         ORDER BY distance" tech_query))]
+    (t/is (= 3 (count results)))
+    ;; Tech documents should be more similar (lower distance) than sports
+    (t/is (or (= "tech1" (:id (first results))) (= "tech2" (:id (first results)))))))
+
 (t/deftest test-bool-test-expr
   (t/are [sql expected]
       (= expected (plan-expr-with-foo sql))
@@ -259,7 +470,7 @@
     "INTERVAL '1' YEAR + INTERVAL '3' MONTH + INTERVAL '4' DAY" '(+ (+ (single-field-interval "1" "YEAR" 2 6)
                                                                        (single-field-interval "3" "MONTH" 2 6))
                                                                     (single-field-interval "4" "DAY" 2 6))
-    
+
     "INTERVAL '1' YEAR * 3" '(* (single-field-interval "1" "YEAR" 2 6) 3)
     "3 * INTERVAL '1' YEAR" '(* 3 (single-field-interval "1" "YEAR" 2 6))
 
@@ -308,7 +519,7 @@
     "INTERVAL -'3' YEAR" '(- (single-field-interval "3" "YEAR" 2 6))
     "INTERVAL -'3-10' YEAR TO MONTH" '(- (multi-field-interval "3-10" "YEAR" 2 "MONTH" 6))
     "INTERVAL -'3 10' DAY TO HOUR" '(- (multi-field-interval "3 10" "DAY" 2 "HOUR" 6))
-    
+
     "CAST(foo.a AS INTERVAL)" '(cast f/a :interval)
     "CAST(foo.a AS INTERVAL YEAR)" '(cast f/a :interval {:start-field "YEAR",
                                                          :end-field nil,
@@ -431,11 +642,11 @@
       "foo.a::INT" '(cast f/a :i32)
       "'42.0'::FLOAT" '(cast "42.0" :f32)
       "43.1::TEXT" '(cast 43.1 :utf8)))
-  
+
   (t/testing "used within a query"
     (t/is (= [{:x 42}]
              (xt/q tu/*node* "SELECT '42'::INT as x")))
-    
+
     (t/is (= [{:x #xt/date "2021-10-21"}]
              (xt/q tu/*node* "SELECT '2021-10-21'::DATE as x")))))
 

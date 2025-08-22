@@ -1137,6 +1137,9 @@
 
 (def-sql-fns [sin cos tan sinh cosh tanh asin acos atan] 1 1)
 
+;; vector functions
+(def-sql-fns [dot_product l2_distance cosine_distance] 2 2)
+
 ;; periods
 (def-sql-fns [lower_inf lower upper upper_inf] 1 1)
 (def-sql-fns [age] 2 2)
