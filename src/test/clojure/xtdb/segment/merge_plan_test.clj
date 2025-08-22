@@ -1,4 +1,4 @@
-(ns xtdb.merge-plan-test
+(ns xtdb.segment.merge-plan-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -6,7 +6,8 @@
             [xtdb.util :as util])
   (:import (org.apache.arrow.memory RootAllocator)
            xtdb.arrow.Relation
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf ISegment ISegment$Page MergePlan MergeTask)
+           (xtdb.segment MergePlanner MergeTask Segment Segment$Page)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -15,10 +16,10 @@
   (ArrowHashTrie. (.get meta-rel "nodes")))
 
 (defrecord TestPage [seg page-idx]
-  ISegment$Page)
+  Segment$Page)
 
 (defrecord TestSegment [seg trie]
-  ISegment
+  Segment
   (getTrie [_] trie)
 
   (page [_ leaf]
@@ -42,10 +43,10 @@
               {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :log, :page-idx 0}]}
               {:path [0 2], :pages [{:seg :log, :page-idx 0}]}
               {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :log, :page-idx 0}]}]
-             (->> (MergePlan/toMergePlan [(->TestSegment :t1 (->arrow-hash-trie t1-rel))
-                                          (->TestSegment :log (->arrow-hash-trie log-rel))
-                                          (->TestSegment :log2 (->arrow-hash-trie log2-rel))]
-                                         nil)
+             (->> (MergePlanner/plan [(->TestSegment :t1 (->arrow-hash-trie t1-rel))
+                                      (->TestSegment :log (->arrow-hash-trie log-rel))
+                                      (->TestSegment :log2 (->arrow-hash-trie log2-rel))]
+                                     nil)
                   (mapv <-MergeTask)
                   (sort-by :path)))))
 
@@ -70,14 +71,14 @@
               {:path [0 3 3],
                :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3}]}]
 
-             (->> (MergePlan/toMergePlan [(->TestSegment :t1 (->arrow-hash-trie t1-rel))
-                                          (->TestSegment :t2 (->arrow-hash-trie t2-rel))]
-                                         nil)
+             (->> (MergePlanner/plan [(->TestSegment :t1 (->arrow-hash-trie t1-rel))
+                                      (->TestSegment :t2 (->arrow-hash-trie t2-rel))]
+                                     nil)
                   (mapv <-MergeTask)
                   (sort-by :path))))))
 
 (defrecord MockPage [page metadata-matches? temporal-metadata]
-  ISegment$Page
+  Segment$Page
   (loadDataPage [_ _root-cache] (throw (UnsupportedOperationException.)))
   (testMetadata [_] metadata-matches?)
   (getTemporalMetadata [_] temporal-metadata))

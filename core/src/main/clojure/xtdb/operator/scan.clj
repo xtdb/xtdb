@@ -32,8 +32,9 @@
            (xtdb.indexer Snapshot Snapshot$Source)
            (xtdb.metadata MetadataPredicate PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan IidSelector RootCache ScanCursor)
+           (xtdb.segment BufferPoolSegment MemorySegment MergePlanner MergeTask)
            xtdb.table.TableRef
-           (xtdb.trie Bucketer ISegment$BufferPoolSegment ISegment$Memory MergePlan MergeTask TrieCatalog)
+           (xtdb.trie Bucketer TrieCatalog)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (s/def ::table ::table/ref)
@@ -270,21 +271,18 @@
                                                                     (cat/current-tries)
                                                                     (cat/filter-tries temporal-bounds))]
                                (.add !segments
-                                     (ISegment$BufferPoolSegment/open buffer-pool metadata-mgr
-                                                                      table trie-key
-                                                                      metadata-pred)))
+                                     (BufferPoolSegment/open buffer-pool metadata-mgr table trie-key metadata-pred)))
 
                              (when live-table-snap
                                (.add !segments
-                                     (ISegment$Memory. (.getLiveTrie live-table-snap)
-                                                       (.getLiveRelation live-table-snap))))
+                                     (MemorySegment. (.getLiveTrie live-table-snap) (.getLiveRelation live-table-snap))))
 
                              (when template-table?
                                (.add !segments
                                      (let [[memory-rel trie] (info-schema/table-template info-schema table)]
-                                       (ISegment$Memory. trie memory-rel))))
+                                       (MemorySegment. trie memory-rel))))
 
-                             (let [merge-tasks (->> (MergePlan/toMergePlan !segments (->path-pred iid-arrow-buf))
+                             (let [merge-tasks (->> (MergePlanner/plan !segments (->path-pred iid-arrow-buf))
                                                     (into [] (keep (fn [^MergeTask mt]
                                                                      (when-let [leaves (trie/filter-meta-objects (.getPages mt) temporal-bounds)]
                                                                        (MergeTask. leaves (.getPath mt)))))))]

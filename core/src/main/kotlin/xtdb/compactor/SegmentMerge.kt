@@ -14,8 +14,12 @@ import xtdb.compactor.RecencyPartition.WEEK
 import xtdb.metadata.PageMetadata
 import xtdb.metadata.UNBOUND_TEMPORAL_METADATA
 import xtdb.operator.scan.RootCache
-import xtdb.trie.*
-import xtdb.trie.ISegment.Page
+import xtdb.segment.Segment
+import xtdb.segment.Segment.Page
+import xtdb.segment.MergePlanner
+import xtdb.segment.MergeTask
+import xtdb.trie.ArrowHashTrie
+import xtdb.trie.EventRowPointer
 import xtdb.trie.Trie.dataRelSchema
 import xtdb.types.Fields.mergeFields
 import xtdb.types.withName
@@ -199,7 +203,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
 
     @JvmOverloads
     fun mergeSegments(
-        segments: List<ISegment<*>>,
+        segments: List<Segment<*>>,
         pathFilter: ByteArray?,
         recencyPartitioning: RecencyPartitioning,
         recencyPartition: RecencyPartition? = WEEK
@@ -220,7 +224,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
         }
 
         return outWriter.use {
-            for (task in segments.toMergePlan(pathFilter?.toPathPredicate())) {
+            for (task in MergePlanner.plan(segments, pathFilter?.toPathPredicate())) {
                 if (Thread.interrupted()) throw InterruptedException()
 
                 task.merge(it, pathFilter)
@@ -239,7 +243,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
 
 private class LocalSegment(
     private val al: BufferAllocator, dataFile: Path, metaFile: Path
-) : ISegment<ArrowHashTrie.Leaf>, AutoCloseable {
+) : Segment<ArrowHashTrie.Leaf>, AutoCloseable {
 
     override val pageMetadata = PageMetadata.open(al, metaFile)
     override val trie get() = pageMetadata.trie

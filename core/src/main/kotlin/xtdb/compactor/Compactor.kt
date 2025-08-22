@@ -18,7 +18,7 @@ import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.TrieMetadata
 import xtdb.table.TableRef
 import xtdb.trie.*
-import xtdb.trie.ISegment.BufferPoolSegment.Companion.open
+import xtdb.segment.BufferPoolSegment.Companion.open
 import xtdb.util.*
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration

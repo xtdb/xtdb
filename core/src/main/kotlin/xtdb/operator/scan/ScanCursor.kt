@@ -12,7 +12,7 @@ import xtdb.operator.SelectionSpec
 import xtdb.time.TEMPORAL_COL_NAMES
 import xtdb.trie.ColumnName
 import xtdb.trie.EventRowPointer
-import xtdb.trie.MergeTask
+import xtdb.segment.MergeTask
 import xtdb.util.TemporalBounds
 import xtdb.vector.MultiVectorRelationFactory
 import xtdb.vector.OldRelationWriter

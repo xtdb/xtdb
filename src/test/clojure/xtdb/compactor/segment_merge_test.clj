@@ -7,7 +7,7 @@
             [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
            (xtdb.compactor SegmentMerge SegmentMerge$RecencyPartitioning$Partition SegmentMerge$RecencyPartitioning$Preserve SegmentMerge$Result)
-           [xtdb.trie ISegment$Memory]))
+           [xtdb.segment MemorySegment]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -33,8 +33,8 @@
       (with-open [live-rel0 (.openDirectSlice (.getLiveRelation lt0) tu/*allocator*)
                   live-rel1 (.openDirectSlice (.getLiveRelation lt1) tu/*allocator*)]
 
-        (let [segments [(ISegment$Memory. (.compactLogs (.getLiveTrie lt0)) live-rel0)
-                        (ISegment$Memory. (.compactLogs (.getLiveTrie lt1)) live-rel1)]]
+        (let [segments [(MemorySegment. (.compactLogs (.getLiveTrie lt0)) live-rel0)
+                        (MemorySegment. (.compactLogs (.getLiveTrie lt1)) live-rel1)]]
 
           (t/testing "merge segments"
             (util/with-open [results (.mergeSegments seg-merge segments nil (SegmentMerge$RecencyPartitioning$Preserve. nil))]
