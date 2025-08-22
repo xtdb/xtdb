@@ -17,7 +17,7 @@ private const val PAGE_LIMIT = 1024
 // for iids this is ArrowType.FixedSizeBinary(16)
 // for hashes this is ArrowType.Int
 class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorReader, levelBits: Int) :
-    HashTrie<MutableMemoryHashTrie.Node, MutableMemoryHashTrie.Leaf> {
+    HashTrie<MutableMemoryHashTrie.Leaf> {
     private val bucketer = Bucketer(levelBits)
 
     private val hashByteWidth: Int = when (val type = hashReader.field.type) {
@@ -33,7 +33,7 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
     private val reusePtr1 = ArrowBufPointer()
     private val reusePtr2 = ArrowBufPointer()
 
-    sealed interface Node : HashTrie.Node<Node> {
+    sealed interface Node : HashTrie.Node<Leaf> {
         fun add(trie: MutableMemoryHashTrie, newIdx: Int): Node
         fun addIfNotPresent(
             trie: MutableMemoryHashTrie,

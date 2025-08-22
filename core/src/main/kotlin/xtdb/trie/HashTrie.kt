@@ -1,7 +1,6 @@
 package xtdb.trie
 
 import xtdb.trie.HashTrie.Node
-import java.util.*
 import java.util.stream.Stream
 
 internal fun conjPath(path: ByteArray, idx: Byte): ByteArray {
@@ -12,21 +11,20 @@ internal fun conjPath(path: ByteArray, idx: Byte): ByteArray {
     return childPath
 }
 
+@Suppress("UNCHECKED_CAST")
+private fun <L> Node<L>.leafStream(): Stream<L> =
+    hashChildren?.let { it.stream().flatMap { child -> child?.leafStream() } } ?: Stream.of(this as L)
 
-private fun <N : Node<N>> Node<N>.leafStream(): Stream<Node<N>> =
-    hashChildren?.let { it.stream().flatMap { child -> child?.leafStream() } } ?: Stream.of(this)
-
-
-interface HashTrie<N : Node<N>, L : N> {
-    val rootNode: N?
+interface HashTrie<L> {
+    val rootNode: Node<L>?
 
     val leaves get() = rootNode?.leaves ?: emptyList()
 
-    interface Node<N : Node<N>> {
+    interface Node<L> {
         val path: ByteArray
 
-        val hashChildren: List<N?>?
+        val hashChildren: List<Node<L>?>?
 
-        val leaves: List<Node<N>> get() = leafStream().toList()
+        val leaves: List<L> get() = leafStream().toList()
     }
 }

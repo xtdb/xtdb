@@ -4,18 +4,18 @@ package xtdb.trie
 import com.carrotsearch.hppc.ObjectStack
 import java.util.function.Predicate
 
-data class MergePlanNode<N : HashTrie.Node<N>, L : N>(val segment: ISegment<N, L>, val node: L) {
+data class MergePlanNode<L>(val segment: ISegment<L>, val node: HashTrie.Node<L>) {
     companion object {
         @Suppress("UNCHECKED_CAST")
-        fun <N : HashTrie.Node<N>, L : N> create(segment: ISegment<N, L>, node: HashTrie.Node<*>): MergePlanNode<N, L> =
-            MergePlanNode(segment, node as L)
+        fun <L> create(segment: ISegment<L>, node: HashTrie.Node<*>): MergePlanNode<L> =
+            MergePlanNode(segment, node as HashTrie.Node<L>)
     }
 }
 
-class MergePlanTask(val mpNodes: List<MergePlanNode<*, *>>, val path: ByteArray)
+class MergePlanTask(val mpNodes: List<MergePlanNode<*>>, val path: ByteArray)
 
 // IMPORTANT - Tries (i.e. segments) and nodes need to be returned in system time order
-fun List<ISegment<*, *>>.toMergePlan(pathPred: Predicate<ByteArray>?): List<MergePlanTask> {
+fun List<ISegment<*>>.toMergePlan(pathPred: Predicate<ByteArray>?): List<MergePlanTask> {
     val result = mutableListOf<MergePlanTask>()
     val stack = ObjectStack<MergePlanTask>()
 

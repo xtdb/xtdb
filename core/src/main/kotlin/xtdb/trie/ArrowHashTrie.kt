@@ -7,14 +7,14 @@ private const val BRANCH_IID = "branch-iid"
 private const val LEAF = "leaf"
 private const val DATA_PAGE_IDX = "data-page-idx"
 
-class ArrowHashTrie(private val nodesVec: Vector) : HashTrie<ArrowHashTrie.Node, ArrowHashTrie.Leaf> {
+class ArrowHashTrie(private val nodesVec: Vector) : HashTrie<ArrowHashTrie.Leaf> {
 
     private val iidBranchVec = nodesVec[BRANCH_IID]
     private val iidBranchElVec = iidBranchVec.listElements
 
     private val dataPageIdxVec = nodesVec[LEAF][DATA_PAGE_IDX]
 
-    interface Node : HashTrie.Node<Node>
+    interface Node : HashTrie.Node<Leaf>
 
     inner class IidBranch(override val path: ByteArray, branchVecIdx: Int) : Node {
         private val startIdx = iidBranchVec.getListStartIndex(branchVecIdx)

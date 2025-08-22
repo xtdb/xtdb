@@ -31,8 +31,9 @@ private fun ByteArray.toPathPredicate() =
         Arrays.equals(this, 0, len, pagePath, 0, len)
     }
 
-private fun <N : HashTrie.Node<N>, L : N> MergePlanNode<N, L>.loadDataPage(): RelationReader? =
-    segment.dataRel?.loadPage(node)
+@Suppress("UNCHECKED_CAST")
+private fun <L> MergePlanNode<L>.loadDataPage(): RelationReader? =
+    segment.dataRel?.loadPage(node as L)
 
 /**
  * A function to do bitemporal resolution for events with the same system-time (same transaction). See #4303
@@ -194,7 +195,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
 
     @JvmOverloads
     fun mergeSegments(
-        segments: List<ISegment<*, *>>,
+        segments: List<ISegment<*>>,
         pathFilter: ByteArray?,
         recencyPartitioning: RecencyPartitioning,
         recencyPartition: RecencyPartition? = WEEK

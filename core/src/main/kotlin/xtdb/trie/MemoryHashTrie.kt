@@ -8,11 +8,11 @@ private const val LOG_LIMIT = 64
 private const val PAGE_LIMIT = 1024
 private const val MAX_LEVEL = 64
 
-class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) : HashTrie<MemoryHashTrie.Node, MemoryHashTrie.Leaf> {
+class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) : HashTrie<MemoryHashTrie.Leaf> {
 
     private val bucketer = Bucketer()
 
-    sealed interface Node : HashTrie.Node<Node> {
+    sealed interface Node : HashTrie.Node<Leaf> {
         fun add(trie: MemoryHashTrie, newIdx: Int): Node
 
         fun compactLogs(trie: MemoryHashTrie): Node
