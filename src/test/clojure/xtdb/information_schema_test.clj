@@ -11,7 +11,8 @@
             [xtdb.pgwire-test :as pgw-test]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
-            [xtdb.util :as util]))
+            [xtdb.util :as util])
+  (:import [xtdb.api SimpleResult]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
 
@@ -326,18 +327,18 @@
   (t/is (= [{:username "xtdb", :usesuper true, :xt/valid-from (time/->zdt #inst "1970")}]
            (xt/q tu/*node* "SELECT username, usesuper, _valid_from, _valid_to FROM pg_user")))
 
-  (t/is (= "xtdb" (.verifyPassword (authn/<-node tu/*node*) "xtdb" "xtdb")))
+  (t/is (= (SimpleResult. "xtdb") (.verifyPassword (authn/<-node tu/*node*) "xtdb" "xtdb")))
 
   (xt/execute-tx tu/*node* ["CREATE USER ada WITH PASSWORD 'lovelace'"])
 
   (t/is (= [{:username "ada", :usesuper false}]
            (xt/q tu/*node* "SELECT username, usesuper FROM pg_user WHERE username = 'ada'")))
-  (t/is (= "ada" (.verifyPassword (authn/<-node tu/*node*) "ada" "lovelace")))
+  (t/is (= (SimpleResult. "ada") (.verifyPassword (authn/<-node tu/*node*) "ada" "lovelace")))
 
   (xt/execute-tx tu/*node* ["ALTER USER anonymous WITH PASSWORD 'anonymous'"])
 
   (t/is (= [{:username "anonymous", :usesuper false}] (xt/q tu/*node* "SELECT username, usesuper FROM pg_user WHERE username = 'anonymous'")))
-  (t/is (= "anonymous" (.verifyPassword (authn/<-node tu/*node*) "anonymous" "anonymous"))))
+  (t/is (= (SimpleResult. "anonymous") (.verifyPassword (authn/<-node tu/*node*) "anonymous" "anonymous"))))
 
 ;; required for Postgrex
 (deftest test-pg-range-3737
