@@ -9,7 +9,7 @@
            (java.util ArrayList)
            (xtdb.log.proto TrieDetails TrieMetadata TrieState)
            (xtdb.operator.scan Metadata)
-           (xtdb.trie ISegment MemoryHashTrie Trie Trie$Key)
+           (xtdb.trie MemoryHashTrie Trie Trie$Key)
            (xtdb.util Temporal TemporalBounds TemporalDimension)))
 
 (defn ->trie-details ^TrieDetails
@@ -84,11 +84,6 @@
 
 (defn ->table-meta-dir ^java.nio.file.Path [^String table-name]
   (Trie/metaFileDir table-name))
-
-(defrecord Segment [trie]
-  ISegment
-  (getTrie [_] trie)
-  (getDataRel [this] (:data-rel this)))
 
 (defn ->live-trie ^MemoryHashTrie [log-limit page-limit iid-rdr]
   (-> (doto (MemoryHashTrie/builder iid-rdr)

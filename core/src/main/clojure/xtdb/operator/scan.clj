@@ -30,10 +30,11 @@
            xtdb.catalog.TableCatalog
            xtdb.database.Database$Catalog
            (xtdb.indexer Snapshot Snapshot$Source)
-           (xtdb.metadata PageMetadata PageMetadata$Factory)
-           (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask)
+           (xtdb.metadata MetadataPredicate PageMetadata PageMetadata$Factory)
+           (xtdb.operator.scan IidSelector RootCache ScanCursor)
+           (xtdb.segment BufferPoolSegment MemorySegment MergePlanner MergeTask)
            xtdb.table.TableRef
-           (xtdb.trie ArrowHashTrie$Leaf Bucketer MergePlan MergePlanNode MergePlanTask Trie TrieCatalog)
+           (xtdb.trie Bucketer TrieCatalog)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (s/def ::table ::table/ref)
@@ -247,6 +248,14 @@
                                col-preds (cond-> col-preds
                                            iid-bb (assoc "_iid" (IidSelector. iid-bb)))
                                metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) (update-vals fields types/field->col-type) args)
+                               metadata-pred (reify MetadataPredicate
+                                               (build [_ page-metadata]
+                                                 (reduce (fn [^IntPredicate page-idx-pred col-name]
+                                                           (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred page-metadata pushdown-blooms col-name)]
+                                                             (.and page-idx-pred bloom-page-idx-pred)
+                                                             page-idx-pred))
+                                                         (.build metadata-pred page-metadata)
+                                                         col-names)))
                                scan-opts (-> scan-opts
                                              (update :for-valid-time
                                                      (fn [fvt]
@@ -256,45 +265,27 @@
                                                                   (-> (basis/<-time-basis-str snapshot-token)
                                                                       (get-in [(.getName db) 0])))]
 
-                           (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
-                             (let [merge-tasks (util/with-open [page-metadatas (LinkedList.)]
-                                                 (let [segments (cond-> (mapv (fn [{:keys [^String trie-key]}]
-                                                                                (let [meta-path (Trie/metaFilePath table trie-key)
-                                                                                      page-metadata (.openPageMetadata metadata-mgr meta-path)]
-                                                                                  (.add page-metadatas page-metadata)
-                                                                                  (into (trie/->Segment (.getTrie page-metadata))
-                                                                                        {:data-file-path (Trie/dataFilePath table trie-key)
-                                                                                         :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
-                                                                                                                  (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred page-metadata pushdown-blooms col-name)]
-                                                                                                                    (.and page-idx-pred bloom-page-idx-pred)
-                                                                                                                    page-idx-pred))
-                                                                                                                (.build metadata-pred page-metadata)
-                                                                                                                col-names)
-                                                                                         :page-metadata page-metadata})))
-                                                                              (-> (cat/trie-state trie-catalog table)
-                                                                                  (cat/current-tries)
-                                                                                  (cat/filter-tries temporal-bounds)))
+                           (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))
+                                            !segments (LinkedList.)]
+                             (doseq [{:keys [^String trie-key]} (-> (cat/trie-state trie-catalog table)
+                                                                    (cat/current-tries)
+                                                                    (cat/filter-tries temporal-bounds))]
+                               (.add !segments
+                                     (BufferPoolSegment/open buffer-pool metadata-mgr table trie-key metadata-pred)))
 
-                                                                  live-table-snap (conj (-> (trie/->Segment (.getLiveTrie live-table-snap))
-                                                                                            (assoc :memory-rel (.getLiveRelation live-table-snap))))
-                                                                  template-table? (conj (let [[memory-rel trie] (info-schema/table-template info-schema table)]
-                                                                                          (-> (trie/->Segment trie)
-                                                                                              (assoc :memory-rel memory-rel)))))]
-                                                   (->> (MergePlan/toMergePlan segments (->path-pred iid-arrow-buf))
-                                                        (into [] (keep (fn [^MergePlanTask mpt]
-                                                                         (when-let [leaves (trie/filter-meta-objects
-                                                                                            (for [^MergePlanNode mpn (.getMpNodes mpt)
-                                                                                                  :let [{:keys [data-file-path page-metadata page-idx-pred trie memory-rel]} (.getSegment mpn)
-                                                                                                        node (.getNode mpn)]]
-                                                                                              (if data-file-path
-                                                                                                (MergePlanPage$Arrow. buffer-pool
-                                                                                                                      data-file-path
-                                                                                                                      page-idx-pred
-                                                                                                                      (.getDataPageIndex ^ArrowHashTrie$Leaf node)
-                                                                                                                      page-metadata)
-                                                                                                (MergePlanPage$Memory. memory-rel trie node)))
-                                                                                            temporal-bounds)]
-                                                                           (ScanCursor$MergeTask. leaves (.getPath mpt)))))))))]
+                             (when live-table-snap
+                               (.add !segments
+                                     (MemorySegment. (.getLiveTrie live-table-snap) (.getLiveRelation live-table-snap))))
+
+                             (when template-table?
+                               (.add !segments
+                                     (let [[memory-rel trie] (info-schema/table-template info-schema table)]
+                                       (MemorySegment. trie memory-rel))))
+
+                             (let [merge-tasks (->> (MergePlanner/plan !segments (->path-pred iid-arrow-buf))
+                                                    (into [] (keep (fn [^MergeTask mt]
+                                                                     (when-let [leaves (trie/filter-meta-objects (.getPages mt) temporal-bounds)]
+                                                                       (MergeTask. leaves (.getPath mt)))))))]
                                (ScanCursor. allocator (RootCache. allocator buffer-pool)
                                             col-names col-preds
                                             temporal-bounds

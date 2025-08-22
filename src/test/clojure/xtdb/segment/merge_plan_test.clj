@@ -1,4 +1,4 @@
-(ns xtdb.merge-plan-test
+(ns xtdb.segment.merge-plan-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -6,8 +6,8 @@
             [xtdb.util :as util])
   (:import (org.apache.arrow.memory RootAllocator)
            xtdb.arrow.Relation
-           xtdb.operator.scan.MergePlanPage
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf MergePlan MergePlanNode MergePlanTask)
+           (xtdb.segment MergePlanner MergeTask Segment Segment$Page)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -15,18 +15,20 @@
 (defn- ->arrow-hash-trie [^Relation meta-rel]
   (ArrowHashTrie. (.get meta-rel "nodes")))
 
-(defn- merge-plan-nodes->path+pages [mp-nodes]
-  (->> mp-nodes
-       (map (fn [^MergePlanTask merge-plan-node]
-              (let [path (.getPath merge-plan-node)
-                    mp-nodes (.getMpNodes merge-plan-node)]
-                {:path (vec path)
-                 :pages (mapv (fn [^MergePlanNode merge-plan-node]
-                                (let [segment (.getSegment merge-plan-node)
-                                      ^ArrowHashTrie$Leaf node (.getNode merge-plan-node)]
-                                  {:seg (:seg segment), :page-idx (.getDataPageIndex node)}))
-                              mp-nodes)})))
-       (sort-by :path)))
+(defrecord TestPage [seg page-idx]
+  Segment$Page)
+
+(defrecord TestSegment [seg trie]
+  Segment
+  (getTrie [_] trie)
+
+  (page [_ leaf]
+    (->TestPage seg (.getDataPageIndex ^ArrowHashTrie$Leaf leaf))))
+
+(defn- <-MergeTask [^MergeTask merge-task]
+  {:path (vec (.getPath merge-task))
+   :pages (mapv (partial into {})
+                (.getPages merge-task))})
 
 (deftest test-merge-plan-with-nil-nodes-2700
   (with-open [al (RootAllocator.)
@@ -41,14 +43,12 @@
               {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :log, :page-idx 0}]}
               {:path [0 2], :pages [{:seg :log, :page-idx 0}]}
               {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :log, :page-idx 0}]}]
-             (->> (MergePlan/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
-                                              (assoc :seg :t1))
-                                          (-> (trie/->Segment (->arrow-hash-trie log-rel))
-                                              (assoc :seg :log))
-                                          (-> (trie/->Segment (->arrow-hash-trie log2-rel))
-                                              (assoc :seg :log2))]
-                                         nil)
-                  (merge-plan-nodes->path+pages)))))
+             (->> (MergePlanner/plan [(->TestSegment :t1 (->arrow-hash-trie t1-rel))
+                                      (->TestSegment :log (->arrow-hash-trie log-rel))
+                                      (->TestSegment :log2 (->arrow-hash-trie log2-rel))]
+                                     nil)
+                  (mapv <-MergeTask)
+                  (sort-by :path)))))
 
   (with-open [al (RootAllocator.)
               t1-rel (tu/open-arrow-hash-trie-rel al [[nil 0 nil 1] 2 nil 3])
@@ -71,29 +71,28 @@
               {:path [0 3 3],
                :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3}]}]
 
-             (->> (MergePlan/toMergePlan [(-> (trie/->Segment (->arrow-hash-trie t1-rel))
-                                              (assoc :seg :t1))
-                                          (-> (trie/->Segment (->arrow-hash-trie t2-rel))
-                                              (assoc :seg :t2))]
-                                         nil)
-                  (merge-plan-nodes->path+pages))))))
+             (->> (MergePlanner/plan [(->TestSegment :t1 (->arrow-hash-trie t1-rel))
+                                      (->TestSegment :t2 (->arrow-hash-trie t2-rel))]
+                                     nil)
+                  (mapv <-MergeTask)
+                  (sort-by :path))))))
 
-(defrecord MockMergePlanPage [page metadata-matches? temporal-metadata]
-  MergePlanPage
-  (loadPage [_ _root-cache] (throw (UnsupportedOperationException.)))
+(defrecord MockPage [page metadata-matches? temporal-metadata]
+  Segment$Page
+  (loadDataPage [_ _root-cache] (throw (UnsupportedOperationException.)))
   (testMetadata [_] metadata-matches?)
   (getTemporalMetadata [_] temporal-metadata))
 
-(defn ->mock-merge-plan-page
-  ([page] (->mock-merge-plan-page page true))
-  ([page metadata-matches?] (->MockMergePlanPage page metadata-matches? util/unconstraint-temporal-metadata))
-  ([page min-valid-from max-valid-to] (->mock-merge-plan-page page true min-valid-from max-valid-to))
+(defn ->mock-page
+  ([page] (->mock-page page true))
+  ([page metadata-matches?] (->MockPage page metadata-matches? util/unconstraint-temporal-metadata))
+  ([page min-valid-from max-valid-to] (->mock-page page true min-valid-from max-valid-to))
   ([page metadata-matches? min-valid-from max-valid-to]
-   (->MockMergePlanPage page metadata-matches? (tu/->temporal-metadata min-valid-from max-valid-to)))
+   (->MockPage page metadata-matches? (tu/->temporal-metadata min-valid-from max-valid-to)))
   ([page metadata-matches? min-vf max-vt min-sf]
-   (->mock-merge-plan-page page metadata-matches? min-vf max-vt min-sf Long/MAX_VALUE))
+   (->mock-page page metadata-matches? min-vf max-vt min-sf Long/MAX_VALUE))
   ([page metadata-matches? min-vf max-vt min-sf max-sf]
-   (->MockMergePlanPage page metadata-matches? (tu/->temporal-metadata min-vf max-vt min-sf max-sf))))
+   (->MockPage page metadata-matches? (tu/->temporal-metadata min-vf max-vt min-sf max-sf))))
 
 (def ^:private inst->micros (comp time/instant->micros time/->instant))
 
@@ -116,25 +115,25 @@
 
       (t/testing "No constraints on query bounds"
 
-        (t/is (= #{1} (->> (trie/filter-meta-objects [(->mock-merge-plan-page 0 false vt0 vt3 sf1 (dec sf2))
-                                                      (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
+        (t/is (= #{1} (->> (trie/filter-meta-objects [(->mock-page 0 false vt0 vt3 sf1 (dec sf2))
+                                                      (->mock-page 1 true vt1 vt2 sf2 sf2)]
                                                      (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                            ->pages))
               "Take page 1. Page 0 system from strictly before page 1.")
-        (t/is (= #{0 1} (->> (trie/filter-meta-objects [(->mock-merge-plan-page 0 false vt0 (inc vt1) sf1 sf2)
-                                                        (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
+        (t/is (= #{0 1} (->> (trie/filter-meta-objects [(->mock-page 0 false vt0 (inc vt1) sf1 sf2)
+                                                        (->mock-page 1 true vt1 vt2 sf2 sf2)]
                                                        (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 0 system from overlaps.")
 
-        (t/is (= #{1} (->> (trie/filter-meta-objects [(->mock-merge-plan-page 0 false vt0 vt1 sf1 (inc sf2))
-                                                      (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
+        (t/is (= #{1} (->> (trie/filter-meta-objects [(->mock-page 0 false vt0 vt1 sf1 (inc sf2))
+                                                      (->mock-page 1 true vt1 vt2 sf2 sf2)]
                                                      (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                            ->pages))
               "Take page 1. Page 0 valid-time strictly before page 1.")
 
-        (t/is (= #{0 1} (->> (trie/filter-meta-objects [(->mock-merge-plan-page 0 false vt0 (inc vt1) sf1 (inc sf2))
-                                                        (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
+        (t/is (= #{0 1} (->> (trie/filter-meta-objects [(->mock-page 0 false vt0 (inc vt1) sf1 (inc sf2))
+                                                        (->mock-page 1 true vt1 vt2 sf2 sf2)]
                                                        (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 0 valid-time overlpas."))
@@ -142,14 +141,14 @@
 
       (t/testing "Tighter constraints on query bounds"
         ;; TODO could we filter page 0 in the two assertions below?
-        (t/is (= #{0 1} (->> (trie/filter-meta-objects [(->mock-merge-plan-page 0 false vt0 vt2 sf1 sf2)
-                                                        (->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)]
+        (t/is (= #{0 1} (->> (trie/filter-meta-objects [(->mock-page 0 false vt0 vt2 sf1 sf2)
+                                                        (->mock-page 1 true vt1 vt2 sf2 sf2)]
                                                        (tu/->temporal-bounds vt0 Long/MAX_VALUE (inc sf2) Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 0 system from overlaps. Query system-time bounds don't touch page 0")
 
-        (t/is (= #{0 1} (->> (trie/filter-meta-objects [(->mock-merge-plan-page 0 false vt0 vt1 sf1 (inc sf2))
-                                                        (->mock-merge-plan-page 1 true (dec vt1) vt2 sf2 sf2)]
+        (t/is (= #{0 1} (->> (trie/filter-meta-objects [(->mock-page 0 false vt0 vt1 sf1 (inc sf2))
+                                                        (->mock-page 1 true (dec vt1) vt2 sf2 sf2)]
                                                        (tu/->temporal-bounds (inc vt1) Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 0 valid-time overlpas. Query valid-time bounds don't touch page 0")))
@@ -158,20 +157,20 @@
 
       (t/testing "No constraints on query bounds"
 
-        (t/is (= #{1} (->> (trie/filter-meta-objects [(->mock-merge-plan-page 1 true vt1 vt2 sf2 sf2)
-                                                      (->mock-merge-plan-page 2 false vt2 vt3 sf3 sf3)]
+        (t/is (= #{1} (->> (trie/filter-meta-objects [(->mock-page 1 true vt1 vt2 sf2 sf2)
+                                                      (->mock-page 2 false vt2 vt3 sf3 sf3)]
                                                      (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                            ->pages))
               "Take page 1. Page 2 doesn't overlap in valid-time")
 
-        (t/is (= #{1 2} (->> (trie/filter-meta-objects [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 sf2)
-                                                        (->mock-merge-plan-page 2 false vt2 vt3 sf3 sf3)]
+        (t/is (= #{1 2} (->> (trie/filter-meta-objects [(->mock-page 1 true vt1 (inc vt2) sf2 sf2)
+                                                        (->mock-page 2 false vt2 vt3 sf3 sf3)]
                                                        (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 2 overlaps in valid-time")
 
-        (t/is (= #{1 2} (->> (trie/filter-meta-objects [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 sf2)
-                                                        (->mock-merge-plan-page 2 false vt2 (inc vt3) sf3 sf3)]
+        (t/is (= #{1 2} (->> (trie/filter-meta-objects [(->mock-page 1 true vt1 (inc vt2) sf2 sf2)
+                                                        (->mock-page 2 false vt2 (inc vt3) sf3 sf3)]
                                                        (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 2 can bound page 1 and we can't filter newer pages (no constraints on query system-time)."))
@@ -179,23 +178,23 @@
 
       (t/testing "Constraints on query bounds"
         ;; TODO can 2 be filtered here?
-        (t/is (= #{1 2} (->> (trie/filter-meta-objects [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 sf2)
-                                                        (->mock-merge-plan-page 2 false vt2 vt3 sf3 sf3)]
+        (t/is (= #{1 2} (->> (trie/filter-meta-objects [(->mock-page 1 true vt1 (inc vt2) sf2 sf2)
+                                                        (->mock-page 2 false vt2 vt3 sf3 sf3)]
                                                        (tu/->temporal-bounds vt1 (dec vt2) sf1 Long/MAX_VALUE))
                              ->pages))
               "Take page 1. Page 2 overlaps in valid-time")
 
 
-        (t/is (= #{1} (->> (trie/filter-meta-objects [(->mock-merge-plan-page 1 true vt1 (inc vt2) sf2 sf3)
-                                                      (->mock-merge-plan-page 2 false vt2 (inc vt3) sf3 sf3)]
+        (t/is (= #{1} (->> (trie/filter-meta-objects [(->mock-page 1 true vt1 (inc vt2) sf2 sf3)
+                                                      (->mock-page 2 false vt2 (inc vt3) sf3 sf3)]
                                                      (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 sf3))
                            ->pages))
               "Take page 1. Page 2 can bound page 1 and we can filter newer pages because of query system-time constraints.")))
 
 
-    (t/is (= #{0 1 2} (->> (trie/filter-meta-objects [(->mock-merge-plan-page 0 true vt0 Long/MAX_VALUE sf1 sf1)
-                                                      (->mock-merge-plan-page 1 false vt1 vt2 sf2 sf2)
-                                                      (->mock-merge-plan-page 2 false vt2 vt3 sf3 sf3)])
+    (t/is (= #{0 1 2} (->> (trie/filter-meta-objects [(->mock-page 0 true vt0 Long/MAX_VALUE sf1 sf1)
+                                                      (->mock-page 1 false vt1 vt2 sf2 sf2)
+                                                      (->mock-page 2 false vt2 vt3 sf3 sf3)])
                            ->pages))
           "All pages pages need to be taken if later pages bound valid-time")))
 
@@ -207,7 +206,7 @@
     (letfn [(query-bounds+temporal-page-metadata->pages [temporal-page-metadata query-bounds]
               (->> (trie/filter-meta-objects
                     (for [[page min-vf max-vt] temporal-page-metadata]
-                      (->mock-merge-plan-page page min-vf max-vt))
+                      (->mock-page page min-vf max-vt))
                     query-bounds)
                    (mapv :page)))]
 

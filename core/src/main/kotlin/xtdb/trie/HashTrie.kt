@@ -11,9 +11,11 @@ internal fun conjPath(path: ByteArray, idx: Byte): ByteArray {
     return childPath
 }
 
+
 @Suppress("UNCHECKED_CAST")
 private fun <L> Node<L>.leafStream(): Stream<L> =
     hashChildren?.let { it.stream().flatMap { child -> child?.leafStream() } } ?: Stream.of(this as L)
+
 
 interface HashTrie<L> {
     val rootNode: Node<L>?

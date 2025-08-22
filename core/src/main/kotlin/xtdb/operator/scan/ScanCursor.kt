@@ -3,17 +3,18 @@ package xtdb.operator.scan
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.ICursor
+import xtdb.arrow.RelationReader
 import xtdb.bitemporal.PolygonCalculator
+import xtdb.bloom.BloomFilter
 import xtdb.bloom.bloomHashes
+import xtdb.bloom.contains
 import xtdb.operator.SelectionSpec
 import xtdb.time.TEMPORAL_COL_NAMES
 import xtdb.trie.ColumnName
 import xtdb.trie.EventRowPointer
+import xtdb.segment.MergeTask
 import xtdb.util.TemporalBounds
 import xtdb.vector.MultiVectorRelationFactory
-import xtdb.arrow.RelationReader
-import xtdb.bloom.BloomFilter
-import xtdb.bloom.contains
 import xtdb.vector.OldRelationWriter
 import java.util.*
 import java.util.Comparator.comparing
@@ -30,8 +31,6 @@ class ScanCursor(
     private val schema: Map<String, Any>, private val args: RelationReader,
     private val iidPushdownBloom: BloomFilter?
 ) : ICursor<RelationReader> {
-
-    class MergeTask(val pages: List<MergePlanPage>, val path: ByteArray)
 
     private class LeafPointer(val evPtr: EventRowPointer, val relIdx: Int)
 
@@ -56,7 +55,7 @@ class ScanCursor(
 
             OldRelationWriter(al).use { outRel ->
                 val bitemporalConsumer = BitemporalConsumer(outRel, colNames)
-                val leafReaders = task.pages.map { it.loadPage(rootCache).maybeSelect(iidPred) }
+                val leafReaders = task.pages.map { it.loadDataPage(rootCache).maybeSelect(iidPred) }
 
                 val (temporalCols, contentCols) = colNames.groupBy { it in TEMPORAL_COL_NAMES }
                     .let { it[true] to it[false] }

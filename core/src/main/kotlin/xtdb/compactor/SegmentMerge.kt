@@ -4,13 +4,22 @@ import com.carrotsearch.hppc.ByteArrayList
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
+import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.bitemporal.PolygonCalculator
 import xtdb.compactor.OutWriter.OutWriters
 import xtdb.compactor.OutWriter.RecencyRowCopier
 import xtdb.compactor.RecencyPartition.WEEK
-import xtdb.trie.*
+import xtdb.metadata.PageMetadata
+import xtdb.metadata.UNBOUND_TEMPORAL_METADATA
+import xtdb.operator.scan.RootCache
+import xtdb.segment.Segment
+import xtdb.segment.Segment.Page
+import xtdb.segment.MergePlanner
+import xtdb.segment.MergeTask
+import xtdb.trie.ArrowHashTrie
+import xtdb.trie.EventRowPointer
 import xtdb.trie.Trie.dataRelSchema
 import xtdb.types.Fields.mergeFields
 import xtdb.types.withName
@@ -30,10 +39,6 @@ private fun ByteArray.toPathPredicate() =
         val len = min(size, pagePath.size)
         Arrays.equals(this, 0, len, pagePath, 0, len)
     }
-
-@Suppress("UNCHECKED_CAST")
-private fun <L> MergePlanNode<L>.loadDataPage(): RelationReader? =
-    segment.dataRel?.loadPage(node as L)
 
 /**
  * A function to do bitemporal resolution for events with the same system-time (same transaction). See #4303
@@ -143,48 +148,51 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
 
     private val outWriters = OutWriters(al)
 
-    private fun MergePlanTask.merge(outWriter: OutWriter, pathFilter: ByteArray?) {
+    private fun MergeTask.merge(outWriter: OutWriter, pathFilter: ByteArray?) {
         val isValidPtr = ArrowBufPointer()
 
-        val mpNodes = mpNodes
         val path = path.let { if (pathFilter == null || it.size > pathFilter.size) it else pathFilter }
         val mergeQueue = PriorityQueue(Comparator.comparing(QueueElem::evPtr, EventRowPointer.comparator()))
 
-        for (dataReader in mpNodes.mapNotNull { it.loadDataPage() }) {
-            val evPtr = EventRowPointer(dataReader, path)
-            val rowCopier = outWriter.rowCopier(dataReader)
+        pages
+            .safeMap { it.openDataPage(al) }
+            .useAll { rels ->
+                for (rel in rels) {
+                    val evPtr = EventRowPointer(rel, path)
+                    val rowCopier = outWriter.rowCopier(rel)
 
-            if (evPtr.isValid(isValidPtr, path))
-                mergeQueue.add(QueueElem(evPtr, rowCopier))
-        }
-
-        var seenErase = false
-        val iidPtr = ArrowBufPointer()
-
-        val polygonCalculator = PolygonCalculator()
-
-        while (true) {
-            val elem = mergeQueue.poll() ?: break
-            val (evPtr, rowCopier) = elem
-
-            if (polygonCalculator.currentIidPtr != evPtr.getIidPointer(iidPtr)) seenErase = false
-
-            when (val polygon = polygonCalculator.calculate(evPtr)) {
-                null -> {
-                    if (!seenErase) rowCopier.copyRow(MAX_LONG, evPtr.index)
-                    seenErase = true
+                    if (evPtr.isValid(isValidPtr, path))
+                        mergeQueue.add(QueueElem(evPtr, rowCopier))
                 }
 
-                else -> rowCopier.copyRow(polygon.recency, evPtr.index)
+                var seenErase = false
+                val iidPtr = ArrowBufPointer()
+
+                val polygonCalculator = PolygonCalculator()
+
+                while (true) {
+                    val elem = mergeQueue.poll() ?: break
+                    val (evPtr, rowCopier) = elem
+
+                    if (polygonCalculator.currentIidPtr != evPtr.getIidPointer(iidPtr)) seenErase = false
+
+                    when (val polygon = polygonCalculator.calculate(evPtr)) {
+                        null -> {
+                            if (!seenErase) rowCopier.copyRow(MAX_LONG, evPtr.index)
+                            seenErase = true
+                        }
+
+                        else -> rowCopier.copyRow(polygon.recency, evPtr.index)
+                    }
+
+                    evPtr.nextIndex()
+
+                    if (evPtr.isValid(isValidPtr, path))
+                        mergeQueue.add(elem)
+                }
+
+                outWriter.endPage(ByteArrayList.from(*this.path))
             }
-
-            evPtr.nextIndex()
-
-            if (evPtr.isValid(isValidPtr, path))
-                mergeQueue.add(elem)
-        }
-
-        outWriter.endPage(ByteArrayList.from(*this.path))
     }
 
     sealed interface RecencyPartitioning {
@@ -195,14 +203,14 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
 
     @JvmOverloads
     fun mergeSegments(
-        segments: List<ISegment<*>>,
+        segments: List<Segment<*>>,
         pathFilter: ByteArray?,
         recencyPartitioning: RecencyPartitioning,
         recencyPartition: RecencyPartition? = WEEK
     ): Results {
         val mergedPutField = mergeFields(
             segments.mapNotNull { seg ->
-                seg.dataRel!!.schema
+                seg.schema
                     .findField("op")
                     .children
                     .find { it.name == "put" && it.children.isNotEmpty() }
@@ -216,7 +224,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
         }
 
         return outWriter.use {
-            for (task in segments.toMergePlan(pathFilter?.toPathPredicate())) {
+            for (task in MergePlanner.plan(segments, pathFilter?.toPathPredicate())) {
                 if (Thread.interrupted()) throw InterruptedException()
 
                 task.merge(it, pathFilter)
@@ -229,9 +237,40 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
     override fun close() = outWriters.close()
 }
 
-/**
- *  Utility function to call SegmentMerge manually
+/*
+ *  Utilities to call SegmentMerge manually
  */
+
+private class LocalSegment(
+    private val al: BufferAllocator, dataFile: Path, metaFile: Path
+) : Segment<ArrowHashTrie.Leaf>, AutoCloseable {
+
+    override val pageMetadata = PageMetadata.open(al, metaFile)
+    override val trie get() = pageMetadata.trie
+    private val dataLoader = Relation.loader(al, dataFile)
+    override val schema: Schema get() = dataLoader.schema
+
+    // in the utility, we keep the Segments open throughout,
+    // so can be excused for the dataLoader being used 'outside its lifetime'
+    override fun page(leaf: ArrowHashTrie.Leaf) = object : Page {
+        override val schema: Schema get() = this@LocalSegment.schema
+
+        override fun testMetadata() = true
+        override val temporalMetadata get() = UNBOUND_TEMPORAL_METADATA
+
+        override fun loadDataPage(rootCache: RootCache) =
+            dataLoader.loadPage(leaf.dataPageIndex, al)
+
+        override fun openDataPage(al: BufferAllocator) =
+            dataLoader.loadPage(leaf.dataPageIndex, al).openSlice(al)
+    }
+
+    override fun close() {
+        pageMetadata.close()
+        dataLoader.close()
+    }
+}
+
 internal fun main() {
     val dir = "/tmp/downloads/compactor-error".asPath
     val files = listOf("l01-rc-b2c74.arrow", "l00-rc-b2c75.arrow")
@@ -240,7 +279,7 @@ internal fun main() {
         RootAllocator().use { al ->
             SegmentMerge(al).use { segMerge ->
                 files.safeMap { fileName ->
-                    ISegment.LocalSegment(
+                    LocalSegment(
                         al,
                         dir.resolve("data").resolve(fileName),
                         dir.resolve("meta").resolve(fileName)
