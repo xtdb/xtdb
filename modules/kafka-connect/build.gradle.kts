@@ -19,7 +19,7 @@ dependencies {
     api(project(":xtdb-api"))
 
     api(kotlin("stdlib-jdk8"))
-    implementation("org.apache.kafka:connect-api:4.0.0")
+    implementation("org.apache.kafka:connect-api:3.9.1")
 
     api(libs.clojure.tools.logging)
     api("cheshire", "cheshire", "5.13.0")
@@ -28,17 +28,18 @@ dependencies {
 
     testImplementation(project(":"))
     testImplementation(project(":xtdb-core"))
+    testImplementation(libs.hato)
 }
 
 kotlin {
     compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_21)
+        jvmTarget.set(JvmTarget.JVM_11)
     }
 }
 
 tasks.compileJava {
     sourceCompatibility = "21"
-    targetCompatibility = "21"
+    targetCompatibility = "11"
 }
 
 tasks.shadowJar {

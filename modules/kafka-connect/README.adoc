@@ -4,9 +4,11 @@
 
 == Config
 
-=== `url`
+=== `jdbcUrl`
 
 Destination URL of XTDB HTTP end point.
+
+Example: `jdbc:xtdb://my_host:5432/xtdb`
 
 [cols="1,1"]
 |===

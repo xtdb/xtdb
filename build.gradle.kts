@@ -101,7 +101,7 @@ allprojects {
             // To stub an AWS region
             environment("AWS_REGION", "eu-west-1")
             useJUnitPlatform {
-                excludeTags("integration", "jdbc", "timescale", "s3", "minio", "slt", "docker", "azure", "google-cloud")
+                excludeTags("manual", "integration", "jdbc", "timescale", "s3", "minio", "slt", "docker", "azure", "google-cloud")
             }
 
             /*
