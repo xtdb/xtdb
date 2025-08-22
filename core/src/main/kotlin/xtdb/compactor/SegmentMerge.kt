@@ -12,6 +12,8 @@ import xtdb.compactor.OutWriter.OutWriters
 import xtdb.compactor.OutWriter.RecencyRowCopier
 import xtdb.compactor.RecencyPartition.WEEK
 import xtdb.metadata.PageMetadata
+import xtdb.metadata.UNBOUND_TEMPORAL_METADATA
+import xtdb.operator.scan.RootCache
 import xtdb.trie.*
 import xtdb.trie.ISegment.Page
 import xtdb.trie.Trie.dataRelSchema
@@ -236,7 +238,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
  */
 
 private class LocalSegment(
-    al: BufferAllocator, dataFile: Path, metaFile: Path
+    private val al: BufferAllocator, dataFile: Path, metaFile: Path
 ) : ISegment<ArrowHashTrie.Leaf>, AutoCloseable {
 
     override val pageMetadata = PageMetadata.open(al, metaFile)
@@ -248,6 +250,12 @@ private class LocalSegment(
     // so can be excused for the dataLoader being used 'outside its lifetime'
     override fun page(leaf: ArrowHashTrie.Leaf) = object : Page {
         override val schema: Schema get() = this@LocalSegment.schema
+
+        override fun testMetadata() = true
+        override val temporalMetadata get() = UNBOUND_TEMPORAL_METADATA
+
+        override fun loadDataPage(rootCache: RootCache) =
+            dataLoader.loadPage(leaf.dataPageIndex, al)
 
         override fun openDataPage(al: BufferAllocator) =
             dataLoader.loadPage(leaf.dataPageIndex, al).openSlice(al)

@@ -1,6 +1,7 @@
 package xtdb.trie
 
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.BufferPool
 import xtdb.arrow.Relation
@@ -9,6 +10,9 @@ import xtdb.compactor.resolveSameSystemTimeEvents
 import xtdb.log.proto.TemporalMetadata
 import xtdb.metadata.MetadataPredicate
 import xtdb.metadata.PageMetadata
+import xtdb.metadata.UNBOUND_TEMPORAL_METADATA
+import xtdb.operator.scan.Metadata
+import xtdb.operator.scan.RootCache
 import xtdb.table.TableRef
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
@@ -26,10 +30,16 @@ interface ISegment<L> : AutoCloseable {
     /**
      * Implementations of DataPage should be able to out-live the related Segment
      */
-    interface Page {
+    interface Page : Metadata {
         val schema: Schema
 
+        override fun testMetadata(): Boolean
+        override val temporalMetadata: TemporalMetadata
+
+        // two very similar functions here - `openDataPage` for the compactor, `loadDataPage` for scan.
+
         fun openDataPage(al: BufferAllocator): RelationReader
+        fun loadDataPage(rootCache: RootCache): RelationReader
     }
 
     fun page(leaf: L): Page
@@ -49,10 +59,19 @@ interface ISegment<L> : AutoCloseable {
             val dataFilePath: Path, override val schema: Schema,
             val pageIndex: Int,
             val pageIdxPredicate: IntPredicate?,
-            val temporalMetadata: TemporalMetadata,
+            override val temporalMetadata: TemporalMetadata,
             private val resolveSameSystemTimeEvents: Boolean
 
         ) : ISegment.Page {
+            override fun testMetadata() = pageIdxPredicate?.test(pageIndex) ?: true
+
+            override fun loadDataPage(rootCache: RootCache): RelationReader =
+                bp.getRecordBatch(dataFilePath, pageIndex).use { rb ->
+                    val root = rootCache.openRoot(dataFilePath)
+                    VectorLoader(root).load(rb)
+                    RelationReader.from(root)
+                }
+
             override fun openDataPage(al: BufferAllocator): RelationReader =
                 bp.getRecordBatch(dataFilePath, pageIndex).use { rb ->
                     Relation.fromRecordBatch(al, schema, rb)
@@ -103,9 +122,14 @@ interface ISegment<L> : AutoCloseable {
         // this one is the exception to the rule - nothing in the Memory class that needs closing,
         // so DataPage can be an inner object.
         inner class Page(val leaf: MemoryHashTrie.Leaf) : ISegment.Page {
+            override fun testMetadata() = true
+            override val temporalMetadata: TemporalMetadata get() = UNBOUND_TEMPORAL_METADATA
+
             override val schema: Schema get() = this@Memory.schema
 
-            fun loadPage() = rel.select(leaf.mergeSort(trie))
+            private fun loadPage() = rel.select(leaf.mergeSort(trie))
+
+            override fun loadDataPage(rootCache: RootCache) = loadPage()
 
             override fun openDataPage(al: BufferAllocator) = loadPage().openSlice(al)
         }

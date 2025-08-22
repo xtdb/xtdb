@@ -31,9 +31,9 @@
            xtdb.database.Database$Catalog
            (xtdb.indexer Snapshot Snapshot$Source)
            (xtdb.metadata MetadataPredicate PageMetadata PageMetadata$Factory)
-           (xtdb.operator.scan IidSelector MergePlanPage$Arrow MergePlanPage$Memory RootCache ScanCursor ScanCursor$MergeTask)
+           (xtdb.operator.scan IidSelector RootCache ScanCursor)
            xtdb.table.TableRef
-           (xtdb.trie ArrowHashTrie$Leaf Bucketer ISegment$Page ISegment$BufferPoolSegment ISegment$BufferPoolSegment$Page ISegment$Memory MergePlan MergeTask TrieCatalog)
+           (xtdb.trie Bucketer ISegment$BufferPoolSegment ISegment$Memory MergePlan MergeTask TrieCatalog)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (s/def ::table ::table/ref)
@@ -286,18 +286,8 @@
 
                              (let [merge-tasks (->> (MergePlan/toMergePlan !segments (->path-pred iid-arrow-buf))
                                                     (into [] (keep (fn [^MergeTask mt]
-                                                                     (when-let [leaves (trie/filter-meta-objects
-                                                                                        (for [^ISegment$Page page (.getPages mt)]
-                                                                                          (if (instance? ISegment$BufferPoolSegment$Page page)
-                                                                                            (let [^ISegment$BufferPoolSegment$Page bp-page page]
-                                                                                              (MergePlanPage$Arrow. buffer-pool
-                                                                                                                    (.getDataFilePath bp-page)
-                                                                                                                    (.getPageIdxPredicate bp-page)
-                                                                                                                    (.getPageIndex bp-page)
-                                                                                                                    (.getTemporalMetadata bp-page)))
-                                                                                            (MergePlanPage$Memory. page)))
-                                                                                        temporal-bounds)]
-                                                                       (ScanCursor$MergeTask. leaves (.getPath mt)))))))]
+                                                                     (when-let [leaves (trie/filter-meta-objects (.getPages mt) temporal-bounds)]
+                                                                       (MergeTask. leaves (.getPath mt)))))))]
                                (ScanCursor. allocator (RootCache. allocator buffer-pool)
                                             col-names col-preds
                                             temporal-bounds
