@@ -6,10 +6,6 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.connect.sink.SinkRecord
 import org.apache.kafka.connect.sink.SinkTask
-import java.net.URI
-import java.sql.Connection
-import java.sql.DriverManager
-import javax.sql.DataSource
 
 class XtdbSinkTask : SinkTask() {
     companion object {
@@ -21,29 +17,21 @@ class XtdbSinkTask : SinkTask() {
         }
     }
 
-    private var config: XtdbSinkConfig? = null
-    private var client: Connection? = null
-
-    override fun version(): String = XtdbSinkConnector().version()
+    private lateinit var config: XtdbSinkConfig
 
     override fun start(props: Map<String, String>) {
-        val config = XtdbSinkConfig.parse(props).also { this.config = it }
-        this.client = DriverManager.getConnection(config.jdbcUrl)
+        config = XtdbSinkConfig.parse(props)
     }
 
     override fun put(sinkRecords: Collection<SinkRecord>) {
-        submitSinkRecords(client, config, sinkRecords)
+        submitSinkRecords(config.jdbcUrl, config, sinkRecords)
     }
+
+    override fun version(): String = XtdbSinkConnector().version()
 
     override fun flush(offsets: Map<TopicPartition, OffsetAndMetadata>) {
     }
 
     override fun stop() {
-        try {
-            client?.close()
-            client = null
-        } catch (e: Exception) {
-            throw RuntimeException(e)
-        }
     }
 }
