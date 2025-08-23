@@ -82,3 +82,30 @@
 
         (t/is (= [{:_id "public-bar"}]
                  (jdbc/execute! xtdb-conn ["SELECT _id FROM public.xtdb.bar"])))))))
+
+(t/deftest test-database-switching
+  (with-open [pg (pgw/open-playground)
+              conn (.build (.createConnectionBuilder pg))]
+
+    ;; Insert data into the default 'xtdb' database
+    (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 'xtdb-data'}"])
+    (t/is (= {:_id "xtdb-data"} (jdbc/execute-one! conn ["SELECT * FROM foo"])))
+
+    ;; Switch to a new database using USE command
+    (jdbc/execute! conn ["USE new_db"])
+
+    ;; Insert data into the new database
+    (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 'new-db-data'}"])
+    (t/is (= {:_id "new-db-data"} (jdbc/execute-one! conn ["SELECT * FROM foo"])))
+
+    ;; Verify we can still access the old database via qualified name
+    (t/is (= {:_id "xtdb-data"} (jdbc/execute-one! conn ["SELECT * FROM xtdb.foo"])))
+
+    ;; Switch back to xtdb using SET DATABASE command
+    (jdbc/execute! conn ["SET DATABASE = xtdb"])
+
+    ;; Verify we're back in the original database
+    (t/is (= {:_id "xtdb-data"} (jdbc/execute-one! conn ["SELECT * FROM foo"])))
+
+    ;; Verify we can still access the other database via qualified name
+    (t/is (= {:_id "new-db-data"} (jdbc/execute-one! conn ["SELECT * FROM new_db.foo"])))))

@@ -476,7 +476,12 @@
   (when counter
     (.increment counter)))
 
-(defn cmd-commit [{:keys [node conn-state default-db] :as conn}]
+(defn- get-current-database
+  "Gets the current database name, checking connection state first, then falling back to the connection's default-db"
+  [{:keys [conn-state default-db]}]
+  (or (:current-database @conn-state) default-db))
+
+(defn cmd-commit [{:keys [node conn-state] :as conn}]
   (let [{:keys [transaction session]} @conn-state
         {:keys [failed dml-buf system-time access-mode default-tz async?]} transaction
         {:keys [parameters]} session]
@@ -489,7 +494,7 @@
           (let [tx-opts {:default-tz default-tz
                          :system-time (some-> system-time (time/->instant {:default-tz default-tz}))
                          :authn {:user (get parameters "user")}
-                         :default-db default-db}]
+                         :default-db (get-current-database conn)}]
             (if async?
               (let [tx-id (xtp/submit-tx node dml-buf tx-opts)]
                 (swap! conn-state assoc :await-token (xtp/await-token node), :latest-submitted-tx {:tx-id tx-id}))
@@ -729,6 +734,14 @@
                                           {:statement-type :set-time-zone
                                            :tz (sql/plan-expr (.zone ctx) env)})
 
+                                        (visitSetDatabaseStatement [_ ctx]
+                                          {:statement-type :set-database
+                                           :database-name (sql/identifier-sym (.databaseName ctx))})
+
+                                        (visitUseDatabaseStatement [_ ctx]
+                                          {:statement-type :use-database
+                                           :database-name (sql/identifier-sym (.databaseName ctx))})
+
                                         (visitInsertStatement [_ ctx]
                                           {:statement-type :dml, :dml-type :insert, :query (subsql ctx)})
 
@@ -832,7 +845,7 @@
 
     [:utf8]))
 
-(defn- prep-stmt [{:keys [node conn-state default-db] :as conn} {:keys [statement-type param-oids] :as stmt}]
+(defn- prep-stmt [{:keys [node conn-state] :as conn} {:keys [statement-type param-oids] :as stmt}]
   (case statement-type
     (:query :execute :show-variable)
     (try
@@ -845,7 +858,7 @@
                         :tx-timeout (Duration/ofMinutes 1)
                         :default-tz (.getZone clock)
                         :explain? explain?
-                        :default-db default-db}
+                        :default-db (get-current-database conn)}
 
             ^PreparedQuery pq (case statement-type
                                 (:query :execute) (xtp/prepare-sql node parsed-query query-opts)
@@ -1129,6 +1142,18 @@
     (swap! conn-state assoc :await-token await-token)
     (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"})))
 
+(defn cmd-set-database [{:keys [node server conn-state] :as conn} {:keys [database-name]}]
+  (let [{:keys [playground?]} server
+        db-name (str database-name)
+        db-cat (db/<-node node)
+        db (or (.databaseOrNull db-cat db-name)
+               (when playground?
+                 (log/debug "creating playground database" (pr-str db-name))
+                 (db/create-database db-cat db-name))
+               (throw (err-invalid-catalog db-name)))]
+    (swap! conn-state assoc :current-database db-name)
+    (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET DATABASE"})))
+
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
   (swap! conn-state update-in [:session :characteristics] (fnil into {}) session-characteristics)
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
@@ -1239,6 +1264,8 @@
     :set-role nil
     :set-transaction (cmd-set-transaction conn tx-characteristics)
     :set-time-zone (cmd-set-time-zone conn portal)
+    :set-database (cmd-set-database conn portal)
+    :use-database (cmd-set-database conn portal)
     :set-await-token (cmd-set-await-token conn portal)
     :ignore (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "IGNORED"})
 
