@@ -18,7 +18,7 @@
                value-schema value-value
                offset))
 
-(t/deftest e2e-test
+(t/deftest test-sink
   (let [sink (partial kc/submit-sink-records tu/*node*)]
     (t/testing "basic record_key"
       (let [props (ktu/->config {"jdbcUrl" "jdbcUrl"

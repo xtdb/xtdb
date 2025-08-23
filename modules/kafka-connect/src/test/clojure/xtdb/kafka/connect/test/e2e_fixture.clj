@@ -1,4 +1,4 @@
-(ns xtdb.kafka.connect.test.fixture
+(ns xtdb.kafka.connect.test.e2e-fixture
   (:require [hato.client :as http]
             [clojure.java.io :as io]
             [clojure.test :refer :all]
@@ -108,16 +108,28 @@
         (finally
           (ig/halt! *containers*))))))
 
-(comment
-  ; for manually starting and stopping
+(defn run-permanently []
+  "Manually starts the fixture until manually stopped, for faster testing at dev-time."
   (alter-var-root #'*containers* (fn [prev]
                                    (if prev
                                      prev
-                                     (ig/init conf))))
+                                     (ig/init conf)))))
 
+(defn stop-permanently []
+  "Manually stops the fixture."
   (alter-var-root #'*containers* (fn [prev]
                                    (ig/halt! prev)
                                    nil)))
+
+(def ^:dynamic *xtdb-db*)
+(def ^:dynamic *xtdb-conn*)
+
+(defn with-xtdb-conn [f]
+  (binding [*xtdb-db* (random-uuid)]
+    (with-open [xtdb-conn (jdbc/get-connection (str "jdbc:xtdb://localhost:5439/" *xtdb-db*))]
+      (binding [*xtdb-conn* xtdb-conn]
+        (f)))))
+
 
 ; Test utilities
 
@@ -131,32 +143,30 @@
         port (.getMappedPort schema-registry 8081)]
     (str "http://" host ":" port)))
 
-(defn create-connector! [{:keys [topic value-converter]}]
+(defn create-connector! [{:keys [topic value-converter extra-conf]}]
   (let [connector-name (str topic "-xtdb-sink")
         connector-config (merge
-                           {"tasks.max" "1"
+                           {:tasks.max "1"
 
-                            "topics" topic
-                            "table.name.format" "${topic}"
+                            :topics topic
+                            :table.name.format "${topic}"
 
-                            "key.converter" "org.apache.kafka.connect.storage.StringConverter"
-                            "key.converter.schemas.enable" "false"
-                            "value.converter" (case value-converter
-                                                :json "org.apache.kafka.connect.json.JsonConverter"
-                                                :json-schema "io.confluent.connect.json.JsonSchemaConverter"
-                                                :avro "io.confluent.connect.avro.AvroConverter")
-                            "value.converter.schema.registry.url" (str "http://" (-> *containers* ::schema-registry .getNetworkAliases first) ":8081")
-                            "value.converter.schemas.enable" "true"
+                            :key.converter "org.apache.kafka.connect.storage.StringConverter"
+                            :key.converter.schemas.enable "false"
+                            :value.converter (case value-converter
+                                                 :json "org.apache.kafka.connect.json.JsonConverter"
+                                                 :json-schema "io.confluent.connect.json.JsonSchemaConverter"
+                                                 :avro "io.confluent.connect.avro.AvroConverter")
+                            :value.converter.schema.registry.url (str "http://" (-> *containers* ::schema-registry .getNetworkAliases first) ":8081")
+                            :value.converter.schemas.enable "true"
 
-                            "connector.class" "xtdb.kafka.connect.XtdbSinkConnector"
-                            "jdbcUrl" "jdbc:xtdb://host.testcontainers.internal:5439/xtdb"
-                            "id.mode" "record_value"
-                            "id.field" "_id"
-                            "validFrom.field" "validFrom"
-                            "validTo.field" "validTo"}
+                            :connector.class "xtdb.kafka.connect.XtdbSinkConnector"
+                            :jdbcUrl (str "jdbc:xtdb://host.testcontainers.internal:5439/" *xtdb-db*)}
 
                            (when (= value-converter :avro)
-                             {"value.converter.connect.meta.data" "true"}))]
+                             {"value.converter.connect.meta.data" "true"})
+
+                           extra-conf)]
 
     (http/post (str (kafka-connect-api-url) "/connectors")
       {:body (json/write-value-as-string {:name connector-name
@@ -188,10 +198,3 @@
                                                       "use.latest.version" true})))]
     (-> (.send producer (ProducerRecord. topic k m))
         (.get))))
-
-(def ^:dynamic *xtdb-conn*)
-
-(defn with-xtdb-conn [f]
-  (with-open [xtdb-conn (jdbc/get-connection (str "jdbc:xtdb://localhost:5439/xtdb"))]
-    (binding [*xtdb-conn* xtdb-conn]
-      (f))))

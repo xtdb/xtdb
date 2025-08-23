@@ -1,14 +1,43 @@
 = kafka-connect
 
-== kafka-sink
+== Schema-Driven XTDB Encoder Transformation
+
+Allows for encoding your data to insert each field using the appropriate XTDB type, based on the record schema.
+
+=== Config
+
+Prefix with `transforms.<name>.`
+
+[cols="1,1"]
+|===
+|`type`
+|`"xtdb.kafka.connect.SchemaDrivenXtdbEncoder"`
+|===
+
+=== XTDB types depending on schema
+
+(Tentative)
+
+Integer and float sizes are stored to the smallest size available in XTDB.
+
+For strings, you can use a custom `xtdb.type` parameter for more specific XTDB types:
+
+* `interval`
+* `timestamptz`
+
+== XTDB Sink Connector
 
 == Config
 
+=== `connector.class`
+
+Must be `"xtdb.kafka.connect.XtdbSinkConnector"`
+
 === `jdbcUrl`
 
-Destination URL of XTDB HTTP end point.
+Required. Must point to XTDB's PostgreSQL-compatible port.
 
-Example: `jdbc:xtdb://my_host:5432/xtdb`
+Example: `"jdbc:xtdb://my_host:5432/xtdb"`
 
 [cols="1,1"]
 |===
