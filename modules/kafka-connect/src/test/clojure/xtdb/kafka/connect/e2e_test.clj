@@ -2,7 +2,8 @@
   (:require [clojure.test :refer :all]
             [jsonista.core :as json]
             [xtdb.api :as xt]
-            [xtdb.kafka.connect.test.e2e-fixture :as fixture :refer [*xtdb-conn*]]))
+            [xtdb.kafka.connect.test.e2e-fixture :as fixture :refer [*xtdb-conn*]]
+            [xtdb.kafka.connect.test.util :refer [query-col-types]]))
 
 (use-fixtures :once fixture/with-containers)
 (use-fixtures :each fixture/with-xtdb-conn)
@@ -10,15 +11,6 @@
 (comment ; For dev
   (fixture/run-permanently)
   (fixture/stop-permanently))
-
-(defn query-col-types []
-  (let [col-types-res (xt/q *xtdb-conn* "SELECT column_name, data_type
-                                         FROM information_schema.columns
-                                         WHERE table_name = 'my_table'")]
-    (->> col-types-res
-         (map (fn [{:keys [column-name data-type]}]
-                [(keyword column-name) (read-string data-type)]))
-         (into {}))))
 
 (deftest ^:manual ingest_record_with_in-band_connect-schema
   (fixture/create-connector! {:topic "my_table"
@@ -53,14 +45,15 @@
              :my-timestamptz #xt/zdt"2020-01-01T00:00Z"
              :xt/valid-from #xt/zdt"2020-01-02T00:00Z[UTC]"}]))
 
-    (is (= (query-col-types) {:_id :utf8
-                              :my_string :utf8
-                              :my_int16 :i16
-                              :my_timestamptz [:timestamp-tz :micro "Z"] ; TODO: should be UTC?
+    (is (= (query-col-types *xtdb-conn*)
+           {:_id :utf8
+            :my_string :utf8
+            :my_int16 :i16
+            :my_timestamptz [:timestamp-tz :micro "Z"] ; TODO: should be UTC?
 
-                              :_system_from [:timestamp-tz :micro "UTC"]
-                              :_system_to [:union #{:null [:timestamp-tz :micro "UTC"]}]
-                              :_valid_from [:timestamp-tz :micro "UTC"]
-                              :_valid_to [:union #{:null [:timestamp-tz :micro "UTC"]}]}))
+            :_system_from [:timestamp-tz :micro "UTC"]
+            :_system_to [:union #{:null [:timestamp-tz :micro "UTC"]}]
+            :_valid_from [:timestamp-tz :micro "UTC"]
+            :_valid_to [:union #{:null [:timestamp-tz :micro "UTC"]}]}))
     (finally
       (fixture/delete-connector! "my_table"))))

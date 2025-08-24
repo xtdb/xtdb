@@ -2,7 +2,9 @@
 
 == Schema-Driven XTDB Encoder Transformation
 
-Allows for encoding your data to insert each field using the appropriate XTDB type, based on the record schema.
+Allows for encoding the value of a record to insert each field using the appropriate XTDB type, based on the record schema.
+
+Transforms into a value of type Map, and dismisses the value schema, as the value no longer complies with it.
 
 === Config
 

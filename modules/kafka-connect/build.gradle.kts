@@ -38,7 +38,7 @@ kotlin {
 }
 
 tasks.compileJava {
-    sourceCompatibility = "21"
+    sourceCompatibility = "11"
     targetCompatibility = "11"
 }
 

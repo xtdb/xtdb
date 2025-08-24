@@ -1,7 +1,9 @@
 (ns xtdb.kafka.connect.encode
-  (:require [cognitect.transit :as transit]
+  (:require [clojure.string :as str]
+            [cognitect.transit :as transit]
             [xtdb.kafka.connect.util :refer [clone-connect-record]])
-  (:import (org.apache.kafka.connect.connector ConnectRecord)
+  (:import (java.util List)
+           (org.apache.kafka.connect.connector ConnectRecord)
            (org.apache.kafka.connect.data Field Schema Schema$Type Struct)))
 
 (defn ?encode-by-xtdb-type [^Schema schema data]
@@ -23,55 +25,62 @@
 
     nil))
 
-(defn encode-by-schema [^Schema schema
-                        data
-                        path]
-  (cond
-    (nil? schema)
-    data
+(defn encode-by-schema* [^Schema schema, data, path]
+  (try
+    (cond
+      (nil? schema)
+      data
 
-    (-> schema .type (= Schema$Type/STRUCT))
-    (if-not (instance? Struct data)
-      (throw (IllegalArgumentException. "expected struct"))
-      (reduce
-        (fn [m ^Field field]
-          (assoc m (.name field) (encode-by-schema (.schema field)
-                                          (.get data field)
-                                          (conj path (.name field)))))
-        {}
-        (.fields schema)))
+      (-> schema .type (= Schema$Type/STRUCT))
+      (if-not (instance? Struct data)
+        (throw (IllegalArgumentException. "expected struct"))
+        (reduce
+          (fn [m ^Field field]
+            (assoc m (.name field) (encode-by-schema* (.schema field)
+                                                      (.get data field)
+                                                      (conj path (.name field)))))
+          {}
+          (.fields schema)))
 
-    (-> schema .type (= Schema$Type/MAP))
-    (if-not (map? data)
-      (throw (IllegalArgumentException. "expected map"))
-      (reduce-kv
-        (fn [m k v]
-          (let [subpath (conj path (name k))]
-            (assoc m
-              (encode-by-schema (.keySchema schema) k subpath)
-              (encode-by-schema (.valueSchema schema) v subpath))))
-        {}
-        data))
+      (-> schema .type (= Schema$Type/MAP))
+      (if-not (map? data)
+        (throw (IllegalArgumentException. "expected map"))
+        (reduce-kv
+          (fn [m k v]
+            (let [subpath (conj path (name k))]
+              (assoc m
+                (encode-by-schema* (.keySchema schema) k subpath)
+                (encode-by-schema* (.valueSchema schema) v subpath))))
+          {}
+          data))
 
-    (-> schema .type (= Schema$Type/ARRAY))
-    (if-not (or (sequential? data)
-                (-> data class .isArray))
-      (throw (IllegalArgumentException. "expected array"))
-      (map-indexed
-        (fn [i x]
-          (encode-by-schema (.valueSchema schema) x (conj path i)))
-        data))
+      (-> schema .type (= Schema$Type/ARRAY))
+      (if-not (or (sequential? data)
+                  (instance? List data))
+        (throw (IllegalArgumentException. "expected array"))
+        (map-indexed
+          (fn [i x]
+            (encode-by-schema* (.valueSchema schema) x (conj path i)))
+          data))
 
-    (nil? data)
-    nil
+      (nil? data)
+      nil
 
-    :else
-    (or (?encode-by-xtdb-type schema data)
-        (?encode-by-simple-type schema data)
-        data)))
+      :else
+      (or (?encode-by-xtdb-type schema data)
+          (?encode-by-simple-type schema data)
+          data))
 
-(defn encode-record-value-by-schema [^ConnectRecord record]
+    (catch Exception e
+      (if (-> e ex-data ::path)
+        (throw e)
+        (throw (ex-info (str "/" (str/join '/ path) ": " (ex-message e))
+                 {::path path}
+                 e))))))
+
+(defn encode-by-schema [^Schema schema, data]
+  (encode-by-schema* schema data []))
+
+(defn ^ConnectRecord encode-record-value-by-schema [^ConnectRecord record]
   (clone-connect-record record {:value-schema nil
-                                :value (encode-by-schema (.valueSchema record)
-                                                         (.value record)
-                                                         [])}))
+                                :value (encode-by-schema (.valueSchema record) (.value record))}))

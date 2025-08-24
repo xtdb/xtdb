@@ -1,7 +1,10 @@
 (ns xtdb.kafka.sink-connector-test
-  (:require [clojure.test :as t]
-            [xtdb.kafka.test-utils :refer [->config]])
-  (:import (org.apache.kafka.common.config ConfigException)))
+  (:require [clojure.test :as t])
+  (:import (org.apache.kafka.common.config ConfigException)
+           (xtdb.kafka.connect XtdbSinkConfig)))
+
+(defn ->config [config]
+  (XtdbSinkConfig/parse config))
 
 (t/deftest test-connector-config
   (t/testing "Missing url"
