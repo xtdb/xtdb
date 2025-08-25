@@ -36,7 +36,6 @@ class ProbeSide(
 
     private val hasher = IndexHasher.fromCols(probeKeyCols)
 
-    // TODO one could very likely do a similar thing to a merge sort phase with the buildHashTrie and a probeHashTrie
     fun indexOf(probeIdx: Int, removeOnMatch: Boolean): Int =
         buildSide.indexOf(
             hasher.hashCode(probeIdx),
