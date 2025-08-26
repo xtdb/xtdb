@@ -496,7 +496,7 @@ public abstract class BaseLargeVariableWidthVector extends BaseValueVector
   private ArrowBuf allocateOffsetBuffer(final long size) {
     ArrowBuf offsetBuffer = allocator.buffer(size);
     offsetBuffer.readerIndex(0);
-    initOffsetBuffer();
+    offsetBuffer.setZero(0, offsetBuffer.capacity());
     return offsetBuffer;
   }
 

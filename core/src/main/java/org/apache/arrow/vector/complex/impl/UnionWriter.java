@@ -16,6 +16,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.arrow.vector.complex.impl;
 
 
@@ -58,8 +59,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.Period;
 import java.time.ZonedDateTime;
-
-
 import org.apache.arrow.vector.complex.writer.BaseWriter;
 import org.apache.arrow.vector.types.Types.MinorType;
 
@@ -242,6 +241,10 @@ public class UnionWriter extends AbstractFieldWriter implements FieldWriter {
     return getMapWriter(arrowType);
   }
 
+  private ExtensionWriter getExtensionWriter(ArrowType arrowType) {
+    throw new UnsupportedOperationException("ExtensionTypes are not supported yet.");
+  }
+
   BaseWriter getWriter(MinorType minorType) {
     return getWriter(minorType, null);
   }
@@ -257,7 +260,7 @@ public class UnionWriter extends AbstractFieldWriter implements FieldWriter {
     case MAP:
       return getMapWriter(arrowType);
     case EXTENSIONTYPE:
-      return null;
+      return getExtensionWriter(arrowType);
     case TINYINT:
       return getTinyIntWriter();
     case UINT1:
@@ -1695,6 +1698,20 @@ public class UnionWriter extends AbstractFieldWriter implements FieldWriter {
     data.setType(idx(), MinorType.MAP);
     getStructWriter().setPosition(idx());
     return getStructWriter().map(name, keysSorted);
+  }
+
+  @Override
+  public ExtensionWriter extension(ArrowType arrowType) {
+    data.setType(idx(), MinorType.EXTENSIONTYPE);
+    getListWriter().setPosition(idx());
+    return getListWriter().extension(arrowType);
+  }
+
+  @Override
+  public ExtensionWriter extension(String name, ArrowType arrowType) {
+    data.setType(idx(), MinorType.EXTENSIONTYPE);
+    getStructWriter().setPosition(idx());
+    return getStructWriter().extension(name, arrowType);
   }
 
   @Override

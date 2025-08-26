@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.arrow.vector.complex.impl;
 
 import java.util.Locale;
@@ -58,8 +59,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.Period;
 import java.time.ZonedDateTime;
-
-
 
 /**
  * This FieldWriter implementation delegates all FieldWriter API calls to an inner FieldWriter. This
@@ -322,7 +321,7 @@ public class PromotableWriter extends AbstractPromotableFieldWriter {
         writer = new UnionWriter((UnionVector) vector, nullableStructWriterFactory);
         break;
       case EXTENSIONTYPE:
-        writer = null;
+        writer = new UnionExtensionWriter((ExtensionTypeVector) vector);
         break;
       default:
         writer = type.getNewFieldWriter(vector);
@@ -574,6 +573,16 @@ public class PromotableWriter extends AbstractPromotableFieldWriter {
   @Override
   public void writeLargeVarChar(String value) {
     getWriter(MinorType.LARGEVARCHAR).writeLargeVarChar(value);
+  }
+
+  @Override
+  public void writeExtension(Object value) {
+    getWriter(MinorType.EXTENSIONTYPE).writeExtension(value);
+  }
+
+  @Override
+  public void addExtensionTypeWriterFactory(ExtensionTypeWriterFactory factory) {
+    getWriter(MinorType.EXTENSIONTYPE).addExtensionTypeWriterFactory(factory);
   }
 
   @Override

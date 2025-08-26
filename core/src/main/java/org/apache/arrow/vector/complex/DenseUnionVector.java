@@ -16,6 +16,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.arrow.vector.complex;
 
 
@@ -58,8 +59,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.Period;
 import java.time.ZonedDateTime;
-
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;

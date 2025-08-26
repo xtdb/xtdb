@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.arrow.vector.complex.impl;
 
 
@@ -57,8 +58,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.Period;
 import java.time.ZonedDateTime;
-
-
 import java.util.Map;
 import java.util.HashMap;
 
@@ -98,14 +97,15 @@ public class NullableStructWriter extends AbstractFieldWriter {
         map(child.getName(), arrowType.getKeysSorted());
         break;
       }
-      case EXTENSIONTYPE:
-        break;
       case DENSEUNION: {
         FieldType fieldType = new FieldType(addVectorAsNullable, MinorType.DENSEUNION.getType(), null, null);
         DenseUnionWriter writer = new DenseUnionWriter(container.addOrGet(child.getName(), fieldType, DenseUnionVector.class), getNullableStructWriterFactory());
         fields.put(handleCase(child.getName()), writer);
         break;
       }
+      case EXTENSIONTYPE:
+        extension(child.getName(), child.getType());
+        break;
       case UNION:
         FieldType fieldType = new FieldType(addVectorAsNullable, MinorType.UNION.getType(), null, null);
         UnionWriter writer = new UnionWriter(container.addOrGet(child.getName(), fieldType, UnionVector.class), getNullableStructWriterFactory());
@@ -333,6 +333,29 @@ public class NullableStructWriter extends AbstractFieldWriter {
   }
 
   @Override
+  public ExtensionWriter extension(String name, ArrowType arrowType) {
+    String finalName = handleCase(name);
+    FieldWriter writer = fields.get(finalName);
+    if(writer == null){
+      int vectorCount=container.size();
+      FieldType fieldType = new FieldType(addVectorAsNullable, arrowType, null, null);
+      ExtensionTypeVector vector = container.addOrGet(name, fieldType, ExtensionTypeVector.class);
+      writer = new PromotableWriter(vector, container, getNullableStructWriterFactory());
+      if(vectorCount != container.size()) {
+        writer.allocate();
+      }
+      writer.setPosition(idx());
+      fields.put(finalName, writer);
+    } else {
+      if (writer instanceof PromotableWriter) {
+        // ensure writers are initialized
+        ((PromotableWriter)writer).getWriter(MinorType.EXTENSIONTYPE, arrowType);
+      }
+    }
+    return (ExtensionWriter) writer;
+  }
+
+  @Override
   public void close() throws Exception {
     clear();
     container.close();
@@ -484,7 +507,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -515,7 +538,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -546,7 +569,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -577,7 +600,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -608,7 +631,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -639,7 +662,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -670,7 +693,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -701,7 +724,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -732,7 +755,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -763,7 +786,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -794,7 +817,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -825,7 +848,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -856,7 +879,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -887,7 +910,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -918,7 +941,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -949,7 +972,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -988,7 +1011,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1020,7 +1043,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1051,7 +1074,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1082,7 +1105,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1113,7 +1136,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1152,7 +1175,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1192,7 +1215,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1232,7 +1255,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1272,7 +1295,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1304,7 +1327,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1335,7 +1358,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1366,7 +1389,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1397,7 +1420,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1436,7 +1459,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1475,7 +1498,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1514,7 +1537,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1546,7 +1569,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1577,7 +1600,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1608,7 +1631,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1639,7 +1662,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1670,7 +1693,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1701,7 +1724,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {
@@ -1732,7 +1755,7 @@ public class NullableStructWriter extends AbstractFieldWriter {
           vector.setInitialCapacity(this.initialCapacity);
         }
         vector.allocateNewSafe();
-      } 
+      }
       writer.setPosition(idx());
       fields.put(handleCase(name), writer);
     } else {

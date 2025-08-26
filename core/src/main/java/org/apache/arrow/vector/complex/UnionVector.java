@@ -16,6 +16,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.arrow.vector.complex;
 
 
@@ -58,8 +59,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.Period;
 import java.time.ZonedDateTime;
-
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -601,7 +600,10 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
 
   public DurationVector getDurationVector() {
     if (durationVector == null) {
-      throw new IllegalArgumentException("No Duration present. Provide ArrowType argument to create a new vector");
+      durationVector = internalStruct.getChild(fieldName(MinorType.DURATION), DurationVector.class);
+      if (durationVector == null) {
+        throw new IllegalArgumentException("No Duration present. Provide ArrowType argument to create a new vector");
+      }
     }
     return durationVector;
   }
@@ -706,7 +708,10 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
 
   public TimeStampSecTZVector getTimeStampSecTZVector() {
     if (timeStampSecTZVector == null) {
-      throw new IllegalArgumentException("No TimeStampSecTZ present. Provide ArrowType argument to create a new vector");
+      timeStampSecTZVector = internalStruct.getChild(fieldName(MinorType.TIMESTAMPSECTZ), TimeStampSecTZVector.class);
+      if (timeStampSecTZVector == null) {
+        throw new IllegalArgumentException("No TimeStampSecTZ present. Provide ArrowType argument to create a new vector");
+      }
     }
     return timeStampSecTZVector;
   }
@@ -731,7 +736,10 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
 
   public TimeStampMilliTZVector getTimeStampMilliTZVector() {
     if (timeStampMilliTZVector == null) {
-      throw new IllegalArgumentException("No TimeStampMilliTZ present. Provide ArrowType argument to create a new vector");
+      timeStampMilliTZVector = internalStruct.getChild(fieldName(MinorType.TIMESTAMPMILLITZ), TimeStampMilliTZVector.class);
+      if (timeStampMilliTZVector == null) {
+        throw new IllegalArgumentException("No TimeStampMilliTZ present. Provide ArrowType argument to create a new vector");
+      }
     }
     return timeStampMilliTZVector;
   }
@@ -756,7 +764,10 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
 
   public TimeStampMicroTZVector getTimeStampMicroTZVector() {
     if (timeStampMicroTZVector == null) {
-      throw new IllegalArgumentException("No TimeStampMicroTZ present. Provide ArrowType argument to create a new vector");
+      timeStampMicroTZVector = internalStruct.getChild(fieldName(MinorType.TIMESTAMPMICROTZ), TimeStampMicroTZVector.class);
+      if (timeStampMicroTZVector == null) {
+        throw new IllegalArgumentException("No TimeStampMicroTZ present. Provide ArrowType argument to create a new vector");
+      }
     }
     return timeStampMicroTZVector;
   }
@@ -781,7 +792,10 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
 
   public TimeStampNanoTZVector getTimeStampNanoTZVector() {
     if (timeStampNanoTZVector == null) {
-      throw new IllegalArgumentException("No TimeStampNanoTZ present. Provide ArrowType argument to create a new vector");
+      timeStampNanoTZVector = internalStruct.getChild(fieldName(MinorType.TIMESTAMPNANOTZ), TimeStampNanoTZVector.class);
+      if (timeStampNanoTZVector == null) {
+        throw new IllegalArgumentException("No TimeStampNanoTZ present. Provide ArrowType argument to create a new vector");
+      }
     }
     return timeStampNanoTZVector;
   }
@@ -886,7 +900,10 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
 
   public Decimal256Vector getDecimal256Vector() {
     if (decimal256Vector == null) {
-      throw new IllegalArgumentException("No Decimal256 present. Provide ArrowType argument to create a new vector");
+      decimal256Vector = internalStruct.getChild(fieldName(MinorType.DECIMAL256), Decimal256Vector.class);
+      if (decimal256Vector == null) {
+        throw new IllegalArgumentException("No Decimal256 present. Provide ArrowType argument to create a new vector");
+      }
     }
     return decimal256Vector;
   }
@@ -911,7 +928,10 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
 
   public DecimalVector getDecimalVector() {
     if (decimalVector == null) {
-      throw new IllegalArgumentException("No Decimal present. Provide ArrowType argument to create a new vector");
+      decimalVector = internalStruct.getChild(fieldName(MinorType.DECIMAL), DecimalVector.class);
+      if (decimalVector == null) {
+        throw new IllegalArgumentException("No Decimal present. Provide ArrowType argument to create a new vector");
+      }
     }
     return decimalVector;
   }
@@ -936,7 +956,10 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
 
   public FixedSizeBinaryVector getFixedSizeBinaryVector() {
     if (fixedSizeBinaryVector == null) {
-      throw new IllegalArgumentException("No FixedSizeBinary present. Provide ArrowType argument to create a new vector");
+      fixedSizeBinaryVector = internalStruct.getChild(fieldName(MinorType.FIXEDSIZEBINARY), FixedSizeBinaryVector.class);
+      if (fixedSizeBinaryVector == null) {
+        throw new IllegalArgumentException("No FixedSizeBinary present. Provide ArrowType argument to create a new vector");
+      }
     }
     return fixedSizeBinaryVector;
   }

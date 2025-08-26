@@ -108,13 +108,13 @@ See link:RELEASING.adoc[].
 
 == Arrow Fork
 
-We maintain a fork of [Arrow](https://github.com/apache/arrow) to fix a couple of issues in `DenseUnionVector` and commits that haven't made it into an arrow release yet - see [this diff](https://github.com/apache/arrow/compare/master...xtdb:master) for more details.
-Clone the [XTDB fork](https://github.com/xtdb/arrow), add the [Arrow repo](https://github.com/apache/arrow)as as remote.
+We maintain a fork of [Arrow Java](https://github.com/apache/arrow-java) to fix a couple of issues in `DenseUnionVector` and commits that haven't made it into an arrow release yet - see [this diff](https://github.com/apache/arrow-java/compare/main...xtdb:main) for more details.
+Clone the [XTDB fork](https://github.com/xtdb/arrow-java), add the [Arrow repo](https://github.com/apache/arrow-java) as remote.
 
 To upgrade Arrow:
 
 * Usual bump in `build.gradle.kts`. You can skip this if you just want to add some tweaked files to xtdb.
-* Rebase `xtdb/master` on the upstream tag (in the arrow fork).
+* Rebase `xtdb/main` on the upstream tag (in the arrow fork).
 * In xtdb, `./bin/rebuild-forked-arrow-files.sh`. You might need to update that script if you tweaked new files.
 * Test
 * Push (`--force-with-lease`) to XTDB fork, and commit to xtdb:main.
