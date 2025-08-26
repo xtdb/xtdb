@@ -142,8 +142,7 @@ class MultiVectorReader(
         object : VectorPosition {
             override var position: Int
                 get() = vectorIndirections[pos.position]
-                @Suppress("UNUSED_PARAMETER")
-                set(value) = error("set indirectVectorPosition")
+                set(_) = error("set indirectVectorPosition")
         }
 
     override fun valueReader(pos: VectorPosition): ValueReader {

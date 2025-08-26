@@ -26,3 +26,12 @@
     (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
 
     (t/is (= [{:xt/id 0}] (xt/q tu/*node* "SELECT * FROM docs ORDER BY _id")))))
+
+(t/deftest set-field-mismatch-4690
+  (binding [c/*ignore-signal-block?* true]
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:b #{1}, :xt/id 0}]])
+    (tu/flush-block! tu/*node*)
+
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
+
+    (t/is (= [{:xt/id 0, :b #{1}} {:xt/id 1}] (xt/q tu/*node* "SELECT * FROM docs ORDER BY _id")))))

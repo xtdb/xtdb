@@ -531,11 +531,14 @@ internal class SetVectorWriter(vector: SetVector, notify: FieldChangeListener?) 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
     override fun promoteChildren(field: Field) {
-        if (field.type != this.field.type || (field.isNullable && !this.field.isNullable)) throw FieldMismatch(
-            field.fieldType,
-            this.field.fieldType
-        )
-        inner.promoteChildren(Field(field.name, inner.field.fieldType, field.children))
+        when {
+            field.type == NULL_TYPE && this.field.isNullable -> return
+
+            field.type != this.field.type || field.isNullable && !this.field.isNullable ->
+                throw FieldMismatch(field.fieldType, this.field.fieldType)
+
+            else -> inner.promoteChildren(Field(field.name, inner.field.fieldType, field.children))
+        }
     }
 }
 
