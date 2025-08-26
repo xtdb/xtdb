@@ -2,9 +2,7 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [next.jdbc :as jdbc]
-            [xtdb.error :as err]
-            [xtdb.next.jdbc :as xt-jdbc])
+            [next.jdbc :as jdbc])
   (:import [java.util List Map]
            [org.apache.kafka.connect.data Field Schema Struct]
            org.apache.kafka.connect.sink.SinkRecord
@@ -54,8 +52,7 @@
           (map->edn payload)
 
           :else
-          (throw (err/illegal-arg :unknown-json-payload-type
-                                  {::err/message (str "Unknown JSON payload type: " record)}))))
+          (throw (IllegalArgumentException. (str "Unknown JSON payload type: " record)))))
 
       (instance? Map value)
       (map->edn value)
@@ -64,40 +61,32 @@
       (json/parse-string value true)
 
       :else
-      (throw (err/illegal-arg :unknown-message-type
-                              {::err/message (str "Unknown message type: " record)})))))
+      (throw (IllegalArgumentException. (str "Unknown message type: " record))))))
 
-(defn- find-record-key-eid [^XtdbSinkConfig conf, ^SinkRecord record]
-  (let [r-key (.key record)
-        id-field (.getIdField conf)]
-    (if (nil? r-key)
-      (throw (err/illegal-arg :missing-id
-                              {::err/message (str "Missing key in record: " record)}))
-      (if (instance? Struct r-key)
-        (if (= "" id-field)
-          (throw (err/illegal-arg :invalid-key-type
-                                  {::err/message (str "Invalid key type in record: " record)}))
-          (let [r-doc (struct->edn r-key)
-                id (get r-doc (keyword id-field))]
-            (when-not id
-              (throw (err/illegal-arg :missing-id
-                                      {::err/message (str "Missing ID in record: " record)})))
-            id))
-        (if (not= "" id-field)
-          (do
-            (log/debug "id-field:" id-field)
-            (throw (err/illegal-arg :invalid-key-type
-                                    {::err/message (str "Expected struct key found primitive: " record)})))
-          ;; TODO: Check if valid primitive type
-          r-key)))))
+(defn- find-record-key-eid [^XtdbSinkConfig _conf, ^SinkRecord record]
+  (let [r-key (.key record)]
+    (cond
+      (nil? r-key)
+      (throw (IllegalArgumentException. "no record key"))
 
-(defn- find-record-value-eid [^XtdbSinkConfig conf, ^SinkRecord record, doc]
-  (let [id-field (.getIdField conf)
-        id (get doc (keyword id-field))]
-    (when-not id
-      (throw (err/illegal-arg :missing-id
-                              {::err/message (str "Missing ID in record: " record)})))
-    id))
+      (nil? (.keySchema record))
+      (throw (IllegalArgumentException. "no record key schema"))
+
+      (-> record .keySchema .type .isPrimitive)
+      r-key
+
+      (instance? Struct r-key)
+      (or (-> r-key struct->edn :_id)
+          (throw (IllegalArgumentException. "no 'id' field in record key")))
+
+      (map? r-key)
+      (or (-> r-key :_id)
+          (throw (IllegalArgumentException. "no 'id' field in record key"))))))
+
+(defn- find-record-value-eid [^XtdbSinkConfig _conf, ^SinkRecord _record, doc]
+  (if-some [id (:_id doc)]
+    id
+    (throw (IllegalArgumentException. "no 'id' field in record value"))))
 
 (defn- find-eid [^XtdbSinkConfig conf ^SinkRecord record doc]
   (case (.getIdMode conf)
@@ -118,18 +107,15 @@
     (doto (cond
             (not (tombstone? record))
             (let [doc (record->edn record)
-                  id (find-eid conf record doc)
-                  valid-from (get doc (keyword (.getValidFromField conf)))
-                  valid-to (get doc (keyword (.getValidToField conf)))]
+                  id (find-eid conf record doc)]
               [(format "INSERT INTO %s RECORDS ?" table)
-               (assoc doc :_id id, :_valid_from valid-from, :_valid_to valid-to)])
+               (assoc doc :_id id)])
 
             (= "record_key" (.getIdMode conf))
             (let [id (find-record-key-eid conf record)]
               [(format "DELETE FROM %s WHERE _id = ?" table) id])
 
-            :else (throw (err/illegal-arg :unsupported-tombstone-mode
-                                          {::err/message (str "Unsupported tombstone mode: " record)})))
+            :else (throw (IllegalArgumentException. (str "Unsupported tombstone mode: " record))))
 
       (->> (log/debug "tx op:")))))
 

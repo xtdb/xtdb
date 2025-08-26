@@ -15,6 +15,10 @@ ext {
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
+repositories {
+    maven { url = uri("https://packages.confluent.io/maven/") }
+}
+
 dependencies {
     api(project(":xtdb-api"))
 

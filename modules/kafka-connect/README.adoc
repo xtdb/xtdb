@@ -70,7 +70,6 @@ One way to fix this is by applying transforms. For example, we can make use of b
 [source,json]
 ----
 {
-  ...
   "transforms" : "timeToString, xtdbRenames",
   "transforms.timeToString.type" : "org.apache.kafka.connect.transforms.TimestampConverter$Value",
   "transforms.timeToString.field" : "t",
@@ -155,7 +154,6 @@ For the above to work, you will need to configure your connector's value convert
 [source,json]
 ----
 {
-  ...
   "value.converter" : "io.confluent.connect.json.JsonSchemaConverter",
   "value.converter.schema.registry.url" : "http://schema-registry:8081",
   "value.converter.schemas.enable" : "true"
@@ -195,7 +193,6 @@ For the above to work, you will need to configure your connector's value convert
 [source,json]
 ----
 {
-  ...
   "value.converter": "io.confluent.connect.avro.AvroConverter",
   "value.converter.schemas.enable": "true",
   "value.converter.schema.registry.url": "http://schema-registry:8081",
@@ -244,7 +241,6 @@ For the above to work, you will need to configure your connector's value convert
 [source,json]
 ----
 {
-  ...
   "value.converter": "org.apache.kafka.connect.json.JsonConverter"
 }
 ----
@@ -273,17 +269,11 @@ Example: `"jdbc:xtdb://my_host:5432/xtdb"`
 One of:
 
 `record_key`::
-
-* The record key must be either a Struct or a primitive value
-* If the key is a struct then use `id.field` to select a field to use as the `_id`
-* Required if you want https://kafka.apache.org/documentation/#design_compactionbasics[tombstones] to delete records
+The record key must be either a Struct or a primitive value. If the key is a struct its `_id` field will be selected.
+(Required if you want https://kafka.apache.org/documentation/#design_compactionbasics[tombstones] to delete records).
 
 `record_value`::
-
-* Use `id.field` must be used to select a field to use as the `_id`
-
-|`id.field`
-|The field name to use as the `_id`. Set to an empty string if using a primitive `record_key`.
+Its `_id` field will be selected
 
 |`table.name.format`
 |A format string for the destination table name, which may contain `${topic}` as a placeholder for the originating topic name.

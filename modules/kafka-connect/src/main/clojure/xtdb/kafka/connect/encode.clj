@@ -1,5 +1,6 @@
 (ns xtdb.kafka.connect.encode
   (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
             [xtdb.kafka.connect.util :refer [clone-connect-record]])
   (:import (java.util List)
@@ -80,6 +81,7 @@
                  e))))))
 
 (defn encode-by-schema [^Schema schema, data]
+  (log/debug "encoding data" data "following schema" schema)
   (encode-by-schema* schema data []))
 
 (defn ^ConnectRecord encode-record-value-by-schema [^ConnectRecord record]
