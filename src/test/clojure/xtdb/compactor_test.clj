@@ -492,8 +492,9 @@
               (doseq [{:keys [^String trie-key]} (map trie/parse-trie-file-path meta-files)]
                 (util/with-open [page-meta (.openPageMetadata meta-mgr (Trie/metaFilePath table-name trie-key))
                                  seg (BufferPoolSegment/open bp meta-mgr table-name trie-key)]
-                  (doseq [leaf (.getLeaves (.getTrie page-meta))]
-                    (with-open [rel (.openPage seg leaf)]
+                  (doseq [leaf (.getLeaves (.getTrie page-meta))
+                          :let [page (.page seg leaf)]]
+                    (with-open [rel (.openDataPage page tu/*allocator*)]
                       (t/is (pos? (.getRowCount rel))))))))))))))
 
 (t/deftest test-l2-compaction-badly-distributed

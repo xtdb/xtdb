@@ -15,7 +15,7 @@ import kotlin.concurrent.withLock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
 
-class PinningCache<K, V : PinningCache.IEntry<K>>(
+class PinningCache<K : Any, V : PinningCache.IEntry<K>>(
     @Suppress("MemberVisibilityCanBePrivate")
     val maxSizeBytes: Long
 ) : AutoCloseable {
