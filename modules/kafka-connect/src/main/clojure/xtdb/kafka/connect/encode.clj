@@ -8,10 +8,11 @@
 
 (defn ?encode-by-xtdb-type [^Schema schema data]
   (assert (some? data))
-  (case (some-> schema .parameters (get "xtdb.type"))
-    "interval" (transit/tagged-value "xtdb/interval" data)
-    "timestamptz" (transit/tagged-value "time/zoned-date-time" data)
-    nil))
+  (when-some [xtdb-type (some-> schema .parameters (get "xtdb.type"))]
+    (case xtdb-type
+      "interval" (transit/tagged-value "xtdb/interval" data)
+      "timestamptz" (transit/tagged-value "time/zoned-date-time" data)
+      (transit/tagged-value xtdb-type data))))
 
 (defn ?encode-by-simple-type [^Schema schema data]
   (assert (some? data))
