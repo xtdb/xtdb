@@ -41,7 +41,7 @@
 (defn- in-system-tz ^java.time.ZonedDateTime [^ZonedDateTime zdt]
   (.withZoneSameInstant zdt (ZoneId/systemDefault)))
 
-(defn- read-ex [^PSQLException e]
+(defn read-ex [^PSQLException e]
   (let [sem (.getServerErrorMessage e)]
     (->> {:sql-state (.getSQLState e)
           :message (.getMessage sem)

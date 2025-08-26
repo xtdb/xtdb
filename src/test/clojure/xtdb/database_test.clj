@@ -5,7 +5,9 @@
             [xtdb.api :as xt]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
+            [xtdb.error :as err]
             [xtdb.node :as xtn]
+            [xtdb.pgwire-test :as pgw-test]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -74,3 +76,47 @@
 
             (t/is (= {:_id "xtdb"}
                      (jdbc/execute-one! xt-db-conn ["SELECT * FROM foo"])))))))))
+
+(t/deftest test-multi-db-through-xt-api-4652
+  (with-open [node (xtn/start-node {:databases {:xtdb {}, :new-db {}}})]
+    (xt/submit-tx node [[:put-docs :foo {:xt/id "xtdb"}]])
+
+    (xt/submit-tx node [[:put-docs :foo {:xt/id "new-db"}]]
+                  {:database :new-db})
+
+    (t/is (= [{:xt/id "new-db"}]
+             (xt/q node ["SELECT * FROM foo"]
+                   {:database :new-db})))
+
+    (t/is (= [{:xt/id "xtdb"}]
+             (xt/q node ["SELECT * FROM xtdb.foo"]
+                   {:database :new-db})))
+
+    (t/is (= [{:xt/id "new-db"}]
+             (xt/q node ["SELECT * FROM new_db.foo"]
+                   {:database :xtdb})))
+
+    (t/testing "errors"
+      (t/is (= {:sql-state "3D000",
+                :message "database 'non_existent_db' does not exist"}
+               (pgw-test/reading-ex
+                 (xt/submit-tx node [[:put-docs :foo {:xt/id "non-existent"}]]
+                               {:database :non-existent-db}))))
+
+      (t/is (= {:sql-state "3D000",
+                :message "database 'non_existent_db' does not exist"}
+               (pgw-test/reading-ex
+                 (xt/q node ["SELECT * FROM foo"]
+                       {:database :non-existent-db}))))
+
+      (t/testing "throws if database already selected (via connection)")
+      (with-open [xtdb-conn (.build (.createConnectionBuilder node))]
+        (t/is (anomalous? [:incorrect :cannot-set-db
+                           "Can't set :default-db when connectable is not an XT node"]
+                          (xt/submit-tx xtdb-conn [[:put-docs :foo {:xt/id "xtdb"}]]
+                                        {:database :new_db})))
+
+        (t/is (anomalous? [:incorrect :cannot-set-db
+                           "Can't set :default-db when connectable is not an XT node"]
+                          (xt/q xtdb-conn ["SELECT * FROM foo"]
+                                {:database :new_db})))))))

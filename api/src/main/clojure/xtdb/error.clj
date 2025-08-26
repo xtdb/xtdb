@@ -203,7 +203,7 @@
   Throwable
   (->anomaly [ex data] (fault ::unknown (ex-message ex) (into {::cause ex} data))))
 
-(defmacro wrap-anomaly [ctx & body]
+(defmacro wrap-anomaly ^{:style/indent 1} [ctx & body]
   `(try
      ~@body
      (catch Throwable e#

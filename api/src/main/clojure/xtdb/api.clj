@@ -37,18 +37,27 @@
 (defmethod print-method ClojureForm [clj-form w]
   (print-dup clj-form w))
 
-(defn- with-conn* [connectable f]
-  (let [was-conn? (instance? Connection connectable)
-        ^Connection conn (cond-> connectable
-                           (not was-conn?) jdbc/get-connection)]
-    (try
-      (f conn)
-      (finally
-        (when-not was-conn?
-          (.close conn))))))
+(defn- with-conn
+  ([connectable f] (with-conn connectable {} f))
 
-(defmacro ^:private with-conn [[binding connectable] & body]
-  `(with-conn* ~connectable (fn [~binding] ~@body)))
+  ([connectable {:keys [database]} f]
+   (when (and database (not (instance? DataSource connectable)))
+     (throw (err/incorrect :cannot-set-db "Can't set :default-db when connectable is not an XT node"
+                           {:default-db database, :connectable-class (class connectable)})))
+
+   (let [was-conn? (instance? Connection connectable)
+         ^Connection conn (cond
+                            was-conn? connectable
+                            (instance? DataSource connectable) (-> (.createConnectionBuilder ^DataSource connectable)
+                                                                   (cond-> database (.database (cond-> database
+                                                                                                 (keyword? database) (-> symbol str NormalForm/normalForm))))
+                                                                   (.build))
+                            :else (jdbc/get-connection connectable))]
+     (try
+       (f conn)
+       (finally
+         (when-not was-conn?
+           (.close conn)))))))
 
 (defn- begin-ro-sql [{:keys [default-tz await-token snapshot-token current-time]}]
   (let [kvs (->> [["TIMEZONE = ?" (some-> default-tz str)]
@@ -103,16 +112,17 @@
                 (update :await-token (fnil identity (.getAwaitToken ^xtdb.api.DataSource connectable))))]
      (reify IReduceInit
        (reduce [_ f start]
-         (with-conn [conn connectable]
-           (jdbc/execute! conn (begin-ro-sql opts))
-           (try
-             (err/wrap-anomaly {:sql query}
-               (->> (jdbc/plan conn (into [query] args)
-                               {:builder-fn xt-jdbc/builder-fn
-                                ::xt-jdbc/key-fn (:key-fn opts :kebab-case-keyword)})
-                    (transduce (map #(into {} %)) (completing f) start)))
-             (finally
-               (jdbc/execute! conn ["ROLLBACK"])))))))))
+         (with-conn connectable opts
+           (fn [conn]
+             (jdbc/execute! conn (begin-ro-sql opts))
+             (try
+               (err/wrap-anomaly {:sql query}
+                 (->> (jdbc/plan conn (into [query] args)
+                                 {:builder-fn xt-jdbc/builder-fn
+                                  ::xt-jdbc/key-fn (:key-fn opts :kebab-case-keyword)})
+                      (transduce (map #(into {} %)) (completing f) start)))
+               (finally
+                 (jdbc/execute! conn ["ROLLBACK"]))))))))))
 
 (defn q
   "query an XTDB node/connection.
@@ -271,6 +281,10 @@
      transaction ID of the submitted transaction
 
   opts (map):
+   - :database (keyword/string)
+     the database to execute the transaction on, defaults to `:xtdb`
+     throws if the database does not exist or
+
    - :system-time
      overrides system-time for the transaction,
      mustn't be earlier than any previous system-time
@@ -281,12 +295,13 @@
   ([connectable, tx-ops] (submit-tx connectable tx-ops {}))
 
   ([connectable, tx-ops tx-opts]
-   (with-conn [conn connectable]
-     (let [{:keys [tx-id await-token]} (submit-tx* conn tx-ops (-> tx-opts
-                                                       (assoc :async? true)))]
-       (when (instance? xtdb.api.DataSource connectable)
-         (.setAwaitToken ^xtdb.api.DataSource connectable await-token))
-       {:tx-id tx-id}))))
+   (with-conn connectable tx-opts
+     (fn [conn]
+       (let [{:keys [tx-id await-token]} (submit-tx* conn tx-ops (-> tx-opts
+                                                                     (assoc :async? true)))]
+         (when (instance? xtdb.api.DataSource connectable)
+           (.setAwaitToken ^xtdb.api.DataSource connectable await-token))
+         {:tx-id tx-id})))))
 
 (defn execute-tx
   "Executes a transaction; blocks waiting for the receiving node to index it.
@@ -306,7 +321,25 @@
   If the transaction fails - either due to an error or a failed assert, this function will throw.
   Otherwise, returns a map with details about the submitted transaction, including system-time and tx-id.
 
+  connectable: either
+    - a javax.sql.Connection that is connected to an XTDB node
+
+      e.g.
+        ```clojure
+        (with-open [node ...
+                    conn (jdbc/get-connection node)]
+          (xt/execute-tx conn ...))
+        ````
+
+      Use this if you are batch-submitting transactions, to avoid the overhead of opening a new connection for each transaction.
+
+    - or a javax.sql.DataSource (e.g. an XTDB node returned from `xt/client` or `xtdb.node/start-node`), in which case a temporary connection will be created and used.
+
   opts (map):
+   - :database (keyword/string)
+     the database to execute the transaction on, defaults to `:xtdb`
+     throws if the database does not exist or if a Connection is provided (because the database is already selected)
+
    - :system-time
      overrides system-time for the transaction,
      mustn't be earlier than any previous system-time
@@ -321,11 +354,12 @@
   (^TransactionKey [connectable, tx-ops] (execute-tx connectable tx-ops {}))
 
   (^TransactionKey [connectable, tx-ops tx-opts]
-   (with-conn [conn connectable]
-     (let [{:keys [tx-id system-time await-token]} (submit-tx* conn tx-ops (-> tx-opts (assoc :async? false)))]
-       (when (instance? xtdb.api.DataSource connectable)
-         (.setAwaitToken ^xtdb.api.DataSource connectable await-token))
-       (serde/->TxKey tx-id (time/->instant system-time))))))
+   (with-conn connectable tx-opts
+     (fn [conn]
+       (let [{:keys [tx-id system-time await-token]} (submit-tx* conn tx-ops (-> tx-opts (assoc :async? false)))]
+         (when (instance? xtdb.api.DataSource connectable)
+           (.setAwaitToken ^xtdb.api.DataSource connectable await-token))
+         (serde/->TxKey tx-id (time/->instant system-time)))))))
 
 (defn client
   "Open up a client to a (possibly) remote XTDB node
@@ -362,32 +396,33 @@
   "Returns the status of this node as a map"
 
   ([connectable]
-   (with-conn [conn connectable]
-     (letfn [(status-q [conn query+args]
-               (jdbc/execute! conn query+args
-                              {:builder-fn xt-jdbc/builder-fn}))]
+   (with-conn connectable {}
+     (fn [conn]
+       (letfn [(status-q [conn query+args]
+                 (jdbc/execute! conn query+args
+                                {:builder-fn xt-jdbc/builder-fn}))]
 
-       (jdbc/execute! conn ["BEGIN READ ONLY WITH (await_token = NULL)"])
+         (jdbc/execute! conn ["BEGIN READ ONLY WITH (await_token = NULL)"])
 
-       (try
-         {:metrics (-> (concat (status-q conn ["SELECT * FROM xt.metrics_counters"])
-                               (status-q conn ["SELECT * FROM xt.metrics_timers"])
-                               (status-q conn ["SELECT * FROM xt.metrics_gauges"]))
-                       (->> (group-by :name))
-                       (update-vals (fn [metrics]
-                                      (mapv #(dissoc % :name) metrics))))
+         (try
+           {:metrics (-> (concat (status-q conn ["SELECT * FROM xt.metrics_counters"])
+                                 (status-q conn ["SELECT * FROM xt.metrics_timers"])
+                                 (status-q conn ["SELECT * FROM xt.metrics_gauges"]))
+                         (->> (group-by :name))
+                         (update-vals (fn [metrics]
+                                        (mapv #(dissoc % :name) metrics))))
 
-          :latest-completed-txs (-> (status-q conn ["SHOW LATEST_COMPLETED_TXS"])
-                                    (->> (group-by :db-name))
-                                    (update-vals (fn [txs]
-                                                   (mapv #(serde/map->TxKey (select-keys % [:tx-id :system-time])) txs))))
+            :latest-completed-txs (-> (status-q conn ["SHOW LATEST_COMPLETED_TXS"])
+                                      (->> (group-by :db-name))
+                                      (update-vals (fn [txs]
+                                                     (mapv #(serde/map->TxKey (select-keys % [:tx-id :system-time])) txs))))
 
-          :latest-submitted-txs (-> (status-q conn ["SHOW LATEST_SUBMITTED_TXS"])
-                                    (->> (group-by :db-name))
-                                    (update-vals #(mapv :tx-id %)))}
+            :latest-submitted-txs (-> (status-q conn ["SHOW LATEST_SUBMITTED_TXS"])
+                                      (->> (group-by :db-name))
+                                      (update-vals #(mapv :tx-id %)))}
 
-         (finally
-           (jdbc/execute! conn ["ROLLBACK"])))))))
+           (finally
+             (jdbc/execute! conn ["ROLLBACK"]))))))))
 
 (defmacro template
   "This macro quotes the given query, but additionally allows you to use Clojure's unquote (`~`) and unquote-splicing (`~@`) forms within the quoted form.
