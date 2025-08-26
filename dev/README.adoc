@@ -108,8 +108,8 @@ See link:RELEASING.adoc[].
 
 == Arrow Fork
 
-We maintain a fork of [Arrow Java](https://github.com/apache/arrow-java) to fix a couple of issues in `DenseUnionVector` and commits that haven't made it into an arrow release yet - see [this diff](https://github.com/apache/arrow-java/compare/main...xtdb:main) for more details.
-Clone the [XTDB fork](https://github.com/xtdb/arrow-java), add the [Arrow repo](https://github.com/apache/arrow-java) as remote.
+We maintain a fork of https://github.com/apache/arrow-java[Arrow Java] to fix a couple of issues in `DenseUnionVector` and commits that haven't made it into an arrow release yet - see link:https://github.com/apache/arrow-java/compare/main...xtdb:arrow-java:main[this diff] for more details.
+Clone the https://github.com/xtdb/arrow-java[XTDB fork], add the https://github.com/apache/arrow-java[Arrow repo] as remote.
 
 To upgrade Arrow:
 
