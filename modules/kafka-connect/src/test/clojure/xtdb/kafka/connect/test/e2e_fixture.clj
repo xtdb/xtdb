@@ -6,8 +6,12 @@
             [jsonista.core :as json]
             [next.jdbc :as jdbc]
             [xtdb.pgwire :as xt-pg])
-  (:import (java.util Map)
+  (:import (io.confluent.kafka.serializers KafkaAvroSerializer)
+           (io.confluent.kafka.serializers.json KafkaJsonSchemaSerializer)
+           (java.lang AutoCloseable)
+           (java.util Map)
            (org.apache.kafka.clients.producer KafkaProducer ProducerRecord)
+           (org.apache.kafka.common.serialization StringSerializer)
            (org.testcontainers Testcontainers)
            (org.testcontainers.containers BindMode Container GenericContainer Network)
            (org.testcontainers.containers.wait.strategy Wait)
@@ -70,7 +74,7 @@
 
                                :CONNECT_PLUGIN_PATH "/usr/share/xtdb/kafka/connect/lib/xtdb-kafka-connect.jar"
 
-                               :CONNECT_KEY_CONVERTER "org.apache.kafka.connect.json.JsonConverter"
+                               :CONNECT_KEY_CONVERTER "org.apache.kafka.connect.storage.StringConverter"
                                :CONNECT_VALUE_CONVERTER "org.apache.kafka.connect.json.JsonConverter"
                                :CONNECT_REST_ADVERTISED_HOST_NAME "localhost"})
                     (.start))]
@@ -85,7 +89,8 @@
     (.withNetwork (.getNetwork kafka))
     (.withExposedPorts (into-array [(int 8081)]))
     (with-env {:SCHEMA_REGISTRY_HOST_NAME "schema-registry"
-               :SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS (kafka-endpoint-for-containers kafka)})
+               :SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS (kafka-endpoint-for-containers kafka)
+               :SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL "none"})
     (.start)))
 
 (defmethod ig/halt-key! ::schema-registry [_ container]
@@ -133,68 +138,67 @@
 
 ; Test utilities
 
-(defn kafka-connect-api-url []
+(defn connect-api-url []
   (let [connect (::connect *containers*)]
     (str "http://" (.getHost connect) ":" (.getMappedPort connect 8083))))
 
-(defn kafka-schema-registry-base-url []
+(defn schema-registry-base-url []
   (let [schema-registry (::schema-registry *containers*)
         host (.getHost schema-registry)
         port (.getMappedPort schema-registry 8081)]
     (str "http://" host ":" port)))
 
-(defn create-connector! [{:keys [topic value-converter extra-conf]}]
-  (let [connector-name (str topic "-xtdb-sink")
-        connector-config (merge
-                           {:tasks.max "1"
+(defn schema-registry-base-url-for-containers []
+  (let [schema-registry (::schema-registry *containers*)]
+    (str "http://" (-> schema-registry .getNetworkAliases first) ":8081")))
 
-                            :topics topic
-                            :table.name.format "${topic}"
-
-                            :key.converter "org.apache.kafka.connect.storage.StringConverter"
-                            :key.converter.schemas.enable "false"
-                            :value.converter (case value-converter
-                                                 :json "org.apache.kafka.connect.json.JsonConverter"
-                                                 :json-schema "io.confluent.connect.json.JsonSchemaConverter"
-                                                 :avro "io.confluent.connect.avro.AvroConverter")
-                            :value.converter.schema.registry.url (str "http://" (-> *containers* ::schema-registry .getNetworkAliases first) ":8081")
-                            :value.converter.schemas.enable "true"
-
-                            :connector.class "xtdb.kafka.connect.XtdbSinkConnector"
-                            :jdbcUrl (str "jdbc:xtdb://host.testcontainers.internal:5439/" *xtdb-db*)}
-
-                           (when (= value-converter :avro)
-                             {"value.converter.connect.meta.data" "true"})
-
-                           extra-conf)]
-
-    (http/post (str (kafka-connect-api-url) "/connectors")
-      {:body (json/write-value-as-string {:name connector-name
-                                          :config connector-config})
-       :content-type :json
-       :accept :json})))
-
-(defn delete-connector! [topic-name]
-  (http/delete (str (kafka-connect-api-url) "/connectors/" (str topic-name "-xtdb-sink"))))
+(defn with-connector [conf]
+  (http/post (str (connect-api-url) "/connectors")
+    {:body (json/write-value-as-string
+             {:name (:topics conf)
+              :config (merge {:tasks.max "1"
+                              :connector.class "xtdb.kafka.connect.XtdbSinkConnector"
+                              :connection.url (str "jdbc:xtdb://host.testcontainers.internal:5439/" *xtdb-db*)}
+                             conf)})
+     :content-type :json
+     :accept :json})
+  (reify AutoCloseable
+    (close [_]
+      (http/delete (str (connect-api-url) "/connectors/" (:topics conf))))))
 
 (defn kafka-endpoint-on-host []
   (str "localhost:" (.getMappedPort (::kafka *containers*) 9092)))
 
-(defn send-record! [topic k m & [{:keys [use-schema-registry?
-                                         value-schema-type]
-                                  :or {value-schema-type :json-schema}}]]
-  (with-open [producer (KafkaProducer. ^Map (merge {"bootstrap.servers" (kafka-endpoint-on-host)
-                                                    "key.serializer" "org.apache.kafka.common.serialization.StringSerializer"
-                                                    "value.serializer" "org.apache.kafka.common.serialization.StringSerializer"}
-                                                   (when use-schema-registry?
-                                                     {"value.serializer" (case value-schema-type
-                                                                           :json "org.apache.kafka.common.serialization.StringSerializer"
-                                                                           :json-schema "io.confluent.kafka.serializers.json.KafkaJsonSchemaSerializer"
-                                                                           :avro "io.confluent.kafka.serializers KafkaAvroSerializer")
-                                                      "schema.registry.url" (kafka-schema-registry-base-url)
-                                                      "use.schema.id" (int 1)
-                                                      "id.compatibility.strict" false
-                                                      "auto.register.schemas" false
-                                                      "use.latest.version" true})))]
-    (-> (.send producer (ProducerRecord. topic k m))
+(defn send-record! [topic k v & [{:keys [value-serializer schema-id]}]]
+  (with-open [producer (KafkaProducer. ^Map
+                         (merge {"bootstrap.servers" (kafka-endpoint-on-host)
+                                 "key.serializer" (.getName StringSerializer)}
+
+                                (if-not value-serializer
+                                  {"value.serializer" (.getName StringSerializer)}
+
+                                  {"value.serializer" (case value-serializer
+                                                        :json-schema (.getName KafkaJsonSchemaSerializer)
+                                                        :avro (.getName KafkaAvroSerializer))
+                                   "schema.registry.url" (schema-registry-base-url)
+                                   "use.schema.id" (do
+                                                     (when-not (int? schema-id)
+                                                       (throw (IllegalArgumentException. "schema-id required")))
+                                                     (int schema-id))
+                                   "id.compatibility.strict" false
+                                   "auto.register.schemas" false
+                                   "use.latest.version" true})))]
+    (-> (.send producer (ProducerRecord. topic k v))
         (.get))))
+
+(defn register-schema! [{:keys [subject schema-type schema]}]
+  (let [url (str (schema-registry-base-url) "/subjects/" subject "/versions")
+        resp (http/post url
+               {:headers {"Content-Type" "application/vnd.schemaregistry.v1+json"}
+                :body (json/write-value-as-string {:schemaType (case schema-type
+                                                                 :json "JSON"
+                                                                 :avro "AVRO")
+                                                   :schema (cond
+                                                             (string? schema) schema
+                                                             (map? schema) (json/write-value-as-string schema))})})]
+    (-> resp :body json/read-value (get "id"))))

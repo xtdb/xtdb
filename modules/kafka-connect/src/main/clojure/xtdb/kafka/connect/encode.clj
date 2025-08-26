@@ -34,7 +34,7 @@
 
       (-> schema .type (= Schema$Type/STRUCT))
       (if-not (instance? Struct data)
-        (throw (IllegalArgumentException. "expected struct"))
+        (throw (IllegalArgumentException. "expected Struct"))
         (reduce
           (fn [m ^Field field]
             (assoc m (.name field) (encode-by-schema* (.schema field)
@@ -45,7 +45,7 @@
 
       (-> schema .type (= Schema$Type/MAP))
       (if-not (map? data)
-        (throw (IllegalArgumentException. "expected map"))
+        (throw (IllegalArgumentException. "expected Map"))
         (reduce-kv
           (fn [m k v]
             (let [subpath (conj path (name k))]
@@ -75,7 +75,7 @@
     (catch Exception e
       (if (-> e ex-data ::path)
         (throw e)
-        (throw (ex-info (str "/" (str/join '/ path) ": " (ex-message e))
+        (throw (ex-info (str "path [/" (str/join '/ path) "]: " (ex-message e))
                  {::path path}
                  e))))))
 

@@ -24,7 +24,7 @@ class XtdbSinkTask : SinkTask() {
     }
 
     override fun put(sinkRecords: Collection<SinkRecord>) {
-        submitSinkRecords(config.jdbcUrl, config, sinkRecords)
+        submitSinkRecords(config.connectionUrl, config, sinkRecords)
     }
 
     override fun version(): String = XtdbSinkConnector().version()

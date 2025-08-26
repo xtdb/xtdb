@@ -2,7 +2,7 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.kafka.connect :as kc]
-            [xtdb.kafka.connect.util :refer [->sink-record]]
+            [xtdb.kafka.connect.test.util :refer [->sink-record]]
             [xtdb.test-util :as tu])
   (:import (xtdb.kafka.connect XtdbSinkConfig)))
 
@@ -14,7 +14,7 @@
 (t/deftest test-sink
   (let [sink (partial kc/submit-sink-records tu/*node*)]
     (t/testing "basic record_key"
-      (let [props (->config {"jdbcUrl" "jdbcUrl"
+      (let [props (->config {"connection.url" "url"
                              "id.mode" "record_key"})]
         (sink props [(->sink-record {:topic "foo"
                                      :key-value 1
@@ -25,7 +25,7 @@
               :value {:a 1}}]))))
 
     (t/testing "full config"
-      (let [props (->config {"jdbcUrl" "jdbcUrl"
+      (let [props (->config {"connection.url" "url"
                              "id.mode" "record_value"
                              "id.field" "my-id-field"
                              "validFrom.field" "my-valid-from-field"

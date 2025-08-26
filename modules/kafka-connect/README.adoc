@@ -1,230 +1,323 @@
-= kafka-connect
+= XTDB Plugin for Kafka Connect
 
-== Schema-Driven XTDB Encoder Transformation
+This plugin for Kafka Connect allows for ingestion of data into XTDB.
 
-Allows for encoding the value of a record to insert each field using the appropriate XTDB type, based on the record schema.
+It does so by providing the following components:
 
-Transforms into a value of type Map, and dismisses the value schema, as the value no longer complies with it.
+XtdbSinkConnector::
+A Sink Connector that inserts record data into XTDB tables.
 
-=== Config
+SchemaDrivenXtdbEncoder::
+A Kafka Connect Transformation that you can use to transform your record data to appropriate XTDB data types, which are inferred from the record schema.
 
-Prefix with `transforms.<name>.`
+== User Guide
 
-[cols="1,1"]
+=== Simple insert
+
+In its simplest form, you can start an XTDB connector in Kafka Connect with the following configuration:
+
+[source,json]
+----
+{
+  "tasks.max": "1",
+  "topics": "readings",
+  "connector.class": "xtdb.kafka.connect.XtdbSinkConnector",
+  "connection.url": "jdbc:xtdb://xtdb_host:5432/xtdb",
+  "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "value.converter.schemas.enable": "false"
+}
+----
+
+This allows to insert plain JSON records with no corresponding schema.
+
+Send the following record to your Kafka topic to have it inserted into XTDB:
+
+[source,json]
+----
+{
+  "_id": 1,
+  "_valid_from": "2025-08-25T11:15:00Z",
+  "metric": "Humidity",
+  "measurement": 0.8
+}
+----
+
+Notice that we are setting the XTDB identifier field `_id` and the special temporal field `_valid_from`. You should be able to see your record by querying XTDB:
+
+[source,sql]
+----
+SELECT *, _valid_from FROM readings FOR VALID_TIME ALL
+----
+
+=== Adapting the shape of your records
+
+Sometimes your record field names and types don't match XTDB's special columns. Let's say your records have the following shape:
+
+[source,json]
+----
+{
+  "reading_id" : 1,
+  "t" : 1756120500000,
+  "metric" : "Humidity",
+  "measurement" : 0.8
+}
+----
+
+Notice that the record identifier is in field `reading_id`, and we want to store `t` as XTDB's `_valid_from`. In addition, `t` is expressed in UNIX time in milliseconds.
+
+One way to fix this is by applying transforms. For example, we can make use of builtin Kafka Connect transforms, extending the connector configuration as follows:
+
+[source,json]
+----
+{
+  ...
+  "transforms" : "timeToString, xtdbRenames",
+  "transforms.timeToString.type" : "org.apache.kafka.connect.transforms.TimestampConverter$Value",
+  "transforms.timeToString.field" : "t",
+  "transforms.timeToString.target.type" : "Timestamp",
+  "transforms.xtdbRenames.type" : "org.apache.kafka.connect.transforms.ReplaceField$Value",
+  "transforms.xtdbRenames.renames" : "reading_id:_id, t:_valid_from"
+}
+----
+
+[NOTE]
+====
+
+Remember that you can check the types of XTDB columns by running a query such as:
+
+[source,sql]
+----
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'readings'
+----
+
+====
+
+
+=== Reshaping based on a schema
+
+Let's say our readings are a bit more complicated:
+
+[source,json]
+----
+{
+  "_id" : 1,
+  "_valid_from" : "2025-08-25T11:15:00Z",
+  "metric" : "Humidity",
+  "measurement" : 0.8,
+  "span" : "PT30S"
+}
+----
+
+We have an additional `span` field, that we'd want to store using the `interval` type in XTDB. Furthermore, we want to store `measurement` as a 32-bit float, rather than 64-bit float (commonly known as "double").
+
+Configure your connector to apply the Xtdb encoder transform:
+
+[source,json]
+----
+{
+  "transforms": "xtdbEncode",
+  "transforms.xtdbEncode.type": "xtdb.kafka.connect.SchemaDrivenXtdbEncoder"
+}
+----
+
+Depending on the kind of schema you want to use (JSON Schema / Avro Schema / Connect Schema) choose one of the following sections:
+
+==== Using JSON Schema
+
+Define your schema as follows:
+
+[source,json]
+----
+{
+  "type": "object",
+  "properties": {
+    "_id": { "type": "integer" },
+    "_valid_from": { "type": "string" },
+    "metric": { "type": "string" },
+    "measurement": {
+      "type": "number",
+      "connect.type": "float32"
+    },
+    "span" : {
+      "type": "string",
+      "connect.parameters": { "xtdb.type": "interval" }
+    }
+  }
+}
+----
+
+We are using a standard Kafka Connect type for defining `measurement` as a `float32`. For `span`, we use the custom parameter `xtdb.type` for defining the XTDB-specific data type `interval`.
+
+For the above to work, you will need to configure your connector's value converter as follows:
+
+[source,json]
+----
+{
+  ...
+  "value.converter" : "io.confluent.connect.json.JsonSchemaConverter",
+  "value.converter.schema.registry.url" : "http://schema-registry:8081",
+  "value.converter.schemas.enable" : "true"
+}
+----
+
+==== Using Avro Schema
+
+Define your schema as follows:
+
+[source,json]
+----
+{
+  "type": "record",
+  "name": "Reading",
+  "fields": [
+    {"name": "_id", "type": "long"},
+    {"name": "_valid_from", "type": "string"},
+    {"name": "metric", "type": "string"},
+    {"name": "measurement", "type": "float"},
+    {"name": "span",
+      "type": {
+        "type": "string",
+        "connect.parameters": {
+          "xtdb.type": "interval"
+        }
+      }
+    }
+  ]
+}
+----
+
+We are using a standard Avro type for defining `measurement` as a `float`. For `span`, we use the custom parameter `xtdb.type` for defining the XTDB-specific data type `interval`.
+
+For the above to work, you will need to configure your connector's value converter as follows:
+
+[source,json]
+----
+{
+  ...
+  "value.converter": "io.confluent.connect.avro.AvroConverter",
+  "value.converter.schemas.enable": "true",
+  "value.converter.schema.registry.url": "http://schema-registry:8081",
+  "value.converter.connect.meta.data": "true"
+}
+----
+
+==== Using an in-band Connect Schema
+
+Kafka Connect offers the possibility of sending your data payload and its corresponding schema together in your record value.
+
+[source,json]
+----
+{
+  "schema": {
+    "type": "struct",
+    "fields": [
+      {"field": "_id", "type": "int64", "optional": false},
+      {"field": "_valid_from", "type": "string", "optional": false},
+      {"field": "metric", "type": "string", "optional": false},
+      {"field": "measurement", "type": "float", "optional": false},
+      {
+        "field": "span",
+        "type": "string",
+        "parameters": {
+          "xtdb.type": "interval"
+        },
+        "optional": false
+      }
+    ]
+  },
+  "payload": {
+    "_id": 1,
+    "_valid_from": "2025-08-25T11:15:00Z",
+    "metric": "Humidity",
+    "measurement": 0.8,
+    "span": "PT30S"
+  }
+}
+----
+
+We are using a standard Connect type for defining `measurement` as a `float`. For `span`, we use the custom parameter `xtdb.type` for defining the XTDB-specific data type `interval`.
+
+For the above to work, you will need to configure your connector's value converter as follows:
+
+[source,json]
+----
+{
+  ...
+  "value.converter": "org.apache.kafka.connect.json.JsonConverter"
+}
+----
+
+== Reference
+
+=== XTDB Sink Connector
+
+Ingests Kafka records into XTDB tables.
+
+Configuration options:
+
+[cols="1,2"]
 |===
-|`type`
-|`"xtdb.kafka.connect.SchemaDrivenXtdbEncoder"`
-|===
+|`connector.class`
+|`"xtdb.kafka.connect.XtdbSinkConnector"`
 
-=== XTDB types depending on schema
-
-(Tentative)
-
-Integer and float sizes are stored to the smallest size available in XTDB.
-
-For strings, you can use a custom `xtdb.type` parameter for more specific XTDB types:
-
-* `interval`
-* `timestamptz`
-
-== XTDB Sink Connector
-
-== Config
-
-=== `connector.class`
-
-Must be `"xtdb.kafka.connect.XtdbSinkConnector"`
-
-=== `jdbcUrl`
-
-Required. Must point to XTDB's PostgreSQL-compatible port.
+|`connection.url`
+|Required. Must point to XTDB's PostgreSQL-compatible port.
 
 Example: `"jdbc:xtdb://my_host:5432/xtdb"`
 
-[cols="1,1"]
-|===
-|Type:
-|`String`
-
-|Default:
-|`None`
-
-|Importance:
-|`High`
-|===
-
-=== `id.mode`
-
-Where to get the `_id` from.
+|`id.mode`
+|Where to get the `_id` from.
 
 One of:
 
-record_key::
+`record_key`::
+
 * The record key must be either a Struct or a primitive value
-* If the key is a struct then `id.field` must be used to select a field to use as the `_id`
-* *Required* if you want https://kafka.apache.org/documentation/#design_compactionbasics[tombstones] to delete records
-record_value::
-* `id.field` must be used to select a field to use as the `_id`
+* If the key is a struct then use `id.field` to select a field to use as the `_id`
+* Required if you want https://kafka.apache.org/documentation/#design_compactionbasics[tombstones] to delete records
 
-[cols="1,1"]
-|===
-|Type:
-|`String`
+`record_value`::
 
-|Default:
-|`None`
+* Use `id.field` must be used to select a field to use as the `_id`
 
-|Importance:
-|`High`
+|`id.field`
+|The field name to use as the `_id`. Set to an empty string if using a primitive `record_key`.
+
+|`table.name.format`
+|A format string for the destination table name, which may contain `${topic}` as a placeholder for the originating topic name.
+
 |===
 
-=== `id.field`
+=== SchemaDrivenXtdbEncoder
 
-The field name to use as the `_id`.
-Leave blank if using a primitive `record_key`.
+Transforms each field of a record value into the appropriate XTDB type, based on the record value schema.
 
-The behaviour depends on `id.mode`:
+Configure by defining a transform of `type: xtdb.kafka.connect.SchemaDrivenXtdbEncoder`
 
-record_key::
-* If the key is primitive then `id.field` *must* be empty string
-* If the key is a Struct then must select a field from the Struct
-record_value::
-* Must select a key from the Struct
+The XTDB type for each field is derived from:
 
-[cols="1,1"]
-|===
-|Type:
-|`String`
+* Its type in the schema
+* An optional custom parameter `xtdb.type`. How this custom parameter is defined depends on the schema type. See the User Guide above.
 
-|Default:
-|`""`
+If defined, the `xtdb.type` has preference.
 
-|Importance:
-|`Medium`
-|===
+Supported `xtdb.type` values are:
 
-=== `validFrom.field`
+* `interval`
+* `timestamptz`
+* and any fully-qualified Transit type supported by XTDB
 
-The field name to use as `_valid_from`.
-Leave blank to use xtdb's default `_valid_from`.
-
-[cols="1,1"]
-|===
-|Type:
-|`String`
-
-|Default:
-|`""`
-
-|Importance:
-|`Low`
-|===
-
-=== `validTo.field`
-
-The field name to use as `_valid_from`.
-Leave blank to use xtdb's default `_valid_from`.
-
-[cols="1,1"]
-|===
-|Type:
-|`String`
-
-|Default:
-|`""`
-
-|Importance:
-|`Low`
-|===
-
-=== `table.name.format`
-
-A format string for the destination table name, which may contain `${topic}` as a placeholder for the originating topic name.
-
-[cols="1,1"]
-|===
-|Type:
-|`String`
-
-|Default:
-|`"${topic}"`
-
-|Importance:
-|`Medium`
-|===
-
-== Example config
-
-[source,json]
-----
-{
-    "name": "xtdb-jdbc-sink-connector",
-    "config": {
-        "connector.class": "xtdb.kafka.connect.XtdbSinkConnector",
-        "tasks.max": 1,
-        "topics": "readings",
-        "url": "http://xtdb:3000",
-        "id.mode": "record_value",
-        "id.field": "xt/id",
-        "validFrom.field": "validFrom",
-        "validTo.field": "validTo",
-        "table.name.format": "companyco_${topic}",
-        "transforms": "convertValidFrom,convertValidTo",
-        "transforms.convertValidFrom.type": "org.apache.kafka.connect.transforms.TimestampConverter$Value",
-        "transforms.convertValidFrom.field": "validFrom",
-        "transforms.convertValidFrom.target.type": "Timestamp",
-        "transforms.convertValidFrom.format": "yyyy-MM-dd'T'HH:mm:ssX",
-        "transforms.convertValidTo.type": "org.apache.kafka.connect.transforms.TimestampConverter$Value",
-        "transforms.convertValidTo.field": "validTo",
-        "transforms.convertValidTo.target.type": "Timestamp",
-        "transforms.convertValidTo.format": "yyyy-MM-dd'T'HH:mm:ssX",
-        "key.converter": "org.apache.kafka.connect.json.JsonConverter",
-        "key.converter.schemas.enable": "true",
-        "value.converter": "org.apache.kafka.connect.json.JsonConverter",
-        "value.converter.schemas.enable": "true"
-    }
-}
-----
-
-With some data that looks like:
-[source,json]
-----
-{
-    "schema": {
-        "type": "struct",
-        "fields": [
-            { "type": "int64", "optional": false, "field": "xt/id" },
-            { "type": "string", "optional": false, "field": "metric" },
-            { "type": "int32", "optional": false, "field": "measurement" },
-            { "type": "string", "optional": false, "field": "validFrom" },
-            { "type": "string", "optional": false, "field": "validTo" }
-        ]
-    },
-    "payload": {
-        "xt/id": 1,
-        "metric": "Humidity",
-        "validFrom": "2024-01-01T00:15:00Z",
-        "validTo": "2024-01-01T00:20:00Z",
-        "measurement": 0.8
-    }
-}
-----
-
-If storing datetimes with timezones is important to you, I would suggest
-writing a https://docs.confluent.io/platform/current/connect/transforms/custom.html[custom transform].
+[NOTE]
+====
+SchemaDrivenXtdbEncoder transforms a Struct record into a value of type Map, and dismisses the record value schema, as the value no longer complies with it.
+====
 
 == Development
 
-REPL:
+Gradle tasks for:
 
-[source,bash]
-----
-$ clj -M:dev
-----
+REPL:: Use top project REPL `:xtdb:clojureRepl`
 
-Build:
-
-[source,bash]
-----
-$ clj -T:build uber
-----
+Generate JAR file:: `:xtdb:kafka-connect:`

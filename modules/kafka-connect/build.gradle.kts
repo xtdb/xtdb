@@ -29,6 +29,15 @@ dependencies {
     testImplementation(project(":"))
     testImplementation(project(":xtdb-core"))
     testImplementation(libs.hato)
+
+    // Doc examples:
+    // TODO: change to testImplementation (doesn't work, why?)
+    implementation("io.confluent", "kafka-json-schema-serializer", "7.6.6")
+    implementation("io.confluent", "kafka-avro-serializer", "7.6.6")
+
+    // For code inspection only:
+    testImplementation("io.confluent", "kafka-connect-json-schema-converter", "7.6.6")
+    testImplementation("io.confluent", "kafka-connect-avro-converter", "7.6.6")
 }
 
 kotlin {

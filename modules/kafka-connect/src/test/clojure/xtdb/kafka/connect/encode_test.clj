@@ -2,10 +2,8 @@
   (:require [clojure.test :refer :all]
             [xtdb.api :as xt]
             [xtdb.kafka.connect.encode :as encode]
-            [spyscope.core]
             [xtdb.node :as xtn]
-            [xtdb.kafka.connect.util :refer [->sink-record ->struct]]
-            [xtdb.kafka.connect.test.util :refer [query-col-types]])
+            [xtdb.kafka.connect.test.util :refer [->sink-record ->struct query-col-types]])
   (:import (clojure.lang ExceptionInfo)
            (java.util ArrayList)
            (org.apache.kafka.connect.data ConnectSchema Schema SchemaBuilder)))
@@ -58,12 +56,8 @@
                                                     .value
                                                     (update-keys keyword)
                                                     (clojure.set/rename-keys {:_id :xt/id}))]])
-      (is (= (query-col-types node)
+      (is (= (query-col-types node "my_table")
              {:_id :utf8
-              :_system_from [:timestamp-tz :micro "UTC"]
-              :_system_to [:union #{[:timestamp-tz :micro "UTC"] :null}]
-              :_valid_from [:timestamp-tz :micro "UTC"]
-              :_valid_to [:union #{[:timestamp-tz :micro "UTC"] :null}]
 
               :my_int64 :i64
               :my_int32 :i32
