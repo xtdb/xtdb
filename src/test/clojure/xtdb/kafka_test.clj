@@ -23,18 +23,9 @@
 
   (.stop container))
 
-(defn with-container [^GenericContainer c, f]
-  (if (.getContainerId c)
-    (f c)
-    (try
-      (.start c)
-      (f c)
-      (finally
-        (.stop c)))))
-
 (t/use-fixtures :once
   (fn [f]
-    (with-container container
+    (tu/with-container container
       (fn [^ConfluentKafkaContainer c]
         (binding [*bootstrap-servers* (.getBootstrapServers c)]
           (f))))))
@@ -112,7 +103,7 @@
   (let [original-topic (str "xtdb.kafka-test." (random-uuid))
         empty-topic (str "xtdb.kafka-test." (random-uuid))]
     (util/with-tmp-dirs #{local-disk-path}
-      ;; Node with storage and log topic 
+      ;; Node with storage and log topic
       (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
                                                                           :poll-duration "PT2S"
                                                                           :properties-map {}
@@ -132,7 +123,7 @@
         ;; Submit a few more transactions
         (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :willbe}]])
         (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :lost}]])
-        (t/is (= (set [{:xt/id :foo} 
+        (t/is (= (set [{:xt/id :foo}
                        {:xt/id :bar}
                        {:xt/id :willbe}
                        {:xt/id :lost}])
@@ -168,7 +159,7 @@
 
         (t/testing "can index/query new transactions"
           (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :new}]]))
-          (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :new2}]])) 
+          (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :new2}]]))
           (t/is (= (set [{:xt/id :foo}
                          {:xt/id :bar}
                          {:xt/id :new}
@@ -188,16 +179,16 @@
                                                                          :epoch 1}]
                                                            :storage [:local {:path local-disk-path}]}}})]
         (t/testing "can query all previously indexed values, including those after new epoch started"
-          (t/is (= (set [{:xt/id :foo} 
-                         {:xt/id :bar} 
-                         {:xt/id :new} 
+          (t/is (= (set [{:xt/id :foo}
+                         {:xt/id :bar}
+                         {:xt/id :new}
                          {:xt/id :new2} ])
                    (set (xt/q node "SELECT _id FROM xt_docs")))))
 
         (t/testing "can continue to index/query new transactions"
           (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :new3}]]))
           (t/is (= (set [{:xt/id :foo}
-                         {:xt/id :bar} 
+                         {:xt/id :bar}
                          {:xt/id :new}
                          {:xt/id :new2}
                          {:xt/id :new3}])

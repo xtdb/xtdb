@@ -159,6 +159,7 @@ val YAML_SERDE = Yaml(
 
         polymorphic(Authenticator.Factory::class) {
             subclass(Authenticator.Factory.UserTable::class)
+            subclass(Authenticator.Factory.OpenIdConnect::class)
         }
 
         ServiceLoader.load(XtdbModule.Registration::class.java)

@@ -81,6 +81,7 @@ dependencies {
     antlr(libs.antlr)
     implementation(libs.antlr.runtime)
 
+    api(libs.hato)
     testImplementation(libs.pgjdbc)
     testImplementation(libs.mockk)
     testImplementation(libs.clojure.test.check)
