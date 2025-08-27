@@ -169,7 +169,8 @@
                                (dotimes [build-idx (.getRowCount build-rel)]
                                  (when (and pushdown-iids (= (name build-col-name) "_iid"))
                                    (.add pushdown-iids (.getBytes build-col build-idx)))
-                                 (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))))
+                                 (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx)))))))))
+  (.build build-side))
 
 (defn- join-rels [^JoinType join-type, ^RelationReader build-rel, ^RelationReader probe-rel, [^ints build-sel, ^ints probe-sel]]
   (let [selected-build-rel (.select build-rel build-sel)
@@ -315,7 +316,7 @@
                                        with-nil-row? types/->nullable-field)))))]
     (BuildSide. allocator schema (map str key-col-names)
                 (when matched-build-idxs? (RoaringBitmap.))
-                (boolean with-nil-row?) )))
+                (boolean with-nil-row?))))
 
 (defn ->probe-side [build-side {:keys [build-fields probe-fields key-col-names theta-expr param-fields args with-nil-row?]}]
   (let [param-types (update-vals param-fields types/field->col-type)]

@@ -17,8 +17,18 @@ class IntVector private constructor(
     override val type: ArrowType = I32
     override val byteWidth = Int.SIZE_BYTES
 
-    constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
+    companion object {
+        private fun openBuffer(al: BufferAllocator, valueCount: Int) =
+            ExtensibleBuffer(al, valueCount.toLong() * Int.SIZE_BYTES).also { it.clear() }
+    }
+
+    @JvmOverloads
+    constructor(
+        al: BufferAllocator, name: String, nullable: Boolean, valueCount: Int = 0
+    ) : this(
+        name, nullable, valueCount,
+        openBuffer(al, valueCount), openBuffer(al, valueCount)
+    )
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(v: Int) = writeInt0(v)
