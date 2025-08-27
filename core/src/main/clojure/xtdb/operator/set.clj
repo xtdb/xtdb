@@ -71,12 +71,16 @@
 
 (deftype IntersectionCursor [^ICursor left-cursor, ^ICursor right-cursor
                              ^BuildSide build-side, ->probe-side
-                             difference?]
+                             difference?
+                             ^:unsynchronized-mutable build-phase-ran?]
   ICursor
-  (tryAdvance [_ c]
-    (.forEachRemaining right-cursor
-                       (fn [^RelationReader in-rel]
-                         (.append build-side in-rel)))
+  (tryAdvance [this c]
+    (when-not build-phase-ran?
+      (.forEachRemaining right-cursor
+                         (fn [^RelationReader in-rel]
+                           (.append build-side in-rel)))
+      (set! (.build-phase-ran? this) true))
+
 
     (boolean
      (let [advanced? (boolean-array 1)]
@@ -118,7 +122,7 @@
                                             build-side (join/->probe-side build-side
                                                                           {:fields right-fields
                                                                            :key-col-names key-col-names})
-                                            false)))}))))
+                                            false false)))}))))
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
@@ -136,4 +140,4 @@
                                                                           {:build-fields left-fields
                                                                            :probe-fields right-fields
                                                                            :key-col-names key-col-names})
-                                            true)))}))))
+                                            true false)))}))))
