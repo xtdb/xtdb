@@ -22,7 +22,7 @@
            [java.util.concurrent.atomic AtomicReference]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config)
+           (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$XtdbInternal)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
            (xtdb.database Database$Catalog)
@@ -89,6 +89,9 @@
   (module [_ clazz]
     (->> (vals (:xtdb/modules system))
          (some #(when (instance? clazz %) %))))
+
+  Xtdb$XtdbInternal
+  (getDbCatalog [_] db-cat)
 
   xtp/PNode
   (submit-tx [this tx-ops opts]

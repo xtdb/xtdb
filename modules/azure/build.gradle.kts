@@ -1,5 +1,3 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     `java-library`
     id("dev.clojurephant.clojure")
@@ -8,6 +6,8 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("org.jetbrains.dokka")
+
+    alias(libs.plugins.protobuf)
 }
 
 publishing {
@@ -33,6 +33,23 @@ dependencies {
     api(libs.micrometer.registry.azuremonitor)
 
     api(kotlin("stdlib"))
+
+    api(libs.protobuf.kotlin)
+
     api(libs.kotlinx.coroutines)
     testImplementation(libs.kotlinx.coroutines.test)
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.asProvider().get()}"
+    }
+
+    generateProtoTasks {
+        all().forEach {
+            it.builtins {
+                create("kotlin")
+            }
+        }
+    }
 }

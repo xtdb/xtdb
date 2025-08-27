@@ -6,7 +6,8 @@
   (:import [java.lang AutoCloseable]
            [java.util HashMap]
            xtdb.api.Xtdb$Config
-           [xtdb.database Database Database$Catalog Database$Config]))
+           [xtdb.database Database Database$Catalog Database$Config]
+           [xtdb.database.proto DatabaseConfig DatabaseConfig$LogCase DatabaseConfig$StorageCase]))
 
 (defprotocol CreateDatabase
   ;; currently just used by the playground to create a new in-memory database
@@ -53,8 +54,9 @@
 (defmethod ig/halt-key! ::allocator [_ allocator]
   (util/close allocator))
 
-(defmethod ig/prep-key ::for-query [_ {:keys [db-name]}]
+(defmethod ig/prep-key ::for-query [_ {:keys [db-name db-config]}]
   {:db-name db-name
+   :db-config db-config
    :allocator (ig/ref ::allocator)
    :block-cat (ig/ref :xtdb/block-catalog)
    :table-cat (ig/ref :xtdb/table-catalog)
@@ -64,10 +66,10 @@
    :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)
    :live-index (ig/ref :xtdb.indexer/live-index)})
 
-(defmethod ig/init-key ::for-query [_ {:keys [allocator db-name block-cat table-cat
-                                             trie-cat log buffer-pool metadata-manager
-                                             live-index]}]
-  (Database. db-name allocator block-cat table-cat trie-cat
+(defmethod ig/init-key ::for-query [_ {:keys [allocator db-name db-config block-cat table-cat
+                                              trie-cat log buffer-pool metadata-manager
+                                              live-index]}]
+  (Database. db-name db-config allocator block-cat table-cat trie-cat
              log buffer-pool metadata-manager live-index
              live-index ; snap-src
              nil nil))
@@ -95,7 +97,7 @@
          :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config))
          :xtdb.indexer/live-index (assoc opts :indexer-conf indexer-conf)
 
-         ::for-query opts
+         ::for-query (assoc opts :db-config db-config)
 
          :xtdb.indexer/for-db opts
          :xtdb.compactor/for-db opts
@@ -127,6 +129,23 @@
 (defmethod ig/init-key :xtdb/db-catalog [_ {:keys [base]}]
   (util/with-close-on-catch [!dbs (HashMap.)]
     (let [^Xtdb$Config conf (get-in base [:config :config])
+          db-cat (reify
+                   Database$Catalog
+                   (getDatabaseNames [_] (set (keys !dbs)))
+
+                   (databaseOrNull [_ db-name]
+                     (:db (.get !dbs db-name)))
+
+                   CreateDatabase
+                   (create-database [_ db-name]
+                     (util/with-close-on-catch [db (open-db db-name base (Database$Config.))]
+                       (.put !dbs db-name db)
+                       (:db db)))
+
+                   AutoCloseable
+                   (close [_]
+                     (doseq [[_ {:keys [sys]}] !dbs]
+                       (ig/halt! sys))))
           db-configs (-> (.getDatabases conf)
                          (update-keys (comp util/str->normal-form-str str symbol)))]
 
@@ -134,26 +153,10 @@
         (throw (err/incorrect ::missing-xtdb-database "The 'xtdb' database is required but not found in the configuration.")))
 
       (doseq [[db-name ^Database$Config db-config] db-configs]
-        (util/with-close-on-catch [db (open-db db-name base db-config)]
+        (util/with-close-on-catch [db (open-db db-name (cond-> base (= db-name "xtdb") (assoc :db-catalog db-cat)) db-config)]
           (.put !dbs db-name db)))
 
-      (reify
-        Database$Catalog
-        (getDatabaseNames [_] (set (keys !dbs)))
-
-        (databaseOrNull [_ db-name]
-          (:db (.get !dbs db-name)))
-
-        CreateDatabase
-        (create-database [_ db-name]
-          (util/with-close-on-catch [db (open-db db-name base (Database$Config.))]
-            (.put !dbs db-name db)
-            (:db db)))
-
-        AutoCloseable
-        (close [_]
-          (doseq [[_ {:keys [sys]}] !dbs]
-            (ig/halt! sys)))))))
+      db-cat)))
 
 (defmethod ig/halt-key! :xtdb/db-catalog [_ db-cat]
   (util/close db-cat))
@@ -165,3 +168,16 @@
   ;; HACK a temporary util to just pull the primary DB out of the node
   ;; chances are the non-test callers of this will need to know which database they're interested in.
   (.getPrimary (<-node node)))
+
+(defn <-DatabaseConfig [^DatabaseConfig conf]
+  {:log (condp = (.getLogCase conf)
+          DatabaseConfig$LogCase/IN_MEMORY_LOG :memory
+
+          DatabaseConfig$LogCase/LOCAL_LOG
+          [:local {:path (.hasPath (.getLocalLog conf))}])
+
+   :storage (condp = (.getStorageCase conf)
+              DatabaseConfig$StorageCase/IN_MEMORY_STORAGE :memory
+
+              DatabaseConfig$StorageCase/LOCAL_STORAGE
+              [:local {:path (.hasPath (.getLocalStorage conf))}])})

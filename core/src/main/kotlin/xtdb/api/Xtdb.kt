@@ -29,6 +29,9 @@ interface Xtdb : DataSource, AutoCloseable {
     val serverReadOnlyPort: Int
 
     interface CompactorNode : AutoCloseable
+    interface XtdbInternal : Xtdb {
+        val dbCatalog: Database.Catalog
+    }
 
     fun <T : XtdbModule> module(type: Class<T>): T?
 
@@ -96,6 +99,9 @@ interface Xtdb : DataSource, AutoCloseable {
     }
 
     companion object {
+        internal interface XtdbInternal {
+            val dbCatalog: Database.Catalog
+        }
 
         @JvmStatic
         fun configure() = Config()

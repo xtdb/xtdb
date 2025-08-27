@@ -1,5 +1,6 @@
 package xtdb.storage
 
+import com.google.protobuf.Any as ProtoAny
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
@@ -13,7 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.io.TempDir
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.SimulatedObjectStore
-import xtdb.api.storage.Storage.remoteStorage
+import xtdb.api.storage.Storage.remote
 import xtdb.api.storage.StoreOperation.COMPLETE
 import xtdb.api.storage.StoreOperation.UPLOAD
 import xtdb.arrow.I32
@@ -34,13 +35,16 @@ class RemoteStorageTest : StorageTest() {
 
     object SimulatedObjectStoreFactory : ObjectStore.Factory {
         override fun openObjectStore(storageRoot: Path): ObjectStore = SimulatedObjectStore()
+
+        override val configProto: ProtoAny
+            get() = ProtoAny.newBuilder().build()
     }
 
     @BeforeEach
     fun setUp(@TempDir localDiskCachePath: Path, al: BufferAllocator) {
         memoryCache = MemoryCache.Factory().open(al)
         remoteBufferPool =
-            remoteStorage(SimulatedObjectStoreFactory)
+            remote(SimulatedObjectStoreFactory)
                 .open(al, memoryCache, DiskCache.Factory(localDiskCachePath).build(), "xtdb") as RemoteBufferPool
 
         // Mocking small value for MIN_MULTIPART_PART_SIZE

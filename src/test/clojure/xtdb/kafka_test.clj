@@ -55,6 +55,11 @@
       (t/is (xt/submit-tx secondary-conn [[:put-docs :docs {:xt/id :secondary}]]))
 
       (t/is (= [{:xt/id :primary}] (xt/q xtdb-conn "SELECT _id FROM docs")))
+      (t/is (= [{:xt/id :secondary}] (xt/q secondary-conn "SELECT _id FROM docs")))
+
+      (tu/flush-block! node)
+
+      (t/is (= [{:xt/id :primary}] (xt/q xtdb-conn "SELECT _id FROM docs")))
       (t/is (= [{:xt/id :secondary}] (xt/q secondary-conn "SELECT _id FROM docs"))))))
 
 (t/deftest ^:integration test-kafka-setup-with-provided-opts

@@ -19,7 +19,7 @@
 
       (cr/reset-compactor! (doto (Xtdb$Config.)
                              (.database "xtdb" (Database$Config. (Log/localLog (.resolve tmp-root "log"))
-                                                                 (Storage/localStorage (.resolve tmp-root "objects")))))
+                                                                 (Storage/local (.resolve tmp-root "objects")))))
                            "xtdb"
                            {:dry-run? false})
 

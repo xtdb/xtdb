@@ -1,5 +1,6 @@
 package xtdb.api.storage
 
+import com.google.protobuf.Any as ProtoAny
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
@@ -20,6 +21,7 @@ interface ObjectStore : AutoCloseable {
 
     interface Factory {
         fun openObjectStore(storageRoot: Path = STORAGE_ROOT): ObjectStore
+        val configProto: ProtoAny
 
         companion object {
             val serializersModule = SerializersModule {

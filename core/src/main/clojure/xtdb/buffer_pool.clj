@@ -8,10 +8,10 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defmethod db/->storage-factory :in-memory [_ _]
-  (Storage/inMemoryStorage))
+  (Storage/inMemory))
 
 (defmethod db/->storage-factory :local [_ {:keys [path]}]
-  (Storage/localStorage (util/->path path)))
+  (Storage/local (util/->path path)))
 
 (defmulti ->object-store-factory
   #_{:clj-kondo/ignore [:unused-binding]}
@@ -32,8 +32,8 @@
 (defmethod ->object-store-factory :azure [_ opts] (->object-store-factory :xtdb.azure/object-store opts))
 
 (defmethod db/->storage-factory :remote [_ {:keys [object-store]}]
-  (Storage/remoteStorage (let [[tag opts] object-store]
-                           (->object-store-factory tag opts))))
+  (Storage/remote (let [[tag opts] object-store]
+                    (->object-store-factory tag opts))))
 
 (defmethod ig/prep-key :xtdb/buffer-pool [_ {:keys [base db-name factory]}]
   {:base base, :factory factory, :db-name db-name

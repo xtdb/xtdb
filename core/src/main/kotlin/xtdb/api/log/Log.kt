@@ -9,6 +9,7 @@ import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
 import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
+import xtdb.database.proto.DatabaseConfig
 import xtdb.log.proto.*
 import xtdb.log.proto.LogMessage.MessageCase
 import xtdb.trie.BlockIndex
@@ -119,6 +120,8 @@ interface Log : AutoCloseable {
 
     interface Factory {
         fun openLog(clusters: Map<LogClusterAlias, Cluster>): Log
+
+        fun writeTo(dbConfig: DatabaseConfig.Builder)
 
         companion object {
             val serializersModule = SerializersModule {

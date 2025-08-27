@@ -35,9 +35,14 @@ import kotlin.coroutines.cancellation.CancellationException
 
 private val LOG = LogProcessor::class.logger
 
+/**
+ * @param dbCatalog supplied iff you want to write secondary databases at the end of a block.
+ *                  i.e. iff db == 'xtdb'
+ */
 class LogProcessor(
     allocator: BufferAllocator,
     meterRegistry: MeterRegistry,
+    private val dbCatalog: Database.Catalog?,
     private val db: Database,
     private val indexer: Indexer.ForDatabase,
     private val compactor: Compactor.ForDatabase,
@@ -228,7 +233,13 @@ class LogProcessor(
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
         val tables = liveIndex.finishBlock(blockIdx)
-        blockCatalog.finishBlock(blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId, tables)
+        val secondaryDatabases = dbCatalog?.takeIf { db.name == "xtdb" }?.serialisedSecondaryDatabases
+
+        blockCatalog.finishBlock(
+            blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
+            tables, secondaryDatabases
+        )
+
         liveIndex.nextBlock()
         compactor.signalBlock()
         LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")

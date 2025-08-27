@@ -3,6 +3,7 @@ package xtdb.gcp
 
 import clojure.lang.ExceptionInfo
 import clojure.lang.PersistentHashMap
+import com.google.protobuf.Any as ProtoAny
 import com.google.cloud.storage.BlobInfo
 import com.google.cloud.storage.Storage
 import com.google.cloud.storage.Storage.BlobListOption
@@ -21,7 +22,7 @@ import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
-import xtdb.gcp.CloudStorage.Factory
+import xtdb.gcp.proto.gcsObjectStoreConfig
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
@@ -51,7 +52,7 @@ import kotlin.time.Duration.Companion.seconds
  * ```
  */
 class CloudStorage(
-    projectId: String,
+    private val projectId: String,
     private val bucket: String,
     private val prefix: Path,
 ) : ObjectStore {
@@ -118,6 +119,7 @@ class CloudStorage(
         client.close()
     }
 
+
     companion object {
         @JvmStatic
         fun googleCloudStorage(projectId: String, bucket: String) = Factory(projectId, bucket)
@@ -144,7 +146,16 @@ class CloudStorage(
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
 
         override fun openObjectStore(storageRoot: Path) =
-            CloudStorage(projectId, bucket, prefix?.resolve(storageRoot) ?: storageRoot) }
+            CloudStorage(projectId, bucket, prefix?.resolve(storageRoot) ?: storageRoot)
+
+        override val configProto by lazy {
+            ProtoAny.pack(gcsObjectStoreConfig {
+                this.projectId = this@Factory.projectId
+                this.bucket = this@Factory.bucket
+                this@Factory.prefix?.toString()?.let { this.prefix = it }
+            }, "proto.xtdb.com")
+        }
+    }
 
     /**
      * @suppress

@@ -7,6 +7,7 @@ import xtdb.api.log.MessageId
 import xtdb.block.proto.Block
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
+import xtdb.database.proto.DatabaseConfig
 import xtdb.table.DatabaseName
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
@@ -43,7 +44,8 @@ class BlockCatalog(private val dbName: DatabaseName, private val bp: BufferPool)
         blockIndex: BlockIndex,
         latestCompletedTx: TransactionKey?,
         latestProcessedMsgId: MessageId,
-        tables: Collection<TableRef>
+        tables: Collection<TableRef>,
+        secondaryDatabases: Map<String, DatabaseConfig>?
     ) {
         val currentBlockIndex = this.currentBlockIndex
         check(currentBlockIndex == null || currentBlockIndex < blockIndex) {
@@ -60,6 +62,7 @@ class BlockCatalog(private val dbName: DatabaseName, private val bp: BufferPool)
             }
             this.latestProcessedMsgId = latestProcessedMsgId
             this.tableNames.addAll(tables.map { it.sym.toString() })
+            secondaryDatabases?.let { this.secondaryDatabases.putAll(it) }
         }
 
         bp.putObject(blocksPath.resolve("b${blockIndex.asLexHex}.binpb"), ByteBuffer.wrap(newBlock.toByteArray()))

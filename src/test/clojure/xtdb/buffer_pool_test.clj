@@ -101,7 +101,7 @@
 
 (t/deftest below-min-size-put-test
   (with-caches {}
-    (with-open [bp (-> (Storage/remoteStorage (simulated-obj-store-factory))
+    (with-open [bp (-> (Storage/remote (simulated-obj-store-factory))
                        (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" nil Storage/VERSION))]
       (t/testing "if <= min part size, putObject is used"
         (.putObject bp (util/->path "min-part-put") (utf8-buf "12"))
@@ -119,7 +119,7 @@
 
 (t/deftest local-disk-cache-max-size
   (with-caches {:mem-bytes 12, :disk-bytes 10}
-    (with-open [bp (-> (Storage/remoteStorage (simulated-obj-store-factory))
+    (with-open [bp (-> (Storage/remote (simulated-obj-store-factory))
                        (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" nil Storage/VERSION))]
       (t/testing "staying below max size - all elements available"
         (insert-utf8-to-local-cache bp (util/->path "a") 4)
@@ -156,7 +156,7 @@
         path-b (util/->path "b")]
     (with-caches {:mem-bytes 64, :disk-bytes 64}
       ;; Writing files to buffer pool & local-disk-cache
-      (with-open [bp (-> (Storage/remoteStorage obj-store-factory)
+      (with-open [bp (-> (Storage/remote obj-store-factory)
                          (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" nil Storage/VERSION))]
         (insert-utf8-to-local-cache bp path-a 4)
         (insert-utf8-to-local-cache bp path-b 4)
@@ -164,7 +164,7 @@
 
       ;; Starting a new buffer pool - should load buffers correctly from disk (can be sure its grabbed from disk since using a memory cache and memory object store)
       ;; passing a no-op object store to ensure objects are not loaded from object store and instead only the cache is under test.
-      (with-open [bp (-> (Storage/remoteStorage (no-op-object-store-factory))
+      (with-open [bp (-> (Storage/remote (no-op-object-store-factory))
                          (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" nil Storage/VERSION))]
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-a)))))
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-b)))))))))
@@ -172,7 +172,7 @@
 (t/deftest local-buffer-pool
   (tu/with-tmp-dirs #{tmp-dir}
     (with-caches {}
-      (with-open [bp (open-storage (Storage/localStorage tmp-dir))]
+      (with-open [bp (open-storage (Storage/local tmp-dir))]
         (t/testing "empty buffer pool"
           (t/is (= [] (.listAllObjects bp)))
           (t/is (= [] (.listAllObjects bp (.toPath (io/file "foo"))))))))))
@@ -181,7 +181,7 @@
   (tu/with-tmp-dirs #{tmp-dir}
     (let [schema (Schema. [(types/col-type->field "a" :i32)])]
       (with-caches {}
-        (with-open [bp (open-storage (Storage/localStorage tmp-dir))
+        (with-open [bp (open-storage (Storage/local tmp-dir))
                     rel (Relation/open tu/*allocator* schema)
                     _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) rel)]
           (t/is (= [] (.listAllObjects bp))))))))
@@ -225,13 +225,13 @@
 
 (t/deftest test-memory-list-objs
   (with-caches {}
-    (with-open [bp (open-storage (Storage/inMemoryStorage))]
+    (with-open [bp (open-storage (Storage/inMemory))]
       (test-list-objects bp))))
 
 (t/deftest test-local-list-objs
   (tu/with-tmp-dirs #{tmp-dir}
     (with-caches {}
-      (with-open [bp (open-storage (Storage/localStorage tmp-dir))]
+      (with-open [bp (open-storage (Storage/local tmp-dir))]
         (test-list-objects bp)))))
 
 (t/deftest test-latest-available-block
@@ -273,7 +273,7 @@
 (t/deftest network-counter-test
   (let [registry (SimpleMeterRegistry.)]
     (with-caches {}
-      (with-open [bp (-> (Storage/remoteStorage (simulated-obj-store-factory))
+      (with-open [bp (-> (Storage/remote (simulated-obj-store-factory))
                          (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" registry Storage/VERSION))]
         (let [k1 (util/->path "a")
               k2 (util/->path "b")

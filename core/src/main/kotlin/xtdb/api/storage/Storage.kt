@@ -18,6 +18,12 @@ import xtdb.storage.RemoteBufferPool
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.DatabaseName
+import xtdb.database.proto.DatabaseConfig
+import xtdb.database.proto.RemoteStorage
+import xtdb.database.proto.inMemoryStorage
+import xtdb.database.proto.localStorage
+import xtdb.database.proto.remoteStorage
+import xtdb.storage.BufferPool.Companion.UnusedBufferPool
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeOnCatch
 import java.nio.file.Path
@@ -67,7 +73,7 @@ object Storage {
     }
 
     @JvmStatic
-    fun inMemoryStorage() = InMemoryStorageFactory
+    fun inMemory() = InMemoryStorageFactory
 
     /**
      * Implementation for the storage module that persists data to the local file system, under the **path** directory.
@@ -97,7 +103,7 @@ object Storage {
     }
 
     @JvmStatic
-    fun localStorage(path: Path) = LocalStorageFactory(path)
+    fun local(path: Path) = LocalStorageFactory(path)
 
     /**
      * Implementation for the storage module that persists data remotely within a specified [objectStore],
@@ -126,7 +132,19 @@ object Storage {
     }
 
     @JvmStatic
-    fun remoteStorage(objectStore: ObjectStore.Factory) =
+    fun remote(objectStore: ObjectStore.Factory) =
         RemoteStorageFactory(objectStore)
+
+    fun DatabaseConfig.Builder.applyStorage(storage: Storage.Factory) {
+        when (storage) {
+            InMemoryStorageFactory -> setInMemoryStorage(inMemoryStorage { })
+            is LocalStorageFactory -> setLocalStorage(localStorage { this.path = storage.path.toString() })
+            is RemoteStorageFactory ->
+                setRemoteStorage(
+                    RemoteStorage.newBuilder().also { it.objectStore = storage.objectStore.configProto }.build()
+                )
+
+        }
+    }
 }
 

@@ -4,6 +4,7 @@ package xtdb.azure
 
 import com.azure.core.util.BinaryData
 import com.azure.identity.DefaultAzureCredential
+import com.google.protobuf.Any as ProtoAny
 import com.azure.identity.DefaultAzureCredentialBuilder
 import com.azure.storage.blob.BlobServiceClientBuilder
 import com.azure.storage.blob.models.BlobListDetails
@@ -25,6 +26,7 @@ import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.asBytes
+import xtdb.azure.proto.azureBlobStorageConfig
 import xtdb.multipart.IMultipartUpload
 import xtdb.multipart.SupportsMultipart
 import xtdb.util.asPath
@@ -68,7 +70,7 @@ import kotlin.time.Duration.Companion.seconds
  * }
  * ```
  */
-class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, SupportsMultipart<String> {
+class BlobStorage(private val factory: Factory, private val prefix: Path) : ObjectStore, SupportsMultipart<String> {
 
     private val client =
         BlobServiceClientBuilder().run {
@@ -311,6 +313,19 @@ class BlobStorage(factory: Factory, private val prefix: Path) : ObjectStore, Sup
         fun connectionString(connectionString: String) = apply { this.connectionString = connectionString }
 
         override fun openObjectStore(storageRoot: Path) = BlobStorage(this, prefix?.resolve(storageRoot) ?: storageRoot)
+
+        override val configProto by lazy {
+            ProtoAny.pack(azureBlobStorageConfig {
+                this.storageAccount = this@Factory.storageAccount
+                this.container = this@Factory.container
+                this@Factory.prefix?.toString()?.let { this.prefix = it }
+
+                this@Factory.storageAccountKey?.let { this.storageAccountKey = it }
+                this@Factory.userManagedIdentityClientId?.let { this.userManagedIdentityClientId = it }
+                this@Factory.storageAccountEndpoint?.let { this.storageAccountEndpoint = it }
+                this@Factory.connectionString?.let { this.connectionString = it }
+            }, "proto.xtdb.com")
+        }
     }
 
     /**

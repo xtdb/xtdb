@@ -329,10 +329,10 @@
    :block-flush-duration (.getFlushDuration indexer-conf)
    :skip-txs (.getSkipTxs indexer-conf)})
 
-(defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry]} :base
+(defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry db-catalog]} :base
                                                :keys [allocator db indexer compactor block-flush-duration skip-txs] :as deps}]
   (when deps
-    (LogProcessor. allocator meter-registry db indexer compactor block-flush-duration (set skip-txs))))
+    (LogProcessor. allocator meter-registry db-catalog db indexer compactor block-flush-duration (set skip-txs))))
 
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
   (util/close log-processor))
@@ -358,5 +358,4 @@
   ([node timeout] (.syncAll (db/<-node node) timeout)))
 
 (defn send-flush-block-msg! [^Database db]
-  @(-> (.getLog db)
-       (.appendMessage (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1)))))
+  (.sendFlushBlockMessage db))

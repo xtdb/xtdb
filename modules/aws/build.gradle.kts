@@ -6,6 +6,8 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("org.jetbrains.dokka")
+
+    alias(libs.plugins.protobuf)
 }
 
 publishing {
@@ -31,6 +33,23 @@ dependencies {
     api("software.amazon.awssdk", "sts", "2.25.50")
 
     api(kotlin("stdlib"))
+
+    api(libs.protobuf.kotlin)
+
     api(libs.kotlinx.coroutines)
     testImplementation(libs.kotlinx.coroutines.test)
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.asProvider().get()}"
+    }
+
+    generateProtoTasks {
+        all().forEach {
+            it.builtins {
+                create("kotlin")
+            }
+        }
+    }
 }
