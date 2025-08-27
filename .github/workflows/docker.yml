@@ -33,8 +33,7 @@ jobs:
         with:
           images: ghcr.io/xtdb/xtdb
           tags: |
-            # temporarily use `match` so that it tags `latest` even on pre-releases
-            # type=semver,pattern={{version}}
+            type=semver,pattern={{version}}
             type=match,pattern=v(.*),group=1
             type=schedule
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
@@ -47,9 +46,7 @@ jobs:
         with:
           images: ghcr.io/xtdb/xtdb-aws
           tags: |
-            # temporarily use `match` so that it tags `latest` even on pre-releases
-            # type=semver,pattern={{version}}
-            type=match,pattern=v(.*),group=1
+            type=semver,pattern={{version}}
             type=schedule
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
             type=edge,branch=main
@@ -61,8 +58,7 @@ jobs:
         with:
           images: ghcr.io/xtdb/xtdb-azure
           tags: |
-            # temporarily use `match` so that it tags `latest` even on pre-releases
-            # type=semver,pattern={{version}}
+            type=semver,pattern={{version}}
             type=match,pattern=v(.*),group=1
             type=schedule
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
@@ -75,8 +71,7 @@ jobs:
         with:
           images: ghcr.io/xtdb/xtdb-google-cloud
           tags: |
-            # temporarily use `match` so that it tags `latest` even on pre-releases
-            # type=semver,pattern={{version}}
+            type=semver,pattern={{version}}
             type=match,pattern=v(.*),group=1
             type=schedule
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
