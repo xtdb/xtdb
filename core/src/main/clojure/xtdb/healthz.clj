@@ -17,9 +17,9 @@
            (xtdb.api.log Log$Message$FlushBlock)
            (xtdb.api.metrics HealthzConfig)
            xtdb.api.Xtdb$Config
-           xtdb.BufferPoolKt
            (xtdb.database Database Database$Catalog)
-           (xtdb.indexer LogProcessor)))
+           (xtdb.indexer LogProcessor)
+           xtdb.storage.BufferPoolKt))
 
 (defn get-ingestion-error [^LogProcessor log-processor]
   (.getIngestionError log-processor))

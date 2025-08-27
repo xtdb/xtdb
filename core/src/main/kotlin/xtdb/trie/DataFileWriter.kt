@@ -3,7 +3,7 @@ package xtdb.trie
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ArrowWriter
-import xtdb.BufferPool
+import xtdb.storage.BufferPool
 import xtdb.arrow.Relation
 import xtdb.table.TableRef
 import xtdb.trie.Trie.dataFilePath

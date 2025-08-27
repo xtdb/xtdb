@@ -1,7 +1,7 @@
 package xtdb.catalog
 
 import org.slf4j.LoggerFactory
-import xtdb.BufferPool
+import xtdb.storage.BufferPool
 import xtdb.api.TransactionKey
 import xtdb.api.log.MessageId
 import xtdb.block.proto.Block

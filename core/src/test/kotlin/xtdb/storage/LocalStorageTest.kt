@@ -1,20 +1,19 @@
-package xtdb.buffer_pool
+package xtdb.storage
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
-import xtdb.BufferPool
 import xtdb.api.storage.Storage.localStorage
 import xtdb.cache.MemoryCache
 import java.nio.file.Files.createTempDirectory
 
-class LocalBufferPoolTest : BufferPoolTest() {
+class LocalStorageTest : StorageTest() {
     private lateinit var allocator: BufferAllocator
     private lateinit var memoryCache: MemoryCache
     private lateinit var localBufferPool: BufferPool
 
-    override fun bufferPool(): BufferPool = localBufferPool
+    override fun storage(): BufferPool = localBufferPool
 
     @BeforeEach
     fun setUp() {

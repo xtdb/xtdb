@@ -1,10 +1,9 @@
 (ns xtdb.buffer-pool
   (:require [integrant.core :as ig]
             [xtdb.db-catalog :as db]
-            [xtdb.node :as xtn]
             [xtdb.util :as util])
-  (:import (xtdb BufferPool)
-           (xtdb.api.storage Storage Storage$Factory)))
+  (:import (xtdb.api.storage Storage Storage$Factory)
+           (xtdb.storage BufferPool)))
 
 (set! *unchecked-math* :warn-on-boxed)
 

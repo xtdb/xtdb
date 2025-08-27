@@ -3,7 +3,7 @@ package xtdb.indexer
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
-import xtdb.BufferPool
+import xtdb.storage.BufferPool
 import xtdb.api.TransactionKey
 import xtdb.arrow.RelationReader
 import xtdb.arrow.RelationWriter

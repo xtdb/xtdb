@@ -3,7 +3,7 @@ package xtdb.segment
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.BufferPool
+import xtdb.storage.BufferPool
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.compactor.resolveSameSystemTimeEvents

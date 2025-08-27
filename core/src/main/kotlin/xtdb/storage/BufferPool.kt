@@ -1,9 +1,10 @@
-package xtdb
+package xtdb.storage
 
 import com.github.benmanes.caffeine.cache.Caffeine
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
-import xtdb.api.storage.ObjectStore.StoredObject
+import xtdb.ArrowWriter
+import xtdb.api.storage.ObjectStore
 import xtdb.arrow.Relation
 import xtdb.arrow.unsupported
 import xtdb.util.StringUtil.fromLexHex
@@ -13,7 +14,25 @@ import java.nio.file.Path
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.toJavaDuration
 
-interface BufferPool : AutoCloseable {
+private fun Path.parseBlockIndex(): Long? =
+    Regex("b(\\p{XDigit}+)\\.binpb")
+        .matchEntire(toString())
+        ?.groups?.get(1)
+        ?.value?.fromLexHex
+
+private val latestAvailableBlockCache =
+    Caffeine.newBuilder().expireAfterWrite(1.minutes.toJavaDuration()).build<BufferPool, Long>()
+
+val BufferPool.latestAvailableBlockIndex0: Long
+    get() =
+        listAllObjects("blocks".asPath)
+            .lastOrNull()?.key?.fileName?.parseBlockIndex()
+            ?: -1
+
+val BufferPool.latestAvailableBlockIndex: Long
+    get() = latestAvailableBlockCache.get(this) { it.latestAvailableBlockIndex0 }
+
+sealed interface BufferPool : AutoCloseable {
     /**
      * Get the whole file as an on-heap byte array.
      *
@@ -42,14 +61,14 @@ interface BufferPool : AutoCloseable {
      *
      * Objects are returned in lexicographic order of their path names.
      */
-    fun listAllObjects(): Iterable<StoredObject>
+    fun listAllObjects(): Iterable<ObjectStore.StoredObject>
 
     /**
      * Recursively lists all objects in the buffer pool, under the given directory.
      *
      * Objects are returned in lexicographic order of their path names.
      */
-    fun listAllObjects(dir: Path): Iterable<StoredObject>
+    fun listAllObjects(dir: Path): Iterable<ObjectStore.StoredObject>
 
     fun deleteAllObjects()
 
@@ -59,7 +78,9 @@ interface BufferPool : AutoCloseable {
 
     companion object {
         @JvmField
-        val UNUSED = object : BufferPool {
+        val UNUSED: BufferPool = Unused
+
+        private object Unused : BufferPool {
 
             override fun getByteArray(key: Path) = unsupported("getByteArray")
             override fun getFooter(key: Path) = unsupported("getFooter")
@@ -74,23 +95,4 @@ interface BufferPool : AutoCloseable {
             override fun close() = Unit
         }
     }
-
 }
-
-private fun Path.parseBlockIndex(): Long? =
-    Regex("b(\\p{XDigit}+)\\.binpb")
-        .matchEntire(toString())
-        ?.groups?.get(1)
-        ?.value?.fromLexHex
-
-private val latestAvailableBlockCache =
-    Caffeine.newBuilder().expireAfterWrite(1.minutes.toJavaDuration()).build<BufferPool, Long>()
-
-val BufferPool.latestAvailableBlockIndex0: Long
-    get() =
-        listAllObjects("blocks".asPath)
-            .lastOrNull()?.key?.fileName?.parseBlockIndex()
-            ?: -1
-
-val BufferPool.latestAvailableBlockIndex: Long
-    get() = latestAvailableBlockCache.get(this) { it.latestAvailableBlockIndex0 }

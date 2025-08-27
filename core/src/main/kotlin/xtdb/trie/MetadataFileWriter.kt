@@ -1,7 +1,7 @@
 package xtdb.trie
 
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.BufferPool
+import xtdb.storage.BufferPool
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.indexer.TrieMetadataCalculator

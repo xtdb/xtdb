@@ -2,7 +2,6 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
             [xtdb.db-catalog :as db]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
@@ -16,12 +15,11 @@
            [java.nio.charset StandardCharsets]
            (java.nio.file Path)
            (org.apache.arrow.vector.types.pojo Schema)
-           (xtdb BufferPool BufferPoolKt)
            (xtdb.api.storage ObjectStore ObjectStore$Factory Storage Storage$Factory)
            (xtdb.api.storage SimulatedObjectStore StoreOperation)
            xtdb.arrow.Relation
-           (xtdb.buffer_pool RemoteBufferPool)
-           (xtdb.cache DiskCache MemoryCache)))
+           (xtdb.cache DiskCache MemoryCache)
+           (xtdb.storage BufferPool BufferPoolKt RemoteBufferPool)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -43,7 +41,7 @@
                                       (.build nil))]
              ~@body))))))
 
-(defn- open-storage ^xtdb.BufferPool [^Storage$Factory factory]
+(defn- open-storage ^xtdb.storage.BufferPool [^Storage$Factory factory]
   (.open factory tu/*allocator* *mem-cache* *disk-cache* nil Storage/VERSION))
 
 (t/deftest test-remote-buffer-pool-setup

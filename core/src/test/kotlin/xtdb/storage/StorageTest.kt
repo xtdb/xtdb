@@ -1,21 +1,20 @@
-package xtdb.buffer_pool
+package xtdb.storage
 
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import xtdb.BufferPool
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.arrow.IntVector
 import xtdb.arrow.Relation
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 
-abstract class BufferPoolTest {
-    abstract fun bufferPool(): BufferPool
+abstract class StorageTest {
+    abstract fun storage(): BufferPool
 
     @Test
     fun listObjectTests_3545() {
-        val bufferPool = bufferPool().apply {
+        val storage = storage().apply {
             putObject("a/b/c".asPath, ByteBuffer.wrap(ByteArray(10)))
             putObject("a/b/d".asPath, ByteBuffer.wrap(ByteArray(10)))
             putObject("a/e".asPath, ByteBuffer.wrap(ByteArray(10)))
@@ -27,17 +26,17 @@ abstract class BufferPoolTest {
 
         assertEquals(
             listOf(storedObj("a/b/c"), storedObj("a/b/d"), storedObj("a/e")),
-            bufferPool.listAllObjects("a".asPath)
+            storage.listAllObjects("a".asPath)
         )
         assertEquals(
             listOf(storedObj("a/b/c"), storedObj("a/b/d")),
-            bufferPool.listAllObjects("a/b".asPath)
+            storage.listAllObjects("a/b".asPath)
         )
     }
 
     @Test
     fun testArrowFileSize() {
-        val bp = bufferPool()
+        val bp = storage()
         RootAllocator().use { al ->
             IntVector(al, "foo", false).use { fooVec ->
                 fooVec.apply { writeInt(10); writeInt(42); writeInt(15) }

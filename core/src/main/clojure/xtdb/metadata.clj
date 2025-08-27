@@ -1,7 +1,7 @@
 (ns xtdb.metadata
   (:require [integrant.core :as ig]
             [xtdb.util :as util])
-  (:import xtdb.BufferPool
+  (:import xtdb.storage.BufferPool
            (xtdb.metadata PageMetadata)))
 
 (defmethod ig/prep-key ::metadata-manager [_ _]

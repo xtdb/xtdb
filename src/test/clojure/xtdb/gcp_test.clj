@@ -3,7 +3,6 @@
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
             [xtdb.buffer-pool-test :as bp-test]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.db-catalog :as db]
@@ -14,8 +13,8 @@
             [xtdb.util :as util])
   (:import (com.google.cloud.storage Bucket Bucket$BucketSourceOption Storage Storage$BucketGetOption StorageException StorageOptions StorageOptions$Builder)
            (java.io Closeable)
-           (xtdb.buffer_pool RemoteBufferPool)
-           (xtdb.gcp CloudStorage)))
+           (xtdb.gcp CloudStorage)
+           (xtdb.storage RemoteBufferPool)))
 
 ;; Ensure you are authenticated with google cloud before running these tests - there are two options to do this:
 ;; - gcloud auth Login onto an account which belongs to the `xtdb-devs@gmail.com` group

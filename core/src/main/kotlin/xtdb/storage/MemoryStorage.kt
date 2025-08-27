@@ -1,11 +1,11 @@
-package xtdb.buffer_pool
+package xtdb.storage
 
 import io.micrometer.core.instrument.MeterRegistry
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
-import xtdb.BufferPool
+import xtdb.ArrowWriter
 import xtdb.IEvictBufferTest
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.arrow.ArrowUtil.openArrowBufView
@@ -23,7 +23,7 @@ import java.nio.channels.Channels.newChannel
 import java.nio.file.Path
 import java.util.*
 
-internal class MemoryBufferPool(
+internal class MemoryStorage(
     allocator: BufferAllocator,
     meterRegistry: MeterRegistry? = null
 ) : BufferPool, IEvictBufferTest {
@@ -87,11 +87,11 @@ internal class MemoryBufferPool(
             memoryStore.remove(key)?.also { it.close() }
         }
 
-    override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
+    override fun openArrowWriter(key: Path, rel: Relation): ArrowWriter {
         val baos = ByteArrayOutputStream()
         return newChannel(baos).closeOnCatch { writeChannel ->
             rel.startUnload(writeChannel).closeOnCatch { unloader ->
-                object : xtdb.ArrowWriter {
+                object : ArrowWriter {
                     override fun writePage() {
                         unloader.writePage()
                     }

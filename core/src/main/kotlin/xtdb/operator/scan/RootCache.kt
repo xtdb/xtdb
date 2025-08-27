@@ -2,7 +2,7 @@ package xtdb.operator.scan
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorSchemaRoot
-import xtdb.BufferPool
+import xtdb.storage.BufferPool
 import xtdb.util.closeAll
 import java.nio.file.Path
 import java.util.*

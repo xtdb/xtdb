@@ -18,7 +18,7 @@
            (java.util Arrays HashMap)
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory RootAllocator)
-           xtdb.BufferPool
+           xtdb.storage.BufferPool
            (xtdb.indexer LiveIndex LiveTable LiveTable$Snapshot)
            (xtdb.trie MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)))

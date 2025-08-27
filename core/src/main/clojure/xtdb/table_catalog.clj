@@ -11,9 +11,9 @@
            [java.nio.file Path]
            [java.util ArrayList Map]
            (org.apache.arrow.vector.types.pojo Field Schema)
-           (xtdb BufferPool)
            (xtdb.block.proto TableBlock)
            xtdb.catalog.BlockCatalog
+           (xtdb.storage BufferPool)
            xtdb.table.TableRef
            xtdb.trie.Trie
            (xtdb.util HyperLogLog)))

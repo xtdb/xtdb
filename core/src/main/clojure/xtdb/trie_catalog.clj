@@ -1,7 +1,6 @@
 (ns xtdb.trie-catalog
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
-            [xtdb.db-catalog :as db]
             [xtdb.table-catalog :as table-cat]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
@@ -11,10 +10,10 @@
            [java.util Map]
            [java.util.concurrent ConcurrentHashMap]
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
-           (xtdb BufferPool)
            xtdb.catalog.BlockCatalog
            (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
            xtdb.operator.scan.Metadata
+           (xtdb.storage BufferPool)
            (xtdb.util TemporalBounds)))
 
 ;; table-tries data structure

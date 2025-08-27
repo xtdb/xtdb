@@ -1,4 +1,4 @@
-package xtdb.buffer_pool
+package xtdb.storage
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Field
@@ -11,7 +11,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.io.TempDir
-import xtdb.BufferPool
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.SimulatedObjectStore
 import xtdb.api.storage.Storage.remoteStorage
@@ -27,8 +26,8 @@ import java.nio.file.Path
 import kotlin.io.path.listDirectoryEntries
 
 @ExtendWith(AllocatorResolver::class)
-class RemoteBufferPoolTest : BufferPoolTest() {
-    override fun bufferPool(): BufferPool = remoteBufferPool
+class RemoteStorageTest : StorageTest() {
+    override fun storage(): BufferPool = remoteBufferPool
 
     private lateinit var memoryCache: MemoryCache
     private lateinit var remoteBufferPool: RemoteBufferPool

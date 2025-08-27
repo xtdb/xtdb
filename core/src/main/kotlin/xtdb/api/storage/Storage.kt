@@ -10,11 +10,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
-import xtdb.BufferPool
+import xtdb.storage.BufferPool
 import xtdb.api.PathWithEnvVarSerde
-import xtdb.buffer_pool.LocalBufferPool
-import xtdb.buffer_pool.MemoryBufferPool
-import xtdb.buffer_pool.RemoteBufferPool
+import xtdb.storage.LocalStorage
+import xtdb.storage.MemoryStorage
+import xtdb.storage.RemoteBufferPool
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.util.StringUtil.asLexHex
@@ -61,7 +61,7 @@ object Storage {
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
             meterRegistry: MeterRegistry?, storageVersion: StorageVersion
-        ): BufferPool = MemoryBufferPool(allocator, meterRegistry)
+        ): BufferPool = MemoryStorage(allocator, meterRegistry)
     }
 
     @JvmStatic
@@ -90,7 +90,7 @@ object Storage {
         ): BufferPool {
             val diskStore = path.resolve(storageRoot(storageVersion)).also { it.createDirectories() }
 
-            return LocalBufferPool(allocator, memoryCache, meterRegistry, diskStore)
+            return LocalStorage(allocator, memoryCache, meterRegistry, diskStore)
         }
     }
 

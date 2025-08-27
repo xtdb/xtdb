@@ -1,4 +1,4 @@
-package xtdb.buffer_pool
+package xtdb.storage
 
 import com.github.benmanes.caffeine.cache.Cache
 import io.micrometer.core.instrument.Counter
@@ -7,7 +7,6 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.ArrowWriter
-import xtdb.BufferPool
 import xtdb.IEvictBufferTest
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.api.storage.Storage.arrowFooterCache
@@ -29,7 +28,7 @@ import java.nio.file.StandardOpenOption.*
 import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.io.path.*
 
-internal class LocalBufferPool(
+internal class LocalStorage(
     allocator: BufferAllocator,
     private val memoryCache: MemoryCache,
     meterRegistry: MeterRegistry? = null,

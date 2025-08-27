@@ -1,7 +1,6 @@
 (ns xtdb.aws.s3-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
             [xtdb.buffer-pool-test :as bp-test]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.db-catalog :as db]
@@ -13,8 +12,8 @@
   (:import [java.nio ByteBuffer]
            [xtdb.api.storage ObjectStore Storage]
            [xtdb.aws S3]
-           [xtdb.buffer_pool RemoteBufferPool]
-           [xtdb.multipart IMultipartUpload SupportsMultipart]))
+           [xtdb.multipart IMultipartUpload SupportsMultipart]
+           [xtdb.storage RemoteBufferPool]))
 
 ;; Setup the stack via cloudformation - see modules/s3/cloudformation/s3-stack.yml
 ;; Ensure region is set locally to wherever cloudformation stack is created (ie, eu-west-1 if stack on there)

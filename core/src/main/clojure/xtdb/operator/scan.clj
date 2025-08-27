@@ -24,7 +24,6 @@
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
            [org.roaringbitmap.buffer MutableRoaringBitmap]
-           (xtdb BufferPool)
            xtdb.arrow.RelationReader
            (xtdb.bloom BloomUtils)
            xtdb.catalog.TableCatalog
@@ -33,6 +32,7 @@
            (xtdb.metadata MetadataPredicate PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan IidSelector RootCache ScanCursor)
            (xtdb.segment BufferPoolSegment MemorySegment MergePlanner MergeTask)
+           (xtdb.storage BufferPool)
            xtdb.table.TableRef
            (xtdb.trie Bucketer TrieCatalog)
            (xtdb.util TemporalBounds TemporalDimension)))

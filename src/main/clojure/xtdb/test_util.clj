@@ -28,7 +28,7 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector.types.pojo Field Schema)
            (org.testcontainers.containers GenericContainer)
-           (xtdb BufferPool ICursor) 
+           (xtdb ICursor)
            (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector)
@@ -36,6 +36,7 @@
            (xtdb.indexer LiveTable)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
+           xtdb.storage.BufferPool
            (xtdb.test PagesCursor)
            (xtdb.trie MetadataFileWriter)
            xtdb.types.ZonedDateTimeRange

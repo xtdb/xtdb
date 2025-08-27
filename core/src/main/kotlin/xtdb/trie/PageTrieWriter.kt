@@ -2,7 +2,7 @@ package xtdb.trie
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
-import xtdb.BufferPool
+import xtdb.storage.BufferPool
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorReader
 import xtdb.compactor.PageTree

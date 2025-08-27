@@ -5,7 +5,7 @@ import com.carrotsearch.hppc.ObjectIntMap
 import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.BufferPool
+import xtdb.storage.BufferPool
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader

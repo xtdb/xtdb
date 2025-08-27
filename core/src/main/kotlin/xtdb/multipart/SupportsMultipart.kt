@@ -6,7 +6,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.runBlocking
 import xtdb.api.storage.ObjectStore
-import xtdb.buffer_pool.RemoteBufferPool
+import xtdb.storage.RemoteBufferPool
 import xtdb.util.logger
 import xtdb.util.warn
 import java.nio.ByteBuffer

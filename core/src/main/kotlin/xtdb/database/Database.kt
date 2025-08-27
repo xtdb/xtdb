@@ -9,7 +9,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.time.withTimeout
 import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.BufferPool
+import xtdb.storage.BufferPool
 import xtdb.api.log.Log
 import xtdb.api.log.MessageId
 import xtdb.api.storage.Storage

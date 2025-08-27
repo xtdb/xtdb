@@ -19,7 +19,7 @@
            (xtdb.api IndexerConfig TransactionKey)
            (xtdb.api.log Log Log$Message$TriesAdded)
            xtdb.api.storage.Storage
-           xtdb.BufferPool
+           xtdb.storage.BufferPool
            (xtdb.catalog BlockCatalog TableCatalog)
            (xtdb.indexer LiveIndex$Snapshot LiveIndex$Tx LiveTable LiveTable$Snapshot LiveTable$Tx Snapshot Snapshot)
            (xtdb.log.proto TrieDetails)

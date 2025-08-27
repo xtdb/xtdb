@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.io.TempDir
-import xtdb.BufferPool
+import xtdb.storage.BufferPool
 import xtdb.api.storage.Storage
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey

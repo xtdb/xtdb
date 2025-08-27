@@ -1,26 +1,25 @@
-package xtdb.buffer_pool
+package xtdb.storage
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
-import xtdb.BufferPool
 
-class MemoryBufferPoolTest : BufferPoolTest() {
-    override fun bufferPool(): BufferPool  = memoryBufferPool
+class MemoryStorageTest : StorageTest() {
+    override fun storage(): BufferPool  = memoryStorage
 
     private lateinit var allocator: BufferAllocator
-    private lateinit var memoryBufferPool: MemoryBufferPool
+    private lateinit var memoryStorage: MemoryStorage
 
     @BeforeEach
     fun setUp() {
         allocator = RootAllocator()
-        memoryBufferPool = MemoryBufferPool(allocator)
+        memoryStorage = MemoryStorage(allocator)
     }
 
     @AfterEach
     fun tearDown() {
-        memoryBufferPool.close()
+        memoryStorage.close()
         allocator.close()
     }
 }

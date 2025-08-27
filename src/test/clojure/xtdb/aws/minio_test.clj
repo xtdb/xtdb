@@ -15,8 +15,8 @@
            [software.amazon.awssdk.services.s3.model ListMultipartUploadsRequest ListMultipartUploadsResponse]
            [xtdb.api.storage ObjectStore Storage]
            [xtdb.aws S3]
-           [xtdb.buffer_pool RemoteBufferPool]
-           [xtdb.multipart IMultipartUpload SupportsMultipart]))
+           [xtdb.multipart IMultipartUpload SupportsMultipart]
+           [xtdb.storage RemoteBufferPool]))
 
 ;; To run these, run the MinIO and Kafka containers in the docker-compose file
 ;; http://localhost:9001, minioadmin/minioadmin

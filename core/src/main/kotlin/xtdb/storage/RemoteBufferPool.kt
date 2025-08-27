@@ -1,4 +1,4 @@
-package xtdb.buffer_pool
+package xtdb.storage
 
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
@@ -10,7 +10,7 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
-import xtdb.BufferPool
+import xtdb.ArrowWriter
 import xtdb.IEvictBufferTest
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.Storage.arrowFooterCache
@@ -163,13 +163,13 @@ internal class RemoteBufferPool(
 
     override fun deleteIfExists(key: Path): Unit = runBlocking { objectStore.deleteIfExists(key).await() }
 
-    override fun openArrowWriter(key: Path, rel: Relation): xtdb.ArrowWriter {
+    override fun openArrowWriter(key: Path, rel: Relation): ArrowWriter {
         val tmpPath = diskCache.createTempPath()
 
         return FileChannel.open(tmpPath, READ, WRITE, TRUNCATE_EXISTING)
             .closeOnCatch { fileChannel ->
                 rel.startUnload(fileChannel).closeOnCatch { unloader ->
-                    object : xtdb.ArrowWriter {
+                    object : ArrowWriter {
                         override fun writePage() = unloader.writePage()
 
                         override fun end(): FileSize {
