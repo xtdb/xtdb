@@ -207,6 +207,40 @@
            (roundtrip-q '(union-all (from :foo [{:baz b}])
                                     (from :bar [{:baz b}]))))))
 
+(t/deftest test-parse-union
+  (t/is (= '(union (from :foo [{:baz b}])
+                   (from :bar [{:baz b}]))
+           (roundtrip-q '(union (from :foo [{:baz b}])
+                                (from :bar [{:baz b}]))))))
+
+(t/deftest test-parse-intersect
+  (t/is (= '(intersect (from :foo [{:baz b}])
+                       (from :bar [{:baz b}]))
+           (roundtrip-q '(intersect (from :foo [{:baz b}])
+                                    (from :bar [{:baz b}]))))))
+
+(t/deftest test-parse-intersect-all
+  (t/is (= '(intersect-all (from :foo [{:baz b}])
+                           (from :bar [{:baz b}]))
+           (roundtrip-q '(intersect-all (from :foo [{:baz b}])
+                                        (from :bar [{:baz b}]))))))
+
+(t/deftest test-parse-except
+  (t/is (= '(except (from :foo [{:baz b}])
+                    (from :bar [{:baz b}]))
+           (roundtrip-q '(except (from :foo [{:baz b}])
+                                 (from :bar [{:baz b}]))))))
+
+(t/deftest test-parse-except-all
+  (t/is (= '(except-all (from :foo [{:baz b}])
+                        (from :bar [{:baz b}]))
+           (roundtrip-q '(except-all (from :foo [{:baz b}])
+                                     (from :bar [{:baz b}]))))))
+
+(t/deftest test-parse-distinct
+  (t/is (= '(distinct (from :foo [{:baz b}]))
+           (roundtrip-q '(distinct (from :foo [{:baz b}]))))))
+
 (t/deftest test-parse-limit-test
   (t/is (= '(limit 10)
            (roundtrip-q-tail '(limit 10)))))

@@ -10,7 +10,7 @@
             [xtdb.xtql :as xtql])
   (:import (clojure.lang MapEntry)
            (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)
-           (xtdb.xtql Aggregate DocsRelation From Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline QueryWithParams Return Unify Unnest Where With Without)))
+           (xtdb.xtql Aggregate Distinct DocsRelation Except ExceptAll From Intersect IntersectAll Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline QueryWithParams Return Union UnionAll Unify Unnest Where With Without)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -474,7 +474,67 @@
 
   ParamRelation
   (plan-query [{:keys [param bindings]}]
-    (plan-rel (plan-expr param) (mapv plan-out-spec bindings))))
+    (plan-rel (plan-expr param) (mapv plan-out-spec bindings)))
+
+  UnionAll
+  (plan-query [{:keys [union-all-queries]}]
+    (reduce (fn [left-plan query]
+              (let [right-plan (plan-query query)]
+                {:ra-plan [:union-all (:ra-plan left-plan) (:ra-plan right-plan)]
+                 :provided-vars (set/union (:provided-vars left-plan) (:provided-vars right-plan))}))
+            (plan-query (first union-all-queries))
+            (rest union-all-queries)))
+
+  Union
+  (plan-query [{:keys [union-queries]}]
+    (reduce (fn [left-plan query]
+              (let [right-plan (plan-query query)]
+                {:ra-plan [:distinct [:union-all (:ra-plan left-plan) (:ra-plan right-plan)]]
+                 :provided-vars (set/union (:provided-vars left-plan) (:provided-vars right-plan))}))
+            (plan-query (first union-queries))
+            (rest union-queries)))
+
+  Intersect
+  (plan-query [{:keys [intersect-queries]}]
+    (reduce (fn [left-plan query]
+              (let [right-plan (plan-query query)]
+                {:ra-plan [:distinct [:intersect (:ra-plan left-plan) (:ra-plan right-plan)]]
+                 :provided-vars (set/intersection (:provided-vars left-plan) (:provided-vars right-plan))}))
+            (plan-query (first intersect-queries))
+            (rest intersect-queries)))
+
+  IntersectAll
+  (plan-query [{:keys [intersect-all-queries]}]
+    (reduce (fn [left-plan query]
+              (let [right-plan (plan-query query)]
+                {:ra-plan [:intersect (:ra-plan left-plan) (:ra-plan right-plan)]
+                 :provided-vars (set/intersection (:provided-vars left-plan) (:provided-vars right-plan))}))
+            (plan-query (first intersect-all-queries))
+            (rest intersect-all-queries)))
+
+  Except
+  (plan-query [{:keys [except-queries]}]
+    (reduce (fn [left-plan query]
+              (let [right-plan (plan-query query)]
+                {:ra-plan [:distinct [:difference (:ra-plan left-plan) (:ra-plan right-plan)]]
+                 :provided-vars (:provided-vars left-plan)}))
+            (plan-query (first except-queries))
+            (rest except-queries)))
+
+  ExceptAll
+  (plan-query [{:keys [except-all-queries]}]
+    (reduce (fn [left-plan query]
+              (let [right-plan (plan-query query)]
+                {:ra-plan [:difference (:ra-plan left-plan) (:ra-plan right-plan)]
+                 :provided-vars (:provided-vars left-plan)}))
+            (plan-query (first except-all-queries))
+            (rest except-all-queries)))
+
+  Distinct
+  (plan-query [{:keys [distinct-query]}]
+    (let [plan (plan-query distinct-query)]
+      {:ra-plan [:distinct (:ra-plan plan)]
+       :provided-vars (:provided-vars plan)})))
 
 (declare wrap-expr-subqueries*)
 
