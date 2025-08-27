@@ -83,19 +83,23 @@ module "aks" {
 
   # Default/System node pool config
   agents_size               = var.aks_system_pool_vm_size
-  agents_count              = var.aks_system_pool_node_count
+  agents_max_count          = var.aks_system_pool_node_max_count
+  agents_min_count          = var.aks_system_pool_node_min_count
   agents_availability_zones = var.aks_system_pool_availability_zones
+  enable_auto_scaling       = true
 
   # Node pools
   node_pools = {
     application = {
-      name              = "xtdbpool"
-      mode              = "User"
-      vm_size           = var.aks_application_pool_vm_size
-      node_count        = var.aks_application_pool_node_count
-      zones             = var.aks_application_pool_availability_zones
-      os_disk_type      = var.aks_application_pool_os_disk_type
-      os_disk_size_gb   = var.aks_application_pool_os_disk_size_gb
+      name                = "xtdbpool"
+      mode                = "User"
+      vm_size             = var.aks_application_pool_vm_size
+      max_count           = var.aks_application_pool_node_max_count
+      min_count           = var.aks_application_pool_node_min_count
+      zones               = var.aks_application_pool_availability_zones
+      os_disk_type        = var.aks_application_pool_os_disk_type
+      os_disk_size_gb     = var.aks_application_pool_os_disk_size_gb
+      enable_auto_scaling = true
       node_labels = {
         "node_pool" = "xtdbpool"
       }
