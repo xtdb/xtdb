@@ -46,8 +46,14 @@ variable "aks_system_pool_vm_size" {
   default     = "Standard_D2pds_v6"
 }
 
-variable "aks_system_pool_node_count" {
-  description = "Number of nodes in the XTDB AKS system node pool"
+variable "aks_system_pool_node_max_count" {
+  description = "Maximum number of nodes in the XTDB AKS system node pool"
+  type        = number
+  default     = 2
+}
+
+variable "aks_system_pool_node_min_count" {
+  description = "Minimum number of nodes in the XTDB AKS system node pool"
   type        = number
   default     = 2
 }
@@ -66,6 +72,18 @@ variable "aks_application_pool_vm_size" {
 
 variable "aks_application_pool_node_count" {
   description = "Number of nodes in the XTDB AKS application node pool"
+  type        = number
+  default     = 3
+}
+
+variable "aks_application_pool_node_max_count" {
+  description = "Maximum number of nodes in the XTDB AKS application node pool"
+  type        = number
+  default     = 3
+}
+
+variable "aks_application_pool_node_min_count" {
+  description = "Minimum number of nodes in the XTDB AKS application node pool"
   type        = number
   default     = 3
 }

@@ -13,12 +13,14 @@ aks_cluster_name = "xtdb-aks-cluster"
 
 ## System Pool Config
 aks_system_pool_vm_size            = "Standard_D2pds_v6"
-aks_system_pool_node_count         = 2
+aks_system_pool_node_max_count     = 2
+aks_system_pool_node_min_count     = 2
 aks_system_pool_availability_zones = ["1", "2"]
 
 ## Application Pool Config
 aks_application_pool_vm_size            = "Standard_D4pds_v6"
-aks_application_pool_node_count         = 3
+aks_application_pool_node_max_count     = 3
+aks_application_pool_node_min_count     = 3
 aks_application_pool_availability_zones = ["1", "2", "3"]
 aks_application_pool_os_disk_type       = "Ephemeral"
 aks_application_pool_os_disk_size_gb    = 220
