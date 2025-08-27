@@ -251,9 +251,9 @@
                          pushdown-blooms]
   ICursor
   (tryAdvance [this c]
-    (build-phase build-side build-cursor pushdown-blooms nil)
 
     (when-not probe-cursor
+      (build-phase build-side build-cursor pushdown-blooms nil)
       (set! (.probe-cursor this)
             (->probe-cursor (zipmap (map symbol (.getKeyColNames build-side))
                                     pushdown-blooms)
