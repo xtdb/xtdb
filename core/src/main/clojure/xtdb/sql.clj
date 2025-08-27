@@ -1628,6 +1628,36 @@
           ve-2 (-> (.expr ctx 1) (.accept this))]
       (list 'trim-array ve-1 ve-2)))
 
+  ;; Vector embedding and similarity functions
+  (visitEmbedFunction [this ctx]
+    (let [text-expr (-> (.expr ctx) (.accept this))]
+      (list 'embed text-expr)))
+
+  (visitEmbedModelFunction [this ctx]
+    (let [text-expr (-> (.expr ctx 0) (.accept this))
+          model-expr (-> (.expr ctx 1) (.accept this))]
+      (list 'embed text-expr model-expr)))
+
+  (visitDotProductFunction [this ctx]
+    (let [vec1-expr (-> (.expr ctx 0) (.accept this))
+          vec2-expr (-> (.expr ctx 1) (.accept this))]
+      (list 'dot_product vec1-expr vec2-expr)))
+
+  (visitL2DistanceFunction [this ctx]
+    (let [vec1-expr (-> (.expr ctx 0) (.accept this))
+          vec2-expr (-> (.expr ctx 1) (.accept this))]
+      (list 'l2_distance vec1-expr vec2-expr)))
+
+  (visitCosineDistanceFunction [this ctx]
+    (let [vec1-expr (-> (.expr ctx 0) (.accept this))
+          vec2-expr (-> (.expr ctx 1) (.accept this))]
+      (list 'cosine_distance vec1-expr vec2-expr)))
+
+  (visitCosineSimilarityFunction [this ctx]
+    (let [vec1-expr (-> (.expr ctx 0) (.accept this))
+          vec2-expr (-> (.expr ctx 1) (.accept this))]
+      (list 'cosine_similarity vec1-expr vec2-expr)))
+
   (visitCharacterSubstringFunction [this ctx]
     (let [cve (-> (.substringSource ctx) (.accept this))
           sp (-> (.startPosition ctx) (.accept this))

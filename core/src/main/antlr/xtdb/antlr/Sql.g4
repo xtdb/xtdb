@@ -340,6 +340,14 @@ exprPrimary
     | ('PERIOD' | 'TSTZRANGE') '(' expr ',' expr ')' # TsTzRangeConstructor
 
     | 'TRIM_ARRAY' '(' expr ',' expr ')' # TrimArrayFunction
+    
+    // Vector embedding and similarity functions
+    | 'EMBED' '(' expr ')' # EmbedFunction
+    | 'EMBED' '(' expr ',' expr ')' # EmbedModelFunction
+    | 'DOT_PRODUCT' '(' expr ',' expr ')' # DotProductFunction
+    | 'L2_DISTANCE' '(' expr ',' expr ')' # L2DistanceFunction
+    | 'COSINE_DISTANCE' '(' expr ',' expr ')' # CosineDistanceFunction
+    | 'COSINE_SIMILARITY' '(' expr ',' expr ')' # CosineSimilarityFunction
     ;
 
 currentInstantFunction

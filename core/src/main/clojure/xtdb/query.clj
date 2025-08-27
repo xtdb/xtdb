@@ -10,6 +10,7 @@
             xtdb.expression.pg
             xtdb.expression.temporal
             xtdb.expression.uri
+            xtdb.expression.vector
             [xtdb.logical-plan :as lp]
             [xtdb.metrics :as metrics]
             xtdb.operator.apply

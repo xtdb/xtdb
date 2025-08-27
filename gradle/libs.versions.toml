@@ -15,6 +15,7 @@ muuntaja = "0.6.11"
 testcontainers = "1.21.1"
 micrometer = "1.15.1"
 transit = "1.0.329"
+djl = "0.30.0"
 
 slf4j = "2.0.17"
 logback = "1.5.18"
@@ -93,6 +94,10 @@ micrometer-registry-prometheus = { group = "io.micrometer", name = "micrometer-r
 micrometer-registry-cloudwatch2 = { group = "io.micrometer", name = "micrometer-registry-cloudwatch2", version.ref = "micrometer" }
 micrometer-registry-azuremonitor = { group = "io.micrometer", name = "micrometer-registry-azure-monitor", version.ref = "micrometer" }
 
+djl-api = { group = "ai.djl", name = "api", version.ref = "djl" }
+djl-huggingface = { group = "ai.djl.huggingface", name = "tokenizers", version.ref = "djl" }
+djl-pytorch-engine = { group = "ai.djl.pytorch", name = "pytorch-engine", version.ref = "djl" }
+djl-pytorch-native = { group = "ai.djl.pytorch", name = "pytorch-native-cpu", version = "2.1.2" }
 
 # logging in XTDB:
 # XTDB has public dependencies on clojure.tools.logging, java.lang.System and SLF4J (API) - we could potentially remove the latter

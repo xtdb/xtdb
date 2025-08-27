@@ -78,6 +78,12 @@ dependencies {
 
     api(libs.next.jdbc)
 
+    // DJL for embeddings
+    api(libs.djl.api)
+    api(libs.djl.huggingface)
+    api(libs.djl.pytorch.engine)
+    runtimeOnly(libs.djl.pytorch.native) // Native library for PyTorch
+
     antlr(libs.antlr)
     implementation(libs.antlr.runtime)
 
@@ -135,6 +141,49 @@ protobuf {
                 create("kotlin")
             }
         }
+    }
+}
+
+// Download embedding model at build time (optional)
+val downloadEmbeddingModel by tasks.registering {
+    description = "Downloads the sentence transformer model for embeddings"
+    group = "build setup"
+    
+    // Only run if property is set
+    onlyIf { project.hasProperty("downloadModels") || System.getenv("DOWNLOAD_MODELS") == "true" }
+    
+    val modelDir = file("${layout.buildDirectory.get().asFile}/resources/main/models/sentence-transformers")
+    val modelMarker = file("$modelDir/all-MiniLM-L6-v2/.downloaded")
+    
+    inputs.property("model-version", "all-MiniLM-L6-v2")
+    outputs.file(modelMarker)
+    
+    doLast {
+        println("Downloading embedding model...")
+        modelDir.mkdirs()
+        
+        // Use DJL to download the model
+        javaexec {
+            mainClass.set("xtdb.vector.ModelDownloader")
+            classpath = sourceSets["main"].runtimeClasspath
+            args = listOf(
+                "sentence-transformers/all-MiniLM-L6-v2",
+                modelDir.absolutePath
+            )
+            // Increase memory for model download
+            jvmArgs = listOf("-Xmx2g")
+        }
+        
+        // Create marker file
+        modelMarker.writeText("Downloaded at ${System.currentTimeMillis()}")
+        println("Model downloaded successfully")
+    }
+}
+
+// Optionally make compilation depend on model download
+if (project.hasProperty("downloadModels") || System.getenv("DOWNLOAD_MODELS") == "true") {
+    tasks.compileKotlin {
+        dependsOn(downloadEmbeddingModel)
     }
 }
 
