@@ -308,6 +308,8 @@
 (defn- ->pushdown-blooms [key-col-names]
   (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
 
+(def ^:dynamic *disk-join-threshold* (* 100 1000))
+
 (defn ->build-side ^xtdb.operator.join.BuildSide [^BufferAllocator allocator,
                                                   {:keys [fields, key-col-names, matched-build-idxs?, with-nil-row?]}]
   (let [schema (Schema. (->> fields
@@ -316,7 +318,8 @@
                                        with-nil-row? types/->nullable-field)))))]
     (BuildSide. allocator schema (map str key-col-names)
                 (when matched-build-idxs? (RoaringBitmap.))
-                (boolean with-nil-row?))))
+                (boolean with-nil-row?)
+                *disk-join-threshold*)))
 
 (defn ->probe-side [build-side {:keys [build-fields probe-fields key-col-names theta-expr param-fields args with-nil-row?]}]
   (let [param-types (update-vals param-fields types/field->col-type)]
