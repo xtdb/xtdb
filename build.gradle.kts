@@ -160,6 +160,7 @@ allprojects {
             testImplementation(libs.testcontainers.kafka)
             testImplementation(libs.testcontainers.keycloak)
             testImplementation(libs.testcontainers.minio)
+            testImplementation(libs.clojure.test.check)
         }
 
         if (plugins.hasPlugin("dev.clojurephant.clojure")) {
@@ -419,7 +420,6 @@ dependencies {
     testImplementation("metosin", "jsonista", "0.3.3")
     testImplementation("clj-commons", "clj-yaml", "1.0.27")
     testImplementation("org.xerial", "sqlite-jdbc", "3.39.3.0")
-    testImplementation("org.clojure", "test.check", "1.1.1")
     testImplementation("clj-kondo", "clj-kondo", "2023.12.15")
     testImplementation("com.github.igrishaev", "pg2-core", "0.1.33")
     testImplementation(libs.hato)
