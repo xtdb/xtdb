@@ -127,17 +127,18 @@
                        (and (= n1/n_name ?nation2)
                             (= n2/n_name ?nation1)))]
             [:join [{o_custkey c_custkey}]
-             [:join [{s_nationkey n1/n_nationkey}]
-              [:join [{l_orderkey o_orderkey}]
+             [:join [{n1/n_nationkey s_nationkey}]
+              [:rename n1
+               [:scan {:for-valid-time [:at :now] :table #xt/table nation} [{n_name (or (= n_name ?nation1) (= n_name ?nation2))} n_nationkey]]]
+              [:join [{o_orderkey l_orderkey}]
+               [:scan {:for-valid-time [:at :now] :table #xt/table orders} [o_orderkey o_custkey]]
                [:join [{s_suppkey l_suppkey}]
                 [:scan {:for-valid-time [:at :now] :table #xt/table supplier} [s_suppkey s_nationkey]]
                 [:scan {:for-valid-time [:at :now] :table #xt/table lineitem}
                  [l_orderkey l_extendedprice l_discount l_suppkey
                   {l_shipdate (and (>= l_shipdate ?start_date)
                                    (<= l_shipdate ?end_date))}]]]
-               [:scan {:for-valid-time [:at :now] :table #xt/table orders} [o_orderkey o_custkey]]]
-              [:rename n1
-               [:scan {:for-valid-time [:at :now] :table #xt/table nation} [{n_name (or (= n_name ?nation1) (= n_name ?nation2))} n_nationkey]]]]
+               ]]
              [:scan {:for-valid-time [:at :now] :table #xt/table customer} [c_custkey c_nationkey]]]
             [:rename n2
              [:scan {:for-valid-time [:at :now] :table #xt/table nation} [{n_name (or (= n_name ?nation1) (= n_name ?nation2))} n_nationkey]]]]]]]]
