@@ -121,7 +121,7 @@ allprojects {
             // To stub an AWS region
             environment("AWS_REGION", "eu-west-1")
             useJUnitPlatform {
-                excludeTags("integration", "jdbc", "timescale", "s3", "minio", "slt", "docker", "azure", "google-cloud")
+                excludeTags("integration", "property", "jdbc", "timescale", "s3", "minio", "slt", "docker", "azure", "google-cloud")
             }
 
             /*
@@ -144,6 +144,17 @@ allprojects {
             jvmArgs(defaultJvmArgs + sixGBJvmArgs)
             useJUnitPlatform {
                 includeTags("s3", "google-cloud", "azure")
+            }
+        }
+
+        tasks.register("property-test", Test::class) {
+            jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+            
+            val iterations = project.findProperty("iterations")?.toString() ?: "100"
+            systemProperty("xtdb.property-test-iterations", iterations)
+            
+            useJUnitPlatform {
+                includeTags("property")
             }
         }
 
