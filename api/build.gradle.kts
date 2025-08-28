@@ -33,7 +33,7 @@ dependencies {
     api(libs.arrow.vector)
     api(libs.arrow.memory.netty)
 
-    api(kotlin("stdlib-jdk8"))
+    api(kotlin("stdlib"))
     api(libs.kotlinx.serialization.json)
     
     api(libs.protobuf.kotlin)

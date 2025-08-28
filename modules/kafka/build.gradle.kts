@@ -27,7 +27,7 @@ dependencies {
 
     api("org.apache.kafka", "kafka-clients", "4.0.0")
 
-    api(kotlin("stdlib-jdk8"))
+    api(kotlin("stdlib"))
     testImplementation(libs.mockk)
 
     implementation(libs.kotlinx.coroutines)

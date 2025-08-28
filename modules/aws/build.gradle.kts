@@ -30,7 +30,7 @@ dependencies {
     api("software.amazon.awssdk", "cloudwatch", "2.25.50")
     api("software.amazon.awssdk", "sts", "2.25.50")
 
-    api(kotlin("stdlib-jdk8"))
+    api(kotlin("stdlib"))
     api(libs.kotlinx.coroutines)
     testImplementation(libs.kotlinx.coroutines.test)
 }

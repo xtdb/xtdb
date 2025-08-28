@@ -32,7 +32,7 @@ dependencies {
     api("org.apache.arrow", "arrow-vector", "15.0.2")
     api("org.apache.arrow", "flight-sql", "15.0.2")
 
-    api(kotlin("stdlib-jdk8"))
+    api(kotlin("stdlib"))
 
     testImplementation(project(":"))
 
