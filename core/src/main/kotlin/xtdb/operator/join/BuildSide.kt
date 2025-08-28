@@ -16,25 +16,18 @@ internal const val NULL_ROW_IDX = 0
 
 class BuildSide @JvmOverloads constructor(
     val al: BufferAllocator, val schema: Schema, val keyColNames: List<String>, val matchedBuildIdxs: RoaringBitmap?,
-    withNilRow: Boolean, pageLimit: Int = 64, levelBits: Int = 4
+    private val withNilRow: Boolean, pageLimit: Int = 64, levelBits: Int = 4
 ) : AutoCloseable {
     private val relWriter = OldRelationWriter(al, schema)
 
     private val hashColumn: IntVector = IntVector(al, "xt/join-hash", false)
 
-    var buildHashTrie: MutableMemoryHashTrie
-        private set
+    var buildMap: BuildSideMap? = null
 
     init {
         if (withNilRow) {
             relWriter.endRow()
-            hashColumn.writeInt(0)
         }
-
-        buildHashTrie =
-            MutableMemoryHashTrie.builder(hashColumn.asReader)
-                .setPageLimit(pageLimit).setLevelBits(levelBits)
-                .build()
     }
 
     @Suppress("NAME_SHADOWING")
@@ -45,16 +38,14 @@ class BuildSide @JvmOverloads constructor(
         val rowCopier = relWriter.rowCopier(inRel)
 
         repeat(inRel.rowCount) { inIdx ->
-            // outIndex and used index for hashColumn should be identical
-            val outIdxHashColumn = hashColumn.valueCount
             hashColumn.writeInt(hasher.hashCode(inIdx))
-            buildHashTrie += outIdxHashColumn
-
-            val outIdx = rowCopier.copyRow(inIdx)
-            assert(outIdx == outIdxHashColumn) {
-                "Expected outIdx $outIdx to match hashColumn valueCount $outIdxHashColumn"
-            }
+            rowCopier.copyRow(inIdx)
         }
+    }
+
+    fun build() {
+        buildMap?.close()
+        buildMap = BuildSideMap.from(al, hashColumn, if (withNilRow) 1 else 0)
     }
 
     val builtRel get() = relWriter.asReader
@@ -62,11 +53,13 @@ class BuildSide @JvmOverloads constructor(
     fun addMatch(idx: Int) = matchedBuildIdxs?.add(idx)
 
     fun indexOf(hashCode: Int, cmp: IntUnaryOperator, removeOnMatch: Boolean): Int =
-        buildHashTrie.findValue(hashCode, cmp, removeOnMatch)
+        requireNotNull(buildMap).findValue(hashCode, cmp, removeOnMatch)
 
-    fun forEachMatch(hashCode: Int, c: IntConsumer) = buildHashTrie.forEachMatch(hashCode, c)
+    fun forEachMatch(hashCode: Int, c: IntConsumer) =
+        requireNotNull(buildMap).forEachMatch(hashCode, c)
 
     override fun close() {
+        buildMap?.close()
         relWriter.close()
         hashColumn.close()
     }

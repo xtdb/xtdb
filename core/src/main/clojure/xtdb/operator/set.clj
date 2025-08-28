@@ -79,6 +79,7 @@
       (.forEachRemaining right-cursor
                          (fn [^RelationReader in-rel]
                            (.append build-side in-rel)))
+      (.build build-side)
       (set! (.build-phase-ran? this) true))
 
 
