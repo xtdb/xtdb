@@ -14,9 +14,12 @@ import java.util.function.IntUnaryOperator
 
 internal const val NULL_ROW_IDX = 0
 
-class BuildSide @JvmOverloads constructor(
-    val al: BufferAllocator, val schema: Schema, val keyColNames: List<String>, val matchedBuildIdxs: RoaringBitmap?,
-    private val withNilRow: Boolean, pageLimit: Int = 64, levelBits: Int = 4
+class BuildSide(
+    val al: BufferAllocator,
+    val schema: Schema,
+    val keyColNames: List<String>,
+    val matchedBuildIdxs: RoaringBitmap?,
+    private val withNilRow: Boolean
 ) : AutoCloseable {
     private val relWriter = OldRelationWriter(al, schema)
 
