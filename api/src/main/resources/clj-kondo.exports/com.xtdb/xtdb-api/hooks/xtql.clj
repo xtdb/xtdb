@@ -2,15 +2,23 @@
   (:require [clj-kondo.hooks-api :as api]))
 
 (def source-op?
-  #{'from 'rel 'unify})
+  #{'from 'rel 'unify
+    'union 'union-all
+    'intersect 'intersect-all
+    'except 'except-all
+    'distinct})
 
 (def tail-op?
   #{'aggregate
     'limit 'offset
-    'where 
-    'order-by 
-    'with 'without 'return 
-    'unnest})
+    'where
+    'order-by
+    'with 'without 'return
+    'unnest
+    'union 'union-all
+    'intersect 'intersect-all
+    'except 'except-all
+    'distinct})
 
 (def unify-clause?
   #{'from 'rel
@@ -231,7 +239,7 @@
                :type :xtql/type-mismatch)))
     (case (:tag opts)
       :vector (->> opts :children (run! lint-bind))
-      :map 
+      :map
       (let [kvs (map-children opts)
             ks (->> kvs
                     (map first)
@@ -304,6 +312,46 @@
         (assoc (meta binds)
                :message "expected rel binding to be a vector"
                :type :xtql/type-mismatch)))))
+
+;; Set operations as source operators
+(defn lint-variadic-set-operation [node min-queries]
+  (let [queries (-> node :children rest)]
+    (when (< (count queries) min-queries)
+      (api/reg-finding!
+        (assoc (meta node)
+               :message (str "expected at least " min-queries " quer" (if (= 1 min-queries) "y" "ies"))
+               :type :xtql/invalid-arity)))
+    (->> queries (run! lint-query))))
+
+(defn lint-binary-set-operation [node]
+  (let [queries (-> node :children rest)]
+    (when-not (= (count queries) 2)
+      (api/reg-finding!
+        (assoc (meta node)
+               :message "expected exactly 2 queries"
+               :type :xtql/invalid-arity)))
+    (->> queries (run! lint-query))))
+
+(defmethod lint-source-op 'union [node]
+  (lint-variadic-set-operation node 2))
+
+(defmethod lint-source-op 'union-all [node]
+  (lint-variadic-set-operation node 2))
+
+(defmethod lint-source-op 'intersect [node]
+  (lint-variadic-set-operation node 2))
+
+(defmethod lint-source-op 'intersect-all [node]
+  (lint-variadic-set-operation node 2))
+
+(defmethod lint-source-op 'except [node]
+  (lint-binary-set-operation node))
+
+(defmethod lint-source-op 'except-all [node]
+  (lint-binary-set-operation node))
+
+(defmethod lint-source-op 'distinct [node]
+  (lint-variadic-set-operation node 1))
 
 ;; TODO: Lint more tail ops
 (defmethod lint-tail-op :default [node]
@@ -457,7 +505,7 @@
             (if (node-keyword? v)
               (lint-enum v :dir #{:asc :desc})
               (lint-keyword v ":dir value"))
-            :nulls 
+            :nulls
             (if (node-keyword? v)
               (lint-enum v :nulls #{:first :last})
               (lint-keyword v ":nulls value"))
@@ -532,6 +580,42 @@
           (assoc (meta opt)
                  :message "expected opt to be a map"
                  :type :xtql/type-mismatch))))))
+
+;; Set operations as tail operators
+(defn lint-tail-set-operation [node expected-queries]
+  (let [queries (-> node :children rest)]
+    (when-not (= (count queries) expected-queries)
+      (api/reg-finding!
+        (assoc (meta node)
+               :message (str "expected exactly " expected-queries " quer" (if (= 1 expected-queries) "y" "ies"))
+               :type :xtql/invalid-arity)))
+    (->> queries (run! lint-query))))
+
+(defmethod lint-tail-op 'union [node]
+  (lint-tail-set-operation node 1))
+
+(defmethod lint-tail-op 'union-all [node]
+  (lint-tail-set-operation node 1))
+
+(defmethod lint-tail-op 'intersect [node]
+  (lint-tail-set-operation node 1))
+
+(defmethod lint-tail-op 'intersect-all [node]
+  (lint-tail-set-operation node 1))
+
+(defmethod lint-tail-op 'except [node]
+  (lint-tail-set-operation node 1))
+
+(defmethod lint-tail-op 'except-all [node]
+  (lint-tail-set-operation node 1))
+
+(defmethod lint-tail-op 'distinct [node]
+  (let [opts (-> node :children rest)]
+    (when-not (= 0 (count opts))
+      (api/reg-finding!
+        (assoc (meta node)
+               :message "expected no arguments for distinct as tail operator"
+               :type :xtql/invalid-arity)))))
 
 (defn lint-pipeline [node]
   (let [[_ & ops] (some-> node :children)]
