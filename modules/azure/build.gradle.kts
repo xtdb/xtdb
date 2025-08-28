@@ -32,7 +32,7 @@ dependencies {
     // metrics
     api(libs.micrometer.registry.azuremonitor)
 
-    api(kotlin("stdlib-jdk8"))
+    api(kotlin("stdlib"))
     api(libs.kotlinx.coroutines)
     testImplementation(libs.kotlinx.coroutines.test)
 }

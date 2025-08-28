@@ -18,7 +18,7 @@ java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 dependencies {
     api(project(":xtdb-api"))
 
-    api(kotlin("stdlib-jdk8"))
+    api(kotlin("stdlib"))
     implementation("org.apache.kafka:connect-api:4.0.0")
 
     api(libs.clojure.tools.logging)
