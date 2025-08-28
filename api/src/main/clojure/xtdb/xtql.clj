@@ -619,9 +619,9 @@
   UnparseQuery (unparse-query [_] (list* 'union-all (mapv unparse-query union-all-queries))))
 
 (defmethod parse-query 'union-all [[_ & queries :as this] env]
-  (when (> 1 (count queries))
-    (throw (err/illegal-arg :xtql/malformed-union {:union this
-                                                   :message "Union must contain a least one sub query"})))
+  (when (< (count queries) 2)
+    (throw (err/incorrect :xtql/malformed-union-all
+                          "Union-all must contain at least two sub queries")))
   (->UnionAll (mapv #(parse-query % env) queries)))
 
 (defrecord Union [union-queries]
@@ -629,9 +629,9 @@
   UnparseQuery (unparse-query [_] (list* 'union (mapv unparse-query union-queries))))
 
 (defmethod parse-query 'union [[_ & queries :as this] env]
-  (when (> 1 (count queries))
-    (throw (err/illegal-arg :xtql/malformed-union {:union this
-                                                   :message "Union must contain a least one sub query"})))
+  (when (< (count queries) 2)
+    (throw (err/incorrect :xtql/malformed-union
+                          "Union must contain at least two sub queries")))
   (->Union (mapv #(parse-query % env) queries)))
 
 (defrecord Intersect [intersect-queries]
@@ -639,9 +639,9 @@
   UnparseQuery (unparse-query [_] (list* 'intersect (mapv unparse-query intersect-queries))))
 
 (defmethod parse-query 'intersect [[_ & queries :as this] env]
-  (when (> 1 (count queries))
-    (throw (err/illegal-arg :xtql/malformed-intersect {:intersect this
-                                                       :message "Intersect must contain a least one sub query"})))
+  (when (< (count queries) 2)
+    (throw (err/incorrect :xtql/malformed-intersect
+                          "Intersect must contain at least two sub queries")))
   (->Intersect (mapv #(parse-query % env) queries)))
 
 (defrecord IntersectAll [intersect-all-queries]
@@ -649,9 +649,9 @@
   UnparseQuery (unparse-query [_] (list* 'intersect-all (mapv unparse-query intersect-all-queries))))
 
 (defmethod parse-query 'intersect-all [[_ & queries :as this] env]
-  (when (> 1 (count queries))
-    (throw (err/illegal-arg :xtql/malformed-intersect {:intersect this
-                                                       :message "Intersect must contain a least one sub query"})))
+  (when (< (count queries) 2)
+    (throw (err/incorrect :xtql/malformed-intersect-all
+                          "Intersect-all must contain at least two sub queries")))
   (->IntersectAll (mapv #(parse-query % env) queries)))
 
 (defrecord Except [except-queries]
@@ -659,9 +659,9 @@
   UnparseQuery (unparse-query [_] (list* 'except (mapv unparse-query except-queries))))
 
 (defmethod parse-query 'except [[_ & queries :as this] env]
-  (when (> 1 (count queries))
-    (throw (err/illegal-arg :xtql/malformed-except {:except this
-                                                    :message "Except must contain a least one sub query"})))
+  (when-not (= (count queries) 2)
+    (throw (err/incorrect :xtql/malformed-except
+                          "Except must contain exactly two sub queries")))
   (->Except (mapv #(parse-query % env) queries)))
 
 (defrecord ExceptAll [except-all-queries]
@@ -669,9 +669,9 @@
   UnparseQuery (unparse-query [_] (list* 'except-all (mapv unparse-query except-all-queries))))
 
 (defmethod parse-query 'except-all [[_ & queries :as this] env]
-  (when (> 1 (count queries))
-    (throw (err/illegal-arg :xtql/malformed-except {:except this
-                                                    :message "Except must contain a least one sub query"})))
+  (when-not (= (count queries) 2)
+    (throw (err/incorrect :xtql/malformed-except-all
+                          "Except-all must contain exactly two sub queries")))
   (->ExceptAll (mapv #(parse-query % env) queries)))
 
 (defrecord Distinct [distinct-query]
@@ -679,10 +679,77 @@
   UnparseQuery (unparse-query [_] (list 'distinct (unparse-query distinct-query))))
 
 (defmethod parse-query 'distinct [[_ query :as this] env]
-  (when-not query
-    (throw (err/illegal-arg :xtql/malformed-distinct {:distinct this
-                                                      :message "Distinct must contain a sub query"})))
+  (when (not= (count this) 2)
+    (throw (err/incorrect :xtql/malformed-distinct
+                          "Distinct must contain exactly one sub query")))
   (->Distinct (parse-query query env)))
+
+(defrecord DistinctTail []
+  XtqlQuery$QueryTail
+  UnparseQueryTail (unparse-query-tail [_] '(distinct)))
+
+(defmethod parse-query-tail 'distinct [_ _env]
+  (->DistinctTail))
+
+(defrecord UnionTail [union-query]
+  XtqlQuery$QueryTail
+  UnparseQueryTail (unparse-query-tail [_] (list 'union (unparse-query union-query))))
+
+(defmethod parse-query-tail 'union [[_ query :as this] env]
+  (when-not query
+    (throw (err/incorrect :xtql/malformed-union
+                          "Union tail must contain a query")))
+  (->UnionTail (parse-query query env)))
+
+(defrecord UnionAllTail [union-all-query]
+  XtqlQuery$QueryTail
+  UnparseQueryTail (unparse-query-tail [_] (list 'union-all (unparse-query union-all-query))))
+
+(defmethod parse-query-tail 'union-all [[_ query :as this] env]
+  (when-not query
+    (throw (err/incorrect :xtql/malformed-union-all
+                          "Union-all tail must contain a query")))
+  (->UnionAllTail (parse-query query env)))
+
+(defrecord IntersectTail [intersect-query]
+  XtqlQuery$QueryTail
+  UnparseQueryTail (unparse-query-tail [_] (list 'intersect (unparse-query intersect-query))))
+
+(defmethod parse-query-tail 'intersect [[_ query :as this] env]
+  (when-not query
+    (throw (err/incorrect :xtql/malformed-intersect
+                          {::err/message "Intersect tail must contain a query"})))
+  (->IntersectTail (parse-query query env)))
+
+(defrecord IntersectAllTail [intersect-all-query]
+  XtqlQuery$QueryTail
+  UnparseQueryTail (unparse-query-tail [_] (list 'intersect-all (unparse-query intersect-all-query))))
+
+(defmethod parse-query-tail 'intersect-all [[_ query :as this] env]
+  (when-not query
+    (throw (err/incorrect :xtql/malformed-intersect-all
+                          "Intersect-all tail must contain a query")))
+  (->IntersectAllTail (parse-query query env)))
+
+(defrecord ExceptTail [except-query]
+  XtqlQuery$QueryTail
+  UnparseQueryTail (unparse-query-tail [_] (list 'except (unparse-query except-query))))
+
+(defmethod parse-query-tail 'except [[_ query :as this] env]
+  (when-not query
+    (throw (err/incorrect :xtql/malformed-except
+                          "Except tail must contain a query")))
+  (->ExceptTail (parse-query query env)))
+
+(defrecord ExceptAllTail [except-all-query]
+  XtqlQuery$QueryTail
+  UnparseQueryTail (unparse-query-tail [_] (list 'except-all (unparse-query except-all-query))))
+
+(defmethod parse-query-tail 'except-all [[_ query :as this] env]
+  (when-not query
+    (throw (err/incorrect :xtql/malformed-except-all
+                          "Except-all tail must contain a query")))
+  (->ExceptAllTail (parse-query query env)))
 
 (extend-protocol Unparse
   Expr$Null (unparse [_] nil)
