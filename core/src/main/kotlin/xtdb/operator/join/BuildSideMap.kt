@@ -53,12 +53,17 @@ class BuildSideMap private constructor(
         internal fun hashBits(rowCount: Int, loadFactor: Double = DEFAULT_LOAD_FACTOR) =
             Long.SIZE_BITS - (rowCount / loadFactor).toLong().countLeadingZeroBits()
 
-        internal fun IntVector.insertionIdx(maskedHash: Int, hashMask: Int): Int {
-            var insertionIdx = maskedHash
+        internal fun IntVector.insertionIdx(maskedHash: Int, hashMask: Int, skipIndex: IntArray): Int {
+            var insertionIdx = skipIndex[maskedHash]
 
             while (true) {
-                if (isNull(insertionIdx)) return insertionIdx
-                insertionIdx = insertionIdx.inc() and hashMask
+                if (isNull(insertionIdx)) {
+                    skipIndex[maskedHash] = skipIndex[insertionIdx.inc() and hashMask]
+                    return insertionIdx
+                }
+                val newIdx = insertionIdx.inc() and hashMask
+                skipIndex[insertionIdx] = skipIndex[newIdx]
+                insertionIdx = skipIndex[newIdx]
             }
         }
 
@@ -71,16 +76,17 @@ class BuildSideMap private constructor(
             val hashBits = hashBits(rowCount, loadFactor)
             val mapSize = 1 shl hashBits
             val hashMask = mapSize - 1
+            val skipIndex = IntArray(mapSize) { it }
 
             return IntVector(al, "src-idxs", true, mapSize).closeOnCatch { srcIdxs ->
                 IntVector(al, "src-hashes", true, mapSize).closeOnCatch { srcHashes ->
                     repeat(rowCount) { idx ->
                         val hash = hashCol.getInt(idx)
-                        val insertionIdx = srcIdxs.insertionIdx(hash and hashMask, hashMask)
+                        val insertionIdx = srcIdxs.insertionIdx(hash and hashMask , hashMask, skipIndex)
+
                         srcIdxs[insertionIdx] = idx + offset
                         srcHashes[insertionIdx] = hash
                     }
-
                     BuildSideMap(srcIdxs, srcHashes, hashMask)
                 }
             }
