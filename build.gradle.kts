@@ -429,7 +429,7 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines)
     testImplementation(libs.kotlinx.coroutines.test)
-    implementation(kotlin("stdlib-jdk8"))
+    implementation(kotlin("stdlib"))
     testImplementation(kotlin("test"))
     testImplementation(kotlin("test-junit5"))
 

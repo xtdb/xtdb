@@ -45,7 +45,7 @@ dependencies {
 
     api(libs.transit.clj)
 
-    api(kotlin("stdlib-jdk8"))
+    api(kotlin("stdlib"))
     implementation(kotlin("reflect"))
     implementation(libs.kotlinx.serialization.json)
 

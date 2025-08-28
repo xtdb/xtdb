@@ -29,7 +29,7 @@ dependencies {
 
     api("com.google.guava","guava","32.1.1-jre")
 
-    api(kotlin("stdlib-jdk8"))
+    api(kotlin("stdlib"))
     api(libs.kotlinx.coroutines)
     testImplementation(libs.kotlinx.coroutines.test)
 }
