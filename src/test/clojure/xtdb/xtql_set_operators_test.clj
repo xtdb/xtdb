@@ -15,82 +15,82 @@
                       [:put-docs :table2 {:xt/id 5, :name "Eve", :age 35}]]))
 
 (t/deftest test-union-operator
-  (let [node tu/*node*
-        _ (insert-test-data node)]
-
-    ;; Test that union removes duplicates
+  (let [node tu/*node*]
+    (insert-test-data node)
     (t/is (= [{:name "Alice"} {:name "Bob"} {:name "Charlie"} {:name "David"} {:name "Eve"}]
              (->> (xt/q node '(union
                                (from :table1 [{:name name}])
                                (from :table2 [{:name name}])))
-                  (sort-by :name))))))
+                  (sort-by :name)))
+          "union removes duplicates")))
 
 (t/deftest test-union-all-operator
-  (let [node tu/*node*
-        _ (insert-test-data node)]
-
-    ;; Test that union-all keeps duplicates
-    (t/is (= 6 ;; Alice appears twice: once from each table
+  (let [node tu/*node*]
+    (insert-test-data node)
+    (t/is (= 6
              (count (xt/q node '(union-all
                                  (from :table1 [{:name name}])
-                                 (from :table2 [{:name name}]))))))))
+                                 (from :table2 [{:name name}])))))
+          "union-all keeps duplicates - Alice appears twice")))
 
 (t/deftest test-intersect-operator
-  (let [node tu/*node*
-        _ (insert-test-data node)]
+  (let [node tu/*node*]
+    (insert-test-data node)
 
-    ;; Test that intersect finds common elements (without duplicates)
+
     (t/is (= [{:name "Alice"}]
              (xt/q node '(intersect
                           (from :table1 [{:name name}])
-                          (from :table2 [{:name name}])))))))
+                          (from :table2 [{:name name}]))))
+          "intersect finds common elements without duplicates")))
 
 (t/deftest test-intersect-all-operator
-  (let [node tu/*node*
-        _ (insert-test-data node)]
+  (let [node tu/*node*]
+    (insert-test-data node)
 
-    ;; Test that intersect-all finds common elements (with duplicates)
+
     (t/is (= [{:name "Alice"}]
              (xt/q node '(intersect-all
                           (from :table1 [{:name name}])
-                          (from :table2 [{:name name}])))))))
+                          (from :table2 [{:name name}]))))
+          "intersect-all finds common elements with duplicates")))
 
 (t/deftest test-except-operator
-  (let [node tu/*node*
-        _ (insert-test-data node)]
+  (let [node tu/*node*]
+    (insert-test-data node)
 
-    ;; Test that except finds elements in first but not second (without duplicates)
+
     (t/is (= [{:name "Bob"} {:name "Charlie"}]
              (->> (xt/q node '(except
                                (from :table1 [{:name name}])
                                (from :table2 [{:name name}])))
-                  (sort-by :name))))))
+                  (sort-by :name)))
+          "except finds elements in first but not second without duplicates")))
 
 (t/deftest test-except-all-operator
-  (let [node tu/*node*
-        _ (insert-test-data node)]
+  (let [node tu/*node*]
+    (insert-test-data node)
 
-    ;; Test that except-all finds elements in first but not second (with duplicates)
+
     (t/is (= [{:name "Bob"} {:name "Charlie"}]
              (->> (xt/q node '(except-all
                                (from :table1 [{:name name}])
                                (from :table2 [{:name name}])))
-                  (sort-by :name))))))
+                  (sort-by :name)))
+          "except-all finds elements in first but not second with duplicates"))
 
 (t/deftest test-distinct-operator
-  (let [node tu/*node*
-        _ (xt/submit-tx node [[:put-docs :table3 {:xt/id 1, :name "Alice"}]
+  (let [node tu/*node*]
+    (xt/submit-tx node [[:put-docs :table3 {:xt/id 1, :name "Alice"}]
                               [:put-docs :table3 {:xt/id 2, :name "Alice"}]
-                              [:put-docs :table3 {:xt/id 3, :name "Bob"}]])]
+                        [:put-docs :table3 {:xt/id 3, :name "Bob"}]])
+    (t/is (= 2
+             (count (xt/q node '(distinct (from :table3 [{:name name}])))))
+          "distinct removes duplicates"))))
 
-    ;; Test that distinct removes duplicates
-    (t/is (= 2 ;; Should only return unique names
-             (count (xt/q node '(distinct (from :table3 [{:name name}]))))))))
-
-;; Test parameter passing (implicit scoping like pipeline operator)
 (t/deftest test-set-operators-with-parameters
-  (let [node tu/*node*
-        _ (insert-test-data node)]
+  (let [node tu/*node*]
+    (insert-test-data node)
 
     (t/is (= [{:result "Alice"}]
              (xt/q node ['(fn [$target-name]
@@ -105,15 +105,13 @@
 
 ;; Complex integration tests with other XTQL features
 (t/deftest test-set-operators-with-aggregation
-  (let [node tu/*node*
-        _ (xt/submit-tx node [[:put-docs :employees {:xt/id 1, :name "Alice", :dept "Engineering", :salary 85000}]
+  (let [node tu/*node*]
+    (xt/submit-tx node [[:put-docs :employees {:xt/id 1, :name "Alice", :dept "Engineering", :salary 85000}]
                               [:put-docs :employees {:xt/id 2, :name "Bob", :dept "Engineering", :salary 90000}]
                               [:put-docs :employees {:xt/id 3, :name "Charlie", :dept "Marketing", :salary 70000}]
                               [:put-docs :employees {:xt/id 4, :name "David", :dept "Engineering", :salary 95000}]
                               [:put-docs :contractors {:xt/id 5, :name "Eve", :dept "Engineering", :salary 80000}]
-                              [:put-docs :contractors {:xt/id 6, :name "Frank", :dept "Marketing", :salary 65000}]])]
-
-    ;; Union with aggregation and grouping
+                        [:put-docs :contractors {:xt/id 6, :name "Frank", :dept "Marketing", :salary 65000}]])
     (t/is (= #{{:dept "Engineering", :total-people 4, :avg-salary 87500.0}
                {:dept "Marketing", :total-people 2, :avg-salary 67500.0}}
              (set (xt/q node '(-> (union-all
@@ -132,15 +130,13 @@
                                    (return {:name name})))))))))
 
 (t/deftest test-set-operators-with-subqueries-and-exists
-  (let [node tu/*node*
-        _ (xt/submit-tx node [[:put-docs :customers {:xt/id 1, :name "Alice", :region "North"}]
+  (let [node tu/*node*]
+    (xt/submit-tx node [[:put-docs :customers {:xt/id 1, :name "Alice", :region "North"}]
                               [:put-docs :customers {:xt/id 2, :name "Bob", :region "South"}]
                               [:put-docs :customers {:xt/id 3, :name "Charlie", :region "North"}]
                               [:put-docs :orders {:xt/id 101, :customer-id 1, :amount 500}]
                               [:put-docs :orders {:xt/id 102, :customer-id 1, :amount 300}]
-                              [:put-docs :orders {:xt/id 103, :customer-id 3, :amount 200}]])]
-
-    ;; Union with exists subqueries - using parameterized subqueries
+                        [:put-docs :orders {:xt/id 103, :customer-id 3, :amount 200}]])
     (t/is (= #{{:name "Alice", :has-large-orders true}
                {:name "Charlie", :has-large-orders false}}
              (set (xt/q node '(distinct
@@ -153,11 +149,6 @@
                                                                        cust-id])})
                                    (return {:name name, :has-large-orders has-large-orders})))))))
 
-    ;; Intersect with explicit unify instead of problematic joins
-    ;; Should find customers who both have orders AND are in North region
-    ;; Alice (id: 1) - North region, has orders 101, 102 ✓
-    ;; Charlie (id: 3) - North region, has order 103 ✓
-    ;; Bob (id: 2) - South region, no orders ✗
     (t/is (= #{{:name "Alice"} {:name "Charlie"}}
              (set (xt/q node '(intersect
                                (-> (unify (from :customers [{:name name, :xt/id cust-id}])
@@ -169,16 +160,13 @@
                                    (return {:name name})))))))))
 
 (t/deftest test-set-operators-with-complex-expressions
-  (let [node tu/*node*
-        _ (xt/submit-tx node [[:put-docs :sales {:xt/id 1, :product "A", :quarter "Q1", :amount 1000, :region "US"}]
+  (let [node tu/*node*]
+    (xt/submit-tx node [[:put-docs :sales {:xt/id 1, :product "A", :quarter "Q1", :amount 1000, :region "US"}]
                               [:put-docs :sales {:xt/id 2, :product "B", :quarter "Q1", :amount 1500, :region "US"}]
                               [:put-docs :sales {:xt/id 3, :product "A", :quarter "Q2", :amount 1200, :region "US"}]
                               [:put-docs :sales {:xt/id 4, :product "A", :quarter "Q1", :amount 800, :region "EU"}]
-                              [:put-docs :sales {:xt/id 5, :product "B", :quarter "Q2", :amount 1800, :region "EU"}]])]
-
-    ;; Union with complex expressions and calculated fields
-    ;; Test data: US has A-Q1, A-Q2, B-Q1 (3 rows), EU has A-Q1, B-Q2 (2 rows) = 5 total
-    (t/is (= 5  ; Corrected: US Q1+Q2 + EU Q1+Q2 = 5 unique combinations
+                        [:put-docs :sales {:xt/id 5, :product "B", :quarter "Q2", :amount 1800, :region "EU"}]])
+    (t/is (= 5
              (count (xt/q node '(distinct
                                  (union-all
                                    (-> (from :sales [{:product prod, :quarter q, :amount amt, :region rgn}])
@@ -188,11 +176,7 @@
                                        (where (= rgn "EU"))
                                        (return {:product prod, :period q, :revenue amt, :market "international"}))))))))
 
-    ;; Except with mathematical operations - now using distinct as tail operator
-    ;; Left: Products A & B both have total sales > 1500
-    ;; Right: Products A & B both appear in EU region
-    ;; Except result: {A, B} - {A, B} = {} (empty set - both high performers are in EU)
-    (t/is (= #{}  ; Corrected: both high-performing products appear in EU, so except returns empty
+    (t/is (= #{}
              (set (xt/q node '(-> (except
                                    (-> (from :sales [{:product prod, :amount amt}])
                                        (aggregate prod {:total-sales (sum amt)})
@@ -204,15 +188,13 @@
                                   (distinct))))))))
 
 (t/deftest test-nested-set-operators
-  (let [node tu/*node*
-        _ (xt/submit-tx node [[:put-docs :table-a {:xt/id 1, :value "x"}]
+  (let [node tu/*node*]
+    (xt/submit-tx node [[:put-docs :table-a {:xt/id 1, :value "x"}]
                               [:put-docs :table-a {:xt/id 2, :value "y"}]
                               [:put-docs :table-b {:xt/id 3, :value "y"}]
                               [:put-docs :table-b {:xt/id 4, :value "z"}]
                               [:put-docs :table-c {:xt/id 5, :value "z"}]
-                              [:put-docs :table-c {:xt/id 6, :value "w"}]])]
-
-    ;; Nested set operations: (A ∪ B) ∩ (B ∪ C)
+                        [:put-docs :table-c {:xt/id 6, :value "w"}]])
     (t/is (= #{{:value "y"} {:value "z"}}
              (set (xt/q node '(intersect
                                (union
@@ -237,15 +219,13 @@
                                    (from :table-c [{:value value}]))))))))))
 
 (t/deftest test-set-operators-with-order-and-limit
-  (let [node tu/*node*
-        _ (xt/submit-tx node [[:put-docs :numbers {:xt/id 1, :num 10, :category "even"}]
+  (let [node tu/*node*]
+    (xt/submit-tx node [[:put-docs :numbers {:xt/id 1, :num 10, :category "even"}]
                               [:put-docs :numbers {:xt/id 2, :num 15, :category "odd"}]
                               [:put-docs :numbers {:xt/id 3, :num 20, :category "even"}]
                               [:put-docs :more-numbers {:xt/id 4, :num 15, :category "odd"}]
                               [:put-docs :more-numbers {:xt/id 5, :num 25, :category "odd"}]
-                              [:put-docs :more-numbers {:xt/id 6, :num 30, :category "even"}]])]
-
-    ;; Union with ordering and limiting
+                        [:put-docs :more-numbers {:xt/id 6, :num 30, :category "even"}]])
     (t/is (= [{:num 10} {:num 15}]
              (xt/q node '(-> (union
                               (from :numbers [{:num num}])
@@ -268,8 +248,8 @@
 
 ;; Comprehensive multiplicity (cardinality) tests for intersect and except operators
 (t/deftest test-intersect-multiplicity-handling
-  (let [node tu/*node*
-        _ (xt/submit-tx node [[:put-docs :left-set {:xt/id 1, :value "A"}]
+  (let [node tu/*node*]
+    (xt/submit-tx node [[:put-docs :left-set {:xt/id 1, :value "A"}]
                               [:put-docs :left-set {:xt/id 2, :value "A"}]
                               [:put-docs :left-set {:xt/id 3, :value "A"}]
                               [:put-docs :left-set {:xt/id 4, :value "B"}]
@@ -279,12 +259,7 @@
                               [:put-docs :right-set {:xt/id 8, :value "A"}]
                               [:put-docs :right-set {:xt/id 9, :value "B"}]
                               [:put-docs :right-set {:xt/id 10, :value "B"}]
-                              [:put-docs :right-set {:xt/id 11, :value "B"}]])]
-
-    ;; intersect-all: minimum cardinality from each side
-    ;; Left: A(3), B(2), C(1)
-    ;; Right: A(2), B(3)
-    ;; Result: A(min(3,2)=2), B(min(2,3)=2), C(min(1,0)=0)
+                        [:put-docs :right-set {:xt/id 11, :value "B"}]])
     (t/is (= {"A" 2, "B" 2}
              (-> (xt/q node '(intersect-all
                               (from :left-set [{:value value}])
@@ -303,8 +278,8 @@
           "intersect: should return unique values only")))
 
 (t/deftest test-except-multiplicity-handling
-  (let [node tu/*node*
-        _ (xt/submit-tx node [[:put-docs :left-set {:xt/id 1, :value "A"}]
+  (let [node tu/*node*]
+    (xt/submit-tx node [[:put-docs :left-set {:xt/id 1, :value "A"}]
                               [:put-docs :left-set {:xt/id 2, :value "A"}]
                               [:put-docs :left-set {:xt/id 3, :value "A"}]
                               [:put-docs :left-set {:xt/id 4, :value "B"}]
@@ -312,12 +287,7 @@
                               [:put-docs :left-set {:xt/id 6, :value "C"}]
                               [:put-docs :right-set {:xt/id 7, :value "A"}]
                               [:put-docs :right-set {:xt/id 8, :value "A"}]
-                              [:put-docs :right-set {:xt/id 9, :value "B"}]])]
-
-    ;; except-all: left cardinality minus right cardinality
-    ;; Left: A(3), B(2), C(1)
-    ;; Right: A(2), B(1)
-    ;; Result: A(3-2=1), B(2-1=1), C(1-0=1)
+                        [:put-docs :right-set {:xt/id 9, :value "B"}]])
     (t/is (= {"A" 1, "B" 1, "C" 1}
              (-> (xt/q node '(except-all
                               (from :left-set [{:value value}])
@@ -326,11 +296,7 @@
                  (frequencies)))
           "except-all: cardinalities should be difference of left minus right")
 
-    ;; except: should remove duplicates and find elements only in left set
-    ;; Since except-all returns A(1), B(1), C(1), except should deduplicate to A, B, C
-    ;; But if we want to test proper except semantics (elements in left but not right),
-    ;; we need different test data. Let me adjust the assertion:
-    (t/is (= #{"A" "B" "C"}  ; All elements that appear in the result of except-all
+    (t/is (= #{"A" "B" "C"}
              (->> (xt/q node '(except
                                (from :left-set [{:value value}])
                                (from :right-set [{:value value}])))
@@ -339,16 +305,14 @@
           "except: should return unique values from the except-all result")))
 
 (t/deftest test-except-vs-except-all-semantics
-  (let [node tu/*node*
-        _ (xt/submit-tx node [;; Left has: X, Y, Y, Z
+  (let [node tu/*node*]
+    (xt/submit-tx node [;; Left has: X, Y, Y, Z
                               [:put-docs :left-only-set {:xt/id 1, :value "X"}]
                               [:put-docs :left-only-set {:xt/id 2, :value "Y"}]
                               [:put-docs :left-only-set {:xt/id 3, :value "Y"}]
                               [:put-docs :left-only-set {:xt/id 4, :value "Z"}]
-                              ;; Right has: Y (so Y should be excluded from result)
-                              [:put-docs :right-filter-set {:xt/id 5, :value "Y"}]])]
-
-    ;; except-all: should return X(1), Y(2-1=1), Z(1)
+                        ;; Right has: Y (so Y should be excluded from result)
+                        [:put-docs :right-filter-set {:xt/id 5, :value "Y"}]])
     (t/is (= {"X" 1, "Y" 1, "Z" 1}
              (-> (xt/q node '(except-all
                               (from :left-only-set [{:value value}])
@@ -371,20 +335,20 @@
 
     ;; Empty sets
     (t/testing "intersect with empty sets"
-      (let [_ (xt/submit-tx node [[:put-docs :empty-test {:xt/id 1, :value "A"}]])]
-        (t/is (empty? (xt/q node '(intersect-all
+      (xt/submit-tx node [[:put-docs :empty-test {:xt/id 1, :value "A"}]])
+      (t/is (empty? (xt/q node '(intersect-all
                                    (from :empty-test [{:value value}])
                                    (from :non-existent [{:value value}])))))
 
         (t/is (empty? (xt/q node '(intersect
                                    (from :empty-test [{:value value}])
-                                   (from :non-existent [{:value value}])))))))
+                                   (from :non-existent [{:value value}])))))
 
     ;; Single element sets
     (t/testing "intersect with single elements"
-      (let [_ (xt/submit-tx node [[:put-docs :single-a {:xt/id 1, :value "X"}]
-                                  [:put-docs :single-b {:xt/id 2, :value "X"}]])]
-        (t/is (= [{"X" 1}]
+      (xt/submit-tx node [[:put-docs :single-a {:xt/id 1, :value "X"}]
+                          [:put-docs :single-b {:xt/id 2, :value "X"}]])
+      (t/is (= [{"X" 1}]
                  [(-> (xt/q node '(intersect-all
                                    (from :single-a [{:value value}])
                                    (from :single-b [{:value value}])))
@@ -396,13 +360,13 @@
                                    (from :single-a [{:value value}])
                                    (from :single-b [{:value value}])))
                       (map :value)
-                      (set))))))
+                      (set))))
 
     ;; Except with empty right side
     (t/testing "except with empty right side"
-      (let [_ (xt/submit-tx node [[:put-docs :left-only {:xt/id 1, :value "Y"}]
-                                  [:put-docs :left-only {:xt/id 2, :value "Y"}]])]
-        (t/is (= {"Y" 2}
+      (xt/submit-tx node [[:put-docs :left-only {:xt/id 1, :value "Y"}]
+                          [:put-docs :left-only {:xt/id 2, :value "Y"}]])
+      (t/is (= {"Y" 2}
                  (-> (xt/q node '(except-all
                                   (from :left-only [{:value value}])
                                   (from :non-existent [{:value value}])))
@@ -418,16 +382,14 @@
                       (set)))
               "except with empty right side should return unique left elements")))))
 
-;; Test set operators as tail operators (new functionality)
+;; Test set operators as tail operators
 (t/deftest test-set-operators-as-tail-operators
-  (let [node tu/*node*
-        _ (xt/submit-tx node [[:put-docs :employees {:xt/id 1, :name "Alice", :dept "Engineering"}]
+  (let [node tu/*node*]
+    (xt/submit-tx node [[:put-docs :employees {:xt/id 1, :name "Alice", :dept "Engineering"}]
                               [:put-docs :employees {:xt/id 2, :name "Bob", :dept "Marketing"}]
                               [:put-docs :employees {:xt/id 3, :name "Charlie", :dept "Engineering"}]
                               [:put-docs :contractors {:xt/id 4, :name "David", :dept "Engineering"}]
-                              [:put-docs :contractors {:xt/id 5, :name "Eve", :dept "Marketing"}]])]
-
-    ;; Union as tail operator: current pipeline UNION another query
+                        [:put-docs :contractors {:xt/id 5, :name "Eve", :dept "Marketing"}]])
     (t/is (= #{"Alice" "Bob" "Charlie" "David" "Eve"}
              (->> (xt/q node '(-> (from :employees [{:name name}])
                                   (union (from :contractors [{:name name}]))))
@@ -470,8 +432,8 @@
 
 ;; Additional comprehensive multiplicity test scenarios
 (t/deftest test-complex-multiplicity-scenarios
-  (let [node tu/*node*
-        _ (xt/submit-tx node [;; Dataset with varied multiplicities for comprehensive testing
+  (let [node tu/*node*]
+    (xt/submit-tx node [;; Dataset with varied multiplicities for comprehensive testing
                               [:put-docs :multi-left {:xt/id 1, :key "A", :category "X"}]
                               [:put-docs :multi-left {:xt/id 2, :key "A", :category "X"}] ; A appears 2x
                               [:put-docs :multi-left {:xt/id 3, :key "B", :category "Y"}] ; B appears 1x
@@ -483,8 +445,8 @@
                               [:put-docs :multi-right {:xt/id 9, :key "A", :category "X"}] ; A appears 3x
                               [:put-docs :multi-right {:xt/id 10, :key "B", :category "Y"}]
                               [:put-docs :multi-right {:xt/id 11, :key "B", :category "Y"}] ; B appears 2x
-                              [:put-docs :multi-right {:xt/id 12, :key "D", :category "W"}] ; D appears 1x (only in right)
-                              ])]
+                        [:put-docs :multi-right {:xt/id 12, :key "D", :category "W"}] ; D appears 1x (only in right)
+                        ])
 
     (t/testing "intersect-all with varied multiplicities"
       ;; Left: A(2), B(1), C(3)
@@ -537,13 +499,13 @@
             "distinct: should return unique elements only"))))
 
 (t/deftest test-multiplicity-with-tail-operators
-  (let [node tu/*node*
-        _ (xt/submit-tx node [[:put-docs :base-data {:xt/id 1, :value "P"}]
+  (let [node tu/*node*]
+    (xt/submit-tx node [[:put-docs :base-data {:xt/id 1, :value "P"}]
                               [:put-docs :base-data {:xt/id 2, :value "P"}] ; P appears 2x
                               [:put-docs :base-data {:xt/id 3, :value "Q"}] ; Q appears 1x
                               [:put-docs :tail-data {:xt/id 4, :value "P"}] ; P appears 1x
-                              [:put-docs :tail-data {:xt/id 5, :value "R"}] ; R appears 1x
-                              ])]
+                        [:put-docs :tail-data {:xt/id 5, :value "R"}] ; R appears 1x
+                        ])
 
     (t/testing "union-all as tail operator preserves multiplicities"
       ;; Base pipeline: P(2), Q(1)
@@ -579,14 +541,14 @@
             "except-all as tail: should subtract multiplicities"))))
 
 (t/deftest test-multiplicity-through-pipelines
-  (let [node tu/*node*
-        _ (xt/submit-tx node [[:put-docs :pipeline-test {:xt/id 1, :item "Alpha", :count 5}]
+  (let [node tu/*node*]
+    (xt/submit-tx node [[:put-docs :pipeline-test {:xt/id 1, :item "Alpha", :count 5}]
                               [:put-docs :pipeline-test {:xt/id 2, :item "Alpha", :count 3}]
                               [:put-docs :pipeline-test {:xt/id 3, :item "Beta", :count 7}]
                               [:put-docs :pipeline-test {:xt/id 4, :item "Beta", :count 7}] ; Duplicate Beta-7 pair
                               [:put-docs :other-data {:xt/id 5, :item "Alpha", :count 5}]  ; Exact match for first Alpha
-                              [:put-docs :other-data {:xt/id 6, :item "Beta", :count 2}]   ; Different count for Beta
-                              ])]
+                        [:put-docs :other-data {:xt/id 6, :item "Beta", :count 2}]   ; Different count for Beta
+                        ])
 
     (t/testing "multiplicity preserved through complex pipeline before set operation"
       ;; This tests that multiplicities are correctly handled when set operations
@@ -612,17 +574,15 @@
 
 ;; Tests for variadic vs binary operator behavior
 (t/deftest test-variadic-set-operations
-  (let [node tu/*node*
-        _ (xt/submit-tx node [[:put-docs :set-a {:xt/id 1, :value "x"}]
+  (let [node tu/*node*]
+    (xt/submit-tx node [[:put-docs :set-a {:xt/id 1, :value "x"}]
                               [:put-docs :set-a {:xt/id 2, :value "y"}]
                               [:put-docs :set-b {:xt/id 3, :value "y"}]
                               [:put-docs :set-b {:xt/id 4, :value "z"}]
                               [:put-docs :set-c {:xt/id 5, :value "z"}]
-                              [:put-docs :set-c {:xt/id 6, :value "w"}]])]
+                        [:put-docs :set-c {:xt/id 6, :value "w"}]])
 
     (t/testing "3-way union (variadic)"
-      ;; A = {x, y}, B = {y, z}, C = {z, w}
-      ;; A ∪ B ∪ C = {x, y, z, w}
       (t/is (= #{"x" "y" "z" "w"}
                (->> (xt/q node '(union
                                  (from :set-a [{:value value}])
@@ -656,29 +616,26 @@
             "3-way intersect should find common elements (none in this case)"))
 
     (t/testing "3-way intersect with actual common element"
-      ;; Add a common element to all sets
-      (let [_ (xt/submit-tx node [[:put-docs :set-a {:xt/id 10, :value "common"}]
-                                  [:put-docs :set-b {:xt/id 11, :value "common"}]
-                                  [:put-docs :set-c {:xt/id 12, :value "common"}]])]
-        (t/is (= #{"common"}
+      (xt/submit-tx node [[:put-docs :set-a {:xt/id 10, :value "common"}]
+                          [:put-docs :set-b {:xt/id 11, :value "common"}]
+                          [:put-docs :set-c {:xt/id 12, :value "common"}]])
+      (t/is (= #{"common"}
                  (->> (xt/q node '(intersect
                                    (from :set-a [{:value value}])
                                    (from :set-b [{:value value}])
                                    (from :set-c [{:value value}])))
                       (map :value)
                       (set)))
-              "3-way intersect should find the common element")))
+              "3-way intersect should find the common element"))
 
     (t/testing "3-way intersect-all (variadic)"
-      ;; With common element having different multiplicities
-      (let [_ (xt/submit-tx node [[:put-docs :set-a {:xt/id 13, :value "multi"}]   ; multi appears 1x in A
+      (xt/submit-tx node [[:put-docs :set-a {:xt/id 13, :value "multi"}]   ; multi appears 1x in A
                                   [:put-docs :set-b {:xt/id 14, :value "multi"}]   ; multi appears 1x in B
                                   [:put-docs :set-b {:xt/id 15, :value "multi"}]   ; multi appears 2x total in B
                                   [:put-docs :set-c {:xt/id 16, :value "multi"}]   ; multi appears 1x in C
                                   [:put-docs :set-c {:xt/id 17, :value "multi"}]   ; multi appears 2x total in C
-                                  [:put-docs :set-c {:xt/id 18, :value "multi"}]])] ; multi appears 3x total in C
-        ;; A(1) ∩ B(2) ∩ C(3) = min(1,2,3) = 1
-        (t/is (= {"multi" 1}
+                          [:put-docs :set-c {:xt/id 18, :value "multi"}]]) ; multi appears 3x total in C
+      (t/is (= {"multi" 1}
                  (->> (xt/q node '(intersect-all
                                    (from :set-a [{:value value}])
                                    (from :set-b [{:value value}])
@@ -690,16 +647,14 @@
               "3-way intersect-all should use minimum multiplicity")))))
 
 (t/deftest test-binary-except-operations
-  (let [node tu/*node*
-        _ (xt/submit-tx node [[:put-docs :left-set {:xt/id 1, :value "a"}]
+  (let [node tu/*node*]
+    (xt/submit-tx node [[:put-docs :left-set {:xt/id 1, :value "a"}]
                               [:put-docs :left-set {:xt/id 2, :value "b"}]
                               [:put-docs :left-set {:xt/id 3, :value "c"}]
                               [:put-docs :right-set {:xt/id 4, :value "b"}]
-                              [:put-docs :right-set {:xt/id 5, :value "d"}]])]
+                        [:put-docs :right-set {:xt/id 5, :value "d"}]])
 
     (t/testing "except is strictly binary"
-      ;; Left = {a, b, c}, Right = {b, d}
-      ;; Left - Right = {a, c}
       (t/is (= #{"a" "c"}
                (->> (xt/q node '(except
                                  (from :left-set [{:value value}])
@@ -723,6 +678,7 @@
 
     (t/testing "union requires at least 2 queries"
       (t/is (thrown? Exception
+                     #_:clj-kondo/ignore
                      (xt/q node '(union (rel [{:x "a"}] [x])))))
       (t/is (= #{"a" "b"}
                (->> (xt/q node '(union
@@ -740,20 +696,25 @@
 
     (t/testing "union-all requires at least 2 queries"
       (t/is (thrown? Exception
+                     #_:clj-kondo/ignore
                      (xt/q node '(union-all (rel [{:x "a"}] [x]))))))
 
     (t/testing "intersect requires at least 2 queries"
       (t/is (thrown? Exception
+                     #_:clj-kondo/ignore
                      (xt/q node '(intersect (rel [{:x "a"}] [x]))))))
 
     (t/testing "intersect-all requires at least 2 queries"
       (t/is (thrown? Exception
+                     #_:clj-kondo/ignore
                      (xt/q node '(intersect-all (rel [{:x "a"}] [x]))))))
 
     (t/testing "except requires exactly 2 queries"
       (t/is (thrown? Exception
+                     #_:clj-kondo/ignore
                      (xt/q node '(except (rel [{:x "a"}] [x])))))
       (t/is (thrown? Exception
+                     #_:clj-kondo/ignore
                      (xt/q node '(except
                                   (rel [{:x "a"}] [x])
                                   (rel [{:x "b"}] [x])
@@ -761,8 +722,10 @@
 
     (t/testing "except-all requires exactly 2 queries"
       (t/is (thrown? Exception
+                     #_:clj-kondo/ignore
                      (xt/q node '(except-all (rel [{:x "a"}] [x])))))
       (t/is (thrown? Exception
+                     #_:clj-kondo/ignore
                      (xt/q node '(except-all
                                   (rel [{:x "a"}] [x])
                                   (rel [{:x "b"}] [x])
@@ -770,8 +733,10 @@
 
     (t/testing "distinct requires exactly 1 query"
       (t/is (thrown? Exception
+                     #_:clj-kondo/ignore
                      (xt/q node '(distinct))))
       (t/is (thrown? Exception
+                     #_:clj-kondo/ignore
                      (xt/q node '(distinct
                                   (rel [{:x "a"}] [x])
                                   (rel [{:x "b"}] [x]))))))))

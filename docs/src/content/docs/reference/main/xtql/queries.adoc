@@ -36,10 +36,11 @@ Param :: Symbol
 
 Pipeline :: (-> Source Tail*) | Source
 Source :: From | Rel | Unify | Union | UnionAll | Intersect | IntersectAll
-	  | Except | ExceptAll | Distinct
+          | Except | ExceptAll | Distinct
 Tail :: Aggregate | Limit | Offset | OrderBy | Return
-	| Where | With | Without | Unnest | UnionTail | UnionAllTail
-	| IntersectTail | IntersectAllTail | ExceptTail | ExceptAllTail | DistinctTail
+        | Where | With | Without | Unnest
+        | Union | UnionAll | Intersect | IntersectAll
+        | Except | ExceptAll | Distinct
 ----
 
 === Source operators
@@ -75,13 +76,13 @@ Tail :: Aggregate | Limit | Offset | OrderBy | Return
 | link:#_with[With] | Adds columns to the relation
 | link:#_without[Without] | Removes columns from the relation
 | link:#_unnest[Unnest] | Flattens an array within a column into individual rows
-| link:#_union_tail[Union (tail)] | Combines current pipeline with another query, removing duplicates
-| link:#_union_all_tail[Union All (tail)] | Combines current pipeline with another query, preserving duplicates
-| link:#_intersect_tail[Intersect (tail)] | Returns common elements between current pipeline and another query
-| link:#_intersect_all_tail[Intersect All (tail)] | Returns common elements between current pipeline and another query, preserving duplicates
-| link:#_except_tail[Except (tail)] | Returns elements in current pipeline but not in another query
-| link:#_except_all_tail[Except All (tail)] | Returns elements in current pipeline but not in another query, preserving duplicates
-| link:#_distinct_tail[Distinct (tail)] | Removes duplicate rows from current pipeline
+| link:#_union_tail[Union (tail)] | Combines the relation with other queries, removing duplicates
+| link:#_union_all_tail[Union All (tail)] | Combines the relation with other queries, preserving duplicates
+| link:#_intersect_tail[Intersect (tail)] | Returns common elements between the relation and other queries
+| link:#_intersect_all_tail[Intersect All (tail)] | Returns common elements between the relation and other queries, preserving duplicates
+| link:#_except_tail[Except (tail)] | Returns elements in the relation but not in another query
+| link:#_except_all_tail[Except All (tail)] | Returns elements in the relation but not in another query, preserving duplicates
+| link:#_distinct_tail[Distinct (tail)] | Removes duplicate rows from the relation
 |===
 
 === Unify clauses
@@ -125,10 +126,10 @@ Expr :: <defined separately>
 [source,clojure]
 ----
 (-> (unify (from :customers [{:xt/id customer-id, :name customer-name}])
-	   (from :orders [customer-id order-value]))
+           (from :orders [customer-id order-value]))
     (aggregate customer-id customer-name
-	       {:order-count (row-count)
-		:total-value (sum order-value)}))
+               {:order-count (row-count)
+                :total-value (sum order-value)}))
 ----
 
 === From
@@ -146,12 +147,12 @@ From :: (from Table FromOpts)
 Table :: keyword
 
 FromOpts :: [BindSpec+]
-	    | {; required
-	       :bind [BindSpec+]
+            | {; required
+               :bind [BindSpec+]
 
-	       ; optional
-	       :for-valid-time TemporalFilter
-	       :for-system-time TemporalFilter}
+               ; optional
+               :for-valid-time TemporalFilter
+               :for-system-time TemporalFilter}
 ----
 
 [source,clojure]
@@ -211,10 +212,10 @@ Unless otherwise specified, queries will see the current version of the row, `at
 [source]
 ----
 TemporalFilter :: (at Timestamp)
-		| (from Timestamp)
-		| (to Timestamp)
-		| (in Timestamp Timestamp)
-		| :all-time
+                | (from Timestamp)
+                | (to Timestamp)
+                | (in Timestamp Timestamp)
+                | :all-time
 
 Timestamp :: java.util.Date | java.time.Instant | java.time.ZonedDateTime
 ----
@@ -222,8 +223,8 @@ Timestamp :: java.util.Date | java.time.Instant | java.time.ZonedDateTime
 [source,clojure]
 ----
 (from :users {:bind [...]
-	      :for-valid-time (in #inst "2020-01-01" #inst "2021-01-01")
-	      :for-system-time (at #inst "2023-01-01")})
+              :for-valid-time (in #inst "2020-01-01" #inst "2021-01-01")
+              :for-system-time (at #inst "2023-01-01")})
 ----
 Without any temporal filters, it is valid to just specify the binding specs without a map.
 
@@ -251,7 +252,7 @@ LeftJoin :: (left-join Subquery [BindSpec+])
 ----
 (unify (from :customers [{:xt/id customer-id} customer-name]
        (left-join (from :orders [{:xt/id order-id}, customer-id, order-value])
-		  [customer-id order-id order-value])))
+                  [customer-id order-id order-value])))
 ----
 
 In this case, `customer-id` is specified multiple times, so this adds a join-condition constraint; `order-id` and `order-value` are not specified elsewhere within the unify, so these columns are simply returned.
@@ -307,12 +308,12 @@ spec are supplied priority is given from left to right.
 ----
 OrderBy :: (order-by OrderSpec+)
 OrderSpec :: OrderCol
-	   | {; required
-	      :val Expr
+           | {; required
+              :val Expr
 
-	      ; optional
-	      :dir Direction
-	      :nulls NullOrdering}
+              ; optional
+              :dir Direction
+              :nulls NullOrdering}
 
 OrderCol :: symbol
 Direction :: :asc | :desc
@@ -326,7 +327,7 @@ Expr :: <defined separately>
 ;; then received-at ascending
 (-> (from :orders [order-value received-at])
     (order-by {:val order-value, :dir :desc, :nulls :last}
-	      received-at))
+               received-at))
 ----
 
 === Return
@@ -380,7 +381,7 @@ Expr :: <defined separately>
 
 ;; from a parameter
 (xt/q node ['#(rel % [a b])
-	    [{:a 1, :b 2}, {:a 3, :b 4}]])
+            [{:a 1, :b 2}, {:a 3, :b 4}]])
 
 ;; from a value in another document
 ;; assume we have a document {:xt/id <id>, :my-nested-rel [{:a 1, :b 2}, ...]}
@@ -494,7 +495,7 @@ Expr :: <defined separately>
 ;; as a 'tail' operator
 (-> (from :users [username date-of-birth])
     (where (> (current-timestamp)
-	      (+ date-of-birth #xt/period "P18Y"))))
+              (+ date-of-birth #xt/period "P18Y"))))
 
 ;; in `unify`
 (unify (from :customers [{:xt/id customer-id} customer-name vip?])
@@ -557,7 +558,7 @@ Column :: keyword
 [source,clojure]
 ----
 (-> (unify (from :customers [{:xt/id customer-id}, customer-name])
-	   (from :orders [customer-id order-value]))
+           (from :orders [customer-id order-value]))
     (without :customer-id))
 ----
 
@@ -612,13 +613,13 @@ The following example retrieves a post together with their author and comments:
 (fn [post-id]
   (-> (from :posts [{:xt/id post-id} post-content author-id])
       (with {:author (pull (from :authors [{:xt/id author-id} first-name last-name])
-			   {:args [author-id]})
+                           {:args [author-id]})
 
-	     :comments (pull* (-> (from :comments [{:post-id post-id} comment posted-at])
-				  (order-by posted-at)
-				  (limit 2)
-				  (return comment))
-			      {:args [{:post-id post-id}]})})
+             :comments (pull* (-> (from :comments [{:post-id post-id} comment posted-at])
+                                  (order-by posted-at)
+                                  (limit 2)
+                                  (return comment))
+                              {:args [{:post-id post-id}]})})
 
       (return post-content author comments)))
 
@@ -698,10 +699,10 @@ Expr :: <defined separately>
 
 (-> (from :posts [{:xt/id post-id} ...])
     (with {:comments (pull* [(fn [post-id]
-			       (-> (from :comments [{:post-id post-id} comment commented-at])
-				   (limit 3)))
+                               (-> (from :comments [{:post-id post-id} comment commented-at])
+                                   (limit 3)))
 
-			     post-id])}))
+                             post-id])}))
 
 ;; in this query, the `post-id` argument is referenced as `post-id` in the sub-query
 
@@ -710,8 +711,8 @@ Expr :: <defined separately>
 
 (-> (from :posts [{:xt/id post-id} ...])
     (with {:comments (pull* (fn [post-id]
-			      (-> (from :comments [{:post-id post-id} comment commented-at])
-				  (limit 3))))}))
+                              (-> (from :comments [{:post-id post-id} comment commented-at])
+                                  (limit 3))))}))
 ----
 
 As well as 'pull', this is quite commonly used in left joins, because we don't want to filter out rows that don't match (which would happen if the `<>` here was in the outer unify).
@@ -723,11 +724,11 @@ Instead, we want to preserve them, albeit without values for the columns in the 
 ;; find everybody and, for those who have them, their siblings
 
 (-> (unify (from :people [{:xt/id person, :parent parent}])
-	   (left-join [(fn [person]
-			 (-> (from :people [{:xt/id sibling, :parent parent}])
-			     (where (<> person sibling))))
-			person]
-		      [sibling parent]))
+           (left-join [(fn [person]
+                         (-> (from :people [{:xt/id sibling, :parent parent}])
+                             (where (<> person sibling))))
+                        person]
+                      [sibling parent]))
     (return person sibling))
 
 ;; in this query, the `person` argument is referenced as `person` in the sub-query;
@@ -737,10 +738,10 @@ Instead, we want to preserve them, albeit without values for the columns in the 
 ;; we can omit the application vector
 
 (-> (unify (from :people [{:xt/id person, :parent parent}])
-	   (left-join (fn [person]
-			(-> (from :people [{:xt/id sibling, :parent parent}])
-			    (where (<> person sibling))))
-		      [sibling parent]))
+           (left-join (fn [person]
+                        (-> (from :people [{:xt/id sibling, :parent parent}])
+                            (where (<> person sibling))))
+                      [sibling parent]))
     (return person sibling))
 ----
 
@@ -981,6 +982,6 @@ Set operations follow standard mathematical set theory for handling duplicates (
 (fn [target-category]
   (except
     (-> (from :all-products [{:category category, :name name}])
-	(where (= category target-category)))
+        (where (= category target-category)))
     (from :discontinued-products [{:category category, :name name}])))
 ----

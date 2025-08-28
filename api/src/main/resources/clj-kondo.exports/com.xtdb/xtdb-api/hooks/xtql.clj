@@ -313,7 +313,6 @@
                :message "expected rel binding to be a vector"
                :type :xtql/type-mismatch)))))
 
-;; Set operations as source operators
 (defn lint-variadic-set-operation [node min-queries]
   (let [queries (-> node :children rest)]
     (when (< (count queries) min-queries)
@@ -581,7 +580,6 @@
                  :message "expected opt to be a map"
                  :type :xtql/type-mismatch))))))
 
-;; Set operations as tail operators
 (defn lint-tail-set-operation [node expected-queries]
   (let [queries (-> node :children rest)]
     (when-not (= (count queries) expected-queries)
