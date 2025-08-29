@@ -57,6 +57,9 @@ This is particularly useful for non-JVM testing - see the `/lang` README for mor
 == Testing
 
 * Test all with `./gradlew test`; `./gradlew integration-test` for longer tests
+* Property-based testing with `./gradlew property-test`
+** Run with custom iterations: `./gradlew property-test -Piterations=500` (defaults to 100)
+** Uses test.check generators to test with randomized data including composite types
 * Some tests have external dependencies which require `docker-compose`:
 ** `docker-compose up` (`docker-compose up <kafka>` etc for individual containers),
 ** `./gradlew kafka-test`
