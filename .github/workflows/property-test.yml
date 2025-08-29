@@ -1,0 +1,49 @@
+name: XTDB Property Tests
+
+on:
+  workflow_call:
+    inputs:
+      iteration_count:
+        description: 'Number of property test iterations to run'
+        required: true
+        type: string
+
+jobs:
+  property-test:
+    name: Property Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Property Test
+        run: ./gradlew property-test -Piterations=${{ inputs.iteration_count }}
+
+      - name: Publish Property Test Report
+        uses: mikepenz/action-junit-report@v4
+        if: always()
+        with:
+          check_name: JUnit Property Test Report
+          report_paths: '**/build/test-results/property-test/TEST-*.xml'
+
+      - name: Post Slack Notification (On Fail)
+        if: failure() && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/main'
+        uses: ravsamhq/notify-slack-action@v2
+        with:
+          status: ${{ job.status }}
+          notification_title: "*Property Test* has {status_message}:"
+          message_format: "{emoji} `property-test` job has {status_message} with ${{ inputs.iteration_count }} iterations"
+          notify_when: "failure"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

@@ -178,3 +178,11 @@ jobs:
   #     - name: SLT 2
   #       run: ./gradlew slt-test-2
   #       timeout-minutes: 40
+
+  property-test:
+    uses: ./.github/workflows/property-test.yml
+    with:
+      iteration_count: "100"
+    permissions:
+      contents: read
+      checks: write
