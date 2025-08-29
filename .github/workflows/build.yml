@@ -176,5 +176,13 @@ jobs:
   #       uses: gradle/actions/setup-gradle@v4
 
   #     - name: SLT 2
-  #       run: ./gradlew slt-test-2
   #       timeout-minutes: 40
+
+  # FIXME #4721
+  # property-test:
+  #   uses: ./.github/workflows/property-test.yml
+  #   with:
+  #     iteration_count: "100"
+  #   permissions:
+  #     contents: read
+  #     checks: write
