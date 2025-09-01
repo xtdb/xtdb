@@ -1,8 +1,10 @@
 package xtdb.indexer
 
+import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.log.MessageId
 import xtdb.arrow.VectorReader
+import xtdb.block.proto.TxKey
 import xtdb.database.Database
 import java.time.Instant
 import java.time.ZoneId
@@ -14,6 +16,8 @@ interface Indexer : AutoCloseable {
             msgId: MessageId, msgTimestamp: Instant, txOps: VectorReader?,
             systemTime: Instant?, defaultTz: ZoneId?, user: String?
         ): TransactionResult
+
+        fun addTxRow(txKey: TransactionKey, error: Throwable?)
     }
 
     fun openForDatabase(db: Database): ForDatabase

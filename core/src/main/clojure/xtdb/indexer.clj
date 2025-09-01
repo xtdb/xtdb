@@ -5,12 +5,12 @@
             [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.authn.crypt :as authn.crypt]
+            [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.indexer.live-index :as li]
             [xtdb.log :as xt-log]
             [xtdb.logical-plan :as lp]
             [xtdb.metrics :as metrics]
-            [xtdb.operator.scan :as scan]
             [xtdb.query :as q]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
@@ -19,8 +19,7 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.basis :as basis])
+            [xtdb.vector.reader :as vr])
   (:import (clojure.lang MapEntry)
            (io.micrometer.core.instrument Counter Timer)
            (java.io ByteArrayInputStream)
@@ -720,7 +719,12 @@
                   (do
                     (add-tx-row! db-name live-idx-tx tx-key nil)
                     (.commit live-idx-tx)
-                    (serde/->tx-committed msg-id system-time)))))))))))
+                    (serde/->tx-committed msg-id system-time))))))))))
+
+  (addTxRow [_ tx-key e]
+    (util/with-open [live-idx-tx (.startTx live-index tx-key)]
+      (add-tx-row! (.getName db) live-idx-tx tx-key e)
+      (.commit live-idx-tx))))
 
 (defmethod ig/init-key :xtdb/indexer [_ {:keys [config, q-src, metrics-registry]}]
   (let [tx-timer (metrics/add-timer metrics-registry "tx.op.timer"
