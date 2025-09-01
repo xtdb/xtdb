@@ -74,7 +74,7 @@
 (def struct-gen
   (fn [value-gen]
     (gen/let [num-keys (gen/choose 1 10)
-              keys (gen/vector-distinct-by #(str/lower-case (name %)) safe-keyword-gen {:num-elements num-keys})
+              keys (gen/vector-distinct-by #(str/lower-case (name %)) safe-keyword-gen {:num-elements num-keys :max-tries 100})
               values (gen/vector value-gen num-keys)]
       (->> (zipmap keys values)
            (filter val)
@@ -116,7 +116,8 @@
              num-fields (gen/choose 1 5)
              field-keys (gen/vector-distinct
                          (gen/elements [:a :b :c :d :e :f :g :h :i :j])
-                         {:num-elements num-fields})
+                         {:num-elements num-fields
+                          :max-tries 100})
              field-values (gen/vector recursive-value-gen num-fields)]
      (-> (zipmap field-keys field-values)
          (assoc :xt/id id)))))
