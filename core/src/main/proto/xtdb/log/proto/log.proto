@@ -2,12 +2,15 @@ edition = "2023";
 
 package xtdb.log.proto;
 
+import "xtdb/database/proto/db.proto";
+
 option java_multiple_files = true;
 
 message LogMessage {
     oneof message {
         FlushBlock flush_block = 1;
         TriesAdded tries_added = 2;
+        AttachDatabase attach_database = 3;
     }
 }
 
@@ -48,4 +51,9 @@ message TrieDetails {
     TrieMetadata trie_metadata = 4;
     TrieState trie_state = 5;
     int64 garbage_as_of = 6;
+}
+
+message AttachDatabase {
+    string db_name = 1;
+    xtdb.database.proto.DatabaseConfig config = 2;
 }

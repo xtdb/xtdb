@@ -7,7 +7,6 @@
 
 package xtdb.api.log
 
-import com.google.protobuf.Any as ProtoAny
 import kotlinx.coroutines.*
 import kotlinx.coroutines.future.future
 import kotlinx.serialization.SerialName
@@ -32,9 +31,8 @@ import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.StringMapWithEnvVarsSerde
 import xtdb.api.StringWithEnvVarSerde
 import xtdb.api.log.Log.*
-import xtdb.api.module.XtdbModule
 import xtdb.database.proto.DatabaseConfig
-import xtdb.database.proto.otherLog
+import xtdb.kafka.proto.KafkaLogConfig
 import xtdb.kafka.proto.kafkaLogConfig
 import java.nio.ByteBuffer
 import java.nio.file.Path
@@ -46,6 +44,7 @@ import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.io.path.inputStream
 import kotlin.time.Duration.Companion.seconds
+import com.google.protobuf.Any as ProtoAny
 
 private typealias KafkaConfigMap = Map<String, String>
 
@@ -148,7 +147,11 @@ class KafkaCluster(
         override fun open(): KafkaCluster = KafkaCluster(configMap, pollDuration)
     }
 
-    private inner class KafkaLog(private val clusterAlias: LogClusterAlias, private val topic: String, override val epoch: Int) : Log {
+    private inner class KafkaLog(
+        private val clusterAlias: LogClusterAlias,
+        private val topic: String,
+        override val epoch: Int
+    ) : Log {
 
         private fun readLatestSubmittedMessage(kafkaConfigMap: KafkaConfigMap): LogOffset =
             kafkaConfigMap.openConsumer().use { c ->
@@ -245,14 +248,11 @@ class KafkaCluster(
         }
 
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
-            dbConfig.setOtherLog(otherLog {
-                tag = "kafka"
-                log = ProtoAny.pack(kafkaLogConfig {
-                    this.topic = this@LogFactory.topic
-                    this.epoch = this@LogFactory.epoch
-                    this.logClusterAlias = cluster
-                }, "proto.xtdb.com")
-            })
+            dbConfig.setOtherLog(ProtoAny.pack(kafkaLogConfig {
+                this.topic = this@LogFactory.topic
+                this.epoch = this@LogFactory.epoch
+                this.logClusterAlias = cluster
+            }, "proto.xtdb.com"))
         }
     }
 
@@ -260,6 +260,13 @@ class KafkaCluster(
      * @suppress
      */
     class Registration : Log.Registration {
+        override val protoTag: String get() = "proto.xtdb.com/xtdb.kafka.proto.KafkaLogConfig"
+
+        override fun fromProto(msg: ProtoAny) =
+            msg.unpack(KafkaLogConfig::class.java).let {
+                LogFactory(it.logClusterAlias, it.topic)
+            }
+
         override fun registerSerde(builder: PolymorphicModuleBuilder<Log.Factory>) {
             builder.subclass(LogFactory::class)
         }

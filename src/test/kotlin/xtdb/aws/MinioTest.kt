@@ -14,6 +14,7 @@ import org.junit.jupiter.api.io.TempDir
 import org.testcontainers.containers.MinIOContainer
 import software.amazon.awssdk.regions.Region.AWS_ISO_GLOBAL
 import xtdb.api.Xtdb
+import xtdb.api.log.Log
 import xtdb.api.storage.Storage
 import xtdb.cache.DiskCache
 import xtdb.database.Database
@@ -23,6 +24,8 @@ import java.nio.file.Path
 import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.toJavaDuration
 
 @Tag("integration")
 class MinioTest : S3Test() {
@@ -58,14 +61,23 @@ class MinioTest : S3Test() {
     }.openObjectStore()
 
     @Test
-    fun writeBlock(@TempDir diskCacheDir: Path) {
+    fun writeBlock(@TempDir nodeDir: Path) {
         Clojure.`var`("clojure.core/require").invoke("xtdb.types".symbol)
 
+        val xtdbConfig =
+            Database.Config()
+                .log(Log.localLog(nodeDir.resolve("xt-log")))
+                .storage(Storage.local(nodeDir.resolve("xt-objs")))
+
         Xtdb.openNode {
-            diskCache(DiskCache.factory(diskCacheDir))
+            diskCache(DiskCache.factory(nodeDir.resolve("disk-cache")))
+
+            database("xtdb", xtdbConfig)
+
             database(
                 "foo",
                 Database.Config()
+                    .log(Log.localLog(nodeDir.resolve("foo-log")))
                     .storage(
                         Storage.remote(
                             S3.s3(bucket) {
@@ -83,7 +95,28 @@ class MinioTest : S3Test() {
                 exec("INSERT INTO foo RECORDS {_id: 1}")
             }
 
-            (node as Xtdb.XtdbInternal).dbCatalog.primary.sendFlushBlockMessage()
+            (node as Xtdb.XtdbInternal).dbCatalog.let { cat ->
+                cat.primary.sendFlushBlockMessage()
+                cat["foo"]!!.sendFlushBlockMessage()
+                cat.syncAll(2.seconds.toJavaDuration())
+            }
+
+            transaction(db = connect(node)) {
+                exec("SELECT * FROM foo.foo") { rs ->
+                    assertTrue(rs.next())
+                    assertEquals(1, rs.getInt(1))
+                    assertFalse(rs.next())
+                }
+            }
+        }
+
+        Xtdb.openNode {
+            diskCache(DiskCache.factory(nodeDir.resolve("disk-cache2")))
+            database("xtdb", xtdbConfig)
+        }.use { node ->
+            val dbCatalog = (node as Xtdb.XtdbInternal).dbCatalog
+
+            assertEquals(setOf("xtdb", "foo"), dbCatalog.databaseNames.toSet())
 
             transaction(db = connect(node)) {
                 exec("SELECT * FROM foo.foo") { rs ->

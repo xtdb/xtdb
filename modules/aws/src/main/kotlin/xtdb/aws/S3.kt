@@ -26,6 +26,7 @@ import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
+import xtdb.aws.proto.S3ObjectStoreConfig
 import xtdb.aws.proto.s3Credentials
 import xtdb.aws.proto.s3ObjectStoreConfig
 import xtdb.aws.s3.S3Configurator
@@ -314,6 +315,20 @@ class S3(
      * @suppress
      */
     class Registration : ObjectStore.Registration {
+        override val protoTag = "proto.xtdb.com/xtdb.aws.proto.S3ObjectStoreConfig"
+
+        override fun fromProto(msg: ProtoAny) =
+            msg.unpack(S3ObjectStoreConfig::class.java).let { config ->
+                Factory(
+                    region = config.region.takeIf { it.isNotEmpty() },
+                    bucket = config.bucket,
+                    prefix = config.prefix.takeIf { it.isNotEmpty() }?.asPath,
+                    credentials = config.credentials?.let { BasicCredentials(it.accessKey, it.secretKey) },
+                    endpoint = config.endpoint.takeIf { it.isNotEmpty() },
+                    pathStyleAccessEnabled = config.pathStyleAccessEnabled
+                )
+            }
+
         override fun registerSerde(builder: PolymorphicModuleBuilder<ObjectStore.Factory>) {
             builder.subclass(Factory::class)
         }

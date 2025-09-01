@@ -1,6 +1,5 @@
 package xtdb.api.storage
 
-import com.google.protobuf.Any as ProtoAny
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
@@ -12,6 +11,7 @@ import java.nio.file.StandardOpenOption.CREATE
 import java.nio.file.StandardOpenOption.WRITE
 import java.util.*
 import java.util.concurrent.CompletableFuture
+import com.google.protobuf.Any as ProtoAny
 
 interface ObjectStore : AutoCloseable {
 
@@ -24,16 +24,25 @@ interface ObjectStore : AutoCloseable {
         val configProto: ProtoAny
 
         companion object {
+            val objectStores = ServiceLoader.load(Registration::class.java).associateBy { it.protoTag }
+
             val serializersModule = SerializersModule {
                 polymorphic(Factory::class) {
                     for (reg in ServiceLoader.load(Registration::class.java))
                         reg.registerSerde(this)
                 }
             }
+
+            fun fromProto(objectStore: ProtoAny) =
+                (objectStores[objectStore.typeUrl] ?: error("unknown object store: ${objectStore.typeUrl}"))
+                    .fromProto(objectStore)
         }
     }
 
     interface Registration {
+        val protoTag: String
+        fun fromProto(msg: ProtoAny): Factory
+
         fun registerSerde(builder: PolymorphicModuleBuilder<Factory>)
     }
 

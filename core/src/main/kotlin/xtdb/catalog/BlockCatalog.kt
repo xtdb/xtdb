@@ -84,6 +84,8 @@ class BlockCatalog(private val dbName: DatabaseName, private val bp: BufferPool)
 
     val allTables: List<TableRef> get() = latestBlock?.tableNamesList.orEmpty().map { TableRef.parse(dbName, it) }
 
+    val secondaryDatabases: Map<String, DatabaseConfig> get() = latestBlock?.secondaryDatabasesMap.orEmpty()
+
     private fun Path.parseBlockIndex(): Long? =
         Regex("b(\\p{XDigit}+)\\.binpb")
             .matchEntire(fileName.toString())

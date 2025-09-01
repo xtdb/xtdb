@@ -8,7 +8,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.time.withTimeout
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.api.YAML_SERDE
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message
 import xtdb.api.log.MessageId
@@ -59,6 +61,10 @@ data class Database(
         log.appendMessage(Message.FlushBlock(blockCatalog.currentBlockIndex ?: -1)).await()
     }
 
+    fun sendAttachDbMessage(dbName: DatabaseName, config: Database.Config): Log.MessageMetadata = runBlocking {
+        log.appendMessage(Message.AttachDatabase(dbName, config)).await()
+    }
+
     @Serializable
     data class Config(
         val log: Log.Factory = Log.inMemoryLog,
@@ -73,6 +79,17 @@ data class Database(
                     log.writeTo(dbConfig)
                     dbConfig.applyStorage(storage)
                 }.build()
+
+        companion object {
+            @JvmStatic
+            fun fromYaml(yaml: String): Config = YAML_SERDE.decodeFromString(yaml.trimIndent())
+
+            @JvmStatic
+            fun fromProto(dbConfig: DatabaseConfig) =
+                Config()
+                    .log(Log.Factory.fromProto(dbConfig))
+                    .storage(Storage.Factory.fromProto(dbConfig))
+        }
     }
 
     interface Catalog : ILookup, Seqable, Iterable<Database> {
@@ -101,6 +118,9 @@ data class Database(
                 override val databaseNames: Collection<DatabaseName> get() = setOf(db.name)
 
                 override fun databaseOrNull(dbName: DatabaseName) = db.takeIf { dbName == it.name }
+
+                override fun attach(dbName: DatabaseName, config: Config?) =
+                    error("can't attach database to singleton db-cat")
             }
 
             @JvmField
@@ -108,6 +128,9 @@ data class Database(
                 override val databaseNames: Collection<DatabaseName> = emptySet()
 
                 override fun databaseOrNull(dbName: DatabaseName) = null
+
+                override fun attach(dbName: DatabaseName, config: Config?) =
+                    error("can't attach database to empty db-cat")
             }
         }
 
@@ -117,6 +140,8 @@ data class Database(
         operator fun get(dbName: DatabaseName) = databaseOrNull(dbName)
 
         val primary: Database get() = this["xtdb"]!!
+
+        fun attach(dbName: DatabaseName, config: Config?): Database
 
         override fun valAt(key: Any?) = valAt(key, null)
         override fun valAt(key: Any?, notFound: Any?) = databaseOrNull(key as DatabaseName) ?: notFound

@@ -6,6 +6,9 @@ import kotlinx.coroutines.future.await
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.ArrowStreamReader
+import xtdb.api.TransactionAborted
+import xtdb.api.TransactionCommitted
+import xtdb.api.TransactionKey
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message
 import xtdb.api.log.MessageId
@@ -16,6 +19,7 @@ import xtdb.arrow.asChannel
 import xtdb.catalog.BlockCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.Database
+import xtdb.error.Anomaly
 import xtdb.error.Interrupted
 import xtdb.table.TableRef
 import xtdb.util.MsgIdUtil.msgIdToEpoch
@@ -49,6 +53,10 @@ class LogProcessor(
     flushTimeout: Duration,
     private val skipTxs: Set<MessageId>
 ) : Log.Subscriber, AutoCloseable {
+
+    init {
+        assert((dbCatalog != null) == (db.name == "xtdb")) { "dbCatalog supplied iff db == 'xtdb'" }
+    }
 
     private val log = db.log
     private val epoch = log.epoch
@@ -195,6 +203,23 @@ class LogProcessor(
                                 trieCatalog.addTries(TableRef.parse(db.name, tableName), tries, record.logTimestamp)
                             }
                         null
+                    }
+
+                    is Message.AttachDatabase -> {
+                        requireNotNull(dbCatalog) { "attach-db received on non-primary database ${db.name}" }
+                        val res = try {
+                            dbCatalog.attach(msg.dbName, msg.config)
+                            TransactionCommitted(msgId, record.logTimestamp)
+                        } catch (e: Anomaly.Caller) {
+                            TransactionAborted(msgId, record.logTimestamp, e)
+                        }
+
+                        indexer.addTxRow(
+                            TransactionKey(msgId, record.logTimestamp),
+                            (res as? TransactionAborted)?.error
+                        )
+
+                        res
                     }
                 }
                 latestProcessedMsgId = msgId

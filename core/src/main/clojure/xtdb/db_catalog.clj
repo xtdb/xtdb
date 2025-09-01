@@ -9,10 +9,6 @@
            [xtdb.database Database Database$Catalog Database$Config]
            [xtdb.database.proto DatabaseConfig DatabaseConfig$LogCase DatabaseConfig$StorageCase]))
 
-(defprotocol CreateDatabase
-  ;; currently just used by the playground to create a new in-memory database
-  (create-database [this db-name]))
-
 (defmulti ->log-factory
   #_{:clj-kondo/ignore [:unused-binding]}
   (fn [tag opts]
@@ -136,9 +132,15 @@
                    (databaseOrNull [_ db-name]
                      (:db (.get !dbs db-name)))
 
-                   CreateDatabase
-                   (create-database [_ db-name]
-                     (util/with-close-on-catch [db (open-db db-name base (Database$Config.))]
+                   (attach [_ db-name db-config]
+                     (when (.containsKey !dbs db-name)
+                       (throw (err/conflict :xtdb/db-exists "Database already exists" {:db-name db-name})))
+
+                     (util/with-close-on-catch [db (try
+                                                     (open-db db-name base (or db-config (Database$Config.)))
+                                                     (catch Throwable t
+                                                       (throw (err/incorrect ::invalid-db-config "Failed to open database"
+                                                                             {::err/cause t}))))]
                        (.put !dbs db-name db)
                        (:db db)))
 
@@ -146,15 +148,23 @@
                    (close [_]
                      (doseq [[_ {:keys [sys]}] !dbs]
                        (ig/halt! sys))))
+
           db-configs (-> (.getDatabases conf)
                          (update-keys (comp util/str->normal-form-str str symbol)))]
 
-      (when-not (get db-configs "xtdb")
-        (throw (err/incorrect ::missing-xtdb-database "The 'xtdb' database is required but not found in the configuration.")))
+      (let [xtdb-db-config (or (get db-configs "xtdb")
+                               (throw (err/incorrect ::missing-xtdb-database "The 'xtdb' database is required but not found in the configuration.")))]
 
-      (doseq [[db-name ^Database$Config db-config] db-configs]
-        (util/with-close-on-catch [db (open-db db-name (cond-> base (= db-name "xtdb") (assoc :db-catalog db-cat)) db-config)]
-          (.put !dbs db-name db)))
+        (util/with-close-on-catch [xtdb-db (open-db "xtdb" (assoc base :db-catalog db-cat) xtdb-db-config)]
+          (.put !dbs "xtdb" xtdb-db)
+
+          (let [^Database xtdb-db (:db xtdb-db)]
+            (doseq [[db-name ^Database$Config db-config] (into db-configs
+                                                               (-> (.getSecondaryDatabases (.getBlockCatalog xtdb-db))
+                                                                   (update-vals Database$Config/fromProto)))
+                    :when (not= db-name "xtdb")]
+              (util/with-close-on-catch [db (open-db db-name base db-config)]
+                (.put !dbs db-name db))))))
 
       db-cat)))
 

@@ -117,4 +117,21 @@ class BlobStorageTest : ObjectStoreTest() {
         assertEquals(totalSize, downloaded.capacity().toLong())
         assertEquals(allParts, downloaded)
     }
+
+    @Test
+    fun `test proto round trip`() {
+        val originalFactory = azureBlobStorage("test-storage", "test-container") {
+            prefix("test/prefix".asPath)
+            storageAccountKey("test-key")
+            userManagedIdentityClientId("test-client-id")
+            storageAccountEndpoint("https://test.blob.core.windows.net")
+            connectionString("DefaultEndpointsProtocol=https;AccountName=test;AccountKey=test")
+        }
+
+        val registration = BlobStorage.Registration()
+        val proto = originalFactory.configProto
+        val deserializedFactory = registration.fromProto(proto)
+
+        assertEquals(originalFactory, deserializedFactory)
+    }
 }

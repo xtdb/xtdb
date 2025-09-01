@@ -1162,6 +1162,7 @@
   (visitCharacterStringLiteral [_ ctx] (.accept ctx string-literal-visitor))
   (visitSqlStandardString [_ ctx] (.accept ctx string-literal-visitor))
   (visitCEscapesString [_ ctx] (.accept ctx string-literal-visitor))
+  (visitDollarString [_ ctx] (.accept ctx string-literal-visitor))
 
   (visitDateTimeLiteral0 [this ctx] (-> (.dateTimeLiteral ctx) (.accept this)))
 

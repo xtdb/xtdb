@@ -54,6 +54,7 @@ directlyExecutableStatement
     | SHOW CLOCK_TIME # ShowClockTimeStatement
     | CREATE USER userName=identifier WITH PASSWORD password=characterString # CreateUserStatement
     | ALTER USER userName=identifier WITH PASSWORD password=characterString # AlterUserStatement
+    | ATTACH DATABASE dbName=identifier (WITH configYaml=characterString)? # AttachDatabaseStatement
     ;
 
 targetTable : (schemaName=identifier '.')? tableName=identifier ;
@@ -144,6 +145,7 @@ identifier
         | 'VARBINARY' | 'BYTEA'
         | 'URI'
         | 'COPY' | 'FORMAT'
+        | 'ATTACH' | 'DATABASE'
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier

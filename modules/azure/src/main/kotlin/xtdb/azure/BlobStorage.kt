@@ -26,6 +26,7 @@ import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.asBytes
+import xtdb.azure.proto.AzureBlobStorageConfig
 import xtdb.azure.proto.azureBlobStorageConfig
 import xtdb.multipart.IMultipartUpload
 import xtdb.multipart.SupportsMultipart
@@ -332,6 +333,21 @@ class BlobStorage(private val factory: Factory, private val prefix: Path) : Obje
      * @suppress
      */
     class Registration : ObjectStore.Registration {
+        override val protoTag = "proto.xtdb.com/xtdb.azure.proto.AzureBlobStorageConfig"
+
+        override fun fromProto(msg: ProtoAny) =
+            msg.unpack(AzureBlobStorageConfig::class.java).let { config ->
+                Factory(
+                    storageAccount = config.storageAccount,
+                    container = config.container,
+                    prefix = config.prefix.takeIf { it.isNotEmpty() }?.asPath,
+                    storageAccountKey = config.storageAccountKey.takeIf { it.isNotEmpty() },
+                    userManagedIdentityClientId = config.userManagedIdentityClientId.takeIf { it.isNotEmpty() },
+                    storageAccountEndpoint = config.storageAccountEndpoint.takeIf { it.isNotEmpty() },
+                    connectionString = config.connectionString.takeIf { it.isNotEmpty() }
+                )
+            }
+
         override fun registerSerde(builder: PolymorphicModuleBuilder<ObjectStore.Factory>) {
             builder.subclass(Factory::class)
         }

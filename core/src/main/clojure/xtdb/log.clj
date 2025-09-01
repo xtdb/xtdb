@@ -20,7 +20,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api IndexerConfig TransactionKey Xtdb$Config)
-           (xtdb.api.log Log Log$Cluster$Factory Log$Factory Log$Message$FlushBlock Log$Message$Tx Log$MessageMetadata)
+           (xtdb.api.log Log Log$Cluster$Factory Log$Factory Log$Message$Tx Log$MessageMetadata)
            (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
@@ -359,3 +359,7 @@
 
 (defn send-flush-block-msg! [^Database db]
   (.sendFlushBlockMessage db))
+
+(defn send-attach-db! ^long [^Database primary-db, db-name, db-config]
+  (MsgIdUtil/offsetToMsgId (.getEpoch (.getLog primary-db))
+                           (.getLogOffset (.sendAttachDbMessage primary-db db-name db-config))))

@@ -13,11 +13,6 @@ message LocalLog {
     string path = 1;
 }
 
-message OtherLog {
-    string tag = 1;
-    google.protobuf.Any log = 2;
-}
-
 message InMemoryStorage {
 }
 
@@ -33,7 +28,7 @@ message DatabaseConfig {
     oneof log {
         InMemoryLog in_memory_log = 1;
         LocalLog local_log = 2;
-        OtherLog other_log = 3;
+        google.protobuf.Any other_log = 3;
     }
 
     oneof storage {

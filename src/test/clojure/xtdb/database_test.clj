@@ -5,7 +5,6 @@
             [xtdb.api :as xt]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
-            [xtdb.error :as err]
             [xtdb.node :as xtn]
             [xtdb.pgwire-test :as pgw-test]
             [xtdb.test-json :as tj]
@@ -49,9 +48,9 @@
                            xtdb-conn (-> (.createConnectionBuilder node) (.build))
                            new-db-conn (.build (-> (.createConnectionBuilder node)
                                                    (.database "new_db")))]
-            (jdbc/execute! xtdb-conn ["INSERT INTO foo RECORDS {_id: 'xtdb'}"])
+            (jdbc/execute! xtdb-conn ["INSERT INTO foo RECORDS {_id: 'xtdb', _valid_from: TIMESTAMP '2020-01-01Z[UTC]'}"])
 
-            (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db'}"])
+            (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db', _valid_from: TIMESTAMP '2020-01-02Z[UTC]'}"])
             (t/is (= {:_id "new-db"} (jdbc/execute-one! new-db-conn ["SELECT * FROM foo"])))
 
             (tu/flush-block! node))
@@ -69,7 +68,7 @@
                                            (.build))]
             (t/is (= {:_id "xtdb"} (jdbc/execute-one! xt-db-conn ["SELECT * FROM foo"])))
 
-            (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db', version: 2}"])
+            (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db', version: 2, _valid_from: TIMESTAMP '2020-01-03Z[UTC]'}"])
             (t/is (= [{:_id "new-db", :version 2, :_valid_from #xt/zdt "2020-01-03Z[UTC]"}
                       {:_id "new-db", :version nil, :_valid_from #xt/zdt "2020-01-02Z[UTC]"}]
                      (jdbc/execute! new-db-conn ["SELECT *, _valid_from FROM foo FOR ALL VALID_TIME"])))
