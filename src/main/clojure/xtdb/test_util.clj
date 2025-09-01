@@ -1,6 +1,8 @@
 (ns xtdb.test-util
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.pprint :as pprint]
+            [clojure.spec.alpha :as s]
             [clojure.test :as t]
+            [clojure.test.check :as tc]
             [cognitect.anomalies :as-alias anom]
             [xtdb.api :as xt]
             [xtdb.db-catalog :as db]
@@ -374,3 +376,15 @@
       (f c)
       (finally
         (.stop c)))))
+
+(def property-test-iterations
+  (Integer/parseInt (System/getProperty "xtdb.property-test-iterations" "100")))
+
+(defn run-property-test
+  "Takes opts map as first argument which is passed to quick-check (e.g. {:seed 42, :num-tests 100})"
+  ([property]
+   (run-property-test {} property))
+  ([opts property]
+   (let [opts (merge {:num-tests property-test-iterations} opts)
+         result (tc/quick-check (:num-tests opts) property (dissoc opts :num-tests))]
+     (t/is (:pass? result) (with-out-str (pprint/pprint result))))))
