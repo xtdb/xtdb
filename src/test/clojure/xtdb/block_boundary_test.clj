@@ -14,7 +14,7 @@
    {:num-tests tu/property-test-iterations}
    (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
                   records2 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)]
-                 (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
+                 (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
                                                    :compactor {:threads 0}})]
                    (xt/execute-tx node [(into [:put-docs :docs] records1)])
                    (tu/flush-block! node)
@@ -34,7 +34,7 @@
    {:num-tests tu/property-test-iterations}
    (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
                   records2 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)]
-                 (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
+                 (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
                                                    :compactor {:threads 0}})]
                    (xt/execute-tx node [(into [:put-docs :docs] records1)])
                    (tu/flush-block! node)
@@ -56,7 +56,7 @@
    {:num-tests tu/property-test-iterations}
    (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
                   records2 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)]
-                 (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
+                 (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
                                                    :compactor {:threads 0}})]
                    (xt/execute-tx node [(into [:put-docs :docs] records1)])
                    (tu/flush-block! node)
@@ -75,7 +75,7 @@
    {:num-tests tu/property-test-iterations}
    (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
                   records2 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)]
-                 (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
+                 (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
                                                    :compactor {:threads 0}})]
                    (xt/execute-tx node [(into [:put-docs :docs] records1)])
                    (xt/execute-tx node [(into [:put-docs :docs] records2)])

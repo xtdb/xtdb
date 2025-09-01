@@ -14,9 +14,7 @@
 (defn reset-compactor! [node-opts db-name {:keys [dry-run?]}]
   (let [config (doto (xtn/->config node-opts)
                  (-> (.getCompactor) (.threads 0))
-                 (.setServer nil)
-                 ;; complains if we don't include `xtdb`
-                 (as-> config (.setDatabases config (select-keys (.getDatabases config) ["xtdb" db-name]))))]
+                 (.setServer nil))]
 
     (log/info "Starting a temporary node to catch up with any pending transactions on the tx-log")
 

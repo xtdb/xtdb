@@ -1,48 +1,12 @@
 (ns xtdb.db-catalog
   (:require [integrant.core :as ig]
             [xtdb.error :as err]
-            [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import [java.lang AutoCloseable]
            [java.util HashMap]
            xtdb.api.Xtdb$Config
            [xtdb.database Database Database$Catalog Database$Config]
            [xtdb.database.proto DatabaseConfig DatabaseConfig$LogCase DatabaseConfig$StorageCase]))
-
-(defmulti ->log-factory
-  #_{:clj-kondo/ignore [:unused-binding]}
-  (fn [tag opts]
-    (when-let [ns (namespace tag)]
-      (doseq [k [(symbol ns)
-                 (symbol (str ns "." (name tag)))]]
-
-        (try
-          (require k)
-          (catch Throwable _))))
-
-    tag))
-
-(defmulti ->storage-factory
-  #_{:clj-kondo/ignore [:unused-binding]}
-  (fn [tag opts]
-    (when-let [ns (namespace tag)]
-      (doseq [k [(symbol ns)
-                 (symbol (str ns "." (name tag)))]]
-
-        (try
-          (require k)
-          (catch Throwable _))))
-
-    tag))
-
-(defmethod xtn/apply-config! ::databases [^Xtdb$Config config _ databases]
-  (doseq [[db-name {:keys [log storage]}] databases]
-    (.database config (str (symbol db-name))
-               (cond-> (Database$Config.)
-                 log (.log (->log-factory (first log) (second log)))
-                 storage (.storage (->storage-factory (first storage) (second storage))))))
-
-  config)
 
 (defmethod ig/init-key ::allocator [_ {{:keys [allocator]} :base, :keys [db-name]}]
   (util/->child-allocator allocator (format "database/%s" db-name)))
@@ -157,21 +121,15 @@
                    AutoCloseable
                    (close [_]
                      (doseq [[_ {:keys [sys]}] !dbs]
-                       (ig/halt! sys))))
+                       (ig/halt! sys))))]
 
-          db-configs (-> (.getDatabases conf)
-                         (update-keys (comp util/str->normal-form-str str symbol)))]
-
-      (let [xtdb-db-config (or (get db-configs "xtdb")
-                               (throw (err/incorrect ::missing-xtdb-database "The 'xtdb' database is required but not found in the configuration.")))]
-
+      (let [xtdb-db-config (Database$Config. (.getLog conf) (.getStorage conf))]
         (util/with-close-on-catch [xtdb-db (open-db "xtdb" (assoc base :db-catalog db-cat) xtdb-db-config)]
           (.put !dbs "xtdb" xtdb-db)
 
           (let [^Database xtdb-db (:db xtdb-db)]
-            (doseq [[db-name ^Database$Config db-config] (into db-configs
-                                                               (-> (.getSecondaryDatabases (.getBlockCatalog xtdb-db))
-                                                                   (update-vals Database$Config/fromProto)))
+            (doseq [[db-name ^Database$Config db-config] (-> (.getSecondaryDatabases (.getBlockCatalog xtdb-db))
+                                                             (update-vals Database$Config/fromProto))
                     :when (not= db-name "xtdb")]
               (util/with-close-on-catch [db (open-db db-name base db-config)]
                 (.put !dbs db-name db))))))

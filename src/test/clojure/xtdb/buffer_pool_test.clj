@@ -47,7 +47,7 @@
 (t/deftest test-remote-buffer-pool-setup
   (util/with-tmp-dirs #{path}
     (util/with-open [node (xtn/start-node (-> tu/*node-opts*
-                                              (assoc-in [:databases :xtdb :storage] [:remote {:object-store [:in-memory {}]}])
+                                              (assoc :storage [:remote {:object-store [:in-memory {}]}])
                                               (assoc :disk-cache {:path path}
                                                      :compactor {:threads 0})))]
       (xt/submit-tx node [[:put-docs :foo {:xt/id :foo}]])
@@ -236,9 +236,9 @@
 
 (t/deftest test-latest-available-block
   (tu/with-tmp-dirs #{tmp-dir}
-    (with-open [node1 (xtn/start-node {:databases {:xtdb {:storage [:local {:path tmp-dir}]}}
+    (with-open [node1 (xtn/start-node {:storage [:local {:path tmp-dir}]
                                        :compactor {:threads 0}})
-                node2 (xtn/start-node {:databases {:xtdb {:storage [:local {:path tmp-dir}]}}
+                node2 (xtn/start-node {:storage [:local {:path tmp-dir}]
                                        :compactor {:threads 0}})]
       (let [bp1 (.getBufferPool (db/primary-db node1))
             bp2 (.getBufferPool (db/primary-db node2))]

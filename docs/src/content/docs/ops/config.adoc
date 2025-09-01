@@ -9,30 +9,8 @@ title: Configuration
 v2.1: multi-database support::
 +
 --
-`databases` was introduced in v2.1.
-
-Prior to that, the `log` and `storage` keys were at the top-level of the configuration:
-
-[source,yaml]
-----
-log: !Local
-  path: /path/to/log-file
-
-storage: !Local
-  path: /path/to/storage-dir
-
-# became
-
-databases:
-  xtdb:
-    log: !Local
-      path: /path/to/log-file
-
-    storage: !Local
-      path: /path/to/storage-dir
-----
-
-For more details on the changes to the log and storage configurations, see the link:config/log[Transaction Logs] and link:config/storage[Object Storage] documentation.
+The log and storage configurations were changed as part of 2.1's multi-db support.
+For more details on those changes, see the link:config/log[Transaction Logs] and link:config/storage[Object Storage] documentation.
 --
 ====
 
@@ -42,20 +20,17 @@ The two main pluggable components of XTDB are transaction logs and object storag
 
 [source,yaml]
 ----
-databases:
-  # Currently only one database is supported, named `xtdb`.
-  xtdb:
-    # -- optional
+# -- optional
 
-    # transaction log configuration
-    # defaults to an in-memory transaction log
-    log: !Local
-      path: /path/to/log-file
+# transaction log configuration
+# defaults to an in-memory transaction log
+log: !Local
+  path: /path/to/log-file
 
-    # object store configuration
-    # defaults to an in-memory object store
-    storage: !Local
-      path: /path/to/storage-dir
+# object store configuration
+# defaults to an in-memory object store
+storage: !Local
+  path: /path/to/storage-dir
 ----
 
 If no `databases` section is specified, XTDB will use the default configuration - an in-memory transaction log and an in-memory object store.
@@ -70,10 +45,8 @@ When specifying a key, you can use the `!Env` tag to reference an environment va
 
 [source,yaml]
 ----
-databases:
-  xtdb:
-    storage: !Local
-      path: !Env XTDB_STORAGE_PATH
+storage: !Local
+  path: !Env XTDB_STORAGE_PATH
 ----
 
 Any key that we allow the use of `!Env` will be documented as such.

@@ -278,36 +278,34 @@ To use the Azure module, include the following in your node configuration:
 
 [source,yaml]
 ----
-databases:
-  xtdb:
-    storage: !Remote
-      objectStore: !Azure
-        # -- required
+storage: !Remote
+  objectStore: !Azure
+    # -- required
 
-        # --- At least one of storageAccount or storageAccountEndpoint is required
+    # --- At least one of storageAccount or storageAccountEndpoint is required
 
-        # The name of the storage account which has the storage container
-        # (Can be set as an !Env value)
-        storageAccount: storage-account
+    # The name of the storage account which has the storage container
+    # (Can be set as an !Env value)
+    storageAccount: storage-account
 
-        # The full endpoint of the storage account which has the storage container
-        # (Can be set as an !Env value)
-        # storageAccountEndpoint: https://storage-account.privatelink.blob.core.windows.net
+    # The full endpoint of the storage account which has the storage container
+    # (Can be set as an !Env value)
+    # storageAccountEndpoint: https://storage-account.privatelink.blob.core.windows.net
 
-        # The name of the blob storage container to be used as the object store
-        # (Can be set as an !Env value)
-        container: xtdb-container
+    # The name of the blob storage container to be used as the object store
+    # (Can be set as an !Env value)
+    container: xtdb-container
 
-        # -- optional
-        # A file path to prefix all of your files with
-        # - for example, if "foo" is provided, all XTDB files will be located under a "foo" sub-directory
-        # (Can be set as an !Env value)
-        # prefix: my-xtdb-node
-        #
-        # Azure Client ID of a User Assigned Managed Identity -
-        # required when using them for authentication to Azure Services ie, inside of an Azure App Container.
-        # (Can be set as an !Env value)
-        # userManagedIdentityClientId: user-managed-identity-client-id
+    # -- optional
+    # A file path to prefix all of your files with
+    # - for example, if "foo" is provided, all XTDB files will be located under a "foo" sub-directory
+    # (Can be set as an !Env value)
+    # prefix: my-xtdb-node
+    #
+    # Azure Client ID of a User Assigned Managed Identity -
+    # required when using them for authentication to Azure Services ie, inside of an Azure App Container.
+    # (Can be set as an !Env value)
+    # userManagedIdentityClientId: user-managed-identity-client-id
 
 # -- required
 # A local disk path where XTDB can cache files from the remote storage

@@ -37,18 +37,25 @@
 (t/deftest two-databases-with-same-files
   (let [node-dir (util/->path "target/multi-db/overlapping-caches")]
     (util/delete-dir node-dir)
-    (with-open [node (xtn/start-node {:databases {:xtdb {:log [:local {:path (.resolve node-dir "xtdb/log")}]
-                                                         :storage [:local {:path (.resolve node-dir "xtdb/objects")}]},
-                                                  :new-db {:log [:local {:path (.resolve node-dir "new_db/log")}]
-                                                           :storage [:local {:path (.resolve node-dir "new_db/objects")}]}}})
-                xtdb-conn (.build (.createConnectionBuilder node))
-                new-db-conn (.build (-> (.createConnectionBuilder node)
-                                        (.database "new_db")))]
-      (jdbc/execute! xtdb-conn ["INSERT INTO foo RECORDS {_id: 'xtdb'}"])
-      (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db'}"])
-      (tu/flush-block! node)
-      (t/is (= [{:xt/id "new-db"}] (xt/q new-db-conn "SELECT * FROM foo")))
-      (t/is (= [{:xt/id "xtdb"}] (xt/q xtdb-conn "SELECT * FROM foo"))))))
+    (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "xtdb/log")}]
+                                      :storage [:local {:path (.resolve node-dir "xtdb/objects")}]},)
+                xtdb-conn (.build (.createConnectionBuilder node))]
+
+      (jdbc/execute! xtdb-conn ["
+         ATTACH DATABASE new_db WITH $$
+           log: !Local
+             path: 'target/multi-db/overlapping-caches/new_db/log'
+           storage: !Local
+             path: 'target/multi-db/overlapping-caches/new_db/objects'
+         $$"])
+
+      (with-open [new-db-conn (.build (-> (.createConnectionBuilder node)
+                                          (.database "new_db")))]
+        (jdbc/execute! xtdb-conn ["INSERT INTO foo RECORDS {_id: 'xtdb'}"])
+        (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db'}"])
+        (tu/flush-block! node)
+        (t/is (= [{:xt/id "new-db"}] (xt/q new-db-conn "SELECT * FROM foo")))
+        (t/is (= [{:xt/id "xtdb"}] (xt/q xtdb-conn "SELECT * FROM foo")))))))
 
 (t/deftest deals-with-table-ref-ambiguities
   (with-open [pg (pgw/open-playground)

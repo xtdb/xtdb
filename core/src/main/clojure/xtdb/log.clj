@@ -246,19 +246,26 @@
             (.open factory)))
     (into {} !clusters)))
 
-(defmethod db/->log-factory :in-memory [_ {:keys [instant-src epoch]}]
-  (cond-> (Log/getInMemoryLog)
-    instant-src (.instantSource instant-src)
-    epoch (.epoch epoch)))
+(defmethod xtn/apply-config! ::in-memory [^Xtdb$Config config _ {:keys [instant-src epoch]}]
+  (.log config
+        (cond-> (Log/getInMemoryLog)
+          instant-src (.instantSource instant-src)
+          epoch (.epoch epoch))))
 
-(defmethod db/->log-factory :local [_ {:keys [path instant-src epoch instant-source-for-non-tx-msgs?]}]
-  (cond-> (Log/localLog (util/->path path))
-    instant-src (.instantSource instant-src)
-    epoch (.epoch epoch)
-    instant-source-for-non-tx-msgs? (.useInstantSourceForNonTx)))
+(defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path instant-src epoch instant-source-for-non-tx-msgs?]}]
+  (.log config
+        (cond-> (Log/localLog (util/->path path))
+          instant-src (.instantSource instant-src)
+          epoch (.epoch epoch)
+          instant-source-for-non-tx-msgs? (.useInstantSourceForNonTx))))
 
-(defmethod db/->log-factory :kafka [_ opts]
-  (db/->log-factory :xtdb/kafka opts))
+(defmethod xtn/apply-config! :xtdb/log [^Xtdb$Config config _ [tag opts]]
+  (xtn/apply-config! config
+                     (case tag
+                       :in-memory ::in-memory
+                       :local ::local
+                       :kafka :xtdb/kafka)
+                     opts))
 
 (defmethod ig/prep-key :xtdb/log [_ {:keys [base factory]}]
   {:base base

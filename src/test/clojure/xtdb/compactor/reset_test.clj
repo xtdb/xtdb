@@ -7,8 +7,7 @@
             [xtdb.util :as util])
   (:import [xtdb.api Xtdb$Config]
            xtdb.api.log.Log
-           xtdb.api.storage.Storage
-           xtdb.database.Database$Config))
+           xtdb.api.storage.Storage))
 
 (t/deftest test-compactor-reset
   (let [node-root (util/->path "src/test/resources/xtdb/compactor-reset-node")
@@ -18,8 +17,8 @@
       (util/copy-dir node-root tmp-root)
 
       (cr/reset-compactor! (doto (Xtdb$Config.)
-                             (.database "xtdb" (Database$Config. (Log/localLog (.resolve tmp-root "log"))
-                                                                 (Storage/local (.resolve tmp-root "objects")))))
+                             (.log (Log/localLog (.resolve tmp-root "log")))
+                             (.storage (Storage/local (.resolve tmp-root "objects"))))
                            "xtdb"
                            {:dry-run? false})
 

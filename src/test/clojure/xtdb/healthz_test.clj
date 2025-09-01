@@ -98,8 +98,8 @@
 
 (t/deftest test-block-lag-healthy-4364
   (let [port (tu/free-port)]
-    (with-open [_node (xtn/start-node {:databases {:xtdb {:log [:in-memory]
-                                                          :storage [:in-memory]}}
+    (with-open [_node (xtn/start-node {:log [:in-memory]
+                                       :storage [:in-memory]
                                        :healthz {:port port}})]
       (t/testing "server thrown error responds with reasonable message"
         (letfn [(alive-resp []

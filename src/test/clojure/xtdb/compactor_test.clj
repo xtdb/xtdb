@@ -678,7 +678,7 @@
 
 (t/deftest different-recency-partitioning
   (binding [c/*recency-partition* RecencyPartition/YEAR]
-    (with-open [node (xtn/start-node (assoc-in tu/*node-opts* [:databases :xtdb :log]
+    (with-open [node (xtn/start-node (assoc-in tu/*node-opts* [:log]
                                                [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]))]
       (let [tc (.getTrieCatalog (db/primary-db node))]
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version 1}]])
@@ -723,7 +723,7 @@
                                          ["split in valid-time" #inst "2022" #inst "2025" #inst "2023" #inst "2024"]
                                          ["overlapping valid-time" #inst "2022" #inst "2025" #inst "2023" #inst "2026"]]]
       (t/testing test-name
-        (with-open [node (xtn/start-node (assoc-in tu/*node-opts* [:databases :xtdb :log]
+        (with-open [node (xtn/start-node (assoc-in tu/*node-opts* [:log]
                                                    [:in-memory {:instant-src (tu/->mock-clock (tu/->instants :year))}]))]
           (xt/execute-tx node [[:put-docs :docs
                                 (cond-> {:xt/id 1, :version 1}

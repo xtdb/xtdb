@@ -33,8 +33,11 @@
 (defmethod apply-config! :log-clusters [config _ opts]
   (apply-config! config :xtdb.log/clusters opts))
 
-(defmethod apply-config! :databases [config _ opts]
-  (apply-config! config :xtdb.db-catalog/databases opts))
+(defmethod apply-config! :log [config _ opts]
+  (apply-config! config :xtdb/log opts))
+
+(defmethod apply-config! :storage [config _ opts]
+  (apply-config! config :xtdb.buffer-pool/storage opts))
 
 (defmethod apply-config! :memory-cache [config _ opts]
   (apply-config! config :xtdb.cache/memory opts))

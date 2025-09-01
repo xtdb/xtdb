@@ -6,18 +6,16 @@ logClusters:
   kafkaCluster: !Kafka
     bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
 
-databases:
-  xtdb:
-    log: !Kafka
-      cluster: kafkaCluster
-      topic: !Env XTDB_LOG_TOPIC
+log: !Kafka
+  cluster: kafkaCluster
+  topic: !Env XTDB_LOG_TOPIC
 
-    storage: !Remote
-      objectStore: !Azure
-        storageAccount: !Env XTDB_AZURE_STORAGE_ACCOUNT
-        container: !Env XTDB_AZURE_STORAGE_CONTAINER
-        prefix: "xtdb-object-store"
-        userManagedIdentityClientId: !Env XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID
+storage: !Remote
+  objectStore: !Azure
+    storageAccount: !Env XTDB_AZURE_STORAGE_ACCOUNT
+    container: !Env XTDB_AZURE_STORAGE_CONTAINER
+    prefix: "xtdb-object-store"
+    userManagedIdentityClientId: !Env XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID
 
 diskCache:
   path: !Env XTDB_LOCAL_DISK_CACHE

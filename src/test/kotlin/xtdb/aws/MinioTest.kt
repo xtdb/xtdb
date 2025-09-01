@@ -64,33 +64,34 @@ class MinioTest : S3Test() {
     fun writeBlock(@TempDir nodeDir: Path) {
         Clojure.`var`("clojure.core/require").invoke("xtdb.types".symbol)
 
-        val xtdbConfig =
-            Database.Config()
-                .log(Log.localLog(nodeDir.resolve("xt-log")))
-                .storage(Storage.local(nodeDir.resolve("xt-objs")))
+        val xtdbLog = Log.localLog(nodeDir.resolve("xt-log"))
+        val xtdbStorage = Storage.local(nodeDir.resolve("xt-objs"))
 
         Xtdb.openNode {
             diskCache(DiskCache.factory(nodeDir.resolve("disk-cache")))
 
-            database("xtdb", xtdbConfig)
-
-            database(
-                "foo",
-                Database.Config()
-                    .log(Log.localLog(nodeDir.resolve("foo-log")))
-                    .storage(
-                        Storage.remote(
-                            S3.s3(bucket) {
-                                endpoint(container.s3URL)
-                                credentials(container.userName, container.password)
-                                region(AWS_ISO_GLOBAL)
-                                prefix(UUID.randomUUID().toString().asPath)
-                                pathStyleAccessEnabled(true)
-                            }
-                        )
-                    )
-            )
+            log(xtdbLog)
+            storage(xtdbStorage)
         }.use { node ->
+            node.connection.use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute("""ATTACH DATABASE foo WITH $$
+                        log: !Local { path: "${nodeDir.resolve("foo-log")}" }
+                        storage: !Remote 
+                          objectStore: !S3 
+                            bucket: "$bucket"
+                            endpoint: "${container.s3URL}"
+                            region: "${AWS_ISO_GLOBAL.id()}"
+                            credentials:
+                              accessKey: "${container.userName}"
+                              secretKey: "${container.password}"
+                            pathStyleAccessEnabled: true
+                            prefix: "${UUID.randomUUID()}"
+                        $$"""
+                    )
+                }
+            }
+
             transaction(db = connect({ node.createConnectionBuilder().database("foo").build() })) {
                 exec("INSERT INTO foo RECORDS {_id: 1}")
             }
@@ -112,7 +113,8 @@ class MinioTest : S3Test() {
 
         Xtdb.openNode {
             diskCache(DiskCache.factory(nodeDir.resolve("disk-cache2")))
-            database("xtdb", xtdbConfig)
+            log(xtdbLog)
+            storage(xtdbStorage)
         }.use { node ->
             val dbCatalog = (node as Xtdb.XtdbInternal).dbCatalog
 

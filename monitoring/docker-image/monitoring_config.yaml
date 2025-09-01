@@ -6,14 +6,12 @@ logClusters:
   kafkaCluster: !Kafka
     bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
 
-databases:
-  xtdb:
-    log: !Kafka
-      cluster: kafkaCluster
-      topic: !Env XTDB_LOG_TOPIC
+log: !Kafka
+  cluster: kafkaCluster
+  topic: !Env XTDB_LOG_TOPIC
 
-    storage: !Local
-      path: "/var/lib/xtdb/buffers"
+storage: !Local
+  path: "/var/lib/xtdb/buffers"
 
 healthz:
   host: '*'
