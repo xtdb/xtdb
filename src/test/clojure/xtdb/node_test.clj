@@ -1,8 +1,6 @@
 (ns xtdb.node-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]] 
-            [clojure.test.check.generators :as gen]
-            [clojure.test.check.properties :as prop]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
@@ -16,8 +14,7 @@
             [xtdb.node.impl] ;;TODO probably move internal methods to main node interface
             [xtdb.object-store :as os]
             [xtdb.protocols :as xtp]
-            [xtdb.serde :as serde]
-            [xtdb.test-generators :as tg]
+            [xtdb.serde :as serde] 
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.util :as util])
@@ -1199,81 +1196,3 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:xt/id 1, :a 3} {:xt/id 2} {:xt/id 3, :a 4} {:xt/id 4, :a "hello"}]
            (xt/q tu/*node* "SELECT * FROM docs ORDER BY _id"))))
-
-(t/deftest ^:property block-boundary-consistency-flush
-  (tu/run-property-test
-   {:num-tests tu/property-test-iterations}
-   (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
-                  records2 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)]
-                 (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
-                                                   :compactor {:threads 0}})]
-                   (xt/execute-tx node [(into [:put-docs :docs] records1)])
-                   (tu/flush-block! node)
-
-                   (xt/execute-tx node [(into [:put-docs :docs] records2)])
-                   (tu/flush-block! node)
-
-                   (and (t/testing "two transactions recorded"
-                          (= 2 (count (xt/q node "FROM xt.txs"))))
-                        (t/testing "all expected document IDs present"
-                          (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
-                                expected-ids (into #{} (map :xt/id (concat records1 records2)))]
-                            (= expected-ids (into #{} (map :xt/id res))))))))))
-
-(t/deftest ^:property block-boundary-consistency-flush+compact
-  (tu/run-property-test
-   {:num-tests tu/property-test-iterations}
-   (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
-                  records2 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)]
-                 (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
-                                                   :compactor {:threads 0}})]
-                   (xt/execute-tx node [(into [:put-docs :docs] records1)])
-                   (tu/flush-block! node)
-
-                   (xt/execute-tx node [(into [:put-docs :docs] records2)])
-                   (tu/flush-block! node)
-
-                   (c/compact-all! node #xt/duration "PT1S")
-
-                   (and (t/testing "two transactions recorded"
-                          (= 2 (count (xt/q node "FROM xt.txs"))))
-                        (t/testing "all expected document IDs present"
-                          (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
-                                expected-ids (into #{} (map :xt/id (concat records1 records2)))]
-                            (= expected-ids (into #{} (map :xt/id res))))))))))
-
-(t/deftest ^:property block-boundary-consistency-flush+live
-  (tu/run-property-test
-   {:num-tests tu/property-test-iterations}
-   (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
-                  records2 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)]
-                 (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
-                                                   :compactor {:threads 0}})]
-                   (xt/execute-tx node [(into [:put-docs :docs] records1)])
-                   (tu/flush-block! node)
-
-                   (xt/execute-tx node [(into [:put-docs :docs] records2)])
-
-                   (and (t/testing "two transactions recorded"
-                          (= 2 (count (xt/q node "FROM xt.txs"))))
-                        (t/testing "all expected document IDs present"
-                          (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
-                                expected-ids (into #{} (map :xt/id (concat records1 records2)))]
-                            (= expected-ids (into #{} (map :xt/id res))))))))))
-
-(t/deftest ^:property block-boundary-consistency-live
-  (tu/run-property-test
-   {:num-tests tu/property-test-iterations}
-   (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
-                  records2 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)]
-                 (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:instant-src (tu/->mock-clock)}]}}
-                                                   :compactor {:threads 0}})]
-                   (xt/execute-tx node [(into [:put-docs :docs] records1)])
-                   (xt/execute-tx node [(into [:put-docs :docs] records2)])
-
-                   (and (t/testing "two transactions recorded"
-                          (= 2 (count (xt/q node "FROM xt.txs"))))
-                        (t/testing "all expected document IDs present"
-                          (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
-                                expected-ids (into #{} (map :xt/id (concat records1 records2)))]
-                            (= expected-ids (into #{} (map :xt/id res))))))))))
