@@ -85,7 +85,7 @@ sealed class Vector : VectorReader, VectorWriter {
         if (dest is DenseUnionVector.LegVector) return dest.rowCopierFrom(this)
         if (dest is DenseUnionVector) return dest.rowCopier0(this)
 
-        check(dest is Vector)
+        check(dest is Vector) { "can only copy to another Vector, got ${dest::class}" }
 
         val copier = dest.rowCopier0(this)
         if (!nullable) return copier
