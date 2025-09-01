@@ -1,0 +1,16 @@
+name: XTDB nightly property tests
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron:  '0 19 * * 1-5'
+
+jobs:
+  nightly-property-test:
+    if: github.event_name == 'workflow_dispatch' || github.repository == 'xtdb/xtdb'
+    uses: ./.github/workflows/property-test.yml
+    with:
+      iteration_count: "10000"
+    permissions:
+      contents: read
+      checks: write
