@@ -1,0 +1,4 @@
+{:block-idx 1,
+ :latest-processed-msg-id 2717,
+ :table-names #{"xt/txs" "public/foo"},
+ :secondary-dbs {}}

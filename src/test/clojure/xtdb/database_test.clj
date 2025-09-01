@@ -10,9 +10,10 @@
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import [java.nio.file Path]))
+  (:import [java.nio.file Path]
+           xtdb.api.storage.Storage))
 
-(t/use-fixtures :each tu/with-allocator)
+(t/use-fixtures :each tu/with-allocator tu/with-mock-clock)
 
 (t/deftest test-multi-db
   (with-open [node (xtn/start-node {:databases {:xtdb {}, :new-db {}}})
@@ -74,7 +75,14 @@
                      (jdbc/execute! new-db-conn ["SELECT *, _valid_from FROM foo FOR ALL VALID_TIME"])))
 
             (t/is (= {:_id "xtdb"}
-                     (jdbc/execute-one! xt-db-conn ["SELECT * FROM foo"])))))))))
+                     (jdbc/execute-one! xt-db-conn ["SELECT * FROM foo"])))
+
+            (jdbc/execute! xt-db-conn ["DETACH DATABASE new_db"])
+            (tu/flush-block! node2)
+
+            (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/database-test/block-boundary-post-detach")))
+                            (.resolve node-dir (format "xt/objects/%s/blocks" Storage/STORAGE_ROOT))
+                            {:update-fn #(dissoc % :latest-completed-tx)})))))))
 
 (t/deftest test-multi-db-through-xt-api-4652
   (with-open [node (xtn/start-node {:databases {:xtdb {}, :new-db {}}})]

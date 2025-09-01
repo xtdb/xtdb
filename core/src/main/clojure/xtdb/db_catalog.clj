@@ -144,6 +144,16 @@
                        (.put !dbs db-name db)
                        (:db db)))
 
+                   (detach [_ db-name]
+                     (when (= "xtdb" db-name)
+                       (throw (err/incorrect :xtdb/cannot-detach-primary "Cannot detach the primary 'xtdb' database" {:db-name db-name})))
+                       
+                     (when-not (.containsKey !dbs db-name)
+                       (throw (err/not-found :xtdb/no-such-db "Database does not exist" {:db-name db-name})))
+                     
+                     (when-some [{:keys [sys]} (.remove !dbs db-name)]
+                       (ig/halt! sys)))
+
                    AutoCloseable
                    (close [_]
                      (doseq [[_ {:keys [sys]}] !dbs]

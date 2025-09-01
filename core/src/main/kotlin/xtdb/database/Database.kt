@@ -65,6 +65,10 @@ data class Database(
         log.appendMessage(Message.AttachDatabase(dbName, config)).await()
     }
 
+    fun sendDetachDbMessage(dbName: DatabaseName): Log.MessageMetadata = runBlocking {
+        log.appendMessage(Message.DetachDatabase(dbName)).await()
+    }
+
     @Serializable
     data class Config(
         val log: Log.Factory = Log.inMemoryLog,
@@ -121,6 +125,9 @@ data class Database(
 
                 override fun attach(dbName: DatabaseName, config: Config?) =
                     error("can't attach database to singleton db-cat")
+
+                override fun detach(dbName: DatabaseName) =
+                    error("can't detach database from singleton db-cat")
             }
 
             @JvmField
@@ -131,6 +138,9 @@ data class Database(
 
                 override fun attach(dbName: DatabaseName, config: Config?) =
                     error("can't attach database to empty db-cat")
+
+                override fun detach(dbName: DatabaseName) =
+                    error("can't detach database from empty db-cat")
             }
         }
 
@@ -142,6 +152,7 @@ data class Database(
         val primary: Database get() = this["xtdb"]!!
 
         fun attach(dbName: DatabaseName, config: Config?): Database
+        fun detach(dbName: DatabaseName)
 
         override fun valAt(key: Any?) = valAt(key, null)
         override fun valAt(key: Any?, notFound: Any?) = databaseOrNull(key as DatabaseName) ?: notFound

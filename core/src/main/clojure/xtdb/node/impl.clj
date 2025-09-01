@@ -159,6 +159,24 @@
                 (serde/->tx-committed msg-id system-time)
                 (serde/->tx-aborted msg-id system-time error)))))))
 
+  (detach-db [this db-name]
+    (let [primary-db (.getPrimary db-cat)
+          msg-id (xt-log/send-detach-db! primary-db db-name)]
+      (or (let [^TransactionResult tx-res (-> @(.awaitAsync (.getLogProcessor primary-db) msg-id)
+                                              (util/rethrowing-cause))]
+            (when (and tx-res
+                       (= (.getTxId tx-res) msg-id))
+              tx-res))
+
+          (with-open [res (xtp/open-sql-query this "SELECT system_time, committed AS \"committed?\", error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?"
+                                              {:args [msg-id]
+                                               :key-fn (serde/read-key-fn :kebab-case-keyword)})]
+            (let [{:keys [system-time committed? error]} (-> (.findFirst res) (.orElse nil))
+                  system-time (time/->instant system-time)]
+              (if committed?
+                (serde/->tx-committed msg-id system-time)
+                (serde/->tx-aborted msg-id system-time error)))))))
+
   xtp/PStatus
   (latest-completed-txs [_]
     (->> (.getDatabaseNames db-cat)

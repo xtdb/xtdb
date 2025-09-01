@@ -6,7 +6,8 @@
   (^java.util.stream.Stream open-xtql-query [node query opts])
   (^long submit-tx [node tx-ops tx-opts])
   (^xtdb.api.TransactionResult execute-tx [node tx-ops tx-opts])
-  (^xtdb.api.TransactionResult attach-db [node db-name db-config]))
+  (^xtdb.api.TransactionResult attach-db [node db-name db-config])
+  (^xtdb.api.TransactionResult detach-db [node db-name]))
 
 (defprotocol PLocalNode
   (^xtdb.query.PreparedQuery prepare-sql [node query query-opts])

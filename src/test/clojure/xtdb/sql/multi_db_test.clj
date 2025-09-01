@@ -145,7 +145,7 @@ ATTACH DATABASE new_db WITH $$
                      {:update-fn #(dissoc % :latest-completed-tx)})
 
     (t/testing "restart node with flushed block"
-      (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
         (with-open [conn (-> (.createConnectionBuilder node)
                              (.database "new_db")
                              (.build))]
@@ -209,3 +209,50 @@ ATTACH DATABASE new_db WITH $$
                                  {:db "new_db"}]}
              (pgw-test/reading-ex
                (jdbc/execute! conn ["ATTACH DATABASE nope"]))))))
+
+(t/deftest detach-database
+  (with-open [node (xtn/start-node)
+              xtdb-conn (.build (.createConnectionBuilder node))]
+    
+    (jdbc/execute! xtdb-conn ["ATTACH DATABASE test_db"])
+    
+    (with-open [test-conn (.build (-> (.createConnectionBuilder node)
+                                      (.database "test_db")))]
+      (jdbc/execute! test-conn ["INSERT INTO foo RECORDS {_id: 'test'}"])
+      (t/is (= {:_id "test"} (jdbc/execute-one! test-conn ["SELECT * FROM foo"]))))
+    
+    (jdbc/execute! xtdb-conn ["DETACH DATABASE test_db"])
+    
+    (t/is (= {:sql-state "3D000", :message "database 'test_db' does not exist"}
+             (pgw-test/reading-ex
+              (with-open [test-conn (.build (-> (.createConnectionBuilder node)
+                                                (.database "test_db")))]
+                (jdbc/execute! test-conn ["SELECT 1"])))))))
+
+(t/deftest disallow-detach-db-in-tx
+  (with-open [node (xtn/start-node)
+              conn (jdbc/get-connection node)]
+    (jdbc/execute! conn ["ATTACH DATABASE test_db"])
+    (jdbc/execute! conn ["BEGIN"])
+
+    (try
+      (t/is (= {:sql-state "08P01",
+                :message "Cannot detach a database in a transaction.",
+                :detail #xt/error [:incorrect :xtdb.pgwire/detach-db-in-tx
+                                   "Cannot detach a database in a transaction."
+                                   {:db-name "test_db"}]}
+               (pgw-test/reading-ex
+                 (jdbc/execute! conn ["DETACH DATABASE test_db"]))))
+      (finally
+        (jdbc/execute! conn ["ROLLBACK"])))))
+
+(t/deftest disallow-detach-primary-db
+  (with-open [node (xtn/start-node)
+              conn (jdbc/get-connection node)]
+    (t/is (= {:sql-state "08P01",
+              :message "Cannot detach the primary 'xtdb' database",
+              :detail #xt/error [:incorrect :xtdb/cannot-detach-primary
+                                 "Cannot detach the primary 'xtdb' database"
+                                 {:db-name "xtdb"}]}
+             (pgw-test/reading-ex
+               (jdbc/execute! conn ["DETACH DATABASE xtdb"]))))))

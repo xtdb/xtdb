@@ -221,6 +221,23 @@ class LogProcessor(
 
                         res
                     }
+
+                    is Message.DetachDatabase -> {
+                        requireNotNull(dbCatalog) { "detach-db received on non-primary database ${db.name}" }
+                        val res = try {
+                            dbCatalog.detach(msg.dbName)
+                            TransactionCommitted(msgId, record.logTimestamp)
+                        } catch (e: Anomaly.Caller) {
+                            TransactionAborted(msgId, record.logTimestamp, e)
+                        }
+
+                        indexer.addTxRow(
+                            TransactionKey(msgId, record.logTimestamp),
+                            (res as? TransactionAborted)?.error
+                        )
+
+                        res
+                    }
                 }
                 latestProcessedMsgId = msgId
                 watchers.notify(msgId, res)

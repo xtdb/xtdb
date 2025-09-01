@@ -363,3 +363,7 @@
 (defn send-attach-db! ^long [^Database primary-db, db-name, db-config]
   (MsgIdUtil/offsetToMsgId (.getEpoch (.getLog primary-db))
                            (.getLogOffset (.sendAttachDbMessage primary-db db-name db-config))))
+
+(defn send-detach-db! ^long [^Database primary-db, db-name]
+  (MsgIdUtil/offsetToMsgId (.getEpoch (.getLog primary-db))
+                           (.getLogOffset (.sendDetachDbMessage primary-db db-name))))

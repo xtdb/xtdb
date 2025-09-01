@@ -1,0 +1,6 @@
+{:block-idx 0,
+ :latest-processed-msg-id 0,
+ :table-names #{"xt/txs" "public/foo"},
+ :secondary-dbs
+ {"new_db"
+  {:log [:local {:path true}], :storage [:local {:path true}]}}}

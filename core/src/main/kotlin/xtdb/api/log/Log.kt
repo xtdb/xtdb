@@ -106,6 +106,10 @@ interface Log : AutoCloseable {
                                     AttachDatabase(it.dbName, Database.Config.fromProto(it.config))
                                 }
 
+                                MessageCase.DETACH_DATABASE -> msg.detachDatabase.let {
+                                    DetachDatabase(it.dbName)
+                                }
+
                                 else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
                             }
                         }
@@ -132,6 +136,14 @@ interface Log : AutoCloseable {
                 attachDatabase = attachDatabase {
                     this.dbName = this@AttachDatabase.dbName
                     this.config = this@AttachDatabase.config.serializedConfig
+                }
+            }
+        }
+
+        data class DetachDatabase(val dbName: DatabaseName) : ProtobufMessage() {
+            override fun toLogMessage() = logMessage {
+                detachDatabase = detachDatabase {
+                    this.dbName = this@DetachDatabase.dbName
                 }
             }
         }

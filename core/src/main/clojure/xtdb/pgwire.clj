@@ -866,7 +866,11 @@
                                                             (Database$Config.))
                                                         (catch Exception e
                                                           (throw (err/incorrect :xtdb/invalid-database-config
-                                                                                (str "Invalid database config in `ATTACH DATABASE`: " (ex-message e))))))})))))))
+                                                                                (str "Invalid database config in `ATTACH DATABASE`: " (ex-message e))))))})
+
+                                        (visitDetachDatabaseStatement [_ ctx]
+                                          {:statement-type :detach-db
+                                           :db-name (str (sql/identifier-sym (.dbName ctx)))})))))))
 
               (catch Exception e
                 (log/debug e "Error parsing SQL")
@@ -1307,6 +1311,22 @@
       (when error
         (throw error)))))
 
+(defn- detach-db [{:keys [node conn-state default-db] :as conn} {:keys [db-name]}]
+  (when-not (= default-db "xtdb")
+    (throw (err/incorrect ::detach-db-on-secondary "Can only detach databases when connected to the primary 'xtdb' database."
+                          {:db default-db})))
+
+  (when (false? (get-in @conn-state [:transaction :implicit?]))
+    (throw (err/incorrect ::detach-db-in-tx "Cannot detach a database in a transaction."
+                          {:db-name db-name})))
+
+  (with-auth-check conn
+    (let [{:keys [error] :as tx} (xtp/detach-db node db-name)]
+      (swap! conn-state assoc :await-token (xtp/await-token node), :latest-submitted-tx tx)
+
+      (when error
+        (throw error)))))
+
 (defn execute-portal [{:keys [conn-state] :as conn} {:keys [statement-type canned-response parameter value session-characteristics tx-characteristics] :as portal}]
   (verify-permissibility conn portal)
 
@@ -1373,6 +1393,10 @@
     :attach-db (do
                  (attach-db conn portal)
                  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "ATTACH DATABASE"}))
+
+    :detach-db (do
+                 (detach-db conn portal)
+                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "DETACH DATABASE"}))
 
     (throw (UnsupportedOperationException. (pr-str {:portal portal})))))
 
