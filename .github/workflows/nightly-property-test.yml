@@ -9,6 +9,7 @@ jobs:
   nightly-property-test:
     if: github.event_name == 'workflow_dispatch' || github.repository == 'xtdb/xtdb'
     uses: ./.github/workflows/property-test.yml
+    secrets: inherit
     with:
       iteration_count: "10000"
     permissions:

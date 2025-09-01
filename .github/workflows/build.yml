@@ -181,6 +181,7 @@ jobs:
   # FIXME #4721
   # property-test:
   #   uses: ./.github/workflows/property-test.yml
+  #   secrets: inherit
   #   with:
   #     iteration_count: "100"
   #   permissions:
