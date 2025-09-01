@@ -67,7 +67,7 @@ class ScanCursor(
                 leafReaders.forEachIndexed { idx, leafReader ->
                     val evPtr = EventRowPointer(leafReader, taskPath)
                     if (!evPtr.isValid(isValidPtr, taskPath)) return@forEachIndexed
-                    val passesBloomFilter = skipBloomCheck || checkBloomFilter(leafReader, evPtr.index, iidPushdownBloom)
+                    val passesBloomFilter = skipBloomCheck || checkBloomFilter(leafReader, evPtr.index, iidPushdownBloom!!)
                     if (passesBloomFilter) mergeQueue.add(LeafPointer(evPtr, idx))
                 }
 
