@@ -5,6 +5,8 @@ package xtdb.api
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
+import kotlinx.serialization.modules.PolymorphicModuleBuilder
+import kotlinx.serialization.modules.subclass
 import xtdb.api.module.XtdbModule
 import xtdb.util.requiringResolve
 import java.net.InetAddress
@@ -45,8 +47,8 @@ object HttpServer {
      * @suppress
      */
     class Registration : XtdbModule.Registration {
-        override fun register(registry: XtdbModule.Registry) {
-            registry.registerModuleFactory(Factory::class)
+        override fun registerSerde(builder: PolymorphicModuleBuilder<XtdbModule.Factory>) {
+            builder.subclass(Factory::class)
         }
     }
 }

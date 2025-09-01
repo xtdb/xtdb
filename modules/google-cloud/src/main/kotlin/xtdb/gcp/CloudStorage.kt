@@ -13,6 +13,8 @@ import kotlinx.coroutines.future.future
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
+import kotlinx.serialization.modules.PolymorphicModuleBuilder
+import kotlinx.serialization.modules.subclass
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.StringWithEnvVarSerde
 import xtdb.api.module.XtdbModule
@@ -147,9 +149,9 @@ class CloudStorage(
     /**
      * @suppress
      */
-    class Registration : XtdbModule.Registration {
-        override fun register(registry: XtdbModule.Registry) {
-            registry.registerObjectStore(Factory::class)
+    class Registration : ObjectStore.Registration {
+        override fun registerSerde(builder: PolymorphicModuleBuilder<ObjectStore.Factory>) {
+            builder.subclass(Factory::class)
         }
     }
 }

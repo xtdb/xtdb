@@ -9,6 +9,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlinx.serialization.UseSerializers
+import kotlinx.serialization.modules.PolymorphicModuleBuilder
+import kotlinx.serialization.modules.subclass
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.core.async.AsyncRequestBody
@@ -289,9 +291,9 @@ class S3(
     /**
      * @suppress
      */
-    class Registration : XtdbModule.Registration {
-        override fun register(registry: XtdbModule.Registry) {
-            registry.registerObjectStore(Factory::class)
+    class Registration : ObjectStore.Registration {
+        override fun registerSerde(builder: PolymorphicModuleBuilder<ObjectStore.Factory>) {
+            builder.subclass(Factory::class)
         }
     }
 }

@@ -6,6 +6,8 @@ import io.micrometer.core.instrument.Clock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
+import kotlinx.serialization.modules.PolymorphicModuleBuilder
+import kotlinx.serialization.modules.subclass
 import software.amazon.awssdk.services.cloudwatch.CloudWatchAsyncClient
 import xtdb.api.Xtdb
 import xtdb.api.module.XtdbModule
@@ -35,8 +37,8 @@ class CloudWatchMetrics(
      * @suppress
      */
     class Registration : XtdbModule.Registration {
-        override fun register(registry: XtdbModule.Registry) {
-            registry.registerModuleFactory(CloudWatchMetrics::class)
+        override fun registerSerde(builder: PolymorphicModuleBuilder<XtdbModule.Factory>) {
+            builder.subclass(CloudWatchMetrics::class)
         }
     }
 }

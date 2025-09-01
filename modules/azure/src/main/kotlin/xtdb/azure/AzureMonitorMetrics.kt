@@ -5,6 +5,8 @@ import io.micrometer.azuremonitor.AzureMonitorMeterRegistry
 import io.micrometer.core.instrument.Clock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.modules.PolymorphicModuleBuilder
+import kotlinx.serialization.modules.subclass
 import xtdb.api.module.XtdbModule
 import xtdb.api.StringWithEnvVarSerde
 import xtdb.api.Xtdb
@@ -37,8 +39,8 @@ class AzureMonitorMetrics(
      * @suppress
      */
     class Registration : XtdbModule.Registration {
-        override fun register(registry: XtdbModule.Registry) {
-            registry.registerModuleFactory(AzureMonitorMetrics::class)
+        override fun registerSerde(builder: PolymorphicModuleBuilder<XtdbModule.Factory>) {
+            builder.subclass(AzureMonitorMetrics::class)
         }
     }
 }

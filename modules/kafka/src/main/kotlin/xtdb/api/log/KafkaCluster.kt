@@ -12,6 +12,8 @@ import kotlinx.coroutines.future.future
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
+import kotlinx.serialization.modules.PolymorphicModuleBuilder
+import kotlinx.serialization.modules.subclass
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.consumer.KafkaConsumer
@@ -242,10 +244,18 @@ class KafkaCluster(
     /**
      * @suppress
      */
-    class Registration : XtdbModule.Registration {
-        override fun register(registry: XtdbModule.Registry) {
-            registry.registerLogClusterFactory(ClusterFactory::class)
-            registry.registerLogFactory(LogFactory::class)
+    class Registration : Log.Registration {
+        override fun registerSerde(builder: PolymorphicModuleBuilder<Log.Factory>) {
+            builder.subclass(LogFactory::class)
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    class ClusterRegistration : Log.Cluster.Registration {
+        override fun registerSerde(builder: PolymorphicModuleBuilder<Log.Cluster.Factory<*>>) {
+            builder.subclass(ClusterFactory::class)
         }
     }
 }

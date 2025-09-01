@@ -1,11 +1,15 @@
 package xtdb.api.storage
 
+import kotlinx.serialization.modules.PolymorphicModuleBuilder
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.polymorphic
 import xtdb.api.storage.Storage.STORAGE_ROOT
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.CREATE
 import java.nio.file.StandardOpenOption.WRITE
+import java.util.*
 import java.util.concurrent.CompletableFuture
 
 interface ObjectStore : AutoCloseable {
@@ -16,6 +20,19 @@ interface ObjectStore : AutoCloseable {
 
     interface Factory {
         fun openObjectStore(storageRoot: Path = STORAGE_ROOT): ObjectStore
+
+        companion object {
+            val serializersModule = SerializersModule {
+                polymorphic(Factory::class) {
+                    for (reg in ServiceLoader.load(Registration::class.java))
+                        reg.registerSerde(this)
+                }
+            }
+        }
+    }
+
+    interface Registration {
+        fun registerSerde(builder: PolymorphicModuleBuilder<Factory>)
     }
 
     data class StoredObject(val key: Path, val size: Long)

@@ -5,6 +5,9 @@ package xtdb.api
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.polymorphic
+import kotlinx.serialization.modules.subclass
 import xtdb.UrlSerializer
 import xtdb.api.Authenticator.Method.TRUST
 import xtdb.api.Authenticator.MethodRule
@@ -87,7 +90,8 @@ interface Authenticator : AutoCloseable {
         val remoteAddress: String? = null
     )
 
-    interface Factory {
+    @Serializable
+    sealed interface Factory {
         var rules: List<MethodRule>
 
         fun rules(rules: List<MethodRule>) = apply { this.rules = rules }

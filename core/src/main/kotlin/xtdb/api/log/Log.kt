@@ -3,6 +3,10 @@
 package xtdb.api.log
 
 import kotlinx.serialization.UseSerializers
+import kotlinx.serialization.modules.PolymorphicModuleBuilder
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.polymorphic
+import kotlinx.serialization.modules.subclass
 import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.log.proto.*
@@ -11,6 +15,7 @@ import xtdb.trie.BlockIndex
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Instant
+import java.util.*
 import java.util.concurrent.CompletableFuture
 
 typealias LogOffset = Long
@@ -25,18 +30,20 @@ interface Log : AutoCloseable {
 
         interface Factory<C : Cluster> {
             fun open(): C
+
+            companion object {
+                val serializersModule = SerializersModule {
+                    polymorphic(Factory::class) {
+                        for (reg in ServiceLoader.load(Registration::class.java))
+                            reg.registerSerde(this)
+                    }
+                }
+            }
         }
-    }
-    companion object {
-        @JvmStatic
-        val inMemoryLog get() = InMemoryLog.Factory()
 
-        @JvmStatic
-        fun localLog(rootPath: Path) = LocalLog.Factory(rootPath)
-
-        @Suppress("unused")
-        @JvmSynthetic
-        fun localLog(path: Path, configure: LocalLog.Factory.() -> Unit) = localLog(path).also(configure)
+        interface Registration {
+            fun registerSerde(builder: PolymorphicModuleBuilder<Factory<*>>)
+        }
     }
 
     sealed interface Message {
@@ -112,6 +119,34 @@ interface Log : AutoCloseable {
 
     interface Factory {
         fun openLog(clusters: Map<LogClusterAlias, Cluster>): Log
+
+        companion object {
+            val serializersModule = SerializersModule {
+                polymorphic(Factory::class) {
+                    subclass(InMemoryLog.Factory::class)
+                    subclass(LocalLog.Factory::class)
+
+                    for (reg in ServiceLoader.load(Registration::class.java))
+                        reg.registerSerde(this)
+                }
+            }
+        }
+    }
+
+    companion object {
+        @JvmStatic
+        val inMemoryLog get() = InMemoryLog.Factory()
+
+        @JvmStatic
+        fun localLog(rootPath: Path) = LocalLog.Factory(rootPath)
+
+        @Suppress("unused")
+        @JvmSynthetic
+        fun localLog(path: Path, configure: LocalLog.Factory.() -> Unit) = localLog(path).also(configure)
+    }
+
+    interface Registration {
+        fun registerSerde(builder: PolymorphicModuleBuilder<Factory>)
     }
 
     /*
