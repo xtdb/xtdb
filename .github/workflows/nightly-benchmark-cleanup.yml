@@ -1,0 +1,129 @@
+name: Nightly Benchmark Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      benchType:
+        description: 'Type of benchmark to clean up'
+        required: true
+        type: choice
+        options:
+          - tpch
+          - auctionmark
+          - readings
+      status:
+        description: 'Status of the benchmark'
+        required: true
+        type: choice
+        options:
+          - success
+          - failure
+      nodeId:
+        description: 'Node ID of the benchmark'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cleanup-benchmarks
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Azure CLI Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.BENCHMARK_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.BENCHMARK_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.BENCHMARK_AZURE_SUBSCRIPTION_ID }}
+
+      - name: Acquire Kubernetes Configuration
+        run: |
+          az aks get-credentials --resource-group cloud-benchmark-resources --name xtdb-bench-cluster
+
+      - name: Check Deployment
+        id: check-deployment
+        continue-on-error: true
+        run: |
+          # exit 0 if exists, non-zero if not
+          helm status xtdb-benchmark -n cloud-benchmark >/dev/null 2>&1
+
+      - name: Capture Benchmark Logs
+        if: steps.check-deployment.outcome == 'success'
+        id: logs
+        run: |
+          # Wait for job logs with retries
+          max_attempts=12
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+            if kubectl logs ${{ inputs.nodeId }} --namespace cloud-benchmark > benchmark.log 2>/dev/null; then
+              if grep -q '"time-taken-ms":' benchmark.log; then
+                time_taken=$(grep -o '"time-taken-ms":[0-9]\+' benchmark.log | tail -1 | cut -d: -f2)
+                echo "time_taken=$time_taken" >> "$GITHUB_OUTPUT"
+                break
+              fi
+            fi
+            echo "Attempt $attempt: Waiting for benchmark logs..."
+            sleep 5
+            attempt=$((attempt + 1))
+          done
+
+      - name: Set Timestamp
+        id: timestamp
+        run: |
+          echo "value=$(date -u +"%Y-%m-%d-%H-%M-%S")" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +"%Y/%m/%d")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Benchmark Logs
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-logs-${{ inputs.benchType }}-${{ steps.timestamp.outputs.value }}-${{ inputs.nodeId }}-${{ inputs.status }}
+          path: benchmark.log
+          retention-days: 7
+
+      - name: Run Cleanup Script
+        if: ${{ always() && steps.check-deployment.outcome == 'success' }}
+        run: |
+          ./modules/bench/cloud/clear-bench.sh azure
+
+      - name: Compose Slack Message
+        id: compose
+        run: |
+          type="${{ inputs.benchType }}"
+          [ "$type" = "tpch" ] && type="TPC-H"
+
+          if [ -n "${{ steps.logs.outputs.time_taken }}" ]; then
+            base="$type Benchmark completed in ${{ steps.logs.outputs.time_taken }}ms"
+          else
+            base="$type Benchmark cleanup"
+          fi
+
+          {
+            echo "msg<<EOF"
+            echo "$base — {status_message}"
+            if [ "${{ steps.upload.outcome }}" = "success" ]; then
+              echo ":link: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|view logs>"
+            else
+              echo ":link: (log upload failed)"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+
+      - name: Post Slack Notification
+        uses: ravsamhq/notify-slack-action@v2
+        if: steps.check-deployment.outcome == 'success'
+        with:
+          status: ${{ inputs.status }}
+          notification_title: "*${{ (inputs.benchType == 'tpch') && 'TPC-H' || inputs.benchType }} Benchmark*"
+          message_format: ${{ steps.compose.outputs.msg }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.BENCHMARK_SLACK_WEBHOOK_URL }}

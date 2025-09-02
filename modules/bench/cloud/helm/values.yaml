@@ -8,14 +8,14 @@ auctionmark:
   threads: 8
   duration: "PT24H"
 
-tpch: 
+tpch:
   scaleFactor: 0.01
 
 readings:
   devices: 10000
   readings: 10000
 
-xtdbConfig: 
+xtdbConfig:
   # Core environment variables
   kafkaBootstrapServers: xtdb-benchmark-kafka.cloud-benchmark.svc.cluster.local:9092
   logTopic: xtdb-log
@@ -31,11 +31,11 @@ providerConfig:
   serviceAccountAnnotations: {}
   nodeSelector: {}
   nodeConfig:
-  
+
 image:
   repository: ghcr.io/xtdb/xtdb-bench
   pullPolicy: Always
-  tag: "sha-8d029ad"
+  tag: "sha-6b5931e"
 
 resources:
   limits:
@@ -58,4 +58,4 @@ kafka:
     persistence:
       size: 50Gi
     resourcesPreset: medium
-      
+
