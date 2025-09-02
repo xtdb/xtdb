@@ -135,8 +135,8 @@
                                   ;; Map attribute to variable name (for symbol variables)
                                   (symbol? value) 
                                   (let [var-name (cond
-                                                  ;; For entity ID, use variable name + "-id"  
-                                                  (= attr :xt/id) (symbol (str (subs (name value) 1) "-id"))
+                                                  ;; For entity ID, use table name + "-id"  
+                                                  (= attr :xt/id) (symbol (str (name table) "-id"))
                                                   ;; For reference attributes, use attribute name + "-id"
                                                   (contains? (get-in schema [:reference-attributes :cardinality-one] #{}) attr)
                                                   (symbol (str (name attr) "-id"))
@@ -162,7 +162,9 @@
                                                                                (contains? (get-in schema [:reference-attributes :cardinality-one] #{}) attr)))
                                                                         patterns)))
                                                            entity-patterns)
-                                should-add-entity-id? (and is-referenced-entity?
+                                ;; Add entity ID if entity is referenced OR appears in find clause
+                                entity-in-find? (some #(= % entity-var) find-spec)
+                                should-add-entity-id? (and (or is-referenced-entity? entity-in-find?)
                                                           (not (contains? column-mappings :xt/id)))
                                 ;; For entity ID, find the reference attribute that points to this entity
                                 entity-id-name (when should-add-entity-id?
@@ -176,7 +178,7 @@
                                                        entity-patterns))
                                 column-mappings-with-id (if should-add-entity-id?
                                                           (assoc column-mappings :xt/id (or entity-id-name 
-                                                                                            (symbol (str (subs (name entity-var) 1) "-id"))))
+                                                                                            (symbol (str (name table) "-id"))))
                                                           column-mappings)]
                             (if (seq column-mappings-with-id) 
                               [column-mappings-with-id]
@@ -262,7 +264,7 @@
 
 (defn- build-return-clause
   "Builds the return clause based on find specification"
-  [find-spec entity-patterns aggregations]
+  [find-spec entity-patterns aggregations & [entity-tables]]
   (let [return-map (reduce (fn [acc find-var]
                              (cond
                                ;; Aggregation expression
@@ -287,9 +289,15 @@
                                (symbol? find-var)
                                (let [var-name (subs (name find-var) 1) ; Remove ? prefix
                                      var-key (keyword var-name)
-                                     var-sym (symbol var-name)]
-                                 ;; Always use the variable name itself as both key and value
-                                 ;; The column mappings in from clauses handle the actual mapping
+                                     ;; Check if this is an entity variable (appears as entity in patterns)
+                                     is-entity-var? (contains? entity-patterns find-var)
+                                     var-sym (if (and is-entity-var? entity-tables)
+                                               ;; For entity variables, use table-id as the column name
+                                               (let [table (get entity-tables find-var)]
+                                                 (if table
+                                                   (symbol (str (name table) "-id"))
+                                                   (symbol var-name)))
+                                               (symbol var-name))]
                                  (assoc acc var-key var-sym))
                                
                                :else acc))
@@ -374,7 +382,21 @@
   ([datalog-query schema options]
    (when-not (map? datalog-query)
      (throw (ex-info "datalog-query must be a map" {:query datalog-query})))
-   (let [{:keys [find where in order-by limit group-by]} datalog-query
+   (let [{:keys [find where in order-by limit group-by args]} datalog-query
+         
+         ;; Handle :args by substituting $-prefixed variables with their values
+         processed-where (if args
+                          (let [arg-map (first args)] ; Get the argument map
+                            (clojure.walk/postwalk
+                             (fn [x]
+                               (if (and (symbol? x) (.startsWith (name x) "$"))
+                                 (get arg-map x x) ; Replace $var with its value, or keep as-is if not found
+                                 x))
+                             where))
+                          where)
+         
+         ;; Use processed patterns for the rest of the compilation
+         where processed-where
          
          ;; Check for pull patterns (simplified - just detect, don't fully handle)
          has-pull? (some #(and (seq? %) (= 'pull (first %))) find)
@@ -451,7 +473,7 @@
                       force-pipeline? (:force-pipeline options)
                       ;; Build return clause if needed
                       return-clause (when (or force-pipeline? find)
-                                     (build-return-clause find entity-patterns false))
+                                     (build-return-clause find entity-patterns false entity-tables))
                       ;; For multi-entity queries with negations, we need return clauses
                       needs-return-for-negation? (and (seq not-clauses) find (not (empty? find)))
                       ;; Only use pipeline for operations that require it
@@ -521,7 +543,7 @@
                                                      options)
                       where-clause (build-where-clause constraints entity-patterns params)
                       return-clause (build-return-clause find entity-patterns 
-                                                         (boolean group-by))]
+                                                         (boolean group-by) entity-tables)]
                   ;; Build a pipeline manually - cond-> doesn't work well with building list structures
                   (let [force-pipeline? (:force-pipeline options)
                         ops (cond-> []
@@ -621,7 +643,7 @@
                                                                          (extract-entity-patterns combined-patterns))
                                               ;; Add return clause if needed
                                               return-clause (when needs-return?
-                                                             (build-return-clause find combined-entity-patterns false))
+                                                             (build-return-clause find combined-entity-patterns false entity-tables))
                                               negated-with-return (if (and needs-return? return-clause)
                                                                     (list '-> negated-query return-clause)
                                                                     negated-query)]
@@ -634,7 +656,7 @@
                             find
                             (not (empty? find)))
                       (list '-> query-with-negations
-                           (build-return-clause find entity-patterns false))
+                           (build-return-clause find entity-patterns false entity-tables))
                       query-with-negations)]
      ;; Return the query!
      final-query)))
@@ -1132,6 +1154,47 @@
           ;; Just verify we got a date back (format may vary)
           (t/is (some? (:start-date result))))))))
 
+(def test-schema2
+  {:attribute->table
+   {:date/inverted-instant :docs
+    :_etype :docs}
+   
+   :entity-id-attribute
+   {:docs :xt/id}
+   
+   :reference-attributes
+   {:cardinality-one  #{}
+    :cardinality-many #{}}})
+
+(t/deftest test-user-examples
+  "Misc examples"
+  (let [node tu/*node*]
+    (insert-test-data node)
+
+    (t/testing "Multiple inequalities and args"
+      (let [datalog-query {:find  '[?e],
+                           :where '[[?e :date/inverted-instant ?inverted-instant]
+                                    [(> ?inverted-instant $now)]
+                                    [(< ?inverted-instant $prior-to-now)]
+                                    [?e :_etype $etype]]
+                           :args  [{'$etype        :foo
+                                    '$now          #inst "2023-01-01"
+                                    '$prior-to-now #inst "2024-01-01"}]}
+            xtql-query (datalog->xtql datalog-query test-schema2)
+            ;; Expected XTQL equivalent:
+            expected-xtql '(-> (from :docs [{:date/inverted-instant inverted-instant, :_etype _etype :xt/id docs-id}])
+                               (where
+                                (> inverted-instant #inst "2023-01-01T00:00:00.000-00:00")
+                                (< inverted-instant #inst "2024-01-01T00:00:00.000-00:00")
+                                (= _etype :foo))
+                               (return {:e docs-id}))]
+        ;; Test the compiler generates correct XTQL
+        (t/is (= expected-xtql xtql-query))
+        (t/is (= #{}
+                 (->> (xt/q node xtql-query)
+                      (map :e)
+                      (set))))))))
+
 ;; =============================================================================
 ;; Tests for datalog->xtql helper functions
 ;; =============================================================================
@@ -1140,8 +1203,8 @@
   "Test pattern extraction and grouping by entity variable"
   (t/testing "Simple entity-attribute-value patterns"
     (let [patterns (#'xtdb.datalog-to-xtql-test/extract-entity-patterns '[[?p :name ?name]
-                                               [?p :age ?age]
-                                               [?p :dept "Engineering"]])]
+                                                                          [?p :age ?age]
+                                                                          [?p :dept "Engineering"]])]
       (t/is (= 1 (count patterns)))
       (t/is (contains? patterns '?p))
       (t/is (= [{:attr :name :value '?name}
@@ -1151,8 +1214,8 @@
   
   (t/testing "Multiple entities"
     (let [patterns (#'xtdb.datalog-to-xtql-test/extract-entity-patterns '[[?p :name ?name]
-                                               [?e :person ?p]
-                                               [?e :salary ?salary]])]
+                                                                          [?e :person ?p]
+                                                                          [?e :salary ?salary]])]
       (t/is (= 2 (count patterns)))
       (t/is (contains? patterns '?p))
       (t/is (contains? patterns '?e))
@@ -1162,8 +1225,8 @@
   
   (t/testing "Ignores constraint clauses"
     (let [patterns (#'xtdb.datalog-to-xtql-test/extract-entity-patterns '[[?p :age ?age]
-                                               [(> ?age 30)]
-                                               [?p :name ?name]])]
+                                                                          [(> ?age 30)]
+                                                                          [?p :name ?name]])]
       (t/is (= 1 (count patterns)))
       (t/is (= [{:attr :age :value '?age}
                 {:attr :name :value '?name}]
