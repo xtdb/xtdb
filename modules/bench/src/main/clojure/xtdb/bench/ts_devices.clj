@@ -18,6 +18,7 @@
   (bu/download-s3-dataset-file "ts-devices/small/devices_small_device_info.csv.gz" tmp-file))
 
 (defmethod b/->benchmark :ts-devices [_ {:keys [size seed] :or {seed 0}}]
+  (log/info {:size size :seed seed})
   {:title "TS Devices Ingest"
    :seed seed,
    :->state #(do {:!state (atom {})})

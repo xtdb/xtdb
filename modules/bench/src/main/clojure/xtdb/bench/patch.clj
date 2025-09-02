@@ -67,7 +67,7 @@
 
 (defmethod b/->benchmark :patch [_ {:keys [doc-count patch-count seed no-load?]
                                     :or {doc-count 500000 patch-count 10 seed 0} :as opts}]
-  (log/info {:doc-count doc-count :patch-count patch-count})
+  (log/info {:doc-count doc-count :patch-count patch-count :seed seed})
   
   {:title "PATCH Performance Benchmark"
    :seed seed
