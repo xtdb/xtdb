@@ -257,6 +257,118 @@ include::{test}[tags=aggr-xtql-1,indent=0]
 include::{example}[tags=aggr-sql-1,indent=0]
 ----
 
+=== Set Operations
+
+XTQL provides powerful set operations that allow you to combine, intersect, and compare results from multiple queries. These operations treat query results as mathematical sets and follow standard relational algebra principles.
+
+Set operations are particularly useful when you need to:
+
+* Combine data from different tables or sources
+* Find commonalities between datasets
+* Identify differences between query results
+* Remove duplicates from complex queries
+
+==== Basic Set Operations
+
+The most common set operations are `union`, `intersect`, and `except`:
+
+[source,clojure]
+----
+;; Combine customers and suppliers (removing duplicates)
+(union
+  (from :customers [{:name name, :city city}])
+  (from :suppliers [{:name company-name, :city location}]))
+
+;; Find cities that have both customers and suppliers
+(intersect
+  (-> (from :customers [{:city city}]) (return {:location city}))
+  (-> (from :suppliers [{:city city}]) (return {:location city})))
+
+;; Find customers who haven't placed orders
+(except
+  (from :customers [{:customer-id customer-id, :name name}])
+  (-> (from :orders [{:customer-id customer-id}])
+      (return {:customer-id customer-id, :name ""}))) ; simplified example
+----
+
+Each operation has an `-all` variant that preserves duplicates according to set theory rules:
+
+[source,clojure]
+----
+;; union-all: preserves all rows, including duplicates
+(union-all
+  (from :sales-q1 [{:product product, :region region}])
+  (from :sales-q2 [{:product product, :region region}]))
+
+;; intersect-all: returns minimum count from each side
+(intersect-all
+  (from :inventory-a [{:product product}])
+  (from :inventory-b [{:product product}]))
+
+;; except-all: subtracts right-side count from left-side
+(except-all
+  (from :ordered-items [{:product product}])
+  (from :shipped-items [{:product product}]))
+----
+
+==== Set Operations in Pipelines
+
+Set operations can also be used as tail operators within pipelines, combining the current pipeline result with another query:
+
+[source,clojure]
+----
+;; Find all engineering staff (employees + contractors)
+(-> (from :employees [{:name name, :dept dept}])
+    (where (= dept "Engineering"))
+    (union (from :contractors [{:name name, :dept dept}])))
+
+;; Find featured products that are also high-priced
+(-> (from :products [{:category category, :price price}])
+    (where (> price 100))
+    (intersect (from :featured-products [{:category category, :price price}])))
+
+;; Remove duplicates from a combined dataset
+(-> (from :orders [customer-id])
+    (union-all (from :quotes [customer-id]))
+    (distinct))
+----
+
+==== Advanced Set Operations
+
+You can nest set operations to create more complex queries:
+
+[source,clojure]
+----
+;; Find products that are either (in category A or B) AND (high-demand or featured)
+(intersect
+  (union
+    (from :products [{:product product, :category "A"}])
+    (from :products [{:product product, :category "B"}]))
+  (union
+    (from :high-demand-products [{:product product}])
+    (from :featured-products [{:product product}])))
+----
+
+Set operations integrate seamlessly with other XTQL features like aggregation and parameters:
+
+[source,clojure]
+----
+;; Combine quarterly sales and calculate totals
+(-> (union-all
+      (from :sales-q1 [{:region region, :amount amount}])
+      (from :sales-q2 [{:region region, :amount amount}]))
+    (aggregate region {:total-sales (sum amount)}))
+
+;; Parameterized set operation
+(fn [target-status]
+  (except
+    (-> (from :users [{:user-id user-id, :status status}])
+	(where (= status target-status)))
+    (from :suspended-users [{:user-id user-id, :status status}])))
+----
+
+For complete details on set operations, including multiplicity handling and schema compatibility requirements, see the link:/reference/main/xtql/queries.html#_set_operations[Set Operations reference guide].
+
 === 'Pull'
 
 When we've found the documents we're interested in, it's common to then want a tree of related information.
