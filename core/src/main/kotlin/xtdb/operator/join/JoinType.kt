@@ -5,6 +5,7 @@ import org.apache.arrow.vector.BitVector
 import xtdb.arrow.RelationReader
 import xtdb.error.Incorrect
 import xtdb.operator.join.JoinType.OuterJoinType.*
+import java.util.function.Consumer
 
 fun interface JoinType {
     fun ProbeSide.probe(): RelationReader
@@ -37,7 +38,7 @@ fun interface JoinType {
             }
 
             val outBuild = buildRel.select(matchingBuildIdxs.toArray())
-            val outProbe = probeRel.select(matchingProbeIdxs.toArray())
+            val outProbe = probeRel!!.select(matchingProbeIdxs.toArray())
 
             return if (outerJoinType == LEFT_FLIPPED)
                 RelationReader.concatCols(outProbe, outBuild)
@@ -62,7 +63,7 @@ fun interface JoinType {
 
             RelationReader.concatCols(
                 buildRel.select(matchingBuildIdxs.toArray()),
-                probeRel.select(matchingProbeIdxs.toArray())
+                probeRel!!.select(matchingProbeIdxs.toArray())
             )
         }
 
@@ -96,7 +97,8 @@ fun interface JoinType {
             }
 
         @JvmField
-        val SEMI = JoinType { probeRel.select(semiJoinSelection()) }
+        val SEMI = JoinType { probeRel!!.select(semiJoinSelection()) }
+
 
         internal fun ProbeSide.antiJoinSelection() =
             IntArrayList().let { sel ->
@@ -106,7 +108,7 @@ fun interface JoinType {
             }
 
         @JvmField
-        val ANTI = JoinType { probeRel.select(antiJoinSelection()) }
+        val ANTI = JoinType { probeRel!!.select(antiJoinSelection()) }
 
         @JvmField
         val SINGLE = JoinType {
@@ -132,7 +134,7 @@ fun interface JoinType {
 
             RelationReader.concatCols(
                 buildRel.select(matchingBuildIdxs.toArray()),
-                probeRel.select(matchingProbeIdxs.toArray())
+                probeRel!!.select(matchingProbeIdxs.toArray())
             )
         }
     }

@@ -72,7 +72,8 @@
 (deftype IntersectionCursor [^ICursor left-cursor, ^ICursor right-cursor
                              ^BuildSide build-side, ->probe-side
                              difference?
-                             ^:unsynchronized-mutable build-phase-ran?]
+                             ^:unsynchronized-mutable build-phase-ran?
+                             ^:unsynchronized-mutable ^ProbeSide probe-side]
   ICursor
   (tryAdvance [this c]
     (when-not build-phase-ran?
@@ -80,27 +81,28 @@
                          (fn [^RelationReader in-rel]
                            (.append build-side in-rel)))
       (.build build-side)
-      (set! (.build-phase-ran? this) true))
+      (set! (.build-phase-ran? this) true)
+      (set! (.probe-side this) (->probe-side left-cursor)))
 
 
     (boolean
      (let [advanced? (boolean-array 1)]
        (while (and (not (aget advanced? 0))
-                   (.tryAdvance left-cursor
-                                (fn [^RelationReader in-rel]
-                                  (let [row-count (.getRowCount in-rel)]
-                                    (when (pos? row-count)
-                                      (let [^ProbeSide probe-side (->probe-side in-rel)
-                                            idxs (IntStream/builder)]
-                                        (dotimes [idx row-count]
-                                          (when (cond-> (not= -1 (.indexOf probe-side idx true))
-                                                  difference? not)
-                                            (.add idxs idx)))
+                   (.processNext probe-side
+                                 (fn []
+                                   (let [in-rel (.getProbeRel probe-side)
+                                         row-count (.getRowCount in-rel)]
+                                     (when (pos? row-count)
+                                       (let [idxs (IntStream/builder)]
+                                         (dotimes [idx row-count]
+                                           (when (cond-> (not= -1 (.indexOf probe-side idx true))
+                                                   difference? not)
+                                             (.add idxs idx)))
 
-                                        (let [idxs (.toArray (.build idxs))]
-                                          (when-not (empty? idxs)
-                                            (aset advanced? 0 true)
-                                            (.accept c (.select in-rel idxs)))))))))))
+                                         (let [idxs (.toArray (.build idxs))]
+                                           (when-not (empty? idxs)
+                                             (aset advanced? 0 true)
+                                             (.accept c (.select in-rel idxs)))))))))))
        (aget advanced? 0))))
 
   (close [_]
@@ -123,7 +125,7 @@
                                             build-side (join/->probe-side build-side
                                                                           {:fields right-fields
                                                                            :key-col-names key-col-names})
-                                            false false)))}))))
+                                            false false nil)))}))))
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
@@ -141,4 +143,4 @@
                                                                           {:build-fields left-fields
                                                                            :probe-fields right-fields
                                                                            :key-col-names key-col-names})
-                                            true false)))}))))
+                                            true false nil)))}))))

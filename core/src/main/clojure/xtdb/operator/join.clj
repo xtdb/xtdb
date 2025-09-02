@@ -184,6 +184,7 @@
                      probe-fields probe-key-cols
                      ->probe-cursor, ->probe-side
                      ^:unsynchronized-mutable ^ICursor probe-cursor
+                     ^:unsynchronized-mutable ^ProbeSide probe-side
                      ^:unsynchronized-mutable ^RelationWriter nil-rel-writer
                      pushdown-blooms
                      ^Set pushdown-iids
@@ -198,7 +199,8 @@
               (->probe-cursor (when pushdown-blooms
                                 (zipmap (map symbol probe-key-cols) pushdown-blooms))
                               (when pushdown-iids
-                                (zipmap probe-iid-keys (repeat pushdown-iids)))))))
+                                (zipmap probe-iid-keys (repeat pushdown-iids)))))
+        (set! (.probe-side this) (->probe-side probe-cursor))))
 
     (when (and (.getMatchedBuildIdxs build-side) (not nil-rel-writer))
       (util/with-close-on-catch [nil-rel-writer (emap/->nillable-rel-writer allocator probe-fields)]
@@ -206,15 +208,14 @@
 
     (boolean
      (or (let [advanced? (boolean-array 1)]
+
            (while (and (not (aget advanced? 0))
-                       (.tryAdvance ^ICursor (.probe-cursor this)
-                                    (fn [^RelationReader probe-rel]
-                                      (when (pos? (.getRowCount probe-rel))
-                                        (with-open [out-rel (-> (.probe join-type (->probe-side probe-rel))
-                                                                (.openSlice allocator))]
-                                          (when (pos? (.getRowCount out-rel))
-                                            (aset advanced? 0 true)
-                                            (.accept c out-rel))))))))
+                       (.processNext probe-side
+                                     (fn []
+                                       (with-open [out-rel (-> (.probe join-type probe-side) (.openSlice allocator))]
+                                         (when (pos? (.getRowCount out-rel))
+                                           (aset advanced? 0 true)
+                                           (.accept c out-rel)))))))
            (aget advanced? 0))
 
          (when-let [matched-build-idxs (.getMatchedBuildIdxs build-side)]
@@ -248,6 +249,7 @@
                          ^BuildSide build-side, ^ICursor build-cursor,
                          ->probe-cursor, ->probe-side,
                          ^:unsynchronized-mutable ^ICursor probe-cursor
+                         ^:unsynchronized-mutable ^ProbeSide probe-side
                          mark-col-name
                          pushdown-blooms]
   ICursor
@@ -258,24 +260,25 @@
       (set! (.probe-cursor this)
             (->probe-cursor (zipmap (map symbol (.getKeyColNames build-side))
                                     pushdown-blooms)
-                            nil)))
+                            nil))
+      (set! (.probe-side this) (->probe-side probe-cursor)))
 
     (boolean
      (let [advanced? (boolean-array 1)]
        (while (and (not (aget advanced? 0))
-                   (.tryAdvance ^ICursor (.probe-cursor this)
-                                (fn [^RelationReader probe-rel]
-                                  (let [^ProbeSide probe-side (->probe-side probe-rel)
-                                        row-count (.getRowCount probe-rel)]
-                                    (when (pos? row-count)
-                                      (aset advanced? 0 true)
+                   (.processNext probe-side
+                                 (fn []
+                                   (let [probe-rel (.getProbeRel probe-side)
+                                         row-count (.getRowCount probe-rel)]
+                                     (when (pos? row-count)
+                                       (aset advanced? 0 true)
 
-                                      (with-open [mark-col (doto (BitVector. (name mark-col-name) allocator)
-                                                             (.allocateNew row-count)
-                                                             (.setValueCount row-count))]
-                                        (JoinType/mark probe-side mark-col)
-                                        (let [out-cols (conj (seq probe-rel) (vr/vec->reader mark-col))]
-                                          (.accept c (vr/rel-reader out-cols row-count))))))))))
+                                       (with-open [mark-col (doto (BitVector. (name mark-col-name) allocator)
+                                                              (.allocateNew row-count)
+                                                              (.setValueCount row-count))]
+                                         (JoinType/mark probe-side mark-col)
+                                         (let [out-cols (conj (seq probe-rel) (vr/vec->reader mark-col))]
+                                           (.accept c (vr/rel-reader out-cols row-count))))))))))
        (aget advanced? 0))))
 
   (close [_]
@@ -320,8 +323,8 @@
 
 (defn ->probe-side [build-side {:keys [build-fields probe-fields key-col-names theta-expr param-fields args with-nil-row?]}]
   (let [param-types (update-vals param-fields types/field->col-type)]
-    (fn ^xtdb.operator.join.ProbeSide [probe-rel]
-      (ProbeSide. build-side probe-rel (map str key-col-names)
+    (fn ^xtdb.operator.join.ProbeSide [probe-cursor]
+      (ProbeSide. build-side probe-cursor (map str key-col-names)
                   (reify ProbeSide$ComparatorFactory
                     (buildEqui [_ build-col probe-col]
                       (emap/->equi-comparator build-col probe-col args
@@ -411,11 +414,11 @@
                        (project/->project-cursor opts
                                                  (if (= join-type ::mark-join)
                                                    (MarkJoinCursor. allocator build-side build-cursor
-                                                                    ->probe-cursor-with-pushdowns ->probe-side nil
+                                                                    ->probe-cursor-with-pushdowns ->probe-side nil nil
                                                                     mark-col-name pushdown-blooms)
                                                    (JoinCursor. allocator build-side build-cursor
                                                                 probe-fields probe-key-col-names
-                                                                ->probe-cursor-with-pushdowns ->probe-side nil
+                                                                ->probe-cursor-with-pushdowns ->probe-side nil nil
                                                                 nil
                                                                 pushdown-blooms pushdown-iids
                                                                 (case join-type
