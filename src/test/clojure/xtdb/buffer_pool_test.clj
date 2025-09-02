@@ -42,7 +42,7 @@
              ~@body))))))
 
 (defn- open-storage ^xtdb.storage.BufferPool [^Storage$Factory factory]
-  (.open factory tu/*allocator* *mem-cache* *disk-cache* nil Storage/VERSION))
+  (.open factory tu/*allocator* *mem-cache* *disk-cache* "xtdb" nil Storage/VERSION))
 
 (t/deftest test-remote-buffer-pool-setup
   (util/with-tmp-dirs #{path}
@@ -73,8 +73,9 @@
 
     (when root-path
       (t/testing "expect a file to exist under our :disk-store"
-        (t/is (util/path-exists (.resolve root-path k)))
-        (t/is (= 0 (util/compare-nio-buffers-unsigned expected (util/->mmap-path (.resolve root-path k))))))
+        (let [cache-path (.resolve root-path (.resolve (util/->path "xtdb/0") k))]
+          (t/is (util/path-exists cache-path))
+          (t/is (= 0 (util/compare-nio-buffers-unsigned expected (util/->mmap-path cache-path))))))
 
       (t/testing "if the buffer is evicted, it is loaded from disk"
         (.evictCachedBuffer bp k)
@@ -101,7 +102,7 @@
 (t/deftest below-min-size-put-test
   (with-caches {}
     (with-open [bp (-> (Storage/remoteStorage (simulated-obj-store-factory))
-                       (.open tu/*allocator* *mem-cache* *disk-cache* nil Storage/VERSION))]
+                       (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" nil Storage/VERSION))]
       (t/testing "if <= min part size, putObject is used"
         (.putObject bp (util/->path "min-part-put") (utf8-buf "12"))
         (t/is (= [StoreOperation/PUT] (get-remote-calls bp)))
@@ -119,7 +120,7 @@
 (t/deftest local-disk-cache-max-size
   (with-caches {:mem-bytes 12, :disk-bytes 10}
     (with-open [bp (-> (Storage/remoteStorage (simulated-obj-store-factory))
-                       (.open tu/*allocator* *mem-cache* *disk-cache* nil Storage/VERSION))]
+                       (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" nil Storage/VERSION))]
       (t/testing "staying below max size - all elements available"
         (insert-utf8-to-local-cache bp (util/->path "a") 4)
         (insert-utf8-to-local-cache bp (util/->path "b") 4)
@@ -156,7 +157,7 @@
     (with-caches {:mem-bytes 64, :disk-bytes 64}
       ;; Writing files to buffer pool & local-disk-cache
       (with-open [bp (-> (Storage/remoteStorage obj-store-factory)
-                         (.open tu/*allocator* *mem-cache* *disk-cache* nil Storage/VERSION))]
+                         (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" nil Storage/VERSION))]
         (insert-utf8-to-local-cache bp path-a 4)
         (insert-utf8-to-local-cache bp path-b 4)
         (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info *disk-cache-dir*))))
@@ -164,7 +165,7 @@
       ;; Starting a new buffer pool - should load buffers correctly from disk (can be sure its grabbed from disk since using a memory cache and memory object store)
       ;; passing a no-op object store to ensure objects are not loaded from object store and instead only the cache is under test.
       (with-open [bp (-> (Storage/remoteStorage (no-op-object-store-factory))
-                         (.open tu/*allocator* *mem-cache* *disk-cache* nil Storage/VERSION))]
+                         (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" nil Storage/VERSION))]
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-a)))))
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-b)))))))))
 
@@ -273,7 +274,7 @@
   (let [registry (SimpleMeterRegistry.)]
     (with-caches {}
       (with-open [bp (-> (Storage/remoteStorage (simulated-obj-store-factory))
-                         (.open tu/*allocator* *mem-cache* *disk-cache* registry Storage/VERSION))]
+                         (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" registry Storage/VERSION))]
         (let [k1 (util/->path "a")
               k2 (util/->path "b")
               ^ByteBuffer v1 (utf8-buf "aaa")

@@ -44,7 +44,7 @@ class BlockCatalogTest {
     @Test
     fun `garbageCollectBlocks deletes oldest blocks and per-table blocks`(@TempDir tempDir: Path, al: BufferAllocator) {
         MemoryCache.Factory().open(al).use { memoryCache ->
-            Storage.localStorage(tempDir).open(al, memoryCache, null).use { bufferPool ->
+            Storage.localStorage(tempDir).open(al, memoryCache, null, "xtdb").use { bufferPool ->
                 // Write dummy blocks and table blocks
                 val blocksPath = "blocks".asPath
                 val table1BlockPath = "public/foo".tablePath.resolve(blocksPath)

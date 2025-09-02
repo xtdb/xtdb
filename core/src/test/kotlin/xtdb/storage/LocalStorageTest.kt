@@ -22,7 +22,7 @@ class LocalStorageTest : StorageTest() {
 
         localBufferPool =
             localStorage(createTempDirectory("local-buffer-pool-test"))
-                .open(allocator, memoryCache, null)
+                .open(allocator, memoryCache, null, "xtdb")
     }
 
     @AfterEach

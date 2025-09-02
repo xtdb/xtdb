@@ -16,6 +16,7 @@ import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.Relation
 import xtdb.cache.MemoryCache
 import xtdb.cache.PathSlice
+import xtdb.database.DatabaseName
 import xtdb.trie.FileSize
 import xtdb.util.*
 import java.io.Closeable
@@ -32,6 +33,7 @@ internal class LocalStorage(
     allocator: BufferAllocator,
     private val memoryCache: MemoryCache,
     meterRegistry: MeterRegistry? = null,
+    dbName: DatabaseName,
     private val diskStore: Path,
 ) : BufferPool, IEvictBufferTest, Closeable {
 
@@ -40,6 +42,11 @@ internal class LocalStorage(
     private val arrowFooterCache: Cache<Path, ArrowFooter> = arrowFooterCache()
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
     private val memCacheMisses: Counter? = meterRegistry?.counter("memory-cache-misses")
+
+    // we partition the cache by dbName as it's shared between multiple databases
+    // the cache itself has no knowledge of this
+    // '0' for partition 0, in advance of multi-partition support
+    private val cacheRootPath = dbName.asPath.resolve("0")
 
     companion object {
         private fun Path.createTempUploadFile(): Path {
@@ -53,9 +60,11 @@ internal class LocalStorage(
     }
 
     override fun getByteArray(key: Path): ByteArray =
-        memoryCache.get(PathSlice(key)) { pathSlice ->
+        memoryCache.get(PathSlice(cacheRootPath.resolve(key))) { pathSlice ->
             memCacheMisses?.increment()
-            val bufferCachePath = diskStore.resolve(pathSlice.path).orThrowIfMissing(key)
+            val bufferCachePath = diskStore
+                .resolve(cacheRootPath.relativize(pathSlice.path))
+                .orThrowIfMissing(key)
 
             completedFuture(Pair(PathSlice(bufferCachePath, pathSlice.offset, pathSlice.length), null))
         }.use { it.toByteArray() }
@@ -77,11 +86,11 @@ internal class LocalStorage(
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
 
         return memoryCache.get(
-            PathSlice(key, arrowBlock.offset, arrowBlock.metadataLength + arrowBlock.bodyLength)
+            PathSlice(cacheRootPath.resolve(key), arrowBlock.offset, arrowBlock.metadataLength + arrowBlock.bodyLength)
         ) { pathSlice ->
             memCacheMisses?.increment()
             val bufferCachePath =
-                diskStore.resolve(pathSlice.path)
+                diskStore.resolve(cacheRootPath.relativize(pathSlice.path))
                     .takeIf { it.exists() } ?: throw objectMissingException(path)
 
             completedFuture(Pair(PathSlice(bufferCachePath, pathSlice.offset, pathSlice.length), null))
@@ -162,7 +171,7 @@ internal class LocalStorage(
     }
 
     override fun evictCachedBuffer(key: Path) {
-        memoryCache.invalidate(PathSlice(key))
+        memoryCache.invalidate(PathSlice(cacheRootPath.resolve(key)))
     }
 
     override fun close() {

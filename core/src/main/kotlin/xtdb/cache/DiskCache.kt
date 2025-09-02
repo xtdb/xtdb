@@ -81,7 +81,6 @@ class DiskCache internal constructor(val rootPath: Path, val maxSizeBytes: Long)
         LOGGER.debug("disk cache started, existing size: {} bytes", pinningCache.stats0.evictableBytes)
     }
 
-    @Suppress("MemberVisibilityCanBePrivate")
     fun createTempPath(): Path =
         Files.createTempFile(rootPath.resolve(".tmp").createDirectories(), "upload", ".arrow")
 

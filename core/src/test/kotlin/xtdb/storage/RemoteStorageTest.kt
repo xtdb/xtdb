@@ -41,7 +41,7 @@ class RemoteStorageTest : StorageTest() {
         memoryCache = MemoryCache.Factory().open(al)
         remoteBufferPool =
             remoteStorage(SimulatedObjectStoreFactory)
-                .open(al, memoryCache, DiskCache.Factory(localDiskCachePath).build()) as RemoteBufferPool
+                .open(al, memoryCache, DiskCache.Factory(localDiskCachePath).build(), "xtdb") as RemoteBufferPool
 
         // Mocking small value for MIN_MULTIPART_PART_SIZE
         RemoteBufferPool.minMultipartPartSize = 320

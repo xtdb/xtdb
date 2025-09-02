@@ -17,6 +17,7 @@ import xtdb.storage.MemoryStorage
 import xtdb.storage.RemoteBufferPool
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
+import xtdb.database.DatabaseName
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeOnCatch
 import java.nio.file.Path
@@ -43,6 +44,7 @@ object Storage {
     sealed interface Factory {
         fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
+            dbName: DatabaseName,
             meterRegistry: MeterRegistry? = null,
             storageVersion: StorageVersion = VERSION
         ): BufferPool
@@ -60,7 +62,7 @@ object Storage {
     data object InMemoryStorageFactory : Factory {
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
-            meterRegistry: MeterRegistry?, storageVersion: StorageVersion
+            dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion
         ): BufferPool = MemoryStorage(allocator, meterRegistry)
     }
 
@@ -86,11 +88,11 @@ object Storage {
 
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
-            meterRegistry: MeterRegistry?, storageVersion: StorageVersion
+            dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion
         ): BufferPool {
             val diskStore = path.resolve(storageRoot(storageVersion)).also { it.createDirectories() }
 
-            return LocalStorage(allocator, memoryCache, meterRegistry, diskStore)
+            return LocalStorage(allocator, memoryCache, meterRegistry, dbName, diskStore)
         }
     }
 
@@ -113,12 +115,12 @@ object Storage {
 
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
-            meterRegistry: MeterRegistry?, storageVersion: StorageVersion
+            dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion
         ): BufferPool {
             requireNotNull(diskCache) { "diskCache is required for remote storage" }
 
             return objectStore.openObjectStore(storageRoot(storageVersion)).closeOnCatch { objectStore ->
-                RemoteBufferPool(allocator, objectStore, memoryCache, diskCache, meterRegistry)
+                RemoteBufferPool(allocator, objectStore, memoryCache, diskCache, meterRegistry, dbName)
             }
         }
     }

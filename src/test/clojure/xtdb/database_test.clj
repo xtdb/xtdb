@@ -71,7 +71,7 @@
 
             (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db', version: 2}"])
             (t/is (= [{:_id "new-db", :version 2, :_valid_from #xt/zdt "2020-01-03Z[UTC]"}
-                      {:_id "xtdb", :version nil, :_valid_from #xt/zdt "2020-01-01Z[UTC]"}]
+                      {:_id "new-db", :version nil, :_valid_from #xt/zdt "2020-01-02Z[UTC]"}]
                      (jdbc/execute! new-db-conn ["SELECT *, _valid_from FROM foo FOR ALL VALID_TIME"])))
 
             (t/is (= {:_id "xtdb"}

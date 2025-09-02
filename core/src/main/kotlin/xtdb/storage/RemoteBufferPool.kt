@@ -22,6 +22,7 @@ import xtdb.arrow.Relation
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.cache.PathSlice
+import xtdb.database.DatabaseName
 import xtdb.multipart.SupportsMultipart
 import xtdb.multipart.SupportsMultipart.Companion.uploadMultipartBuffers
 import xtdb.trie.FileSize
@@ -40,6 +41,7 @@ internal class RemoteBufferPool(
     val memoryCache: MemoryCache,
     val diskCache: DiskCache,
     meterRegistry: MeterRegistry? = null,
+    dbName: DatabaseName,
 ) : BufferPool, IEvictBufferTest, Closeable {
 
     private val allocator = allocator.openChildAllocator("buffer-pool").also { meterRegistry?.register(it) }
@@ -52,6 +54,10 @@ internal class RemoteBufferPool(
     private val networkWrite: Counter? = meterRegistry?.counter("buffer-pool.network.write")
     private val networkRead: Counter? = meterRegistry?.counter("buffer-pool.network.read")
 
+    // we partition the caches by dbName as they're shared between multiple databases
+    // the caches themselves has no knowledge of this
+    // '0' for partition 0, in advance of multi-partition support
+    private val cacheRootPath = dbName.asPath.resolve("0")
 
     companion object {
         internal var minMultipartPartSize = 5 * 1024 * 1024
@@ -107,19 +113,19 @@ internal class RemoteBufferPool(
         }
 
     override fun getByteArray(key: Path): ByteArray =
-        memoryCache.get(PathSlice(key)) { pathSlice ->
+        memoryCache.get(PathSlice(cacheRootPath.resolve(key))) { pathSlice ->
             memCacheMisses?.increment()
-            diskCache.get(key) { k, tmpFile ->
+            diskCache.get(pathSlice.path) { k, tmpFile ->
                 diskCacheMisses?.increment()
-                getObject(k, tmpFile)
+                getObject(cacheRootPath.relativize(k), tmpFile)
             }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
         }.use { it.toByteArray() }
 
     override fun getFooter(key: Path): ArrowFooter = arrowFooterCache.get(key) {
         diskCache
-            .get(key) { k, tmpFile ->
+            .get(cacheRootPath.resolve(key)) { k, tmpFile ->
                 diskCacheMisses?.increment()
-                getObject(k, tmpFile)
+                getObject(cacheRootPath.relativize(k), tmpFile)
             }.get()
             .use { entry -> entry.path.openReadableChannel().readArrowFooter() }
     }
@@ -133,15 +139,15 @@ internal class RemoteBufferPool(
 
         return memoryCache.get(
             PathSlice(
-                key,
+                cacheRootPath.resolve(key),
                 arrowBlock.offset,
                 arrowBlock.metadataLength + arrowBlock.bodyLength
             )
         ) { pathSlice ->
             memCacheMisses?.increment()
-            diskCache.get(key) { k, tmpFile ->
+            diskCache.get(pathSlice.path) { k, tmpFile ->
                 diskCacheMisses?.increment()
-                getObject(k, tmpFile)
+                getObject(cacheRootPath.relativize(k), tmpFile)
             }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
         }.use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(

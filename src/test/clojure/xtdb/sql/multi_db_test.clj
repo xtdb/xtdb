@@ -1,7 +1,11 @@
 (ns xtdb.sql.multi-db-test
   (:require [clojure.test :as t]
             [next.jdbc :as jdbc]
-            [xtdb.pgwire :as pgw])
+            [xtdb.api :as xt]
+            [xtdb.node :as xtn]
+            [xtdb.pgwire :as pgw]
+            [xtdb.test-util :as tu]
+            [xtdb.util :as util])
   (:import (org.postgresql.util PSQLException)))
 
 (t/deftest test-resolves-other-db
@@ -24,6 +28,22 @@
 
     (t/is (= [{:_id "new-db"} {:_id "xtdb"}]
              (jdbc/execute! xtdb-conn ["SELECT _id FROM new_db.foo UNION ALL SELECT _id FROM foo"])))))
+
+(t/deftest two-databases-with-same-files
+  (let [node-dir (util/->path "target/multi-db/overlapping-caches")]
+    (util/delete-dir node-dir)
+    (with-open [node (xtn/start-node {:databases {:xtdb {:log [:local {:path (.resolve node-dir "xtdb/log")}]
+                                                         :storage [:local {:path (.resolve node-dir "xtdb/objects")}]},
+                                                  :new-db {:log [:local {:path (.resolve node-dir "new_db/log")}]
+                                                           :storage [:local {:path (.resolve node-dir "new_db/objects")}]}}})
+                xtdb-conn (.build (.createConnectionBuilder node))
+                new-db-conn (.build (-> (.createConnectionBuilder node)
+                                        (.database "new_db")))]
+      (jdbc/execute! xtdb-conn ["INSERT INTO foo RECORDS {_id: 'xtdb'}"])
+      (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db'}"])
+      (tu/flush-block! node)
+      (t/is (= [{:xt/id "new-db"}] (xt/q new-db-conn "SELECT * FROM foo")))
+      (t/is (= [{:xt/id "xtdb"}] (xt/q xtdb-conn "SELECT * FROM foo"))))))
 
 (t/deftest deals-with-table-ref-ambiguities
   (with-open [pg (pgw/open-playground)
