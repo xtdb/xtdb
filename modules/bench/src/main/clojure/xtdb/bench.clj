@@ -1,16 +1,15 @@
 (ns xtdb.bench
-  (:require [clojure.data.json :as json]
+  (:require [clj-http.client :as http]
+            [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
-            [xtdb.db-catalog :as db]
             [xtdb.log :as xt-log]
             [xtdb.logging :as logging]
             [xtdb.node :as xtn]
-            [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (com.google.common.collect MinMaxPriorityQueue)
@@ -370,6 +369,22 @@
     :id :bench-log-file
     :parse-fn io/file]])
 
+(defn trigger-cleanup [benchmark-type success?]
+  (when-let [pat (System/getenv "GITHUB_PAT")]
+    (try
+      (let [node-id (System/getenv "XTDB_NODE_ID")]
+        (http/post "https://api.github.com/repos/xtdb/xtdb/actions/workflows/nightly-benchmark-cleanup.yml/dispatches"
+                   {:headers {"Accept" "application/vnd.github+json"
+                            "Authorization" (str "Bearer " pat)}
+                    :content-type :json
+                    :body (json/write-str {"ref" "main"
+                                           "inputs" {"benchType" (name benchmark-type)
+                                                     "status" (if success? "success" "failure")
+                                                     "nodeId" node-id}})})
+        (log/info "Triggered cleanup workflow for" benchmark-type))
+      (catch Exception e
+        (log/warn e "Failed to trigger cleanup workflow")))))
+
 (defn -main [benchmark-type & args]
   (util/install-uncaught-exception-handler!)
   (logging/set-from-env! (System/getenv))
@@ -397,18 +412,29 @@
       :else (let [main-thread (Thread/currentThread)]
               (-> (Runtime/getRuntime)
                   (.addShutdownHook (Thread. (fn []
-                                               (let [shutdown-ms 10000]
-                                                 (.interrupt main-thread)
-                                                 (.join main-thread shutdown-ms)
-                                                 (if (.isAlive main-thread)
-                                                   (do
-                                                     (log/warn "could not stop benchmark cleanly after" shutdown-ms "ms, forcing exit")
-                                                     (-> (Runtime/getRuntime) (.halt 1)))
+                                             (let [shutdown-ms 10000]
+                                               (.interrupt main-thread)
+                                               (.join main-thread shutdown-ms)
+                                               (if (.isAlive main-thread)
+                                                 (do
+                                                   (log/warn "could not stop benchmark cleanly after" shutdown-ms "ms, forcing exit")
+                                                   (-> (Runtime/getRuntime) (.halt 1)))
+                                                 (log/info "Benchmark stopped."))))
+                                           "xtdb.shutdown-hook-thread")))
 
-                                                   (log/info "Benchmark stopped."))))
-
-                                             "xtdb.shutdown-hook-thread")))
-
-              (run-benchmark (->benchmark benchmark-type options) options))))
+              (let [ok? (atom false)]
+                (try
+                  (run-benchmark (->benchmark benchmark-type options) options)
+                  (reset! ok? true)
+                  (catch Throwable t
+                    (when (instance? InterruptedException t)
+                      (.interrupt (Thread/currentThread)))
+                    (log/error "Benchmark failed:" (or (ex-message t) (.getMessage t)))
+                    (throw t))
+                  (finally
+                    (try
+                      (trigger-cleanup benchmark-type @ok?)
+                      (catch Throwable u
+                        (log/error "Cleanup trigger failed:" (.getMessage u))))))))))
 
   (shutdown-agents))
