@@ -168,6 +168,7 @@
        slurp str/split-lines))
 
 (defmethod b/->benchmark :clickbench [_ {:keys [no-load? limit size], :or {size :small}}]
+  (log/info {:no-load? no-load? :limit limit :size size})
   {:title "Clickbench Hits"
    :tasks [{:t :call, :stage :download
             :f (fn [_]

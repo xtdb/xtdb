@@ -47,7 +47,7 @@
 
 (defmethod b/->benchmark :tpch [_ {:keys [scale-factor seed no-load?],
                                    :or {scale-factor 0.01, seed 0}}]
-  (log/info {:scale-factor scale-factor})
+  (log/info {:scale-factor scale-factor :seed seed :no-load? no-load?})
 
   {:title "TPC-H (OLAP)", :seed seed
    :->state #(do {:!state (atom {})})

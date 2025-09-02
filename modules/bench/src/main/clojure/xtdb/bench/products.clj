@@ -40,6 +40,8 @@
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :products [_ {:keys [no-load? limit]}]
+  (log/info {:no-load? no-load? :limit limit})
+
   {:title "Products"
    :tasks [{:t :call, :stage :download
             :f (fn [_]

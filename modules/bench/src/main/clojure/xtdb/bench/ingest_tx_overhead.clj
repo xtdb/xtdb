@@ -57,6 +57,8 @@
    ["-h" "--help"]])
 
 (defn benchmark [{:keys [seed doc-count batch-sizes], :or {seed 0, doc-count 100000, batch-sizes #{1000 100 10 1}}}]
+  (log/info {:doc-count doc-count :batch-sizes batch-sizes})
+
   {:title "Ingest batch vs individual"
    :seed seed
    :tasks (->> [{:t :call
