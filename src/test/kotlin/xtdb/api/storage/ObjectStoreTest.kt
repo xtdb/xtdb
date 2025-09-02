@@ -128,5 +128,4 @@ abstract class ObjectStoreTest {
             assertEquals(setOf("alice", "bob"), objectStore2.allObjects())
         }
     }
-
 }

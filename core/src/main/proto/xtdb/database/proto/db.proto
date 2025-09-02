@@ -1,0 +1,40 @@
+edition = "2023";
+
+package xtdb.database.proto;
+
+option java_multiple_files = true;
+
+import "google/protobuf/any.proto";
+
+message InMemoryLog {
+}
+
+message LocalLog {
+    string path = 1;
+}
+
+message InMemoryStorage {
+}
+
+message LocalStorage {
+    string path = 1;
+}
+
+message RemoteStorage {
+    google.protobuf.Any object_store = 1;
+}
+
+message DatabaseConfig {
+    oneof log {
+        InMemoryLog in_memory_log = 1;
+        LocalLog local_log = 2;
+        google.protobuf.Any other_log = 3;
+    }
+
+    oneof storage {
+        InMemoryStorage in_memory_storage = 4;
+        LocalStorage local_storage = 5;
+        RemoteStorage remote_storage = 6;
+    }
+}
+

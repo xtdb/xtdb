@@ -31,7 +31,7 @@
            [java.nio.channels FileChannel]
            [java.nio.file Path]
            [java.security KeyStore]
-           [java.time Clock Duration Instant ZoneId]
+           [java.time Clock Duration ZoneId]
            [java.util.concurrent ExecutorService Executors TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.antlr.v4.runtime ParserRuleContext)
@@ -41,6 +41,7 @@
            (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb$Config)
            xtdb.api.module.XtdbModule
            xtdb.arrow.RelationReader
+           xtdb.database.Database$Config
            (xtdb.error Anomaly Incorrect Interrupted)
            xtdb.IResultCursor
            (xtdb.query PreparedQuery)))
@@ -331,7 +332,7 @@
         db (or (.databaseOrNull db-cat db-name)
                (when playground?
                  (log/debug "creating playground database" (pr-str db-name))
-                 (db/create-database db-cat db-name))
+                 (.attach db-cat db-name nil))
                (throw (err-invalid-catalog db-name)))
         user (get startup-opts "user")
         conn (assoc conn :node node, :authn authn, :default-db db-name, :db db)]
@@ -853,7 +854,23 @@
                                         (visitShowSessionVariableStatement [_ ctx]
                                           {:statement-type :show-variable
                                            :query sql
-                                           :variable (session-param-name (.identifier ctx))})))))))
+                                           :variable (session-param-name (.identifier ctx))})
+
+                                        (visitAttachDatabaseStatement [_ ctx]
+                                          {:statement-type :attach-db
+                                           :db-name (str (sql/identifier-sym (.dbName ctx)))
+                                           :db-config (try
+                                                        (or (some-> (.configYaml ctx)
+                                                                    (sql/plan-expr env)
+                                                                    (Database$Config/fromYaml))
+                                                            (Database$Config.))
+                                                        (catch Exception e
+                                                          (throw (err/incorrect :xtdb/invalid-database-config
+                                                                                (str "Invalid database config in `ATTACH DATABASE`: " (ex-message e))))))})
+
+                                        (visitDetachDatabaseStatement [_ ctx]
+                                          {:statement-type :detach-db
+                                           :db-name (str (sql/identifier-sym (.dbName ctx)))})))))))
 
               (catch Exception e
                 (log/debug e "Error parsing SQL")
@@ -1278,6 +1295,38 @@
       (inc-error-counter! query-error-counter)
       (throw e))))
 
+(defn- attach-db [{:keys [node conn-state default-db] :as conn} {:keys [db-name db-config]}]
+  (when-not (= default-db "xtdb")
+    (throw (err/incorrect ::attach-db-on-secondary "Can only attach databases when connected to the primary 'xtdb' database."
+                          {:db default-db})))
+
+  (when (false? (get-in @conn-state [:transaction :implicit?]))
+    (throw (err/incorrect ::attach-db-in-tx "Cannot attach a database in a transaction."
+                          {:db-name db-name})))
+
+  (with-auth-check conn
+    (let [{:keys [error] :as tx} (xtp/attach-db node db-name db-config)]
+      (swap! conn-state assoc :await-token (xtp/await-token node), :latest-submitted-tx tx)
+
+      (when error
+        (throw error)))))
+
+(defn- detach-db [{:keys [node conn-state default-db] :as conn} {:keys [db-name]}]
+  (when-not (= default-db "xtdb")
+    (throw (err/incorrect ::detach-db-on-secondary "Can only detach databases when connected to the primary 'xtdb' database."
+                          {:db default-db})))
+
+  (when (false? (get-in @conn-state [:transaction :implicit?]))
+    (throw (err/incorrect ::detach-db-in-tx "Cannot detach a database in a transaction."
+                          {:db-name db-name})))
+
+  (with-auth-check conn
+    (let [{:keys [error] :as tx} (xtp/detach-db node db-name)]
+      (swap! conn-state assoc :await-token (xtp/await-token node), :latest-submitted-tx tx)
+
+      (when error
+        (throw error)))))
+
 (defn execute-portal [{:keys [conn-state] :as conn} {:keys [statement-type canned-response parameter value session-characteristics tx-characteristics] :as portal}]
   (verify-permissibility conn portal)
 
@@ -1340,6 +1389,14 @@
                                                        :transit-msgpack :binary)]
                                      {:copy-format copy-format
                                       :column-formats [copy-format]})))
+
+    :attach-db (do
+                 (attach-db conn portal)
+                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "ATTACH DATABASE"}))
+
+    :detach-db (do
+                 (detach-db conn portal)
+                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "DETACH DATABASE"}))
 
     (throw (UnsupportedOperationException. (pr-str {:portal portal})))))
 

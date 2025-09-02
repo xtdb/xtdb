@@ -151,8 +151,8 @@
 (t/deftest test-memory-log-epochs
   (util/with-tmp-dirs #{local-disk-path}
     ;; Node with local storage and memory log 
-    (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {}]
-                                                         :storage [:local {:path local-disk-path}]}}})]
+    (with-open [node (xtn/start-node {:log [:in-memory {}]
+                                       :storage [:local {:path local-disk-path}]})]
       ;; Submit a few transactions
       (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
       (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])
@@ -175,12 +175,12 @@
      (thrown-with-msg?
       IllegalStateException
       #"Node failed to start due to an invalid transaction log state \(the log is empty\)"
-      (xtn/start-node {:databases {:xtdb {:log [:in-memory {}]
-                                          :storage [:local {:path local-disk-path}]}}})))
+      (xtn/start-node {:log [:in-memory {}]
+                       :storage [:local {:path local-disk-path}]})))
 
     ;; Node with intact storage and empty memory log with epoch set to 1
-    (with-open [node (xtn/start-node {:databases {:xtdb {:log [:in-memory {:epoch 1}]
-                                                         :storage [:local {:path local-disk-path}]}}})]
+    (with-open [node (xtn/start-node {:log [:in-memory {:epoch 1}]
+                                       :storage [:local {:path local-disk-path}]})]
       (t/testing "can query previous indexed values, unindexed values will be lost"
         (t/is (= (set [{:xt/id :foo} {:xt/id :bar}])
                  (set (xt/q node "SELECT _id FROM xt_docs")))))
@@ -200,8 +200,8 @@
 (t/deftest test-local-log-epochs
   (util/with-tmp-dirs #{node-dir}
     ;; Node with local storage and local directory log 
-    (with-open [node (xtn/start-node {:databases {:xtdb {:log [:local {:path (.resolve node-dir "log")}]
-                                                         :storage [:local {:path (.resolve node-dir "objects")}]}}})]
+    (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "log")}]
+                                       :storage [:local {:path (.resolve node-dir "objects")}]})]
       ;; Submit a few transactions
       (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
       (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])
@@ -224,13 +224,13 @@
      (thrown-with-msg?
       IllegalStateException
       #"Node failed to start due to an invalid transaction log state \(the log is empty\)"
-      (xtn/start-node {:databases {:xtdb {:log [:local {:path (.resolve node-dir "new-log")}]
-                                          :storage [:local {:path (.resolve node-dir "objects")}]}}})))
+      (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")}]
+                       :storage [:local {:path (.resolve node-dir "objects")}]})))
 
     ;; Node with intact storage and empty directory-log with epoch set to 1
-    (with-open [node (xtn/start-node {:databases {:xtdb {:log [:local {:path (.resolve node-dir "new-log")
-                                                                       :epoch 1}]
-                                                         :storage [:local {:path (.resolve node-dir "objects")}]}}})]
+    (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")
+                                                     :epoch 1}]
+                                       :storage [:local {:path (.resolve node-dir "objects")}]})]
       (t/testing "can query previous indexed values, unindexed values will be lost"
         (t/is (= (set [{:xt/id :foo} {:xt/id :bar}])
                  (set (xt/q node "SELECT _id FROM xt_docs")))))

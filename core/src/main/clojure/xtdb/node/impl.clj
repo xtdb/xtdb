@@ -22,7 +22,7 @@
            [java.util.concurrent.atomic AtomicReference]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config)
+           (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$XtdbInternal)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.api.query XtqlQuery)
            (xtdb.database Database$Catalog)
@@ -90,6 +90,9 @@
     (->> (vals (:xtdb/modules system))
          (some #(when (instance? clazz %) %))))
 
+  Xtdb$XtdbInternal
+  (getDbCatalog [_] db-cat)
+
   xtp/PNode
   (submit-tx [this tx-ops opts]
     (try
@@ -138,6 +141,42 @@
             (.increment query-error-counter))
           (throw e)))))
 
+  (attach-db [this db-name db-config]
+    (let [primary-db (.getPrimary db-cat)
+          msg-id (xt-log/send-attach-db! primary-db db-name db-config)]
+      (or (let [^TransactionResult tx-res (-> @(.awaitAsync (.getLogProcessor primary-db) msg-id)
+                                              (util/rethrowing-cause))]
+            (when (and tx-res
+                       (= (.getTxId tx-res) msg-id))
+              tx-res))
+
+          (with-open [res (xtp/open-sql-query this "SELECT system_time, committed AS \"committed?\", error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?"
+                                              {:args [msg-id]
+                                               :key-fn (serde/read-key-fn :kebab-case-keyword)})]
+            (let [{:keys [system-time committed? error]} (-> (.findFirst res) (.orElse nil))
+                  system-time (time/->instant system-time)]
+              (if committed?
+                (serde/->tx-committed msg-id system-time)
+                (serde/->tx-aborted msg-id system-time error)))))))
+
+  (detach-db [this db-name]
+    (let [primary-db (.getPrimary db-cat)
+          msg-id (xt-log/send-detach-db! primary-db db-name)]
+      (or (let [^TransactionResult tx-res (-> @(.awaitAsync (.getLogProcessor primary-db) msg-id)
+                                              (util/rethrowing-cause))]
+            (when (and tx-res
+                       (= (.getTxId tx-res) msg-id))
+              tx-res))
+
+          (with-open [res (xtp/open-sql-query this "SELECT system_time, committed AS \"committed?\", error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?"
+                                              {:args [msg-id]
+                                               :key-fn (serde/read-key-fn :kebab-case-keyword)})]
+            (let [{:keys [system-time committed? error]} (-> (.findFirst res) (.orElse nil))
+                  system-time (time/->instant system-time)]
+              (if committed?
+                (serde/->tx-committed msg-id system-time)
+                (serde/->tx-aborted msg-id system-time error)))))))
+
   xtp/PStatus
   (latest-completed-txs [_]
     (->> (.getDatabaseNames db-cat)
@@ -169,7 +208,7 @@
      :await-token (xtp/await-token this)})
 
   xtp/PLocalNode
-  (prepare-sql [this query {:keys [default-db] :as query-opts}]
+  (prepare-sql [this query query-opts]
     (let [ast (cond
                 (instance? Sql$DirectlyExecutableStatementContext query) query
                 (string? query) (antlr/parse-statement query)

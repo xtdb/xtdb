@@ -17,15 +17,16 @@ import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.StringWithEnvVarSerde
-import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
-import xtdb.gcp.CloudStorage.Factory
+import xtdb.gcp.proto.GcsObjectStoreConfig
+import xtdb.gcp.proto.gcsObjectStoreConfig
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.seconds
+import com.google.protobuf.Any as ProtoAny
 
 /**
  * Used to set configuration options for a Google Cloud Storage Object Store, which can be used as implementation of an [object store][xtdb.api.storage.Storage.RemoteStorageFactory.objectStore].
@@ -51,7 +52,7 @@ import kotlin.time.Duration.Companion.seconds
  * ```
  */
 class CloudStorage(
-    projectId: String,
+    private val projectId: String,
     private val bucket: String,
     private val prefix: Path,
 ) : ObjectStore {
@@ -118,6 +119,7 @@ class CloudStorage(
         client.close()
     }
 
+
     companion object {
         @JvmStatic
         fun googleCloudStorage(projectId: String, bucket: String) = Factory(projectId, bucket)
@@ -144,14 +146,32 @@ class CloudStorage(
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
 
         override fun openObjectStore(storageRoot: Path) =
-            CloudStorage(projectId, bucket, prefix?.resolve(storageRoot) ?: storageRoot) }
+            CloudStorage(projectId, bucket, prefix?.resolve(storageRoot) ?: storageRoot)
+
+        override val configProto: ProtoAny by lazy {
+            ProtoAny.pack(gcsObjectStoreConfig {
+                this.projectId = this@Factory.projectId
+                this.bucket = this@Factory.bucket
+                this@Factory.prefix?.toString()?.let { this.prefix = it }
+            }, "proto.xtdb.com")
+        }
+    }
 
     /**
      * @suppress
      */
     class Registration : ObjectStore.Registration {
-        override fun registerSerde(builder: PolymorphicModuleBuilder<ObjectStore.Factory>) {
+        override val protoTag: String get() = "proto.xtdb.com/xtdb.gcp.proto.GcsObjectStoreConfig"
+
+        override fun fromProto(msg: ProtoAny) =
+            msg.unpack(GcsObjectStoreConfig::class.java).let { config ->
+                Factory(
+                    config.projectId, config.bucket,
+                    config.prefix.takeIf { it.isNotEmpty() }?.asPath
+                )
+            }
+
+        override fun registerSerde(builder: PolymorphicModuleBuilder<ObjectStore.Factory>) =
             builder.subclass(Factory::class)
-        }
     }
 }

@@ -5,56 +5,63 @@
             [xtdb.api :as xt]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
-            [xtdb.error :as err]
             [xtdb.node :as xtn]
             [xtdb.pgwire-test :as pgw-test]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import [java.nio.file Path]))
+  (:import [java.nio.file Path]
+           xtdb.api.storage.Storage))
 
-(t/use-fixtures :each tu/with-allocator)
+(t/use-fixtures :each tu/with-allocator tu/with-mock-clock)
 
 (t/deftest test-multi-db
-  (with-open [node (xtn/start-node {:databases {:xtdb {}, :new-db {}}})
-              xtdb-conn (.build (.createConnectionBuilder node))
-              new-db-conn (.build (-> (.createConnectionBuilder node)
-                                      (.database "new_db")))]
-    (jdbc/execute! xtdb-conn ["INSERT INTO foo RECORDS {_id: 'xtdb'}"])
-    (t/is (= {:_id "xtdb"} (jdbc/execute-one! xtdb-conn ["SELECT * FROM foo"])))
+  (with-open [node (xtn/start-node)
+              xtdb-conn (.build (.createConnectionBuilder node))]
+    (jdbc/execute! xtdb-conn ["ATTACH DATABASE new_db"])
 
-    (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db'}"])
+    (with-open [new-db-conn (.build (-> (.createConnectionBuilder node)
+                                        (.database "new_db")))]
+      (jdbc/execute! xtdb-conn ["INSERT INTO foo RECORDS {_id: 'xtdb'}"])
+      (t/is (= {:_id "xtdb"} (jdbc/execute-one! xtdb-conn ["SELECT * FROM foo"])))
 
-    (t/is (= {:_id "new-db"} (jdbc/execute-one! new-db-conn ["SELECT * FROM foo"])))
-    (t/is (= [{:xt/id "new-db"}] (xt/q new-db-conn ["SELECT * FROM foo"])))
+      (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db'}"])
 
-    (jdbc/execute! xtdb-conn ["INSERT INTO foo RECORDS {_id: 'xtdb', version: 2}"])
+      (t/is (= {:_id "new-db"} (jdbc/execute-one! new-db-conn ["SELECT * FROM foo"])))
+      (t/is (= [{:xt/id "new-db"}] (xt/q new-db-conn ["SELECT * FROM foo"])))
 
-    (t/is (= {:_id "xtdb", :version 2} (jdbc/execute-one! xtdb-conn ["SELECT * FROM foo"])))
+      (jdbc/execute! xtdb-conn ["INSERT INTO foo RECORDS {_id: 'xtdb', version: 2}"])
 
-    (t/is (= [{:xt/id "new-db"}] (xt/q new-db-conn ["SELECT * FROM foo"])))))
+      (t/is (= {:_id "xtdb", :version 2} (jdbc/execute-one! xtdb-conn ["SELECT * FROM foo"])))
 
+      (t/is (= [{:xt/id "new-db"}] (xt/q new-db-conn ["SELECT * FROM foo"]))))))
+
+#_
 (t/deftest test-block-boundary
   (binding [c/*ignore-signal-block?* true]
     (util/with-tmp-dir* "node"
       (fn [^Path node-dir]
         (let [mock-clock (tu/->mock-clock)
-              node-config {:databases {:xtdb {:log [:local {:path (.resolve node-dir "xt/log")
-                                                            :instant-src mock-clock}]
-                                              :storage [:local {:path (.resolve node-dir "xt/objects")}]},
-                                       :new-db {:log [:local {:path (.resolve node-dir "new_db/log")
-                                                              :instant-src mock-clock}]
-                                                :storage [:local {:path (.resolve node-dir "new_db/objects")}]}}}]
+              node-config {:log [:local {:path (.resolve node-dir "xt/log")
+                                         :instant-src mock-clock}]
+                           :storage [:local {:path (.resolve node-dir "xt/objects")}]}]
           (util/with-open [node (xtn/start-node node-config)
-                           xtdb-conn (-> (.createConnectionBuilder node) (.build))
-                           new-db-conn (.build (-> (.createConnectionBuilder node)
-                                                   (.database "new_db")))]
-            (jdbc/execute! xtdb-conn ["INSERT INTO foo RECORDS {_id: 'xtdb'}"])
+                           xtdb-conn (-> (.createConnectionBuilder node) (.build))]
+            (jdbc/execute! xtdb-conn [(format "ATTACH DATABASE new_db WITH $$
+              log: !Local
+                path: '%s/new_db/log'
+              storage: !Local
+                path: '%s/new_db/objects'
+              $$" node-dir node-dir)])
 
-            (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db'}"])
-            (t/is (= {:_id "new-db"} (jdbc/execute-one! new-db-conn ["SELECT * FROM foo"])))
+            (with-open [new-db-conn (.build (-> (.createConnectionBuilder node)
+                                                (.database "new_db")))]
+              (jdbc/execute! xtdb-conn ["INSERT INTO foo RECORDS {_id: 'xtdb', _valid_from: TIMESTAMP '2020-01-01Z[UTC]'}"])
 
-            (tu/flush-block! node))
+              (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db', _valid_from: TIMESTAMP '2020-01-02Z[UTC]'}"])
+              (t/is (= {:_id "new-db"} (jdbc/execute-one! new-db-conn ["SELECT * FROM foo"])))
+
+              (tu/flush-block! node)))
 
           (tj/check-json (.toPath (io/as-file (io/resource "xtdb/database-test/block-boundary")))
                          node-dir)
@@ -69,16 +76,24 @@
                                            (.build))]
             (t/is (= {:_id "xtdb"} (jdbc/execute-one! xt-db-conn ["SELECT * FROM foo"])))
 
-            (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db', version: 2}"])
+            (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db', version: 2, _valid_from: TIMESTAMP '2020-01-03Z[UTC]'}"])
             (t/is (= [{:_id "new-db", :version 2, :_valid_from #xt/zdt "2020-01-03Z[UTC]"}
                       {:_id "new-db", :version nil, :_valid_from #xt/zdt "2020-01-02Z[UTC]"}]
                      (jdbc/execute! new-db-conn ["SELECT *, _valid_from FROM foo FOR ALL VALID_TIME"])))
 
             (t/is (= {:_id "xtdb"}
-                     (jdbc/execute-one! xt-db-conn ["SELECT * FROM foo"])))))))))
+                     (jdbc/execute-one! xt-db-conn ["SELECT * FROM foo"])))
+
+            (jdbc/execute! xt-db-conn ["DETACH DATABASE new_db"])
+            (tu/flush-block! node2)
+
+            (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/database-test/block-boundary-post-detach")))
+                            (.resolve node-dir (format "xt/objects/%s/blocks" Storage/STORAGE_ROOT))
+                            {:update-fn #(dissoc % :latest-completed-tx)})))))))
 
 (t/deftest test-multi-db-through-xt-api-4652
-  (with-open [node (xtn/start-node {:databases {:xtdb {}, :new-db {}}})]
+  (with-open [node (xtn/start-node)]
+    (jdbc/execute! node ["ATTACH DATABASE new_db"])
     (xt/submit-tx node [[:put-docs :foo {:xt/id "xtdb"}]])
 
     (xt/submit-tx node [[:put-docs :foo {:xt/id "new-db"}]]

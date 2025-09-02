@@ -45,10 +45,10 @@
                                  :trie-metadata (some-> (trie-cat/<-trie-metadata (.getTrieMetadata trie-details))
                                                         (update :iid-bloom (juxt hash #(.getCardinality ^ImmutableRoaringBitmap %))))})))))
 
-(defn- write-pbuf-edn-file [^Path path parse-fn]
+(defn- write-pbuf-edn-file [^Path path parse-fn update-fn]
   (let [edn-file (.resolveSibling path (str (.getFileName path) ".edn"))]
     (with-open [out (io/writer (.toFile edn-file))]
-      (pp/pprint (parse-fn (Files/readAllBytes path)) out))
+      (pp/pprint (update-fn (parse-fn (Files/readAllBytes path))) out))
 
     edn-file))
 
@@ -62,9 +62,10 @@
   ([expected-dir actual-dir] (check-pbuf expected-dir actual-dir {}))
 
   ([^Path expected-dir, ^Path actual-dir,
-    {:keys [parse-fn file-pattern]
+    {:keys [parse-fn file-pattern update-fn]
      :or {parse-fn (multi-parse-fn [#(some-> (ignoring-ex (Block/parseFrom ^bytes %)) <-Block)
-                                    #(some-> (ignoring-ex (TableBlock/parseFrom ^bytes %)) <-TableBlock)])}}]
+                                    #(some-> (ignoring-ex (TableBlock/parseFrom ^bytes %)) <-TableBlock)])
+          update-fn identity}}]
 
    ;; uncomment if you want to remove files
    #_(delete-and-recreate-dir expected-dir) ;; <<no-commit>>
@@ -73,7 +74,7 @@
            :when (and (str/ends-with? file-name ".binpb")
                       (or (nil? file-pattern)
                           (re-matches file-pattern file-name)))]
-     (doto (write-pbuf-edn-file path parse-fn)
+     (doto (write-pbuf-edn-file path parse-fn update-fn)
        ;; uncomment this to reset the expected file (but don't commit it)
        #_(copy-expected-file expected-dir actual-dir))) ;; <<no-commit>>
 
@@ -86,4 +87,4 @@
                  actual (.resolve actual-dir file-key)]]
      (t/testing (str file-key)
        (t/is (= (read-string (slurp (.toFile expected)))
-                (read-string (slurp (.toFile actual)))))))))
+                (update-fn (read-string (slurp (.toFile actual))))))))))

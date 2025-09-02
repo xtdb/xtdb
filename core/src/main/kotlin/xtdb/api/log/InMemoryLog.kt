@@ -9,6 +9,10 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import xtdb.api.log.Log.*
+import xtdb.database.proto.DatabaseConfig
+import xtdb.database.proto.DatabaseConfigKt
+import xtdb.database.proto.databaseConfig
+import xtdb.database.proto.inMemoryLog
 import java.time.Instant
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS
@@ -27,6 +31,10 @@ class InMemoryLog(private val instantSource: InstantSource, override val epoch: 
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
 
         override fun openLog(clusters: Map<LogClusterAlias, Cluster>) = InMemoryLog(instantSource, epoch)
+
+        override fun writeTo(dbConfig: DatabaseConfig.Builder) {
+            dbConfig.inMemoryLog = inMemoryLog {  }
+        }
     }
 
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)

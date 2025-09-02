@@ -2,13 +2,11 @@ server:
   host: '*'
   port: 5432
 
-databases:
-  xtdb:
-    log: !Local
-      path: "/var/lib/xtdb/log"
+log: !Local
+  path: "/var/lib/xtdb/log"
 
-    storage: !Local
-      path: "/var/lib/xtdb/buffers"
+storage: !Local
+  path: "/var/lib/xtdb/buffers"
 
 healthz:
   host: '*'

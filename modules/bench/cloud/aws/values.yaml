@@ -20,16 +20,14 @@ providerConfig:
         propertiesMap:
           max.request.size: 5242880
 
-    databases:
-      xtdb:
-        log: !Kafka
-          cluster: kafkaCluster
-          topic: !Env XTDB_LOG_TOPIC
+    log: !Kafka
+      cluster: kafkaCluster
+      topic: !Env XTDB_LOG_TOPIC
 
-        storage: !Remote
-          objectStore: !S3
-            bucket: !Env AWS_S3_BUCKET
-            prefix: "xtdb-object-store"
+    storage: !Remote
+      objectStore: !S3
+        bucket: !Env AWS_S3_BUCKET
+        prefix: "xtdb-object-store"
 
     diskCache:
       path: /var/lib/xtdb/buffers/disk-cache

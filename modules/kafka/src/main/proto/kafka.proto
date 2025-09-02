@@ -1,0 +1,11 @@
+edition = "2023";
+
+package xtdb.kafka.proto;
+
+option java_multiple_files = true;
+
+message KafkaLogConfig {
+    string log_cluster_alias = 1;
+    string topic = 2;
+    int32 epoch = 3;
+}

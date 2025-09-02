@@ -1,12 +1,12 @@
 (ns ^:kafka xtdb.kafka-test
   (:require [clojure.test :as t]
+            [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.db-catalog :as db]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import org.apache.kafka.common.KafkaException
-           org.testcontainers.containers.GenericContainer
            org.testcontainers.kafka.ConfluentKafkaContainer
            org.testcontainers.utility.DockerImageName
            [xtdb.api.log Log]))
@@ -33,8 +33,8 @@
 (t/deftest ^:integration test-kafka
   (let [test-uuid (random-uuid)]
     (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
-                                      :databases {:xtdb {:log [:kafka {:cluster :my-kafka
-                                                                       :topic (str "xtdb.kafka-test." test-uuid)}]}}})]
+                                      :log [:kafka {:cluster :my-kafka
+                                                    :topic (str "xtdb.kafka-test." test-uuid)}]})]
       (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]]))
 
       (t/is (= [{:xt/id :foo}]
@@ -44,18 +44,27 @@
 (t/deftest ^:integration test-multi-db
   (let [test-uuid (random-uuid)]
     (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
-                                      :databases {:xtdb {:log [:kafka {:cluster :my-kafka
-                                                                       :topic (str "xtdb.kafka-test." test-uuid)}]}
-                                                  :secondary {:log [:kafka {:cluster :my-kafka
-                                                                            :topic (str "xtdb.kafka-test-secondary." test-uuid)}]}}})
-                xtdb-conn (.build (.createConnectionBuilder node))
-                secondary-conn (.build (-> (.createConnectionBuilder node)
-                                           (.database "secondary")))]
-      (t/is (xt/submit-tx xtdb-conn [[:put-docs :docs {:xt/id :primary}]]))
-      (t/is (xt/submit-tx secondary-conn [[:put-docs :docs {:xt/id :secondary}]]))
+                                      :log [:kafka {:cluster :my-kafka
+                                                    :topic (str "xtdb.kafka-test." test-uuid)}]})
+                xtdb-conn (.build (.createConnectionBuilder node))]
+      (jdbc/execute! xtdb-conn [(format "ATTACH DATABASE secondary WITH $$
+         log: !Kafka
+           cluster: my-kafka
+           topic: xtdb.kafka-test-secondary.%s
+         $$" test-uuid)])
+      (with-open [secondary-conn (.build (-> (.createConnectionBuilder node)
+                                   (.database "secondary")))]
 
-      (t/is (= [{:xt/id :primary}] (xt/q xtdb-conn "SELECT _id FROM docs")))
-      (t/is (= [{:xt/id :secondary}] (xt/q secondary-conn "SELECT _id FROM docs"))))))
+       (t/is (xt/submit-tx xtdb-conn [[:put-docs :docs {:xt/id :primary}]]))
+       (t/is (xt/submit-tx secondary-conn [[:put-docs :docs {:xt/id :secondary}]]))
+
+       (t/is (= [{:xt/id :primary}] (xt/q xtdb-conn "SELECT _id FROM docs")))
+       (t/is (= [{:xt/id :secondary}] (xt/q secondary-conn "SELECT _id FROM docs")))
+
+       (tu/flush-block! node)
+
+       (t/is (= [{:xt/id :primary}] (xt/q xtdb-conn "SELECT _id FROM docs")))
+       (t/is (= [{:xt/id :secondary}] (xt/q secondary-conn "SELECT _id FROM docs")))))))
 
 (t/deftest ^:integration test-kafka-setup-with-provided-opts
   (let [test-uuid (random-uuid)]
@@ -63,9 +72,9 @@
                                                                         :poll-duration "PT2S"
                                                                         :properties-map {}
                                                                         :properties-file nil}]}
-                                      :databases {:xtdb {:log [:kafka {:cluster :my-kafka
-                                                                       :topic (str "xtdb.kafka-test." test-uuid)
-                                                                       :create-topic? true}]}}})]
+                                      :log [:kafka {:cluster :my-kafka
+                                                    :topic (str "xtdb.kafka-test." test-uuid)
+                                                    :create-topic? true}]})]
       (t/testing "KafkaLog successfully created"
         (t/is (instance? Log (.getLog (db/primary-db node))))))))
 
@@ -76,9 +85,9 @@
                                                                           :poll-duration "PT2S"
                                                                           :properties-map {}
                                                                           :properties-file nil}]}
-                                        :databases {:xtdb {:log [:kafka {:cluster :my-kafka
-                                                                         :topic (str "xtdb.kafka-test." test-uuid)}]
-                                                           :storage [:remote {:object-store [:in-memory {}]}]}}
+                                        :log [:kafka {:cluster :my-kafka
+                                                      :topic (str "xtdb.kafka-test." test-uuid)}]
+                                        :storage [:remote {:object-store [:in-memory {}]}]
                                         :disk-cache {:path path}})]
         (t/testing "Send a transaction"
           (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]]))))
@@ -95,9 +104,9 @@
                           #"Failed to construct kafka producer"
                           (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers "nonresolvable:9092"
                                                                              :some-secret "foobar"}]}
-                                           :databases {:xtdb {:log [:kafka {:cluster :my-kafka
-                                                                            :topic "topic"
-                                                                            :create-topic? false}]}}}))))
+                                           :log [:kafka {:cluster :my-kafka
+                                                         :topic "topic"
+                                                         :create-topic? false}]}))))
 
 (t/deftest ^:integration test-kafka-topic-cleared
   (let [original-topic (str "xtdb.kafka-test." (random-uuid))
@@ -108,10 +117,10 @@
                                                                           :poll-duration "PT2S"
                                                                           :properties-map {}
                                                                           :properties-file nil}]}
-                                        :databases {:xtdb {:log [:kafka {:cluster :my-kafka
-                                                                         :topic original-topic
-                                                                         :create-topic? true}]
-                                                           :storage [:local {:path local-disk-path}]}}})]
+                                        :log [:kafka {:cluster :my-kafka
+                                                      :topic original-topic
+                                                      :create-topic? true}]
+                                        :storage [:local {:path local-disk-path}]})]
         ;; Submit a few transactions
         (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
         (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])
@@ -138,21 +147,21 @@
                                                            :poll-duration "PT2S"
                                                            :properties-map {}
                                                            :properties-file nil}]}
-                         :databases {:xtdb {:log [:kafka {:cluster :my-kafka
-                                                          :topic empty-topic
-                                                          :create-topic? true}]
-                                            :storage [:local {:path local-disk-path}]}}})))
+                         :log [:kafka {:cluster :my-kafka
+                                       :topic empty-topic
+                                       :create-topic? true}]
+                         :storage [:local {:path local-disk-path}]})))
 
       ;; Node with intact storage and topic 2 (ie, empty topic) along with setting log offset
       (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
                                                                           :poll-duration "PT2S"
                                                                           :properties-map {}
                                                                           :properties-file nil}]}
-                                        :databases {:xtdb {:log [:kafka {:cluster :my-kafka
-                                                                         :topic empty-topic
-                                                                         :create-topic? true
-                                                                         :epoch 1}]
-                                                           :storage [:local {:path local-disk-path}]}}})]
+                                        :log [:kafka {:cluster :my-kafka
+                                                      :topic empty-topic
+                                                      :create-topic? true
+                                                      :epoch 1}]
+                                        :storage [:local {:path local-disk-path}]})]
         (t/testing "can query previous indexed values, unindexed values will be lost"
           (t/is (= (set [{:xt/id :foo} {:xt/id :bar}])
                    (set (xt/q node "SELECT _id FROM xt_docs")))))
@@ -173,11 +182,11 @@
                                                                           :poll-duration "PT2S"
                                                                           :properties-map {}
                                                                           :properties-file nil}]}
-                                        :databases {:xtdb {:log [:kafka {:cluster :my-kafka
-                                                                         :topic empty-topic
-                                                                         :create-topic? true
-                                                                         :epoch 1}]
-                                                           :storage [:local {:path local-disk-path}]}}})]
+                                        :log [:kafka {:cluster :my-kafka
+                                                      :topic empty-topic
+                                                      :create-topic? true
+                                                      :epoch 1}]
+                                        :storage [:local {:path local-disk-path}]})]
         (t/testing "can query all previously indexed values, including those after new epoch started"
           (t/is (= (set [{:xt/id :foo}
                          {:xt/id :bar}
@@ -203,8 +212,8 @@
       ;; Start a node, write a few transactions to the original topic
       (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
                                                                           :poll-duration "PT2S"}]}
-                                        :databases {:xtdb {:log [:kafka {:cluster :my-kafka, :topic original-topic}]
-                                                           :storage [:local {:path local-disk-path}]}}})]
+                                        :log [:kafka {:cluster :my-kafka, :topic original-topic}]
+                                        :storage [:local {:path local-disk-path}]})]
         (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
         (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])
         (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]])
@@ -224,10 +233,10 @@
       ;; - Submit two txes to it.
       (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
                                                                           :poll-duration "PT2S"}]}
-                                        :databases {:xtdb {:log [:kafka {:cluster :my-kafka
-                                                                         :topic stale-topic
-                                                                         :create-topic? true}]
-                                                           :storage [:in-memory {}]}}})]
+                                        :log [:kafka {:cluster :my-kafka
+                                                      :topic stale-topic
+                                                      :create-topic? true}]
+                                        :storage [:in-memory {}]})]
         (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
         (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]]))
 
@@ -238,21 +247,21 @@
         #"Node failed to start due to an invalid transaction log state \(epoch=0, offset=1\) that does not correspond with the latest indexed transaction \(epoch=0 and offset=2\)"
         (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
                                                            :poll-duration "PT2S"}]}
-                         :databases {:xtdb {:log [:kafka {:cluster :my-kafka
-                                                          :topic stale-topic
-                                                          :create-topic? false}]
-                                            :storage [:local {:path local-disk-path}]}}})))
+                         :log [:kafka {:cluster :my-kafka
+                                       :topic stale-topic
+                                       :create-topic? false}]
+                         :storage [:local {:path local-disk-path}]})))
 
       ;; Attempt to restart the node with intact storage, a new topic + new epoch
       (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
                                                                           :poll-duration "PT2S"
                                                                           :properties-map {}
                                                                           :properties-file nil}]}
-                                        :databases {:xtdb {:log [:kafka {:cluster :my-kafka
-                                                                         :topic empty-topic
-                                                                         :create-topic? true
-                                                                         :epoch 1}]
-                                                           :storage [:local {:path local-disk-path}]}}})]
+                                        :log [:kafka {:cluster :my-kafka
+                                                      :topic empty-topic
+                                                      :create-topic? true
+                                                      :epoch 1}]
+                                        :storage [:local {:path local-disk-path}]})]
         (t/testing "can query previous indexed values, unindexed values will be lost"
           (t/is (= (set [{:xt/id :foo} {:xt/id :bar} {:xt/id :baz}])
                    (set (xt/q node "SELECT _id FROM xt_docs")))))

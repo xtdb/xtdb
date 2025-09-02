@@ -4,7 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
-import xtdb.api.storage.Storage.localStorage
+import xtdb.api.storage.Storage
 import xtdb.cache.MemoryCache
 import java.nio.file.Files.createTempDirectory
 
@@ -21,8 +21,8 @@ class LocalStorageTest : StorageTest() {
         memoryCache = MemoryCache.Factory().open(allocator)
 
         localBufferPool =
-            localStorage(createTempDirectory("local-buffer-pool-test"))
-                .open(allocator, memoryCache, null, "xtdb")
+            Storage.local(createTempDirectory("local-buffer-pool-test"))
+              .open(allocator, memoryCache, null, "xtdb")
     }
 
     @AfterEach

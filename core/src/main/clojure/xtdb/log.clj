@@ -20,7 +20,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api IndexerConfig TransactionKey Xtdb$Config)
-           (xtdb.api.log Log Log$Cluster$Factory Log$Factory Log$Message$FlushBlock Log$Message$Tx Log$MessageMetadata)
+           (xtdb.api.log Log Log$Cluster$Factory Log$Factory Log$Message$Tx Log$MessageMetadata)
            (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
@@ -246,19 +246,26 @@
             (.open factory)))
     (into {} !clusters)))
 
-(defmethod db/->log-factory :in-memory [_ {:keys [instant-src epoch]}]
-  (cond-> (Log/getInMemoryLog)
-    instant-src (.instantSource instant-src)
-    epoch (.epoch epoch)))
+(defmethod xtn/apply-config! ::in-memory [^Xtdb$Config config _ {:keys [instant-src epoch]}]
+  (.log config
+        (cond-> (Log/getInMemoryLog)
+          instant-src (.instantSource instant-src)
+          epoch (.epoch epoch))))
 
-(defmethod db/->log-factory :local [_ {:keys [path instant-src epoch instant-source-for-non-tx-msgs?]}]
-  (cond-> (Log/localLog (util/->path path))
-    instant-src (.instantSource instant-src)
-    epoch (.epoch epoch)
-    instant-source-for-non-tx-msgs? (.useInstantSourceForNonTx)))
+(defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path instant-src epoch instant-source-for-non-tx-msgs?]}]
+  (.log config
+        (cond-> (Log/localLog (util/->path path))
+          instant-src (.instantSource instant-src)
+          epoch (.epoch epoch)
+          instant-source-for-non-tx-msgs? (.useInstantSourceForNonTx))))
 
-(defmethod db/->log-factory :kafka [_ opts]
-  (db/->log-factory :xtdb/kafka opts))
+(defmethod xtn/apply-config! :xtdb/log [^Xtdb$Config config _ [tag opts]]
+  (xtn/apply-config! config
+                     (case tag
+                       :in-memory ::in-memory
+                       :local ::local
+                       :kafka :xtdb/kafka)
+                     opts))
 
 (defmethod ig/prep-key :xtdb/log [_ {:keys [base factory]}]
   {:base base
@@ -329,10 +336,10 @@
    :block-flush-duration (.getFlushDuration indexer-conf)
    :skip-txs (.getSkipTxs indexer-conf)})
 
-(defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry]} :base
+(defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry db-catalog]} :base
                                                :keys [allocator db indexer compactor block-flush-duration skip-txs] :as deps}]
   (when deps
-    (LogProcessor. allocator meter-registry db indexer compactor block-flush-duration (set skip-txs))))
+    (LogProcessor. allocator meter-registry db-catalog db indexer compactor block-flush-duration (set skip-txs))))
 
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
   (util/close log-processor))
@@ -358,5 +365,12 @@
   ([node timeout] (.syncAll (db/<-node node) timeout)))
 
 (defn send-flush-block-msg! [^Database db]
-  @(-> (.getLog db)
-       (.appendMessage (Log$Message$FlushBlock. (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1)))))
+  (.sendFlushBlockMessage db))
+
+(defn send-attach-db! ^long [^Database primary-db, db-name, db-config]
+  (MsgIdUtil/offsetToMsgId (.getEpoch (.getLog primary-db))
+                           (.getLogOffset (.sendAttachDbMessage primary-db db-name db-config))))
+
+(defn send-detach-db! ^long [^Database primary-db, db-name]
+  (MsgIdUtil/offsetToMsgId (.getEpoch (.getLog primary-db))
+                           (.getLogOffset (.sendDetachDbMessage primary-db db-name))))

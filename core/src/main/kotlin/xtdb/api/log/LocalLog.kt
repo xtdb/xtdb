@@ -15,6 +15,8 @@ import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.log.Log.*
+import xtdb.database.proto.DatabaseConfig
+import xtdb.database.proto.localLog
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
 import java.io.DataInputStream
@@ -33,7 +35,12 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.Int.Companion.SIZE_BYTES as INT_BYTES
 import kotlin.Long.Companion.SIZE_BYTES as LONG_BYTES
 
-class LocalLog(rootPath: Path, private val instantSource: InstantSource, override val epoch: Int, val useInstantSourceForNonTx: Boolean) : Log {
+class LocalLog(
+    rootPath: Path,
+    private val instantSource: InstantSource,
+    override val epoch: Int,
+    val useInstantSourceForNonTx: Boolean
+) : Log {
     companion object {
         private val Path.logFilePath get() = resolve("LOG")
 
@@ -275,8 +282,15 @@ class LocalLog(rootPath: Path, private val instantSource: InstantSource, overrid
         @Suppress("unused")
         fun instantSource(instantSource: InstantSource) = apply { this.instantSource = instantSource }
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
-        fun useInstantSourceForNonTx() = apply { this.useInstantSourceForNonTx = true}
+        fun useInstantSourceForNonTx() = apply { this.useInstantSourceForNonTx = true }
 
-        override fun openLog(clusters: Map<LogClusterAlias, Cluster>) = LocalLog(path, instantSource, epoch, useInstantSourceForNonTx)
+        override fun openLog(clusters: Map<LogClusterAlias, Cluster>) =
+            LocalLog(path, instantSource, epoch, useInstantSourceForNonTx)
+
+        override fun writeTo(dbConfig: DatabaseConfig.Builder) {
+            dbConfig.localLog = localLog {
+                this.path = this@Factory.path.toString()
+            }
+        }
     }
 }

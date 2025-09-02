@@ -2,6 +2,7 @@
 
 package xtdb.aws
 
+import com.google.protobuf.Any as ProtoAny
 import kotlinx.coroutines.*
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.future.future
@@ -25,6 +26,9 @@ import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
+import xtdb.aws.proto.S3ObjectStoreConfig
+import xtdb.aws.proto.s3Credentials
+import xtdb.aws.proto.s3ObjectStoreConfig
 import xtdb.aws.s3.S3Configurator
 import xtdb.multipart.IMultipartUpload
 import xtdb.multipart.SupportsMultipart
@@ -62,6 +66,7 @@ class S3(
     private val bucket: String,
     private val prefix: Path,
     private val configurator: S3Configurator,
+    private val factory: Factory,
 ) : ObjectStore, SupportsMultipart<CompletedPart> {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -284,7 +289,25 @@ class S3(
                         s3Configurator.configureClient(this)
                     }.build()
 
-            return S3(client, bucket, prefix?.resolve(storageRoot) ?: storageRoot, s3Configurator)
+            return S3(client, bucket, prefix?.resolve(storageRoot) ?: storageRoot, s3Configurator, this)
+        }
+
+        override val configProto by lazy {
+            ProtoAny.pack(s3ObjectStoreConfig {
+                this.bucket = this@Factory.bucket
+                this@Factory.prefix?.toString()?.let { this.prefix = it }
+                
+                this@Factory.region?.let { this.region = it }
+                this@Factory.endpoint?.let { this.endpoint = it }
+                this.pathStyleAccessEnabled = this@Factory.pathStyleAccessEnabled
+                
+                this@Factory.credentials?.let { creds ->
+                    this.credentials = s3Credentials {
+                        this.accessKey = creds.accessKey
+                        this.secretKey = creds.secretKey
+                    }
+                }
+            }, "proto.xtdb.com")
         }
     }
 
@@ -292,6 +315,20 @@ class S3(
      * @suppress
      */
     class Registration : ObjectStore.Registration {
+        override val protoTag = "proto.xtdb.com/xtdb.aws.proto.S3ObjectStoreConfig"
+
+        override fun fromProto(msg: ProtoAny) =
+            msg.unpack(S3ObjectStoreConfig::class.java).let { config ->
+                Factory(
+                    region = config.region.takeIf { it.isNotEmpty() },
+                    bucket = config.bucket,
+                    prefix = config.prefix.takeIf { it.isNotEmpty() }?.asPath,
+                    credentials = config.credentials?.let { BasicCredentials(it.accessKey, it.secretKey) },
+                    endpoint = config.endpoint.takeIf { it.isNotEmpty() },
+                    pathStyleAccessEnabled = config.pathStyleAccessEnabled
+                )
+            }
+
         override fun registerSerde(builder: PolymorphicModuleBuilder<ObjectStore.Factory>) {
             builder.subclass(Factory::class)
         }

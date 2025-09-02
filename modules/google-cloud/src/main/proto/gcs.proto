@@ -1,0 +1,11 @@
+edition = "2023";
+
+package xtdb.gcp.proto;
+
+option java_multiple_files = true;
+
+message GcsObjectStoreConfig {
+    string project_id = 1;
+    string bucket = 2;
+    string prefix = 3;
+}

@@ -13,7 +13,9 @@ import org.junit.jupiter.api.Test
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import xtdb.api.log.Log.*
 import xtdb.api.storage.Storage
+import xtdb.database.Database
 import xtdb.log.proto.TrieDetails
+import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.time.Duration
 import java.util.Collections.synchronizedList
@@ -54,6 +56,10 @@ class KafkaClusterTest {
 
         val addedTrieDetails = listOf(trieDetails("foo", 12), trieDetails("bar", 18))
 
+        val databaseConfig = Database.Config(
+            Log.localLog("log-path".asPath), Storage.local("storage-path".asPath)
+        )
+        
         KafkaCluster.ClusterFactory(container.bootstrapServers)
             .pollDuration(Duration.ofMillis(100))
             .open().use { cluster ->
@@ -68,12 +74,14 @@ class KafkaClusterTest {
 
                             log.appendMessage(Message.TriesAdded(Storage.VERSION, addedTrieDetails)).await()
 
-                            while (msgs.flatten().size < 3) delay(100)
+                            log.appendMessage(Message.AttachDatabase("foo", databaseConfig))
+
+                            while (msgs.flatten().size < 4) delay(100)
                         }
                     }
             }
 
-        assertEquals(3, msgs.flatten().size)
+        assertEquals(4, msgs.flatten().size)
 
         val allMsgs = msgs.flatten()
 
@@ -90,6 +98,12 @@ class KafkaClusterTest {
         allMsgs[2].message.let {
             check(it is Message.TriesAdded)
             assertEquals(addedTrieDetails, it.tries)
+        }
+
+        allMsgs[3].message.let {
+            check(it is Message.AttachDatabase)
+            assertEquals("foo", it.dbName)
+            assertEquals(databaseConfig, it.config)
         }
     }
 }

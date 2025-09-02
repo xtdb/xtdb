@@ -8,6 +8,8 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("org.jetbrains.dokka")
+
+    alias(libs.plugins.protobuf)
 }
 
 publishing {
@@ -28,8 +30,25 @@ dependencies {
     api("org.apache.kafka", "kafka-clients", "4.0.0")
 
     api(kotlin("stdlib"))
+
+    api(libs.protobuf.kotlin)
+
     testImplementation(libs.mockk)
 
     implementation(libs.kotlinx.coroutines)
     testImplementation(libs.kotlinx.coroutines.test)
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.asProvider().get()}"
+    }
+
+    generateProtoTasks {
+        all().forEach {
+            it.builtins {
+                create("kotlin")
+            }
+        }
+    }
 }

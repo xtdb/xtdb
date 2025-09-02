@@ -8,17 +8,28 @@ import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
+import kotlinx.serialization.decodeFromString
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import xtdb.storage.BufferPool
 import xtdb.api.PathWithEnvVarSerde
+import xtdb.api.YAML_SERDE
 import xtdb.storage.LocalStorage
 import xtdb.storage.MemoryStorage
 import xtdb.storage.RemoteBufferPool
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.DatabaseName
+import xtdb.database.proto.DatabaseConfig
+import xtdb.database.proto.DatabaseConfig.StorageCase
+import xtdb.database.proto.DatabaseConfig.StorageCase.*
+import xtdb.database.proto.RemoteStorage
+import xtdb.database.proto.inMemoryStorage
+import xtdb.database.proto.localStorage
+import xtdb.database.proto.remoteStorage
+import xtdb.storage.BufferPool.Companion.UnusedBufferPool
 import xtdb.util.StringUtil.asLexHex
+import xtdb.util.asPath
 import xtdb.util.closeOnCatch
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
@@ -48,6 +59,16 @@ object Storage {
             meterRegistry: MeterRegistry? = null,
             storageVersion: StorageVersion = VERSION
         ): BufferPool
+
+        companion object {
+            internal fun fromProto(config: DatabaseConfig): Factory =
+                when (config.storageCase) {
+                    IN_MEMORY_STORAGE -> inMemory()
+                    LOCAL_STORAGE -> local(config.localStorage.path.asPath)
+                    REMOTE_STORAGE -> remote(ObjectStore.Factory.fromProto(config.remoteStorage.objectStore))
+                    else -> error("invalid storage: ${config.storageCase}")
+                }
+        }
     }
 
     internal fun arrowFooterCache(maxEntries: Long = 1024): Cache<Path, ArrowFooter> =
@@ -67,7 +88,7 @@ object Storage {
     }
 
     @JvmStatic
-    fun inMemoryStorage() = InMemoryStorageFactory
+    fun inMemory() = InMemoryStorageFactory
 
     /**
      * Implementation for the storage module that persists data to the local file system, under the **path** directory.
@@ -97,7 +118,7 @@ object Storage {
     }
 
     @JvmStatic
-    fun localStorage(path: Path) = LocalStorageFactory(path)
+    fun local(path: Path) = LocalStorageFactory(path)
 
     /**
      * Implementation for the storage module that persists data remotely within a specified [objectStore],
@@ -126,7 +147,19 @@ object Storage {
     }
 
     @JvmStatic
-    fun remoteStorage(objectStore: ObjectStore.Factory) =
+    fun remote(objectStore: ObjectStore.Factory) =
         RemoteStorageFactory(objectStore)
+
+    fun DatabaseConfig.Builder.applyStorage(storage: Storage.Factory) {
+        when (storage) {
+            InMemoryStorageFactory -> setInMemoryStorage(inMemoryStorage { })
+            is LocalStorageFactory -> setLocalStorage(localStorage { this.path = storage.path.toString() })
+            is RemoteStorageFactory ->
+                setRemoteStorage(
+                    RemoteStorage.newBuilder().also { it.objectStore = storage.objectStore.configProto }.build()
+                )
+
+        }
+    }
 }
 

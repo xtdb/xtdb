@@ -9,14 +9,20 @@ import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
 import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
+import xtdb.database.Database
+import xtdb.database.DatabaseName
+import xtdb.database.proto.DatabaseConfig
+import xtdb.database.proto.DatabaseConfig.LogCase.*
 import xtdb.log.proto.*
 import xtdb.log.proto.LogMessage.MessageCase
 import xtdb.trie.BlockIndex
+import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Instant
 import java.util.*
 import java.util.concurrent.CompletableFuture
+import com.google.protobuf.Any as ProtoAny
 
 typealias LogOffset = Long
 typealias LogTimestamp = Instant
@@ -92,8 +98,17 @@ interface Log : AutoCloseable {
                                         ?.expectedBlockIdx
                                         ?.let { FlushBlock(it) }
 
-                                MessageCase.TRIES_ADDED ->
-                                    TriesAdded(msg.triesAdded.storageVersion, msg.triesAdded.triesList)
+                                MessageCase.TRIES_ADDED -> msg.triesAdded.let {
+                                    TriesAdded(it.storageVersion, it.triesList)
+                                }
+
+                                MessageCase.ATTACH_DATABASE -> msg.attachDatabase.let {
+                                    AttachDatabase(it.dbName, Database.Config.fromProto(it.config))
+                                }
+
+                                MessageCase.DETACH_DATABASE -> msg.detachDatabase.let {
+                                    DetachDatabase(it.dbName)
+                                }
 
                                 else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
                             }
@@ -115,12 +130,33 @@ interface Log : AutoCloseable {
                 }
             }
         }
+
+        data class AttachDatabase(val dbName: DatabaseName, val config: Database.Config) : ProtobufMessage() {
+            override fun toLogMessage() = logMessage {
+                attachDatabase = attachDatabase {
+                    this.dbName = this@AttachDatabase.dbName
+                    this.config = this@AttachDatabase.config.serializedConfig
+                }
+            }
+        }
+
+        data class DetachDatabase(val dbName: DatabaseName) : ProtobufMessage() {
+            override fun toLogMessage() = logMessage {
+                detachDatabase = detachDatabase {
+                    this.dbName = this@DetachDatabase.dbName
+                }
+            }
+        }
     }
 
     interface Factory {
         fun openLog(clusters: Map<LogClusterAlias, Cluster>): Log
 
+        fun writeTo(dbConfig: DatabaseConfig.Builder)
+
         companion object {
+            private val otherLogs = ServiceLoader.load(Registration::class.java).associateBy { it.protoTag }
+
             val serializersModule = SerializersModule {
                 polymorphic(Factory::class) {
                     subclass(InMemoryLog.Factory::class)
@@ -130,6 +166,17 @@ interface Log : AutoCloseable {
                         reg.registerSerde(this)
                 }
             }
+
+            internal fun fromProto(config: DatabaseConfig): Factory =
+                when (config.logCase) {
+                    IN_MEMORY_LOG -> inMemoryLog
+                    LOCAL_LOG -> localLog(config.localLog.path.asPath)
+                    OTHER_LOG -> config.otherLog.let {
+                        (otherLogs[it.typeUrl] ?: error("unknown log")).fromProto(it)
+                    }
+
+                    else -> error("invalid log: ${config.logCase}")
+                }
         }
     }
 
@@ -147,6 +194,8 @@ interface Log : AutoCloseable {
 
     interface Registration {
         fun registerSerde(builder: PolymorphicModuleBuilder<Factory>)
+        val protoTag: String
+        fun fromProto(msg: ProtoAny): Factory
     }
 
     /*

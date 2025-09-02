@@ -65,11 +65,11 @@
 (defn start-kafka-node [local-disk-cache prefix]
   (xtn/start-node
    {:log-clusters {:local-kafka [:kafka {:bootstrap-servers "localhost:9092"}]}
-    :databases {:xtdb {:log [:kafka {:cluster :local-kafka, :topic (str "xtdb.kafka-test." prefix)}]
-                       :storage [:remote
-                                 {:object-store [:google-cloud {:project-id project-id
-                                                                :bucket test-bucket
-                                                                :prefix (str "xtdb.gcp-test." prefix)}]}]}}
+    :log [:kafka {:cluster :local-kafka, :topic (str "xtdb.kafka-test." prefix)}]
+    :storage [:remote
+              {:object-store [:google-cloud {:project-id project-id
+                                             :bucket test-bucket
+                                             :prefix (str "xtdb.gcp-test." prefix)}]}]
     :disk-cache {:path local-disk-cache}}))
 
 (t/deftest ^:google-cloud list-test

@@ -8,9 +8,9 @@ title: Storage
 v2.1: multi-database support::
 +
 --
-`databases` was introduced in v2.1.
+As part of the multi-database support, the `memoryCache` and `diskCache` keys were extracted from the local/remote storage.
 
-Prior to that, the `storage` key was at the top-level of the configuration, and the `memoryCache` and `diskCache` keys were nested under the local/remote storage:
+Prior to that, the keys related to the `memoryCache` and `diskCache` were nested under the local/remote storage:
 
 [source,yaml]
 ----
@@ -21,10 +21,8 @@ storage: !Local
 
 # became
 
-databases:
-  xtdb:
-    storage: !Local
-      path: /var/lib/xtdb/storage
+storage: !Local
+  path: /var/lib/xtdb/storage
 
 memoryCache:
   # maxSizeRatio: 0.5
@@ -43,10 +41,8 @@ storage: !Remote
 
 # became
 
-databases:
-  xtdb:
-    storage: !Remote
-      objectStore: <ObjectStoreImplementation>
+storage: !Remote
+  objectStore: <ObjectStoreImplementation>
 
 diskCache:
   path: /var/lib/xtdb/remote-cache
@@ -76,9 +72,8 @@ By default, the storage module is configured to use transient, in-memory storage
 [source,yaml]
 ----
 # default, no need to explicitly specify
-# databases:
-#   xtdb:
-#     storage: !InMemory
+
+# storage: !InMemory
 ----
 
 [#local-disk]
@@ -88,14 +83,12 @@ A persistent storage implementation that writes to a local directory, also maint
 
 [source,yaml]
 ----
-databases:
-  xtdb:
-    storage: !Local
-      # -- required
+storage: !Local
+  # -- required
 
-      # The path to the local directory to persist the data to.
-      # (Can be set as an !Env value)
-      path: /var/lib/xtdb/storage
+  # The path to the local directory to persist the data to.
+  # (Can be set as an !Env value)
+  path: /var/lib/xtdb/storage
 
 ## -- optional
 # configuration for XTDB's in-memory cache
@@ -121,14 +114,12 @@ We achieve this inter-node messaging using a link:log#Remote[**remote log**] imp
 
 [source,yaml]
 ----
-databases:
-  xtdb:
-    storage: !Remote
-      # -- required
+storage: !Remote
+  # -- required
 
-      # Configuration of the Object Store to use for remote storage
-      # Each of these is configured separately - see below for more information.
-      objectStore: <ObjectStoreImplementation>
+  # Configuration of the Object Store to use for remote storage
+  # Each of these is configured separately - see below for more information.
+  objectStore: <ObjectStoreImplementation>
 
 ## -- required
 # Local directory to store the working-set cache in.

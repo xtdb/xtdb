@@ -1,7 +1,5 @@
-databases:
-  xtdb:
-    log: !InMemory
-    storage: !InMemory
+log: !InMemory
+storage: !InMemory
 indexer:
   logLimit: 65
   flushDuration: PT4H

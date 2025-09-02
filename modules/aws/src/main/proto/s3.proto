@@ -1,0 +1,19 @@
+edition = "2023";
+
+package xtdb.aws.proto;
+
+option java_multiple_files = true;
+
+message S3ObjectStoreConfig {
+    string bucket = 1;
+    string region = 2;
+    string prefix = 3;
+    S3Credentials credentials = 4;
+    string endpoint = 5;
+    bool path_style_access_enabled = 6;
+}
+
+message S3Credentials {
+    string access_key = 1;
+    string secret_key = 2;
+}

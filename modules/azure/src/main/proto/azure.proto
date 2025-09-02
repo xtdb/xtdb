@@ -1,0 +1,15 @@
+edition = "2023";
+
+package xtdb.azure.proto;
+
+option java_multiple_files = true;
+
+message AzureBlobStorageConfig {
+    string storage_account = 1;
+    string container = 2;
+    string prefix = 3;
+    string storage_account_key = 4;
+    string user_managed_identity_client_id = 5;
+    string storage_account_endpoint = 6;
+    string connection_string = 7;
+}

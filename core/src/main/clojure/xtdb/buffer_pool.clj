@@ -1,17 +1,18 @@
 (ns xtdb.buffer-pool
   (:require [integrant.core :as ig]
-            [xtdb.db-catalog :as db]
+            [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import (xtdb.api.storage Storage Storage$Factory)
+           xtdb.api.Xtdb$Config
            (xtdb.storage BufferPool)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defmethod db/->storage-factory :in-memory [_ _]
-  (Storage/inMemoryStorage))
+(defmethod xtn/apply-config! ::in-memory [^Xtdb$Config config _ _]
+  (.storage config (Storage/inMemory)))
 
-(defmethod db/->storage-factory :local [_ {:keys [path]}]
-  (Storage/localStorage (util/->path path)))
+(defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path]}]
+  (.storage config (Storage/local (util/->path path))))
 
 (defmulti ->object-store-factory
   #_{:clj-kondo/ignore [:unused-binding]}
@@ -31,9 +32,17 @@
 (defmethod ->object-store-factory :google-cloud [_ opts] (->object-store-factory :xtdb.gcp/object-store opts))
 (defmethod ->object-store-factory :azure [_ opts] (->object-store-factory :xtdb.azure/object-store opts))
 
-(defmethod db/->storage-factory :remote [_ {:keys [object-store]}]
-  (Storage/remoteStorage (let [[tag opts] object-store]
-                           (->object-store-factory tag opts))))
+(defmethod xtn/apply-config! ::remote [^Xtdb$Config config _ {:keys [object-store]}]
+  (.storage config (Storage/remote (let [[tag opts] object-store]
+                                     (->object-store-factory tag opts)))))
+
+(defmethod xtn/apply-config! ::storage [config _ [tag opts]]
+  (xtn/apply-config! config
+                     (case tag
+                       :in-memory ::in-memory
+                       :local ::local
+                       :remote ::remote)
+                     opts))
 
 (defmethod ig/prep-key :xtdb/buffer-pool [_ {:keys [base db-name factory]}]
   {:base base, :factory factory, :db-name db-name

@@ -74,12 +74,12 @@
   (xtn/start-node
    {:log-clusters {:local-kafka [:kafka {:bootstrap-servers "localhost:9092"}]}
 
-    :databases {:xtdb {:log [:kafka {:cluster :local-kafka, :topic (str "xtdb.kafka-test." prefix)}]
+    :log [:kafka {:cluster :local-kafka, :topic (str "xtdb.kafka-test." prefix)}]
 
-                       :storage [:remote
-                                 {:object-store [:azure {:storage-account storage-account
-                                                         :container container
-                                                         :prefix (util/->path (str "xtdb.azure-test." prefix))}]}]}}
+    :storage [:remote
+              {:object-store [:azure {:storage-account storage-account
+                                      :container container
+                                      :prefix (util/->path (str "xtdb.azure-test." prefix))}]}]
 
     :disk-cache {:path local-disk-cache}
     :compactor {:threads 0}}))

@@ -6,6 +6,9 @@ import kotlinx.coroutines.future.await
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.ArrowStreamReader
+import xtdb.api.TransactionAborted
+import xtdb.api.TransactionCommitted
+import xtdb.api.TransactionKey
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message
 import xtdb.api.log.MessageId
@@ -16,6 +19,7 @@ import xtdb.arrow.asChannel
 import xtdb.catalog.BlockCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.Database
+import xtdb.error.Anomaly
 import xtdb.error.Interrupted
 import xtdb.table.TableRef
 import xtdb.util.MsgIdUtil.msgIdToEpoch
@@ -35,15 +39,24 @@ import kotlin.coroutines.cancellation.CancellationException
 
 private val LOG = LogProcessor::class.logger
 
+/**
+ * @param dbCatalog supplied iff you want to write secondary databases at the end of a block.
+ *                  i.e. iff db == 'xtdb'
+ */
 class LogProcessor(
     allocator: BufferAllocator,
     meterRegistry: MeterRegistry,
+    private val dbCatalog: Database.Catalog?,
     private val db: Database,
     private val indexer: Indexer.ForDatabase,
     private val compactor: Compactor.ForDatabase,
     flushTimeout: Duration,
     private val skipTxs: Set<MessageId>
 ) : Log.Subscriber, AutoCloseable {
+
+    init {
+        assert((dbCatalog != null) == (db.name == "xtdb")) { "dbCatalog supplied iff db == 'xtdb'" }
+    }
 
     private val log = db.log
     private val epoch = log.epoch
@@ -191,6 +204,40 @@ class LogProcessor(
                             }
                         null
                     }
+
+                    is Message.AttachDatabase -> {
+                        requireNotNull(dbCatalog) { "attach-db received on non-primary database ${db.name}" }
+                        val res = try {
+                            dbCatalog.attach(msg.dbName, msg.config)
+                            TransactionCommitted(msgId, record.logTimestamp)
+                        } catch (e: Anomaly.Caller) {
+                            TransactionAborted(msgId, record.logTimestamp, e)
+                        }
+
+                        indexer.addTxRow(
+                            TransactionKey(msgId, record.logTimestamp),
+                            (res as? TransactionAborted)?.error
+                        )
+
+                        res
+                    }
+
+                    is Message.DetachDatabase -> {
+                        requireNotNull(dbCatalog) { "detach-db received on non-primary database ${db.name}" }
+                        val res = try {
+                            dbCatalog.detach(msg.dbName)
+                            TransactionCommitted(msgId, record.logTimestamp)
+                        } catch (e: Anomaly.Caller) {
+                            TransactionAborted(msgId, record.logTimestamp, e)
+                        }
+
+                        indexer.addTxRow(
+                            TransactionKey(msgId, record.logTimestamp),
+                            (res as? TransactionAborted)?.error
+                        )
+
+                        res
+                    }
                 }
                 latestProcessedMsgId = msgId
                 watchers.notify(msgId, res)
@@ -228,7 +275,13 @@ class LogProcessor(
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
         val tables = liveIndex.finishBlock(blockIdx)
-        blockCatalog.finishBlock(blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId, tables)
+        val secondaryDatabases = dbCatalog?.takeIf { db.name == "xtdb" }?.serialisedSecondaryDatabases
+
+        blockCatalog.finishBlock(
+            blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
+            tables, secondaryDatabases
+        )
+
         liveIndex.nextBlock()
         compactor.signalBlock()
         LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")

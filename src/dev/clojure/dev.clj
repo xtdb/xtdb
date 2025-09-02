@@ -48,8 +48,8 @@
                                 :host "*"
                                 :ssl {:keystore (io/file (io/resource "xtdb/pgwire/xtdb.jks"))
                                       :keystore-password "password123"}}
-                       :databases {:xtdb {:log [:local {:path (io/file dev-node-dir "log")}]
-                                          :storage [:local {:path (io/file dev-node-dir "objects")}]}}
+                       :log [:local {:path (io/file dev-node-dir "log")}]
+                       :storage [:local {:path (io/file dev-node-dir "objects")}]
                        :healthz {:port 8080
                                  :host "*"}
                        :flight-sql-server {:port 52358}}}})
