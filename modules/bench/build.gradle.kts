@@ -19,6 +19,7 @@ dependencies {
     api(project(":modules:xtdb-google-cloud"))
 
     api("org.clojure", "data.csv", "1.0.1")
+    api(libs.clojure.test.check)
 
     runtimeOnly(libs.logback.classic)
     runtimeOnly(libs.slf4j.jpl)
