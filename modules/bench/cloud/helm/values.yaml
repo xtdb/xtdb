@@ -2,7 +2,7 @@ benchType: tpch
 
 auctionmark:
   onlyLoad: false
-  noLoad: true
+  noLoad: false
   scaleFactor: 0.1
   nodeCount: 3 # only applies if not onlyLoad
   threads: 8
@@ -58,4 +58,3 @@ kafka:
     persistence:
       size: 50Gi
     resourcesPreset: medium
-

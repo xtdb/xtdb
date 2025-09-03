@@ -238,6 +238,7 @@ Auctionmark typically runs in two stages: an initial load phase and an OLTP phas
 ./cloud/run-bench.sh azure auctionmark \
   --set auctionmark.threads=8 \
   --set auctionmark.duration=PT10M \
+  --set auctionmark.noLoad=true \
   --no-cleanup
 ----
 

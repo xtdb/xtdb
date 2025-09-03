@@ -37,7 +37,7 @@ spec:
       initContainers:
         - name: wait-for-kafka
           image: busybox
-          command: ['sh', '-c', 'until nc -z xtdb-benchmark-kafka.cloud-benchmark.svc.cluster.local 9092; do echo waiting for kafka; sleep 5; done;']
+          command: ['sh', '-c', 'until nc -z -w 2 {{ include "xtdb.kafka.host" .Values.xtdbConfig.kafkaBootstrapServers }} {{ include "xtdb.kafka.port" .Values.xtdbConfig.kafkaBootstrapServers }}; do echo waiting for kafka; sleep 5; done;']
           resources:
             requests:
               memory: "256Mi"
@@ -69,12 +69,15 @@ spec:
             - auctionmark
             - -f
             - "/var/lib/xtdb-config/xtdbconfig.yaml"
+            {{- if and .Values.auctionmark.onlyLoad .Values.auctionmark.noLoad -}}
+            {{- fail "auctionmark.onlyLoad and auctionmark.noLoad cannot both be true" -}}
+            {{- end -}}
+            {{- if .Values.auctionmark.onlyLoad }}
             - --only-load
-            - {{ .Values.auctionmark.onlyLoad | quote }}
-            {{ if not .Values.auctionmark.onlyLoad }}
+            {{- end }}
+            {{- if .Values.auctionmark.noLoad }}
             - --no-load
-            - {{ .Values.auctionmark.noLoad | quote }}
-            {{- end}}
+            {{- end }}
             - --threads
             - {{ .Values.auctionmark.threads | quote }}
             - --duration
