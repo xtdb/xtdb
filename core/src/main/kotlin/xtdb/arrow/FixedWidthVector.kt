@@ -76,6 +76,11 @@ sealed class FixedWidthVector : Vector() {
         if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
         else dataBuffer.getLong(idx)
 
+    operator fun set(idx: Int, v: Long) {
+        setNotNull(idx)
+        dataBuffer[idx] = v
+    }
+
     protected fun writeLong0(value: Long) {
         dataBuffer.writeLong(value)
         writeNotNull()

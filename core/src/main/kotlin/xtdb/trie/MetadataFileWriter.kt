@@ -1,12 +1,12 @@
 package xtdb.trie
 
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.storage.BufferPool
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.indexer.TrieMetadataCalculator
 import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.ColumnMetadata
+import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.trie.Trie.metaFilePath
 import xtdb.types.Fields
@@ -46,6 +46,7 @@ class MetadataFileWriter(
     private val validFromVec = dataRel["_valid_from"]
     private val validToVec = dataRel["_valid_to"]
     private val systemFromVec = dataRel["_system_from"]
+    private val recencyVec = dataRel["_recency"]
 
     private val opReader = dataRel["op"]
     private val putReader = opReader.vectorForOrNull("put")
@@ -67,7 +68,9 @@ class MetadataFileWriter(
     private var pageIdx = 0
 
     private val trieMetaCalc =
-        if (writeTrieMetadata) TrieMetadataCalculator(iidVec, validFromVec, validToVec, systemFromVec) else null
+        if (writeTrieMetadata)
+            TrieMetadataCalculator(iidVec, validFromVec, validToVec, systemFromVec, recencyVec)
+        else null
 
     fun writeNull(): RowIndex {
         val pos = nodeWtr.valueCount
@@ -94,6 +97,7 @@ class MetadataFileWriter(
         colMetaWriter.writeMetadata(validFromVec)
         colMetaWriter.writeMetadata(validToVec)
         colMetaWriter.writeMetadata(systemFromVec)
+        colMetaWriter.writeMetadata(recencyVec)
 
         trieMetaCalc?.update(0, dataRel.rowCount)
 

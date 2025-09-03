@@ -110,6 +110,10 @@ object Trie {
             "_system_from" to Fields.TEMPORAL,
             "_valid_from" to Fields.TEMPORAL,
             "_valid_to" to Fields.TEMPORAL,
+
+            // vector may not be present in <2.1.0 files
+            "_recency" to Fields.TEMPORAL.nullable,
+
             "op" to Fields.Union(
                 *(listOfNotNull(
                     putDocField?.let { "put" to NamelessField(it.fieldType, it.children) },

@@ -103,7 +103,7 @@
               },
               "children" : [{
                 "name" : "min",
-                "nullable" : false,
+                "nullable" : true,
                 "type" : {
                   "name" : "floatingpoint",
                   "precision" : "DOUBLE"
@@ -111,7 +111,7 @@
                 "children" : [ ]
               },{
                 "name" : "max",
-                "nullable" : false,
+                "nullable" : true,
                 "type" : {
                   "name" : "floatingpoint",
                   "precision" : "DOUBLE"
@@ -158,52 +158,52 @@
           "name" : "columns",
           "count" : 1,
           "VALIDITY" : [1],
-          "OFFSET" : [0,4],
+          "OFFSET" : [0,5],
           "children" : [{
             "name" : "col",
-            "count" : 4,
-            "VALIDITY" : [1,1,1,1],
+            "count" : 5,
+            "VALIDITY" : [1,1,1,1,1],
             "children" : [{
               "name" : "col-name",
-              "count" : 4,
-              "VALIDITY" : [1,1,1,1],
-              "OFFSET" : [0,4,15,24,36],
-              "DATA" : ["_iid","_valid_from","_valid_to","_system_from"]
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "OFFSET" : [0,4,15,24,36,44],
+              "DATA" : ["_iid","_valid_from","_valid_to","_system_from","_recency"]
             },{
               "name" : "root-col?",
-              "count" : 4,
-              "VALIDITY" : [1,1,1,1],
-              "DATA" : [1,1,1,1]
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "DATA" : [1,1,1,1,1]
             },{
               "name" : "count",
-              "count" : 4,
-              "VALIDITY" : [1,1,1,1],
-              "DATA" : ["50000","50000","50000","50000"]
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "DATA" : ["50000","50000","50000","50000","0"]
             },{
               "name" : "bytes",
-              "count" : 4,
-              "VALIDITY" : [1,0,0,0],
+              "count" : 5,
+              "VALIDITY" : [1,0,0,0,0],
               "children" : [{
                 "name" : "bloom",
-                "count" : 4,
-                "VALIDITY" : [1,0,0,0],
-                "OFFSET" : [0,58,58,58,58],
-                "DATA" : ["3a300000050000000a0000000c0000000e000000100000001200000030000000320000003400000036000000380000002c3d7557be71078c50a6","","",""]
+                "count" : 5,
+                "VALIDITY" : [1,0,0,0,0],
+                "OFFSET" : [0,58,58,58,58,58],
+                "DATA" : ["3a300000050000000a0000000c0000000e000000100000001200000030000000320000003400000036000000380000002c3d7557be71078c50a6","","","",""]
               }]
             },{
               "name" : "date-times",
-              "count" : 4,
-              "VALIDITY" : [0,1,1,1],
+              "count" : 5,
+              "VALIDITY" : [0,1,1,1,1],
               "children" : [{
                 "name" : "min",
-                "count" : 4,
-                "VALIDITY" : [0,1,1,1],
-                "DATA" : [0.0,0.0,0.0,9.466848E8]
+                "count" : 5,
+                "VALIDITY" : [0,1,1,1,0],
+                "DATA" : [0.0,0.0,0.0,9.466848E8,0.0]
               },{
                 "name" : "max",
-                "count" : 4,
-                "VALIDITY" : [0,1,1,1],
-                "DATA" : [0.0,0.0,0.0,9.466848E8]
+                "count" : 5,
+                "VALIDITY" : [0,1,1,1,0],
+                "DATA" : [0.0,0.0,0.0,9.466848E8,0.0]
               }]
             }]
           }]

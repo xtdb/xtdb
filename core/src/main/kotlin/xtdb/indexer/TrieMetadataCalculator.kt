@@ -13,7 +13,8 @@ class TrieMetadataCalculator(
     private val iidRdr: VectorReader,
     private val validFromRdr: VectorReader,
     private val validToRdr: VectorReader,
-    private val systemFromRdr: VectorReader
+    private val systemFromRdr: VectorReader,
+    private val recencyRdr: VectorReader?
 ) {
 
     private var rowCount = 0L
@@ -36,6 +37,10 @@ class TrieMetadataCalculator(
                 val systemFrom = systemFromRdr.getLong(i)
                 minSystemFrom = minOf(minSystemFrom, systemFrom)
                 maxSystemFrom = maxOf(maxSystemFrom, systemFrom)
+
+                if (recencyRdr != null && !recencyRdr.isNull(i)) {
+                    maxRecency = maxOf(maxRecency, recencyRdr.getLong(i))
+                }
             }
 
             iidBloom.add(*bloomHashes(iidRdr, i))

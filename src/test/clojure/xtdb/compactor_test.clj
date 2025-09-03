@@ -661,6 +661,7 @@
                                          :max-valid-to #xt/instant "2011-01-01T00:00:00Z",
                                          :min-system-from #xt/instant "2020-01-01T00:00:00Z",
                                          :max-system-from #xt/instant "2020-01-01T00:00:00Z",
+                                         :max-recency #xt/instant "2011-01-01T00:00:00Z",
                                          :row-count 1},
                     "l01-rc-b01" nil,
                     "l01-r20160104-b01" {:min-valid-from #xt/instant "2015-01-01T00:00:00Z",
@@ -669,6 +670,7 @@
                                          :max-valid-to #xt/instant "2016-01-01T00:00:00Z",
                                          :min-system-from #xt/instant "2020-01-02T00:00:00Z",
                                          :max-system-from #xt/instant "2020-01-02T00:00:00Z",
+                                         :max-recency #xt/instant "2016-01-01T00:00:00Z",
                                          :row-count 1}}
                    (->> tries
                         (filter #(str/starts-with? (:trie-key %) "l01"))

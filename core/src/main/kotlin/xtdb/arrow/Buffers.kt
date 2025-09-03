@@ -90,6 +90,8 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
 
     fun getLong(idx: Int) = buf.getLong((idx * Long.SIZE_BYTES).toLong())
 
+    operator fun set(idx: Int, v: Long) = buf.setLong(idx.toLong() * Long.SIZE_BYTES, v)
+
     fun writeLong(value: Long) {
         ensureWritable(Long.SIZE_BYTES.toLong())
         buf.writeLong(value)

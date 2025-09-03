@@ -53,7 +53,7 @@ constructor(
 
     private val trieWriter = LiveTrieWriter(al, bp, calculateBlooms = false)
     private val trieMetadataCalculator = TrieMetadataCalculator(
-        iidRdr, validFromWtr.asReader, validToWtr.asReader, systemFromWtr.asReader
+        iidRdr, validFromWtr.asReader, validToWtr.asReader, systemFromWtr.asReader, null
     )
 
     private val hllCalculator = HllCalculator()
