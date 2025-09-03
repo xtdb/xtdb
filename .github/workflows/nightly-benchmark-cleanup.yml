@@ -24,7 +24,8 @@ on:
         type: string
 
 permissions:
-  contents: write
+  id-token: write
+  contents: read
 
 concurrency:
   group: cleanup-benchmarks
