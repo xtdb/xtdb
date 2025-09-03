@@ -37,7 +37,7 @@ spec:
       initContainers:
         - name: wait-for-kafka
           image: busybox
-          command: ['sh', '-c', 'until nc -z xtdb-benchmark-kafka.cloud-benchmark.svc.cluster.local 9092; do echo waiting for kafka; sleep 5; done;']
+          command: ['sh', '-c', 'until nc -z -w 2 {{ include "xtdb.kafka.host" .Values.xtdbConfig.kafkaBootstrapServers }} {{ include "xtdb.kafka.port" .Values.xtdbConfig.kafkaBootstrapServers }}; do echo waiting for kafka; sleep 5; done;']
           resources:
             requests:
               memory: "256Mi"
