@@ -1,0 +1,88 @@
+name: Nightly Benchmark TPC-H
+
+on:
+  workflow_dispatch:
+    inputs:
+      scale_factor:
+        description: 'TPC-H Scale Factor'
+        required: false
+        default: '0.5'
+        type: string
+  schedule:
+    - cron: '0 0 * * *'  # Run daily at midnight UTC
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: nightly-benchmark-tpch
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    name: Run Nightly Benchmark TPC-H
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      SCALE_FACTOR: ${{ inputs.scale_factor || '0.5' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure CLI Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.BENCHMARK_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.BENCHMARK_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.BENCHMARK_AZURE_SUBSCRIPTION_ID }}
+
+      - name: Acquire Kubernetes Configuration
+        run: |
+          az aks get-credentials --resource-group cloud-benchmark-resources --name xtdb-bench-cluster
+
+      - name: Check Existing Deployment
+        id: check-deployment
+        continue-on-error: true
+        run: |
+          # exit 0 if exists, non-zero if not
+          helm status xtdb-benchmark -n cloud-benchmark >/dev/null 2>&1
+
+      - name: Run Benchmark
+        if: steps.check-deployment.outcome != 'success'
+        run: |
+          helm dependency update ./modules/bench/cloud/helm
+          helm upgrade --install "xtdb-benchmark" ./modules/bench/cloud/helm \
+            --namespace "cloud-benchmark" \
+            --create-namespace \
+            -f ./modules/bench/cloud/azure/values.yaml \
+            --set "benchType=tpch" \
+            --set "tpch.scaleFactor=${{ env.SCALE_FACTOR }}" \
+            --set "providerConfig.env.GITHUB_PAT=${{ secrets.BENCHMARK_GITHUB_PAT }}" \
+            --set "providerConfig.env.AZURE_USER_MANAGED_IDENTITY_CLIENT_ID=${{ secrets.BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID }}" \
+            --set "providerConfig.serviceAccountAnnotations.azure\.workload\.identity/client-id=${{ secrets.BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID }}"
+
+      - name: Compose Slack Message
+        id: compose
+        run: |
+          if [ "${{ steps.check-deployment.outcome }}" = "success" ]; then
+            echo 'msg=:information_source: TPC-H Benchmark skipped — existing deployment found' >> "$GITHUB_OUTPUT"
+          else
+            echo 'msg=TPC-H Benchmark (Scale Factor: ${{ env.SCALE_FACTOR }}) started' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post Slack Notification
+        uses: ravsamhq/notify-slack-action@v2
+        if: always()
+        with:
+          status: ${{ job.status }}
+          notification_title: "*TPC-H Benchmark*"
+          message_format: "${{ steps.compose.outputs.msg }}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.BENCHMARK_SLACK_WEBHOOK_URL }}
+
+      - name: Fail if existing deployment
+        if: steps.check-deployment.outcome == 'success'
+        run: |
+          echo "Failing workflow due to existing deployment"
+          exit 1
