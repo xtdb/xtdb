@@ -63,10 +63,10 @@
               [trie1-bloom _trie2-bloom] (map :iid-bloom trie-metas)]
           (t/is (= [{:table #xt/table foo,
                      :trie-key "l00-rc-b00",
-                     :data-file-size 1966}
+                     :data-file-size 2182}
                     {:table #xt/table foo,
                      :trie-key "l00-rc-b01",
-                     :data-file-size 1966}]
+                     :data-file-size 2182}]
                    (map #(dissoc % :trie-metadata) current-tries)))
 
           (t/is (= [{:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
@@ -75,6 +75,7 @@
                      :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
                      :min-system-from #xt/instant "2020-01-01T00:00:00Z",
                      :max-system-from #xt/instant "2020-01-01T00:00:00Z",
+                     :max-recency nil,
                      :row-count 1}
                     {:min-valid-from #xt/instant "2020-01-02T00:00:00Z",
                      :max-valid-from #xt/instant "2020-01-02T00:00:00Z",
@@ -82,6 +83,7 @@
                      :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
                      :min-system-from #xt/instant "2020-01-02T00:00:00Z",
                      :max-system-from #xt/instant "2020-01-02T00:00:00Z",
+                     :max-recency nil,
                      :row-count 1}]
                    (map #(dissoc % :iid-bloom) trie-metas)))
 

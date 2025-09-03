@@ -36,6 +36,15 @@
       },
       "children" : [ ]
     },{
+      "name" : "_recency",
+      "nullable" : true,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
       "name" : "op",
       "nullable" : false,
       "type" : {
@@ -112,7 +121,7 @@
       "name" : "_iid",
       "count" : 1,
       "VALIDITY" : [1],
-      "DATA" : ["f71157be20163bf97f696a7c6de81daa"]
+      "DATA" : ["be2115c261f72ab08b6dec2a475ed38d"]
     },{
       "name" : "_system_from",
       "count" : 1,
@@ -128,6 +137,11 @@
       "count" : 1,
       "VALIDITY" : [1],
       "DATA" : [9223372036854775807]
+    },{
+      "name" : "_recency",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "DATA" : [0]
     },{
       "name" : "op",
       "count" : 1,
@@ -147,7 +161,7 @@
           "name" : "_id",
           "count" : 1,
           "VALIDITY" : [1],
-          "DATA" : ["3115"]
+          "DATA" : ["3136"]
         },{
           "name" : "system_time",
           "count" : 1,

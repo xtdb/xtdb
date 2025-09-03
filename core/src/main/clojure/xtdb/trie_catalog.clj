@@ -306,6 +306,8 @@
        :max-valid-to (time/micros->instant (.getMaxValidTo temporal-metadata))
        :min-system-from (time/micros->instant (.getMinSystemFrom temporal-metadata))
        :max-system-from (time/micros->instant (.getMaxSystemFrom temporal-metadata))
+       :max-recency (when (.hasMaxRecency temporal-metadata)
+                      (time/micros->instant (.getMaxRecency temporal-metadata)))
        :row-count (.getRowCount trie-metadata)
        :iid-bloom (ImmutableRoaringBitmap. (ByteBuffer/wrap (.toByteArray (.getIidBloom trie-metadata))))})))
 

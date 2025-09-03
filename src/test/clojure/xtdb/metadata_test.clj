@@ -134,7 +134,7 @@
         (t/testing "L0"
           (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))]
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
-              (t/is (= 4 (.rowIndex page-metadata "_id" 0)))
+              (t/is (= 5 (.rowIndex page-metadata "_id" 0)))
 
               (let [page-idx-pred (.build literal-selector page-metadata)]
                 (doseq [page-idx relevant-pages]
@@ -172,7 +172,7 @@
       (let [meta-file-path (Trie/metaFilePath "public$xt_docs" ^String (trie/->l0-trie-key 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
           (let [page-idx-pred (.build true-selector page-metadata)]
-            (t/is (= 4 (.rowIndex page-metadata "boolean_or_int" 0)))
+            (t/is (= 5 (.rowIndex page-metadata "boolean_or_int" 0)))
 
             (t/is (true? (.test page-idx-pred 0)))))))
 
@@ -182,7 +182,7 @@
       (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
           (let [page-idx-pred (.build true-selector page-metadata)]
-            (t/is (= 4 (.rowIndex page-metadata "boolean_or_int" 0)))
+            (t/is (= 5 (.rowIndex page-metadata "boolean_or_int" 0)))
 
             (t/is (true? (.test page-idx-pred 0)))))))))
 
@@ -203,12 +203,12 @@
         (t/testing "L0"
           (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))]
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
-              (t/is (= 6 (.rowIndex page-metadata "colours" 0))))))
+              (t/is (= 7 (.rowIndex page-metadata "colours" 0))))))
 
         (t/testing "L1"
           (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
             (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
-              (t/is (= 6 (.rowIndex page-metadata "colours" 0))))))))))
+              (t/is (= 7 (.rowIndex page-metadata "colours" 0))))))))))
 
 (t/deftest test-duration-metadata-4198
   (let [node-dir (util/->path "target/test-duration-metadata")]
@@ -230,7 +230,7 @@
       (let [metadata-mgr (.getMetadataManager (db/primary-db node))
             meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
-          (t/is (= 4 (.rowIndex page-metadata "duration" 0))))))))
+          (t/is (= 5 (.rowIndex page-metadata "duration" 0))))))))
 
 (t/deftest test-missing-type-metadata-4665
   (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo", :foo 4}]])

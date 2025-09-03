@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
+import xtdb.arrow.TimestampTzVector
 import xtdb.compactor.RecencyPartition.*
 import xtdb.compactor.SegmentMerge.Results
 import xtdb.time.microsAsInstant
@@ -54,6 +55,7 @@ internal fun ZonedDateTime.roundToNextPartition(recencyPartition: RecencyPartiti
             result.withMonth(nextQuarterMonth)
                 .withDayOfMonth(1)
         }
+
         YEAR -> this.with(TemporalAdjusters.firstDayOfNextYear())
     }
 
@@ -76,18 +78,27 @@ internal interface OutWriter : AutoCloseable {
         fun copyRow(recency: RecencyMicros, sourceIndex: Int): Int
     }
 
-    class OutWriters(private val al: BufferAllocator): AutoCloseable {
+    class OutWriters(private val al: BufferAllocator) : AutoCloseable {
 
         private val tempDir = createTempDirectory("compactor")
 
         private class CopierFactory(private val dataRel: Relation) {
+            private val outRecencyCol = dataRel["_recency"] as TimestampTzVector
+
             fun rowCopier(dataReader: RelationReader) = object : RecencyRowCopier {
                 private val copier = dataRel.rowCopier(dataReader)
 
-                override fun copyRow(recency: RecencyMicros, sourceIndex: Int): Int = copier.copyRow(sourceIndex)
+                override fun copyRow(recency: RecencyMicros, sourceIndex: Int): Int =
+                    copier.copyRow(sourceIndex)
+                        .also { destIdx ->
+                            outRecencyCol[destIdx] =
+                                if (outRecencyCol.isNull(destIdx)) recency
+                                else minOf(recency, outRecencyCol.getLong(destIdx))
+                        }
             }
         }
 
+        // this one used for L1H+ and L2C+ - preserving the input recency partitioning
         internal inner class OutRel(
             schema: Schema,
             private val outPath: Path = createTempFile(tempDir, "merged-segments", ".arrow"),
@@ -128,7 +139,11 @@ internal interface OutWriter : AutoCloseable {
             }
         }
 
-        internal inner class PartitionedOutWriter(private val schema: Schema, private val recencyPartition: RecencyPartition?) : OutWriter {
+        // this one used for level 1: L1C + L0s -> L1C + L1Hs
+        internal inner class PartitionedOutWriter(
+            private val schema: Schema,
+            private val recencyPartition: RecencyPartition?
+        ) : OutWriter {
             private val outDir = createTempDirectory(tempDir, "merged-segments")
             private var currentRel = OutRel(schema, outDir.resolve("rc.arrow"), null)
 
@@ -144,7 +159,9 @@ internal interface OutWriter : AutoCloseable {
 
                 private fun copier(recency: RecencyMicros) =
                     if (recency == Long.MAX_VALUE) currentCopier
-                    else historicalCopiers.computeIfAbsent(recency.toPartition(this@PartitionedOutWriter.recencyPartition ?: WEEK)) { historicalRel(it).rowCopier(reader) }
+                    else historicalCopiers.computeIfAbsent(recency.toPartition(recencyPartition ?: WEEK)) {
+                        historicalRel(it).rowCopier(reader)
+                    }
 
                 override fun copyRow(recency: RecencyMicros, sourceIndex: Int) =
                     copier(recency).copyRow(recency, sourceIndex)

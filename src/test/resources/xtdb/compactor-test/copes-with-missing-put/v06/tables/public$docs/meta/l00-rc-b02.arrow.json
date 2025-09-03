@@ -103,7 +103,7 @@
               },
               "children" : [{
                 "name" : "min",
-                "nullable" : false,
+                "nullable" : true,
                 "type" : {
                   "name" : "floatingpoint",
                   "precision" : "DOUBLE"
@@ -111,7 +111,7 @@
                 "children" : [ ]
               },{
                 "name" : "max",
-                "nullable" : false,
+                "nullable" : true,
                 "type" : {
                   "name" : "floatingpoint",
                   "precision" : "DOUBLE"
@@ -158,52 +158,52 @@
           "name" : "columns",
           "count" : 1,
           "VALIDITY" : [1],
-          "OFFSET" : [0,4],
+          "OFFSET" : [0,5],
           "children" : [{
             "name" : "col",
-            "count" : 4,
-            "VALIDITY" : [1,1,1,1],
+            "count" : 5,
+            "VALIDITY" : [1,1,1,1,1],
             "children" : [{
               "name" : "col-name",
-              "count" : 4,
-              "VALIDITY" : [1,1,1,1],
-              "OFFSET" : [0,4,15,24,36],
-              "DATA" : ["_iid","_valid_from","_valid_to","_system_from"]
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "OFFSET" : [0,4,15,24,36,44],
+              "DATA" : ["_iid","_valid_from","_valid_to","_system_from","_recency"]
             },{
               "name" : "root-col?",
-              "count" : 4,
-              "VALIDITY" : [1,1,1,1],
-              "DATA" : [1,1,1,1]
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "DATA" : [1,1,1,1,1]
             },{
               "name" : "count",
-              "count" : 4,
-              "VALIDITY" : [1,1,1,1],
-              "DATA" : ["1","1","1","1"]
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "DATA" : ["1","1","1","1","0"]
             },{
               "name" : "bytes",
-              "count" : 4,
-              "VALIDITY" : [1,0,0,0],
+              "count" : 5,
+              "VALIDITY" : [1,0,0,0,0],
               "children" : [{
                 "name" : "bloom",
-                "count" : 4,
-                "VALIDITY" : [1,0,0,0],
-                "OFFSET" : [0,58,58,58,58],
-                "DATA" : ["3a30000005000000100000002400000028000000380000003c0000003000000032000000340000003600000038000000d5bc2cb127d483a57ec8","","",""]
+                "count" : 5,
+                "VALIDITY" : [1,0,0,0,0],
+                "OFFSET" : [0,58,58,58,58,58],
+                "DATA" : ["3a30000005000000100000002400000028000000380000003c0000003000000032000000340000003600000038000000d5bc2cb127d483a57ec8","","","",""]
               }]
             },{
               "name" : "date-times",
-              "count" : 4,
-              "VALIDITY" : [0,1,1,1],
+              "count" : 5,
+              "VALIDITY" : [0,1,1,1,1],
               "children" : [{
                 "name" : "min",
-                "count" : 4,
-                "VALIDITY" : [0,1,1,1],
-                "DATA" : [0.0,-9.223372036854775E12,9.223372036854775E12,1.5780096E9]
+                "count" : 5,
+                "VALIDITY" : [0,1,1,1,0],
+                "DATA" : [0.0,-9.223372036854775E12,9.223372036854775E12,1.5780096E9,0.0]
               },{
                 "name" : "max",
-                "count" : 4,
-                "VALIDITY" : [0,1,1,1],
-                "DATA" : [0.0,-9.223372036854775E12,9.223372036854775E12,1.5780096E9]
+                "count" : 5,
+                "VALIDITY" : [0,1,1,1,0],
+                "DATA" : [0.0,-9.223372036854775E12,9.223372036854775E12,1.5780096E9,0.0]
               }]
             }]
           }]
