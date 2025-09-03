@@ -1,9 +1,15 @@
 (ns xtdb.test-generators
   (:require [clojure.string :as str]
-            [clojure.test.check.generators :as gen])
+            [clojure.test.check.generators :as gen]
+            [xtdb.time :as time])
   (:import [java.math BigDecimal]
            [java.net URI]
-           [java.nio ByteBuffer]))
+           [java.nio ByteBuffer]
+           [java.time.temporal Temporal]
+           [java.util List Map Set]
+           [org.apache.arrow.memory BufferAllocator]
+           [xtdb Types]
+           [xtdb.arrow Vector]))
 
 ;; Simple types
 ;; TODO: Ensure all arrow types are covered here
@@ -14,9 +20,8 @@
 (def i32-gen (gen/let [v (gen/choose Integer/MAX_VALUE Integer/MAX_VALUE)] (int v)))
 (def i64-gen (gen/choose Long/MIN_VALUE Long/MAX_VALUE))
 (def f64-gen gen/double)
-(def decimal-gen
-  (gen/let [^double v (gen/double* {:infinite? false :NaN? false})]
-    (BigDecimal/valueOf v)))
+(def decimal-gen (gen/let [^double v (gen/double* {:infinite? false :NaN? false})]
+                   (BigDecimal/valueOf v)))
 
 (def utf8-gen gen/string)
 (def varbinary-gen (gen/let [bs gen/bytes] (ByteBuffer/wrap bs)))
@@ -53,15 +58,18 @@
 (def duration-gen (gen/return #xt/duration "PT1S"))
 (def interval-gen (gen/return #xt/interval "P1YT1S"))
 
+(def simple-type-gens
+  [nil-gen bool-gen
+   i8-gen i16-gen i32-gen i64-gen
+   f64-gen decimal-gen
+   utf8-gen varbinary-gen
+   keyword-gen uuid-gen uri-gen
+   instant-gen local-date-gen local-time-gen
+   local-datetime-gen offset-datetime-gen zoned-datetime-gen
+   duration-gen interval-gen])
+
 (def simple-gen
-  (gen/one-of [nil-gen bool-gen
-               i8-gen i16-gen i32-gen i64-gen
-               f64-gen decimal-gen
-               utf8-gen varbinary-gen
-               keyword-gen uuid-gen uri-gen
-               instant-gen local-date-gen local-time-gen
-               local-datetime-gen offset-datetime-gen zoned-datetime-gen
-               duration-gen interval-gen]))
+  (gen/one-of simple-type-gens))
 
 ;; Composite Types
 (def list-gen
@@ -105,6 +113,10 @@
        [1 (union-gen inner-gen simple-gen)]]))
    simple-gen))
 
+(def field-type-gen 
+  (gen/let [v recursive-value-gen]
+    (Types/toFieldType v)))
+
 ;; TODO: Generating simple keys here for now, trying to ensure some overlap between records
 (defn generate-record
   ([]
@@ -121,3 +133,91 @@
              field-values (gen/vector recursive-value-gen num-fields)]
      (-> (zipmap field-keys field-values)
          (assoc :xt/id id)))))
+
+(def single-type-vector-vs-gen 
+  (fn [min-length max-length]
+    (gen/let [vector-name (gen/such-that #(not (str/blank? %)) gen/string-alphanumeric 100)
+              type-gen (gen/elements simple-type-gens)
+              vs (gen/vector type-gen min-length max-length)]
+      {:vec-name vector-name
+       :type type-gen
+       :vs vs})))
+
+(def dense-union-vector-vs-gen
+  (fn [min-length max-length]
+    (gen/let [vector-name (gen/such-that #(not (str/blank? %)) gen/string-alphanumeric 100)
+              vs (gen/vector recursive-value-gen min-length max-length)]
+      {:vec-name vector-name 
+       :vs vs})))
+
+(def vector-vs-gen
+  (gen/frequency
+   [[3 (single-type-vector-vs-gen 1 100)]
+    [1 (dense-union-vector-vs-gen 1 100)]]))
+
+(def fixed-length-vector-vs-gen 
+  (fn [length]
+    (gen/frequency
+     [[3 (single-type-vector-vs-gen length length)]
+      [1 (dense-union-vector-vs-gen length length)]])))
+
+(def two-distinct-single-type-vecs-gen
+  (gen/let [vec1 (single-type-vector-vs-gen 1 100)
+            vec2 (gen/such-that #(and (not= (:type %) (:type vec1))
+                                      (not= (:vec-name %) (:vec-name vec1)))
+                                (single-type-vector-vs-gen 1 100)
+                                100)]
+    [vec1 vec2]))
+
+(def two-distinct-duvs-gen
+  (gen/let [duv1 (dense-union-vector-vs-gen 1 100)
+            duv2 (gen/such-that #(not= (:vec-name %) (:vec-name duv1))
+                                (dense-union-vector-vs-gen 1 100)
+                                100)]
+    [duv1 duv2]))
+
+(defn vec-gen->arrow-vec [^BufferAllocator allocator {:keys [^String vec-name ^List vs]}]
+  (Vector/fromList allocator vec-name vs))
+
+;; TODO - Any utils/other way we could handle this?
+(defn normalize-for-comparison [obj]
+  (cond
+    (and (number? obj) (Double/isNaN (double obj)))
+    ::nan
+
+    (instance? ByteBuffer obj)
+    (vec (.array ^ByteBuffer obj))
+
+    (bytes? obj)
+    (vec obj)
+
+    (instance? Temporal obj)
+    (try
+      (time/->instant obj)
+      (catch Exception _ obj))
+
+    (instance? List obj)
+    (vec (map normalize-for-comparison obj))
+    
+    (vector? obj)
+    (mapv normalize-for-comparison obj)
+    
+    (list? obj)
+    (map normalize-for-comparison obj)
+
+    (or (instance? Set obj) (set? obj))
+    (set (map normalize-for-comparison obj))
+
+    (or (instance? Map obj) (map? obj))
+    (into {} (map (fn [[k v]] 
+                    (let [norm-k (cond
+                                   (keyword? k) (name k)
+                                   :else (str k))]
+                      [norm-k (normalize-for-comparison v)]))
+                  obj)) 
+
+    :else obj))
+
+(defn lists-equal-normalized? [list1 list2]
+  (= (map normalize-for-comparison list1)
+     (map normalize-for-comparison list2)))
