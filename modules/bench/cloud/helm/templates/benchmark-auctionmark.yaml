@@ -69,12 +69,15 @@ spec:
             - auctionmark
             - -f
             - "/var/lib/xtdb-config/xtdbconfig.yaml"
+            {{- if and .Values.auctionmark.onlyLoad .Values.auctionmark.noLoad -}}
+            {{- fail "auctionmark.onlyLoad and auctionmark.noLoad cannot both be true" -}}
+            {{- end -}}
+            {{- if .Values.auctionmark.onlyLoad }}
             - --only-load
-            - {{ .Values.auctionmark.onlyLoad | quote }}
-            {{ if not .Values.auctionmark.onlyLoad }}
+            {{- end }}
+            {{- if .Values.auctionmark.noLoad }}
             - --no-load
-            - {{ .Values.auctionmark.noLoad | quote }}
-            {{- end}}
+            {{- end }}
             - --threads
             - {{ .Values.auctionmark.threads | quote }}
             - --duration
