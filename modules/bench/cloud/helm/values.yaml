@@ -35,7 +35,7 @@ providerConfig:
 image:
   repository: ghcr.io/xtdb/xtdb-bench
   pullPolicy: Always
-  tag: "sha-6b5931e"
+  tag: "latest"
 
 resources:
   limits:
