@@ -280,12 +280,15 @@
 
 (defrecord CatalogEntry [^LocalDate recency ^TrieMetadata trie-metadata ^TemporalBounds query-bounds]
   Metadata
-  (testMetadata [_]
+  (testMetadata [this]
     (let [min-query-recency (min (.getLower (.getValidTime query-bounds)) (.getLower (.getSystemTime query-bounds)))]
-      (if-let [^long recency (and recency (time/instant->micros (time/->instant recency {:default-tz ZoneOffset/UTC})))]
-        ;; the recency of a trie is exclusive, no row in that file has a recency equal to it
-        (< min-query-recency recency)
-        true)))
+      (and (or (nil? recency)
+               ;; the recency of a trie is exclusive, no row in that file has a recency equal to it
+               (< min-query-recency (time/instant->micros (time/->instant recency {:default-tz ZoneOffset/UTC}))))
+
+           (let [temporal-metadata (.getTemporalMetadata this)]
+             (or (not (.hasMaxRecency temporal-metadata))
+                 (<= min-query-recency (.getMaxRecency temporal-metadata)))))))
 
   (getTemporalMetadata [_]
     ;; if we reset compaction, we may not have temporal metadata until the next compaction
