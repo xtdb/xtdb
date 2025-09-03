@@ -5,15 +5,15 @@
             [xtdb.db-catalog :as db]
             [xtdb.garbage-collector :as gc]
             [xtdb.test-util :as tu]
+            [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.util :as util])
   (:import (java.time Duration Instant)
            (java.util.concurrent ConcurrentHashMap)
            (xtdb.api.storage ObjectStore$StoredObject)
-           (xtdb.operator.scan Metadata)
-           (xtdb.trie_catalog TrieCatalog)
-           (xtdb.util TemporalBounds)))
+           (xtdb.log.proto TemporalMetadata TrieMetadata)
+           (xtdb.trie_catalog TrieCatalog)))
 
 (t/use-fixtures :once tu/with-allocator)
 
@@ -50,28 +50,20 @@
       (t/is (false? (stale? l1 "l01-rc-b01")))
       (t/is (false? (stale? l1 "l01-rc-b02"))))))
 
-(defrecord MockCatalogEntry [recency temporal-metadata ^TemporalBounds query-bounds]
-  Metadata
-  (testMetadata [_]
-    ;; copied from the actual implementation
-    (let [min-query-recency (min (.getLower (.getValidTime query-bounds)) (.getLower (.getSystemTime query-bounds)))]
-      (if recency
-        (< min-query-recency recency)
-        true)))
-  (getTemporalMetadata [_] temporal-metadata))
-
 (defn apply-filter-msgs [& trie-keys]
   (map (fn [[trie-key recency temporal-metadata]]
-         (map->MockCatalogEntry {:trie-key trie-key
-                                 :recency recency
-                                 :temporal-metadata (apply tu/->temporal-metadata temporal-metadata)}))
+         (let [^TemporalMetadata tm (apply tu/->temporal-metadata temporal-metadata)]
+           (cat/map->CatalogEntry {:trie-key trie-key
+                                   :recency (some-> recency time/micros->instant)
+                                   :trie-metadata (-> (TrieMetadata/newBuilder)
+                                                      (doto (.setTemporalMetadata tm))
+                                                      (.build))})))
        trie-keys))
 
 (defn- filter-tries [trie-keys query-bounds]
-  (with-redefs [cat/map->CatalogEntry map->MockCatalogEntry]
-    (-> (apply apply-filter-msgs trie-keys)
-        (cat/filter-tries query-bounds)
-        (->> (into #{} (map :trie-key))))))
+  (-> (apply apply-filter-msgs trie-keys)
+      (cat/filter-tries query-bounds)
+      (->> (into #{} (map :trie-key)))))
 
 (t/deftest earilier-recency-files-can-effect-splitting-in-later-buckets-4097
   (let [query-bounds (tu/->temporal-bounds 20220101 20220102)]
