@@ -1,7 +1,7 @@
 (ns xtdb.block-boundary-test
   (:require [clojure.test :as t]
             [clojure.test.check.generators :as gen]
-            [clojure.test.check.properties :as prop] 
+            [clojure.test.check.properties :as prop]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.node :as xtn]
@@ -9,7 +9,7 @@
             [xtdb.test-generators :as tg]
             [xtdb.test-util :as tu]))
 
-(t/deftest ^:property block-boundary-consistency-flush
+(t/deftest ^:property mixed-records-flush-boundary
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
    (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
@@ -29,7 +29,7 @@
                                 expected-ids (into #{} (map :xt/id (concat records1 records2)))]
                             (= expected-ids (into #{} (map :xt/id res))))))))))
 
-(t/deftest ^:property block-boundary-consistency-flush+compact
+(t/deftest ^:property mixed-records-flush-and-compact-boundary
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
    (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
@@ -51,7 +51,7 @@
                                 expected-ids (into #{} (map :xt/id (concat records1 records2)))]
                             (= expected-ids (into #{} (map :xt/id res))))))))))
 
-(t/deftest ^:property block-boundary-consistency-flush+live
+(t/deftest ^:property mixed-records-flush-and-live-boundary
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
    (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
@@ -70,7 +70,7 @@
                                 expected-ids (into #{} (map :xt/id (concat records1 records2)))]
                             (= expected-ids (into #{} (map :xt/id res))))))))))
 
-(t/deftest ^:property block-boundary-consistency-live
+(t/deftest ^:property mixed-records-live-boundary
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
    (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
@@ -86,3 +86,52 @@
                           (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
                                 expected-ids (into #{} (map :xt/id (concat records1 records2)))]
                             (= expected-ids (into #{} (map :xt/id res))))))))))
+
+(t/deftest ^:property type-change-across-blocks
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [[vec1 vec2] tg/two-distinct-single-type-vecs-gen]
+                 (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
+                                                   :compactor {:threads 0}})]
+                   (let [values1 (:vs vec1)
+                         values2 (:vs vec2)
+                         records1 (map-indexed (fn [i v] {:xt/id (+ 1000 i) :field v}) values1)
+                         records2 (map-indexed (fn [i v] {:xt/id (+ 2000 i) :field v}) values2)]
+                     (xt/execute-tx node [(into [:put-docs :docs] records1)])
+                     (tu/flush-block! node)
+
+                     (xt/execute-tx node [(into [:put-docs :docs] records2)])
+                     (tu/flush-block! node)
+
+                     (c/compact-all! node #xt/duration "PT1S")
+
+                     (and (t/testing "two transactions recorded"
+                            (= 2 (count (xt/q node "FROM xt.txs"))))
+                          (t/testing "all expected document IDs present"
+                            (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
+                                  expected-ids (into #{} (map :xt/id (concat records1 records2)))]
+                              (= expected-ids (into #{} (map :xt/id res)))))))))))
+
+(t/deftest ^:property single-typed-value-to-nils-across-blocks
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [single-type-vec (tg/single-type-vector-vs-gen 1 100)]
+                 (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
+                                                   :compactor {:threads 0}})]
+                   (let [values (:vs single-type-vec)
+                         records1 (map-indexed (fn [i v] {:xt/id (+ 1000 i) :field v}) values)
+                         records2 (map-indexed (fn [i _] {:xt/id (+ 2000 i)}) values)]
+                     (xt/execute-tx node [(into [:put-docs :docs] records1)])
+                     (tu/flush-block! node)
+
+                     (xt/execute-tx node [(into [:put-docs :docs] records2)])
+                     (tu/flush-block! node)
+
+                     (c/compact-all! node #xt/duration "PT1S")
+
+                     (and (t/testing "two transactions recorded"
+                            (= 2 (count (xt/q node "FROM xt.txs"))))
+                          (t/testing "all expected document IDs present"
+                            (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
+                                  expected-ids (into #{} (map :xt/id (concat records1 records2)))]
+                              (= expected-ids (into #{} (map :xt/id res)))))))))))

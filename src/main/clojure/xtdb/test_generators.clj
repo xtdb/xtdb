@@ -136,16 +136,14 @@
      (-> (zipmap field-keys field-values)
          (assoc :xt/id id)))))
 
-(defn typed-vector-vs-gen
-  [element-gen min-length max-length]
+(defn typed-vector-vs-gen [element-gen min-length max-length]
   (gen/let [vector-name non-blank-string-gen
             vs (gen/vector element-gen min-length max-length)]
     {:vec-name vector-name
      :vs vs
      :type element-gen}))
 
-(defn single-type-vector-vs-gen
-  [min-length max-length]
+(defn single-type-vector-vs-gen [min-length max-length]
   (gen/let [type-gen (gen/elements simple-type-gens)]
     (typed-vector-vs-gen type-gen min-length max-length)))
 
