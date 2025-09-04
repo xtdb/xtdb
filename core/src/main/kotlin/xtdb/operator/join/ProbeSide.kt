@@ -1,15 +1,21 @@
 package xtdb.operator.join
 
+import xtdb.ICursor
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.expression.map.IndexHasher
+import xtdb.vector.OldRelationWriter
+import java.util.function.Consumer
 import java.util.function.IntBinaryOperator
 import java.util.function.IntConsumer
 
 class ProbeSide(
-    private val buildSide: BuildSide, val probeRel: RelationReader,
+    private val buildSide: BuildSide, private val probeCursor: ICursor<RelationReader>,
     val keyColNames: List<String>, private val comparatorFactory: ComparatorFactory,
 ) {
+    var probeRel: RelationReader? = null
+
+    fun processNext(process: Runnable) = probeCursor.tryAdvance { probeRel = it; process.run()}
 
     interface ComparatorFactory {
         fun buildEqui(buildCol: VectorReader, probeCol: VectorReader): IntBinaryOperator
@@ -17,24 +23,24 @@ class ProbeSide(
     }
 
     internal val buildRel = buildSide.builtRel
-    val rowCount = probeRel.rowCount
+    val rowCount get() = probeRel!!.rowCount
 
-    private val probeKeyCols = keyColNames.map { probeRel[it] }
+    private val probeKeyCols get() = keyColNames.map { probeRel!![it] }
 
     private fun andIBO(p1: IntBinaryOperator, p2: IntBinaryOperator) = IntBinaryOperator { l, r ->
         val lRes = p1.applyAsInt(l, r)
         if (lRes == -1) -1 else minOf(lRes, p2.applyAsInt(l, r))
     }
 
-    private val comparator =
+    private val comparator get() =
         buildSide.keyColNames
             .map { buildRel[it] }.zip(probeKeyCols)
             .map { (buildCol, probeCol) -> comparatorFactory.buildEqui(buildCol, probeCol) }
-            .plus(listOfNotNull(comparatorFactory.buildTheta(buildRel, probeRel)))
+            .plus(listOfNotNull(comparatorFactory.buildTheta(buildRel, probeRel!!)))
             .reduceOrNull(::andIBO)
             ?: IntBinaryOperator { _, _ -> 1 }
 
-    private val hasher = IndexHasher.fromCols(probeKeyCols)
+    private val hasher get() = IndexHasher.fromCols(probeKeyCols)
 
     fun indexOf(probeIdx: Int, removeOnMatch: Boolean): Int =
         buildSide.indexOf(
@@ -65,5 +71,4 @@ class ProbeSide(
         }
         return acc
     }
-
 }
