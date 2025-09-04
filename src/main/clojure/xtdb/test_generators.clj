@@ -72,27 +72,29 @@
   (gen/one-of simple-type-gens))
 
 ;; Composite Types
-(def list-gen
-  (fn [element-gen] (gen/vector element-gen 1 10)))
+(defn list-gen [element-gen]
+  (gen/vector element-gen 1 10))
+
+(def non-blank-string-gen
+  (gen/such-that #(not (str/blank? %)) gen/string-alphanumeric 100))
 
 (def safe-keyword-gen
-  (gen/let [s (gen/such-that #(not (str/blank? %)) gen/string-alphanumeric 100)]
+  (gen/let [s non-blank-string-gen]
     (keyword (str/lower-case s))))
 
-(def struct-gen
-  (fn [value-gen]
-    (gen/let [num-keys (gen/choose 1 10)
-              keys (gen/vector-distinct-by #(str/lower-case (name %)) safe-keyword-gen {:num-elements num-keys :max-tries 100})
-              values (gen/vector value-gen num-keys)]
-      (->> (zipmap keys values)
-           (filter val)
-           (into {})))))
+(defn struct-gen [value-gen]
+  (gen/let [num-keys (gen/choose 1 10)
+            keys (gen/vector-distinct-by #(str/lower-case (name %)) safe-keyword-gen {:num-elements num-keys :max-tries 100})
+            values (gen/vector value-gen num-keys)]
+    (->> (zipmap keys values)
+         (filter val)
+         (into {}))))
 
-(def set-gen
-  (fn [element-gen] (gen/set element-gen {:min-elements 0 :max-elements 10})))
+(defn set-gen [element-gen] 
+  (gen/set element-gen {:min-elements 0 :max-elements 10}))
 
-(def union-gen
-  (fn [& generators] (gen/one-of generators)))
+(defn union-gen [& generators]
+  (gen/one-of generators))
 
 (def value-gen
   (gen/frequency
@@ -113,7 +115,7 @@
        [1 (union-gen inner-gen simple-gen)]]))
    simple-gen))
 
-(def field-type-gen 
+(def field-type-gen
   (gen/let [v recursive-value-gen]
     (Types/toFieldType v)))
 
@@ -134,32 +136,32 @@
      (-> (zipmap field-keys field-values)
          (assoc :xt/id id)))))
 
-(def single-type-vector-vs-gen 
-  (fn [min-length max-length]
-    (gen/let [vector-name (gen/such-that #(not (str/blank? %)) gen/string-alphanumeric 100)
-              type-gen (gen/elements simple-type-gens)
-              vs (gen/vector type-gen min-length max-length)]
-      {:vec-name vector-name
-       :type type-gen
-       :vs vs})))
+(defn typed-vector-vs-gen
+  [element-gen min-length max-length]
+  (gen/let [vector-name non-blank-string-gen
+            vs (gen/vector element-gen min-length max-length)]
+    {:vec-name vector-name
+     :vs vs
+     :type element-gen}))
 
-(def dense-union-vector-vs-gen
-  (fn [min-length max-length]
-    (gen/let [vector-name (gen/such-that #(not (str/blank? %)) gen/string-alphanumeric 100)
-              vs (gen/vector recursive-value-gen min-length max-length)]
-      {:vec-name vector-name 
-       :vs vs})))
+(defn single-type-vector-vs-gen
+  [min-length max-length]
+  (gen/let [type-gen (gen/elements simple-type-gens)]
+    (typed-vector-vs-gen type-gen min-length max-length)))
+
+(defn dense-union-vector-vs-gen
+  [min-length max-length]
+  (typed-vector-vs-gen recursive-value-gen min-length max-length))
 
 (def vector-vs-gen
   (gen/frequency
    [[3 (single-type-vector-vs-gen 1 100)]
     [1 (dense-union-vector-vs-gen 1 100)]]))
 
-(def fixed-length-vector-vs-gen 
-  (fn [length]
-    (gen/frequency
-     [[3 (single-type-vector-vs-gen length length)]
-      [1 (dense-union-vector-vs-gen length length)]])))
+(defn fixed-length-vector-vs-gen [length]
+  (gen/frequency
+   [[3 (single-type-vector-vs-gen length length)]
+    [1 (dense-union-vector-vs-gen length length)]]))
 
 (def two-distinct-single-type-vecs-gen
   (gen/let [vec1 (single-type-vector-vs-gen 1 100)
@@ -198,10 +200,10 @@
 
     (instance? List obj)
     (vec (map normalize-for-comparison obj))
-    
+
     (vector? obj)
     (mapv normalize-for-comparison obj)
-    
+
     (list? obj)
     (map normalize-for-comparison obj)
 
@@ -209,12 +211,12 @@
     (set (map normalize-for-comparison obj))
 
     (or (instance? Map obj) (map? obj))
-    (into {} (map (fn [[k v]] 
+    (into {} (map (fn [[k v]]
                     (let [norm-k (cond
                                    (keyword? k) (name k)
                                    :else (str k))]
                       [norm-k (normalize-for-comparison v)]))
-                  obj)) 
+                  obj))
 
     :else obj))
 
