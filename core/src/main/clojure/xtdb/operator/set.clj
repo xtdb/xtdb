@@ -92,11 +92,12 @@
                                     (when (pos? row-count)
                                       (let [^ProbeSide probe-side (->probe-side in-rel)
                                             idxs (IntStream/builder)]
-                                        (dotimes [idx row-count]
-                                          (when (cond-> (not= -1 (.indexOf probe-side idx true))
-                                                  difference? not)
-                                            (.add idxs idx)))
-
+                                        (.forEachIndexOf probe-side
+                                                         (fn [probe-idx build-idx]
+                                                           (when (cond-> (not= -1 build-idx)
+                                                                   difference? not)
+                                                             (.add idxs probe-idx)))
+                                                         true)
                                         (let [idxs (.toArray (.build idxs))]
                                           (when-not (empty? idxs)
                                             (aset advanced? 0 true)

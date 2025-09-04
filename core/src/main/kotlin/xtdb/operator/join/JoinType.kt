@@ -88,10 +88,7 @@ fun interface JoinType {
 
         internal fun ProbeSide.semiJoinSelection() =
             IntArrayList().let { sel ->
-                repeat(rowCount) {
-                    if (indexOf(it, false) >= 0) sel.add(it)
-                }
-
+                forEachIndexOf( {probeIdx, buildIdx -> if (buildIdx >= 0) sel.add(probeIdx) } ,false)
                 sel.toArray()
             }
 
