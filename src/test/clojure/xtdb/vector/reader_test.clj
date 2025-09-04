@@ -1,14 +1,18 @@
 (ns xtdb.vector.reader-test
   (:require [clojure.test :as t :refer [deftest]]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
+            [xtdb.test-generators :as tg]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import [java.util List]
+           [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            (org.apache.arrow.vector.types.pojo FieldType)
-           (xtdb.arrow ValueReader VectorIndirection VectorPosition)
+           (xtdb.arrow ValueReader Vector VectorIndirection VectorPosition)
            (xtdb.vector IndirectMultiVectorReader OldRelationWriter)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -267,7 +271,7 @@
 (deftest multivec-underlying-monomorphic-vectors-get-leg-test ; see #3343
   (with-open [struct-int-vec (.createVector (types/->field "foo" #xt.arrow/type :struct false
                                                            (types/col-type->field "bar" :i64))
-                                             tu/*allocator*)
+                                            tu/*allocator*)
               struct-str-vec (.createVector (types/->field "foo" #xt.arrow/type :struct false
                                                            (types/col-type->field "bar" :utf8))
                                             tu/*allocator*)]
@@ -341,3 +345,89 @@
           (.copyRow str-copier 0)
           (t/is (= [{:bar 42} {:bar "forty-two"}]
                    (.toList (vw/vec-wtr->rdr wtr) #xt/key-fn :kebab-case-keyword))))))))
+
+(t/deftest ^:property vector-read-what-you-write
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [{:keys [vs] :as vec-gen} tg/vector-vs-gen]
+                 (with-open [^Vector src-vec (tg/vec-gen->arrow-vec tu/*allocator* vec-gen)]
+                   (tg/lists-equal-normalized? vs (.toList src-vec))))))
+
+(defn- copy-vector ^Vector
+  ([^Vector src-vec ^BufferAllocator al]
+   (copy-vector src-vec al 0 (.getValueCount src-vec)))
+  ([^Vector src-vec ^BufferAllocator al start-idx end-idx]
+   (util/with-close-on-catch [out-vec (Vector/fromField al (.getField src-vec))]
+     (let [copier (.rowCopier src-vec out-vec)]
+       (doseq [i (range start-idx end-idx)]
+         (.copyRow copier i))
+       out-vec))))
+
+(defn- vectors-equal?
+  [^Vector src-vec ^Vector out-vec]
+  (and (= (.getValueCount src-vec) (.getValueCount out-vec))
+       (tg/lists-equal-normalized? (.toList src-vec) (.toList out-vec))))
+
+(t/deftest ^:property full-vector-copy-preserves-data
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [vec-gen tg/vector-vs-gen]
+                 (with-open [^Vector src-vec (tg/vec-gen->arrow-vec tu/*allocator* vec-gen)
+                             ^Vector copied-vec (copy-vector src-vec tu/*allocator*)]
+                   (vectors-equal? src-vec copied-vec)))))
+
+(t/deftest ^:property partial-vector-copy-preserves-data
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [vec-gen (tg/fixed-length-vector-vs-gen 100)
+                  start-idx (gen/choose 0 50)
+                  end-idx (gen/choose 51 100)]
+                 (with-open [^Vector src-vec (tg/vec-gen->arrow-vec tu/*allocator* vec-gen)
+                             ^Vector copied-vec (copy-vector src-vec tu/*allocator* start-idx end-idx)]
+                   (let [expected-data (subvec (:vs vec-gen) start-idx end-idx)
+                         actual-data (.toList copied-vec)]
+                     (tg/lists-equal-normalized? expected-data actual-data))))))
+
+(defn- merge-vectors-into-duv ^Vector [^BufferAllocator al vectors]
+  (util/with-close-on-catch [^Vector duv-vec (Vector/fromField al (types/->field "mixed" #xt.arrow/type :union true))]
+    (doseq [^Vector vec vectors]
+      (let [copier (.rowCopier vec duv-vec)]
+        (dotimes [i (.getValueCount vec)]
+          (.copyRow copier i))))
+
+    duv-vec))
+
+(t/deftest ^:property copy-two-distinct-single-typed-vectors
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [[vec-gen1 vec-gen2] tg/two-distinct-single-type-vecs-gen]
+                 (with-open [^Vector src-vec1 (tg/vec-gen->arrow-vec tu/*allocator* vec-gen1)
+                             ^Vector src-vec2 (tg/vec-gen->arrow-vec tu/*allocator* vec-gen2)
+                             ^Vector duv (merge-vectors-into-duv tu/*allocator* [src-vec1 src-vec2])]
+                   (let [expected-data (concat (:vs vec-gen1) (:vs vec-gen2))
+                         actual-data (.toList duv)]
+                     (tg/lists-equal-normalized? expected-data actual-data))))))
+
+(t/deftest ^:property copy-two-duvs
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [[vec-gen1 vec-gen2] tg/two-distinct-duvs-gen]
+                 (with-open [^Vector src-vec1 (tg/vec-gen->arrow-vec tu/*allocator* vec-gen1)
+                             ^Vector src-vec2 (tg/vec-gen->arrow-vec tu/*allocator* vec-gen2)
+                             ^Vector duv (merge-vectors-into-duv tu/*allocator* [src-vec1 src-vec2])]
+                   (let [expected-data (concat (:vs vec-gen1) (:vs vec-gen2))
+                         actual-data (.toList duv)]
+                     (tg/lists-equal-normalized? expected-data actual-data))))))
+
+(t/deftest ^:property multiple-type-promotions
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations} 
+   (prop/for-all [vec-gen tg/vector-vs-gen
+                  field-types (gen/vector tg/field-type-gen 1 4)]
+                 (with-open [^Vector promoted-vec (reduce
+                                                   (fn [^Vector old-vec field-type]
+                                                     (util/with-close-on-catch [old-vec old-vec]
+                                                       (.maybePromote$xtdb_core old-vec tu/*allocator* field-type)))
+                                                   (tg/vec-gen->arrow-vec tu/*allocator* vec-gen)
+                                                   field-types)]
+                   promoted-vec))))
