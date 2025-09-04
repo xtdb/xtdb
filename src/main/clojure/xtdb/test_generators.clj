@@ -17,7 +17,7 @@
 (def bool-gen gen/boolean)
 (def i8-gen gen/byte)
 (def i16-gen (gen/let [v (gen/choose Short/MIN_VALUE Short/MAX_VALUE)] (short v)))
-(def i32-gen (gen/let [v (gen/choose Integer/MAX_VALUE Integer/MAX_VALUE)] (int v)))
+(def i32-gen (gen/let [v (gen/choose Integer/MIN_VALUE Integer/MAX_VALUE)] (int v)))
 (def i64-gen (gen/choose Long/MIN_VALUE Long/MAX_VALUE))
 (def f64-gen gen/double)
 (def decimal-gen (gen/let [^double v (gen/double* {:infinite? false :NaN? false})]
