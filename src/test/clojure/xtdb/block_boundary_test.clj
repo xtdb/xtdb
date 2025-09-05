@@ -9,6 +9,52 @@
             [xtdb.test-generators :as tg]
             [xtdb.test-util :as tu]))
 
+(t/deftest ^:property multiple-writes-to-doc
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [records (gen/vector (tg/generate-record {:potential-doc-ids #{1}}) 10)]
+                 (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
+                                                   :compactor {:threads 0}})]
+                   (doseq [record records]
+                     (xt/execute-tx node [[:put-docs :docs record]]))
+
+                   (and
+                    (t/testing "multiple transaction recorded"
+                      (= (count records) (count (xt/q node "FROM xt.txs"))))
+                    (t/testing "all entries in history"
+                      (let [res (xt/q node "SELECT * FROM docs FOR VALID_TIME ALL")]
+                        (= (count records) (count res))))
+                    (t/testing "only one document present at valid time"
+                      (let [res (xt/q node "SELECT * FROM docs")]
+                        (= 1 (count res))))
+                    (t/testing "document is equal to last entry"
+                      (= (tg/normalize-for-comparison (tu/remove-nils (last records)))
+                         (tg/normalize-for-comparison (first (xt/q node "SELECT * FROM docs"))))))))))
+
+(t/deftest ^:property multiple-writes-to-doc-in-same-tx
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [records (gen/vector (tg/generate-record {:potential-doc-ids #{1}}) 10)]
+                 (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
+                                                   :compactor {:threads 0}})]
+                   (let [vts (take (count records) (tu/->instants :day 1 #inst "2019-01-01"))
+                         docs-with-time (mapv (fn [record valid-from]
+                                                [:put-docs {:into :docs :valid-from valid-from} record])
+                                              records vts)]
+                     (xt/execute-tx node docs-with-time)
+                     (and
+                      (t/testing "one transaction recorded"
+                        (= 1 (count (xt/q node "FROM xt.txs"))))
+                      (t/testing "all entries in history"
+                        (let [res (xt/q node "SELECT * FROM docs FOR VALID_TIME ALL")]
+                          (= (count records) (count res))))
+                      (t/testing "only one document present at valid time"
+                        (let [res (xt/q node "SELECT * FROM docs")] 
+                          (= 1 (count res))))
+                      (t/testing "document is equal to last entry"
+                        (= (tg/normalize-for-comparison (tu/remove-nils (last records)))
+                           (tg/normalize-for-comparison (first (xt/q node "SELECT * FROM docs")))))))))))
+
 (t/deftest ^:property mixed-records-flush-boundary
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
