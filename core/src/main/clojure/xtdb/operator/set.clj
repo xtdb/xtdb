@@ -41,6 +41,9 @@
 (deftype UnionAllCursor [^ICursor left-cursor
                          ^ICursor right-cursor]
   ICursor
+  (getCursorType [_] "union-all")
+  (getChildCursors [_] [left-cursor right-cursor])
+
   (tryAdvance [_ c]
     (let [advanced? (boolean-array 1 false)]
       (loop []
@@ -76,6 +79,9 @@
                              difference?
                              ^:unsynchronized-mutable build-phase-ran?]
   ICursor
+  (getCursorType [_] "intersection")
+  (getChildCursors [_] [left-cursor right-cursor])
+
   (tryAdvance [this c]
     (when-not build-phase-ran?
       (.forEachRemaining right-cursor

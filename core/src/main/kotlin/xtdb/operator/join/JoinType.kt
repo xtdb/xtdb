@@ -6,16 +6,22 @@ import xtdb.arrow.RelationReader
 import xtdb.error.Incorrect
 import xtdb.operator.join.JoinType.OuterJoinType.*
 
-fun interface JoinType {
+interface JoinType {
     fun ProbeSide.probe(): RelationReader
 
     val outerJoinType: OuterJoinType? get() = null
+    val joinTypeName: String
 
     enum class OuterJoinType {
         LEFT, LEFT_FLIPPED, FULL
     }
 
     class Outer(override val outerJoinType: OuterJoinType) : JoinType {
+        
+        override val joinTypeName: String get() = when (outerJoinType) {
+            LEFT, LEFT_FLIPPED -> "left-join"
+            FULL -> "full-join"
+        }
 
         override fun ProbeSide.probe(): RelationReader {
             val matchingBuildIdxs = IntArrayList()
@@ -49,21 +55,25 @@ fun interface JoinType {
 
     companion object {
         @JvmField
-        val INNER = JoinType {
-            val matchingBuildIdxs = IntArrayList()
-            val matchingProbeIdxs = IntArrayList()
+        val INNER = object : JoinType {
+            override val joinTypeName = "inner-join"
+            
+            override fun ProbeSide.probe(): RelationReader {
+                val matchingBuildIdxs = IntArrayList()
+                val matchingProbeIdxs = IntArrayList()
 
-            repeat(rowCount) { probeIdx ->
-                forEachMatch(probeIdx) { buildIdx ->
-                    matchingBuildIdxs.add(buildIdx)
-                    matchingProbeIdxs.add(probeIdx)
+                repeat(rowCount) { probeIdx ->
+                    forEachMatch(probeIdx) { buildIdx ->
+                        matchingBuildIdxs.add(buildIdx)
+                        matchingProbeIdxs.add(probeIdx)
+                    }
                 }
-            }
 
-            RelationReader.concatCols(
-                buildRel.select(matchingBuildIdxs.toArray()),
-                probeRel.select(matchingProbeIdxs.toArray())
-            )
+                return RelationReader.concatCols(
+                    buildRel.select(matchingBuildIdxs.toArray()),
+                    probeRel.select(matchingProbeIdxs.toArray())
+                )
+            }
         }
 
         @JvmField
@@ -93,7 +103,13 @@ fun interface JoinType {
             }
 
         @JvmField
-        val SEMI = JoinType { probeRel.select(semiJoinSelection()) }
+        val SEMI = object : JoinType {
+            override val joinTypeName = "semi-join"
+            
+            override fun ProbeSide.probe(): RelationReader {
+                return probeRel.select(semiJoinSelection())
+            }
+        }
 
         internal fun ProbeSide.antiJoinSelection() =
             IntArrayList().let { sel ->
@@ -103,34 +119,44 @@ fun interface JoinType {
             }
 
         @JvmField
-        val ANTI = JoinType { probeRel.select(antiJoinSelection()) }
+        val ANTI = object : JoinType {
+            override val joinTypeName = "anti-join"
+            
+            override fun ProbeSide.probe(): RelationReader {
+                return probeRel.select(antiJoinSelection())
+            }
+        }
 
         @JvmField
-        val SINGLE = JoinType {
-            val matchingBuildIdxs = IntArrayList()
-            val matchingProbeIdxs = IntArrayList()
+        val SINGLE = object : JoinType {
+            override val joinTypeName = "single-join"
+            
+            override fun ProbeSide.probe(): RelationReader {
+                val matchingBuildIdxs = IntArrayList()
+                val matchingProbeIdxs = IntArrayList()
 
-            repeat(rowCount) { probeIdx ->
-                var matched = false
-                forEachMatch(probeIdx) { buildIdx ->
-                    if (matched)
-                        throw Incorrect("cardinality violation", "xtdb.single-join/cardinality-violation")
-                    matched = true
+                repeat(rowCount) { probeIdx ->
+                    var matched = false
+                    forEachMatch(probeIdx) { buildIdx ->
+                        if (matched)
+                            throw Incorrect("cardinality violation", "xtdb.single-join/cardinality-violation")
+                        matched = true
 
-                    matchingBuildIdxs.add(buildIdx)
-                    matchingProbeIdxs.add(probeIdx)
+                        matchingBuildIdxs.add(buildIdx)
+                        matchingProbeIdxs.add(probeIdx)
+                    }
+
+                    if (!matched) {
+                        matchingBuildIdxs.add(NULL_ROW_IDX)
+                        matchingProbeIdxs.add(probeIdx)
+                    }
                 }
 
-                if (!matched) {
-                    matchingBuildIdxs.add(NULL_ROW_IDX)
-                    matchingProbeIdxs.add(probeIdx)
-                }
+                return RelationReader.concatCols(
+                    buildRel.select(matchingBuildIdxs.toArray()),
+                    probeRel.select(matchingProbeIdxs.toArray())
+                )
             }
-
-            RelationReader.concatCols(
-                buildRel.select(matchingBuildIdxs.toArray()),
-                probeRel.select(matchingProbeIdxs.toArray())
-            )
         }
     }
 }

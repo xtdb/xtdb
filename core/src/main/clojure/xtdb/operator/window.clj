@@ -104,6 +104,9 @@
                          ^List window-specs
                          ^:unsynchronized-mutable ^boolean done?]
   ICursor
+  (getCursorType [_] "window")
+  (getChildCursors [_] [in-cursor])
+
   (tryAdvance [this c]
     (boolean
      (when-not done?

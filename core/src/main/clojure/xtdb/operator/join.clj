@@ -114,6 +114,9 @@
                           ^:unsynchronized-mutable ^Iterator left-rel-iterator
                           ^:unsynchronized-mutable ^RelationReader right-rel]
   ICursor
+  (getCursorType [_] "cross-join")
+  (getChildCursors [_] [left-cursor right-cursor])
+
   (tryAdvance [this c]
     (.forEachRemaining left-cursor
                        (fn [^RelationReader left-rel]
@@ -191,6 +194,9 @@
                      ^Set pushdown-iids
                      ^JoinType join-type]
   ICursor
+  (getCursorType [_] (.getJoinTypeName join-type))
+  (getChildCursors [_] [build-cursor probe-cursor])
+
   (tryAdvance [this c]
     (when-not probe-cursor
       (build-phase build-side build-cursor pushdown-blooms pushdown-iids)
@@ -253,6 +259,9 @@
                          mark-col-name
                          pushdown-blooms]
   ICursor
+  (getCursorType [_] "mark-join")
+  (getChildCursors [_] [build-cursor])
+
   (tryAdvance [this c]
 
     (when-not probe-cursor
@@ -390,7 +399,7 @@
                                 (mapv #(project/->identity-projection-spec (get merged-fields %))))]
 
     {:op (case join-type
-           ::inner-join :join
+           ::inner-join :inner-join
            ::left-outer-join :left-join
            ::left-outer-join-flipped :left-join
            ::full-outer-join :full-join

@@ -13,6 +13,9 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
         fun open(): ICursor
     }
 
+    val cursorType: String
+    val childCursors: List<ICursor>
+
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean
     override fun trySplit(): Spliterator<RelationReader>? = null
     override fun characteristics() = Spliterator.IMMUTABLE

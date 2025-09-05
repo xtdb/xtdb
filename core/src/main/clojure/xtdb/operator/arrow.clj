@@ -18,6 +18,9 @@
 
 (deftype ArrowCursor [^ArrowReader rdr on-close-fn]
   ICursor
+  (getCursorType [_] "arrow")
+  (getChildCursors [_] [])
+
   (tryAdvance [_ c]
     (if (.loadNextBatch rdr)
       (do

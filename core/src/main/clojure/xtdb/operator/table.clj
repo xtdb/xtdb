@@ -29,6 +29,9 @@
 
 (deftype TableCursor [^:unsynchronized-mutable ^RelationReader out-rel]
   ICursor
+  (getCursorType [_] "table")
+  (getChildCursors [_] [])
+
   (tryAdvance [this c]
     (boolean
      (when-let [out-rel out-rel]

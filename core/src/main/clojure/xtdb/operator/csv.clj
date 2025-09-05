@@ -32,6 +32,9 @@
                     col-parsers
                     ^Iterator row-batches]
   ICursor
+  (getCursorType [_] "csv")
+  (getChildCursors [_] [])
+
   (tryAdvance [_ c]
     (if (.hasNext row-batches)
       (let [row-batch (.next row-batches)

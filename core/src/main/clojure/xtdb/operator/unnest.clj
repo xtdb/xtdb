@@ -30,6 +30,9 @@
                        ^Field to-field
                        ^String ordinality-column]
   ICursor
+  (getCursorType [_] "unnest")
+  (getChildCursors [_] [in-cursor])
+
   (tryAdvance [_this c]
     (let [advanced? (boolean-array 1)]
       (while (and (.tryAdvance in-cursor

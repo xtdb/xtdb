@@ -575,6 +575,9 @@
                         ^List aggregate-specs
                         ^:unsynchronized-mutable ^boolean done?]
   ICursor
+  (getCursorType [_] "group-by")
+  (getChildCursors [_] [in-cursor])
+
   (tryAdvance [this c]
     (boolean
      (when-not done?
@@ -623,11 +626,11 @@
                                                                                types/field->col-type)}))))))]
           {:op :group-by
            :children [inner-rel]
-           :explain {:group-by (vec group-cols)
+           :explain {:group-by (mapv str group-cols)
                      :aggregates (->> aggs
                                       (mapv (fn [[_ agg]]
                                               (let [[to-column agg-form] (first agg)]
-                                                [to-column (pr-str agg-form)]))))}
+                                                [(str to-column) (pr-str agg-form)]))))}
            :fields (into (->> group-cols
                               (into {} (map (juxt identity fields))))
                          (->> agg-factories

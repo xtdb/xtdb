@@ -446,6 +446,9 @@
 
 (deftype InformationSchemaCursor [^:unsynchronized-mutable ^RelationReader out-rel vsr]
   ICursor
+  (getCursorType [_] "information-schema")
+  (getChildCursors [_] [])
+
   (tryAdvance [this c]
     (boolean
      (when-let [^RelationReader out-rel (.out_rel this)]

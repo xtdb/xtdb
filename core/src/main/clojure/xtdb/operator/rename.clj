@@ -21,6 +21,9 @@
 (deftype RenameCursor [^ICursor in-cursor
                        ^Map #_#_<Symbol, Symbol> col-name-mapping]
   ICursor
+  (getCursorType [_] "rename")
+  (getChildCursors [_] [in-cursor])
+
   (tryAdvance [_ c]
     (.tryAdvance in-cursor
                  (fn [^RelationReader in-rel]

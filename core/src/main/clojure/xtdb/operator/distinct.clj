@@ -18,6 +18,9 @@
 (deftype DistinctCursor [^ICursor in-cursor
                          ^DistinctRelationMap rel-map]
   ICursor
+  (getCursorType [_] "distinct")
+  (getChildCursors [_] [in-cursor])
+
   (tryAdvance [_ c]
     (let [advanced? (boolean-array 1)]
       (while (and (not (aget advanced? 0))

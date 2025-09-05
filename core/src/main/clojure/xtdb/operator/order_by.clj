@@ -208,6 +208,9 @@
                         ^:unsynchronized-mutable ^VectorSchemaRoot read-root
                         ^:unsynchronized-mutable ^File sorted-file]
   ICursor
+  (getCursorType [_] "order-by")
+  (getChildCursors [_] [in-cursor])
+
   (tryAdvance [this c]
     (if-not consumed?
       (letfn [(load-next-batch []

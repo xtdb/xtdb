@@ -31,6 +31,9 @@
                      ^long batch-size
                      ^:unsynchronized-mutable ^long current-pos]
   ICursor
+  (getCursorType [_] "list")
+  (getChildCursors [_] [])
+
   (tryAdvance [_ consumer]
     (boolean
      (when (and list-expr (< current-pos (.getSize list-expr)))

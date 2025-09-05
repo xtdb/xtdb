@@ -90,6 +90,9 @@
                              (fn [{:keys [allocator args] :as query-opts}]
                                (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
                                  (reify ICursor
+                                   (getCursorType [_] "apply-mark-join")
+                                   (getChildCursors [_] [dep-cursor])
+
                                    (tryAdvance [_ c]
                                      (.tryAdvance dep-cursor (fn [in-rel]
                                                                (with-open [match-vec (.project projection-spec allocator in-rel {} args)]

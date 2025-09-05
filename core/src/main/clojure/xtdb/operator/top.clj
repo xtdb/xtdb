@@ -31,6 +31,9 @@
                     ^long limit
                     ^:unsynchronized-mutable ^long idx]
   ICursor
+  (getCursorType [_] "top")
+  (getChildCursors [_] [in-cursor])
+
   (tryAdvance [this c]
     (let [advanced? (boolean-array 1)]
       (while (and (not (aget advanced? 0))

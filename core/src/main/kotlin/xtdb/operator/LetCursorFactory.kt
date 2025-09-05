@@ -35,6 +35,9 @@ class LetCursorFactory(
     override fun open() = object : ICursor {
         private val batches = boundBatches.spliterator()
 
+        override val cursorType get() = "let"
+        override val childCursors get() = emptyList<ICursor>()
+
         override fun tryAdvance(c: Consumer<in RelationReader>): Boolean =
             batches.tryAdvance { batch ->
                 Relation(al, batch.schema).use { rel ->
@@ -54,6 +57,9 @@ class LetCursorFactory(
     }
 
     fun wrapBodyCursor(bodyCursor: ICursor) = object : ICursor by bodyCursor {
+        override val cursorType get() = "let-wrapper"
+        override val childCursors get() = listOf(bodyCursor)
+
         override fun close() {
             bodyCursor.close()
             this@LetCursorFactory.close()
