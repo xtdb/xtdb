@@ -1,7 +1,11 @@
 (ns xtdb.operator.patch-test
   (:require [clojure.test :as t]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
+            [xtdb.node :as xtn]
+            [xtdb.test-generators :as tg]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.types :as types]))
@@ -134,3 +138,29 @@
 
     (t/is (= [{:xt/id 1, :xt/valid-from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}]
              (xt/q tu/*node* "SELECT *,_valid_from, _valid_to FROM docs")))))
+
+;; TODO: Will fail due to #4751
+(t/deftest ^:property multiple-patches-on-record
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [records (gen/vector (tg/generate-record {:potential-doc-ids #{1}}) 1 20)]
+                 (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
+                                                   :compactor {:threads 0}})]
+                   (doseq [record records]
+                     (xt/execute-tx node [[:patch-docs :docs record]]))
+                   
+                   (and
+                    (t/testing "correct number of transactions recorded"
+                      (= (count records) (count (xt/q node "FROM xt.txs"))))
+                    (t/testing "all entries in history"
+                      (let [res (xt/q node "SELECT * FROM docs FOR VALID_TIME ALL")]
+                        (= (count records) (count res))))
+                    (t/testing "only one document present at valid time"
+                      (let [res (xt/q node "SELECT * FROM docs")] (= 1 (count res))))
+                    (t/testing "document equals merge of all patches"
+                      (let [res (first (xt/q node "SELECT * FROM docs"))
+                            records-no-nils (map tu/remove-nils records)
+                            expected-merged (reduce merge {:xt/id 1} records-no-nils)] 
+                        (= (tg/normalize-for-comparison expected-merged)
+                           (tg/normalize-for-comparison res)))))))))
+
