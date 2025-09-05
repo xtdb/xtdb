@@ -388,3 +388,6 @@
    (let [opts (merge {:num-tests property-test-iterations} opts)
          result (tc/quick-check (:num-tests opts) property (dissoc opts :num-tests))]
      (t/is (:pass? result) (with-out-str (pprint/pprint result))))))
+
+(defn remove-nils [m]
+  (into {} (remove (comp nil? val) m)))
