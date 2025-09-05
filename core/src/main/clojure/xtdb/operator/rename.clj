@@ -43,7 +43,10 @@
                                    prefix (->> name (symbol (name prefix))))])
                               (into {}))
         col-name-reverse-mapping (set/map-invert col-name-mapping)]
-    {:fields (->> inner-fields
+    {:op :rename
+     :children [emitted-child-relation]
+     :explain {:prefix (some-> prefix str), :columns (some-> columns pr-str)}
+     :fields (->> inner-fields
                   (into {}
                         (map (juxt (comp col-name-mapping key)
                                    (comp (fn [^Field field]

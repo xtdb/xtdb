@@ -279,8 +279,11 @@
 
 (t/deftest test-explain-query-with-params
   (with-open [conn (pg-conn {})]
-    (let [[{:keys [plan]}] (pg/execute conn "EXPLAIN SELECT $1" {:params [""]})]
-      (t/is (some? plan)))))
+    (t/is (= [{:depth "->", :op "project",
+               :explain {:append? false, :project "[{_column_1 ?_0}]"}}
+              {:depth "  ->", :op "table"
+               :explain nil}]
+             (pg/execute conn "EXPLAIN SELECT $1" {:params [""]})))))
 
 (t/deftest test-sql-with-leading-whitespace
   (with-open [conn (pg-conn {})]

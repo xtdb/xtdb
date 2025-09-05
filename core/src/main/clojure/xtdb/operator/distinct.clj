@@ -71,8 +71,10 @@
 
 (defmethod lp/emit-expr :distinct [{:keys [relation]} args]
   (lp/unary-expr (lp/emit-expr relation args)
-                 (fn [{inner-fields :fields}]
-                   {:fields inner-fields
+                 (fn [{inner-fields :fields :as inner-rel}]
+                   {:op :distinct
+                    :children [inner-rel]
+                    :fields inner-fields
                     :->cursor (fn [{:keys [allocator]} in-cursor]
                                 (DistinctCursor. in-cursor (->relation-map allocator
                                                                            {:build-fields inner-fields

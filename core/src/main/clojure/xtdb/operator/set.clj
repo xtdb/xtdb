@@ -64,8 +64,10 @@
 
 (defmethod lp/emit-expr :union-all [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
-                  (fn [{left-fields :fields} {right-fields :fields}]
-                    {:fields (union-fields left-fields right-fields)
+                  (fn [{left-fields :fields :as left-rel} {right-fields :fields :as right-rel}]
+                    {:op :union-all
+                     :children [left-rel right-rel]
+                     :fields (union-fields left-fields right-fields)
                      :->cursor (fn [_opts left-cursor right-cursor]
                                  (UnionAllCursor. left-cursor right-cursor))})))
 
@@ -111,10 +113,12 @@
 
 (defmethod lp/emit-expr :intersect [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
-    (fn [{left-fields :fields} {right-fields :fields}]
+    (fn [{left-fields :fields :as left-rel} {right-fields :fields :as right-rel}]
       (let [fields (union-fields left-fields right-fields)
             key-col-names (set (keys fields))]
-        {:fields fields
+        {:op :intersect
+         :children [left-rel right-rel]
+         :fields fields
          :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                      (let [build-side (join/->build-side allocator
                                                          {:fields left-fields
@@ -128,10 +132,12 @@
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
-    (fn [{left-fields :fields} {right-fields :fields}]
+    (fn [{left-fields :fields :as left-rel} {right-fields :fields :as right-rel}]
       (let [fields (union-fields left-fields right-fields)
             key-col-names (set (keys fields))]
-        {:fields fields
+        {:op :difference
+         :children [left-rel right-rel]
+         :fields fields
          :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                      (let [build-side (join/->build-side allocator
                                                          {:fields left-fields

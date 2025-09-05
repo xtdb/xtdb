@@ -16,7 +16,9 @@
 (defmethod lp/emit-expr :let [{[binding bound-rel] :binding, :keys [relation]} emit-opts]
   (let [{->bound-cursor :->cursor, :as emitted-bound-rel} (lp/emit-expr bound-rel emit-opts)
         {->body-cursor :->cursor, :as emitted-body-rel} (lp/emit-expr relation (assoc-in emit-opts [:let-bindings binding] emitted-bound-rel))]
-    {:fields (:fields emitted-body-rel)
+    {:op :let
+     :children [emitted-bound-rel emitted-body-rel]
+     :fields (:fields emitted-body-rel)
      :stats (:stats emitted-body-rel)
      :->cursor (fn [{:keys [allocator] :as opts}]
                  (util/with-close-on-catch [bound-cursor (->bound-cursor opts)
@@ -41,7 +43,9 @@
                                                        {:relation relation
                                                         :available available}))))]
 
-    {:fields fields, :stats stats
+    {:op :relation
+     :children []
+     :fields fields, :stats stats
      :->cursor (fn [opts]
                  (let [^ICursor$Factory cursor-factory (or (get-in opts [:let-bindings relation])
                                                            (let [available (set (keys (:let-bindings opts)))]

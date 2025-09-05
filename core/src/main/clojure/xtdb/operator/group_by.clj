@@ -606,7 +606,7 @@
   (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)
         group-cols (mapv second group-cols)]
     (lp/unary-expr (lp/emit-expr relation args)
-      (fn [{:keys [fields]}]
+      (fn [{:keys [fields], :as inner-rel}]
         (let [agg-factories (for [[_ agg] aggs]
                               (let [[to-column agg-form] (first agg)]
                                 (->aggregate-factory (into {:to-name to-column
@@ -621,7 +621,14 @@
                                                                 :from-name from-column
                                                                 :from-type (-> (get fields from-column types/null-field)
                                                                                types/field->col-type)}))))))]
-          {:fields (into (->> group-cols
+          {:op :group-by
+           :children [inner-rel]
+           :explain {:group-by (vec group-cols)
+                     :aggregates (->> aggs
+                                      (mapv (fn [[_ agg]]
+                                              (let [[to-column agg-form] (first agg)]
+                                                [to-column (pr-str agg-form)]))))}
+           :fields (into (->> group-cols
                               (into {} (map (juxt identity fields))))
                          (->> agg-factories
                               (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)

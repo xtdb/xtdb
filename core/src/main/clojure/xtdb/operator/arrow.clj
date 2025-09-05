@@ -40,7 +40,9 @@
 
 ;; HACK: not ideal that we have to open the file in the emitter just to get the fields?
 (defn- path->cursor [^Path path on-close-fn]
-  {:fields (with-open [al (RootAllocator.)
+  {:op :arrow
+   :children []
+   :fields (with-open [al (RootAllocator.)
                        ^ArrowReader rdr (path->arrow-reader (util/->file-channel path) al)]
              (->> (.getFields (.getSchema (.getVectorSchemaRoot rdr)))
                   (into {} (map (juxt #(symbol (.getName ^Field %)) identity)))))

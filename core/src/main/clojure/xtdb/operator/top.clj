@@ -60,8 +60,13 @@
 
 (defmethod lp/emit-expr :top [{:keys [relation], {[skip-tag skip-arg] :skip, [limit-tag limit-arg] :limit} :top} args]
   (lp/unary-expr (lp/emit-expr relation args)
-    (fn [{fields :fields}]
-      {:fields fields
+    (fn [{fields :fields :as inner-rel}]
+      {:op :top
+       :children [inner-rel]
+       :explain (->> {:skip (some-> skip-arg pr-str),
+                      :limit (some-> limit-arg pr-str)}
+                     (into {} (filter val)))
+       :fields fields
        :->cursor (fn [{:keys [args]} in-cursor]
                    (TopCursor. in-cursor
                                (case skip-tag

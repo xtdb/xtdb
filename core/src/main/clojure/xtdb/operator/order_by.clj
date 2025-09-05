@@ -262,7 +262,10 @@
 
 (defmethod lp/emit-expr :order-by [{:keys [order-specs relation]} args]
   (lp/unary-expr (lp/emit-expr relation args)
-    (fn [{:keys [fields]}]
-      {:fields fields
+    (fn [{:keys [fields], :as rel}]
+      {:op :order-by
+       :children [rel]
+       :explain {:order-specs (pr-str order-specs)}
+       :fields fields
        :->cursor (fn [{:keys [allocator]} in-cursor]
                    (OrderByCursor. allocator in-cursor (rename-fields fields) order-specs false nil nil nil nil))})))

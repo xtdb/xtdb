@@ -55,7 +55,9 @@
         {:keys [field ->list-expr]} (expr-list/compile-list-expr expr input-types)
         named-field (types/field-with-name field (str out-col))
         fields {(symbol (.getName named-field)) named-field}]
-    {:fields (restrict-cols fields list-expr)
+    {:op :list
+     :children []
+     :fields (restrict-cols fields list-expr)
      :->cursor (fn [{:keys [allocator ^RelationReader args]}]
                  (ListCursor. allocator (->list-expr schema args) named-field
                               *batch-size* 0))}))

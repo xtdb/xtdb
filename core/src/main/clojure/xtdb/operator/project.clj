@@ -45,7 +45,7 @@
 (defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-fields] :as args}]
   (let [emitted-child-relation (lp/emit-expr relation args)]
     (lp/unary-expr emitted-child-relation
-      (fn [{inner-fields :fields}]
+      (fn [{inner-fields :fields, :as inner-rel}]
         (let [projection-specs (concat (when append-columns?
                                          (for [[_col-name field] inner-fields]
                                            (->identity-projection-spec field)))
@@ -74,7 +74,11 @@
                                                                       :param-types (update-vals param-fields types/field->col-type)}
                                                          expr (expr/form->expr form input-types)]
                                                      (expr/->expression-projection-spec col-name expr input-types)))))]
-          {:fields (->> projection-specs
+          {:op :project
+           :children [inner-rel]
+           :explain {:project (pr-str (into [] (map second) projections))
+                     :append? (boolean append-columns?)}
+           :fields (->> projection-specs
                         (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
                                             #(.getField ^ProjectionSpec %)))))
            :stats (:stats emitted-child-relation)

@@ -83,7 +83,9 @@
   (let [fields (->> col-types
                     (into {} (map (juxt (comp name key)
                                         #(types/col-type->field (name (key %)) (get csv-col-type-overrides (val %) (val %)))))))]
-    {:fields fields
+    {:op :csv
+     :children []
+     :fields fields
      :->cursor (fn [{:keys [allocator]}]
                  (let [rdr (Files/newBufferedReader path)
                        rows (rest (csv/read-csv rdr))

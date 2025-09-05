@@ -147,8 +147,10 @@
 
 (defn emit-cross-join [{:keys [left right]}]
   (lp/binary-expr left right
-    (fn [{left-fields :fields} {right-fields :fields}]
-      {:fields (merge left-fields right-fields)
+    (fn [{left-fields :fields :as left-rel} {right-fields :fields :as right-rel}]
+      {:op :cross-join
+       :children [left-rel right-rel]
+       :fields (merge left-fields right-fields)
        :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                    (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil))})))
 
@@ -387,7 +389,21 @@
                                                       equi-specs))
                                 (mapv #(project/->identity-projection-spec (get merged-fields %))))]
 
-    {:fields (projection-specs->fields output-projections)
+    {:op (case join-type
+           ::inner-join :join
+           ::left-outer-join :left-join
+           ::left-outer-join-flipped :left-join
+           ::full-outer-join :full-join
+           ::semi-join :semi-join
+           ::anti-semi-join :anti-join
+           ::single-join :single-join
+           ::mark-join :mark-join)
+
+     :children [left right]
+     :explain {:condition (pr-str (mapv second condition))}
+
+     :fields (projection-specs->fields output-projections)
+
      :->cursor (fn [{:keys [allocator args] :as opts}]
                  (util/with-close-on-catch [build-cursor (->build-cursor opts)
                                             build-side (->build-side allocator {:fields build-fields

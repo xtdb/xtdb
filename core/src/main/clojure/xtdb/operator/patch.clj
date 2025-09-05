@@ -34,10 +34,14 @@
 
 (defmethod lp/emit-expr :patch-gaps [{:keys [relation], {:keys [valid-from valid-to]} :opts} opts]
   (lp/unary-expr (lp/emit-expr relation opts)
-    (fn [{inner-fields :fields}]
+    (fn [{inner-fields :fields :as inner-rel}]
       (let [fields (-> inner-fields
                        (update 'doc types/->nullable-field))]
-        {:fields fields
+        {:op :patch-gaps
+         :children [inner-rel]
+         :explain {:valid-from (pr-str valid-from)
+                   :valid-to (pr-str valid-to)}
+         :fields fields
          :->cursor (fn [{:keys [allocator current-time] :as qopts} inner]
                      (let [valid-from (time/instant->micros (->instant (or valid-from [:literal current-time]) qopts))
                            valid-to (or (some-> valid-to (->instant qopts) time/instant->micros) Long/MAX_VALUE)]

@@ -106,12 +106,17 @@
 (defmethod lp/emit-expr :unnest [{:keys [columns relation], {:keys [ordinality-column]} :opts}, op-args]
   (let [[to-col from-col] (first columns)]
     (lp/unary-expr (lp/emit-expr relation op-args)
-                   (fn [{:keys [fields]}]
+                   (fn [{:keys [fields] :as inner-rel}]
                      (let [unnest-field (->> (get fields from-col)
                                              types/flatten-union-field
                                              (keep types/unnest-field)
                                              (apply types/merge-fields))]
-                       {:fields (-> fields
+                       {:op :unnest
+                        :children [inner-rel]
+                        :explain {:from from-col
+                                  :to to-col
+                                  :ordinality ordinality-column}
+                        :fields (-> fields
                                     (assoc to-col (types/field-with-name unnest-field (str to-col)))
                                     (cond-> ordinality-column (assoc ordinality-column (types/col-type->field ordinality-column :i32))))
                         :->cursor (fn [{:keys [allocator]} in-cursor]

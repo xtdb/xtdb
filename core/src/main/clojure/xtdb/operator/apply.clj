@@ -38,7 +38,7 @@
   ;; TODO: decodes/re-encodes row values - can we pass these directly to the sub-query?
 
   (lp/unary-expr (lp/emit-expr independent-relation args)
-    (fn [{independent-fields :fields}]
+    (fn [{independent-fields :fields, :as indep-rel}]
       (let [{:keys [param-fields] :as dependent-args} (-> args
                                                           (update :param-fields
                                                                   (fnil into {})
@@ -51,7 +51,7 @@
                                                                              {::err/message (str "Column missing from independent relation: " ik)
                                                                               :column ik})))))
                                                                   columns))
-            {dependent-fields :fields, ->dependent-cursor :->cursor} (lp/emit-expr dependent-relation dependent-args)
+            {dependent-fields :fields, ->dependent-cursor :->cursor, :as dep-rel} (lp/emit-expr dependent-relation dependent-args)
             out-dependent-fields (zmatch mode
                                    [:mark-join mark-spec]
                                    (let [[col-name _expr] (first (:mark-join mark-spec))]
@@ -65,7 +65,18 @@
 
                                      (:semi-join :anti-join) {}))]
 
-        {:fields (merge-with types/merge-fields independent-fields out-dependent-fields)
+        {:op (zmatch mode
+               [:mark-join _] :apply-mark-join
+               [:otherwise simple-mode]
+               (case simple-mode
+                 :cross-join :apply-cross-join
+                 :left-outer-join :apply-left-join
+                 :semi-join :apply-semi-join
+                 :anti-join :apply-anti-join
+                 :single-join :apply-single-join))
+         :children [indep-rel dep-rel]
+         :explain {:columns (pr-str columns)}
+         :fields (merge-with types/merge-fields independent-fields out-dependent-fields)
 
          :->cursor (let [mode-strat (->mode-strategy mode (for [[col-name field] out-dependent-fields]
                                                             (types/field-with-name field (str col-name))))

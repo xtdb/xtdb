@@ -451,29 +451,27 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (xt/submit-tx tu/*node* [[:put-docs :people {:xt/id 1 :name "Dave" :age 30}]
                            [:put-docs :people {:xt/id 2 :name "John" :age 40}]])
 
-  (t/is (= '[{:plan [:project [{name name}
-                               {age age}
-                               {_valid_from _valid_from}
-                               {_valid_to _valid_to}]
-                     [:scan {:table #xt/table people
-                             :for-valid-time nil, :for-system-time nil}
-                      [{_id (= _id ?_0)} name age _valid_from _valid_to]]]}]
-           (-> (xt/q tu/*node*
-                     [(format "EXPLAIN XTQL $$ %s $$"
-                              (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))])
-               (update-in [0 :plan] read-string))))
+  (t/is (= '[{:depth "->", :op :project,
+              :explain {:append? false, :project "[{name name} {age age} {_valid_from _valid_from} {_valid_to _valid_to}]"}}
+             {:depth "  ->", :op :scan,
+              :explain {:table "xtdb.public.people",
+                        :columns ["_valid_from" "age" "name" "_valid_to" "_id"],
+                        :predicates ["(= _id ?_0)"]}}]
+           (xt/q tu/*node*
+                 [(format "EXPLAIN XTQL ($$ %s $$, ?)"
+                          (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))
+                  1])))
 
-  (t/is (= '[{:plan [:project [{name people.1/name}
-                               {age people.1/age}
-                               {_valid_from people.1/_valid_from}
-                               {_valid_to people.1/_valid_to}]
-                     [:rename people.1
-                      [:scan {:table #xt/table people}
-                       [_valid_from {_id (= _id ?_0)} age name _valid_to]]]]}]
-           (-> (xt/q tu/*node*
-                     ["EXPLAIN SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?"
-                      "dummy-arg-because-pgjdbc-expects-one"])
-               (update-in [0 :plan] read-string)))))
+  (t/is (= '[{:depth "->", :op :project,
+              :explain {:append? false, :project "[{name people.1/name} {age people.1/age} {_valid_from people.1/_valid_from} {_valid_to people.1/_valid_to}]"}}
+             {:depth "  ->", :op :rename, :explain {:prefix "people.1"}}
+             {:depth "    ->", :op :scan,
+              :explain {:table "xtdb.public.people"
+                        :columns ["_valid_from" "age" "name" "_valid_to" "_id"]
+                        :predicates ["(= _id ?_0)"]}}]
+           (xt/q tu/*node*
+                 ["EXPLAIN SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?"
+                  "dummy-arg-because-pgjdbc-expects-one"]))))
 
 (t/deftest test-transit-encoding-of-ast-objects-3019
   (t/is (anomalous? [:incorrect nil #"Not all variables in expression are in scope"]

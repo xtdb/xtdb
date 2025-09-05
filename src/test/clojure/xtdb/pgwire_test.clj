@@ -2504,18 +2504,15 @@ ORDER BY 1,2;")
 
 (t/deftest test-explain
   ;; this one might be a little brittle, let's revisit if it fails a lot.
-  (let [sql "EXPLAIN SELECT _id FROM foo"
-        expected-plan '[:project [{_id foo.1/_id}]
-                        [:rename foo.1
-                         [:scan {:table #xt/table foo}
-                          [_id]]]]]
+  (let [sql "EXPLAIN SELECT _id FROM foo"]
     (with-open [conn (jdbc-conn)]
       (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"])
-      (let [[row :as res] (jdbc/execute! conn [sql])]
-        (t/is (= 1 (count res)))
-        (t/is (= #{:plan} (set (keys row))))
-        (let [plan (read-string (:plan row))]
-          (t/is (= expected-plan plan)))))
+      (t/is (= [{:depth "->", :op :project,
+                 :explain {"append?" false, "project" "[{_id foo.1/_id}]"}}
+                {:depth "  ->", :op :rename, :explain {"prefix" "foo.1"}}
+                {:depth "    ->", :op :scan,
+                 :explain {"predicates" [], "columns" ["_id"], "table" "xtdb.public.foo"}}]
+               (jdbc/execute! conn [sql]))))
 
     (when (psql-available?)
       (psql-session
@@ -2523,10 +2520,15 @@ ORDER BY 1,2;")
          (send "INSERT INTO foo RECORDS {_id: 1};\n")
          (t/is (= [["INSERT 0 0"]] (read)))
          (send (str sql ";\n"))
-         (let [[cols [plan] & more-rows] (read)]
-           (t/is (= ["plan"] cols))
-           (t/is (nil? more-rows))
-           (t/is (= expected-plan (read-string plan)))))))))
+         (t/is (= [["depth" "op" "explain"]
+                   ["->" "project"
+                    "{\"append?\":false,\"project\":\"[{_id foo.1\\/_id}]\"}"]
+                   ["  ->" "rename"
+                    "{\"prefix\":\"foo.1\"}"]
+                   ["    ->" "scan"
+                    "{\"predicates\":[],\"columns\":[\"_id\"],\"table\":\"xtdb.public.foo\"}"]]
+
+                  (read))))))))
 
 (t/deftest test-ro-server-4043
   (with-open [node (xtn/start-node {:server {:read-only-port 0, :port 0}})]

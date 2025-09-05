@@ -525,23 +525,18 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 (t/deftest test-explain-plan-sql
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO users (_id, foo, a, b) VALUES (1, 2, 3, 4)"]])
 
-  (t/is (= [{:plan '[:project [{_id u.1/_id} {foo u.1/foo}]
-                     [:rename u.1
-                      [:select (= (+ a b) 12)
-                       [:scan {:table #xt/table users}
-                        [a _id foo b]]]]]}]
-           (-> (xt/q tu/*node*
-                     "EXPLAIN SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12")
-               (update-in [0 :plan] read-string))))
-
-  (t/is (= [{:plan '[:project [{_id u.1/_id} {foo u.1/foo}]
-                     [:rename u.1
-                      [:select (= (+ a b) 12)
-                       [:scan {:table #xt/table users}
-                        [a _id foo b]]]]]}]
-           (-> (xt/q tu/*node*
-                     "EXPLAIN SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12")
-               (update-in [0 :plan] read-string)))))
+  (t/is (= [{:depth "->", :op :project
+             :explain {:project "[{_id u.1/_id} {foo u.1/foo}]", :append? false}}
+            {:depth "  ->", :op :rename
+             :explain {:prefix "u.1"}}
+            {:depth "    ->", :op :select
+             :explain {:predicate "(= (+ a b) 12)"}}
+            {:depth "      ->", :op :scan
+             :explain {:table "xtdb.public.users"
+                       :columns ["foo" "a" "b" "_id"]
+                       :predicates ["(= b 1)"]}}]
+           (xt/q tu/*node*
+                 "EXPLAIN SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12 AND u.b = 1"))))
 
 (t/deftest test-normalising-nested-cols-2483
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :foo {:a/b "foo"}}]])

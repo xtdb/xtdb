@@ -112,26 +112,20 @@
   (fn [ra-expr opts]
     (:op ra-expr)))
 
-(defn unary-expr {:style/indent 1} [relation f]
-  (let [{->inner-cursor :->cursor, :as inner-rel} relation
-        {:keys [fields ->cursor stats]} (f inner-rel)]
-    {:fields fields
-     :->cursor (fn [opts]
-                 (util/with-close-on-catch [inner (->inner-cursor opts)]
-                   (->cursor opts inner)))
-     :stats stats}))
+(defn unary-expr {:style/indent 1} [{->inner-cursor :->cursor, :as inner-rel} f]
+  (-> (f inner-rel)
+      (update :->cursor (fn [->cursor]
+                          (fn [opts]
+                            (util/with-close-on-catch [inner (->inner-cursor opts)]
+                              (->cursor opts inner)))))))
 
-(defn binary-expr {:style/indent 2} [left right f]
-  (let [{->left-cursor :->cursor} left
-        {->right-cursor :->cursor} right
-        {:keys [fields ->cursor stats]} (f left right)]
-
-    {:fields fields
-     :->cursor (fn [opts]
-                 (util/with-close-on-catch [left (->left-cursor opts)
-                                            right (->right-cursor opts)]
-                   (->cursor opts left right)))
-     :stats stats}))
+(defn binary-expr {:style/indent 2} [{->left-cursor :->cursor, :as left} {->right-cursor :->cursor, :as right} f]
+  (-> (f left right)
+      (update :->cursor (fn [->cursor]
+                          (fn [opts]
+                            (util/with-close-on-catch [left (->left-cursor opts)
+                                                       right (->right-cursor opts)]
+                              (->cursor opts left right)))))))
 
 ;;;; Rewriting of logical plan.
 

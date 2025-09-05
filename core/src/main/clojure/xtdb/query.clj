@@ -1,6 +1,6 @@
 (ns xtdb.query
-  (:require [clojure.pprint :as pp]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.antlr :as antlr]
@@ -48,12 +48,12 @@
            [java.util.stream Stream StreamSupport]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            org.apache.arrow.vector.types.pojo.Field
-           (xtdb ICursor IResultCursor IResultCursor$ErrorTrackingCursor)
+           (xtdb ICursor IResultCursor IResultCursor$ErrorTrackingCursor PagesCursor)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn Query)
            (xtdb.arrow RelationReader VectorReader)
-           (xtdb.database Database Database$Catalog)
-           (xtdb.indexer Snapshot Snapshot$Source)
+           (xtdb.database Database$Catalog)
+           (xtdb.indexer Snapshot)
            xtdb.operator.scan.IScanEmitter
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.util.RefCounter))
@@ -133,18 +133,13 @@
                                 {:query query, :type (type query)}))))
 
 (defn- plan-query [parsed-query query-opts]
-  (let [plan (cond
-               (vector? parsed-query) parsed-query
-               (instance? Sql$DirectlyExecutableStatementContext parsed-query) (sql/plan parsed-query query-opts)
-               (instance? Query parsed-query) (xtql.plan/compile-query parsed-query query-opts)
+  (cond
+    (vector? parsed-query) parsed-query
+    (instance? Sql$DirectlyExecutableStatementContext parsed-query) (sql/plan parsed-query query-opts)
+    (instance? Query parsed-query) (xtql.plan/compile-query parsed-query query-opts)
 
-               :else (throw (err/fault :unknown-query-type "Unknown query type"
-                                       {:query parsed-query, :type (class parsed-query)})))]
-
-    (if (or (:explain? query-opts) (:explain? (meta plan)))
-      (with-meta [:table [{:plan (with-out-str (pp/pprint plan))}]]
-        (-> (meta plan) (select-keys [:param-count :warnings])))
-      plan)))
+    :else (throw (err/fault :unknown-query-type "Unknown query type"
+                            {:query parsed-query, :type (class parsed-query)}))))
 
 (defn- conform-plan [plan]
   (let [conformed-plan (s/conform ::lp/logical-plan plan)]
@@ -171,16 +166,34 @@
                     :param-fields param-fields}
 
         (fn [{:keys [scan-fields param-fields default-tz]}]
-          (let [{:keys [fields ->cursor]} (binding [expr/*default-tz* default-tz]
-                                            (lp/emit-expr conformed-plan
-                                                          {:scan-fields scan-fields
-                                                           :default-tz default-tz
-                                                           :param-fields param-fields
-                                                           :db-cat db-cat
-                                                           :scan-emitter scan-emitter}))]
+          (binding [expr/*default-tz* default-tz]
+            (-> (lp/emit-expr conformed-plan
+                              {:scan-fields scan-fields
+                               :default-tz default-tz
+                               :param-fields param-fields
+                               :db-cat db-cat
+                               :scan-emitter scan-emitter})
+                (update :fields (fn [fs]
+                                  (->result-fields col-names fs))))))))
 
-            {:fields (->result-fields col-names fields)
-             :->cursor ->cursor}))))
+(defn- ->explain-plan [emitted-expr]
+  (letfn [(->explain-plan* [{:keys [op children explain]} depth]
+            (lazy-seq
+             (cons {:depth (str (str/join (repeat depth "  ")) "->")
+                    :op op
+                    :explain explain}
+                   (->> (for [child children]
+                          (->explain-plan* child (inc depth)))
+                        (sequence cat)))))]
+
+    (->explain-plan* emitted-expr 0)))
+
+(defn- explain-plan-fields [explain-plan]
+  (let [[_struct col-types] (->> (map vw/value->col-type explain-plan)
+                                 distinct
+                                 (apply types/merge-col-types))]
+    (for [field-name '[depth op explain]]
+      (types/col-type->field field-name (get col-types field-name)))))
 
 (defprotocol PQuerySource
   (-plan-query [q-src parsed-query query-opts table-info]))
@@ -203,7 +216,7 @@
 
                   {:keys [ordered-outer-projection warnings param-count], :or {param-count 0}, :as plan-meta} (meta plan)]
 
-              (into (select-keys plan-meta [:current-time :snapshot-token])
+              (into (select-keys plan-meta [:current-time :snapshot-token :explain?])
                     {:plan plan,
                      :conformed-plan conformed-plan
                      :scan-cols (->> (lp/child-exprs conformed-plan)
@@ -249,10 +262,13 @@
             (getColumnFields [_ param-fields]
               (let [planned-query (plan-query* @!table-info)]
                 (util/with-open [snaps (open-snaps)]
-                  (:fields (emit-query planned-query scan-emitter db-cat snaps
-                                       (->> param-fields
-                                            (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity))))
-                                       query-opts)))))
+                  (let [emitted-query (emit-query planned-query scan-emitter db-cat snaps
+                                                  (->> param-fields
+                                                       (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity))))
+                                                  query-opts)]
+                    (if (:explain? planned-query)
+                      (explain-plan-fields (->explain-plan emitted-query))
+                      (:fields emitted-query))))))
 
             (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
@@ -273,7 +289,7 @@
                              :else (throw (ex-info "invalid args"
                                                    {:type (class args)})))
 
-                      {:keys [fields ->cursor]} (emit-query planned-query scan-emitter db-cat snaps (->arg-fields args) query-opts)
+                      {:keys [fields ->cursor] :as emitted-query} (emit-query planned-query scan-emitter db-cat snaps (->arg-fields args) query-opts)
                       current-time (or (some-> (or (:current-time planned-query) current-time)
                                                (expr->value {:args args})
                                                (time/->instant {:default-tz default-tz}))
@@ -298,15 +314,23 @@
                                                                 (basis/->time-basis-str)))
                               expr/*await-token* await-token]
 
-                      (-> (->cursor {:allocator allocator,
-                                     :snaps snaps
-                                     :snapshot-token expr/*snapshot-token*
-                                     :current-time current-time
-                                     :args args, :schema table-info
-                                     :default-tz default-tz})
-                          (wrap-cursor fields
-                                       current-time expr/*snapshot-token* default-tz
-                                       allocator snaps ref-ctr (when close-args? args))))
+                      (if (:explain? planned-query)
+                        (let [explain-plan (->explain-plan emitted-query)]
+                          (-> (PagesCursor. allocator nil [explain-plan])
+                              (wrap-cursor (explain-plan-fields explain-plan)
+                                           current-time expr/*snapshot-token* default-tz
+                                           allocator snaps ref-ctr (when close-args? args))))
+
+                        (-> (->cursor {:allocator allocator,
+                                       :snaps snaps
+                                       :snapshot-token expr/*snapshot-token*
+                                       :current-time current-time
+                                       :args args, :schema table-info
+                                       :default-tz default-tz})
+
+                            (wrap-cursor fields
+                                         current-time expr/*snapshot-token* default-tz
+                                         allocator snaps ref-ctr (when close-args? args)))))
 
                     (catch Throwable t
                       (.release ref-ctr)

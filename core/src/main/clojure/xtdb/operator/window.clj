@@ -140,7 +140,7 @@
   (let [{:keys [projections windows]} specs
         [_window-name {:keys [partition-cols order-specs]}] (first windows)]
     (lp/unary-expr (lp/emit-expr relation args)
-      (fn [{:keys [fields]}]
+      (fn [{:keys [fields] :as inner-rel}]
         (let [window-fn-factories (vec (for [p projections]
                                          ;; ignoring window-name for now
                                          (let [[to-column {:keys [_window-name window-agg]}] (first p)]
@@ -156,7 +156,15 @@
                                    (->> window-fn-factories
                                         (into {} (map (juxt #(.getToColumnName ^IWindowFnSpecFactory %)
                                                             #(.getToColumnField ^IWindowFnSpecFactory %)))))))]
-          {:fields out-fields
+          {:op :window
+           :children [inner-rel]
+           :explain {:partition-by (vec partition-cols)
+                     :order-by (pr-str order-specs)
+                     :window-functions (->> projections
+                                           (mapv (fn [p]
+                                                   (let [[to-column {:keys [window-agg]}] (first p)]
+                                                     [to-column (pr-str window-agg)]))))}
+           :fields out-fields
 
            :->cursor (fn [{:keys [allocator]} in-cursor]
                        (util/with-close-on-catch [window-fn-specs (LinkedList.)]

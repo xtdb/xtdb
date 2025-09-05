@@ -1,5 +1,6 @@
 (ns xtdb.operator.scan
   (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [integrant.core :as ig]
             [xtdb.basis :as basis]
             [xtdb.expression :as expr]
@@ -231,7 +232,15 @@
 
             row-count (.rowCount table-catalog table)]
 
-        {:fields fields
+        {:op :scan
+         :children []
+         :explain {:table (->> [(.getDbName table) (.getSchemaName table) (.getTableName table)]
+                               (remove nil?)
+                               (str/join "."),)
+                   :columns (vec col-names)
+                   :predicates (mapv pr-str (vals selects))}
+
+         :fields fields
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids]}]
                      (let [^Snapshot snapshot (get snaps db-name)

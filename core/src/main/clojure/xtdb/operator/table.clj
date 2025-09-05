@@ -194,7 +194,9 @@
                                                      [:column col] (emit-col-table col table-expr opts)
                                                      [:param param] (emit-arg-table param table-expr opts))]
 
-    {:fields fields
+    {:op :table
+     :children []
+     :fields fields
      :stats (when row-count {:row-count row-count})
      :->cursor (fn [opts]
                  (TableCursor. (->out-rel opts)))}))
