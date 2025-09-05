@@ -1,8 +1,7 @@
-package xtdb.test
+package xtdb
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.ICursor
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.util.closeOnCatch
@@ -25,8 +24,7 @@ class PagesCursor(
                     Relation.openFromRows(al, rows)
                 else
                     Relation(al, schema).closeOnCatch {
-                        it.writeRows(*rows.toTypedArray())
-                        it
+                        it.apply { writeRows(*rows.toTypedArray()) }
                     }
 
             rel.use { rel ->

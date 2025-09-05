@@ -30,7 +30,7 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector.types.pojo Field Schema)
            (org.testcontainers.containers GenericContainer)
-           (xtdb ICursor)
+           (xtdb ICursor PagesCursor)
            (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector)
@@ -39,7 +39,6 @@
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.storage.BufferPool
-           (xtdb.test PagesCursor)
            (xtdb.trie MetadataFileWriter)
            xtdb.types.ZonedDateTimeRange
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)))
@@ -181,7 +180,9 @@
                    (rows->fields (into [] cat pages)))
         ^Schema schema (Schema. (for [[col-name field] fields]
                                   (types/field-with-name field (str col-name))))]
-    {:fields fields
+    {:op :pages
+     :children []
+     :fields fields
      :stats stats
      :->cursor (fn [{:keys [allocator]}]
                  (->cursor allocator schema pages))}))
