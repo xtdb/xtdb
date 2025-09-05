@@ -15,7 +15,7 @@
 
 (defmethod lp/emit-expr :select [{:keys [predicate relation]} {:keys [param-fields] :as args}]
   (lp/unary-expr (lp/emit-expr relation args)
-    (fn [inner-fields]
+    (fn [{inner-fields :fields}]
       (let [input-types {:col-types (update-vals inner-fields types/field->col-type)
                          :param-types (update-vals param-fields types/field->col-type)}
             selector (expr/->expression-selection-spec (expr/form->expr predicate input-types) input-types)]

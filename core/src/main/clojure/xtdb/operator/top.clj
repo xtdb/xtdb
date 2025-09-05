@@ -60,7 +60,7 @@
 
 (defmethod lp/emit-expr :top [{:keys [relation], {[skip-tag skip-arg] :skip, [limit-tag limit-arg] :limit} :top} args]
   (lp/unary-expr (lp/emit-expr relation args)
-    (fn [fields]
+    (fn [{fields :fields}]
       {:fields fields
        :->cursor (fn [{:keys [args]} in-cursor]
                    (TopCursor. in-cursor

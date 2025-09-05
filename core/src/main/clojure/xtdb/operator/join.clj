@@ -147,7 +147,7 @@
 
 (defn emit-cross-join [{:keys [left right]}]
   (lp/binary-expr left right
-    (fn [left-fields right-fields]
+    (fn [{left-fields :fields} {right-fields :fields}]
       {:fields (merge left-fields right-fields)
        :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                    (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil))})))

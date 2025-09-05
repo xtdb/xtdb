@@ -45,7 +45,7 @@
 (defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-fields] :as args}]
   (let [emitted-child-relation (lp/emit-expr relation args)]
     (lp/unary-expr emitted-child-relation
-      (fn [inner-fields]
+      (fn [{inner-fields :fields}]
         (let [projection-specs (concat (when append-columns?
                                          (for [[_col-name field] inner-fields]
                                            (->identity-projection-spec field)))

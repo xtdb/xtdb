@@ -64,7 +64,7 @@
 
 (defmethod lp/emit-expr :union-all [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
-                  (fn [left-fields right-fields]
+                  (fn [{left-fields :fields} {right-fields :fields}]
                     {:fields (union-fields left-fields right-fields)
                      :->cursor (fn [_opts left-cursor right-cursor]
                                  (UnionAllCursor. left-cursor right-cursor))})))
@@ -111,7 +111,7 @@
 
 (defmethod lp/emit-expr :intersect [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
-    (fn [left-fields right-fields]
+    (fn [{left-fields :fields} {right-fields :fields}]
       (let [fields (union-fields left-fields right-fields)
             key-col-names (set (keys fields))]
         {:fields fields
@@ -128,7 +128,7 @@
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
-    (fn [left-fields right-fields]
+    (fn [{left-fields :fields} {right-fields :fields}]
       (let [fields (union-fields left-fields right-fields)
             key-col-names (set (keys fields))]
         {:fields fields

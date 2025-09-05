@@ -38,7 +38,7 @@
   ;; TODO: decodes/re-encodes row values - can we pass these directly to the sub-query?
 
   (lp/unary-expr (lp/emit-expr independent-relation args)
-    (fn [independent-fields]
+    (fn [{independent-fields :fields}]
       (let [{:keys [param-fields] :as dependent-args} (-> args
                                                           (update :param-fields
                                                                   (fnil into {})

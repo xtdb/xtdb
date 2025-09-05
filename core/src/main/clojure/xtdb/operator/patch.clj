@@ -34,7 +34,7 @@
 
 (defmethod lp/emit-expr :patch-gaps [{:keys [relation], {:keys [valid-from valid-to]} :opts} opts]
   (lp/unary-expr (lp/emit-expr relation opts)
-    (fn [inner-fields]
+    (fn [{inner-fields :fields}]
       (let [fields (-> inner-fields
                        (update 'doc types/->nullable-field))]
         {:fields fields

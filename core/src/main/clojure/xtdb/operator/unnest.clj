@@ -106,7 +106,7 @@
 (defmethod lp/emit-expr :unnest [{:keys [columns relation], {:keys [ordinality-column]} :opts}, op-args]
   (let [[to-col from-col] (first columns)]
     (lp/unary-expr (lp/emit-expr relation op-args)
-                   (fn [fields]
+                   (fn [{:keys [fields]}]
                      (let [unnest-field (->> (get fields from-col)
                                              types/flatten-union-field
                                              (keep types/unnest-field)

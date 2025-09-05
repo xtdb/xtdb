@@ -606,7 +606,7 @@
   (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)
         group-cols (mapv second group-cols)]
     (lp/unary-expr (lp/emit-expr relation args)
-      (fn [fields]
+      (fn [{:keys [fields]}]
         (let [agg-factories (for [[_ agg] aggs]
                               (let [[to-column agg-form] (first agg)]
                                 (->aggregate-factory (into {:to-name to-column

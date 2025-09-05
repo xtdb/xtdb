@@ -140,7 +140,7 @@
   (let [{:keys [projections windows]} specs
         [_window-name {:keys [partition-cols order-specs]}] (first windows)]
     (lp/unary-expr (lp/emit-expr relation args)
-      (fn [fields]
+      (fn [{:keys [fields]}]
         (let [window-fn-factories (vec (for [p projections]
                                          ;; ignoring window-name for now
                                          (let [[to-column {:keys [_window-name window-agg]}] (first p)]
