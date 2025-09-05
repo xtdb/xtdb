@@ -139,7 +139,7 @@
     (t/is (= [{:xt/id 1, :xt/valid-from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}]
              (xt/q tu/*node* "SELECT *,_valid_from, _valid_to FROM docs")))))
 
-;; TODO: Will fail due to #4751
+;; TODO: Will fail due to #4751 + #4752
 (t/deftest ^:property multiple-patches-on-record
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}

@@ -116,6 +116,7 @@
                                 expected-ids (into #{} (map :xt/id (concat records1 records2)))]
                             (= expected-ids (into #{} (map :xt/id res))))))))))
 
+;; TODO: Will fail due to #4721
 (t/deftest ^:property mixed-records-live-boundary
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
