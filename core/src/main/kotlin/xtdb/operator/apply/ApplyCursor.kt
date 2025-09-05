@@ -10,9 +10,9 @@ import java.util.function.Consumer
 class ApplyCursor(
     private val al: BufferAllocator,
     private val mode: ApplyMode,
-    private val independentCursor: ICursor<RelationReader>,
+    private val independentCursor: ICursor,
     private val depCursorFactory: DependentCursorFactory
-) : ICursor<RelationReader> {
+) : ICursor {
     override fun tryAdvance(c: Consumer<in RelationReader>) =
         independentCursor.tryAdvance { inRel ->
             val idxs = IntArrayList()

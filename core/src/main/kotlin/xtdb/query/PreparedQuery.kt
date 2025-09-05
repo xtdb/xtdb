@@ -12,5 +12,5 @@ interface PreparedQuery {
 
     val warnings: List<String>
 
-    fun openQuery(opts: Any?): IResultCursor<RelationReader>
+    fun openQuery(opts: Any?): IResultCursor
 }

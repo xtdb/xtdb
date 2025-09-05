@@ -8,13 +8,13 @@ import java.util.*
 import java.util.function.Consumer
 import java.util.stream.StreamSupport
 
-interface ICursor<E> : Spliterator<E>, AutoCloseable {
-    interface Factory<E> {
-        fun open(): ICursor<E>
+interface ICursor : Spliterator<RelationReader>, AutoCloseable {
+    interface Factory {
+        fun open(): ICursor
     }
 
-    override fun tryAdvance(c: Consumer<in E>): Boolean
-    override fun trySplit(): Spliterator<E>? = null
+    override fun tryAdvance(c: Consumer<in RelationReader>): Boolean
+    override fun trySplit(): Spliterator<RelationReader>? = null
     override fun characteristics() = Spliterator.IMMUTABLE
     override fun estimateSize(): Long = Long.MAX_VALUE
 
@@ -22,11 +22,11 @@ interface ICursor<E> : Spliterator<E>, AutoCloseable {
 
     companion object {
         @JvmStatic
-        fun ICursor<RelationReader>.toMaps(): List<Map<*, *>> =
+        fun ICursor.toMaps(): List<Map<*, *>> =
             StreamSupport.stream(this, false).flatMap { it.toMaps(SNAKE_CASE_STRING).stream() }.toList()
 
         @JvmStatic
-        fun <K> ICursor<RelationReader>.toMaps(keyFn: IKeyFn<K>): List<Map<K, *>> =
+        fun <K> ICursor.toMaps(keyFn: IKeyFn<K>): List<Map<K, *>> =
             StreamSupport.stream(this, false).flatMap { it.toMaps(keyFn).stream() }.toList()
     }
 }

@@ -9,11 +9,11 @@ import java.util.function.Consumer
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 
 class PatchGapsCursor(
-    private val inner: ICursor<RelationReader>,
+    private val inner: ICursor,
     private val out: RelationWriter,
     private val validFrom: Long,
     private val validTo: Long,
-) : ICursor<RelationReader> {
+) : ICursor {
 
     private val iidWriter = out.vectorFor("_iid")
     private val vfWriter = out.vectorFor("_valid_from")

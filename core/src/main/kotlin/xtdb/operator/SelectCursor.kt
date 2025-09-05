@@ -7,11 +7,11 @@ import java.util.function.Consumer
 
 class SelectCursor(
     private val al: BufferAllocator,
-    private val inCursor: ICursor<RelationReader>,
+    private val inCursor: ICursor,
     private val selector: SelectionSpec,
     private val schema: Map<String, Any>,
     private val args: RelationReader
-) : ICursor<RelationReader> {
+) : ICursor {
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
         var advanced = false
 

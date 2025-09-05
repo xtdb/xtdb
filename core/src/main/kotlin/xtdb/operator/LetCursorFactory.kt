@@ -11,8 +11,8 @@ import xtdb.util.closeAllOnCatch
 import java.util.function.Consumer
 
 class LetCursorFactory(
-    private val al: BufferAllocator, private val boundCursor: ICursor<RelationReader>,
-) : ICursor.Factory<RelationReader>, AutoCloseable {
+    private val al: BufferAllocator, private val boundCursor: ICursor,
+) : ICursor.Factory, AutoCloseable {
 
     class BoundBatch(internal val schema: Schema, internal val recordBatch: ArrowRecordBatch) : AutoCloseable {
         override fun close() = recordBatch.close()
@@ -32,7 +32,7 @@ class LetCursorFactory(
 
     private val boundBatches by boundBatchesLazy
 
-    override fun open() = object : ICursor<RelationReader> {
+    override fun open() = object : ICursor {
         private val batches = boundBatches.spliterator()
 
         override fun tryAdvance(c: Consumer<in RelationReader>): Boolean =
@@ -53,7 +53,7 @@ class LetCursorFactory(
         override fun hasCharacteristics(characteristics: Int) = batches.hasCharacteristics(characteristics)
     }
 
-    fun wrapBodyCursor(bodyCursor: ICursor<RelationReader>) = object : ICursor<RelationReader> by bodyCursor {
+    fun wrapBodyCursor(bodyCursor: ICursor) = object : ICursor by bodyCursor {
         override fun close() {
             bodyCursor.close()
             this@LetCursorFactory.close()

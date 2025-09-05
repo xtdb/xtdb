@@ -9,11 +9,11 @@ import java.util.function.Consumer
 
 class ProjectCursor(
     private val al: BufferAllocator,
-    private val inCursor: ICursor<RelationReader>,
+    private val inCursor: ICursor,
     private val specs: List<ProjectionSpec>,
     private val schema: Map<String, Any>,
     private val args: RelationReader,
-) : ICursor<RelationReader> {
+) : ICursor {
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean = inCursor.tryAdvance { inRel ->
         mutableListOf<VectorReader>().useAll { closeCols ->
             val outCols = specs.map { spec ->

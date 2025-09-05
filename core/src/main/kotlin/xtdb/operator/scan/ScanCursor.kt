@@ -30,7 +30,7 @@ class ScanCursor(
 
     private val schema: Map<String, Any>, private val args: RelationReader,
     private val iidPushdownBloom: BloomFilter?
-) : ICursor<RelationReader> {
+) : ICursor {
 
     private class LeafPointer(val evPtr: EventRowPointer, val relIdx: Int)
 

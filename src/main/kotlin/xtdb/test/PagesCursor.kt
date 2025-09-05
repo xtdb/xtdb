@@ -12,7 +12,7 @@ class PagesCursor(
     private val al: BufferAllocator,
     private val schema: Schema?,
     vals: Iterable<List<Map<*, *>>>
-) : ICursor<RelationReader> {
+) : ICursor {
 
     constructor(al: BufferAllocator, vals: Iterable<List<Map<*, *>>>): this(al, null, vals)
 
