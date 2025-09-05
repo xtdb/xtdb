@@ -9,22 +9,23 @@
   "_id"
   #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]},
  :tries
- [{:trie-key "l00-rc-b00", :data-file-size 2798, :trie-metadata nil}
-  {:trie-key "l00-rc-b01", :data-file-size 2798, :trie-metadata nil}
-  {:trie-key "l01-rc-b00", :data-file-size 2806, :trie-metadata nil}
+ [{:trie-key "l00-rc-b00", :data-file-size 3014, :trie-metadata nil}
+  {:trie-key "l00-rc-b01", :data-file-size 3014, :trie-metadata nil}
+  {:trie-key "l01-rc-b00", :data-file-size 3014, :trie-metadata nil}
   {:trie-key "l01-rc-b01",
-   :data-file-size 2870,
+   :data-file-size 3086,
    :trie-metadata
-   {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
+   {:min-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-recency #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :iid-bloom [-1042473350 10],
     :max-valid-from #xt/instant "2020-01-02T00:00:00Z",
-    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
-    :max-system-from #xt/instant "2020-01-02T00:00:00Z",
     :row-count 2,
-    :iid-bloom [135529592 10]}}],
+    :max-system-from #xt/instant "2020-01-02T00:00:00Z",
+    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-valid-from #xt/instant "2020-01-01T00:00:00Z"}}],
  :hlls
  {"system_time" [2144534777 2.001955671862574],
   "committed" [554809535 1.0004885993744506],
-  "_id" [392248895 2.001955671862574],
+  "_id" [1959637022 2.001955671862574],
   "error" [1743287434 1.0004885993744506]}}
