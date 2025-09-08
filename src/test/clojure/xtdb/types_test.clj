@@ -370,3 +370,12 @@
     (t/is (= {:vs vs
               :vec-types [RegClassVector RegProcVector]}
              (test-round-trip vs)))))
+
+(t/deftest test-npe-on-empty-list-children-4721
+  (t/testing "merge fields with empty list children shouldn't throw NPE"
+    (let [set-field (types/->field "a" #xt.arrow/type :set true)
+          list-field (types/->field "b" #xt.arrow/type :list true)]
+      (t/is (= (types/->field "a" #xt.arrow/type :set true (types/->field "$data$" #xt.arrow/type :null true)) 
+               (types/merge-fields nil set-field)))
+      (t/is (= (types/->field "b" #xt.arrow/type :list true (types/->field "$data$" #xt.arrow/type :null true)) 
+               (types/merge-fields nil list-field))))))

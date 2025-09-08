@@ -358,9 +358,15 @@
                             (fn [{:keys [nullable?] :as type-opts}]
                               (into {:nullable? (or nullable? (.isNullable field))}
                                     (condp = (class arrow-type)
-                                      ArrowType$List {:el (merge-field* (:el type-opts) (first (.getChildren field)))}
-                                      SetType {:el (merge-field* (:el type-opts) (first (.getChildren field)))}
-                                      ArrowType$FixedSizeList {:el (merge-field* (:el type-opts) (first (.getChildren field)))}
+                                      ArrowType$List (let [child-field (first (.getChildren field))]
+                                                       {:el (cond-> (:el type-opts)
+                                                              child-field (merge-field* child-field))})
+                                      SetType (let [child-field (first (.getChildren field))]
+                                                {:el (cond-> (:el type-opts)
+                                                       child-field (merge-field* child-field))})
+                                      ArrowType$FixedSizeList (let [child-field (first (.getChildren field))]
+                                                                {:el (cond-> (:el type-opts)
+                                                                       child-field (merge-field* child-field))})
                                       ArrowType$Struct {:fields (let [default-field-mapping (if type-opts {#xt.arrow/type :null {:nullable? true}} nil)
                                                                       children (.getChildren field)]
                                                                   (as-> (:fields type-opts) fields-acc

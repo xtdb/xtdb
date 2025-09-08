@@ -1,6 +1,6 @@
 (ns xtdb.node-test
   (:require [clojure.java.io :as io]
-            [clojure.test :as t :refer [deftest]] 
+            [clojure.test :as t :refer [deftest]]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
@@ -14,7 +14,7 @@
             [xtdb.node.impl] ;;TODO probably move internal methods to main node interface
             [xtdb.object-store :as os]
             [xtdb.protocols :as xtp]
-            [xtdb.serde :as serde] 
+            [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.util :as util])
@@ -1199,3 +1199,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                       (xt/execute-tx node [[:put-docs :docs {:xt/id 1}]])))
 
     (t/is (= [{:v 1}] (xt/q node "SELECT 1 AS v")))))
+
+(t/deftest test-merge-fields-npe-4721
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:h {:b #{}} :xt/id 1}]])
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:h {}, :xt/id 1} {:xt/id 1}]])
+  (t/is (= [{:xt/id 1}] (xt/q tu/*node* "SELECT * FROM docs"))))
