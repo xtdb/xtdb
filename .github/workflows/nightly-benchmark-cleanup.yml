@@ -68,6 +68,23 @@ jobs:
               if grep -q '"time-taken-ms":' benchmark.log; then
                 time_taken=$(grep -o '"time-taken-ms":[0-9]\+' benchmark.log | tail -1 | cut -d: -f2)
                 echo "time_taken=$time_taken" >> "$GITHUB_OUTPUT"
+                # Compute ISO-8601 duration (PT#H#M#S) from milliseconds
+                total_seconds=$((time_taken / 1000))
+                hours=$((total_seconds / 3600))
+                minutes=$(((total_seconds % 3600) / 60))
+                seconds=$((total_seconds % 60))
+                duration="PT"
+                if [ "$hours" -gt 0 ]; then
+                  duration="${duration}${hours}H"
+                fi
+                if [ "$minutes" -gt 0 ]; then
+                  duration="${duration}${minutes}M"
+                fi
+                # Always include seconds; if everything is zero, report PT0S
+                if [ "$seconds" -gt 0 ] || [ "$duration" = "PT" ]; then
+                  duration="${duration}${seconds}S"
+                fi
+                echo "time_taken_iso=$duration" >> "$GITHUB_OUTPUT"
                 break
               fi
             fi
@@ -101,8 +118,8 @@ jobs:
           type="${{ inputs.benchType }}"
           [ "$type" = "tpch" ] && type="TPC-H"
 
-          if [ -n "${{ steps.logs.outputs.time_taken }}" ]; then
-            base="$type Benchmark completed in ${{ steps.logs.outputs.time_taken }}ms"
+          if [ -n "${{ steps.logs.outputs.time_taken_iso }}" ]; then
+            base="$type Benchmark completed in ${{ steps.logs.outputs.time_taken_iso }}"
           else
             base="$type Benchmark cleanup"
           fi
