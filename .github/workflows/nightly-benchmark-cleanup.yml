@@ -68,11 +68,18 @@ jobs:
               if grep -q '"time-taken-ms":' benchmark.log; then
                 time_taken=$(grep -o '"time-taken-ms":[0-9]\+' benchmark.log | tail -1 | cut -d: -f2)
                 echo "time_taken=$time_taken" >> "$GITHUB_OUTPUT"
-                # Compute ISO-8601 duration (PT#H#M#S) from milliseconds
+                # Compute ISO-8601 duration (PT#H#M#S) from milliseconds, including fractional seconds
                 total_seconds=$((time_taken / 1000))
+                rem_ms=$((time_taken % 1000))
                 hours=$((total_seconds / 3600))
                 minutes=$(((total_seconds % 3600) / 60))
                 seconds=$((total_seconds % 60))
+                # Build seconds string with millisecond fraction if present
+                sec_str="$seconds"
+                if [ "$rem_ms" -gt 0 ]; then
+                  ms_padded=$(printf "%03d" "$rem_ms")
+                  sec_str="${seconds}.${ms_padded}"
+                fi
                 duration="PT"
                 if [ "$hours" -gt 0 ]; then
                   duration="${duration}${hours}H"
@@ -80,9 +87,9 @@ jobs:
                 if [ "$minutes" -gt 0 ]; then
                   duration="${duration}${minutes}M"
                 fi
-                # Always include seconds; if everything is zero, report PT0S
-                if [ "$seconds" -gt 0 ] || [ "$duration" = "PT" ]; then
-                  duration="${duration}${seconds}S"
+                # Include seconds if any seconds or ms present, or if duration still just PT
+                if [ "$seconds" -gt 0 ] || [ "$rem_ms" -gt 0 ] || [ "$duration" = "PT" ]; then
+                  duration="${duration}${sec_str}S"
                 fi
                 echo "time_taken_iso=$duration" >> "$GITHUB_OUTPUT"
                 break
