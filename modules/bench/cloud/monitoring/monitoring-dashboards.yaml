@@ -33,7 +33,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "How many current active XTDB nodes are there?",
           "fieldConfig": {
@@ -83,7 +83,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -103,7 +103,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "How far behind is each node on it's indexing? Ie - id of last-submitted transaction - id of last-completed-transaction?",
           "fieldConfig": {
@@ -185,7 +185,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -205,7 +205,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "What's the highest transaction latency over the time period?",
           "fieldConfig": {
@@ -259,7 +259,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -279,7 +279,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "What's the Max Query latency over the current time period?",
           "fieldConfig": {
@@ -333,7 +333,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -353,7 +353,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "How many transactions are taking place per second?",
           "fieldConfig": {
@@ -436,7 +436,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -456,7 +456,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "How long are transactions taking, on average, across the cluster?",
           "fieldConfig": {
@@ -539,7 +539,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -555,7 +555,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -576,7 +576,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -659,7 +659,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -679,7 +679,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "How many Queries are taking place per second?",
           "fieldConfig": {
@@ -762,7 +762,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -782,7 +782,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "How long are queries taking, on average, across the cluster?",
           "fieldConfig": {
@@ -865,7 +865,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -881,7 +881,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -902,7 +902,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -985,7 +985,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -1005,7 +1005,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -1088,7 +1088,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -1108,7 +1108,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -1191,7 +1191,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -1211,7 +1211,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -1294,7 +1294,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -1314,7 +1314,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -1397,7 +1397,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -1431,7 +1431,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "How many transactions are taking place per second?",
           "fieldConfig": {
@@ -1513,7 +1513,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -1533,7 +1533,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "How long are transactions taking, on average, across the cluster?",
           "fieldConfig": {
@@ -1615,7 +1615,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -1631,7 +1631,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -1652,7 +1652,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -1734,7 +1734,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -1754,7 +1754,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "How many Queries are taking place per second?",
           "fieldConfig": {
@@ -1836,7 +1836,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -1856,7 +1856,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "How long are queries taking, on average, across the cluster?",
           "fieldConfig": {
@@ -1938,7 +1938,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -1954,7 +1954,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -1975,7 +1975,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -2057,7 +2057,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -2077,7 +2077,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -2159,7 +2159,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -2179,7 +2179,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -2261,7 +2261,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -2281,7 +2281,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -2363,7 +2363,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -2383,7 +2383,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "",
           "fieldConfig": {
@@ -2465,7 +2465,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -2485,7 +2485,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "Current Percentage of CPU used by JVM process of the XTDB nodes. \n",
           "fieldConfig": {
@@ -2539,7 +2539,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -2561,7 +2561,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "Percentage of CPU used by JVM process of the XTDB node over time.\n",
           "fieldConfig": {
@@ -2644,7 +2644,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -2663,7 +2663,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "Heap memory used by the JVM process of each node over time.\n",
           "fieldConfig": {
@@ -2769,7 +2769,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -2784,7 +2784,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -2800,7 +2800,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -2832,7 +2832,7 @@ data:
             },
             "datasource": {
               "type": "prometheus",
-              "uid": "DS_PROMETHEUS"
+              "uid": "Prometheus"
             },
             "definition": "label_values(node_id)",
             "description": "Show info sections for selected nodes...",
@@ -2894,7 +2894,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -2943,7 +2943,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "code",
               "expr": "sum(jvm_memory_used_bytes{area=\"heap\", node_id=\"$xtdbnode\"})",
@@ -2955,7 +2955,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "code",
               "expr": "sum(jvm_memory_committed_bytes{area=\"heap\", node_id=\"$xtdbnode\"})",
@@ -2968,7 +2968,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "code",
               "expr": "sum(jvm_memory_max_bytes{area=\"heap\", node_id=\"$xtdbnode\"})",
@@ -2998,7 +2998,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -3079,7 +3079,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -3099,7 +3099,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -3182,7 +3182,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -3202,7 +3202,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -3266,7 +3266,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -3299,7 +3299,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -3380,7 +3380,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -3400,7 +3400,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -3483,7 +3483,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -3503,7 +3503,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -3567,7 +3567,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -3601,7 +3601,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -3683,7 +3683,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -3703,7 +3703,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -3785,7 +3785,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -3805,7 +3805,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -3887,7 +3887,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -3907,7 +3907,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -3989,7 +3989,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -4009,7 +4009,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -4092,7 +4092,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -4125,7 +4125,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -4204,7 +4204,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "code",
               "expr": "memory_cache_evictableBytes_bytes{node_id=\"$xtdbnode\"}",
@@ -4216,7 +4216,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "code",
               "expr": "memory_cache_freeBytes_bytes{node_id=\"$xtdbnode\"}",
@@ -4229,7 +4229,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "code",
               "expr": "memory_cache_pinnedBytes_bytes{node_id=\"$xtdbnode\"}",
@@ -4246,7 +4246,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -4328,7 +4328,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -4348,7 +4348,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -4430,7 +4430,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -4450,7 +4450,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -4532,7 +4532,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -4552,7 +4552,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -4634,7 +4634,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -4654,7 +4654,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -4736,7 +4736,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "builder",
               "expr": "jvm_memory_netty_bytes{node_id=\"$xtdbnode\"}",
@@ -4751,7 +4751,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -4833,7 +4833,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "builder",
               "expr": "jvm_memory_direct_bytes{node_id=\"$xtdbnode\"}",
@@ -4861,7 +4861,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -4942,7 +4942,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -4957,7 +4957,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -4977,7 +4977,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -5059,7 +5059,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -5074,7 +5074,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -5094,7 +5094,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -5175,7 +5175,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -5190,7 +5190,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -5206,7 +5206,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -5222,7 +5222,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -5242,7 +5242,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -5323,7 +5323,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "code",
               "expr": "rate(memory_cache_misses_total{node_id=\"$xtdbnode\"}[1m])",
@@ -5334,7 +5334,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "code",
               "expr": "rate(disk_cache_misses_total{node_id=\"$xtdbnode\"}[1m])",
@@ -5346,7 +5346,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "code",
               "expr": "rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])",
@@ -5358,7 +5358,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "code",
               "expr": "avg_over_time(rate(memory_cache_misses_total{node_id=\"$xtdbnode\"}[1m])[5m:])",
@@ -5370,7 +5370,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "code",
               "expr": "avg_over_time(rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])[5m:])",
@@ -5382,7 +5382,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "code",
               "expr": "avg_over_time(rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])[5m:])",
@@ -5398,7 +5398,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -5479,7 +5479,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "code",
               "expr": "rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])",
@@ -5490,7 +5490,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "editorMode": "code",
               "expr": "avg_over_time(rate(record_batch_requests_total{node_id=\"$xtdbnode\"}[1m])[5m:])",
@@ -5519,7 +5519,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "description": "Number of currently available compactor jobs.",
           "fieldConfig": {
@@ -5601,7 +5601,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -5620,7 +5620,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "DS_PROMETHEUS"
+            "uid": "Prometheus"
           },
           "fieldConfig": {
             "defaults": {
@@ -5703,7 +5703,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "builder",
@@ -5720,7 +5720,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -5737,7 +5737,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "DS_PROMETHEUS"
+                "uid": "Prometheus"
               },
               "disableTextWrap": false,
               "editorMode": "code",
@@ -5769,7 +5769,7 @@ data:
             },
             "datasource": {
               "type": "prometheus",
-              "uid": "DS_PROMETHEUS"
+              "uid": "Prometheus"
             },
             "definition": "label_values(node_id)",
             "description": "Which node/application to show metrics for.",
