@@ -131,31 +131,49 @@ jobs:
             sleep 2
           done
 
-      - name: Render Grafana Panel Image
+      - name: Render Grafana Panel Images
         if: steps.check-deployment.outcome == 'success'
         run: |
-          # Dashboard UID and panel selection
+          set -euo pipefail
+          mkdir -p grafana-panels
           DASHBOARD_UID="aeews5bgs0zk0b"
-          PANEL_ID="8" # "Cluster Transactions"
-          # Basic auth using default credentials from monitoring/values.yaml
-          AUTH="admin:admin"
-          # Time range for the image
+          AUTH="admin:admin" # per modules/bench/cloud/monitoring/values.yaml
           FROM="now-2h"
           TO="now"
           WIDTH=1600
           HEIGHT=900
-          # The slug part is not validated but included for readability
           SLUG="xtdb-monitoring-dashboard"
-          URL="http://localhost:3000/render/d-solo/${DASHBOARD_UID}/${SLUG}?panelId=${PANEL_ID}&orgId=1&from=${FROM}&to=${TO}&width=${WIDTH}&height=${HEIGHT}&tz=UTC"
-          echo "Requesting: $URL"
-          curl -sS -f -L -u "$AUTH" -H 'Accept: image/png' "$URL" -o grafana-panel.png
 
-      - name: Upload Grafana Panel Image
-        if: steps.check-deployment.outcome == 'success' && hashFiles('grafana-panel.png') != ''
+          # Declare panels: [title]=panelId
+          declare -A PANELS=(
+            ["Transaction Lag"]=3
+            ["Max Transaction Latency (Over Time)"]=5
+            ["Max Query Latency (Over Time)"]=6
+            ["Cluster Transactions"]=8
+            ["Cluster Transaction Errors"]=22
+            ["Cluster Queries"]=9
+            ["Cluster Query Errors"]=20
+          )
+
+          # Simple slugify for file names
+          slugify() {
+            echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g'
+          }
+
+          for title in "${!PANELS[@]}"; do
+            panelId="${PANELS[$title]}"
+            file="grafana-panels/$(slugify "$title").png"
+            url="http://localhost:3000/render/d-solo/${DASHBOARD_UID}/${SLUG}?panelId=${panelId}&orgId=1&from=${FROM}&to=${TO}&width=${WIDTH}&height=${HEIGHT}&tz=UTC"
+            echo "Rendering [$title] (panelId=${panelId}) -> $file"
+            curl -sS -f -L -u "$AUTH" -H 'Accept: image/png' "$url" -o "$file" || echo "Failed to render $title"
+          done
+
+      - name: Upload Grafana Panels
+        if: steps.check-deployment.outcome == 'success' && hashFiles('grafana-panels/*.png') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: grafana-panel-${{ inputs.benchType }}-${{ steps.timestamp.outputs.value }}-${{ inputs.nodeId }}-${{ inputs.status }}
-          path: grafana-panel.png
+          name: grafana-panels-${{ inputs.benchType }}-${{ steps.timestamp.outputs.value }}-${{ inputs.nodeId }}-${{ inputs.status }}
+          path: grafana-panels/*.png
           retention-days: 7
 
       - name: Stop Grafana Port-forward
