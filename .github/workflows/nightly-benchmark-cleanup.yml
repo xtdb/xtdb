@@ -207,10 +207,10 @@ jobs:
         run: |
           set -euo pipefail
           # Determine the XTDB node id (pod name) to use for var-xtdbnode
-          XTDB_NODE_ID=$(kubectl get pods -n cloud-benchmark -l type=xtdb-benchmark -o jsonpath='{.items[0].metadata.name}' || true)
+          XTDB_NODE_ID=$(kubectl get pods -n cloud-benchmark -l app.kubernetes.io/component=benchmark,app.kubernetes.io/name=xtdb -o jsonpath='{.items[0].metadata.name}' || true)
           if [ -z "$XTDB_NODE_ID" ]; then
             # Fallback via plain text parsing
-            XTDB_NODE_ID=$(kubectl get pods -n cloud-benchmark -l type=xtdb-benchmark -o name | head -n1 | sed 's#.*/##')
+            XTDB_NODE_ID=$(kubectl get pods -n cloud-benchmark -l app.kubernetes.io/component=benchmark,app.kubernetes.io/name=xtdb -o name | head -n1 | sed 's#.*/##')
           fi
           if [ -z "$XTDB_NODE_ID" ]; then
             echo "Failed to determine XTDB_NODE_ID; skipping node debugging panel rendering"
