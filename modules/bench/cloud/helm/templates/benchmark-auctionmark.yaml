@@ -16,6 +16,7 @@ spec:
   template:
     metadata:
       labels:
+        type: xtdb-benchmark
         {{- toYaml .Values.providerConfig.podLabels | nindent 8 }}
       annotations:
         "helm.sh/hook": pre-install,pre-upgrade

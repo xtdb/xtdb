@@ -1,0 +1,55 @@
+global:
+  scrape_interval: 2s
+  evaluation_interval: 2s
+
+prometheus:
+  prometheusSpec:
+    retention: 24h
+    retentionSize: 20GB
+    walCompression: true
+    scrapeInterval: "2s"
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources: { requests: { storage: 50Gi } }
+    additionalScrapeConfigs: []
+
+  service:
+    type: ClusterIP
+
+grafana:
+  adminUser: admin
+  adminPassword: admin
+  service:
+    type: ClusterIP
+  persistence:
+    enabled: true
+    size: 10Gi
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+    datasources:
+      enabled: true
+  imageRenderer:
+    enabled: true
+    replicas: 1
+    env:
+      RENDERING_ARGS: --no-sandbox,--disable-gpu
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits:   { cpu: 500m, memory: 512Mi }
+    service:
+      enabled: true
+      port: 80
+      targetPort: 8081
+
+kube-state-metrics:
+  metricLabelsAllowlist:
+    - "pods=[app,app.kubernetes.io/name,app.kubernetes.io/instance]"
+    - "deployments=[app,app.kubernetes.io/name,app.kubernetes.io/instance]"
+
+nodeExporter:
+  enabled: true
+
