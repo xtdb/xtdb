@@ -320,6 +320,8 @@ jobs:
         run: |
           type="${{ inputs.benchType }}"
           [ "$type" = "tpch" ] && type="TPC-H"
+          [ "$type" = "auctionmark" ] && type="AuctionMark"
+          [ "$type" = "readings" ] && type="Readings"
 
           if [ -n "${{ steps.logs.outputs.time_taken_iso }}" ]; then
             base="$type Benchmark completed in ${{ steps.logs.outputs.time_taken_iso }}"
@@ -344,7 +346,7 @@ jobs:
         if: steps.check-deployment.outcome == 'success'
         with:
           status: ${{ inputs.status }}
-          notification_title: "*${{ (inputs.benchType == 'tpch') && 'TPC-H' || inputs.benchType }} Benchmark*"
+          notification_title: "*${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType }} Benchmark*"
           message_format: ${{ steps.compose.outputs.msg }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.BENCHMARK_SLACK_WEBHOOK_URL }}
