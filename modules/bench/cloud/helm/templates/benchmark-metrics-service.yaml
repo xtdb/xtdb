@@ -10,7 +10,8 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    type: xtdb-benchmark
+    app.kubernetes.io/name: xtdb
+    app.kubernetes.io/component: benchmark
   ports:
     - name: metrics
       port: 8080

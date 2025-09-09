@@ -16,7 +16,8 @@ spec:
   template:
     metadata:
       labels:
-        type: xtdb-benchmark
+        app.kubernetes.io/name: xtdb
+        app.kubernetes.io/component: benchmark
         {{- toYaml .Values.providerConfig.podLabels | nindent 8 }}
       annotations:
         "helm.sh/hook": pre-install,pre-upgrade

@@ -10,7 +10,7 @@ spec:
     matchNames: [{{ .Release.Namespace | quote }}]
   selector:
     matchLabels:
-      type: xtdb-benchmark-service
+      app.kubernetes.io/name: xtdb-benchmark-metrics
       app.kubernetes.io/instance: {{ .Release.Name }}
   endpoints:
     - port: metrics
