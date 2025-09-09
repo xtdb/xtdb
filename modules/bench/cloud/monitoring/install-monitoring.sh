@@ -21,6 +21,18 @@ SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 VALUES_FILE="${VALUES_FILE:-${SCRIPT_DIR}/values.yaml}"
 DASHBOARDS_FILE="${DASHBOARDS_FILE:-${SCRIPT_DIR}/monitoring-dashboards.yaml}"
 
+# Determine project root (prefer git, fall back to 4 dirs up from this script)
+PROJECT_ROOT=${PROJECT_ROOT:-}
+if [ -z "${PROJECT_ROOT}" ] && command -v git >/dev/null 2>&1; then
+  PROJECT_ROOT=$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null || true)
+fi
+if [ -z "${PROJECT_ROOT}" ]; then
+  PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../../../" && pwd)"
+fi
+
+# Dashboard JSON source directory in the repo
+DASH_JSON_DIR="${DASH_JSON_DIR:-${PROJECT_ROOT}/dev/monitoring/dashboards}"
+
 # Check prerequisites
 command -v kubectl >/dev/null 2>&1 || { echo "kubectl not found in PATH" >&2; exit 1; }
 command -v helm >/dev/null 2>&1 || { echo "helm not found in PATH" >&2; exit 1; }
@@ -69,6 +81,12 @@ kubectl -n "${NAMESPACE}" rollout status deploy/"${RELEASE_NAME}"-kube-prometheu
 kubectl -n "${NAMESPACE}" rollout status statefulset/"${RELEASE_NAME}"-kube-prometheus-prometheus --timeout=10m || true
 # Wait for grafana
 kubectl -n "${NAMESPACE}" rollout status deploy/"${RELEASE_NAME}"-grafana --timeout=10m || true
+
+# Generate dashboards YAML from JSON sources if present
+if [ -f "${DASH_JSON_DIR}/xtdb-monitoring.json" ] && [ -f "${DASH_JSON_DIR}/xtdb-node-debugging.json" ]; then
+  echo "Generating dashboards YAML from JSON sources at ${DASH_JSON_DIR}..."
+  INPUT_DIR="${DASH_JSON_DIR}" bash "${SCRIPT_DIR}/gen-dashboards.sh" "${DASHBOARDS_FILE}"
+fi
 
 # Apply dashboards (Grafana sidecar will pick these up)
 if [ -f "${DASHBOARDS_FILE}" ]; then
