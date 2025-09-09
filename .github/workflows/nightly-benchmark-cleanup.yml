@@ -115,6 +115,57 @@ jobs:
           path: benchmark.log
           retention-days: 7
 
+      - name: Port-forward Grafana (background)
+        if: steps.check-deployment.outcome == 'success'
+        run: |
+          # Start port-forward in background
+          kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80 >/tmp/grafana-pf.log 2>&1 &
+          echo $! > /tmp/grafana-pf.pid
+          # Wait for Grafana to be reachable
+          for i in {1..30}; do
+            if curl -sSf http://localhost:3000/api/health > /dev/null; then
+              echo "Grafana is reachable"
+              break
+            fi
+            echo "Waiting for Grafana port-forward... ($i)"
+            sleep 2
+          done
+
+      - name: Render Grafana Panel Image
+        if: steps.check-deployment.outcome == 'success'
+        run: |
+          # Dashboard UID and panel selection
+          DASHBOARD_UID="aeews5bgs0zk0b"
+          PANEL_ID="8" # "Cluster Transactions"
+          # Basic auth using default credentials from monitoring/values.yaml
+          AUTH="admin:admin"
+          # Time range for the image
+          FROM="now-2h"
+          TO="now"
+          WIDTH=1600
+          HEIGHT=900
+          # The slug part is not validated but included for readability
+          SLUG="xtdb-monitoring-dashboard"
+          URL="http://localhost:3000/render/d-solo/${DASHBOARD_UID}/${SLUG}?panelId=${PANEL_ID}&orgId=1&from=${FROM}&to=${TO}&width=${WIDTH}&height=${HEIGHT}&tz=UTC"
+          echo "Requesting: $URL"
+          curl -sS -f -L -u "$AUTH" -H 'Accept: image/png' "$URL" -o grafana-panel.png
+
+      - name: Upload Grafana Panel Image
+        if: steps.check-deployment.outcome == 'success' && hashFiles('grafana-panel.png') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: grafana-panel-${{ inputs.benchType }}-${{ steps.timestamp.outputs.value }}-${{ inputs.nodeId }}-${{ inputs.status }}
+          path: grafana-panel.png
+          retention-days: 7
+
+      - name: Stop Grafana Port-forward
+        if: always()
+        run: |
+          if [ -f /tmp/grafana-pf.pid ]; then
+            kill "$(cat /tmp/grafana-pf.pid)" 2>/dev/null || true
+            rm -f /tmp/grafana-pf.pid
+          fi
+
       - name: Run Cleanup Script
         if: ${{ always() && steps.check-deployment.outcome == 'success' }}
         run: |
