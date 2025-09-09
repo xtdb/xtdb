@@ -27,6 +27,11 @@ xtdbConfig:
 providerConfig:
   # Set by cloud provider override
   env: {}
+  # Additional labels to apply to benchmark pods.
+  # Note: the chart reserves the following labels and will override any values provided here:
+  #   - app.kubernetes.io/name
+  #   - app.kubernetes.io/component
+  # This is to keep Service selectors stable.
   podLabels: {}
   serviceAccountAnnotations: {}
   nodeSelector: {}
