@@ -5,4 +5,4 @@ metadata:
   namespace: {{ .Release.Namespace }}
 data:
   xtdbconfig.yaml: |-
-    {{- (.Values.providerConfig.nodeConfig | default dict) | toYaml | nindent 4 }}
+    {{ .Values.providerConfig.nodeConfig | nindent 4 }}
