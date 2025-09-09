@@ -108,6 +108,7 @@ jobs:
 
       - name: Upload Benchmark Logs
         id: upload
+        if: steps.check-deployment.outcome == 'success' && hashFiles('benchmark.log') != ''
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-logs-${{ inputs.benchType }}-${{ steps.timestamp.outputs.value }}-${{ inputs.nodeId }}-${{ inputs.status }}
@@ -118,6 +119,18 @@ jobs:
         if: ${{ always() && steps.check-deployment.outcome == 'success' }}
         run: |
           ./modules/bench/cloud/clear-bench.sh azure
+
+      - name: Remove Monitoring Stack
+        if: always()
+        run: |
+          if helm status monitoring -n monitoring >/dev/null 2>&1; then
+            echo "Uninstalling monitoring stack..."
+            helm uninstall monitoring -n monitoring
+            # Attempt to delete the namespace (ignore if it contains other resources or is already gone)
+            kubectl delete namespace monitoring --ignore-not-found=true || true
+          else
+            echo "Monitoring stack not found; skipping."
+          fi
 
       - name: Compose Slack Message
         id: compose

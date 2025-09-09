@@ -48,6 +48,12 @@ jobs:
           # exit 0 if exists, non-zero if not
           helm status xtdb-benchmark -n cloud-benchmark >/dev/null 2>&1
 
+      - name: Install Monitoring Stack
+        if: steps.check-deployment.outcome != 'success'
+        continue-on-error: true
+        run: |
+          bash ./modules/bench/cloud/monitoring/install-monitoring.sh
+
       - name: Run Benchmark
         if: steps.check-deployment.outcome != 'success'
         run: |
@@ -64,6 +70,7 @@ jobs:
 
       - name: Compose Slack Message
         id: compose
+        if: always()
         run: |
           if [ "${{ steps.check-deployment.outcome }}" = "success" ]; then
             echo 'msg=:information_source: TPC-H Benchmark skipped — existing deployment found' >> "$GITHUB_OUTPUT"
