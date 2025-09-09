@@ -26,6 +26,7 @@ jobs:
     timeout-minutes: 90
     env:
       SCALE_FACTOR: ${{ inputs.scale_factor || '0.5' }}
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.BENCHMARK_GRAFANA_ADMIN_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v4

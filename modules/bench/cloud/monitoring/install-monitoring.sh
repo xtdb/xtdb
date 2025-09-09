@@ -40,16 +40,25 @@ helm repo update
 
 # Install/Upgrade kube-prometheus-stack
 echo "Installing/Upgrading ${CHART} as release ${RELEASE_NAME} in namespace ${NAMESPACE}"
+
+# Optional helm --set overrides
+HELM_SET=()
+if [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
+  HELM_SET+=(--set "grafana.adminPassword=${GRAFANA_ADMIN_PASSWORD}")
+fi
+
 if [ -f "${VALUES_FILE}" ]; then
   helm upgrade --install "${RELEASE_NAME}" "${CHART}" \
     --namespace "${NAMESPACE}" \
     --create-namespace \
-    -f "${VALUES_FILE}"
+    -f "${VALUES_FILE}" \
+    "${HELM_SET[@]}"
 else
   echo "WARNING: values file not found at ${VALUES_FILE}. Proceeding with chart defaults." >&2
   helm upgrade --install "${RELEASE_NAME}" "${CHART}" \
     --namespace "${NAMESPACE}" \
-    --create-namespace
+    --create-namespace \
+    "${HELM_SET[@]}"
 fi
 
 # Wait for core components to be ready (Prometheus Operator, Prometheus, Grafana)
@@ -81,7 +90,7 @@ Dashboards:  ${DASHBOARDS_FILE}
 
 Next steps:
 - Port-forward Grafana: kubectl -n ${NAMESPACE} port-forward svc/${RELEASE_NAME}-grafana 3000:80
-  Login: admin / admin (default, see values.yaml)
+  Login: admin / (password from values or secret)
 - Check ServiceMonitors: kubectl -n ${NAMESPACE} get servicemonitors
 - Check Prometheus targets for xtdb-benchmark metrics once the benchmark is running.
 EOF

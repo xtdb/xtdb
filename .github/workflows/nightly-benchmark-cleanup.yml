@@ -34,6 +34,8 @@ concurrency:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    env:
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.BENCHMARK_GRAFANA_ADMIN_PASSWORD }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -171,7 +173,7 @@ jobs:
           set -euo pipefail
           mkdir -p grafana-panels
           DASHBOARD_UID="aeews5bgs0zk0b"
-          AUTH="admin:admin"
+          AUTH="admin:${GRAFANA_ADMIN_PASSWORD:-admin}"
           FROM="${{ steps.grafana-time.outputs.from || 'now-2h' }}"
           TO="${{ steps.grafana-time.outputs.to || 'now' }}"
           WIDTH=1600
@@ -220,7 +222,7 @@ jobs:
 
           mkdir -p grafana-panels
           DASHBOARD_UID="edznf2lfly22o1aa" # XTDB: Node Debugging Dashboard
-          AUTH="admin:admin"
+          AUTH="admin:${GRAFANA_ADMIN_PASSWORD:-admin}"
           FROM="${{ steps.grafana-time.outputs.from || 'now-2h' }}"
           TO="${{ steps.grafana-time.outputs.to || 'now' }}"
           WIDTH=1600
