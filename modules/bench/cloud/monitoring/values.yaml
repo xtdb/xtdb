@@ -20,7 +20,10 @@ prometheus:
 
 grafana:
   adminUser: admin
-  adminPassword: admin
+  # Note: adminPassword intentionally omitted from source control.
+  # Provide it at install time via helm override:
+  #   --set grafana.adminPassword=$GRAFANA_ADMIN_PASSWORD
+  # The install script supports injecting GRAFANA_ADMIN_PASSWORD from CI.
   service:
     type: ClusterIP
   persistence:

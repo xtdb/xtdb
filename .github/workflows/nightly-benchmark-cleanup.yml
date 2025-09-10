@@ -62,11 +62,12 @@ jobs:
         if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
         id: logs
         run: |
+          set -euo pipefail
           # Wait for job logs with retries
           max_attempts=12
           attempt=1
           while [ $attempt -le $max_attempts ]; do
-            if kubectl logs ${{ inputs.nodeId }} --namespace cloud-benchmark > benchmark.log 2>/dev/null; then
+            if kubectl logs "${{ inputs.nodeId }}" --namespace cloud-benchmark > benchmark.log 2>/dev/null; then
               if grep -q '"time-taken-ms":' benchmark.log; then
                 time_taken=$(grep -o '"time-taken-ms":[0-9]\+' benchmark.log | tail -1 | cut -d: -f2)
                 echo "time_taken=$time_taken" >> "$GITHUB_OUTPUT"
@@ -151,6 +152,15 @@ jobs:
           echo "from=$FROM_PARAM" >> "$GITHUB_OUTPUT"
           echo "to=$TO_PARAM" >> "$GITHUB_OUTPUT"
 
+      - name: Ensure Grafana password present
+        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
+        run: |
+          set -euo pipefail
+          if [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
+            echo "GRAFANA_ADMIN_PASSWORD is required but not set" >&2
+            exit 1
+          fi
+
       - name: Port-forward Grafana (background)
         if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
         run: |
@@ -173,7 +183,6 @@ jobs:
           set -euo pipefail
           mkdir -p grafana-panels
           DASHBOARD_UID="aeews5bgs0zk0b"
-          AUTH="admin:${GRAFANA_ADMIN_PASSWORD:-admin}"
           FROM="${{ steps.grafana-time.outputs.from || 'now-2h' }}"
           TO="${{ steps.grafana-time.outputs.to || 'now' }}"
           WIDTH=1600
@@ -201,7 +210,7 @@ jobs:
             file="grafana-panels/$(slugify "$title").png"
             url="http://localhost:3000/render/d-solo/${DASHBOARD_UID}/${SLUG}?panelId=${panelId}&orgId=1&from=${FROM}&to=${TO}&width=${WIDTH}&height=${HEIGHT}&tz=UTC"
             echo "Rendering [$title] (panelId=${panelId}) -> $file"
-            curl -sS -f -L -u "$AUTH" -H 'Accept: image/png' "$url" -o "$file" || echo "Failed to render $title"
+            curl -sS -f -L -u "admin:${GRAFANA_ADMIN_PASSWORD}" -H 'Accept: image/png' "$url" -o "$file" || echo "Failed to render $title"
           done
 
       - name: Render Node Debugging Panels
@@ -222,7 +231,6 @@ jobs:
 
           mkdir -p grafana-panels
           DASHBOARD_UID="edznf2lfly22o1aa" # XTDB: Node Debugging Dashboard
-          AUTH="admin:${GRAFANA_ADMIN_PASSWORD:-admin}"
           FROM="${{ steps.grafana-time.outputs.from || 'now-2h' }}"
           TO="${{ steps.grafana-time.outputs.to || 'now' }}"
           WIDTH=1600
@@ -251,7 +259,7 @@ jobs:
             file="grafana-panels/node-$(slugify "$title").png"
             url="http://localhost:3000/render/d-solo/${DASHBOARD_UID}/${SLUG}?panelId=${panelId}&orgId=1&from=${FROM}&to=${TO}&width=${WIDTH}&height=${HEIGHT}&tz=UTC&var-xtdbnode=${XTDB_NODE_ID}"
             echo "Rendering [Node Debug] $title (panelId=${panelId}, xtdbnode=${XTDB_NODE_ID}) -> $file"
-            curl -sS -f -L -u "$AUTH" -H 'Accept: image/png' "$url" -o "$file" || echo "Failed to render node panel $title"
+            curl -sS -f -L -u "admin:${GRAFANA_ADMIN_PASSWORD}" -H 'Accept: image/png' "$url" -o "$file" || echo "Failed to render node panel $title"
           done
 
       - name: Upload Grafana Panels
