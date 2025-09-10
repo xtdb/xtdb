@@ -46,7 +46,7 @@ jobs:
           report_paths: '**/build/test-results/test/TEST-*.xml'
       - name: Post Slack Notification (On Fail)
         if: failure() && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/main'
-        uses: ravsamhq/notify-slack-action@042f29088bb3bdbda5b4ff7b4818466a277fa8f7 # v2
+        uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2 # v2
         with:
           status: ${{ job.status }}
           notification_title: "*{workflow}* has {status_message}:"
@@ -96,7 +96,7 @@ jobs:
 
       - name: Post Slack Notification (On Fail)
         if: failure() && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/main'
-        uses: ravsamhq/notify-slack-action@042f29088bb3bdbda5b4ff7b4818466a277fa8f7 # v2
+        uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2 # v2
         with:
           status: ${{ job.status }}
           notification_title: "*{workflow}* has {status_message}:"
@@ -133,7 +133,7 @@ jobs:
           report_paths: '**/build/test-results/integration-test/TEST-*.xml'
       - name: Post Slack Notification (On Fail)
         if: failure() && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/main'
-        uses: ravsamhq/notify-slack-action@042f29088bb3bdbda5b4ff7b4818466a277fa8f7 # v2
+        uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2 # v2
         with:
           status: ${{ job.status }}
           notification_title: "*{workflow}* has {status_message}:"
