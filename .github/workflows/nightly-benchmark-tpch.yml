@@ -64,6 +64,14 @@ jobs:
         run: |
           bash ./modules/bench/cloud/monitoring/install-monitoring.sh
 
+      - name: Create Bench Secret (GITHUB_PAT)
+        if: steps.check-deployment.outcome != 'success'
+        run: |
+          set -euo pipefail
+          kubectl -n cloud-benchmark create secret generic xtdb-bench-secrets \
+            --from-literal=GITHUB_PAT="${{ secrets.BENCHMARK_GITHUB_PAT }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Run Benchmark
         if: steps.check-deployment.outcome != 'success'
         run: |
@@ -74,7 +82,7 @@ jobs:
             -f ./modules/bench/cloud/azure/values.yaml \
             --set "benchType=tpch" \
             --set "tpch.scaleFactor=${{ env.SCALE_FACTOR }}" \
-            --set "providerConfig.env.GITHUB_PAT=${{ secrets.BENCHMARK_GITHUB_PAT }}" \
+            --set "providerConfig.existingSecret=xtdb-bench-secrets" \
             --set "providerConfig.env.AZURE_USER_MANAGED_IDENTITY_CLIENT_ID=${{ secrets.BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID }}" \
             --set "providerConfig.serviceAccountAnnotations.azure\.workload\.identity/client-id=${{ secrets.BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID }}"
 

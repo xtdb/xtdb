@@ -58,6 +58,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: xtdb-env-config
+            {{- if .Values.providerConfig.existingSecret }}
+            - secretRef:
+                name: {{ .Values.providerConfig.existingSecret }}
+            {{- end }}
           env:
             - name: XTDB_NODE_ID
               valueFrom:
