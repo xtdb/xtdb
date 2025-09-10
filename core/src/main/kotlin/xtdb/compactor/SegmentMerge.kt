@@ -14,10 +14,10 @@ import xtdb.compactor.RecencyPartition.WEEK
 import xtdb.metadata.PageMetadata
 import xtdb.metadata.UNBOUND_TEMPORAL_METADATA
 import xtdb.operator.scan.RootCache
-import xtdb.segment.Segment
-import xtdb.segment.Segment.Page
 import xtdb.segment.MergePlanner
 import xtdb.segment.MergeTask
+import xtdb.segment.Segment
+import xtdb.segment.Segment.Page
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.EventRowPointer
 import xtdb.trie.Trie.dataRelSchema
@@ -28,11 +28,10 @@ import java.nio.file.Path
 import java.time.LocalDate
 import java.util.*
 import java.util.function.Predicate
-import kotlin.Long.Companion.MAX_VALUE
-import kotlin.Long.Companion.MIN_VALUE
+import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
+import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 import kotlin.io.path.deleteExisting
 import kotlin.math.min
-import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 
 private fun ByteArray.toPathPredicate() =
     Predicate<ByteArray> { pagePath ->
@@ -81,8 +80,8 @@ fun resolveSameSystemTimeEvents(
                     if (!seenErase) {
                         iidVec.copyRow(evPtr.index)
                         sysFromVec.copyRow(evPtr.index)
-                        validFromVec.writeLong(MIN_VALUE)
-                        validToVec.writeLong(MAX_VALUE)
+                        validFromVec.writeLong(MIN_LONG)
+                        validToVec.writeLong(MAX_LONG)
                         opCopier.copyRow(evPtr.index)
                         relWriter.endRow()
                     }
@@ -165,25 +164,17 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
                         mergeQueue.add(QueueElem(evPtr, rowCopier))
                 }
 
-                var seenErase = false
-                val iidPtr = ArrowBufPointer()
-
                 val polygonCalculator = PolygonCalculator()
 
                 while (true) {
                     val elem = mergeQueue.poll() ?: break
                     val (evPtr, rowCopier) = elem
 
-                    if (polygonCalculator.currentIidPtr != evPtr.getIidPointer(iidPtr)) seenErase = false
-
-                    when (val polygon = polygonCalculator.calculate(evPtr)) {
-                        null -> {
-                            if (!seenErase) rowCopier.copyRow(MAX_LONG, evPtr.index)
-                            seenErase = true
+                    polygonCalculator.calculate(evPtr)
+                        ?.let { polygon ->
+                            val recency = if (evPtr.op == "erase") MAX_LONG else polygon.recency
+                            rowCopier.copyRow(recency, evPtr.index)
                         }
-
-                        else -> rowCopier.copyRow(polygon.recency, evPtr.index)
-                    }
 
                     evPtr.nextIndex()
 

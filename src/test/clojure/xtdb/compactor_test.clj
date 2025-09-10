@@ -24,7 +24,7 @@
            xtdb.segment.BufferPoolSegment
            (xtdb.trie Trie)))
 
-(t/use-fixtures :each tu/with-allocator tu/with-node)
+(t/use-fixtures :each tu/with-allocator tu/with-mock-clock tu/with-node)
 
 (defn- job
   ([out in] (job out in []))
@@ -693,19 +693,23 @@
                       (into #{} (map :trie-key)))))))))
 
 (t/deftest dont-lose-erases-during-compaction
-  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1 :xt/valid-to #inst "2050"} {:xt/id 2 :xt/valid-to #inst "2050"}]])
-  (tu/flush-block! tu/*node*)
-  (c/compact-all! tu/*node* #xt/duration "PT1S")
+  (let [sql "SELECT _id, _valid_from, _valid_to FROM foo FOR ALL VALID_TIME FOR ALL SYSTEM_TIME"]
+    (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1 :xt/valid-to #inst "2050"} {:xt/id 2 :xt/valid-to #inst "2050"}]])
+    (tu/flush-block! tu/*node*)
+    (c/compact-all! tu/*node* #xt/duration "PT1S")
 
-  ;; TODO move this check to pgwire rather than in the main query engine?
-  (xt/execute-tx tu/*node* [[:erase-docs :foo 1 2]])
+    (t/is (= [{:xt/id 2, :xt/valid-from #xt/zdt "2020-01-01Z[UTC]", :xt/valid-to #xt/zdt "2050-01-01Z[UTC]"}
+              {:xt/id 1, :xt/valid-from #xt/zdt "2020-01-01Z[UTC]", :xt/valid-to #xt/zdt "2050-01-01Z[UTC]"}]
+             (xt/q tu/*node* sql)))
 
-  (t/is (= [] (xt/q tu/*node* "SELECT _id FROM foo")))
+    (xt/execute-tx tu/*node* [[:erase-docs :foo 1 2]])
 
-  (tu/flush-block! tu/*node*)
-  (c/compact-all! tu/*node* #xt/duration "PT1S")
+    (t/is (= [] (xt/q tu/*node* sql)))
 
-  (t/is (= [] (xt/q tu/*node* "SELECT _id FROM foo"))))
+    (tu/flush-block! tu/*node*)
+    (c/compact-all! tu/*node* #xt/duration "PT1S")
+
+    (t/is (= [] (xt/q tu/*node* sql)))))
 
 (t/deftest null-duv-issue-4231
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :l [{:foo 1}]}]])

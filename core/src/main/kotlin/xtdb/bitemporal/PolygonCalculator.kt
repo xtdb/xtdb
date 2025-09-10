@@ -4,7 +4,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.trie.EventRowPointer
 import xtdb.util.TemporalBounds
 
-class PolygonCalculator(private val temporalBounds: TemporalBounds? = null) {
+class PolygonCalculator(private val queryBounds: TemporalBounds? = null) {
     companion object {
         private fun ArrowBufPointer.setFrom(src: ArrowBufPointer) = apply { set(src.buf, src.offset, src.length) }
     }
@@ -19,6 +19,7 @@ class PolygonCalculator(private val temporalBounds: TemporalBounds? = null) {
     fun reset() = ceiling.reset()
 
     fun calculate(erp: EventRowPointer): Polygon? {
+        // after an erase, we don't process any more rows
         if (skipIidPtr == erp.getIidPointer(currentIidPtr)) return null
 
         if (prevIidPtr != currentIidPtr) {
@@ -26,21 +27,23 @@ class PolygonCalculator(private val temporalBounds: TemporalBounds? = null) {
             prevIidPtr.setFrom(currentIidPtr)
         }
 
-        if (erp.op == "erase") {
-            ceiling.reset()
-            skipIidPtr.setFrom(currentIidPtr)
-            return null
-        }
+        val isErase = erp.op == "erase"
 
         val systemFrom = erp.systemFrom
 
-        if (temporalBounds != null && systemFrom >= temporalBounds.systemTime.upper) return null
+        // unless it's an erase, we don't want to take any events after the query's snapshot time into account.
+        if (!isErase && queryBounds != null && systemFrom >= queryBounds.systemTime.upper) return null
 
         val validFrom = erp.validFrom
         val validTo = erp.validTo
 
         polygon.calculateFor(ceiling, validFrom, validTo)
         ceiling.applyLog(systemFrom, validFrom, validTo)
+
+        if (isErase) {
+            skipIidPtr.setFrom(currentIidPtr)
+        }
+        
         return polygon
     }
 }
