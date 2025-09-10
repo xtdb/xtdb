@@ -44,7 +44,7 @@ jobs:
             >> $GITHUB_STEP_SUMMARY
 
       - name: Post Slack Notification
-        uses: ravsamhq/notify-slack-action@042f29088bb3bdbda5b4ff7b4818466a277fa8f7  # v2
+        uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2  # v2.5.0
         if: always()
         with:
           status: ${{ job.status }}
