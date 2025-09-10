@@ -82,7 +82,7 @@ jobs:
         run: ./gradlew :docker:standalone:shadowJar :docker:aws:shadowJar :docker:azure:shadowJar :docker:google-cloud:shadowJar
 
       - name: Push Standalone
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: docker/standalone
           platforms: linux/arm64/v8,linux/amd64
@@ -94,7 +94,7 @@ jobs:
             XTDB_VERSION=${{ steps.standalone-meta.outputs.version }}
 
       - name: Push Azure
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: docker/azure
           platforms: linux/arm64/v8,linux/amd64
@@ -106,7 +106,7 @@ jobs:
             XTDB_VERSION=${{ steps.azure-meta.outputs.version }}
 
       - name: Push AWS
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: docker/aws
           platforms: linux/arm64/v8,linux/amd64
@@ -118,7 +118,7 @@ jobs:
             XTDB_VERSION=${{ steps.aws-meta.outputs.version }}
 
       - name: Push Google Cloud
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: docker/google-cloud
           platforms: linux/arm64/v8,linux/amd64
