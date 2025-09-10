@@ -16,7 +16,10 @@ spec:
   template:
     metadata:
       labels:
-        {{- toYaml .Values.providerConfig.podLabels | nindent 8 }}
+        {{- $user := .Values.providerConfig.podLabels | default (dict) -}}
+        {{- $base := dict "app.kubernetes.io/name" "xtdb" "app.kubernetes.io/component" "benchmark" -}}
+        {{- $labels := merge (dict) $user $base -}}
+        {{- toYaml $labels | nindent 8 }}
       annotations:
         "helm.sh/hook": pre-install,pre-upgrade
         "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded

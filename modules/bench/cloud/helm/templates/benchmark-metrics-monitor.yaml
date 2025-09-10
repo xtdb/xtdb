@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: xtdb-benchmark-monitor
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [{{ .Release.Namespace | quote }}]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: xtdb-benchmark-metrics
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  endpoints:
+    - port: metrics
+      interval: 2s
+      scrapeTimeout: 1s

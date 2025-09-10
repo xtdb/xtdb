@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: xtdb-benchmark-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: xtdb-benchmark-metrics
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    type: xtdb-benchmark-service
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: xtdb
+    app.kubernetes.io/component: benchmark
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: metrics

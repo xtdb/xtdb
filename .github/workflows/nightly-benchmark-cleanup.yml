@@ -34,6 +34,8 @@ concurrency:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    env:
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.BENCHMARK_GRAFANA_ADMIN_PASSWORD }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -57,7 +59,7 @@ jobs:
           helm status xtdb-benchmark -n cloud-benchmark >/dev/null 2>&1
 
       - name: Capture Benchmark Logs
-        if: steps.check-deployment.outcome == 'success'
+        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
         id: logs
         run: |
           # Wait for job logs with retries
@@ -107,23 +109,192 @@ jobs:
           echo "date=$(date -u +"%Y/%m/%d")" >> "$GITHUB_OUTPUT"
 
       - name: Upload Benchmark Logs
-        id: upload
+        id: upload-logs
+        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success' && hashFiles('benchmark.log') != ''
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-logs-${{ inputs.benchType }}-${{ steps.timestamp.outputs.value }}-${{ inputs.nodeId }}-${{ inputs.status }}
           path: benchmark.log
           retention-days: 7
 
+      - name: Compute Grafana Time Range
+        id: grafana-time
+        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
+        run: |
+          set -euo pipefail
+          FROM_PARAM="now-2h"
+          TO_PARAM="now"
+          if [ -f benchmark.log ]; then
+            # Extract first timestamp like HH:MM:SS.mmm
+            start_ts=$(grep -m1 -oE '^[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}' benchmark.log || true)
+            if [ -n "$start_ts" ]; then
+              start_hms=${start_ts%.*}
+              start_ms=${start_ts#*.}
+              today=$(date -u +%Y-%m-%d)
+              # Candidates: today and yesterday (to handle jobs crossing midnight UTC)
+              cand1=$(date -u -d "$today $start_hms" +%s 2>/dev/null || echo "")
+              yesterday=$(date -u -d "$today - 1 day" +%Y-%m-%d)
+              cand2=$(date -u -d "$yesterday $start_hms" +%s 2>/dev/null || echo "")
+              now_s=$(date -u +%s)
+              pick=""
+              if [ -n "$cand1" ] && [ "$cand1" -le "$now_s" ]; then pick="$cand1"; fi
+              if [ -n "$cand2" ] && [ "$cand2" -le "$now_s" ]; then
+                if [ -z "$pick" ] || [ $((now_s - cand2)) -lt $((now_s - pick)) ]; then pick="$cand2"; fi
+              fi
+              if [ -n "$pick" ]; then
+                # Ensure ms parsed as decimal even with leading zeros
+                FROM_PARAM=$((pick * 1000 + 10#${start_ms}))
+                TO_PARAM="$(date -u +%s000)"
+              fi
+            fi
+          fi
+          echo "from=$FROM_PARAM" >> "$GITHUB_OUTPUT"
+          echo "to=$TO_PARAM" >> "$GITHUB_OUTPUT"
+
+      - name: Port-forward Grafana (background)
+        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
+        run: |
+          # Start port-forward in background
+          kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80 >/tmp/grafana-pf.log 2>&1 &
+          echo $! > /tmp/grafana-pf.pid
+          # Wait for Grafana to be reachable
+          for i in {1..30}; do
+            if curl -sSf http://localhost:3000/api/health > /dev/null; then
+              echo "Grafana is reachable"
+              break
+            fi
+            echo "Waiting for Grafana port-forward... ($i)"
+            sleep 2
+          done
+
+      - name: Render Cluster Monitoring Panels
+        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
+        run: |
+          set -euo pipefail
+          mkdir -p grafana-panels
+          DASHBOARD_UID="aeews5bgs0zk0b"
+          AUTH="admin:${GRAFANA_ADMIN_PASSWORD:-admin}"
+          FROM="${{ steps.grafana-time.outputs.from || 'now-2h' }}"
+          TO="${{ steps.grafana-time.outputs.to || 'now' }}"
+          WIDTH=1600
+          HEIGHT=900
+          SLUG="xtdb-monitoring-dashboard"
+
+          # Declare panels: [title]=panelId
+          declare -A PANELS=(
+            ["Transaction Lag"]=3
+            ["Max Transaction Latency (Over Time)"]=5
+            ["Max Query Latency (Over Time)"]=6
+            ["Cluster Transactions"]=8
+            ["Cluster Transaction Errors"]=22
+            ["Cluster Queries"]=9
+            ["Cluster Query Errors"]=20
+          )
+
+          # Simple slugify for file names
+          slugify() {
+            echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g'
+          }
+
+          for title in "${!PANELS[@]}"; do
+            panelId="${PANELS[$title]}"
+            file="grafana-panels/$(slugify "$title").png"
+            url="http://localhost:3000/render/d-solo/${DASHBOARD_UID}/${SLUG}?panelId=${panelId}&orgId=1&from=${FROM}&to=${TO}&width=${WIDTH}&height=${HEIGHT}&tz=UTC"
+            echo "Rendering [$title] (panelId=${panelId}) -> $file"
+            curl -sS -f -L -u "$AUTH" -H 'Accept: image/png' "$url" -o "$file" || echo "Failed to render $title"
+          done
+
+      - name: Render Node Debugging Panels
+        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
+        run: |
+          set -euo pipefail
+          # Determine the XTDB node id (pod name) to use for var-xtdbnode
+          XTDB_NODE_ID=$(kubectl get pods -n cloud-benchmark -l app.kubernetes.io/component=benchmark,app.kubernetes.io/name=xtdb -o jsonpath='{.items[0].metadata.name}' || true)
+          if [ -z "$XTDB_NODE_ID" ]; then
+            # Fallback via plain text parsing
+            XTDB_NODE_ID=$(kubectl get pods -n cloud-benchmark -l app.kubernetes.io/component=benchmark,app.kubernetes.io/name=xtdb -o name | head -n1 | sed 's#.*/##')
+          fi
+          if [ -z "$XTDB_NODE_ID" ]; then
+            echo "Failed to determine XTDB_NODE_ID; skipping node debugging panel rendering"
+            exit 0
+          fi
+          echo "Using XTDB_NODE_ID=$XTDB_NODE_ID"
+
+          mkdir -p grafana-panels
+          DASHBOARD_UID="edznf2lfly22o1aa" # XTDB: Node Debugging Dashboard
+          AUTH="admin:${GRAFANA_ADMIN_PASSWORD:-admin}"
+          FROM="${{ steps.grafana-time.outputs.from || 'now-2h' }}"
+          TO="${{ steps.grafana-time.outputs.to || 'now' }}"
+          WIDTH=1600
+          HEIGHT=900
+          SLUG="xtdb-node-debugging"
+
+          declare -A PANELS=(
+            ["JVM - Heap Usage (Average)"]=8
+            ["JVM - Heap Usage (Max)"]=20
+            ["XTDB - Buffer Pool Allocated Memory"]=24
+            ["XTDB - Compactor Allocated Memory"]=3
+            ["Netty Allocated Memory"]=38
+            ["Direct Allocated Memory"]=40
+            ["Memory Cache - Record Batch count"]=26
+            ["Buffer Pool - Record Batch requests"]=36
+            ["Available Compaction Jobs"]=42
+            ["Compaction Job Timer"]=45
+          )
+
+          slugify() {
+            echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g'
+          }
+
+          for title in "${!PANELS[@]}"; do
+            panelId="${PANELS[$title]}"
+            file="grafana-panels/node-$(slugify "$title").png"
+            url="http://localhost:3000/render/d-solo/${DASHBOARD_UID}/${SLUG}?panelId=${panelId}&orgId=1&from=${FROM}&to=${TO}&width=${WIDTH}&height=${HEIGHT}&tz=UTC&var-xtdbnode=${XTDB_NODE_ID}"
+            echo "Rendering [Node Debug] $title (panelId=${panelId}, xtdbnode=${XTDB_NODE_ID}) -> $file"
+            curl -sS -f -L -u "$AUTH" -H 'Accept: image/png' "$url" -o "$file" || echo "Failed to render node panel $title"
+          done
+
+      - name: Upload Grafana Panels
+        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success' && hashFiles('grafana-panels/*.png') != ''
+        id: upload-grafana
+        uses: actions/upload-artifact@v4
+        with:
+          name: grafana-panels-${{ inputs.benchType }}-${{ steps.timestamp.outputs.value }}-${{ inputs.nodeId }}-${{ inputs.status }}
+          path: grafana-panels/*.png
+          retention-days: 7
+
+      - name: Stop Grafana Port-forward
+        if: always()
+        run: |
+          if [ -f /tmp/grafana-pf.pid ]; then
+            kill "$(cat /tmp/grafana-pf.pid)" 2>/dev/null || true
+            rm -f /tmp/grafana-pf.pid
+          fi
+
       - name: Run Cleanup Script
         if: ${{ always() && steps.check-deployment.outcome == 'success' }}
         run: |
           ./modules/bench/cloud/clear-bench.sh azure
+
+      - name: Remove Monitoring Stack
+        if: always()
+        run: |
+          if helm status monitoring -n monitoring >/dev/null 2>&1; then
+            echo "Uninstalling monitoring stack..."
+            helm uninstall monitoring -n monitoring
+            # Attempt to delete the namespace (ignore if it contains other resources or is already gone)
+            kubectl delete namespace monitoring --ignore-not-found=true || true
+          else
+            echo "Monitoring stack not found; skipping."
+          fi
 
       - name: Compose Slack Message
         id: compose
         run: |
           type="${{ inputs.benchType }}"
           [ "$type" = "tpch" ] && type="TPC-H"
+          [ "$type" = "auctionmark" ] && type="AuctionMark"
+          [ "$type" = "readings" ] && type="Readings"
 
           if [ -n "${{ steps.logs.outputs.time_taken_iso }}" ]; then
             base="$type Benchmark completed in ${{ steps.logs.outputs.time_taken_iso }}"
@@ -134,10 +305,10 @@ jobs:
           {
             echo "msg<<EOF"
             echo "$base — {status_message}"
-            if [ "${{ steps.upload.outcome }}" = "success" ]; then
-              echo ":link: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|view logs>"
+            if [ "${{ steps.upload-logs.outcome }}" = "success" ] || [ "${{ steps.upload-grafana.outcome }}" = "success" ]; then
+              echo ":link: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|view artifacts>"
             else
-              echo ":link: (log upload failed)"
+              echo ":link: (artifacts upload failed)"
             fi
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
@@ -148,7 +319,7 @@ jobs:
         if: steps.check-deployment.outcome == 'success'
         with:
           status: ${{ inputs.status }}
-          notification_title: "*${{ (inputs.benchType == 'tpch') && 'TPC-H' || inputs.benchType }} Benchmark*"
+          notification_title: "*${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType }} Benchmark*"
           message_format: ${{ steps.compose.outputs.msg }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.BENCHMARK_SLACK_WEBHOOK_URL }}
