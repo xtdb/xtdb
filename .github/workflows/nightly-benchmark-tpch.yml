@@ -29,10 +29,10 @@ jobs:
       GRAFANA_ADMIN_PASSWORD: ${{ secrets.BENCHMARK_GRAFANA_ADMIN_PASSWORD }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
 
       - name: Azure CLI Login
-        uses: azure/login@v2
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2
         with:
           client-id: ${{ secrets.BENCHMARK_AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.BENCHMARK_AZURE_TENANT_ID }}
@@ -97,7 +97,7 @@ jobs:
           fi
 
       - name: Post Slack Notification
-        uses: ravsamhq/notify-slack-action@v2
+        uses: ravsamhq/notify-slack-action@042f29088bb3bdbda5b4ff7b4818466a277fa8f7 # v2
         if: always()
         with:
           status: ${{ job.status }}

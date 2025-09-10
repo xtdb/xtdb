@@ -10,18 +10,18 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - name: Set up JDK 21
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@17f84c3641ba7b8f6deff6309fc4c864478f5d62 # v3
         with:
           java-version: '21'
           distribution: 'temurin'
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
       - name: Log in to the Container registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -29,7 +29,7 @@ jobs:
 
       - name: Standalone meta
         id: standalone-meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5
         with:
           images: ghcr.io/xtdb/xtdb
           tags: |
@@ -41,7 +41,7 @@ jobs:
 
       - name: AWS meta
         id: aws-meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5
         with:
           images: ghcr.io/xtdb/xtdb-aws
           tags: |
@@ -53,7 +53,7 @@ jobs:
 
       - name: Azure meta
         id: azure-meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5
         with:
           images: ghcr.io/xtdb/xtdb-azure
           tags: |
@@ -65,7 +65,7 @@ jobs:
 
       - name: Google Cloud meta
         id: google-cloud-meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5
         with:
           images: ghcr.io/xtdb/xtdb-google-cloud
           tags: |
@@ -76,13 +76,13 @@ jobs:
             type=sha,prefix=g
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
       - name: Build Uberjar
         run: ./gradlew :docker:standalone:shadowJar :docker:aws:shadowJar :docker:azure:shadowJar :docker:google-cloud:shadowJar
 
       - name: Push Standalone
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: docker/standalone
           platforms: linux/arm64/v8,linux/amd64
@@ -94,7 +94,7 @@ jobs:
             XTDB_VERSION=${{ steps.standalone-meta.outputs.version }}
 
       - name: Push Azure
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: docker/azure
           platforms: linux/arm64/v8,linux/amd64
@@ -106,7 +106,7 @@ jobs:
             XTDB_VERSION=${{ steps.azure-meta.outputs.version }}
 
       - name: Push AWS
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: docker/aws
           platforms: linux/arm64/v8,linux/amd64
@@ -118,7 +118,7 @@ jobs:
             XTDB_VERSION=${{ steps.aws-meta.outputs.version }}
 
       - name: Push Google Cloud
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: docker/google-cloud
           platforms: linux/arm64/v8,linux/amd64
