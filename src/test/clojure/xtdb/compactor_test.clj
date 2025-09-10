@@ -615,7 +615,7 @@
                  (xt/q node "SELECT _id FROM foo FOR ALL VALID_TIME FOR ALL SYSTEM_TIME"))))
 
       (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/compaction-with-erase")))
-                     (.resolve node-dir (tables-key "public$foo")) #"l01-rc-(.+)\.arrow"))))
+                     (.resolve node-dir (tables-key "public$foo")) #"l01-(.+)\.arrow"))))
 
 (t/deftest compactor-trie-metadata
   (let [node-dir (util/->path "target/compactor/compactor-metadata-test")]
