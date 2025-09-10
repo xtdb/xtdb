@@ -172,8 +172,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
 
                     polygonCalculator.calculate(evPtr)
                         ?.let { polygon ->
-                            val recency = if (evPtr.op == "erase") MAX_LONG else polygon.recency
-                            rowCopier.copyRow(recency, evPtr.index)
+                            rowCopier.copyRow(polygon.recency, evPtr.index)
                         }
 
                     evPtr.nextIndex()
