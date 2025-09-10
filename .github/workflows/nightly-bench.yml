@@ -16,10 +16,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@17f84c3641ba7b8f6deff6309fc4c864478f5d62 # v3
         with:
           java-version: '21'
           distribution: 'temurin'
@@ -42,9 +42,9 @@ jobs:
           grep '^{.*"stage":' benchmark.log \
             | jq -r '"| \(.stage) | \(.["time-taken-ms"]) |"' \
             >> $GITHUB_STEP_SUMMARY
-      
-      - name: Post Slack Notification      
-        uses: ravsamhq/notify-slack-action@v2
+
+      - name: Post Slack Notification
+        uses: ravsamhq/notify-slack-action@042f29088bb3bdbda5b4ff7b4818466a277fa8f7  # v2
         if: always()
         with:
           status: ${{ job.status }}

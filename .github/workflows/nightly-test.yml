@@ -40,31 +40,31 @@ jobs:
           ALLOW_PLAINTEXT_LISTENER: yes
           CLUSTER_ID: q1Sh-9_ISia_zwGINzRvyQ
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - name: Set up JDK 21
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@17f84c3641ba7b8f6deff6309fc4c864478f5d62 # v3
         with:
           java-version: '21'
           distribution: 'temurin'
       - id: 'google-cloud-auth'
         name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v1'
+        uses: google-github-actions/auth@3a3c4c57d294ef65efaaee4ff17b22fa88dd3c69 # v1
         with:
           credentials_json: '${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}'
       - name: Run Nightly Test Task
-        uses: gradle/gradle-build-action@v2.6.1
+        uses: gradle/gradle-build-action@915a66c096a03101667f9df2e56c9efef558b165 # v2.6.1
         with:
           arguments: nightly-test
           cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
       - name: Publish Nightly Test Report
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@db71d41eb79864e25ab0337e395c352e84523afe # v4
         if: always()
         with:
           check_name: JUnit Nightly Test Report
           report_paths: '**/build/test-results/nightly-test/TEST-*.xml'
       - name: Post Slack Notification
         if: "always() && github.event_name != 'workflow_dispatch' && github.repository == 'xtdb/xtdb'"
-        uses: ravsamhq/notify-slack-action@v2
+        uses: ravsamhq/notify-slack-action@042f29088bb3bdbda5b4ff7b4818466a277fa8f7 # v2
         with:
           status: ${{ job.status }}
           notification_title: "*Nightly test*"
