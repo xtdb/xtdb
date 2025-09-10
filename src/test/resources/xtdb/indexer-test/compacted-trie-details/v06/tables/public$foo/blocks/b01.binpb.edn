@@ -5,29 +5,31 @@
   "_id"
   #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]},
  :tries
- [{:trie-key "l00-rc-b00", :data-file-size 2214, :trie-metadata nil}
+ [{:trie-key "l00-rc-b00", :data-file-size 2438, :trie-metadata nil}
   {:trie-key "l00-rc-b01",
-   :data-file-size 2206,
+   :data-file-size 2430,
    :trie-metadata
-   {:min-valid-from #xt/instant "2020-01-02T00:00:00Z",
+   {:min-system-from #xt/instant "2020-01-02T00:00:00Z",
+    :max-recency nil,
+    :iid-bloom [-250283280 10],
     :max-valid-from #xt/instant "2020-01-02T00:00:00Z",
-    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :min-system-from #xt/instant "2020-01-02T00:00:00Z",
+    :row-count 2,
     :max-system-from #xt/instant "2020-01-02T00:00:00Z",
-    :row-count 2,
-    :iid-bloom [-250283280 10]}}
-  {:trie-key "l01-rc-b00",
-   :data-file-size 2214,
-   :trie-metadata
-   {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
-    :max-valid-from #xt/instant "2020-01-01T00:00:00Z",
-    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
     :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
-    :max-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-valid-from #xt/instant "2020-01-02T00:00:00Z"}}
+  {:trie-key "l01-rc-b00",
+   :data-file-size 2438,
+   :trie-metadata
+   {:min-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-recency #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :iid-bloom [1320799995 10],
+    :max-valid-from #xt/instant "2020-01-01T00:00:00Z",
     :row-count 2,
-    :iid-bloom [1320799995 10]}}],
+    :max-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-valid-from #xt/instant "2020-01-01T00:00:00Z"}}],
  :hlls
  {"a" [2130024660 4.007832904843586],
   "_id" [1375436314 4.007832904843586]}}

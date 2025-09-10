@@ -6,16 +6,17 @@
   #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :uuid false]]},
  :tries
  [{:trie-key "l00-rc-b00",
-   :data-file-size 2494,
+   :data-file-size 2726,
    :trie-metadata
-   {:min-valid-from #xt/instant "-290308-12-21T19:59:05.224192Z",
+   {:min-system-from #xt/instant "2020-01-01T00:00:00Z",
+    :max-recency nil,
+    :iid-bloom [-2011970292 5],
     :max-valid-from #xt/instant "2023-01-01T00:00:00Z",
-    :min-valid-to #xt/instant "2024-01-01T00:00:00Z",
-    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
-    :max-system-from #xt/instant "2020-01-03T00:00:00Z",
     :row-count 3,
-    :iid-bloom [-2011970292 5]}}],
+    :max-system-from #xt/instant "2020-01-03T00:00:00Z",
+    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+    :min-valid-to #xt/instant "2024-01-01T00:00:00Z",
+    :min-valid-from #xt/instant "-290308-12-21T19:59:05.224192Z"}}],
  :hlls
  {"b" [267952670 2.001955671862574],
   "_id" [350460640 1.0004885993744506]}}

@@ -282,6 +282,17 @@
   ([vf-min vt-max sf-min st-max] (TemporalBounds. (TemporalDimension. vf-min vt-max) (TemporalDimension. sf-min st-max))))
 
 (defn ->temporal-metadata
+  ([{:keys [min max min-vf max-vf min-vt max-vt min-sf max-sf sf max-recency]}]
+   (-> (TemporalMetadata/newBuilder)
+       (.setMinValidFrom (or min-vf min Long/MAX_VALUE))
+       (.setMaxValidFrom (or max-vf max Long/MIN_VALUE))
+       (.setMinValidTo (or min-vt min Long/MAX_VALUE))
+       (.setMaxValidTo (or max-vt max Long/MIN_VALUE))
+       (.setMinSystemFrom (or min-sf sf min Long/MAX_VALUE))
+       (.setMaxSystemFrom (or max-sf sf min Long/MIN_VALUE))
+       (cond-> max-recency (.setMaxRecency max-recency))
+       (.build)))
+
   ([min max] (->temporal-metadata min max min))
   ([vf-min vt-max sf-min] (->temporal-metadata vf-min vt-max sf-min sf-min))
   ([vf-min vt-max sf-min sf-max]

@@ -77,6 +77,7 @@ class TimestampTzVector private constructor(
             : this(name, nullable, unit, zone, ExtensibleBuffer(al), ExtensibleBuffer(al), 0)
 
     override fun getLong(idx: Int) = getLong0(idx)
+
     override fun writeLong(v: Long) = writeLong0(v)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): ZonedDateTime =

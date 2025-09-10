@@ -52,7 +52,9 @@
 
 (defn apply-filter-msgs [& trie-keys]
   (map (fn [[trie-key recency temporal-metadata]]
-         (let [^TemporalMetadata tm (apply tu/->temporal-metadata temporal-metadata)]
+         (let [^TemporalMetadata tm (if (map? temporal-metadata)
+                                      (tu/->temporal-metadata temporal-metadata)
+                                      (apply tu/->temporal-metadata temporal-metadata))]
            (cat/map->CatalogEntry {:trie-key trie-key
                                    :recency (some-> recency time/micros->instant)
                                    :trie-metadata (-> (TrieMetadata/newBuilder)
@@ -159,6 +161,36 @@
                                 ["l0-current-block-02" nil [20220101 Long/MAX_VALUE 20190101]]]
                                query-bounds))
               "recency doesn't filter, temporal metadata does filter, if valid-time bounding files come earlier in system time they don't need to get taken")))))
+
+(t/deftest test-filter-tries-recency
+  (let [current-time 20200101]
+    (t/testing "recency filtering (temporal metadata always overlaps the query)"
+      (let [query-bounds (tu/->temporal-bounds current-time (inc current-time))]
+        (t/is (= #{"l01-current-block-00"}
+                 (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2019-block-00" 20190104 {:min 20180101, :max Long/MAX_VALUE
+                                                                       :max-recency 20190101}]]
+                               query-bounds))
+              "2019 gets filtered out")
+
+        (t/is (= #{"l01-current-block-00" "l01-recency-2020-block-00"}
+                 (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2020-block-00" 20200104 {:min 20190101, :max 20200103
+                                                                       :max-recency 20200103}]]
+                               query-bounds))
+              "recency matches, so this is in")
+
+        (t/is (= #{"l01-current-block-00" "l01-recency-2020-block-00"}
+                 (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2020-block-00" 20200104 {:min 20190101, :max 20200103}]]
+                               query-bounds))
+              "recency matches, so this is in")
+
+        (t/is (= #{"l01-current-block-00" "l01-recency-2020-block-00"}
+                 (filter-tries [["l01-current-block-00"      nil      [20200101 Long/MAX_VALUE]]
+                                ["l01-recency-2020-block-00" 20200104 {:min 20190101, :max 20200103}]]
+                               query-bounds))
+              "no max-recency (legacy file), so it's in")))))
 
 (t/deftest test-l0-l1-tries
   (t/is (= #{} (curr-tries)))
