@@ -8,7 +8,10 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ReadChannel
-import org.apache.arrow.vector.ipc.message.*
+import org.apache.arrow.vector.ipc.message.ArrowFieldNode
+import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
+import org.apache.arrow.vector.ipc.message.MessageChannelReader
+import org.apache.arrow.vector.ipc.message.MessageSerializer
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
@@ -23,7 +26,6 @@ import xtdb.util.closeOnCatch
 import xtdb.util.normalForm
 import xtdb.util.safeMap
 import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
 import java.nio.channels.*
 import java.nio.file.Files
 import java.nio.file.Path
@@ -232,5 +234,16 @@ class Relation(
 
                 Vector.fromList(al, normalKey, col.value)
             }.closeAllOnCatch { Relation(al, it, it.firstOrNull()?.valueCount ?: 0) }
+
+        @JvmStatic
+        fun openFromArrowStream(al: BufferAllocator, bytes: ByteArray): Relation =
+            bytes.asChannel.use { ch ->
+                StreamLoader(al, ch).use { loader ->
+                    Relation(al, loader.schema).closeOnCatch { rel ->
+                        loader.loadNextPage(rel)
+                        rel
+                    }
+                }
+            }
     }
 }
