@@ -334,11 +334,12 @@
    :indexer (ig/ref :xtdb.indexer/for-db)
    :compactor (ig/ref :xtdb.compactor/for-db)
    :block-flush-duration (.getFlushDuration indexer-conf)
-   :skip-txs (.getSkipTxs indexer-conf)})
+   :skip-txs (.getSkipTxs indexer-conf)
+   :enabled? (.getEnabled indexer-conf)})
 
 (defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry db-catalog]} :base
-                                               :keys [allocator db indexer compactor block-flush-duration skip-txs] :as deps}]
-  (when deps
+                                               :keys [allocator db indexer compactor block-flush-duration skip-txs enabled?]}]
+  (when enabled?
     (LogProcessor. allocator meter-registry db-catalog db indexer compactor block-flush-duration (set skip-txs))))
 
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]

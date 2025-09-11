@@ -14,13 +14,15 @@ data class IndexerConfig(
     var pageLimit: Long = 1024L,
     var rowsPerBlock: Long = 102400L,
     var flushDuration: Duration = Duration.ofHours(4),
-    var skipTxs: List<MessageId> = System.getenv("XTDB_SKIP_TXS")?.let(::parseSkipTxsEnv).orEmpty()
+    var skipTxs: List<MessageId> = System.getenv("XTDB_SKIP_TXS")?.let(::parseSkipTxsEnv).orEmpty(),
+    var enabled: Boolean = true
 ) {
     fun logLimit(logLimit: Long) = apply { this.logLimit = logLimit }
     fun pageLimit(pageLimit: Long) = apply { this.pageLimit = pageLimit }
     fun rowsPerBlock(rowsPerBlock: Long) = apply { this.rowsPerBlock = rowsPerBlock }
     fun flushDuration(flushDuration: Duration) = apply { this.flushDuration = flushDuration }
     fun skipTxs(skipTxs: List<MessageId>) = apply { this.skipTxs = skipTxs.sorted() }
+    fun enabled(enabled: Boolean) = apply { this.enabled = enabled }
 
     companion object {
         private fun parseSkipTxsEnv(skipTxs: String): List<MessageId> =

@@ -1191,3 +1191,11 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:xt/id 1, :a 3} {:xt/id 2} {:xt/id 3, :a 4} {:xt/id 4, :a "hello"}]
            (xt/q tu/*node* "SELECT * FROM docs ORDER BY _id"))))
+
+(t/deftest test-log-processor-disabled
+  (with-open [node (xtn/start-node {:indexer {:enabled? false}
+                                    :compactor {:threads 0}})]
+    (t/is (anomalous? [:fault nil "log processor not initialised"]
+                      (xt/execute-tx node [[:put-docs :docs {:xt/id 1}]])))
+
+    (t/is (= [{:v 1}] (xt/q node "SELECT 1 AS v")))))
