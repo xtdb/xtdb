@@ -37,6 +37,7 @@
       (t/is (= [{:xt/id "new-db"}] (xt/q new-db-conn ["SELECT * FROM foo"]))))))
 
 #_
+;; TODO propagating mock clocking through to secondary databases
 (t/deftest test-block-boundary
   (binding [c/*ignore-signal-block?* true]
     (util/with-tmp-dir* "node"
