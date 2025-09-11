@@ -74,7 +74,7 @@ constructor(
         txKey: TransactionKey,
         private val newLiveTable: Boolean
     ) : AutoCloseable {
-        private var transientTrie = liveTrie
+        var transientTrie = liveTrie; private set
         private val systemFrom: InstantMicros = txKey.systemTime.asMicros
 
         fun openSnapshot(): Snapshot = openSnapshot(transientTrie)

@@ -9,7 +9,7 @@
            (java.util ArrayList)
            (xtdb.log.proto TrieDetails TrieMetadata TrieState)
            (xtdb.operator.scan Metadata)
-           (xtdb.trie MemoryHashTrie Trie Trie$Key)
+           (xtdb.trie MemoryHashTrie MemoryHashTrie$Node MemoryHashTrie$Branch MemoryHashTrie$Leaf Trie Trie$Key)
            (xtdb.util Temporal TemporalBounds TemporalDimension)))
 
 (defn ->trie-details ^TrieDetails
@@ -134,3 +134,17 @@
                      (.add leaves meta-obj))
                    (recur meta-objects)))))
            (vec leaves)))))))
+
+(defn- <-MemoryHashTrieNode [^MemoryHashTrie$Node node]
+  (when node
+    (condp instance? node
+      MemoryHashTrie$Leaf
+      [:leaf (vec (.getData ^MemoryHashTrie$Leaf node))]
+
+      MemoryHashTrie$Branch
+      (into [:branch] (map <-MemoryHashTrieNode) (.getHashChildren ^MemoryHashTrie$Branch node)))))
+
+(defn <-MemoryHashTrie [^MemoryHashTrie trie]
+  {:log-limit (.getLogLimit trie)
+   :page-limit (.getPageLimit trie)
+   :tree (<-MemoryHashTrieNode (.getRootNode trie))})

@@ -3,6 +3,8 @@ package xtdb.trie
 import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.arrow.VectorReader
+import xtdb.trie.proto.*
+import xtdb.trie.proto.HashTrie as HashTrieProto
 
 private const val LOG_LIMIT = 64
 private const val PAGE_LIMIT = 1024
@@ -185,6 +187,22 @@ class MemoryHashTrie(
         }
     }
 
+    private fun Node?.asProto(): HashTrieNode =
+        hashTrieNode {
+            when (this@asProto) {
+                is Branch -> branch = branch { children.addAll(hashChildren.map { it.asProto() }) }
+                is Leaf -> leaf = leaf { data.addAll(this@asProto.data.asIterable()) }
+                null -> Unit
+            }
+        }
+
+    val asProto: ByteArray
+        get() = hashTrie {
+            logLimit = this@MemoryHashTrie.logLimit
+            pageLimit = this@MemoryHashTrie.pageLimit
+            rootNode = compactLogs().rootNode.asProto()
+        }.toByteArray()
+
     companion object {
         @JvmStatic
         fun builder(iidReader: VectorReader) = Builder(iidReader)
@@ -199,6 +217,27 @@ class MemoryHashTrie(
             System.arraycopy(path, 0, childPath, 0, currentPathLength)
             childPath[currentPathLength] = idx
             return childPath
+        }
+
+        private fun HashTrieNode.decode(logLimit: Int): Node? =
+            when (nodeCase) {
+                HashTrieNode.NodeCase.BRANCH ->
+                    Branch(path.toByteArray(), branch.childrenList.map { it.decode(logLimit) })
+
+                HashTrieNode.NodeCase.LEAF ->
+                    Leaf(logLimit, path.toByteArray(), leaf.dataList.toIntArray())
+
+                HashTrieNode.NodeCase.NODE_NOT_SET -> null
+            }
+
+        @JvmStatic
+        fun fromProto(bytes: ByteArray, iidReader: VectorReader): MemoryHashTrie {
+            val msg = HashTrieProto.parseFrom(bytes)
+
+            return MemoryHashTrie(
+                msg.rootNode.decode(msg.logLimit)!!,
+                iidReader, msg.logLimit, msg.pageLimit
+            )
         }
     }
 }

@@ -1,0 +1,28 @@
+edition = "2023";
+
+package xtdb.trie.proto;
+
+option java_multiple_files = true;
+
+message Branch {
+    repeated HashTrieNode children = 1;
+}
+
+message Leaf {
+    repeated int32 data = 1;
+}
+
+message HashTrieNode {
+    bytes path = 1;
+
+    oneof node {
+        Branch branch = 2;
+        Leaf leaf = 3;
+    }
+}
+
+message HashTrie {
+    HashTrieNode root_node = 1;
+    int32 log_limit = 2;
+    int32 page_limit = 3;
+}

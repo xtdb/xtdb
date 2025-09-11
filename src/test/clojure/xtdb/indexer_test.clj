@@ -17,16 +17,19 @@
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
+            [xtdb.trie :as trie]
             [xtdb.ts-devices :as ts]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import (java.nio.channels ClosedByInterruptException)
+  (:import java.nio.ByteBuffer
+           (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
            (java.time Duration Instant InstantSource)
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector.types UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType$Union]
-           xtdb.arrow.Relation))
+           (xtdb.arrow NullVector Relation)
+           xtdb.trie.MemoryHashTrie))
 
 (t/use-fixtures :once tu/with-allocator)
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
@@ -620,23 +623,39 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
           (with-open [db-idxer (.openForDatabase idxer (db/primary-db node))
                       live-idx-tx (.startTx live-idx (serde/->TxKey 1 Instant/EPOCH))
                       live-table-tx (.liveTable live-idx-tx #xt/table foo)]
+            (.logPut live-table-tx (ByteBuffer/allocate 16) 0 0
+                     (fn []
+                       (.writeObject (.getDocWriter live-table-tx) {:xt/id 3, :version 0})))
             (idx/crash-log! (-> db-idxer (assoc :node-id node-id)) "test crash log"
-                            {:foo "bar"} {:live-table-tx live-table-tx}))
+                            {:table #xt/table foo, :foo "bar"}
+                            {:live-idx live-idx, :live-table-tx live-table-tx}))
 
-          (t/is (= {:foo "bar", :ex "test crash log"}
+          (t/is (= {:table #xt/table foo, :foo "bar", :ex "test crash log"}
                    (let [path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/crash.edn" node-id))]
                      (-> (.getByteArray bp path)
                          String.
                          read-string))))
 
-          (let [live-table-tx-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/live-table.arrow" node-id))
+          (t/is (= {:tree [:leaf [0]], :page-limit 1024, :log-limit 64}
+                   (let [path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/live-trie.binpb" node-id))]
+                     (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (.getByteArray bp path) (NullVector. "_iid" 0))))))
+
+          (t/is (= {:tree [:leaf [1 0]], :page-limit 1024, :log-limit 64}
+                   (let [path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/live-trie-tx.binpb" node-id))]
+                     (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (.getByteArray bp path) (NullVector. "_iid" 0))))))
+
+          (let [live-table-tx-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/live-table-tx.arrow" node-id))
                 footer (.getFooter bp live-table-tx-path)]
             (with-open [rb (.getRecordBatch bp live-table-tx-path 0)
                         rel (Relation/fromRecordBatch al (.getSchema footer) rb)]
               (t/is (= [{:xt/system-from (time/->zdt #inst "2020"),
                          :xt/valid-from (time/->zdt #inst "2020"),
                          :xt/valid-to (time/->zdt time/end-of-time)
-                         :op {:xt/id 2}}]
+                         :op {:xt/id 2}}
+                        {:xt/system-from #xt/zdt "1970-01-01T00:00Z[UTC]",
+                         :xt/valid-from #xt/zdt "1970-01-01T00:00Z[UTC]",
+                         :xt/valid-to #xt/zdt "1970-01-01T00:00Z[UTC]",
+                         :op {:xt/id 3, :version 0}}]
                        (->> (.toMaps rel)
                             (mapv #(dissoc % :xt/iid))))))))))))
 
