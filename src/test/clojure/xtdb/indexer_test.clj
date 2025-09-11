@@ -19,12 +19,13 @@
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.ts-devices :as ts]
+            [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import java.nio.ByteBuffer
            (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
-           (java.time Duration Instant InstantSource)
+           (java.time Duration Instant InstantSource ZoneId)
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector.types UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType$Union]
@@ -618,19 +619,27 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
               idxer (idx/<-node node)
               db (db/primary-db node)
               bp (.getBufferPool db)
-              live-idx (.getLiveIndex db)]
+              live-idx (.getLiveIndex db)
+              tx-ops [[:put-docs :public/foo {:xt/id 3, :version 0}]
+                      [:put-docs :public/foo {:xt/id 4, :version 0}]]]
 
           (with-open [db-idxer (.openForDatabase idxer (db/primary-db node))
                       live-idx-tx (.startTx live-idx (serde/->TxKey 1 Instant/EPOCH))
                       live-table-tx (.liveTable live-idx-tx #xt/table foo)
-                      query-rel (Relation/openFromRows al [{:foo "bar", :baz 32}, {:foo "baz", :baz 64}])]
-            (.logPut live-table-tx (ByteBuffer/allocate 16) 0 0
-                     (fn []
-                       (.writeObject (.getDocWriter live-table-tx) {:xt/id 3, :version 0})))
-            (idx/crash-log! (-> db-idxer (assoc :node-id node-id)) "test crash log"
-                            {:table #xt/table foo, :foo "bar"}
-                            {:live-idx live-idx, :live-table-tx live-table-tx,
-                             :query-rel query-rel}))
+                      query-rel (Relation/openFromRows al [{:foo "bar", :baz 32}, {:foo "baz", :baz 64}])
+                      tx-ops-rel (Relation/openFromArrowStream al (xt-log/serialize-tx-ops al
+                                                                                           (mapv tx-ops/parse-tx-op tx-ops)
+                                                                                           {:default-db "xtdb"
+                                                                                            :system-time #xt/zdt "1970-01-01T00:00Z[UTC]"
+                                                                                            :default-tz (ZoneId/of "Europe/London")}))]
+            (let [tx-ops-rdr (.getListElements (.vectorFor tx-ops-rel "tx-ops"))] 
+              (.logPut live-table-tx (ByteBuffer/allocate 16) 0 0
+                       (fn []
+                         (.writeObject (.getDocWriter live-table-tx) {:xt/id 3, :version 0})))
+              (idx/crash-log! (-> db-idxer (assoc :node-id node-id)) "test crash log"
+                              {:table #xt/table foo, :foo "bar"}
+                              {:live-idx live-idx, :live-table-tx live-table-tx,
+                               :query-rel query-rel, :tx-ops-rdr tx-ops-rdr})))
 
           (t/is (= {:table #xt/table foo, :foo "bar", :ex "test crash log"}
                    (let [path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/crash.edn" node-id))]
@@ -667,7 +676,18 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
                         rel (Relation/fromRecordBatch al (.getSchema footer) rb)]
               (t/is (= [{:foo "bar", :baz 32}, {:foo "baz", :baz 64}]
                        (->> (.toMaps rel)
-                            (mapv #(dissoc % :xt/iid))))))))))))
+                            (mapv #(dissoc % :xt/iid)))))))
+          
+          (let [tx-ops-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/tx-ops.arrow" node-id))
+                footer (.getFooter bp tx-ops-path)]
+            (with-open [rb (.getRecordBatch bp tx-ops-path 0)
+                        rel (Relation/fromRecordBatch al (.getSchema footer) rb)] 
+              (t/is (= [[{"_id" 3, "version" 0}] [{"_id" 4, "version" 0}]]
+                       (-> (.vectorFor rel "$data$")
+                           (.vectorFor "put-docs")
+                           (.vectorFor "documents")
+                           (.vectorFor "public/foo")
+                           (.toList)))))))))))
 
 (t/deftest list-concat-doesnt-halt-ingestion-3326
   ;; will likely have to remove this once we actually implement list concat

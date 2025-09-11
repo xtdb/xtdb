@@ -30,7 +30,7 @@
            (org.apache.arrow.vector.ipc ArrowReader ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.api.TransactionKey
-           (xtdb.arrow RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
+           (xtdb.arrow Relation RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            (xtdb.database Database Database$Catalog)
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.indexer Indexer Indexer$ForDatabase LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
@@ -42,7 +42,7 @@
 
 (def ^:dynamic ^java.time.InstantSource *crash-log-clock* (InstantSource/system))
 
-(defn crash-log! [{:keys [allocator ^Database db node-id]} ex {:keys [table] :as data} {:keys [^LiveIndex live-idx, ^LiveTable$Tx live-table-tx, ^RelationReader query-rel]}]
+(defn crash-log! [{:keys [allocator ^Database db node-id]} ex {:keys [table] :as data} {:keys [^LiveIndex live-idx, ^LiveTable$Tx live-table-tx, ^RelationReader query-rel, ^VectorReader tx-ops-rdr]}]
   (let [buffer-pool (.getBufferPool db)
         ts (str (.truncatedTo (.instant *crash-log-clock*) ChronoUnit/SECONDS))
         crash-dir (util/->path (format "crashes/%s/%s" node-id ts))]
@@ -71,6 +71,12 @@
                   wtr (.openArrowWriter buffer-pool (.resolve crash-dir "query-rel.arrow") query-rel)]
         (.writePage wtr)
         (.end wtr)))
+
+    (when tx-ops-rdr
+      (let [tx-ops-rel (Relation. allocator [tx-ops-rdr] (.getValueCount tx-ops-rdr))]
+        (with-open [wtr (.openArrowWriter buffer-pool (.resolve crash-dir "tx-ops.arrow") tx-ops-rel)]
+          (.writePage wtr)
+          (.end wtr))))
 
     (log/info "crash log written:" (str crash-dir))))
 
@@ -184,7 +190,7 @@
 
               (with-crash-log indexer "error putting document"
                   {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :doc-idx doc-idx}
-                  {:live-idx live-idx, :live-table-tx live-table-tx}
+                  {:live-idx live-idx, :live-table-tx live-table-tx, :tx-ops-rdr tx-ops-rdr}
 
                 (.logPut live-table-tx
                          (if iid-rdr
@@ -228,7 +234,7 @@
             (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
               (with-crash-log indexer "error deleting documents"
                   {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :iid-idx iid-idx}
-                  {:live-idx live-idx, :live-table-tx live-table-tx}
+                  {:live-idx live-idx, :live-table-tx live-table-tx, :tx-ops-rdr tx-ops-rdr}
 
                 (.logDelete live-table-tx (.getBytes iid-rdr (+ iids-start-idx iid-idx))
                             valid-from valid-to)))))
@@ -253,13 +259,13 @@
           (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
             (with-crash-log indexer "error erasing documents"
                 {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :iid-idx iid-idx}
-                {:live-idx live-idx, :live-table live-table}
+                {:live-idx live-idx, :live-table live-table, :tx-ops-rdr tx-ops-rdr}
 
               (.logErase live-table (.getBytes iid-rdr (+ iids-start-idx iid-idx))))))
 
         nil))))
 
-(defn- ->upsert-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx
+(defn- ->upsert-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
                                                            {:keys [^Instant current-time, indexer tx-key]}]
 
   (let [current-time-µs (time/instant->micros current-time)]
@@ -280,7 +286,7 @@
 
               (with-crash-log indexer "error upserting rows"
                   {:table table, :tx-key tx-key}
-                  {:live-idx live-idx, :live-table-tx live-table-tx, :query-rel in-rel}
+                  {:live-idx live-idx, :live-table-tx live-table-tx, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
                 (let [live-idx-table-copier (.rowCopier (RelationAsStructReader. "content" content-rel)
                                                         (.getDocWriter live-table-tx))]
                   (when-not id-col
@@ -307,7 +313,7 @@
                         (when (< valid-from valid-to)
                           (.logPut live-table-tx (util/->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx)))))))))))))))
 
-(defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, {:keys [indexer tx-key]}]
+(defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr, {:keys [indexer tx-key]}]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [row-count (.getRowCount in-rel)
@@ -321,7 +327,7 @@
         (dotimes [idx row-count]
           (with-crash-log indexer "error deleting rows"
               {:table table, :tx-key tx-key, :row-idx idx}
-              {:live-idx live-idx, :live-table-tx live-idx-tx, :query-rel in-rel}
+              {:live-idx live-idx, :live-table-tx live-idx-tx, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
 
             (let [iid (.getBytes iid-rdr idx)
                   valid-from (.getLong valid-from-rdr idx)
@@ -337,7 +343,7 @@
               (-> (.liveTable live-idx-tx table)
                   (.logDelete iid valid-from valid-to)))))))))
 
-(defn- ->erase-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx {:keys [indexer tx-key]}]
+(defn- ->erase-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr, {:keys [indexer tx-key]}]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [row-count (.getRowCount in-rel)
@@ -348,7 +354,7 @@
         (dotimes [idx row-count]
           (with-crash-log indexer "error erasing rows"
               {:table table, :tx-key tx-key, :row-idx idx}
-              {:live-idx live-idx, :live-table-tx live-idx-tx, :query-rel in-rel}
+              {:live-idx live-idx, :live-table-tx live-idx-tx, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
 
             (let [iid (.getBytes iid-rdr idx)]
               (-> (.liveTable live-idx-tx table)
@@ -543,12 +549,12 @@
   (let [sql-leg (.vectorFor tx-ops-rdr "sql")
         query-rdr (.vectorFor sql-leg "query")
         args-rdr (.vectorFor sql-leg "args")
-        upsert-idxer (->upsert-rel-indexer live-idx live-idx-tx tx-opts)
+        upsert-idxer (->upsert-rel-indexer live-idx live-idx-tx tx-ops-rdr tx-opts)
         patch-idxer (reify RelationIndexer
                       (indexOp [_ rel {:keys [table]}]
                         (patch-rel! table live-idx (.liveTable live-idx-tx table) rel tx-opts)))
-        delete-idxer (->delete-rel-indexer live-idx live-idx-tx tx-opts)
-        erase-idxer (->erase-rel-indexer live-idx live-idx-tx tx-opts)]
+        delete-idxer (->delete-rel-indexer live-idx live-idx-tx tx-ops-rdr tx-opts)
+        erase-idxer (->erase-rel-indexer live-idx live-idx-tx tx-ops-rdr tx-opts)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [query-str (.getObject query-rdr tx-op-idx)]
