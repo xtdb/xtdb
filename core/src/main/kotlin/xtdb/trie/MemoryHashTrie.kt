@@ -8,7 +8,9 @@ private const val LOG_LIMIT = 64
 private const val PAGE_LIMIT = 1024
 private const val MAX_LEVEL = 64
 
-class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) : HashTrie<MemoryHashTrie.Leaf> {
+class MemoryHashTrie(
+    override val rootNode: Node, val iidReader: VectorReader, val logLimit: Int, val pageLimit: Int
+) : HashTrie<MemoryHashTrie.Leaf> {
 
     private val bucketer = Bucketer()
 
@@ -27,15 +29,16 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
         fun setLogLimit(logLimit: Int) = this.apply { this.logLimit = logLimit }
         fun setPageLimit(pageLimit: Int) = this.apply { this.pageLimit = pageLimit }
         fun setRootPath(path: ByteArray) = this.apply { this.rootPath = path }
-        fun build(): MemoryHashTrie = MemoryHashTrie(Leaf(logLimit, pageLimit, rootPath), iidReader)
+        fun build(): MemoryHashTrie =
+            MemoryHashTrie(Leaf(logLimit, rootPath), iidReader, logLimit, pageLimit)
     }
 
-    operator fun plus(idx: Int) = MemoryHashTrie(rootNode.add(this, idx), iidReader)
+    operator fun plus(idx: Int) = MemoryHashTrie(rootNode.add(this, idx), iidReader, logLimit, pageLimit)
 
     @Suppress("unused")
-    fun withIidReader(iidReader: VectorReader) = MemoryHashTrie(rootNode, iidReader)
+    fun withIidReader(iidReader: VectorReader) = MemoryHashTrie(rootNode, iidReader, logLimit, pageLimit)
 
-    fun compactLogs() = MemoryHashTrie(rootNode = rootNode.compactLogs(this), iidReader)
+    fun compactLogs() = MemoryHashTrie(rootNode = rootNode.compactLogs(this), iidReader, logLimit, pageLimit)
 
     private fun bucketFor(idx: Int, level: Int, reusePtr: ArrowBufPointer): Int =
         bucketer.bucketFor(iidReader.getPointer(idx, reusePtr), level).toInt()
@@ -49,8 +52,6 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
     }
 
     class Branch(
-        private val logLimit: Int,
-        private val pageLimit: Int,
         override val path: ByteArray,
         override val hashChildren: List<Node?>,
     ) : Node {
@@ -62,22 +63,21 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
             val newChildren = List(hashChildren.size) { childIdx ->
                 var child = hashChildren[childIdx]
                 if (bucket == childIdx) {
-                    child = child ?: Leaf(logLimit, pageLimit, conjPath(path, childIdx.toByte()))
+                    child = child ?: Leaf(trie.logLimit, conjPath(path, childIdx.toByte()))
                     child = child.add(trie, newIdx)
                 }
                 child
             }
 
-            return Branch(logLimit, pageLimit, path, newChildren)
+            return Branch(path, newChildren)
         }
 
         override fun compactLogs(trie: MemoryHashTrie) =
-            Branch(logLimit, pageLimit, path, hashChildren.map { child -> child?.compactLogs(trie) })
+            Branch(path, hashChildren.map { child -> child?.compactLogs(trie) })
     }
 
     class Leaf(
-        private val logLimit: Int,
-        private val pageLimit: Int,
+        logLimit: Int,
         override val path: ByteArray,
         val data: IntArray = IntArray(0),
         val log: IntArray = IntArray(logLimit),
@@ -152,31 +152,36 @@ class MemoryHashTrie(override val rootNode: Node, val iidReader: VectorReader) :
         override fun compactLogs(trie: MemoryHashTrie): Node {
             if (logCount == 0) return this
 
-            val data = if (sortedData != null) sortedData as IntArray else mergeSort(trie, data, sortLog(trie, log, logCount), logCount)
-            val log = IntArray(logLimit)
+            val data = if (sortedData != null) sortedData as IntArray else mergeSort(
+                trie,
+                data,
+                sortLog(trie, log, logCount),
+                logCount
+            )
+            val log = IntArray(trie.logLimit)
             val logCount = 0
 
-            return if (data.size > pageLimit && path.size < MAX_LEVEL) {
+            return if (data.size > trie.pageLimit && path.size < MAX_LEVEL) {
                 val childBuckets = idxBuckets(trie, data, path)
 
                 val childNodes = childBuckets
                     .mapIndexed<IntArray?, Node?> { childIdx, childBucket ->
                         if (childBucket == null) null
                         else
-                            Leaf(logLimit, pageLimit, conjPath(path, childIdx.toByte()), childBucket)
+                            Leaf(trie.pageLimit, conjPath(path, childIdx.toByte()), childBucket)
                     }
 
-                Branch(logLimit, pageLimit, path, childNodes)
+                Branch(path, childNodes)
 
-            } else Leaf(logLimit, pageLimit, path, data, log, logCount)
+            } else Leaf(trie.pageLimit, path, data, log, logCount)
         }
 
         override fun add(trie: MemoryHashTrie, newIdx: Int): Node {
             var logCount = logCount
             log[logCount++] = newIdx
-            val newLeaf = Leaf(logLimit, pageLimit, path, data, log, logCount)
+            val newLeaf = Leaf(trie.pageLimit, path, data, log, logCount)
 
-            return if (logCount == logLimit) newLeaf.compactLogs(trie) else newLeaf
+            return if (logCount == trie.logLimit) newLeaf.compactLogs(trie) else newLeaf
         }
     }
 
