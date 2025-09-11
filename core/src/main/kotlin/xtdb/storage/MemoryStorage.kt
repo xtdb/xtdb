@@ -26,7 +26,8 @@ import java.util.*
 
 internal class MemoryStorage(
     allocator: BufferAllocator,
-    meterRegistry: MeterRegistry? = null
+    meterRegistry: MeterRegistry? = null,
+    override val epoch: StorageEpoch
 ) : BufferPool, IEvictBufferTest {
 
     private val allocator = allocator.openChildAllocator("buffer-pool").also { meterRegistry?.register(it) }

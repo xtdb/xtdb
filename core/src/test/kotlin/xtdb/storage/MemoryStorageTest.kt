@@ -6,7 +6,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 
 class MemoryStorageTest : StorageTest() {
-    override fun storage(): BufferPool  = memoryStorage
+    override fun storage(): BufferPool = memoryStorage
 
     private lateinit var allocator: BufferAllocator
     private lateinit var memoryStorage: MemoryStorage
@@ -14,7 +14,7 @@ class MemoryStorageTest : StorageTest() {
     @BeforeEach
     fun setUp() {
         allocator = RootAllocator()
-        memoryStorage = MemoryStorage(allocator)
+        memoryStorage = MemoryStorage(allocator, epoch = 0)
     }
 
     @AfterEach

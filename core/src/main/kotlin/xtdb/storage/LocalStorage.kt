@@ -34,6 +34,7 @@ internal class LocalStorage(
     allocator: BufferAllocator,
     private val memoryCache: MemoryCache,
     meterRegistry: MeterRegistry? = null,
+    override val epoch: StorageEpoch,
     dbName: DatabaseName,
     val rootPath: Path,
 ) : BufferPool, IEvictBufferTest, Closeable {

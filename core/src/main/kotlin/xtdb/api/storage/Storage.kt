@@ -89,7 +89,7 @@ object Storage {
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
             dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion
-        ): BufferPool = MemoryStorage(allocator, meterRegistry)
+        ): BufferPool = MemoryStorage(allocator, meterRegistry, epoch)
     }
 
     @JvmStatic
@@ -118,7 +118,7 @@ object Storage {
         ): BufferPool {
             val rootPath = path.resolve(storageRoot(storageVersion, epoch)).also { it.createDirectories() }
 
-            return LocalStorage(allocator, memoryCache, meterRegistry, dbName, rootPath)
+            return LocalStorage(allocator, memoryCache, meterRegistry, epoch, dbName, rootPath)
         }
     }
 
@@ -146,7 +146,7 @@ object Storage {
             requireNotNull(diskCache) { "diskCache is required for remote storage" }
 
             return objectStore.openObjectStore(storageRoot(storageVersion, epoch)).closeOnCatch { objectStore ->
-                RemoteBufferPool(allocator, objectStore, memoryCache, diskCache, meterRegistry, dbName)
+                RemoteBufferPool(allocator, objectStore, memoryCache, diskCache, meterRegistry, epoch, dbName)
             }
         }
     }

@@ -14,7 +14,11 @@ import java.nio.file.Path
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.toJavaDuration
 
+typealias StorageEpoch = Int
+
 sealed interface BufferPool : AutoCloseable {
+
+    val epoch: StorageEpoch
 
     /**
      * Get the whole file as an on-heap byte array.
@@ -64,6 +68,7 @@ sealed interface BufferPool : AutoCloseable {
         val UNUSED = UnusedBufferPool
 
         object UnusedBufferPool : BufferPool {
+            override val epoch: StorageEpoch get() = unsupported("epoch")
             override fun getByteArray(key: Path) = unsupported("getByteArray")
             override fun getFooter(key: Path) = unsupported("getFooter")
             override fun getRecordBatch(key: Path, idx: Int) = unsupported("getRecordBatch")

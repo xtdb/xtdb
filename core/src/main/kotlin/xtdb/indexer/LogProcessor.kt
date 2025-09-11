@@ -196,7 +196,7 @@ class LogProcessor(
                     }
 
                     is Message.TriesAdded -> {
-                        if (msg.storageVersion == Storage.VERSION)
+                        if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == db.bufferPool.epoch)
                             msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
                                 trieCatalog.addTries(TableRef.parse(db.name, tableName), tries, record.logTimestamp)
                             }

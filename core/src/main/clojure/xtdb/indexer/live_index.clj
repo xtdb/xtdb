@@ -161,7 +161,7 @@
                                  (util/rethrowing-cause))]
           (let [added-tries (for [[table {:keys [trie-key data-file-size trie-metadata state]}] table-metadata]
                               (trie/->trie-details table trie-key data-file-size trie-metadata state))]
-            (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION added-tries))
+            (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION (.getEpoch buffer-pool) added-tries))
             (doseq [^TrieDetails added-trie added-tries]
               (.addTries trie-cat (table/->ref db-name (.getTableName added-trie)) [added-trie] (.getSystemTime latest-completed-tx))))
 

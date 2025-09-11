@@ -15,6 +15,7 @@ import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseConfig.LogCase.*
 import xtdb.log.proto.*
 import xtdb.log.proto.LogMessage.MessageCase
+import xtdb.storage.StorageEpoch
 import xtdb.trie.BlockIndex
 import xtdb.util.asPath
 import java.nio.ByteBuffer
@@ -99,7 +100,7 @@ interface Log : AutoCloseable {
                                         ?.let { FlushBlock(it) }
 
                                 MessageCase.TRIES_ADDED -> msg.triesAdded.let {
-                                    TriesAdded(it.storageVersion, it.triesList)
+                                    TriesAdded(it.storageVersion, it.storageEpoch, it.triesList)
                                 }
 
                                 MessageCase.ATTACH_DATABASE -> msg.attachDatabase.let {
@@ -120,10 +121,13 @@ interface Log : AutoCloseable {
             }
         }
 
-        data class TriesAdded(val storageVersion: Int, val tries: List<TrieDetails>) : ProtobufMessage() {
+        data class TriesAdded(
+            val storageVersion: Int, val storageEpoch: StorageEpoch, val tries: List<TrieDetails>
+        ) : ProtobufMessage() {
             override fun toLogMessage() = logMessage {
                 triesAdded = triesAdded {
                     storageVersion = this@TriesAdded.storageVersion
+                    storageEpoch = this@TriesAdded.storageEpoch
                     tries.addAll(this@TriesAdded.tries)
                 }
             }

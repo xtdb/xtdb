@@ -59,7 +59,7 @@ class KafkaClusterTest {
         val databaseConfig = Database.Config(
             Log.localLog("log-path".asPath), Storage.local("storage-path".asPath)
         )
-        
+
         KafkaCluster.ClusterFactory(container.bootstrapServers)
             .pollDuration(Duration.ofMillis(100))
             .open().use { cluster ->
@@ -72,7 +72,7 @@ class KafkaClusterTest {
 
                             log.appendMessage(Message.FlushBlock(12)).await()
 
-                            log.appendMessage(Message.TriesAdded(Storage.VERSION, addedTrieDetails)).await()
+                            log.appendMessage(Message.TriesAdded(Storage.VERSION, 0, addedTrieDetails)).await()
 
                             log.appendMessage(Message.AttachDatabase("foo", databaseConfig))
 
