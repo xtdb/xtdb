@@ -14,6 +14,7 @@
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
            xtdb.api.storage.Storage
+           xtdb.storage.LocalStorage
            xtdb.trie.Trie))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
@@ -196,19 +197,22 @@
       (tu/finish-block! node)
       (c/compact-all! node #xt/duration "PT1S")
 
-      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
-                     (.resolve node-dir (str "objects/" Storage/STORAGE_ROOT "/tables/")))
+      (let [db (db/primary-db node)
+            ^LocalStorage bp (.getBufferPool db)]
 
-      (let [metadata-mgr (.getMetadataManager (db/primary-db node))]
-        (t/testing "L0"
-          (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))]
-            (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
-              (t/is (= 6 (.rowIndex page-metadata "colours" 0))))))
+        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
+                       (.resolve (.getRootPath bp) "tables"))
 
-        (t/testing "L1"
-          (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
-            (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
-              (t/is (= 6 (.rowIndex page-metadata "colours" 0))))))))))
+        (let [metadata-mgr (.getMetadataManager (db/primary-db node))]
+          (t/testing "L0"
+            (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))]
+              (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+                (t/is (= 6 (.rowIndex page-metadata "colours" 0))))))
+
+          (t/testing "L1"
+            (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
+              (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+                (t/is (= 6 (.rowIndex page-metadata "colours" 0)))))))))))
 
 (t/deftest test-duration-metadata-4198
   (let [node-dir (util/->path "target/test-duration-metadata")]
@@ -223,14 +227,16 @@
       (tu/finish-block! node)
       (c/compact-all! node #xt/duration "PT1S")
 
-      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/duration")))
-                     (.resolve node-dir (str "objects/" Storage/STORAGE_ROOT "/tables/"))
-                     #"l01.*")
+      (let [db (db/primary-db node)
+            ^LocalStorage bp (.getBufferPool db)
+            metadata-mgr (.getMetadataManager db)]
+        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/duration")))
+                       (.resolve (.getRootPath bp) "tables")
+                       #"l01.*")
 
-      (let [metadata-mgr (.getMetadataManager (db/primary-db node))
-            meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
-        (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
-          (t/is (= 5 (.rowIndex page-metadata "duration" 0))))))))
+        (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
+          (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+            (t/is (= 5 (.rowIndex page-metadata "duration" 0)))))))))
 
 (t/deftest test-missing-type-metadata-4665
   (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo", :foo 4}]])

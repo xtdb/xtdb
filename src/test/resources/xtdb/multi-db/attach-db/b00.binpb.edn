@@ -3,4 +3,5 @@
  :table-names #{"xt/txs"},
  :secondary-dbs
  {"new_db"
-  {:log [:local {:path true}], :storage [:local {:path true}]}}}
+  {:log [:local {:path true}],
+   :storage [:local {:path true, :epoch 0}]}}}

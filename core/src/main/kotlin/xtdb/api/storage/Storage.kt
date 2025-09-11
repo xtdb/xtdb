@@ -10,11 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
-import xtdb.storage.BufferPool
 import xtdb.api.PathWithEnvVarSerde
-import xtdb.storage.LocalStorage
-import xtdb.storage.MemoryStorage
-import xtdb.storage.RemoteBufferPool
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.DatabaseName
@@ -23,6 +19,10 @@ import xtdb.database.proto.DatabaseConfig.StorageCase.*
 import xtdb.database.proto.RemoteStorage
 import xtdb.database.proto.inMemoryStorage
 import xtdb.database.proto.localStorage
+import xtdb.storage.BufferPool
+import xtdb.storage.LocalStorage
+import xtdb.storage.MemoryStorage
+import xtdb.storage.RemoteBufferPool
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.asPath
 import xtdb.util.closeOnCatch
@@ -37,10 +37,11 @@ object Storage {
     const val VERSION: StorageVersion = 6
 
     @JvmStatic
-    fun storageRoot(version: StorageVersion): Path = Path.of("v${version.asLexHex}")
-
-    @JvmField
-    val STORAGE_ROOT: Path = storageRoot(VERSION)
+    fun storageRoot(version: StorageVersion, epoch: Int): Path =
+        Path.of(buildString {
+            append("v${version.asLexHex}")
+            if (epoch > 0) append("_e${epoch.asLexHex}")
+        })
 
     /**
      * Represents a factory interface for creating storage instances.
@@ -48,6 +49,10 @@ object Storage {
      */
     @Serializable
     sealed interface Factory {
+        var epoch: Int
+
+        fun epoch(epoch: Int) = apply { this.epoch = epoch }
+
         fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
             dbName: DatabaseName,
@@ -58,9 +63,14 @@ object Storage {
         companion object {
             internal fun fromProto(config: DatabaseConfig): Factory =
                 when (config.storageCase) {
-                    IN_MEMORY_STORAGE -> inMemory()
-                    LOCAL_STORAGE -> local(config.localStorage.path.asPath)
-                    REMOTE_STORAGE -> remote(ObjectStore.Factory.fromProto(config.remoteStorage.objectStore))
+                    IN_MEMORY_STORAGE -> InMemoryStorageFactory(config.inMemoryStorage.epoch)
+                    LOCAL_STORAGE -> config.localStorage.let { LocalStorageFactory(it.path.asPath, it.epoch) }
+
+                    REMOTE_STORAGE ->
+                        config.remoteStorage.let {
+                            RemoteStorageFactory(ObjectStore.Factory.fromProto(it.objectStore), it.epoch)
+                        }
+
                     else -> error("invalid storage: ${config.storageCase}")
                 }
         }
@@ -75,7 +85,7 @@ object Storage {
      */
     @Serializable
     @SerialName("!InMemory")
-    data object InMemoryStorageFactory : Factory {
+    data class InMemoryStorageFactory(override var epoch: Int = 0) : Factory {
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
             dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion
@@ -83,7 +93,7 @@ object Storage {
     }
 
     @JvmStatic
-    fun inMemory() = InMemoryStorageFactory
+    fun inMemory() = InMemoryStorageFactory()
 
     /**
      * Implementation for the storage module that persists data to the local file system, under the **path** directory.
@@ -100,13 +110,13 @@ object Storage {
      */
     @Serializable
     @SerialName("!Local")
-    data class LocalStorageFactory(val path: Path) : Factory {
+    data class LocalStorageFactory(val path: Path, override var epoch: Int = 0) : Factory {
 
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
             dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion
         ): BufferPool {
-            val rootPath = path.resolve(storageRoot(storageVersion)).also { it.createDirectories() }
+            val rootPath = path.resolve(storageRoot(storageVersion, epoch)).also { it.createDirectories() }
 
             return LocalStorage(allocator, memoryCache, meterRegistry, dbName, rootPath)
         }
@@ -127,7 +137,7 @@ object Storage {
      */
     @Serializable
     @SerialName("!Remote")
-    data class RemoteStorageFactory(val objectStore: ObjectStore.Factory) : Factory {
+    data class RemoteStorageFactory(val objectStore: ObjectStore.Factory, override var epoch: Int = 0) : Factory {
 
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
@@ -135,7 +145,7 @@ object Storage {
         ): BufferPool {
             requireNotNull(diskCache) { "diskCache is required for remote storage" }
 
-            return objectStore.openObjectStore(storageRoot(storageVersion)).closeOnCatch { objectStore ->
+            return objectStore.openObjectStore(storageRoot(storageVersion, epoch)).closeOnCatch { objectStore ->
                 RemoteBufferPool(allocator, objectStore, memoryCache, diskCache, meterRegistry, dbName)
             }
         }
@@ -147,11 +157,18 @@ object Storage {
 
     fun DatabaseConfig.Builder.applyStorage(storage: Storage.Factory) {
         when (storage) {
-            InMemoryStorageFactory -> setInMemoryStorage(inMemoryStorage { })
-            is LocalStorageFactory -> setLocalStorage(localStorage { this.path = storage.path.toString() })
+            is InMemoryStorageFactory -> setInMemoryStorage(inMemoryStorage { epoch = storage.epoch })
+            is LocalStorageFactory -> setLocalStorage(localStorage {
+                this.path = storage.path.toString()
+                epoch = storage.epoch
+            })
+
             is RemoteStorageFactory ->
                 setRemoteStorage(
-                    RemoteStorage.newBuilder().also { it.objectStore = storage.objectStore.configProto }.build()
+                    RemoteStorage.newBuilder()
+                        .setObjectStore(storage.objectStore.configProto)
+                        .setEpoch(storage.epoch)
+                        .build()
                 )
 
         }

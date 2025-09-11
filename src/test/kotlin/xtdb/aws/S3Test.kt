@@ -2,15 +2,12 @@ package xtdb.aws
 
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStoreTest
-import xtdb.api.storage.Storage.STORAGE_ROOT
-import xtdb.api.storage.Storage.VERSION
-import xtdb.api.storage.Storage.storageRoot
 import xtdb.aws.S3.Companion.s3
 import xtdb.util.asPath
 import java.lang.System.getProperty
 import java.nio.file.Path
+import kotlin.io.path.Path
 import kotlin.test.assertEquals
 
 @Tag("s3")
@@ -22,7 +19,7 @@ open class S3Test : ObjectStoreTest() {
     }
 
     override fun openObjectStore(prefix: Path) =
-        s3(bucket).prefix(prefix).openObjectStore(STORAGE_ROOT)
+        s3(bucket).prefix(prefix).openObjectStore(Path("s3-test"))
 
     @Test
     fun `test proto round trip`() {

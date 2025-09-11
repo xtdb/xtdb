@@ -155,7 +155,9 @@
           [:local {:path (.hasPath (.getLocalLog conf))}])
 
    :storage (condp = (.getStorageCase conf)
-              DatabaseConfig$StorageCase/IN_MEMORY_STORAGE :memory
+              DatabaseConfig$StorageCase/IN_MEMORY_STORAGE
+              [:memory {:epoch (.getEpoch (.getInMemoryStorage conf))}]
 
               DatabaseConfig$StorageCase/LOCAL_STORAGE
-              [:local {:path (.hasPath (.getLocalStorage conf))}])})
+              (let [ls (.getLocalStorage conf)]
+                [:local {:path (.hasPath ls), :epoch (.getEpoch ls)}]))})
