@@ -22,7 +22,6 @@ import software.amazon.awssdk.services.s3.S3Configuration
 import software.amazon.awssdk.services.s3.model.*
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.StringWithEnvVarSerde
-import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
@@ -205,8 +204,17 @@ class S3(
             }
         }.asIterable()
 
-    override fun listAllObjects(dir: Path) = listAllObjects0(prefix.resolve(dir))
+    override fun listAllObjects(dir: Path) = listAllObjects0(prefix.resolve(dir).normalize())
     override fun listAllObjects() = listAllObjects0(prefix)
+
+    override fun copyObject(src: Path, dest: Path): CompletableFuture<Unit> = scope.future {
+        client.copyObject {
+            it.sourceBucket(bucket)
+            it.sourceKey(prefix.resolve(src).normalize().toString())
+            it.destinationBucket(bucket)
+            it.destinationKey(prefix.resolve(dest).normalize().toString())
+        }.await()
+    }
 
     // used for multipart upload testing
     fun listUploads(): Set<Path> = runBlocking {

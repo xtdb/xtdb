@@ -85,6 +85,8 @@ interface ObjectStore : AutoCloseable {
      */
     fun listAllObjects(dir: Path): Iterable<StoredObject>
 
+    fun copyObject(src: Path, dest: Path): CompletableFuture<Unit>
+
     /**
      * Deletes the object with the given path from the object store.
      */

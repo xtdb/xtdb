@@ -128,4 +128,33 @@ abstract class ObjectStoreTest {
             assertEquals(setOf("alice", "bob"), objectStore2.allObjects())
         }
     }
+
+    @Test
+    fun `test copyObject`() = runTest(timeout = 10.seconds) {
+        val originalData = """{:xt/id :alice, :name "Alice"}"""
+        
+        // Put original object
+        objectStore.putString("original", originalData)
+        
+        // Test copying within root directory
+        objectStore.copyObject("original".asPath, "copy1".asPath).await()
+        assertEquals(originalData, objectStore.getString("copy1"))
+        
+        // Test copying to subdirectory
+        objectStore.copyObject("original".asPath, "subdir/copy2".asPath).await()
+        assertEquals(originalData, objectStore.getString("subdir/copy2"))
+        
+        // Test copying to path outside of root directory using relative path
+        objectStore.copyObject("original".asPath, "../other-dir/copy3".asPath).await()
+
+        // Verify objects within root show up in allObjects
+        val allObjects = objectStore.allObjects()
+        assertTrue(allObjects.contains("original"))
+        assertTrue(allObjects.contains("copy1"))
+        assertTrue(allObjects.contains("subdir/copy2"))
+        
+        // Verify the copied object outside root can be found using listAllObjects with normalized path
+        val outsideObjects = objectStore.objects("../other-dir".asPath)
+        assertTrue(outsideObjects.contains("../other-dir/copy3"))
+    }
 }

@@ -13,6 +13,7 @@ import xtdb.arrow.ArrowUtil.readArrowFooter
 import xtdb.arrow.ArrowUtil.toArrowRecordBatchView
 import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.Relation
+import xtdb.error.Unsupported
 import xtdb.trie.FileSize
 import xtdb.util.closeOnCatch
 import xtdb.util.openChildAllocator
@@ -74,6 +75,9 @@ internal class MemoryStorage(
                 .takeWhile { it.key.startsWith(dir) }
                 .map { StoredObject(it.key, it.value.capacity()) }
         }
+
+    override fun copyObject(src: Path, dest: Path) =
+        throw Unsupported("copyObject unsupported on MemoryStorage")
 
     private fun deleteAllObjects() {
         synchronized(memoryStore) {

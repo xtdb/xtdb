@@ -22,6 +22,7 @@ import xtdb.util.*
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException
+import java.nio.file.Files
 import java.nio.file.Files.newByteChannel
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -34,7 +35,7 @@ internal class LocalStorage(
     private val memoryCache: MemoryCache,
     meterRegistry: MeterRegistry? = null,
     dbName: DatabaseName,
-    private val diskStore: Path,
+    val rootPath: Path,
 ) : BufferPool, IEvictBufferTest, Closeable {
 
     private val allocator = allocator.openChildAllocator("buffer-pool").also { meterRegistry?.register(it) }
@@ -62,7 +63,7 @@ internal class LocalStorage(
     override fun getByteArray(key: Path): ByteArray =
         memoryCache.get(PathSlice(cacheRootPath.resolve(key))) { pathSlice ->
             memCacheMisses?.increment()
-            val bufferCachePath = diskStore
+            val bufferCachePath = this@LocalStorage.rootPath
                 .resolve(cacheRootPath.relativize(pathSlice.path))
                 .orThrowIfMissing(key)
 
@@ -71,14 +72,14 @@ internal class LocalStorage(
 
     override fun getFooter(key: Path): ArrowFooter =
         arrowFooterCache.get(key) {
-            val path = diskStore.resolve(key).orThrowIfMissing(key)
+            val path = rootPath.resolve(key).orThrowIfMissing(key)
 
             path.openReadableChannel().readArrowFooter()
         }
 
     override fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
         recordBatchRequests?.increment()
-        val path = diskStore.resolve(key).orThrowIfMissing(key)
+        val path = rootPath.resolve(key).orThrowIfMissing(key)
 
         val footer = arrowFooterCache.get(key) { path.openReadableChannel().readArrowFooter() }
 
@@ -90,7 +91,7 @@ internal class LocalStorage(
         ) { pathSlice ->
             memCacheMisses?.increment()
             val bufferCachePath =
-                diskStore.resolve(cacheRootPath.relativize(pathSlice.path))
+                rootPath.resolve(cacheRootPath.relativize(pathSlice.path))
                     .takeIf { it.exists() } ?: throw objectMissingException(path)
 
             completedFuture(Pair(PathSlice(bufferCachePath, pathSlice.offset, pathSlice.length), null))
@@ -112,10 +113,10 @@ internal class LocalStorage(
 
     override fun putObject(key: Path, buffer: ByteBuffer) {
         try {
-            val tmpPath = diskStore.createTempUploadFile()
+            val tmpPath = rootPath.createTempUploadFile()
             buffer.writeToPath(tmpPath)
 
-            val filePath = diskStore.resolve(key).also { it.createParentDirectories() }
+            val filePath = rootPath.resolve(key).also { it.createParentDirectories() }
             tmpPath.moveTo(filePath, StandardCopyOption.ATOMIC_MOVE)
         } catch (_: ClosedByInterruptException) {
             throw InterruptedException()
@@ -123,20 +124,27 @@ internal class LocalStorage(
     }
 
     private fun Path.listAll() = walk()
-        .map { StoredObject(diskStore.relativize(it), it.fileSize()) }
+        .map { StoredObject(rootPath.relativize(it), it.fileSize()) }
         .filter { it.key.getName(0).toString() != ".tmp" }
         .sortedBy { it.key }
         .toList()
 
-    override fun listAllObjects(): Iterable<StoredObject> = diskStore.listAll()
-    override fun listAllObjects(dir: Path) = diskStore.resolve(dir).listAll()
+    override fun listAllObjects(): Iterable<StoredObject> = rootPath.listAll()
+    override fun listAllObjects(dir: Path) = rootPath.resolve(dir).listAll()
+
+    override fun copyObject(src: Path, dest: Path) {
+        Files.copy(
+            rootPath.resolve(src).normalize(),
+            rootPath.resolve(dest).normalize().also { it.createParentDirectories() }
+        )
+    }
 
     override fun deleteIfExists(key: Path) {
-        diskStore.resolve(key).deleteIfExists()
+        rootPath.resolve(key).deleteIfExists()
     }
 
     override fun openArrowWriter(key: Path, rel: Relation): ArrowWriter {
-        val tmpPath = diskStore.createTempUploadFile()
+        val tmpPath = rootPath.createTempUploadFile()
         return newByteChannel(tmpPath, WRITE, TRUNCATE_EXISTING, CREATE).closeOnCatch { fileChannel ->
             rel.startUnload(fileChannel).closeOnCatch { unloader ->
                 object : ArrowWriter {
@@ -152,7 +160,7 @@ internal class LocalStorage(
                         unloader.end()
                         fileChannel.close()
 
-                        val filePath = diskStore.resolve(key).also { it.createParentDirectories() }
+                        val filePath = rootPath.resolve(key).also { it.createParentDirectories() }
                         tmpPath.moveTo(filePath, StandardCopyOption.ATOMIC_MOVE)
                         return filePath.fileSize()
                     }

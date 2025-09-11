@@ -53,6 +53,12 @@ class SimulatedObjectStore(
             .takeWhile { it.key.startsWith(dir) }
             .map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
 
+    override fun copyObject(src: Path, dest: Path): CompletableFuture<Unit> {
+        val srcBuffer = buffers[src] ?: return failedFuture(IllegalStateException("Object $src doesn't exist"))
+        buffers[dest] = copyByteBuffer(srcBuffer)
+        return completedFuture(Unit)
+    }
+
     override fun deleteIfExists(k: Path): CompletableFuture<Unit> {
         buffers.remove(k)
         return completedFuture(Unit)

@@ -4,7 +4,6 @@ package xtdb.azure
 
 import com.azure.core.util.BinaryData
 import com.azure.identity.DefaultAzureCredential
-import com.google.protobuf.Any as ProtoAny
 import com.azure.identity.DefaultAzureCredentialBuilder
 import com.azure.storage.blob.BlobServiceClientBuilder
 import com.azure.storage.blob.models.BlobListDetails
@@ -21,7 +20,6 @@ import kotlinx.serialization.modules.subclass
 import reactor.core.Exceptions
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.StringWithEnvVarSerde
-import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
@@ -45,6 +43,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.io.path.deleteIfExists
 import kotlin.time.Duration.Companion.seconds
+import com.google.protobuf.Any as ProtoAny
 
 /**
  * Used to set configuration options for Azure Blob Storage, which can be used as implementation of an [object store][xtdb.api.storage.Storage.RemoteStorageFactory.objectStore].
@@ -228,7 +227,7 @@ class BlobStorage(private val factory: Factory, private val prefix: Path) : Obje
             .asIterable()
 
     override fun listAllObjects() = listAllObjects0(prefix)
-    override fun listAllObjects(dir: Path) = listAllObjects0(prefix.resolve(dir))
+    override fun listAllObjects(dir: Path) = listAllObjects0(prefix.resolve(dir).normalize())
 
     // test usage only
     @Suppress("unused")
@@ -243,6 +242,23 @@ class BlobStorage(private val factory: Factory, private val prefix: Path) : Obje
             .map { prefix.relativize(it.name.asPath) }
             .filter { it !in committedBlobs }
             .asIterable()
+    }
+
+    override fun copyObject(src: Path, dest: Path): CompletableFuture<Unit> = scope.future {
+        try {
+            unwrappingReactorException {
+                runInterruptible {
+                    val srcBlobClient = client.getBlobClient(prefix.resolve(src).normalize().toString())
+                    val destBlobClient = client.getBlobClient(prefix.resolve(dest).normalize().toString())
+                    destBlobClient.copyFromUrl(srcBlobClient.blobUrl)
+                }
+            }
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: Exception) {
+            LOGGER.log(WARNING, "Exception thrown when copying object from $src to $dest", e)
+            throw e
+        }
     }
 
     override fun deleteIfExists(k: Path): CompletableFuture<Unit> = scope.future<Unit> {

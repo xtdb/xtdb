@@ -25,6 +25,7 @@ import xtdb.gcp.proto.gcsObjectStoreConfig
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
+import java.util.concurrent.CompletableFuture
 import kotlin.time.Duration.Companion.seconds
 import com.google.protobuf.Any as ProtoAny
 
@@ -112,7 +113,30 @@ class CloudStorage(
             .map { blob -> StoredObject(prefix.relativize(blob.name.asPath), blob.size) }
 
     override fun listAllObjects() = listAllObjects0(prefix)
-    override fun listAllObjects(dir: Path) = listAllObjects0(prefix.resolve(dir))
+    override fun listAllObjects(dir: Path) = listAllObjects0(prefix.resolve(dir).normalize())
+
+    override fun copyObject(src: Path, dest: Path): CompletableFuture<Unit> = scope.future {
+        runInterruptible {
+            val srcKey = prefix.resolve(src).normalize().toString()
+            val destKey = prefix.resolve(dest).normalize().toString()
+            
+            try {
+                client.copy(Storage.CopyRequest.of(bucket, srcKey, destKey))
+            } catch (e: StorageException) {
+                if (e.code == 404) throwMissingKey(src)
+                e.cause?.let { if (it is InterruptedException) throw it }
+                
+                throw ExceptionInfo(
+                    "Error when copying object $src to $dest in bucket $bucket",
+                    PersistentHashMap.create(mapOf(
+                        "bucket-name" to bucket,
+                        "src-blob-name" to srcKey,
+                        "dest-blob-name" to destKey
+                    ))
+                )
+            }
+        }
+    }
 
     override fun close() {
         runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }

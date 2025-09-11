@@ -8,12 +8,10 @@ import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
-import kotlinx.serialization.decodeFromString
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import xtdb.storage.BufferPool
 import xtdb.api.PathWithEnvVarSerde
-import xtdb.api.YAML_SERDE
 import xtdb.storage.LocalStorage
 import xtdb.storage.MemoryStorage
 import xtdb.storage.RemoteBufferPool
@@ -21,13 +19,10 @@ import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.DatabaseName
 import xtdb.database.proto.DatabaseConfig
-import xtdb.database.proto.DatabaseConfig.StorageCase
 import xtdb.database.proto.DatabaseConfig.StorageCase.*
 import xtdb.database.proto.RemoteStorage
 import xtdb.database.proto.inMemoryStorage
 import xtdb.database.proto.localStorage
-import xtdb.database.proto.remoteStorage
-import xtdb.storage.BufferPool.Companion.UnusedBufferPool
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.asPath
 import xtdb.util.closeOnCatch
@@ -111,9 +106,9 @@ object Storage {
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
             dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion
         ): BufferPool {
-            val diskStore = path.resolve(storageRoot(storageVersion)).also { it.createDirectories() }
+            val rootPath = path.resolve(storageRoot(storageVersion)).also { it.createDirectories() }
 
-            return LocalStorage(allocator, memoryCache, meterRegistry, dbName, diskStore)
+            return LocalStorage(allocator, memoryCache, meterRegistry, dbName, rootPath)
         }
     }
 
