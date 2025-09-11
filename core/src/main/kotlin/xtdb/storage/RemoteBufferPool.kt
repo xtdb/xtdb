@@ -160,13 +160,6 @@ internal class RemoteBufferPool(
     override fun listAllObjects() = objectStore.listAllObjects()
     override fun listAllObjects(dir: Path) = objectStore.listAllObjects(dir)
 
-    override fun deleteAllObjects() {
-        runBlocking(IO.limitedParallelism(8, "xtdb-delete-all-objects")) {
-            for (obj in listAllObjects())
-                future { objectStore.deleteIfExists(obj.key) }
-        }
-    }
-
     override fun deleteIfExists(key: Path): Unit = runBlocking { objectStore.deleteIfExists(key).await() }
 
     override fun openArrowWriter(key: Path, rel: Relation): ArrowWriter {

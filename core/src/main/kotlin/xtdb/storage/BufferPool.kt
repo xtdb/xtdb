@@ -57,8 +57,6 @@ sealed interface BufferPool : AutoCloseable {
      */
     fun listAllObjects(dir: Path): Iterable<StoredObject>
 
-    fun deleteAllObjects()
-
     fun deleteIfExists(key: Path)
 
     fun openArrowWriter(key: Path, rel: Relation): ArrowWriter
@@ -75,7 +73,6 @@ sealed interface BufferPool : AutoCloseable {
             override fun putObject(key: Path, buffer: ByteBuffer) = unsupported("putObject")
             override fun listAllObjects() = unsupported("listAllObjects")
             override fun listAllObjects(dir: Path) = unsupported("listAllObjects")
-            override fun deleteAllObjects() = unsupported("deleteObject")
             override fun deleteIfExists(key: Path) = unsupported("deleteIfExists")
             override fun openArrowWriter(key: Path, rel: Relation) = unsupported("openArrowWriter")
 

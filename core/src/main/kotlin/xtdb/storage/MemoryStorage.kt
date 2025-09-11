@@ -75,7 +75,7 @@ internal class MemoryStorage(
                 .map { StoredObject(it.key, it.value.capacity()) }
         }
 
-    override fun deleteAllObjects() {
+    private fun deleteAllObjects() {
         synchronized(memoryStore) {
             memoryStore.values.forEach { it.close() }
             memoryStore.clear()
