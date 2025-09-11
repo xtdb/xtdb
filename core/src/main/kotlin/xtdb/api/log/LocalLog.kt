@@ -94,7 +94,7 @@ class LocalLog(
             val size = headerBuf.getInt()
 
             val message =
-                Message.parse(ByteBuffer.allocate(size).also { read(it); it.flip() })
+                Message.parse(ByteBuffer.allocate(size).also { read(it); it.flip() }.array())
                     ?: return null
 
             return Record(pos, fromMicros(headerBuf.getLong()), message)
@@ -126,7 +126,7 @@ class LocalLog(
                 // that check files can be deterministic
                 val ts = if (msg is Message.Tx || useInstantSourceForNonTx) instantSource.instant() else Instant.now()
                 val payload = msg.encode()
-                val size = payload.remaining()
+                val size = payload.size
                 val offset = logFileChannel.position()
 
                 logFileChannel.write(

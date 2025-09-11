@@ -103,7 +103,7 @@ class Relation(
     fun startUnload(ch: WritableByteChannel, mode: Mode = FILE) =
         RelationUnloader(ArrowUnloader.open(ch, schema, mode))
 
-    val asArrowStream: ByteBuffer
+    val asArrowStream: ByteArray
         get() {
             val baos = ByteArrayOutputStream()
             startUnload(Channels.newChannel(baos), STREAM).use { unl ->
@@ -111,7 +111,7 @@ class Relation(
                 unl.end()
             }
 
-            return ByteBuffer.wrap(baos.toByteArray())
+            return baos.toByteArray()
         }
 
     fun load(recordBatch: ArrowRecordBatch) {

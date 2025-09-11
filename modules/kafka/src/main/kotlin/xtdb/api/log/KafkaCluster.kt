@@ -23,7 +23,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.InterruptException
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
-import org.apache.kafka.common.serialization.ByteBufferSerializer
+import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.apache.kafka.common.serialization.Deserializer
 import org.apache.kafka.common.serialization.Serializer
 import xtdb.DurationSerde
@@ -34,7 +34,6 @@ import xtdb.api.log.Log.*
 import xtdb.database.proto.DatabaseConfig
 import xtdb.kafka.proto.KafkaLogConfig
 import xtdb.kafka.proto.kafkaLogConfig
-import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -64,7 +63,7 @@ private fun KafkaConfigMap.openProducer() =
             "compression.type" to "snappy",
         ) + this,
         UnitSerializer,
-        ByteBufferSerializer()
+        ByteArraySerializer()
     )
 
 private fun KafkaConfigMap.openConsumer() =
@@ -199,7 +198,7 @@ class KafkaCluster(
 
                             subscriber.processRecords(
                                 records.mapNotNull { record ->
-                                    Message.parse(ByteBuffer.wrap(record.value()))
+                                    Message.parse(record.value())
                                         ?.let { msg ->
                                             Record(
                                                 record.offset(),

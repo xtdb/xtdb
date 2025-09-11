@@ -54,37 +54,37 @@ interface Log : AutoCloseable {
 
     sealed interface Message {
 
-        fun encode(): ByteBuffer
+        fun encode(): ByteArray
 
         companion object {
             private const val TX_HEADER: Byte = -1
             private const val LEGACY_FLUSH_BLOCK_HEADER: Byte = 2
             private const val PROTOBUF_HEADER: Byte = 3
 
-            fun parse(buffer: ByteBuffer) =
-                when (buffer.get(0)) {
-                    TX_HEADER -> Tx(buffer.duplicate())
+            fun parse(bytes: ByteArray) =
+                when (bytes[0]) {
+                    TX_HEADER -> Tx(bytes)
                     LEGACY_FLUSH_BLOCK_HEADER -> null
-                    PROTOBUF_HEADER -> ProtobufMessage.parse(buffer.duplicate().position(1))
+                    PROTOBUF_HEADER -> ProtobufMessage.parse(ByteBuffer.wrap(bytes).position(1))
 
-                    else -> throw IllegalArgumentException("Unknown message type: ${buffer.get()}")
+                    else -> throw IllegalArgumentException("Unknown message type: ${bytes[0]}")
                 }
         }
 
-        class Tx(val payload: ByteBuffer) : Message {
-            override fun encode(): ByteBuffer = payload.duplicate()
+        class Tx(val payload: ByteArray) : Message {
+            override fun encode(): ByteArray = payload
         }
 
         sealed class ProtobufMessage : Message {
             abstract fun toLogMessage(): LogMessage
 
-            final override fun encode(): ByteBuffer =
+            final override fun encode(): ByteArray =
                 toLogMessage().let {
                     ByteBuffer.allocate(1 + it.serializedSize).apply {
                         put(PROTOBUF_HEADER)
                         put(it.toByteArray())
                         flip()
-                    }
+                    }.array()
                 }
 
             companion object {
@@ -106,9 +106,7 @@ interface Log : AutoCloseable {
                                     AttachDatabase(it.dbName, Database.Config.fromProto(it.config))
                                 }
 
-                                MessageCase.DETACH_DATABASE -> msg.detachDatabase.let {
-                                    DetachDatabase(it.dbName)
-                                }
+                                MessageCase.DETACH_DATABASE -> DetachDatabase(msg.detachDatabase.dbName)
 
                                 else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
                             }

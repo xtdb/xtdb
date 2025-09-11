@@ -67,7 +67,7 @@ class KafkaClusterTest {
                     .openLog(mapOf("my-cluster" to cluster))
                     .use { log ->
                         log.subscribe(subscriber, 0).use { _ ->
-                            val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip()
+                            val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip().array()
                             log.appendMessage(Message.Tx(txPayload)).await()
 
                             log.appendMessage(Message.FlushBlock(12)).await()
@@ -87,7 +87,7 @@ class KafkaClusterTest {
 
         allMsgs[0].message.let {
             check(it is Message.Tx)
-            assertEquals(42, it.payload.getLong(1))
+            assertEquals(42, ByteBuffer.wrap(it.payload).getLong(1))
         }
 
         allMsgs[1].message.let {

@@ -204,8 +204,8 @@
         EraseDocs (@!write-erase! tx-op)
         (throw (err/illegal-arg :invalid-tx-op {:tx-op tx-op}))))))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops
-                                             {:keys [^Instant system-time, default-tz], {:keys [user]} :authn, :as opts}]
+(defn serialize-tx-ops ^bytes [^BufferAllocator allocator tx-ops
+                               {:keys [^Instant system-time, default-tz], {:keys [user]} :authn, :as opts}]
   (with-open [rel (Relation/open allocator tx-schema)]
     (let [ops-list-writer (.get rel "tx-ops")
 

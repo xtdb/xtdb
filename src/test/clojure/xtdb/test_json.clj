@@ -83,8 +83,9 @@
            :when (.endsWith file-name ".arrow.json")]
      (check-arrow-json-file expected actual))))
 
-(defn arrow-streaming->json ^String [^ByteBuffer buf]
-  (let [json-file (File/createTempFile "arrow" "json")]
+(defn arrow-streaming->json ^String [^bytes bytes]
+  (let [buf (ByteBuffer/wrap bytes)
+        json-file (File/createTempFile "arrow" "json")]
     (try
       (util/with-open [allocator (RootAllocator.)
                        in-ch (util/->seekable-byte-channel buf)
