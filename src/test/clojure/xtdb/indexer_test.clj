@@ -622,13 +622,15 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
 
           (with-open [db-idxer (.openForDatabase idxer (db/primary-db node))
                       live-idx-tx (.startTx live-idx (serde/->TxKey 1 Instant/EPOCH))
-                      live-table-tx (.liveTable live-idx-tx #xt/table foo)]
+                      live-table-tx (.liveTable live-idx-tx #xt/table foo)
+                      query-rel (Relation/openFromRows al [{:foo "bar", :baz 32}, {:foo "baz", :baz 64}])]
             (.logPut live-table-tx (ByteBuffer/allocate 16) 0 0
                      (fn []
                        (.writeObject (.getDocWriter live-table-tx) {:xt/id 3, :version 0})))
             (idx/crash-log! (-> db-idxer (assoc :node-id node-id)) "test crash log"
                             {:table #xt/table foo, :foo "bar"}
-                            {:live-idx live-idx, :live-table-tx live-table-tx}))
+                            {:live-idx live-idx, :live-table-tx live-table-tx,
+                             :query-rel query-rel}))
 
           (t/is (= {:table #xt/table foo, :foo "bar", :ex "test crash log"}
                    (let [path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/crash.edn" node-id))]
@@ -656,6 +658,14 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
                          :xt/valid-from #xt/zdt "1970-01-01T00:00Z[UTC]",
                          :xt/valid-to #xt/zdt "1970-01-01T00:00Z[UTC]",
                          :op {:xt/id 3, :version 0}}]
+                       (->> (.toMaps rel)
+                            (mapv #(dissoc % :xt/iid)))))))
+
+          (let [query-rel-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/query-rel.arrow" node-id))
+                footer (.getFooter bp query-rel-path)]
+            (with-open [rb (.getRecordBatch bp query-rel-path 0)
+                        rel (Relation/fromRecordBatch al (.getSchema footer) rb)]
+              (t/is (= [{:foo "bar", :baz 32}, {:foo "baz", :baz 64}]
                        (->> (.toMaps rel)
                             (mapv #(dissoc % :xt/iid))))))))))))
 
