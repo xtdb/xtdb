@@ -1,1 +1,1 @@
-{:xtdb.cli-test/foo #env TEST_ENV}
+{:xtdb.main-test/foo #env TEST_ENV}

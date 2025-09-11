@@ -1,10 +1,11 @@
-(ns xtdb.cli-test
+(ns xtdb.main-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.cli :as cli]
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
+            xtdb.indexer.live-index
+            [xtdb.main :as xt-main]
             [xtdb.node :as xtn])
   (:import (xtdb.indexer.live_index LiveIndex)))
 
@@ -34,43 +35,43 @@
       (f))))
 
 (defn parse-args [args cli-spec]
-  (let [[tag arg] (cli/parse-args args cli-spec)]
+  (let [[tag arg] (xt-main/parse-args args cli-spec)]
     (case tag
       :success arg
       (throw (err/fault ::failed-parsing-args "Failed to parse CLI args"
                         {:result [tag arg]})))))
 
 (t/deftest no-config
-  (t/is (= [{} []] (map (parse-args [] cli/node-cli-spec) [:options :arguments]))
+  (t/is (= [{} []] (map (parse-args [] xt-main/node-cli-spec) [:options :arguments]))
         "if no config present via file, returns an empty map")
 
-  (t/is (= {} (cli/file->node-opts nil))
+  (t/is (= {} (xt-main/file->node-opts nil))
         "if no file provided, returns an empty map as node opts"))
 
 (t/deftest test-config
   (t/is (= {:options {:file (io/as-file xtdb-cli-edn)}
             :arguments []}
-           (-> (parse-args ["-f" (str (io/as-file xtdb-cli-edn))] cli/node-cli-spec)
+           (-> (parse-args ["-f" (str (io/as-file xtdb-cli-edn))] xt-main/node-cli-spec)
                (select-keys [:options :arguments])))
         "uses CLI supplied EDN file")
 
   (t/testing "uses xtdb.edn if present"
     (with-file-override {"xtdb.edn" (io/as-file xtdb-cli-edn)}
       (fn []
-        (t/is (= {::foo {:bar {}}} (cli/file->node-opts nil))
+        (t/is (= {::foo {:bar {}}} (xt-main/file->node-opts nil))
               "uses xtdb.edn if present")))))
 
 (t/deftest test-env-loading
-  (with-redefs [cli/read-env-var (fn [env-name]
+  (with-redefs [xt-main/read-env-var (fn [env-name]
                                    (when (= (str env-name) "TEST_ENV")
                                      "hello world"))]
     (t/testing
       (t/is (= {::foo "hello world"}
-               (cli/file->node-opts (io/as-file xtdb-cli-edn-env)))
+               (xt-main/file->node-opts (io/as-file xtdb-cli-edn-env)))
             "EDN config - #env reader tag fetches from env"))))
 
 (defn- ->node-opts [cli-args]
-  (cli/file->node-opts (get-in (parse-args cli-args cli/node-cli-spec) [:options :file])))
+  (xt-main/file->node-opts (get-in (parse-args cli-args xt-main/node-cli-spec) [:options :file])))
 
 ;; Expect YAML config file to just return the file - this will get passed to
 ;; start-node and subsequently decoded by the Kotlin API
@@ -105,7 +106,7 @@
              (->node-opts ["-f" (str (io/as-file xtdb-cli-yaml-multi-dot))]))))
 
   (t/testing "EDN with multiple dots in the filename"
-    (t/is (= {:xtdb.cli-test/foo {:bar {}}}
+    (t/is (= {:xtdb.main-test/foo {:bar {}}}
              (->node-opts ["-f" (str (io/as-file xtdb-cli-edn-multi-dot))]))))
 
   (t/testing "YAML with multiple dots in the filename starts node"
