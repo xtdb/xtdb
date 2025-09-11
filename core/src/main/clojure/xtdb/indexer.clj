@@ -26,6 +26,7 @@
            (java.nio ByteBuffer)
            (java.time Instant InstantSource)
            (java.time.temporal ChronoUnit)
+           (java.util List)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.ipc ArrowReader ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
@@ -42,7 +43,7 @@
 
 (def ^:dynamic ^java.time.InstantSource *crash-log-clock* (InstantSource/system))
 
-(defn crash-log! [{:keys [allocator ^Database db node-id]} ex {:keys [table] :as data} {:keys [^LiveIndex live-idx, ^LiveTable$Tx live-table-tx, ^RelationReader query-rel, ^VectorReader tx-ops-rdr]}]
+(defn crash-log! [{:keys [^BufferAllocator allocator ^Database db node-id]} ex {:keys [table] :as data} {:keys [^LiveIndex live-idx, ^LiveTable$Tx live-table-tx, ^RelationReader query-rel, ^VectorReader tx-ops-rdr]}]
   (let [buffer-pool (.getBufferPool db)
         ts (str (.truncatedTo (.instant *crash-log-clock*) ChronoUnit/SECONDS))
         crash-dir (util/->path (format "crashes/%s/%s" node-id ts))]
@@ -73,7 +74,8 @@
         (.end wtr)))
 
     (when tx-ops-rdr
-      (let [tx-ops-rel (Relation. allocator [tx-ops-rdr] (.getValueCount tx-ops-rdr))]
+      (let [^List vec-list [tx-ops-rdr]
+            tx-ops-rel (Relation. allocator vec-list (int (.getValueCount tx-ops-rdr)))]
         (with-open [wtr (.openArrowWriter buffer-pool (.resolve crash-dir "tx-ops.arrow") tx-ops-rel)]
           (.writePage wtr)
           (.end wtr))))
