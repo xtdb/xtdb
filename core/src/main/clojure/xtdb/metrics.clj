@@ -23,6 +23,11 @@
   (when counter
     (.increment counter)))
 
+(defmacro record-callable! [timer & body]
+  `(if ~timer
+     (.recordCallable ^Timer ~timer (fn [] ~@body))
+     (do ~@body)))
+
 (def percentiles [0.75 0.85 0.95 0.98 0.99 0.999])
 
 (defn add-timer ^io.micrometer.core.instrument.Timer [reg name {:keys [^String description]}]

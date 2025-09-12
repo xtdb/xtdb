@@ -6,7 +6,7 @@
             [xtdb.test-util :as tu]
             [xtdb.types]
             [xtdb.util :as util])
-  (:import (io.micrometer.core.instrument Counter Gauge)
+  (:import (io.micrometer.core.instrument Counter Gauge Timer)
            io.micrometer.core.instrument.MeterRegistry))
 
 (t/use-fixtures :each tu/with-mock-clock)
@@ -83,3 +83,25 @@
       ;; We have a connection open so this should be equal to 1.0
       (t/is (= 1.0 (.value ^Gauge (.gauge (.find registry "pgwire.active_connections")))))
       (t/is (= 2.0 (.count ^Counter (.counter (.find registry "pgwire.total_connections"))))))))
+
+(t/deftest test-query-timer
+  (let [node (xtn/start-node tu/*node-opts*)
+        ^MeterRegistry registry (util/component node :xtdb.metrics/registry)]
+
+    (with-open [conn (jdbc/get-connection node)]
+      (t/testing "normal pgwire queries should be added to timer"
+        (jdbc/execute! conn ["SELECT 1"])
+        (jdbc/execute! conn ["SELECT COUNT(*) FROM generate_series(1, 100) AS t(x)"])
+        (let [^Timer timer (.timer (.find registry "query.timer"))]
+          (t/is (= (.count timer) 2))
+          (t/is (> (.totalTime timer java.util.concurrent.TimeUnit/NANOSECONDS) 0))))
+      
+      (t/testing "runtime pgwire error queries should be added to timer"
+        (t/is (thrown? Exception (jdbc/execute! conn ["SELECT 1/0"])))
+        (let [^Timer timer (.timer (.find registry "query.timer"))]
+          (t/is (= (.count timer) 3)))))
+
+    (t/testing "queries via the node should be added to timer" 
+      (xt/q node "SELECT 1")
+      (let [^Timer timer (.timer (.find registry "query.timer"))]
+        (t/is (= (.count timer) 4))))))
