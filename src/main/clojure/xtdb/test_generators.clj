@@ -8,6 +8,7 @@
            [java.time.temporal Temporal]
            [java.util List Map Set]
            [org.apache.arrow.memory BufferAllocator]
+           [org.apache.arrow.vector.types.pojo Field]
            [xtdb Types]
            [xtdb.arrow Vector]))
 
@@ -222,3 +223,39 @@
 (defn lists-equal-normalized? [list1 list2]
   (= (map normalize-for-comparison list1)
      (map normalize-for-comparison list2)))
+
+(defn field->value-generator
+  "Generate a value generator for a given Arrow Field"
+  [^Field field]
+  (let [arrow-type (.getType field)
+        nullable? (.isNullable field)]
+    (gen/frequency
+     (cond-> [[15 (condp = arrow-type
+                    #xt.arrow/type :i8 i8-gen
+                    #xt.arrow/type :i16 i16-gen
+                    #xt.arrow/type :i32 i32-gen
+                    #xt.arrow/type :i64 i64-gen
+                    #xt.arrow/type :f64 f64-gen
+                    #xt.arrow/type [:decimal 32 1 128] decimal-gen
+                    #xt.arrow/type :utf8 utf8-gen
+                    #xt.arrow/type :varbinary varbinary-gen
+                    #xt.arrow/type :keyword keyword-gen
+                    #xt.arrow/type :uuid uuid-gen
+                    #xt.arrow/type :uri uri-gen
+                    #xt.arrow/type :bool bool-gen
+                    #xt.arrow/type [:timestamp-tz :micro "UTC"] instant-gen
+                    #xt.arrow/type [:date :day] local-date-gen
+                    #xt.arrow/type [:time-local :nano] local-time-gen
+                    #xt.arrow/type :list (gen/vector (field->value-generator (first (.getChildren field))) 0 10)
+                    #xt.arrow/type :set (gen/set (field->value-generator (first (.getChildren field))) {:min-elements 0 :max-elements 10})
+                    #xt.arrow/type :union (gen/one-of (map field->value-generator (.getChildren field)))
+                    #xt.arrow/type :struct (gen/let [entries (apply gen/tuple (map (fn [^Field child-field]
+                                                                                     (gen/let [v (field->value-generator child-field)]
+                                                                                       (when v [(keyword (.getName child-field)) v])))
+                                                                                   (.getChildren field)))]
+                                             (->> (filter some? entries)
+                                                  (into {})))
+                    ;; fallback for unknown types
+                    simple-gen)]]
+       nullable? (conj [1 (gen/return nil)])))))
+  
