@@ -267,3 +267,13 @@
   (let [record-col-type (mapv vw/value->col-type records)
         fields (mapv types/col-type->field record-col-type)]
     (field->value-generator (apply types/merge-fields fields))))
+
+(defn info-schema->generator
+  "Given an XTDB info schema for a specific table, produce a generator that will generate records"
+  [info-schema]
+  (let [fields (->> info-schema
+                    (filter (fn [{:keys [column-name]}]
+                              (not (#{"_system_from" "_system_to" "_valid_from" "_valid_to"} column-name))))
+                    (mapv (fn [{:keys [column-name data-type]}]
+                            (types/col-type->field column-name (read-string data-type)))))]
+    (field->value-generator (apply types/->field "docs" #xt.arrow/type :struct false fields))))
