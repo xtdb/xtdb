@@ -530,9 +530,6 @@
                                            (->> (into {} (filter (comp some? val))))))
                                  (assoc :await-token await-token))))))))))
 
-(defn- inc-error-counter! [^Counter counter]
-  (when counter
-    (.increment counter)))
 
 (defn cmd-commit [{:keys [node conn-state default-db] :as conn}]
   (let [{:keys [transaction session]} @conn-state
@@ -979,7 +976,7 @@
     (catch Interrupted e (throw e))
     (catch Exception e
       (when (= :read-write (get-in @conn-state [:transaction :access-mode]))
-        (inc-error-counter! tx-error-counter))
+        (metrics/inc-counter! tx-error-counter))
 
       (throw e))))
 
@@ -1215,7 +1212,7 @@
                     (and (zero? (nth param-oids idx))
                          (some? (nth args idx))))
                   (range (count param-oids))))
-    (inc-error-counter! tx-error-counter)
+    (metrics/inc-counter! tx-error-counter)
     (throw (err/incorrect ::missing-arg-types "Missing types for args - client must specify types for all non-null params in DML statements"
                           {:query query, :param-oids param-oids})))
 
@@ -1292,7 +1289,7 @@
     (catch Interrupted e (throw e))
     (catch InterruptedException e (throw e))
     (catch Throwable e
-      (inc-error-counter! query-error-counter)
+      (metrics/inc-counter! query-error-counter)
       (throw e))))
 
 (defn- attach-db [{:keys [node conn-state default-db] :as conn} {:keys [db-name db-config]}]
