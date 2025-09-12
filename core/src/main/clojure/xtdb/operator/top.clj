@@ -2,9 +2,8 @@
   (:require [clojure.spec.alpha :as s]
             [xtdb.error :as err]
             [xtdb.logical-plan :as lp])
-  (:import java.util.function.Consumer
-           java.util.stream.IntStream
-           xtdb.ICursor
+  (:import java.util.stream.IntStream
+           (xtdb ICursor)
            xtdb.arrow.RelationReader))
 
 (s/def ::skip (s/nilable (s/or :literal nat-int?, :param ::lp/param)))
@@ -70,14 +69,15 @@
                       :limit (some-> limit-arg pr-str)}
                      (into {} (filter val)))
        :fields fields
-       :->cursor (fn [{:keys [args]} in-cursor]
-                   (TopCursor. in-cursor
-                               (case skip-tag
-                                 :literal skip-arg
-                                 :param (read-param args skip-arg)
-                                 nil 0)
-                               (case limit-tag
-                                 :literal limit-arg
-                                 :param (read-param args limit-arg)
-                                 nil Long/MAX_VALUE)
-                               0))})))
+       :->cursor (fn [{:keys [args explain-analyze?]} in-cursor]
+                   (cond-> (TopCursor. in-cursor
+                                       (case skip-tag
+                                         :literal skip-arg
+                                         :param (read-param args skip-arg)
+                                         nil 0)
+                                       (case limit-tag
+                                         :literal limit-arg
+                                         :param (read-param args limit-arg)
+                                         nil Long/MAX_VALUE)
+                                       0)
+                     explain-analyze? (ICursor/wrapExplainAnalyze)))})))

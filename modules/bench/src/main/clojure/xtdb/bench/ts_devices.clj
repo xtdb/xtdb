@@ -1,5 +1,6 @@
 (ns xtdb.bench.ts-devices
   (:require [clojure.test :as t]
+            [clojure.tools.logging :as log]
             [xtdb.bench :as b]
             [xtdb.bench.util :as bu]
             [xtdb.ts-devices :as tsd]

@@ -78,8 +78,9 @@
                    {:op :distinct
                     :children [inner-rel]
                     :fields inner-fields
-                    :->cursor (fn [{:keys [allocator]} in-cursor]
-                                (DistinctCursor. in-cursor (->relation-map allocator
-                                                                           {:build-fields inner-fields
-                                                                            :key-col-names (set (keys inner-fields))
-                                                                            :nil-keys-equal? true})))})))
+                    :->cursor (fn [{:keys [allocator explain-analyze?]} in-cursor]
+                                (cond-> (DistinctCursor. in-cursor (->relation-map allocator
+                                                                                   {:build-fields inner-fields
+                                                                                    :key-col-names (set (keys inner-fields))
+                                                                                    :nil-keys-equal? true}))
+                                  explain-analyze? (ICursor/wrapExplainAnalyze)))})))

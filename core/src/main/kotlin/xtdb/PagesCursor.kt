@@ -16,8 +16,6 @@ class PagesCursor(
     override val cursorType get() = "pages"
     override val childCursors get() = emptyList<ICursor>()
 
-    constructor(al: BufferAllocator, vals: Iterable<List<Map<*, *>>>): this(al, null, vals)
-
     private val vals = vals.spliterator()
 
     override fun tryAdvance(c: Consumer<in RelationReader>) =

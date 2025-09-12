@@ -64,7 +64,6 @@
                                      (:left-outer-join :single-join) (types/with-nullable-fields dependent-fields)
 
                                      (:semi-join :anti-join) {}))]
-
         {:op (zmatch mode
                [:mark-join _] :apply-mark-join
                [:otherwise simple-mode]
@@ -82,36 +81,38 @@
                                                             (types/field-with-name field (str col-name))))
                          open-dependent-cursor
                          (zmatch mode
-                           [:mark-join mark-spec]
-                           (let [[_col-name form] (first (:mark-join mark-spec))
-                                 input-types {:col-types (update-vals dependent-fields types/field->col-type)
-                                              :param-types (update-vals param-fields types/field->col-type)}
-                                 projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
-                             (fn [{:keys [allocator args] :as query-opts}]
-                               (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
-                                 (reify ICursor
-                                   (getCursorType [_] "apply-mark-join")
-                                   (getChildCursors [_] [dep-cursor])
+                                 [:mark-join mark-spec]
+                                 (let [[_col-name form] (first (:mark-join mark-spec))
+                                       input-types {:col-types (update-vals dependent-fields types/field->col-type)
+                                                    :param-types (update-vals param-fields types/field->col-type)}
+                                       projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
+                                   (fn [{:keys [allocator args explain-analyze?] :as query-opts}]
+                                     (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
+                                       (cond-> (reify ICursor
+                                                 (getCursorType [_] "apply-mark-join")
+                                                 (getChildCursors [_] [dep-cursor])
 
-                                   (tryAdvance [_ c]
-                                     (.tryAdvance dep-cursor (fn [in-rel]
-                                                               (with-open [match-vec (.project projection-spec allocator in-rel {} args)]
-                                                                 (.accept c (vr/rel-reader [match-vec]))))))
+                                                 (tryAdvance [_ c]
+                                                   (.tryAdvance dep-cursor (fn [in-rel]
+                                                                             (with-open [match-vec (.project projection-spec allocator in-rel {} args)]
+                                                                               (.accept c (vr/rel-reader [match-vec]))))))
 
-                                   (close [_] (.close dep-cursor))))))
+                                                 (close [_] (.close dep-cursor)))
+                                         explain-analyze? (ICursor/wrapExplainAnalyze)))))
 
-                           [:otherwise _] ->dependent-cursor)]
+                                 [:otherwise _] ->dependent-cursor)]
 
-                     (fn [{:keys [allocator] :as query-opts} independent-cursor]
-                       (ApplyCursor. allocator mode-strat independent-cursor
-                                     (reify DependentCursorFactory
-                                       (open [_this in-rel idx]
-                                         (open-dependent-cursor (-> query-opts
-                                                                    (update :args
-                                                                            (fn [^RelationReader args]
-                                                                              (RelationReader/from (concat args
-                                                                                                           (for [[ik dk] columns]
-                                                                                                             (-> (.vectorForOrNull in-rel (str ik))
-                                                                                                                 (.select (int-array [idx]))
-                                                                                                                 (.withName (str dk)))))
-                                                                                                   1))))))))))}))))
+                     (fn [{:keys [allocator explain-analyze?] :as query-opts} independent-cursor]
+                       (cond-> (ApplyCursor. allocator mode-strat independent-cursor
+                                             (reify DependentCursorFactory
+                                               (open [_this in-rel idx]
+                                                 (open-dependent-cursor (-> query-opts
+                                                                            (update :args
+                                                                                    (fn [^RelationReader args]
+                                                                                      (RelationReader/from (concat args
+                                                                                                                   (for [[ik dk] columns]
+                                                                                                                     (-> (.vectorForOrNull in-rel (str ik))
+                                                                                                                         (.select (int-array [idx]))
+                                                                                                                         (.withName (str dk)))))
+                                                                                                           1))))))))
+                         explain-analyze? (ICursor/wrapExplainAnalyze))))}))))

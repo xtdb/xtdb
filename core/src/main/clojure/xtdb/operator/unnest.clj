@@ -122,7 +122,8 @@
                         :fields (-> fields
                                     (assoc to-col (types/field-with-name unnest-field (str to-col)))
                                     (cond-> ordinality-column (assoc ordinality-column (types/col-type->field ordinality-column :i32))))
-                        :->cursor (fn [{:keys [allocator]} in-cursor]
-                                    (UnnestCursor. allocator in-cursor
-                                                   (str from-col) (types/field-with-name unnest-field (str to-col))
-                                                   (some-> ordinality-column str)))})))))
+                        :->cursor (fn [{:keys [allocator explain-analyze?]} in-cursor]
+                                    (cond-> (UnnestCursor. allocator in-cursor
+                                                           (str from-col) (types/field-with-name unnest-field (str to-col))
+                                                           (some-> ordinality-column str))
+                                      explain-analyze? (ICursor/wrapExplainAnalyze)))})))))

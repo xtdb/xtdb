@@ -184,8 +184,9 @@
      :children []
      :fields fields
      :stats stats
-     :->cursor (fn [{:keys [allocator]}]
-                 (->cursor allocator schema pages))}))
+     :->cursor (fn [{:keys [allocator explain-analyze?]}]
+                 (cond-> (->cursor allocator schema pages)
+                   explain-analyze? (ICursor/wrapExplainAnalyze)))}))
 
 (defn <-cursor
   ([^ICursor cursor] (<-cursor cursor #xt/key-fn :kebab-case-keyword))

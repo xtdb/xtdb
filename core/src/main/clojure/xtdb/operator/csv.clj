@@ -89,12 +89,13 @@
     {:op :csv
      :children []
      :fields fields
-     :->cursor (fn [{:keys [allocator]}]
-                 (let [rdr (Files/newBufferedReader path)
-                       rows (rest (csv/read-csv rdr))
-                       schema (Schema. (vals fields))]
-                   (CSVCursor. allocator rdr
-                               (VectorSchemaRoot/create schema allocator)
-                               (->> fields (into {} (map (juxt (comp name key)
-                                                               (comp col-parsers types/field->col-type val)))))
-                               (.iterator ^Iterable (partition-all batch-size rows)))))}))
+     :->cursor (fn [{:keys [allocator explain-analyze?]}]
+                 (cond-> (let [rdr (Files/newBufferedReader path)
+                               rows (rest (csv/read-csv rdr))
+                               schema (Schema. (vals fields))]
+                           (CSVCursor. allocator rdr
+                                       (VectorSchemaRoot/create schema allocator)
+                                       (->> fields (into {} (map (juxt (comp name key)
+                                                                       (comp col-parsers types/field->col-type val)))))
+                                       (.iterator ^Iterable (partition-all batch-size rows))))
+                   explain-analyze? (ICursor/wrapExplainAnalyze)))}))

@@ -49,8 +49,9 @@
                        ^ArrowReader rdr (path->arrow-reader (util/->file-channel path) al)]
              (->> (.getFields (.getSchema (.getVectorSchemaRoot rdr)))
                   (into {} (map (juxt #(symbol (.getName ^Field %)) identity)))))
-   :->cursor (fn [{:keys [^BufferAllocator allocator]}]
-               (ArrowCursor. (path->arrow-reader (util/->file-channel path) allocator) on-close-fn))})
+   :->cursor (fn [{:keys [^BufferAllocator allocator explain-analyze?]}]
+               (cond-> (ArrowCursor. (path->arrow-reader (util/->file-channel path) allocator) on-close-fn)
+                 explain-analyze? (ICursor/wrapExplainAnalyze)))})
 
 (defmethod lp/emit-expr :arrow [{:keys [^URL url]} _args]
   ;; TODO: should we make it possible to disable local files?

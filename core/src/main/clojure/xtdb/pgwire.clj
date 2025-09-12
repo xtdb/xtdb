@@ -908,7 +908,7 @@
   (case statement-type
     (:query :execute :show-variable)
     (try
-      (let [{:keys [^Sql$DirectlyExecutableStatementContext parsed-query explain?]} stmt
+      (let [{:keys [^Sql$DirectlyExecutableStatementContext parsed-query explain? explain-analyze?]} stmt
 
             {:keys [session await-token]} @conn-state
             {:keys [^Clock clock]} session
@@ -917,6 +917,7 @@
                         :tx-timeout (Duration/ofMinutes 1)
                         :default-tz (.getZone clock)
                         :explain? explain?
+                        :explain-analyze? explain-analyze?
                         :default-db default-db}
 
             ^PreparedQuery pq (case statement-type

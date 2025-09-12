@@ -154,8 +154,9 @@
       {:op :cross-join
        :children [left-rel right-rel]
        :fields (merge left-fields right-fields)
-       :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
-                   (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil))})))
+       :->cursor (fn [{:keys [allocator explain-analyze?]} left-cursor right-cursor]
+                   (cond-> (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil)
+                     explain-analyze? (ICursor/wrapExplainAnalyze)))})))
 
 (defmethod lp/emit-expr :cross-join [join-expr args]
   (emit-cross-join (emit-join-children join-expr args)))
@@ -413,7 +414,7 @@
 
      :fields (projection-specs->fields output-projections)
 
-     :->cursor (fn [{:keys [allocator args] :as opts}]
+     :->cursor (fn [{:keys [allocator explain-analyze? args] :as opts}]
                  (util/with-close-on-catch [build-cursor (->build-cursor opts)
                                             build-side (->build-side allocator {:fields build-fields
                                                                                 :key-col-names build-key-col-names
@@ -434,23 +435,24 @@
                                                        :param-fields param-fields
                                                        :args args})]
                        (project/->project-cursor opts
-                                                 (if (= join-type ::mark-join)
-                                                   (MarkJoinCursor. allocator build-side build-cursor
-                                                                    ->probe-cursor-with-pushdowns ->probe-side nil
-                                                                    mark-col-name pushdown-blooms)
-                                                   (JoinCursor. allocator build-side build-cursor
-                                                                probe-fields probe-key-col-names
-                                                                ->probe-cursor-with-pushdowns ->probe-side nil
-                                                                nil
-                                                                pushdown-blooms pushdown-iids
-                                                                (case join-type
-                                                                  ::inner-join JoinType/INNER
-                                                                  ::left-outer-join JoinType/LEFT_OUTER
-                                                                  ::left-outer-join-flipped JoinType/LEFT_OUTER_FLIPPED
-                                                                  ::full-outer-join JoinType/FULL_OUTER
-                                                                  ::semi-join JoinType/SEMI
-                                                                  ::anti-semi-join JoinType/ANTI
-                                                                  ::single-join JoinType/SINGLE)))
+                                                 (cond-> (if (= join-type ::mark-join)
+                                                           (MarkJoinCursor. allocator build-side build-cursor
+                                                                            ->probe-cursor-with-pushdowns ->probe-side nil
+                                                                            mark-col-name pushdown-blooms)
+                                                           (JoinCursor. allocator build-side build-cursor
+                                                                        probe-fields probe-key-col-names
+                                                                        ->probe-cursor-with-pushdowns ->probe-side nil
+                                                                        nil
+                                                                        pushdown-blooms pushdown-iids
+                                                                        (case join-type
+                                                                          ::inner-join JoinType/INNER
+                                                                          ::left-outer-join JoinType/LEFT_OUTER
+                                                                          ::left-outer-join-flipped JoinType/LEFT_OUTER_FLIPPED
+                                                                          ::full-outer-join JoinType/FULL_OUTER
+                                                                          ::semi-join JoinType/SEMI
+                                                                          ::anti-semi-join JoinType/ANTI
+                                                                          ::single-join JoinType/SINGLE)))
+                                                   explain-analyze? (ICursor/wrapExplainAnalyze))
                                                  output-projections)))))}))
 
 (defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]

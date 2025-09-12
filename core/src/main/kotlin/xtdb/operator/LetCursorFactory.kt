@@ -11,7 +11,7 @@ import xtdb.util.closeAllOnCatch
 import java.util.function.Consumer
 
 class LetCursorFactory(
-    private val al: BufferAllocator, private val boundCursor: ICursor,
+    private val al: BufferAllocator, private val boundCursor: ICursor
 ) : ICursor.Factory, AutoCloseable {
 
     class BoundBatch(internal val schema: Schema, internal val recordBatch: ArrowRecordBatch) : AutoCloseable {
@@ -45,7 +45,7 @@ class LetCursorFactory(
 
                     // TODO: don't need all this openAsRoot dance when the operators all use xtdb.arrow
                     rel.openAsRoot(al).use { root ->
-                        c.accept(RelationReader.Companion.from(root))
+                        c.accept(RelationReader.from(root))
                     }
                 }
             }

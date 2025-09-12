@@ -201,5 +201,6 @@
      :children []
      :fields fields
      :stats (when row-count {:row-count row-count})
-     :->cursor (fn [opts]
-                 (TableCursor. (->out-rel opts)))}))
+     :->cursor (fn [{:keys [explain-analyze?] :as opts}]
+                 (cond-> (TableCursor. (->out-rel opts))
+                   explain-analyze? (ICursor/wrapExplainAnalyze)))}))

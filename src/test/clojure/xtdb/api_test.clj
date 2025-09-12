@@ -473,6 +473,40 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                  ["EXPLAIN SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?"
                   "dummy-arg-because-pgjdbc-expects-one"]))))
 
+(t/deftest test-explain-analyze
+  (xt/submit-tx tu/*node* [[:put-docs :people {:xt/id 1 :name "Dave" :age 30}]
+                           [:put-docs :people {:xt/id 2 :name "John" :age 40}]])
+
+  (letfn [(elide-durations [row]
+            (-> row
+                (update :total-time class)
+                (update :time-to-first-block class)))]
+
+    (t/is (= [{:depth "->", :op :project,
+               :block-count 1, :row-count 1
+               :total-time Duration, :time-to-first-block Duration}
+              {:depth "  ->", :op :scan,
+               :block-count 1, :row-count 1
+               :total-time Duration, :time-to-first-block Duration}]
+             (->> (xt/q tu/*node*
+                        [(format "EXPLAIN ANALYZE XTQL ($$ %s $$, ?)"
+                                 (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))
+                         1])
+                  (mapv elide-durations))))
+
+    (t/is (= [{:depth "->", :op :project,
+               :block-count 1, :row-count 1
+               :total-time Duration, :time-to-first-block Duration}
+              {:depth "  ->", :op :rename,
+               :block-count 1, :row-count 1
+               :total-time Duration, :time-to-first-block Duration}
+              {:depth "    ->", :op :scan,
+               :block-count 1, :row-count 1
+               :total-time Duration, :time-to-first-block Duration}]
+             (->> (xt/q tu/*node*
+                        ["EXPLAIN ANALYZE SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?" 1])
+                  (mapv elide-durations))))))
+
 (t/deftest test-transit-encoding-of-ast-objects-3019
   (t/is (anomalous? [:incorrect nil #"Not all variables in expression are in scope"]
                     (xt/q tu/*node*
