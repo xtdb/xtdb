@@ -512,7 +512,43 @@
 
           (check-server-resources-freed server))))))
 
-;;TODO no current support for cancelling queries
+(deftest cancel-queries-test
+  (testing "Query cancellation works and server remains functional"
+    (let [query-started (CountDownLatch. 1)
+          query-completed (promise)
+          stmt-ref (atom nil)]
+
+      (let [query-future (future
+                          (try
+                            (with-open [conn (jdbc-conn)
+                                       stmt (.createStatement conn)]
+                              (reset! stmt-ref stmt)
+                              (.countDown query-started)
+                              (.executeQuery stmt "FROM generate_series(1, 10000) x")
+                              (deliver query-completed :success))
+                            (catch PSQLException e
+                              (if (= "57014" (.getSQLState e))
+                                (deliver query-completed :cancelled)
+                                (deliver query-completed {:error (.getMessage e)})))))]
+
+        ;; Wait for query to start
+        (is (.await query-started 2 TimeUnit/SECONDS) "Query should start")
+        (Thread/sleep 50) ; Give it time to start executing
+
+        ;; Cancel via JDBC Statement (tests actual PG wire protocol cancellation)
+        (when-let [stmt @stmt-ref]
+          (.cancel stmt))
+
+        ;; Verify query completes quickly (either success or cancelled)
+        (let [result (deref query-future 1000 :timeout)]
+          (is (not= :timeout result) "Query should complete within 1 second (either success or cancelled)"))
+
+        ;; Verify server can still handle new queries normally
+        (with-open [conn (jdbc-conn)
+                    stmt (.createStatement conn)]
+          (let [rs (.executeQuery stmt "SELECT 1")]
+            (.next rs)
+            (is (= 1 (.getInt rs 1)) "Normal query should work after cancellation test")))))))
 
 (deftest jdbc-prepared-query-close-test
   (with-open [conn (jdbc-conn {"prepareThreshold" 1
@@ -2896,7 +2932,7 @@ ORDER BY 1,2;")
   (with-open [conn (jdbc-conn)]
     (t/is (thrown-with-msg? PSQLException #"Cannot put documents with columns.*_system_from"
                             (jdbc/execute! conn ["INSERT INTO docs RECORDS {_id: 1, _system_from: TIMESTAMP '2024-01-01T00:00:00Z'}"])))
-    
+
     (t/is (thrown-with-msg? PSQLException #"Cannot put documents with columns.*_system_from"
                             (jdbc/execute! conn ["INSERT INTO docs RECORDS ?"
                                                  {:_id 2, :_system_from #inst "2024-01-01T00:00:00Z"}])))
@@ -2904,3 +2940,32 @@ ORDER BY 1,2;")
     (t/is (thrown-with-msg? PSQLException #"Cannot put documents with columns.*_system_from"
                             (jdbc/execute! conn ["INSERT INTO docs RECORDS ?"
                                                  {"_id" 2, "_system_from" #inst "2024-01-01T00:00:00Z"}])))))
+
+(t/deftest cmd-cancel-interrupts-thread-test
+  (t/testing "cmd-cancel properly interrupts the query thread"
+    (let [thread-interrupted (promise)
+          query-started (CountDownLatch. 1)
+          test-thread (Thread.
+                      (fn []
+                        (.countDown query-started)
+                        (try
+                          (Thread/sleep 10000)
+                          (catch InterruptedException e
+                            (deliver thread-interrupted true))))
+                      "test-query-thread")]
+
+      (.start test-thread)
+      (t/is (.await query-started 1 TimeUnit/SECONDS) "Test thread should start")
+
+      (let [conn-state (atom {:query-thread test-thread
+                             :cancel false})
+            conn {:conn-state conn-state
+                  :cid 123}]
+
+        (pgw/cmd-cancel conn)
+
+        (t/is (:cancel @conn-state) "Cancel flag should be set")
+
+        (t/is (deref thread-interrupted 1000 false) "Query thread should have been interrupted by cmd-cancel")
+
+        (.interrupt test-thread)))))

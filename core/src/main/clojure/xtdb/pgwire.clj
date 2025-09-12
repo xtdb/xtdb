@@ -156,7 +156,7 @@
            {::severity :fatal, ::error-code "3D000"}))
 
 (defn- err-invalid-auth-spec [msg] (ex-info msg {::severity :error, ::error-code "28000"}))
-(defn- err-query-cancelled [msg] (ex-info msg {::severity :error, :error-code "57014"}))
+(defn- err-query-cancelled [msg] (ex-info msg {::severity :error, ::error-code "57014"}))
 
 (defn- notice [msg]
   {:severity "NOTICE"
@@ -173,10 +173,18 @@
 (defn cmd-cancel
   "Tells the connection to stop doing what its doing and return to idle"
   [conn]
-  ;; we might this want to be conditional on a 'working state' to avoid races (if you fire loads of cancels randomly), not sure whether
-  ;; to use status instead
-  ;;TODO need to interrupt the thread belonging to the conn
-  (swap! (:conn-state conn) assoc :cancel true)
+  ;; Only set cancel flag and interrupt if there's actually a live query thread
+  (let [exec-thread ^Thread (:query-thread @(:conn-state conn))]
+    (if (and exec-thread (.isAlive exec-thread))
+      (do
+        (log/debug "Interrupting active query thread" {:cid (:cid conn) :thread (.getName exec-thread)})
+        ;; Set the cancel flag first to ensure the running query sees it
+        (swap! (:conn-state conn) assoc :cancel true)
+        (.interrupt exec-thread))
+      (log/debug "Cancel request received but no active query thread - ignoring"
+                {:cid (:cid conn)
+                 :thread-exists (some? exec-thread)
+                 :thread-alive (when exec-thread (.isAlive exec-thread))})))
   nil)
 
 (defn- parse-session-params [params]
@@ -245,9 +253,17 @@
 
         ::anom/unsupported {::severity :error, ::error-code "0A000"}
 
-        (do
-          (log/error ex "Uncaught exception processing message")
-          {::severity :error, ::error-code "XX000"})))))
+        ;; Special handling for query cancellation - log as debug, not error
+        (if (and (= "57014" (::error-code data))
+                 (or (str/includes? (ex-message ex) "Query cancelled")
+                     (str/includes? (ex-message ex) "query cancelled")))
+          (do
+            (log/debug "Query cancelled" {:message (ex-message ex)})
+            {::severity :error, ::error-code "57014"})
+
+          (do
+            (log/error ex "Uncaught exception processing message")
+            {::severity :error, ::error-code "XX000"}))))))
 
 (defn validate-and-refresh-token [{:keys [conn-state ^Authenticator authn]}]
   (when-let [^OAuthResult authn-state (:authn-state @conn-state)]
@@ -313,7 +329,7 @@
 (defn parse-client-creds [^String credentials]
   (cond
     (nil? credentials)
-    (throw (err/incorrect :xtdb/invalid-client-credentials "Client credentials were not provided")) 
+    (throw (err/incorrect :xtdb/invalid-client-credentials "Client credentials were not provided"))
 
     (str/blank? credentials)
     (throw (err/incorrect :xtdb/invalid-client-credentials "Client credentials were empty"))
@@ -1044,7 +1060,7 @@
 
         xt-args (xtify-args conn args stmt)]
 
-    (letfn [(->cursor ^xtdb.IResultCursor [xt-args] 
+    (letfn [(->cursor ^xtdb.IResultCursor [xt-args]
                       (with-auth-check conn
                         (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
                           (.openQuery prepared-query (assoc query-opts :args args-rel)))))
@@ -1247,6 +1263,10 @@
 
 (defn cmd-exec-query [{:keys [conn-state !closing? query-error-counter] :as conn}
                       {:keys [limit query ^IResultCursor cursor pg-cols] :as _portal}]
+  ;; Clear any previous cancel flag and store the current thread as the query thread
+  (swap! conn-state #(-> %
+                         (dissoc :cancel)
+                         (assoc :query-thread (Thread/currentThread))))
   (try
     (let [cancelled-by-client? #(:cancel @conn-state)
           ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
@@ -1258,21 +1278,42 @@
                                  (assoc :default (->> (get-in session [:parameters "fallback_output_format"] :json)
                                                       (get pg-types/pg-types))))]
 
-      (while (and (or (nil? limit) (< @n-rows-out limit))
-                  (.tryAdvance cursor
-                               (fn [^RelationReader rel]
-                                 (cond
-                                   (cancelled-by-client?)
-                                   (do (log/trace "query cancelled by client")
-                                       (swap! conn-state dissoc :cancel)
-                                       (throw (err-query-cancelled "query cancelled during execution")))
+      (let [iteration-count (atom 0)]
+        (log/debug "Starting cursor loop" {:cid (:cid conn)})
+        (while (and (or (nil? limit) (< @n-rows-out limit))
+                    (.tryAdvance cursor
+                                 (fn [^RelationReader rel]
+                                   (swap! iteration-count inc)
+                                   (when (= 0 (mod @iteration-count 1000))
+                                     (log/debug "Cursor loop iteration" {:cid (:cid conn) :iteration @iteration-count}))
+                                   (let [thread-interrupted? (Thread/interrupted)
+                                         cancel-flag? (cancelled-by-client?)]
+                                     (cond
+                                       (or thread-interrupted? cancel-flag?)
+                                       (do (log/debug "Query cancelled during execution" {:cid (:cid conn)
+                                                                                          :thread-interrupted thread-interrupted?
+                                                                                          :cancel-flag cancel-flag?
+                                                                                          :rows-processed @n-rows-out
+                                                                                          :iteration @iteration-count})
+                                           (swap! conn-state dissoc :cancel)
+                                           (throw (err-query-cancelled "query cancelled during execution")))
 
-                                   (Thread/interrupted) (throw (InterruptedException.))
+                                     @!closing? (log/trace "query result stream stopping (conn closing)")
 
-                                   @!closing? (log/trace "query result stream stopping (conn closing)")
-
-                                   :else (dotimes [idx (cond-> (.getRowCount rel)
+                                     :else (dotimes [idx (cond-> (.getRowCount rel)
                                                          limit (min (- limit @n-rows-out)))]
+                                           ;; Check for cancellation every 100 rows within the batch
+                                           (when (= 0 (mod idx 100))
+                                             (let [thread-interrupted? (Thread/interrupted)
+                                                   cancel-flag? (cancelled-by-client?)]
+                                               (when (or thread-interrupted? cancel-flag?)
+                                                 (log/debug "Query cancelled during row processing" {:cid (:cid conn)
+                                                                                                      :thread-interrupted thread-interrupted?
+                                                                                                      :cancel-flag cancel-flag?
+                                                                                                      :rows-processed @n-rows-out
+                                                                                                      :row-idx idx})
+                                                 (swap! conn-state dissoc :cancel)
+                                                 (throw (err-query-cancelled "query cancelled during execution")))))
                                            (let [row (mapv
                                                       (fn [{:keys [^String col-name pg-type result-format]}]
                                                         (let [{:keys [write-binary write-text]} (get types-with-default pg-type)
@@ -1287,13 +1328,23 @@
                                              (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
                                              (vswap! n-rows-out inc))))))))
 
-      (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @n-rows-out)}))
+      ;; Query execution is complete, clear both thread reference and any cancel flag
+      (swap! conn-state dissoc :query-thread :cancel)
 
-    (catch Interrupted e (throw e))
-    (catch InterruptedException e (throw e))
+      (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @n-rows-out)}))))
+
+    (catch Interrupted e
+      (log/warn "Query interrupted (Interrupted exception) - sending cancellation error to client" {:cid (:cid conn)})
+      (throw (err-query-cancelled "query cancelled during execution")))
+    (catch InterruptedException e
+      (log/warn "Query interrupted with InterruptedException - sending cancellation error to client" {:cid (:cid conn)})
+      (throw (err-query-cancelled "query cancelled during execution")))
     (catch Throwable e
       (inc-error-counter! query-error-counter)
-      (throw e))))
+      (throw e))
+    (finally
+      ;; Ensure query thread and cancel flag are cleared even on error
+      (swap! conn-state dissoc :query-thread :cancel))))
 
 (defn- attach-db [{:keys [node conn-state default-db] :as conn} {:keys [db-name db-config]}]
   (when-not (= default-db "xtdb")
@@ -1402,6 +1453,8 @@
 
 (defmethod handle-msg* :msg-execute [{:keys [conn-state] :as conn} {:keys [portal-name limit]}]
   ;; Handles a msg-execute to run a previously bound portal (via msg-bind).
+  ;; Clear any previous cancel flag (query thread will be set by cmd-exec-query)
+  (swap! conn-state dissoc :cancel)
   (let [portal (or (get-in @conn-state [:portals portal-name])
                    (throw (pgio/err-protocol-violation "no such portal")))]
     (execute-portal conn (cond-> portal
@@ -1412,18 +1465,34 @@
 
   (close-portal conn "")
 
-  (try
-    (doseq [{:keys [statement-type] :as stmt} (parse-sql query)]
+  ;; Clear any previous cancel flag
+  (swap! conn-state dissoc :cancel)
+  (let [query-completed-successfully? (atom false)]
+    (try
+      (let [parsed-stmts (try
+                           (parse-sql query)
+                           (catch InterruptedException e
+                             (log/warn "Query parsing interrupted - sending cancellation error" {:cid (:cid conn)})
+                             (throw (err-query-cancelled "query cancelled during execution"))))]
+        (doseq [{:keys [statement-type] :as stmt} parsed-stmts]
       (when-not (or (boolean (:transaction @conn-state))
                     (= statement-type :show-variable))
         (cmd-begin conn {:implicit? true} {}))
 
       (try
-        (let [{:keys [param-oids statement-type] :as prepared-stmt} (prep-stmt conn stmt)]
+        (let [{:keys [param-oids statement-type] :as prepared-stmt} (try
+                                                                                        (prep-stmt conn stmt)
+                                                                                        (catch InterruptedException e
+                                                                                          (log/warn "Statement preparation interrupted - sending cancellation error" {:cid (:cid conn)})
+                                                                                          (throw (err-query-cancelled "query cancelled during execution"))))]
           (when (and (seq param-oids) (not= statement-type :show-variable))
             (throw (pgio/err-protocol-violation "Parameters not allowed in simple queries")))
 
-          (let [portal (bind-stmt conn prepared-stmt)]
+          (let [portal (try
+                          (bind-stmt conn prepared-stmt)
+                          (catch InterruptedException e
+                            (log/warn "Portal binding interrupted - sending cancellation error" {:cid (:cid conn)})
+                            (throw (err-query-cancelled "query cancelled during execution"))))]
             (try
               (when (or (contains? #{:query :canned-response :show-variable} statement-type)
                         (and (= :execute statement-type)
@@ -1432,34 +1501,62 @@
                 ;; for certain statement types
                 (cmd-describe-portal conn portal))
 
-              (execute-portal conn portal)
+              (try
+                (execute-portal conn portal)
+                (log/debug "Portal execution completed successfully" {:cid (:cid conn)})
+                (reset! query-completed-successfully? true)
+                (catch InterruptedException e
+                  (log/warn "Portal execution interrupted - sending cancellation error" {:cid (:cid conn)})
+                  (throw (err-query-cancelled "query cancelled during execution"))))
               (finally
                 (util/close (:cursor portal))))))
 
+        (catch InterruptedException e
+          (log/warn "Simple query interrupted - sending cancellation error to client" {:cid (:cid conn)})
+          (when-let [{:keys [implicit?]} (:transaction @conn-state)]
+            (if implicit?
+              (cmd-rollback conn)
+              (swap! conn-state util/maybe-update :transaction assoc :failed true, :err e)))
+          (send-ex conn (err-query-cancelled "Query cancelled")))
         (catch Interrupted e (throw e))
-        (catch InterruptedException e (throw e))
         (catch Exception e
           (when-let [{:keys [implicit?]} (:transaction @conn-state)]
             (if implicit?
               (cmd-rollback conn)
               (swap! conn-state util/maybe-update :transaction assoc :failed true, :err e)))
 
-          (send-ex conn e))))
+          (send-ex conn e)))))
 
-    (let [{:keys [implicit? failed]} (:transaction @conn-state)]
-      (when implicit?
-        (if failed
-          (cmd-rollback conn)
-          (cmd-commit conn))))
+      (let [{:keys [implicit? failed]} (:transaction @conn-state)]
+        (when implicit?
+          (if failed
+            (cmd-rollback conn)
+            (cmd-commit conn))))
 
-    ;; here we catch explicitly because we need to send the error, then a ready message
-    (catch Interrupted e (throw e))
-    (catch InterruptedException e (throw e))
-    (catch Throwable e
-      (send-ex conn e)))
+      ;; here we catch explicitly because we need to send the error, then a ready message
+      (catch Interrupted e (throw e))
+      (catch InterruptedException e
+        (log/warn "Simple query sequence interrupted" {:cid (:cid conn)})
+        (throw e))
+      (catch Throwable e
+        (send-ex conn e))
+      (finally
+        ;; Clear any cancel flag that might be set
+        (swap! conn-state dissoc :cancel)))
 
-  (when-not (:copy @conn-state)
-    (cmd-send-ready conn)))
+    ;; Check if thread was interrupted but query didn't complete successfully
+    ;; Only send cancellation error if query was actually cancelled, not if it completed first
+    (let [was-interrupted? (Thread/interrupted)
+          completed-successfully? @query-completed-successfully?]
+      (log/debug "Checking interruption status" {:cid (:cid conn) :was-interrupted was-interrupted? :completed-successfully completed-successfully?})
+      (if (and was-interrupted? (not completed-successfully?))
+        (do
+          (log/warn "Thread was interrupted and query was cancelled - sending error" {:cid (:cid conn)})
+          (send-ex conn (err-query-cancelled "query cancelled during execution"))
+          (when-not (:copy @conn-state)
+            (cmd-send-ready conn)))
+        (when-not (:copy @conn-state)
+          (cmd-send-ready conn))))))
 
 (defmethod handle-msg* :msg-copy-data [{:keys [conn-state]} {:keys [data]}]
   (let [{:keys [^FileChannel write-ch]} (or (:copy @conn-state)
