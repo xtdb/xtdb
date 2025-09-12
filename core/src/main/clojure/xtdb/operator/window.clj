@@ -104,6 +104,9 @@
                          ^List window-specs
                          ^:unsynchronized-mutable ^boolean done?]
   ICursor
+  (getCursorType [_] "window")
+  (getChildCursors [_] [in-cursor])
+
   (tryAdvance [this c]
     (boolean
      (when-not done?
@@ -166,13 +169,14 @@
                                                      [to-column (pr-str window-agg)]))))}
            :fields out-fields
 
-           :->cursor (fn [{:keys [allocator]} in-cursor]
-                       (util/with-close-on-catch [window-fn-specs (LinkedList.)]
-                         (doseq [^IWindowFnSpecFactory factory window-fn-factories]
-                           (.add window-fn-specs (.build factory allocator)))
+           :->cursor (fn [{:keys [allocator explain-analyze?]} in-cursor]
+                       (cond-> (util/with-close-on-catch [window-fn-specs (LinkedList.)]
+                                 (doseq [^IWindowFnSpecFactory factory window-fn-factories]
+                                   (.add window-fn-specs (.build factory allocator)))
 
-                         (WindowFnCursor. allocator in-cursor (order-by/rename-fields fields)
-                                          (group-by/->group-mapper allocator (select-keys fields partition-cols))
-                                          order-specs
-                                          (vec window-fn-specs)
-                                          false)))})))))
+                                 (WindowFnCursor. allocator in-cursor (order-by/rename-fields fields)
+                                                  (group-by/->group-mapper allocator (select-keys fields partition-cols))
+                                                  order-specs
+                                                  (vec window-fn-specs)
+                                                  false))
+                         explain-analyze? (ICursor/wrapExplainAnalyze)))})))))

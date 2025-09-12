@@ -3,7 +3,7 @@
             [xtdb.error :as err]
             [xtdb.logical-plan :as lp]
             [xtdb.util :as util])
-  (:import [xtdb ICursor$Factory]
+  (:import [xtdb ICursor ICursor$Factory]
            [xtdb.operator LetCursorFactory]))
 
 (s/def ::binding (s/tuple simple-symbol? ::lp/ra-expression))
@@ -20,11 +20,12 @@
      :children [emitted-bound-rel emitted-body-rel]
      :fields (:fields emitted-body-rel)
      :stats (:stats emitted-body-rel)
-     :->cursor (fn [{:keys [allocator] :as opts}]
-                 (util/with-close-on-catch [bound-cursor (->bound-cursor opts)
-                                            factory (LetCursorFactory. allocator bound-cursor)
-                                            body-cursor (->body-cursor (assoc-in opts [:let-bindings binding] factory))]
-                   (.wrapBodyCursor factory body-cursor)))}))
+     :->cursor (fn [{:keys [allocator explain-analyze?] :as opts}]
+                 (cond-> (util/with-close-on-catch [bound-cursor (->bound-cursor opts)
+                                                    factory (LetCursorFactory. allocator bound-cursor)
+                                                    body-cursor (->body-cursor (assoc-in opts [:let-bindings binding] factory))]
+                           (.wrapBodyCursor factory body-cursor))
+                   explain-analyze? (ICursor/wrapExplainAnalyze)))}))
 
 (s/def ::relation simple-symbol?)
 (s/def ::col-names (s/coll-of ::lp/column :kind vector?))
@@ -46,7 +47,7 @@
     {:op :relation
      :children []
      :fields fields, :stats stats
-     :->cursor (fn [opts]
+     :->cursor (fn [{:keys [explain-analyze?] :as opts}]
                  (let [^ICursor$Factory cursor-factory (or (get-in opts [:let-bindings relation])
                                                            (let [available (set (keys (:let-bindings opts)))]
                                                              (throw (err/fault ::missing-relation
@@ -55,4 +56,5 @@
                                                                                {:relation relation
                                                                                 :available available}))))]
 
-                   (.open cursor-factory)))}))
+                   (cond-> (.open cursor-factory)
+                     explain-analyze? (ICursor/wrapExplainAnalyze))))}))

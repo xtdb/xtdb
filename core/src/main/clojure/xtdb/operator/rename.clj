@@ -21,6 +21,9 @@
 (deftype RenameCursor [^ICursor in-cursor
                        ^Map #_#_<Symbol, Symbol> col-name-mapping]
   ICursor
+  (getCursorType [_] "rename")
+  (getChildCursors [_] [in-cursor])
+
   (tryAdvance [_ c]
     (.tryAdvance in-cursor
                  (fn [^RelationReader in-rel]
@@ -54,9 +57,10 @@
                                                (types/field-with-name (str (col-name-mapping (symbol (.getName field)))))))
                                          val)))))
      :stats (:stats emitted-child-relation)
-     :->cursor (fn [opts]
+     :->cursor (fn [{:keys [explain-analyze?] :as opts}]
                  (let [opts (-> opts
                                 (update :pushdown-blooms update-keys #(get col-name-reverse-mapping %))
                                 (update :pushdown-iids update-keys #(get col-name-reverse-mapping %)))]
-                   (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
-                     (RenameCursor. in-cursor col-name-mapping))))}))
+                   (cond-> (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
+                             (RenameCursor. in-cursor col-name-mapping))
+                     explain-analyze? (ICursor/wrapExplainAnalyze))))}))

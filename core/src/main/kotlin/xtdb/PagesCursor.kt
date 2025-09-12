@@ -13,7 +13,8 @@ class PagesCursor(
     vals: Iterable<List<Map<*, *>>>
 ) : ICursor {
 
-    constructor(al: BufferAllocator, vals: Iterable<List<Map<*, *>>>): this(al, null, vals)
+    override val cursorType get() = "pages"
+    override val childCursors get() = emptyList<ICursor>()
 
     private val vals = vals.spliterator()
 

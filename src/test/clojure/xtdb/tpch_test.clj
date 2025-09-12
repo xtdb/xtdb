@@ -180,6 +180,19 @@
       (dorun
        (map-indexed test-sql-query results-sf-001)))))
 
+(t/deftest test-001-sql-explain
+  (with-tpch-data {:method :dml, :scale-factor 0.001
+                   :node-dir (util/->path "target/tpch-queries-sql-sf-001")}
+    (fn []
+      (dotimes [n 22]
+        (let [q (inc n)]
+          (when (contains? *qs* q)
+            (t/is (xt/q *node* (str "EXPLAIN " (slurp-sql-query q)))
+                  (format "EXPLAIN Q%02d" (inc n)))
+
+            (t/is (xt/q *node* (str "EXPLAIN ANALYZE " (slurp-sql-query q)))
+                  (format "EXPLAIN ANALYZE Q%02d" (inc n)))))))))
+
 (t/deftest ^:integration test-01-sql
   (with-tpch-data {:method :dml, :scale-factor 0.01
                    :node-dir (util/->path "target/tpch-queries-sql-sf-01")}

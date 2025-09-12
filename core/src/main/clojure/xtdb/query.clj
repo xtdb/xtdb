@@ -58,11 +58,28 @@
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.util.RefCounter))
 
-(defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, result-fields
-                                        current-time, snapshot-token, default-tz,
-                                        snaps, ^BufferAllocator al, ^RefCounter ref-ctr, args-to-close]
+(defn- wrap-result-fields [^ICursor cursor, result-fields]
   (reify IResultCursor
     (getResultFields [_] result-fields)
+    (tryAdvance [_ c] (.tryAdvance cursor c))
+
+    (getCursorType [_] (.getCursorType cursor))
+    (getChildCursors [_] (.getChildCursors cursor))
+    (getExplainAnalyze [_] (.getExplainAnalyze cursor))
+
+    (characteristics [_] (.characteristics cursor))
+    (estimateSize [_] (.estimateSize cursor))
+    (getComparator [_] (.getComparator cursor))
+    (getExactSizeIfKnown [_] (.getExactSizeIfKnown cursor))
+    (hasCharacteristics [_ c] (.hasCharacteristics cursor c))
+    (trySplit [_] (.trySplit cursor))
+    (close [_] (.close cursor))))
+
+(defn- wrap-dynvars [^IResultCursor cursor
+                     current-time, snapshot-token, default-tz
+                     ^RefCounter ref-ctr]
+  (reify IResultCursor
+    (getResultFields [_] (.getResultFields cursor))
     (tryAdvance [_ c]
       (when (.isClosing ref-ctr)
         (throw (InterruptedException.)))
@@ -72,6 +89,27 @@
                 expr/*default-tz* default-tz]
         (.tryAdvance cursor c)))
 
+    (getCursorType [_] (.getCursorType cursor))
+    (getChildCursors [_] (.getChildCursors cursor))
+    (getExplainAnalyze [_] (.getExplainAnalyze cursor))
+
+    (characteristics [_] (.characteristics cursor))
+    (estimateSize [_] (.estimateSize cursor))
+    (getComparator [_] (.getComparator cursor))
+    (getExactSizeIfKnown [_] (.getExactSizeIfKnown cursor))
+    (hasCharacteristics [_ c] (.hasCharacteristics cursor c))
+    (trySplit [_] (.trySplit cursor))
+    (close [_] (.close cursor))))
+
+(defn- wrap-closeables ^xtdb.IResultCursor [^IResultCursor cursor, ^RefCounter ref-ctr, closeables]
+  (reify IResultCursor
+    (getResultFields [_] (.getResultFields cursor))
+    (tryAdvance [_ c] (.tryAdvance cursor c))
+
+    (getCursorType [_] (.getCursorType cursor))
+    (getChildCursors [_] (.getChildCursors cursor))
+    (getExplainAnalyze [_] (.getExplainAnalyze cursor))
+
     (characteristics [_] (.characteristics cursor))
     (estimateSize [_] (.estimateSize cursor))
     (getComparator [_] (.getComparator cursor))
@@ -80,11 +118,9 @@
     (trySplit [_] (.trySplit cursor))
 
     (close [_]
-      (.release ref-ctr)
-      (util/close cursor)
-      (util/close args-to-close)
-      (util/close snaps)
-      (util/close al))))
+      (.close cursor)
+      (some-> ref-ctr .release)
+      (util/close closeables))))
 
 (defn- ->result-fields [ordered-outer-projection fields]
   (if ordered-outer-projection
@@ -152,7 +188,7 @@
 
     conformed-plan))
 
-(defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache]},
+(defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache, explain-analyze?]},
                    scan-emitter, ^Database$Catalog db-cat, snaps
                    param-fields, {:keys [default-tz]}]
   (.get emit-cache {:scan-fields (scan/scan-fields db-cat snaps scan-cols)
@@ -163,7 +199,8 @@
                                               [db-name (some-> (.databaseOrNull db-cat db-name) .getBlockCatalog .getCurrentBlockIndex)]))
 
                     :default-tz default-tz
-                    :param-fields param-fields}
+                    :param-fields param-fields
+                    :explain-analyze? explain-analyze?}
 
         (fn [{:keys [scan-fields param-fields default-tz]}]
           (binding [expr/*default-tz* default-tz]
@@ -195,6 +232,33 @@
     (for [field-name '[depth op explain]]
       (types/col-type->field field-name (get col-types field-name)))))
 
+(def ^:private explain-analyze-fields
+  [#xt/field ["depth" :utf8]
+   #xt/field ["op" :keyword]
+
+   #xt/field ["total_time" [:duration :micro]]
+   #xt/field ["time_to_first_block" [:duration :micro]]
+
+   #xt/field ["block_count" :i64]
+   #xt/field ["row_count" :i64]])
+
+(defn- explain-analyze-results [^IResultCursor cursor]
+  (letfn [(->results [^ICursor cursor, depth]
+            (lazy-seq
+             (if-let [ea (.getExplainAnalyze cursor)]
+               (cons {:depth (str (str/join (repeat depth "  ")) "->")
+                      :op (keyword (.getCursorType cursor))
+                      :total-time (.getTotalTime ea)
+                      :time-to-first-block (.getTimeToFirstBlock ea)
+                      :block-count (.getBlockCount ea)
+                      :row-count (.getRowCount ea)}
+                     (->> (for [child (.getChildCursors cursor)]
+                            (->results child (inc depth)))
+                          (sequence cat)))
+               (->results (first (.getChildCursors cursor)) depth))))]
+
+    (vec (->results cursor 0))))
+
 (defprotocol PQuerySource
   (-plan-query [q-src parsed-query query-opts table-info]))
 
@@ -203,11 +267,10 @@
                         ^Counter query-warning-counter
                         ^RefCounter ref-ctr
                         ^Cache plan-cache]
-  IQuerySource
   PQuerySource
   (-plan-query [_ parsed-query query-opts table-info]
     (.get plan-cache [parsed-query (-> query-opts
-                                       (select-keys [:default-db :decorrelate? :explain? :arg-fields])
+                                       (select-keys [:default-db :decorrelate? :explain? :explain-analyze? :arg-fields])
                                        (update :decorrelate? (fnil boolean true))
                                        (assoc :table-info table-info))]
           (fn [[parsed-query query-opts]]
@@ -216,7 +279,7 @@
 
                   {:keys [ordered-outer-projection warnings param-count], :or {param-count 0}, :as plan-meta} (meta plan)]
 
-              (into (select-keys plan-meta [:current-time :snapshot-token :explain?])
+              (into (select-keys plan-meta [:current-time :snapshot-token :explain? :explain-analyze?])
                     {:plan plan,
                      :conformed-plan conformed-plan
                      :scan-cols (->> (lp/child-exprs conformed-plan)
@@ -229,6 +292,7 @@
                                      (.maximumSize 16)
                                      (.build))})))))
 
+  IQuerySource
   (prepareQuery [this query db-cat query-opts]
     (let [parsed-query (parse-query query)
 
@@ -266,9 +330,10 @@
                                                   (->> param-fields
                                                        (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity))))
                                                   query-opts)]
-                    (if (:explain? planned-query)
-                      (explain-plan-fields (->explain-plan emitted-query))
-                      (:fields emitted-query))))))
+                    (cond
+                      (:explain? planned-query) (explain-plan-fields (->explain-plan emitted-query))
+                      (:explain-analyze? planned-query) explain-analyze-fields
+                      :else (:fields emitted-query))))))
 
             (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
@@ -317,20 +382,31 @@
                       (if (:explain? planned-query)
                         (let [explain-plan (->explain-plan emitted-query)]
                           (-> (PagesCursor. allocator nil [explain-plan])
-                              (wrap-cursor (explain-plan-fields explain-plan)
-                                           current-time expr/*snapshot-token* default-tz
-                                           allocator snaps ref-ctr (when close-args? args))))
+                              (wrap-result-fields (explain-plan-fields explain-plan))
+                              (wrap-closeables ref-ctr (cond-> [snaps allocator]
+                                                         close-args? (cons args)))))
 
-                        (-> (->cursor {:allocator allocator,
-                                       :snaps snaps
-                                       :snapshot-token expr/*snapshot-token*
-                                       :current-time current-time
-                                       :args args, :schema table-info
-                                       :default-tz default-tz})
+                        (let [cursor (-> (->cursor {:allocator allocator,
+                                                    :snaps snaps
+                                                    :snapshot-token expr/*snapshot-token*
+                                                    :current-time current-time
+                                                    :args args, :schema table-info
+                                                    :default-tz default-tz
+                                                    :explain-analyze? (:explain-analyze? planned-query)})
 
-                            (wrap-cursor fields
-                                         current-time expr/*snapshot-token* default-tz
-                                         allocator snaps ref-ctr (when close-args? args)))))
+                                         (wrap-result-fields fields)
+                                         (wrap-dynvars current-time expr/*snapshot-token* default-tz ref-ctr)
+                                         (wrap-closeables ref-ctr (cond-> [snaps allocator]
+                                                                    close-args? (cons args))))]
+                          (if (:explain-analyze? planned-query)
+                            (try
+                              (.forEachRemaining cursor (fn [_]))
+                              (-> (PagesCursor. allocator nil [(explain-analyze-results cursor)])
+                                  (wrap-result-fields explain-analyze-fields))
+                              (finally
+                                (util/close cursor)))
+
+                            cursor))))
 
                     (catch Throwable t
                       (.release ref-ctr)

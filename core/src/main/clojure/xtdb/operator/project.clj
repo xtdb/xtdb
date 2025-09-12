@@ -5,7 +5,8 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types])
   (:import (org.apache.arrow.vector.types.pojo Field)
-           (xtdb.operator ProjectCursor ProjectionSpec ProjectionSpec$Identity ProjectionSpec$LocalRowNumber ProjectionSpec$Rename ProjectionSpec$RowNumber ProjectionSpec$Star)))
+           (xtdb.operator ProjectCursor ProjectionSpec ProjectionSpec$Identity ProjectionSpec$LocalRowNumber ProjectionSpec$Rename ProjectionSpec$RowNumber ProjectionSpec$Star)
+           (xtdb ICursor)))
 
 (s/def ::append-columns? boolean?)
 
@@ -82,8 +83,9 @@
                         (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
                                             #(.getField ^ProjectionSpec %)))))
            :stats (:stats emitted-child-relation)
-           :->cursor (fn [opts in-cursor]
-                       (->project-cursor opts in-cursor projection-specs))})))))
+           :->cursor (fn [{:keys [explain-analyze?] :as opts} in-cursor]
+                       (cond-> (->project-cursor opts in-cursor projection-specs)
+                         explain-analyze? (ICursor/wrapExplainAnalyze)))})))))
 
 (defmethod lp/emit-expr :map [op args]
   (lp/emit-expr (assoc op :op :project :opts {:append-columns? true}) args))

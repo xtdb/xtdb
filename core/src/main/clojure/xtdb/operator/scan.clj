@@ -29,6 +29,7 @@
            (xtdb.bloom BloomUtils)
            xtdb.catalog.TableCatalog
            xtdb.database.Database$Catalog
+           xtdb.ICursor
            (xtdb.indexer Snapshot Snapshot$Source)
            (xtdb.metadata MetadataPredicate PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan IidSelector RootCache ScanCursor)
@@ -236,13 +237,13 @@
          :children []
          :explain {:table (->> [(.getDbName table) (.getSchemaName table) (.getTableName table)]
                                (remove nil?)
-                               (str/join "."),)
+                               (str/join "."))
                    :columns (vec col-names)
                    :predicates (mapv pr-str (vals selects))}
 
          :fields fields
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids]}]
+         :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze?]}]
                      (let [^Snapshot snapshot (get snaps db-name)
                            derived-table-schema (info-schema/derived-table table)
                            template-table? (boolean (info-schema/template-table table))]
@@ -295,13 +296,14 @@
                                                     (into [] (keep (fn [^MergeTask mt]
                                                                      (when-let [leaves (trie/filter-meta-objects (.getPages mt) temporal-bounds)]
                                                                        (MergeTask. leaves (.getPath mt)))))))]
-                               (ScanCursor. allocator (RootCache. allocator buffer-pool)
-                                            col-names col-preds
-                                            temporal-bounds
-                                            (.iterator ^Iterable merge-tasks)
-                                            schema args
-                                            (when (and iid-set (> (count iid-set) 1))
-                                              iid-pushdown-bloom))))))))}))))
+                               (cond-> (ScanCursor. allocator (RootCache. allocator buffer-pool)
+                                                    col-names col-preds
+                                                    temporal-bounds
+                                                    (.iterator ^Iterable merge-tasks)
+                                                    schema args
+                                                    (when (and iid-set (> (count iid-set) 1))
+                                                      iid-pushdown-bloom))
+                                 explain-analyze? (ICursor/wrapExplainAnalyze))))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-fields, param-fields]}]
   (assert db-cat)

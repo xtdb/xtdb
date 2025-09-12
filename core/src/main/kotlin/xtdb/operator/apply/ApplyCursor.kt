@@ -13,6 +13,16 @@ class ApplyCursor(
     private val independentCursor: ICursor,
     private val depCursorFactory: DependentCursorFactory
 ) : ICursor {
+
+    override val cursorType get() = when (mode) {
+        is ApplyMode.MarkJoin -> "apply-mark-join"
+        is ApplyMode.CrossJoin -> "apply-cross-join"
+        is ApplyMode.LeftJoin -> "apply-left-join"
+        is ApplyMode.SemiJoin -> "apply-semi-join"
+        is ApplyMode.AntiJoin -> "apply-anti-join"
+        is ApplyMode.SingleJoin -> "apply-single-join"
+    }
+    override val childCursors get() = listOf(independentCursor)
     override fun tryAdvance(c: Consumer<in RelationReader>) =
         independentCursor.tryAdvance { inRel ->
             val idxs = IntArrayList()
