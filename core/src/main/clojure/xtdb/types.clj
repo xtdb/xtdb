@@ -343,7 +343,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti arrow-type->col-type
-  (fn [arrow-type & child-fields]
+  (fn [arrow-type & child-fields] 
     (class arrow-type)))
 
 (defmethod arrow-type->col-type ArrowType$Null [_] :null)
@@ -359,7 +359,7 @@
     :null :null
     [:union #{:null col-type}]))
 
-(defn field->col-type [^Field field]
+(defn field->col-type [^Field field] 
   (let [inner-type (apply arrow-type->col-type (.getType field) (.getChildren field))]
     (cond-> inner-type
       (.isNullable field) col-type->nullable-col-type)))
@@ -379,22 +379,22 @@
   (->field col-name ArrowType$List/INSTANCE nullable?
            (col-type->field "$data$" inner-col-type)))
 
-(defmethod arrow-type->col-type ArrowType$List [_ data-field]
-  [:list (field->col-type data-field)])
+(defmethod arrow-type->col-type ArrowType$List [_ & [data-field]]
+  [:list (or (some-> data-field field->col-type) :null)])
 
 (defmethod col-type->field* :fixed-size-list [col-name nullable? [_ list-size inner-col-type]]
   (->field col-name (ArrowType$FixedSizeList. list-size) nullable?
            (col-type->field inner-col-type)))
 
-(defmethod arrow-type->col-type ArrowType$FixedSizeList [^ArrowType$FixedSizeList list-type, data-field]
-  [:fixed-size-list (.getListSize list-type) (field->col-type data-field)])
+(defmethod arrow-type->col-type ArrowType$FixedSizeList [^ArrowType$FixedSizeList list-type & [data-field]]
+  [:fixed-size-list (.getListSize list-type) (or (some-> data-field field->col-type) :null)])
 
 (defmethod col-type->field* :set [col-name nullable? [_ inner-col-type]]
   (->field col-name SetType/INSTANCE nullable?
            (col-type->field "$data$" inner-col-type)))
 
-(defmethod arrow-type->col-type SetType [_ data-field]
-  [:set (field->col-type data-field)])
+(defmethod arrow-type->col-type SetType [_ & [data-field]]
+  [:set (or (some-> data-field field->col-type) :null)])
 
 (defmethod col-type->field* :map [col-name nullable? [_ {:keys [sorted?]} inner-col-type]]
   (->field col-name (ArrowType$Map. (boolean sorted?)) nullable?
