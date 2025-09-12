@@ -1202,3 +1202,14 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (xt/execute-tx tu/*node* [[:put-docs :docs {:h {:b #{}} :xt/id 1}]])
   (xt/execute-tx tu/*node* [[:put-docs :docs {:h {}, :xt/id 1} {:xt/id 1}]])
   (t/is (= [{:xt/id 1}] (xt/q tu/*node* "SELECT * FROM docs"))))
+
+(t/deftest test-info-schema-with-empty-set-children-4774
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:h {:b #{}} :xt/id 1}]])
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:h {}, :xt/id 1} {:xt/id 1}]])
+  (t/is (= [{:column-name "_id"}
+            {:column-name "_system_from"}
+            {:column-name "_system_to"}
+            {:column-name "_valid_from"}
+            {:column-name "_valid_to"}
+            {:column-name "h"}]
+           (xt/q tu/*node* "SELECT column_name FROM information_schema.columns WHERE table_name = 'docs'"))))
