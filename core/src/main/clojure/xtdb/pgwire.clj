@@ -1325,7 +1325,7 @@
       (when error
         (throw error)))))
 
-(defn execute-portal [{:keys [conn-state] :as conn} {:keys [statement-type canned-response parameter value session-characteristics tx-characteristics] :as portal}]
+(defn execute-portal [{:keys [conn-state query-timer] :as conn} {:keys [statement-type canned-response parameter value session-characteristics tx-characteristics] :as portal}]
   (verify-permissibility conn portal)
 
   (swap! conn-state (fn [{:keys [transaction] :as cs}]
@@ -1360,7 +1360,7 @@
               (cmd-commit conn)
               (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "COMMIT"}))
 
-    (:query :show-variable) (cmd-exec-query conn portal)
+    (:query :show-variable) (metrics/record-callable! query-timer (cmd-exec-query conn portal))
     :prepare (cmd-prepare conn portal)
     :dml (cmd-exec-dml conn portal)
 
@@ -1603,7 +1603,7 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [{:keys [node, ^Authenticator authn, server-state, port, allocator, query-error-counter, tx-error-counter, ^Counter total-connections-counter, ^Counter cancelled-connections-counter] :as server} ^Socket conn-socket]
+  [{:keys [node, ^Authenticator authn, server-state, port, allocator, query-error-counter, tx-error-counter, ^Counter total-connections-counter, ^Counter cancelled-connections-counter, query-timer] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
@@ -1625,6 +1625,7 @@
                                                  (throw t)))))
         conn (assoc conn
                     :query-error-counter query-error-counter
+                    :query-timer query-timer
                     :tx-error-counter tx-error-counter
                     :cancelled-connections-counter cancelled-connections-counter)]
 
@@ -1717,9 +1718,10 @@
      (let [host (.getInetAddress accept-socket)
            port (.getLocalPort accept-socket)
            query-error-counter (when metrics-registry (metrics/add-counter metrics-registry "query.error"))
+           query-timer (when metrics-registry (metrics/add-timer metrics-registry "query.timer" {}))
            tx-error-counter (when metrics-registry (metrics/add-counter metrics-registry "tx.error"))
            total-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.total_connections"))
-           cancelled-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.cancelled_connections"))
+           cancelled-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.cancelled_connections")) 
            server (map->Server {:allocator allocator
                                 :node node
                                 :authn (authn/<-node node)
@@ -1749,6 +1751,7 @@
 
            server (assoc server
                          :query-error-counter query-error-counter
+                         :query-timer query-timer
                          :tx-error-counter tx-error-counter
                          :total-connections-counter total-connections-counter
                          :cancelled-connections-counter cancelled-connections-counter)
