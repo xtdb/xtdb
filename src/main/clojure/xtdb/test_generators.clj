@@ -1,7 +1,9 @@
 (ns xtdb.test-generators
   (:require [clojure.string :as str]
             [clojure.test.check.generators :as gen]
-            [xtdb.time :as time])
+            [xtdb.time :as time]
+            [xtdb.types :as types]
+            [xtdb.vector.writer :as vw])
   (:import [java.math BigDecimal]
            [java.net URI]
            [java.nio ByteBuffer]
@@ -91,7 +93,7 @@
          (filter val)
          (into {}))))
 
-(defn set-gen [element-gen] 
+(defn set-gen [element-gen]
   (gen/set element-gen {:min-elements 0 :max-elements 10}))
 
 (defn union-gen [& generators]
@@ -258,4 +260,10 @@
                     ;; fallback for unknown types
                     simple-gen)]]
        nullable? (conj [1 (gen/return nil)])))))
-  
+
+(defn records->generator
+  "Given a list of records, produce a generator that will generate similar records"
+  [records]
+  (let [record-col-type (mapv vw/value->col-type records)
+        fields (mapv types/col-type->field record-col-type)]
+    (field->value-generator (apply types/merge-fields fields))))
