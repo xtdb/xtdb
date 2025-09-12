@@ -1,11 +1,8 @@
 {:row-count 5,
  :fields
- {"toto"
-  #xt.arrow/field ["toto" #xt.arrow/field-type [#xt.arrow/type :utf8 true]],
-  "bar"
-  #xt.arrow/field ["bar" #xt.arrow/field-type [#xt.arrow/type :i64 false]],
-  "_id"
-  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]},
+ {"toto" #xt/field ["toto" :utf8 :?],
+  "bar" #xt/field ["bar" :i64],
+  "_id" #xt/field ["_id" :i64]},
  :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 2550,

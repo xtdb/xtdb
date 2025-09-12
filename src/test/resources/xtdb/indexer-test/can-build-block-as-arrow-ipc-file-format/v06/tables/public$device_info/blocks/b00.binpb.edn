@@ -1,15 +1,10 @@
 {:row-count 2,
  :fields
- {"os_name"
-  #xt.arrow/field ["os_name" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
-  "model"
-  #xt.arrow/field ["model" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
-  "_id"
-  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
-  "api_version"
-  #xt.arrow/field ["api_version" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
-  "manufacturer"
-  #xt.arrow/field ["manufacturer" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]},
+ {"os_name" #xt/field ["os_name" :utf8],
+  "model" #xt/field ["model" :utf8],
+  "_id" #xt/field ["_id" :utf8],
+  "api_version" #xt/field ["api_version" :utf8],
+  "manufacturer" #xt/field ["manufacturer" :utf8]},
  :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 2894,

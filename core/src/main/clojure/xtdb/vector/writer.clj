@@ -1,5 +1,6 @@
 (ns xtdb.vector.writer
-  (:require [xtdb.types :as types]
+  (:require [xtdb.serde.types :as st]
+            [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (clojure.lang Keyword)
            (java.math BigDecimal)
@@ -84,7 +85,7 @@
 
   Interval
   (value->col-type [v]
-    (types/<-arrow-type (value->arrow-type v)))
+    (st/<-arrow-type (value->arrow-type v)))
 
   ZonedDateTimeRange
   (value->col-type [_] :tstz-range))

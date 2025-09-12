@@ -101,8 +101,8 @@
 
   ;; When asking for a writer for field `foo` you are going to get a writer with the specified type back.
   (with-open [allocator (RootAllocator.)
-              struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {foo :i64}]) allocator)]
-    (t/is (= (types/->field "foo" #xt.arrow/type :i64 false)
+              struct-vec (.createVector #xt/field ["my-struct" :struct ["foo" :i64]] allocator)]
+    (t/is (= #xt/field ["foo" :i64]
              (-> (vw/->writer struct-vec)
                  (.vectorFor "foo")
                  (.getField)))))
@@ -110,7 +110,7 @@
   ;; You can also ask for a writer specifying a field type. In this case it works as the writer matches the
   ;; previously specified field type.
   (with-open [allocator (RootAllocator.)
-              struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {foo :i64}]) allocator)]
+              struct-vec (.createVector #xt/field ["my-struct" :struct ["foo" :i64]] allocator)]
     (t/is (= (types/->field "foo" #xt.arrow/type :i64 false)
              (-> (vw/->writer struct-vec)
                  (.vectorFor "foo" (FieldType/notNullable #xt.arrow/type :i64))
@@ -118,34 +118,29 @@
 
   ;; If you are asking for a different field type then the one specified in the beginning it'll promote the writer
   (with-open [allocator (RootAllocator.)
-              struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {foo :i64}]) allocator)]
-    (t/is (= (types/->field "my-struct" #xt.arrow/type :struct false
-                            (types/->field "foo" #xt.arrow/type :union false
-                                           (types/->field "i64" #xt.arrow/type :i64 false)
-                                           (types/->field "utf8" #xt.arrow/type :utf8 false)))
+              struct-vec (.createVector #xt/field ["my-struct" :struct ["foo" :i64]] allocator)]
+    (t/is (= #xt/field ["my-struct" :struct ["foo" :union ["i64" :i64] ["utf8" :utf8]]]
              (-> (vw/->writer struct-vec)
                  (doto (.vectorFor "foo" (FieldType/notNullable #xt.arrow/type :utf8)))
                  (.getField)))))
 
   ;; You can also create a struct key by providing a field-type
   (with-open [allocator (RootAllocator.)
-              struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {}]) allocator)]
-    (t/is (= (types/->field "bar" #xt.arrow/type :utf8 false)
+              struct-vec (.createVector #xt/field ["my-struct" :struct] allocator)]
+    (t/is (= #xt/field ["bar" :utf8]
              (-> (vw/->writer struct-vec)
                  (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :utf8))
                  (.getField)))))
 
   ;; If you first ask for one type and then later for different one, the underlying vector gets promoted to a union vector.
   (with-open [allocator (RootAllocator.)
-              struct-vec (.createVector (types/col-type->field "my-struct" '[:struct {}]) allocator)]
+              struct-vec (.createVector #xt/field ["my-struct" :struct] allocator)]
     (-> (vw/->writer struct-vec)
         (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :utf8))
         (.getField))
 
-    (t/is (= (types/->field "my-struct" #xt.arrow/type :struct false
-                            (types/->field "bar" #xt.arrow/type :union false
-                                           (types/->field "utf8" #xt.arrow/type :utf8 false)
-                                           (types/->field "i64" #xt.arrow/type :i64 false)))
+    (t/is (= #xt/field ["my-struct" :struct
+                        ["bar" :union ["utf8" :utf8] ["i64" :i64]]]
              (-> (vw/->writer struct-vec)
                  (doto (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :i64)))
                  (.getField)))))
@@ -210,7 +205,7 @@
   ;; to writers except that one reads from them. A simple example:
 
   (with-open [allocator (RootAllocator.)
-              my-int-vec (.createVector (types/col-type->field "my-int" :i64) allocator)]
+              my-int-vec (.createVector #xt/field ["my-int" :i64] allocator)]
     ;; writing into the vec
     (let [my-int-wrt (vw/->writer my-int-vec)]
       (.writeLong my-int-wrt 42)
@@ -250,9 +245,7 @@
       (.copyRow copier2 0))
 
     ;; checkout of the field type of that column
-    (t/is (= (types/->field "my-column" #xt.arrow/type :union false
-                            (types/->field "i64" #xt.arrow/type :i64 false)
-                            (types/->field "utf8" #xt.arrow/type :utf8 false))
+    (t/is (= #xt/field ["my-column" :union ["i64" :i64], ["utf8" :utf8]]
              (.getField (.vectorFor rel-wtr3 "my-column"))))
 
     (t/is (= [{:my-column 42} {:my-column "forty-two"}]

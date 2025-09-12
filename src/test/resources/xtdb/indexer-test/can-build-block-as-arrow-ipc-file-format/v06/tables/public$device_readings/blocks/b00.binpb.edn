@@ -1,33 +1,19 @@
 {:row-count 2,
  :fields
- {"cpu_avg_1min"
-  #xt.arrow/field ["cpu_avg_1min" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
-  "cpu_avg_15min"
-  #xt.arrow/field ["cpu_avg_15min" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
-  "device_id"
-  #xt.arrow/field ["device_id" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
-  "battery_level"
-  #xt.arrow/field ["battery_level" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
-  "mem_used"
-  #xt.arrow/field ["mem_used" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
-  "battery_status"
-  #xt.arrow/field ["battery_status" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
-  "mem_free"
-  #xt.arrow/field ["mem_free" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
-  "time"
-  #xt.arrow/field ["time" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]],
-  "ssid"
-  #xt.arrow/field ["ssid" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
-  "rssi"
-  #xt.arrow/field ["rssi" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
-  "_id"
-  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
-  "cpu_avg_5min"
-  #xt.arrow/field ["cpu_avg_5min" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
-  "battery_temperature"
-  #xt.arrow/field ["battery_temperature" #xt.arrow/field-type [#xt.arrow/type :f64 false]],
-  "bssid"
-  #xt.arrow/field ["bssid" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]},
+ {"cpu_avg_1min" #xt/field ["cpu_avg_1min" :f64],
+  "cpu_avg_15min" #xt/field ["cpu_avg_15min" :f64],
+  "device_id" #xt/field ["device_id" :utf8],
+  "battery_level" #xt/field ["battery_level" :f64],
+  "mem_used" #xt/field ["mem_used" :f64],
+  "battery_status" #xt/field ["battery_status" :utf8],
+  "mem_free" #xt/field ["mem_free" :f64],
+  "time" #xt/field ["time" [:timestamp-tz :micro "UTC"]],
+  "ssid" #xt/field ["ssid" :utf8],
+  "rssi" #xt/field ["rssi" :f64],
+  "_id" #xt/field ["_id" :utf8],
+  "cpu_avg_5min" #xt/field ["cpu_avg_5min" :f64],
+  "battery_temperature" #xt/field ["battery_temperature" :f64],
+  "bssid" #xt/field ["bssid" :utf8]},
  :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 4750,

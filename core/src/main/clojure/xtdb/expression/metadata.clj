@@ -2,11 +2,12 @@
   (:require [xtdb.expression :as expr]
             [xtdb.expression.walk :as ewalk]
             [xtdb.metadata :as meta]
+            [xtdb.serde.types :as st]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import java.util.List
-           java.util.function.IntPredicate
+  (:import java.util.function.IntPredicate
+           java.util.List
            org.apache.arrow.memory.BufferAllocator
            (xtdb.arrow RelationReader Vector VectorReader)
            (xtdb.arrow.metadata MetadataFlavour MetadataFlavour$Bytes MetadataFlavour$Numeric MetadataFlavour$Presence)
@@ -47,7 +48,7 @@
                                     :literal (vw/value->col-type (:literal value-expr))
                                     :param (:param-type value-expr))
                                   types/flatten-union-types)
-                   :let [flavour-class (MetadataFlavour/getMetadataFlavour (types/->arrow-type value-type))]]
+                   :let [flavour-class (MetadataFlavour/getMetadataFlavour (st/->arrow-type value-type))]]
                (if (.isAssignableFrom MetadataFlavour$Numeric flavour-class)
                  {:op :test-minmax, :f f, :min-or-max min-or-max, :col col
                   :flavour-col (MetadataFlavour/getMetaColName flavour-class)
@@ -63,7 +64,7 @@
                                     :literal (vw/value->col-type (:literal value-expr))
                                     :param (:param-type value-expr))
                                   types/flatten-union-types)]
-               (if (= MetadataFlavour$Bytes (MetadataFlavour/getMetadataFlavour (types/->arrow-type value-type)))
+               (if (= MetadataFlavour$Bytes (MetadataFlavour/getMetadataFlavour (st/->arrow-type value-type)))
                  {:op :test-bloom,
                   :col col,
                   :value-expr value-expr
@@ -78,7 +79,7 @@
                                   :literal (vw/value->col-type (:literal value-expr))
                                   :param (:param-type value-expr))
                                 types/flatten-union-types)
-                   :let [value-type (types/->arrow-type col-type)]]
+                   :let [value-type (st/->arrow-type col-type)]]
                (if (= MetadataFlavour$Presence (MetadataFlavour/getMetadataFlavour value-type))
                  {:op :test-presence,
                   :col col,

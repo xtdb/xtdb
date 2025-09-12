@@ -1,11 +1,11 @@
 {:row-count 6,
  :fields
  {"struct"
-  #xt.arrow/field ["struct" #xt.arrow/field-type [#xt.arrow/type :struct true] #xt.arrow/field ["a" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]] #xt.arrow/field ["bool" #xt.arrow/field-type [#xt.arrow/type :bool false]]] #xt.arrow/field ["b" #xt.arrow/field-type [#xt.arrow/type :utf8 true]] #xt.arrow/field ["c" #xt.arrow/field-type [#xt.arrow/type :utf8 true]]],
+  #xt/field ["struct" :struct :? ["a" :union ["i64" :i64] ["bool" :bool]] ["b" :utf8 :?] ["c" :utf8 :?]],
   "_id"
-  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]] #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]] #xt.arrow/field ["keyword" #xt.arrow/field-type [#xt.arrow/type :keyword false]]],
+  #xt/field ["_id" :union ["utf8" :utf8] ["i64" :i64] ["keyword" :keyword]],
   "list"
-  #xt.arrow/field ["list" #xt.arrow/field-type [#xt.arrow/type :list true] #xt.arrow/field ["$data$" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["f64" #xt.arrow/field-type [#xt.arrow/type :f64 false]] #xt.arrow/field ["utf8" #xt.arrow/field-type [#xt.arrow/type :utf8 false]] #xt.arrow/field ["timestamp-tz-micro-utc" #xt.arrow/field-type [#xt.arrow/type [:timestamp-tz :micro "UTC"] false]] #xt.arrow/field ["bool" #xt.arrow/field-type [#xt.arrow/type :bool false]]]]},
+  #xt/field ["list" :list :? ["$data$" :union ["f64" :f64] ["utf8" :utf8] ["timestamp-tz-micro-utc" [:timestamp-tz :micro "UTC"]] ["bool" :bool]]]},
  :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 5254,

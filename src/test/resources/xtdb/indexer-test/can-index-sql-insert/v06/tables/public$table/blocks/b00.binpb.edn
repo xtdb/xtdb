@@ -1,13 +1,9 @@
 {:row-count 2,
  :fields
- {"bar"
-  #xt.arrow/field ["bar" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
-  "foo"
-  #xt.arrow/field ["foo" #xt.arrow/field-type [#xt.arrow/type :i64 false]],
-  "baz"
-  #xt.arrow/field ["baz" #xt.arrow/field-type [#xt.arrow/type :union false] #xt.arrow/field ["i64" #xt.arrow/field-type [#xt.arrow/type :i64 false]] #xt.arrow/field ["f64" #xt.arrow/field-type [#xt.arrow/type :f64 false]]],
-  "_id"
-  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]},
+ {"bar" #xt/field ["bar" :utf8],
+  "foo" #xt/field ["foo" :i64],
+  "baz" #xt/field ["baz" :union ["i64" :i64] ["f64" :f64]],
+  "_id" #xt/field ["_id" :i64]},
  :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 2910,

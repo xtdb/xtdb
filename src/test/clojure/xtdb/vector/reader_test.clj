@@ -37,13 +37,11 @@
 
   (t/testing "copying rows from different (composite) col-types from different relations"
     (t/testing "structs"
-      (let [combined-field (types/->field "my-column" #xt.arrow/type :union false
-                                          (types/->field "struct" #xt.arrow/type :struct false
-                                                         (types/col-type->field "toto" [:union #{:null :keyword}])
-                                                         (types/col-type->field "bar" [:union #{:null :utf8}])
-                                                         (types/->field "foo" #xt.arrow/type :union false
-                                                                        (types/col-type->field :i64)
-                                                                        (types/col-type->field :f64))))]
+      (let [combined-field #xt/field ["my-column" :union
+                                      ["struct" :struct
+                                       ["toto" :keyword :?]
+                                       ["bar" :utf8 :?]
+                                       ["foo" :union ["i64" :i64] ["f64" :f64]]]]]
         (util/with-open [rel-wtr1 (vw/->rel-writer tu/*allocator*)
                          rel-wtr2 (vw/->rel-writer tu/*allocator*)
                          rel-wtr3 (OldRelationWriter. tu/*allocator*
@@ -86,10 +84,7 @@
                   {:my-column 42}
                   {:my-column :my-keyword}]
                  (.toMaps (vw/rel-wtr->rdr rel-wtr3))))
-        (t/is (= (types/->field "my-column" #xt.arrow/type :union false
-                                (types/col-type->field "i64" :i64)
-                                (types/col-type->field "utf8" :utf8)
-                                (types/col-type->field "keyword" :keyword))
+        (t/is (= #xt/field ["my-column" :union ["i64" :i64] ["utf8" :utf8] ["keyword" :keyword]]
                  (.getField (.vectorFor rel-wtr3 "my-column"))))))
 
     (t/testing "list"
@@ -101,9 +96,9 @@
           (.writeObject my-column-wtr1 [42 43])
           (.writeObject my-column-wtr2 ["forty-two" "forty-three"])
 
-          (t/is (= (types/->field "my-column" #xt.arrow/type :list false (types/col-type->field "$data$" :i64))
+          (t/is (= #xt/field ["my-column" :list ["$data$" :i64]]
                    (.getField my-column-wtr1)))
-          (t/is (= (types/->field "my-column" #xt.arrow/type :list false (types/col-type->field "$data$" :utf8))
+          (t/is (= #xt/field ["my-column" :list ["$data$" :utf8]]
                    (.getField my-column-wtr2))))
 
         (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))

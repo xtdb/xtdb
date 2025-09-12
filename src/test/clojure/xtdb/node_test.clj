@@ -679,18 +679,17 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                             [:put-docs :unrelated-table {:xt/id 1 :a "a-string"}]])
 
   (let [pq (xtp/prepare-sql tu/*node* "SELECT foo.*, ? FROM foo" {:default-db "xtdb"})
-        column-fields [#xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]
-                       #xt.arrow/field ["a" #xt.arrow/field-type [#xt.arrow/type :utf8 false]]
-                       #xt.arrow/field ["b" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
+        column-fields [#xt/field ["_id" :i64]
+                       #xt/field ["a" :utf8]
+                       #xt/field ["b" :i64]]]
 
-    (t/is (= (conj column-fields #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :i64 false]])
-             (.getColumnFields pq [#xt.arrow/field ["?_0" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]))
+    (t/is (= (conj column-fields #xt/field ["_column_2" :i64])
+             (.getColumnFields pq [#xt/field ["?_0" :i64]]))
           "param type is assumed to be nullable")
 
     (with-open [cursor (.openQuery pq {:args (tu/open-args [42])})]
 
-      (t/is (= (conj column-fields
-                     #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :i64 false]])
+      (t/is (= (conj column-fields #xt/field ["_column_2" :i64])
                (.getResultFields cursor))
             "now param value has been supplied we know its type is non-null")
 
@@ -700,8 +699,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (t/testing "preparedQuery rebound with different param types"
       (with-open [cursor (.openQuery pq {:args (tu/open-args ["fish"])})]
 
-        (t/is (= (conj column-fields
-                       #xt.arrow/field ["_column_2" #xt.arrow/field-type [#xt.arrow/type :utf8 false]])
+        (t/is (= (conj column-fields #xt/field ["_column_2" :utf8])
                  (.getResultFields cursor))
               "now param value has been supplied we know its type is non-null")
 

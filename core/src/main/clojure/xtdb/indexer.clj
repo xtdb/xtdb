@@ -13,6 +13,7 @@
             [xtdb.metrics :as metrics]
             [xtdb.query :as q]
             [xtdb.serde :as serde]
+            [xtdb.serde.types :as st]
             [xtdb.sql :as sql]
             [xtdb.sql.parse :as parse-sql]
             [xtdb.table :as table]
@@ -601,7 +602,7 @@
                (doto (.vectorFor doc-writer "_id" (FieldType/notNullable #xt.arrow/type :i64))
                  (.writeLong tx-id))
 
-               (doto (.vectorFor doc-writer "system_time" (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))
+               (doto (.vectorFor doc-writer "system_time" (FieldType/notNullable (st/->arrow-type types/temporal-col-type)))
                  (.writeLong system-time-µs))
 
                (doto (.vectorFor doc-writer "committed" (FieldType/notNullable #xt.arrow/type :bool))

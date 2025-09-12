@@ -4,6 +4,7 @@
             [xtdb.error :as err]
             [xtdb.expression.macro :as macro]
             [xtdb.rewrite :refer [zmatch]]
+            [xtdb.serde.types :as st]
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -1811,7 +1812,7 @@
         {:writer-bindings (into [out-writer-sym `(vw/->writer ~out-vec-sym)]
                                 (mapcat (fn [[value-type writer-sym]]
                                           [writer-sym `(.vectorFor ~out-writer-sym
-                                                                   ~(types/arrow-type->leg (types/->arrow-type value-type)))]))
+                                                                   ~(types/arrow-type->leg (st/->arrow-type value-type)))]))
                                 writer-syms)
 
          :write-value-out! (fn [value-type code]

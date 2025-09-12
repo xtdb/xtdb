@@ -31,31 +31,25 @@
 (t/deftest test-extension-vector-slicing
   (with-open [vec (tu/open-vec "0" [:A])
               copied-vec (.openSlice vec tu/*allocator*)]
-    (t/is (= #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :keyword false]]
+    (t/is (= #xt/field ["0" :keyword]
              (.getField copied-vec)))
     (t/is (= :A (.getObject copied-vec 0)))))
 
 (t/deftest empty-list-with-nested-lists-slicing-3377
   (t/testing "empty list of lists"
-    (with-open [vec (tu/open-vec #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :list false]
-                                                  #xt.arrow/field ["1" #xt.arrow/field-type [#xt.arrow/type :list false]
-                                                                   #xt.arrow/field ["2" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
+    (with-open [vec (tu/open-vec #xt/field ["0" :list ["1" :list ["2" :i64]]]
                                  [[]])
                 copied-vec (.openSlice vec tu/*allocator*)]
       (t/is (= (.toList vec) (.toList copied-vec)))))
 
   (t/testing "empty set of lists"
-    (with-open [vec (tu/open-vec #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :set false]
-                                                  #xt.arrow/field ["1" #xt.arrow/field-type [#xt.arrow/type :list false]
-                                                                   #xt.arrow/field ["2" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
+    (with-open [vec (tu/open-vec #xt/field ["0" :set ["1" :list ["2" :i64]]]
                                  [#{}])
                 copied-vec (.openSlice vec tu/*allocator*)]
       (= (.toList vec) (.toList copied-vec))))
 
   (t/testing "empty list of sets"
-    (with-open [vec (tu/open-vec #xt.arrow/field ["0" #xt.arrow/field-type [#xt.arrow/type :list false]
-                                                  #xt.arrow/field ["1" #xt.arrow/field-type [#xt.arrow/type :set false]
-                                                                   #xt.arrow/field ["2" #xt.arrow/field-type [#xt.arrow/type :i64 false]]]]
+    (with-open [vec (tu/open-vec #xt/field ["0" :list ["1" :set ["2" :i64]]]
                                  [[] #{}])
                 copied-vec (.openSlice vec tu/*allocator*)]
       (= (.toList vec) (.toList copied-vec)))))

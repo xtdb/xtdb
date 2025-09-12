@@ -239,23 +239,21 @@
                                   (types/col-type->field :i64))
                    (.getField tc #xt/table xt_docs "_id")))
 
-          (t/is (= (types/->field "list" #xt.arrow/type :list true
-                                  (types/->field "$data$" #xt.arrow/type :union false
-                                                 (types/col-type->field :f64)
-                                                 (types/col-type->field :utf8)
-                                                 (types/col-type->field [:timestamp-tz :micro "UTC"])
-                                                 (types/col-type->field :bool)))
+          (t/is (= #xt/field ["list" :list :?
+                              ["$data$" :union
+                               ["f64" :f64]
+                               ["utf8" :utf8]
+                               ["timestamp-tz-micro-utc" [:timestamp-tz :micro "UTC"]]
+                               ["bool" :bool]]]
                    (.getField tc #xt/table xt_docs "list")))
 
-          (t/is (= (types/->field "struct" #xt.arrow/type :struct true
-                                  (types/->field "a" #xt.arrow/type :union false
-                                                 (types/->field "i64" #xt.arrow/type :i64 false)
-                                                 (types/->field "bool" #xt.arrow/type :bool false))
-                                  (types/->field "b" #xt.arrow/type :union false
-                                                 (types/->field "utf8" #xt.arrow/type :utf8 false)
-                                                 (types/->field "struct" #xt.arrow/type :struct false
-                                                                (types/->field "c" #xt.arrow/type :utf8 false)
-                                                                (types/->field "d" #xt.arrow/type :utf8 false))))
+          (t/is (= #xt/field ["struct" :struct :?
+                              ["a" :union
+                               ["i64" :i64]
+                               ["bool" :bool]]
+                              ["b" :union
+                               ["utf8" :utf8]
+                               ["struct" :struct ["c" :utf8] ["d" :utf8]]]]
                    (.getField tc #xt/table xt_docs "struct"))))))))
 
 (t/deftest drops-nils-on-round-trip

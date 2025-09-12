@@ -1,9 +1,5 @@
 {:row-count 2,
- :fields
- {"a"
-  #xt.arrow/field ["a" #xt.arrow/field-type [#xt.arrow/type :utf8 false]],
-  "_id"
-  #xt.arrow/field ["_id" #xt.arrow/field-type [#xt.arrow/type :i64 false]]},
+ :fields {"a" #xt/field ["a" :utf8], "_id" #xt/field ["_id" :i64]},
  :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 2214,
