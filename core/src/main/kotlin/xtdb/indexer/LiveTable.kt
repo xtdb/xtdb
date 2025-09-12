@@ -13,7 +13,7 @@ import xtdb.log.proto.TrieMetadata
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.*
-import xtdb.types.Fields
+import xtdb.types.Type
 import xtdb.util.HLL
 import xtdb.util.RowCounter
 import xtdb.util.closeOnCatch
@@ -47,7 +47,7 @@ constructor(
     private val iidRdr = iidWtr.asReader
 
     private val opWtr = liveRelation.vectorFor("op")
-    private val putWtr by lazy { opWtr.vectorFor("put", Fields.Struct().fieldType) }
+    private val putWtr by lazy { opWtr.vectorFor("put", Type.struct().fieldType) }
     private val deleteWtr = opWtr.vectorFor("delete")
     private val eraseWtr = opWtr.vectorFor("erase")
 
@@ -63,7 +63,7 @@ constructor(
         val liveRelation: RelationReader,
         val liveTrie: MemoryHashTrie
     ) : AutoCloseable {
-        fun columnField(col: ColumnName): Field = columnFields[col] ?: Fields.NULL.toArrowField(col)
+        fun columnField(col: ColumnName): Field = columnFields[col] ?: Type.NULL.toField(col)
 
         override fun close() {
             liveRelation.close()

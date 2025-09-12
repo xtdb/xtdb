@@ -7,7 +7,7 @@ import xtdb.ICursor
 import xtdb.arrow.RelationWriter
 import xtdb.error.Incorrect
 import xtdb.trie.ColumnName
-import xtdb.types.Fields.BOOL
+import xtdb.types.Type.Companion.BOOL
 import xtdb.vector.ValueVectorReader
 
 sealed interface ApplyMode {
@@ -21,7 +21,7 @@ sealed interface ApplyMode {
             idxs: IntArrayList, inIdx: Int
         ) {
             idxs.add(inIdx)
-            val outWriter = dependentOutWriter.vectorFor(columnName, BOOL.nullable.fieldType)
+            val outWriter = dependentOutWriter.vectorFor(columnName, BOOL.nullable().fieldType)
             var match = -1
             while (match != 1) {
                 dependentCursor.tryAdvance { depRel ->

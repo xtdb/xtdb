@@ -349,7 +349,7 @@
             (.setName (str prefix "-" (.getName t)))
             (.setUncaughtExceptionHandler uncaught-exception-handler)))))))
 
-;;; Arrow
+;;; Type
 
 (defn build-arrow-ipc-byte-buffer ^java.nio.ByteBuffer {:style/indent 2}
   [^VectorSchemaRoot root ipc-type f]
@@ -513,7 +513,7 @@
 
 (defn tmp-dir
   (^Path [] (tmp-dir ""))
-  (^Path [prefix] (Files/createTempDirectory prefix (make-array FileAttribute 0)) ))
+  (^Path [prefix] (Files/createTempDirectory prefix (make-array FileAttribute 0))))
 
 (defmacro with-tmp-dirs
   "Usage:

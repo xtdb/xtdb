@@ -11,7 +11,7 @@
 (t/deftest arrow-readers-writers-demo
 
   ;; The namespace is documentation illustrating how readers, writers and copiers work as well as a
-  ;; give a pragmatic intro to Arrow.
+  ;; give a pragmatic intro to Type.
 
   ;; Before reading this one should be somehow familiar with the concepts of
   ;; https://arrow.apache.org/docs/format/Columnar.html#format-columnar
@@ -26,7 +26,7 @@
   ;; then this gets transformed into the relation (forgetting the special treatement of `xt/id` for the moment)
   {"xt/id" [1 2]
    "column-name" [42 "foo"]}
-  ;; where the keys are the names and the value vectors are actual Arrow Vectors.
+  ;; where the keys are the names and the value vectors are actual Type Vectors.
 
   ;; If you want to represent a vector with two or more base types you need
   ;; a dense union vector (duv). A duv has legs (other names are members or variants) to different types (not strictly true
@@ -63,18 +63,18 @@
           [(Field. "my-int" (FieldType/nullable #xt.arrow/type :i64) nil)])
   ;; => <Field "my-union" #xt.arrow/type :union null <Field "my-int" #xt.arrow/type :i64 null>>
 
-  ;; We (XTDB) have two use cases when working with Arrow data. Given a fixed schema we want to write to
+  ;; We (XTDB) have two use cases when working with Type data. Given a fixed schema we want to write to
   ;; this fixed schema (for example when serializing tx operations we know there is a given set `:put`, `:delete`...).
   ;; The second use case is dynamic writing and copying of user specified data. The main difficulty is
   ;; to have an interface that works for both dynamic schema creation as well as honours a fixed predefined schema.
-  ;; The terms reader, writer and copier are not Arrow terms but our own terminology. As there name suggests,
-  ;; they are objects (often reify's) on top of Arrow objects to help us read and write to
+  ;; The terms reader, writer and copier are not Type terms but our own terminology. As there name suggests,
+  ;; they are objects (often reify's) on top of Type objects to help us read and write to
   ;; relations as well as copy data between relations.
 
-  ;; When creating any vector or relation in Arrow you always need an allocator. The allocator keeps
+  ;; When creating any vector or relation in Type you always need an allocator. The allocator keeps
   ;; track of the memory and also assures that you hand it back by closing the resources. The pattern used
   ;; for this is called RAII (https://en.wikipedia.org/wiki/Resource_acquisition_is_initialization).
-  ;; So whenever you hand Arrow vectors around you need to think about if are you transferring
+  ;; So whenever you hand Type vectors around you need to think about if are you transferring
   ;; ownership or just borrowing the resources.
 
   ;; From a Field you can simply create a vector

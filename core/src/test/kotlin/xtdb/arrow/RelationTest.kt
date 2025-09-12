@@ -9,8 +9,8 @@ import org.junit.jupiter.api.Test
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation.Companion.loader
 import xtdb.asKeyword
-import xtdb.types.Fields
 import xtdb.types.Schema
+import xtdb.types.Type
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 
@@ -193,7 +193,7 @@ class RelationTest {
         val row1 = mapOf("i32" to 4)
         val row2 = mapOf("i32" to 8)
 
-        val bytes = Relation.open(allocator, linkedMapOf("i32" to Fields.I32)).use { rel ->
+        val bytes = Relation.open(allocator, linkedMapOf("i32" to Type.I32)).use { rel ->
             rel.writeRows(row1, row2)
             rel.asArrowStream
         }
@@ -215,18 +215,18 @@ class RelationTest {
     @Test
     fun testPromotion() {
         Relation(allocator).use { rel ->
-            val intVec = rel.vectorFor("foo", Fields.I32.fieldType)
+            val intVec = rel.vectorFor("foo", Type.I32.fieldType)
             intVec.writeInt(32)
             rel.endRow()
 
             assertEquals(listOf(mapOf("foo".asKeyword to 32)), rel.toMaps())
 
-            val strVec = rel.vectorFor("bar", Fields.UTF8.fieldType)
+            val strVec = rel.vectorFor("bar", Type.UTF8.fieldType)
             strVec.writeObject("hello")
             rel.endRow()
 
             assertEquals(
-                Schema("foo" to Fields.I32.nullable, "bar" to Fields.UTF8.nullable),
+                Schema("foo" to Type.I32.nullable(), "bar" to Type.UTF8.nullable()),
                 rel.schema
             )
 
@@ -250,10 +250,10 @@ class RelationTest {
         Relation.openFromRows(allocator, rows).use { rel ->
             assertEquals(
                 Schema(
-                    "foo" to Fields.I32.nullable,
-                    "bar" to Fields.Union(
-                        "utf8" to Fields.UTF8.nullable,
-                        "list" to Fields.List(Fields.UTF8, "\$data$")
+                    "foo" to Type.I32.nullable(),
+                    "bar" to Type.union(
+                        "utf8" to Type.UTF8.nullable(),
+                        "list" to Type.list(Type.UTF8, $$"$data$")
                     )
                 ),
                 rel.schema

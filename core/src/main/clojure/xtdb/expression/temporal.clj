@@ -1588,7 +1588,7 @@
 
 (defmethod expr/codegen-call [:current_date] [_]
   ;; departure from the spec - this returns the current date in UTC, not the local time zone.
-  ;; Arrow doesn't support TZ-aware dates
+  ;; Type doesn't support TZ-aware dates
   {:return-type [:date :day]
    :->call-code (fn [_]
                   `(long (-> (ZonedDateTime/ofInstant (expr/current-time) ZoneOffset/UTC)
@@ -1597,7 +1597,7 @@
 
 (defn- current-time [^long precision]
   ;; TODO check the specs on this one - I read the SQL spec as being returned in local,
-  ;; but Arrow expects Times to be in UTC.
+  ;; but Type expects Times to be in UTC.
   ;; we then turn times into LocalTimes, which confuses things further.
   (let [precision (bound-precision precision)]
     {:return-type [:time-local (precision-timeunits precision)]

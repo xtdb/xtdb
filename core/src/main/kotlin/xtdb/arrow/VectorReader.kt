@@ -18,7 +18,7 @@ interface VectorReader : ILookup, AutoCloseable {
     val valueCount: Int
 
     val nullable: Boolean
-    val fieldType: FieldType
+    val fieldType: FieldType get() = this.field.fieldType
     val field: Field
 
     private class RenamedVector(private val inner: VectorReader, override val name: String) : VectorReader by inner

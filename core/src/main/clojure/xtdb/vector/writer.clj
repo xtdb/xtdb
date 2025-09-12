@@ -116,7 +116,7 @@
       #_[:map
          (apply types/merge-col-types (into #{} (map (comp value->col-type key)) v))
          (apply types/merge-col-types (into #{} (map (comp value->col-type val)) v))]
-      (throw (UnsupportedOperationException. "Arrow Maps currently not supported")))))
+      (throw (UnsupportedOperationException. "Type Maps currently not supported")))))
 
 (extend-protocol ArrowWriteable
   Keyword

@@ -9,8 +9,7 @@ import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.ColumnMetadata
 import xtdb.table.TableRef
 import xtdb.trie.Trie.metaFilePath
-import xtdb.types.Fields
-import xtdb.types.NamelessField.Companion.nullable
+import xtdb.types.Type
 import xtdb.types.Schema
 
 class MetadataFileWriter(
@@ -20,22 +19,22 @@ class MetadataFileWriter(
     calculateBlooms: Boolean, writeTrieMetadata: Boolean
 ) : AutoCloseable {
     companion object {
-        private val metadataField = Fields.List(
-            Fields.Struct(
-                "col-name" to Fields.UTF8,
-                "root-col?" to Fields.BOOL,
-                "count" to Fields.I64
+        private val metadataField = Type.list(
+            Type.struct(
+                "col-name" to Type.UTF8,
+                "root-col?" to Type.BOOL,
+                "count" to Type.I64
             ),
             elName = "col"
         )
 
         @JvmField
         val metaRelSchema = Schema(
-            "nodes" to Fields.Union(
-                "nil" to Fields.NULL,
-                "branch-iid" to Fields.List(nullable(Fields.I32)),
-                "leaf" to Fields.Struct(
-                    "data-page-idx" to Fields.I32,
+            "nodes" to Type.union(
+                "nil" to Type.NULL,
+                "branch-iid" to Type.list(Type.I32.nullable()),
+                "leaf" to Type.struct(
+                    "data-page-idx" to Type.I32,
                     "columns" to metadataField
                 )
             )

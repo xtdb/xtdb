@@ -21,8 +21,8 @@ import xtdb.segment.Segment.Page
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.EventRowPointer
 import xtdb.trie.Trie.dataRelSchema
-import xtdb.types.Fields.mergeFields
-import xtdb.types.withName
+import xtdb.types.Arrow.mergeFields
+import xtdb.types.Arrow.withName
 import xtdb.util.*
 import java.nio.file.Path
 import java.time.LocalDate

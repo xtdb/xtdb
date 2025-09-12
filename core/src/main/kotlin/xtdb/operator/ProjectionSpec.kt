@@ -7,8 +7,8 @@ import org.apache.arrow.vector.types.pojo.Field
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.trie.ColumnName
-import xtdb.types.Fields
-import xtdb.types.withName
+import xtdb.types.Type
+import xtdb.types.Arrow.withName
 import xtdb.util.closeOnCatch
 import xtdb.vector.IVectorReader
 import xtdb.vector.ValueVectorReader
@@ -34,7 +34,7 @@ interface ProjectionSpec {
     }
 
     class RowNumber(colName: ColumnName) : ProjectionSpec {
-        override val field = Fields.I64.toArrowField(colName)
+        override val field = Type.I64.toField(colName)
 
         private var rowNum = 1L
 
@@ -50,7 +50,7 @@ interface ProjectionSpec {
 
     // only returns the row number within the batch - see #4131
     class LocalRowNumber(colName: ColumnName) : ProjectionSpec {
-        override val field = Fields.I64.toArrowField(colName)
+        override val field = Type.I64.toField(colName)
 
         override fun project(
             allocator: BufferAllocator, inRel: RelationReader, schema: Map<String, Any>, args: RelationReader
@@ -67,8 +67,8 @@ interface ProjectionSpec {
         override fun project(
             allocator: BufferAllocator, inRel: RelationReader, schema: Map<String, Any>, args: RelationReader
         ) =
-            Fields.Struct(inRel.vectors.map { it.field.withName(it.name) })
-                .toArrowField(field.name)
+            Type.struct(inRel.vectors.map { it.field.withName(it.name) })
+                .toField(field.name)
                 .createVector(allocator)
                 .let { it as StructVector }
                 .closeOnCatch { structVec ->

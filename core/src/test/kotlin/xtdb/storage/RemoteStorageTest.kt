@@ -22,7 +22,7 @@ import xtdb.arrow.Relation
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.test.AllocatorResolver
-import xtdb.types.Fields
+import xtdb.types.Type
 import java.nio.file.Path
 import kotlin.io.path.listDirectoryEntries
 
@@ -61,7 +61,7 @@ class RemoteStorageTest : StorageTest() {
     @Test
     fun arrowIpcTest(al: BufferAllocator) {
         val path = Path.of("aw")
-        Relation.open(al, linkedMapOf("a" to Fields.I32)).use { relation ->
+        Relation.open(al, linkedMapOf("a" to Type.I32)).use { relation ->
             remoteBufferPool.openArrowWriter(path, relation).use { writer ->
                 val v = relation["a"]
                 for (i in 0 until 10) v.writeInt(i)

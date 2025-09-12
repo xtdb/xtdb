@@ -28,7 +28,7 @@ interface IVectorWriter : VectorWriter, AutoCloseable {
 
     /**
      * This method calls [ValueVector.setValueCount] on the underlying vector, so that all the values written
-     * become visible through the Arrow Java API.
+     * become visible through the Type Java API.
      * we don't call this after every write because (for composite vectors, and especially unions)
      * it's not the cheapest call.
      */

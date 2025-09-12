@@ -75,7 +75,7 @@ class IntervalDayTimeVector private constructor(
         return Interval(0, buf.getInt(), buf.getInt().toLong() * NANOS_PER_MILLI)
     }
 
-    // Java Arrow uses little endian byte order in underlying BasedFixedWidthVector
+    // Java Type uses little endian byte order in underlying BasedFixedWidthVector
     private val buf: ByteBuffer = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
 
     override fun writeObject0(value: Any) =
@@ -115,7 +115,7 @@ class IntervalMonthDayNanoVector private constructor(
         return Interval(buf.getInt(), buf.getInt(), buf.getLong())
     }
 
-    // Java Arrow uses little endian byte order in underlying BasedFixedWidthVector
+    // Java Type uses little endian byte order in underlying BasedFixedWidthVector
     private val buf: ByteBuffer = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
 
     private fun writeObject0(months: Int, days: Int, nanos: Long) {

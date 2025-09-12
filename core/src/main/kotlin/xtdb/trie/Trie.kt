@@ -6,8 +6,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.RelationWriter
 import xtdb.table.TableRef
-import xtdb.types.Fields
-import xtdb.types.NamelessField
+import xtdb.types.Type
 import xtdb.types.Schema
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
@@ -106,15 +105,15 @@ object Trie {
     @JvmStatic
     fun dataRelSchema(putDocField: Field?): Schema =
         Schema(
-            "_iid" to Fields.IID,
-            "_system_from" to Fields.TEMPORAL,
-            "_valid_from" to Fields.TEMPORAL,
-            "_valid_to" to Fields.TEMPORAL,
-            "op" to Fields.Union(
+            "_iid" to Type.IID,
+            "_system_from" to Type.TEMPORAL,
+            "_valid_from" to Type.TEMPORAL,
+            "_valid_to" to Type.TEMPORAL,
+            "op" to Type.union(
                 *(listOfNotNull(
-                    putDocField?.let { "put" to NamelessField(it.fieldType, it.children) },
-                    "delete" to Fields.NULL,
-                    "erase" to Fields.NULL
+                    putDocField?.let { "put" to Type(it.type, it.isNullable, it.children) },
+                    "delete" to Type.NULL,
+                    "erase" to Type.NULL
                 ).toTypedArray())
             )
         )

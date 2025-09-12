@@ -23,12 +23,12 @@ class MutableMemoryHashTrie(override val rootNode: Node, val hashReader: VectorR
     private val hashByteWidth: Int = when (val type = hashReader.field.type) {
         is FixedSizeBinary -> type.byteWidth
         is ArrowType.Int -> 4
-        else -> throw IllegalArgumentException("Unsupported Arrow type for hashReader: ${hashReader.field.type}")
+        else -> throw IllegalArgumentException("Unsupported Type type for hashReader: ${hashReader.field.type}")
     }
     private val maxLevel: Int = when (val type = hashReader.field.type) {
         is FixedSizeBinary -> type.byteWidth * 8 / bucketer.levelBits
         is ArrowType.Int -> type.bitWidth / bucketer.levelBits
-        else -> throw IllegalArgumentException("Unsupported Arrow type for hashReader: ${hashReader.field.type}")
+        else -> throw IllegalArgumentException("Unsupported Type type for hashReader: ${hashReader.field.type}")
     }
     private val reusePtr1 = ArrowBufPointer()
     private val reusePtr2 = ArrowBufPointer()

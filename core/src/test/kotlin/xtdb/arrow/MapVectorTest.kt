@@ -112,7 +112,7 @@ class MapVectorTest {
             }
         }
 
-        // reads back in with original Arrow
+        // reads back in with original Type
         val rdr = ArrowFileReader(SeekableReadChannel(buf.toByteArray().asChannel), allocator)
             .also { it.initialize() }
 

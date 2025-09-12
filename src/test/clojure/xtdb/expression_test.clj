@@ -1943,7 +1943,7 @@
                      (run-projection (vr/rel-reader [] 1) '(current-timestamp)))
                   "current-timestamp")
 
-            ;; these two are where we may differ from the spec, due to Arrow's Date and Time types not supporting a TZ.
+            ;; these two are where we may differ from the spec, due to Type's Date and Time types not supporting a TZ.
             ;; I've opted to return these as UTC to differentiate them from `local-date`, `local-time` and `local-timestamp` below.
             (t/is (= {:res [(.toLocalDate utc-zdt-micros)]
                       :res-type [:date :day]}

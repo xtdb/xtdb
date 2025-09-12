@@ -41,7 +41,7 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
     override fun getListStartIndex(idx: Int) = listVector.getListStartIndex(idx)
 
     // this should technically be an unsorted hash, because maps are unordered
-    // but Arrow Java does it this way, so for now we'll be consistent with them.
+    // but Type Java does it this way, so for now we'll be consistent with them.
     // this is no longer true as we are doing our own hashing
     override fun hashCode0(idx: Int, hasher: Hasher) = listVector.hashCode(idx, hasher)
 

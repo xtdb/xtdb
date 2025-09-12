@@ -20,7 +20,7 @@ import xtdb.arrow.ArrowUnloader.Mode
 import xtdb.arrow.ArrowUnloader.Mode.FILE
 import xtdb.arrow.ArrowUnloader.Mode.STREAM
 import xtdb.arrow.Vector.Companion.fromField
-import xtdb.types.NamelessField
+import xtdb.types.Type
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
 import xtdb.util.normalForm
@@ -143,7 +143,7 @@ class Relation(
             val msg = reader.readNext() ?: return false
 
             msg.message.headerType().let {
-                check(it == MessageHeader.RecordBatch) { "unexpected Arrow message type: $it" }
+                check(it == MessageHeader.RecordBatch) { "unexpected Type message type: $it" }
             }
 
             MessageSerializer.deserializeRecordBatch(msg.message, msg.bodyBuffer)
@@ -214,8 +214,8 @@ class Relation(
             Relation(al, fields.map { fromField(al, it) }, 0)
 
         @JvmStatic
-        fun open(al: BufferAllocator, fields: SequencedMap<String, NamelessField>) =
-            open(al, fields.map { (name, field) -> field.toArrowField(name) })
+        fun open(al: BufferAllocator, fields: SequencedMap<String, Type>) =
+            open(al, fields.map { (name, field) -> field.toField(name) })
 
         @JvmStatic
         fun openFromRows(al: BufferAllocator, rows: List<Map<*, *>>): Relation =

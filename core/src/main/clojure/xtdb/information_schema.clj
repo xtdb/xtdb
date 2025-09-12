@@ -26,7 +26,7 @@
            xtdb.operator.SelectionSpec
            xtdb.table.TableRef
            (xtdb.trie MemoryHashTrie Trie TrieCatalog)
-           xtdb.types.Fields))
+           xtdb.types.Type))
 
 (defn name->oid [s]
   (Math/abs ^Integer (hash s)))
@@ -35,10 +35,10 @@
   (for [[^TableRef table cols] schema-info
         :let [cols (into (when-not (and (contains? #{"pg_catalog" "information_schema" "xt"} (.getSchemaName table))
                                         (not= 'xt/txs (table/ref->schema+table table)))
-                           {"_valid_from" (-> Fields/TEMPORAL (.toArrowField "_valid_from"))
-                            "_valid_to" (-> Fields/TEMPORAL (.getNullable) (.toArrowField "_valid_to"))
-                            "_system_from" (-> Fields/TEMPORAL (.toArrowField "_system_from"))
-                            "_system_to" (-> Fields/TEMPORAL (.getNullable) (.toArrowField "_system_to"))})
+                           {"_valid_from" (-> Type/TEMPORAL (.toField "_valid_from"))
+                            "_valid_to"   (-> Type/TEMPORAL (.nullable) (.toField "_valid_to"))
+                            "_system_from" (-> Type/TEMPORAL (.toField "_system_from"))
+                            "_system_to" (-> Type/TEMPORAL (.nullable) (.toField "_system_to"))})
                          cols)
               {xt-cols true, user-cols false} (group-by (comp #(str/starts-with? % "_") key) cols)
               cols (concat (sort-by key xt-cols)

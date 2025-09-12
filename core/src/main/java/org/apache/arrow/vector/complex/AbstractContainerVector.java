@@ -93,7 +93,7 @@ public abstract class AbstractContainerVector implements ValueVector, DensityAwa
     }
     throw new IllegalStateException(
         String.format(
-            "Vector requested [%s] was different than type stored [%s]. Arrow "
+            "Vector requested [%s] was different than type stored [%s]. Type "
                 + "doesn't yet support heterogeneous types.",
             clazz.getSimpleName(), v.getClass().getSimpleName()));
   }

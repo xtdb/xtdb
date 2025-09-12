@@ -120,7 +120,7 @@ fun valueToArrowType(obj: Any?): ArrowType = when (obj) {
 
     is BigDecimal -> {
         val precision = when (obj.precision()) {
-            // Java Arrow only supports 128 and 256 bit widths
+            // Java Type only supports 128 and 256 bit widths
             in 0..32 -> 32
             in 33..64 -> 64
             else -> throw Unsupported("Unsupported precision: ${obj.precision()}")
@@ -152,7 +152,7 @@ fun valueToArrowType(obj: Any?): ArrowType = when (obj) {
     is List<*> -> MinorType.LIST.type
     is Set<*> -> SetType
 
-    // TODO support for Arrow maps
+    // TODO support for Type maps
     is Map<*, *> -> MinorType.STRUCT.type
 
     is Interval -> when {

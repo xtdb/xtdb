@@ -61,7 +61,7 @@ object ArrowUtil {
                 ARROW_MAGIC, 0, magicLength
             )
         )
-            throw Incorrect("invalid Arrow IPC file format", errorCode = "xtdb/invalid-arrow-magic")
+            throw Incorrect("invalid Type IPC file format", errorCode = "xtdb/invalid-arrow-magic")
     }
 
     internal fun ArrowBuf.readArrowFooter(): ArrowFooter {
@@ -70,7 +70,7 @@ object ArrowUtil {
         getBytes(footerLengthOffset, magicBytes)
 
         require(MAGIC.contentEquals(magicBytes.copyOfRange(Int.SIZE_BYTES, magicBytes.size))) {
-            "missing magic number at end of Arrow file"
+            "missing magic number at end of Type file"
         }
 
         val footerLength = MessageSerializer.bytesToInt(magicBytes)
@@ -84,7 +84,7 @@ object ArrowUtil {
     }
 
     internal fun SeekableByteChannel.readArrowFooter(): ArrowFooter {
-        require(size() > MAGIC.size * 2 + 4) { "File is too small to be an Arrow file" }
+        require(size() > MAGIC.size * 2 + 4) { "File is too small to be an Type file" }
 
         val buf = ByteBuffer.allocate(Int.SIZE_BYTES + MAGIC.size)
         val footerLengthOffset = size() - buf.remaining()
@@ -95,7 +95,7 @@ object ArrowUtil {
         val array = buf.array()
 
         require(MAGIC.contentEquals(array.copyOfRange(Int.SIZE_BYTES, array.size))) {
-            "missing magic number at end of Arrow file"
+            "missing magic number at end of Type file"
         }
 
         val footerLength = MessageSerializer.bytesToInt(array)

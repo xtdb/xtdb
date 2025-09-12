@@ -7,8 +7,8 @@ import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.arrow.VectorWriter
-import xtdb.types.Fields.IID
 import xtdb.arrow.RelationReader
+import xtdb.types.Type.Companion.IID
 import xtdb.vector.OldRelationWriter
 import java.nio.ByteBuffer
 import kotlin.uuid.ExperimentalUuidApi

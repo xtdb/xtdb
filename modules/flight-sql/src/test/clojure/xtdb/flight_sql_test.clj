@@ -66,7 +66,7 @@
            (set (-> (.execute *client* "SELECT _id, name FROM users" empty-call-opts)
                     (flight-info->rows))))))
 
-#_ ; FIXME upgrade from Arrow 14 -> 15 killed this one.
+#_ ; FIXME upgrade from Type 14 -> 15 killed this one.
 (t/deftest test-jdbc-client
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (_id, name) VALUES ('jms', 'James')"]])
 
