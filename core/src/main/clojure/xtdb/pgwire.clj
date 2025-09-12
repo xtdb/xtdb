@@ -1266,9 +1266,15 @@
   ;; Clear any previous cancel flag and store the current thread as the query thread
   (swap! conn-state #(-> %
                          (dissoc :cancel)
-                         (assoc :query-thread (Thread/currentThread))))
+                         (assoc :query-thread (Thread/currentThread)
+                                :query-connection-id (:cid conn))))
   (try
     (let [cancelled-by-client? #(:cancel @conn-state)
+          ;; Safe cancellation check that validates connection ID to prevent cross-contamination
+          cancelled-safely? (fn []
+                              (let [state @conn-state]
+                                (and (:cancel state)
+                                     (= (:query-connection-id state) (:cid conn)))))
           ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
 
           n-rows-out (volatile! 0)
@@ -1279,7 +1285,6 @@
                                                       (get pg-types/pg-types))))]
 
       (let [iteration-count (atom 0)]
-        (log/debug "Starting cursor loop" {:cid (:cid conn)})
         (while (and (or (nil? limit) (< @n-rows-out limit))
                     (.tryAdvance cursor
                                  (fn [^RelationReader rel]
@@ -1287,7 +1292,7 @@
                                    (when (= 0 (mod @iteration-count 1000))
                                      (log/debug "Cursor loop iteration" {:cid (:cid conn) :iteration @iteration-count}))
                                    (let [thread-interrupted? (Thread/interrupted)
-                                         cancel-flag? (cancelled-by-client?)]
+                                         cancel-flag? (cancelled-safely?)]
                                      (cond
                                        (or thread-interrupted? cancel-flag?)
                                        (do (log/debug "Query cancelled during execution" {:cid (:cid conn)
@@ -1305,7 +1310,7 @@
                                            ;; Check for cancellation every 100 rows within the batch
                                            (when (= 0 (mod idx 100))
                                              (let [thread-interrupted? (Thread/interrupted)
-                                                   cancel-flag? (cancelled-by-client?)]
+                                                   cancel-flag? (cancelled-safely?)]
                                                (when (or thread-interrupted? cancel-flag?)
                                                  (log/debug "Query cancelled during row processing" {:cid (:cid conn)
                                                                                                       :thread-interrupted thread-interrupted?
@@ -1329,7 +1334,7 @@
                                              (vswap! n-rows-out inc))))))))
 
       ;; Query execution is complete, clear both thread reference and any cancel flag
-      (swap! conn-state dissoc :query-thread :cancel)
+      (swap! conn-state dissoc :query-thread :cancel :query-connection-id)
 
       (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @n-rows-out)}))))
 
@@ -1344,7 +1349,7 @@
       (throw e))
     (finally
       ;; Ensure query thread and cancel flag are cleared even on error
-      (swap! conn-state dissoc :query-thread :cancel))))
+      (swap! conn-state dissoc :query-thread :cancel :query-connection-id))))
 
 (defn- attach-db [{:keys [node conn-state default-db] :as conn} {:keys [db-name db-config]}]
   (when-not (= default-db "xtdb")
@@ -1503,7 +1508,6 @@
 
               (try
                 (execute-portal conn portal)
-                (log/debug "Portal execution completed successfully" {:cid (:cid conn)})
                 (reset! query-completed-successfully? true)
                 (catch InterruptedException e
                   (log/warn "Portal execution interrupted - sending cancellation error" {:cid (:cid conn)})
