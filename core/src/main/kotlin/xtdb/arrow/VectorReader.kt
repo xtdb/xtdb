@@ -21,7 +21,20 @@ interface VectorReader : ILookup, AutoCloseable {
     val fieldType: FieldType get() = this.field.fieldType
     val field: Field
 
-    private class RenamedVector(private val inner: VectorReader, override val name: String) : VectorReader by inner
+    private class RenamedVector(private val inner: VectorReader, override val name: String) : VectorReader by inner {
+        override fun withName(newName: String) = RenamedVector(inner, newName)
+
+        override fun select(idxs: IntArray) = inner.select(idxs).closeOnCatch { RenamedVector(it, name) }
+
+        override fun select(startIdx: Int, len: Int) =
+            inner.select(startIdx, len).closeOnCatch { RenamedVector(it, name) }
+
+        override fun openSlice(al: BufferAllocator) =
+            inner.openSlice(al).closeOnCatch { RenamedVector(it, name) }
+
+        override fun openDirectSlice(al: BufferAllocator): Vector =
+            inner.openDirectSlice(al).closeOnCatch { it.name = name; it }
+    }
 
     fun withName(newName: String): VectorReader = RenamedVector(this, newName)
 
