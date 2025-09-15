@@ -50,20 +50,20 @@
           "name" : "struct"
         },
         "children" : [{
-          "name" : "reading",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
           "name" : "_id",
           "nullable" : false,
           "type" : {
             "name" : "int",
             "bitWidth" : 64,
             "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "reading",
+          "nullable" : false,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
           },
           "children" : [ ]
         }]

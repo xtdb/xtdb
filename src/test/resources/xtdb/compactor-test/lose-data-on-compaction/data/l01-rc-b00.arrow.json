@@ -50,7 +50,7 @@
           "name" : "struct"
         },
         "children" : [{
-          "name" : "v",
+          "name" : "_id",
           "nullable" : false,
           "type" : {
             "name" : "int",
@@ -59,7 +59,7 @@
           },
           "children" : [ ]
         },{
-          "name" : "_id",
+          "name" : "v",
           "nullable" : false,
           "type" : {
             "name" : "int",
@@ -117,15 +117,15 @@
         "count" : 2,
         "VALIDITY" : [1,1],
         "children" : [{
-          "name" : "v",
-          "count" : 2,
-          "VALIDITY" : [1,1],
-          "DATA" : ["10","10"]
-        },{
           "name" : "_id",
           "count" : 2,
           "VALIDITY" : [1,1],
           "DATA" : ["1","0"]
+        },{
+          "name" : "v",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : ["10","10"]
         }]
       },{
         "name" : "delete",

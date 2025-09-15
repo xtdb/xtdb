@@ -11,20 +11,24 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
+import xtdb.util.closeOnCatch
 import org.apache.arrow.vector.complex.FixedSizeListVector as ArrowFixedSizeListVector
 
-class FixedSizeListVector(
+class FixedSizeListVector private constructor(
     private val al: BufferAllocator,
     override var name: String, override var nullable: Boolean, private val listSize: Int,
+    private val validityBuffer: ExtensibleBuffer = ExtensibleBuffer(al),
     private var elVector: Vector,
     override var valueCount: Int = 0
 ) : Vector(), MetadataFlavour.List {
 
+    constructor(
+        al: BufferAllocator, name: String, nullable: Boolean, listSize: Int, elVector: Vector, valueCount: Int = 0
+    ) : this(al, name, nullable, listSize, ExtensibleBuffer(al), elVector, valueCount)
+
     override val type = ArrowType.FixedSizeList(listSize)
 
     override val vectors: Iterable<Vector> get() = listOf(elVector)
-
-    private val validityBuffer = ExtensibleBuffer(al)
 
     override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
 
@@ -88,7 +92,7 @@ class FixedSizeListVector(
 
         val elCopier = try {
             src.elVector.rowCopier(elVector)
-        } catch (e: InvalidCopySourceException) {
+        } catch (_: InvalidCopySourceException) {
             elVector = elVector.maybePromote(al, src.elVector.fieldType)
             src.elVector.rowCopier(elVector)
         }
@@ -111,9 +115,9 @@ class FixedSizeListVector(
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        val node = nodes.removeFirst() ?: throw IllegalStateException("missing node")
+        val node = nodes.removeFirst()
 
-        validityBuffer.loadBuffer(buffers.removeFirst() ?: throw IllegalStateException("missing validity buffer"))
+        validityBuffer.loadBuffer(buffers.removeFirst())
         elVector.loadPage(nodes, buffers)
 
         valueCount = node.length
@@ -140,5 +144,9 @@ class FixedSizeListVector(
     }
 
     override fun openSlice(al: BufferAllocator) =
-        FixedSizeListVector(al, name, nullable, listSize, elVector.openSlice(al), valueCount)
+        validityBuffer.openSlice(al).closeOnCatch { validityBuffer ->
+            elVector.openSlice(al).closeOnCatch { elVector ->
+                FixedSizeListVector(al, name, nullable, listSize, validityBuffer, elVector, valueCount)
+            }
+        }
 }

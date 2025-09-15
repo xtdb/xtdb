@@ -1,10 +1,10 @@
 {:row-count 2,
  :fields
- {"os_name" #xt/field ["os_name" :utf8],
-  "model" #xt/field ["model" :utf8],
-  "_id" #xt/field ["_id" :utf8],
+ {"_id" #xt/field ["_id" :utf8],
   "api_version" #xt/field ["api_version" :utf8],
-  "manufacturer" #xt/field ["manufacturer" :utf8]},
+  "manufacturer" #xt/field ["manufacturer" :utf8],
+  "model" #xt/field ["model" :utf8],
+  "os_name" #xt/field ["os_name" :utf8]},
  :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 2894,
@@ -18,8 +18,8 @@
     :row-count 2,
     :iid-bloom [218706493 10]}}],
  :hlls
- {"os_name" [1167356128 1.0004885993744506],
-  "model" [-2034856674 2.001955671862574],
-  "_id" [1621770365 2.001955671862574],
+ {"_id" [1621770365 2.001955671862574],
   "api_version" [938727103 1.0004885993744506],
-  "manufacturer" [-409064930 1.0004885993744506]}}
+  "manufacturer" [-409064930 1.0004885993744506],
+  "model" [-2034856674 2.001955671862574],
+  "os_name" [1167356128 1.0004885993744506]}}

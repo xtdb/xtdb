@@ -233,10 +233,7 @@
 
         (let [db (db/primary-db node)
               tc (.getTableCatalog db)]
-          (t/is (= (types/->field "_id" (ArrowType$Union. UnionMode/Dense (int-array 0)) false
-                                  (types/col-type->field :utf8)
-                                  (types/col-type->field :keyword)
-                                  (types/col-type->field :i64))
+          (t/is (= #xt/field ["_id" :union ["utf8" :utf8] ["keyword" :keyword] ["i64" :i64]]
                    (.getField tc #xt/table xt_docs "_id")))
 
           (t/is (= #xt/field ["list" :list :?

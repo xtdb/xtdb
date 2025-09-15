@@ -64,15 +64,6 @@
           "name" : "struct"
         },
         "children" : [{
-          "name" : "b",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
           "name" : "_id",
           "nullable" : false,
           "type" : {
@@ -86,6 +77,15 @@
             "value" : "",
             "key" : "ARROW:extension:metadata"
           }]
+        },{
+          "name" : "b",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
         }]
       }]
     }]
@@ -128,15 +128,15 @@
         "count" : 2,
         "VALIDITY" : [1,1],
         "children" : [{
-          "name" : "b",
-          "count" : 2,
-          "VALIDITY" : [1,1],
-          "DATA" : ["3","2"]
-        },{
           "name" : "_id",
           "count" : 2,
           "VALIDITY" : [1,1],
           "DATA" : ["424f5622c8264deda5dbe2144d665c38","424f5622c8264deda5dbe2144d665c38"]
+        },{
+          "name" : "b",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : ["3","2"]
         }]
       }]
     }]

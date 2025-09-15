@@ -64,10 +64,12 @@
           "name" : "struct"
         },
         "children" : [{
-          "name" : "toto",
-          "nullable" : true,
+          "name" : "_id",
+          "nullable" : false,
           "type" : {
-            "name" : "utf8"
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
           },
           "children" : [ ]
         },{
@@ -80,12 +82,10 @@
           },
           "children" : [ ]
         },{
-          "name" : "_id",
-          "nullable" : false,
+          "name" : "toto",
+          "nullable" : true,
           "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
+            "name" : "utf8"
           },
           "children" : [ ]
         }]
@@ -130,21 +130,21 @@
         "count" : 3,
         "VALIDITY" : [1,1,1],
         "children" : [{
-          "name" : "toto",
+          "name" : "_id",
           "count" : 3,
-          "VALIDITY" : [0,1,1],
-          "OFFSET" : [0,0,4,8],
-          "DATA" : ["","toto","toto"]
+          "VALIDITY" : [1,1,1],
+          "DATA" : ["2","1","1"]
         },{
           "name" : "bar",
           "count" : 3,
           "VALIDITY" : [1,1,1],
           "DATA" : ["2","2","1"]
         },{
-          "name" : "_id",
+          "name" : "toto",
           "count" : 3,
-          "VALIDITY" : [1,1,1],
-          "DATA" : ["2","1","1"]
+          "VALIDITY" : [0,1,1],
+          "OFFSET" : [0,0,4,8],
+          "DATA" : ["","toto","toto"]
         }]
       }]
     }]

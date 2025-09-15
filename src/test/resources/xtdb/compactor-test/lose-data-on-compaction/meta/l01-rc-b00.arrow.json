@@ -190,8 +190,8 @@
               "name" : "col-name",
               "count" : 6,
               "VALIDITY" : [1,1,1,1,1,1],
-              "OFFSET" : [0,4,15,24,36,37,40],
-              "DATA" : ["_iid","_valid_from","_valid_to","_system_from","v","_id"]
+              "OFFSET" : [0,4,15,24,36,39,40],
+              "DATA" : ["_iid","_valid_from","_valid_to","_system_from","_id","v"]
             },{
               "name" : "root-col?",
               "count" : 6,
@@ -236,12 +236,12 @@
                 "name" : "min",
                 "count" : 6,
                 "VALIDITY" : [0,0,0,0,1,1],
-                "DATA" : [0.0,0.0,0.0,0.0,10.0,0.0]
+                "DATA" : [0.0,0.0,0.0,0.0,0.0,10.0]
               },{
                 "name" : "max",
                 "count" : 6,
                 "VALIDITY" : [0,0,0,0,1,1],
-                "DATA" : [0.0,0.0,0.0,0.0,10.0,1.0]
+                "DATA" : [0.0,0.0,0.0,0.0,1.0,10.0]
               }]
             }]
           }]

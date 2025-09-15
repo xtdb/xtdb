@@ -4,6 +4,7 @@ import com.carrotsearch.hppc.ByteArrayList
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.arrow.Relation
 import xtdb.arrow.RelationWriter
 import xtdb.table.TableRef
 import xtdb.types.Type
@@ -122,5 +123,5 @@ object Trie {
     fun openLogDataWriter(
         allocator: BufferAllocator,
         dataSchema: Schema = dataRelSchema(null)
-    ): RelationWriter = OldRelationWriter(allocator, dataSchema)
+    ) = Relation(allocator, dataSchema)
 }

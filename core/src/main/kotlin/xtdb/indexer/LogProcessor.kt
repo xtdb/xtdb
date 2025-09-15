@@ -5,7 +5,6 @@ import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.ipc.ArrowStreamReader
 import xtdb.api.TransactionAborted
 import xtdb.api.TransactionCommitted
 import xtdb.api.TransactionKey
@@ -14,7 +13,7 @@ import xtdb.api.log.Log.Message
 import xtdb.api.log.MessageId
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
-import xtdb.arrow.RelationReader
+import xtdb.arrow.Relation
 import xtdb.arrow.asChannel
 import xtdb.catalog.BlockCatalog
 import xtdb.compactor.Compactor
@@ -160,22 +159,21 @@ class LogProcessor(
                             )
                         } else {
                             msg.payload.asChannel.use { txOpsCh ->
-                                ArrowStreamReader(txOpsCh, allocator).use { reader ->
-                                    reader.vectorSchemaRoot.use { root ->
-                                        reader.loadNextBatch()
-                                        val rdr = RelationReader.from(root)
+                                Relation.StreamLoader(allocator, txOpsCh).use { loader ->
+                                    Relation(allocator, loader.schema).use { rel ->
+                                        loader.loadNextPage(rel)
 
                                         val systemTime =
-                                            (rdr["system-time"].getObject(0) as ZonedDateTime?)?.toInstant()
+                                            (rel["system-time"].getObject(0) as ZonedDateTime?)?.toInstant()
 
                                         val defaultTz =
-                                            (rdr["default-tz"].getObject(0) as String?).let { ZoneId.of(it) }
+                                            (rel["default-tz"].getObject(0) as String?).let { ZoneId.of(it) }
 
-                                        val user = rdr["user"].getObject(0) as String?
+                                        val user = rel["user"].getObject(0) as String?
 
                                         indexer.indexTx(
                                             msgId, record.logTimestamp,
-                                            rdr["tx-ops"].listElements,
+                                            rel["tx-ops"].listElements,
                                             systemTime, defaultTz, user
                                         )
                                     }

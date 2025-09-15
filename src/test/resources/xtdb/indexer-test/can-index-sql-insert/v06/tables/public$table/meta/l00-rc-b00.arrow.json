@@ -191,7 +191,7 @@
               "count" : 8,
               "VALIDITY" : [1,1,1,1,1,1,1,1],
               "OFFSET" : [0,4,15,24,36,39,42,45,48],
-              "DATA" : ["_iid","_valid_from","_valid_to","_system_from","bar","foo","baz","_id"]
+              "DATA" : ["_iid","_valid_from","_valid_to","_system_from","_id","foo","bar","baz"]
             },{
               "name" : "root-col?",
               "count" : 8,
@@ -205,7 +205,7 @@
             },{
               "name" : "bytes",
               "count" : 8,
-              "VALIDITY" : [1,0,0,0,1,0,0,0],
+              "VALIDITY" : [1,0,0,0,0,0,1,0],
               "children" : [{
                 "name" : "bloom",
                 "count" : 8,
@@ -231,17 +231,17 @@
             },{
               "name" : "numbers",
               "count" : 8,
-              "VALIDITY" : [0,0,0,0,0,1,1,1],
+              "VALIDITY" : [0,0,0,0,1,1,0,1],
               "children" : [{
                 "name" : "min",
                 "count" : 8,
-                "VALIDITY" : [0,0,0,0,0,1,1,1],
-                "DATA" : [0.0,0.0,0.0,0.0,0.0,1.0,3.3,0.0]
+                "VALIDITY" : [0,0,0,0,1,1,0,1],
+                "DATA" : [0.0,0.0,0.0,0.0,0.0,1.0,0.0,3.3]
               },{
                 "name" : "max",
                 "count" : 8,
-                "VALIDITY" : [0,0,0,0,0,1,1,1],
-                "DATA" : [0.0,0.0,0.0,0.0,0.0,2.0,12.0,1.0]
+                "VALIDITY" : [0,0,0,0,1,1,0,1],
+                "DATA" : [0.0,0.0,0.0,0.0,1.0,2.0,0.0,12.0]
               }]
             }]
           }]

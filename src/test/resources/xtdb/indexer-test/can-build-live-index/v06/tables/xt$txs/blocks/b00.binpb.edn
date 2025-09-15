@@ -1,8 +1,8 @@
 {:row-count 6,
  :fields
- {"system_time" #xt/field ["system_time" [:timestamp-tz :micro "UTC"]],
+ {"_id" #xt/field ["_id" :i64],
+  "system_time" #xt/field ["system_time" [:timestamp-tz :micro "UTC"]],
   "committed" #xt/field ["committed" :bool],
-  "_id" #xt/field ["_id" :i64],
   "error" #xt/field ["error" :transit :?]},
  :tries
  [{:trie-key "l00-rc-b00",
@@ -17,7 +17,7 @@
     :row-count 6,
     :iid-bloom [-291466574 30]}}],
  :hlls
- {"system_time" [-2034527697 6.01764709272061],
-  "committed" [-1112647138 2.001955671862574],
-  "_id" [1297983737 6.01764709272061],
+ {"_id" [1297983737 6.01764709272061],
+  "system_time" [-2034527697 6.01764709272061],
+  "committed" [1743138479 1.0004885993744506],
   "error" [-2042553016 2.001955671862574]}}

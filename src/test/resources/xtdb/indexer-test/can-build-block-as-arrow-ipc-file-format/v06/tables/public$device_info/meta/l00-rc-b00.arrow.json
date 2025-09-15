@@ -167,8 +167,8 @@
               "name" : "col-name",
               "count" : 9,
               "VALIDITY" : [1,1,1,1,1,1,1,1,1],
-              "OFFSET" : [0,4,15,24,36,43,48,51,62,74],
-              "DATA" : ["_iid","_valid_from","_valid_to","_system_from","os_name","model","_id","api_version","manufacturer"]
+              "OFFSET" : [0,4,15,24,36,39,50,62,67,74],
+              "DATA" : ["_iid","_valid_from","_valid_to","_system_from","_id","api_version","manufacturer","model","os_name"]
             },{
               "name" : "root-col?",
               "count" : 9,

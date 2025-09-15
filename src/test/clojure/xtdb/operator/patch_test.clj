@@ -13,10 +13,11 @@
 (t/use-fixtures :each tu/with-allocator tu/with-mock-clock tu/with-node)
 
 (t/deftest test-patch-3879
-  (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1, :a 1, :b 2}]])
-  (xt/submit-tx tu/*node* [[:patch-docs :foo
-                            {:xt/id 1, :c 3}
-                            {:xt/id 2, :a 4, :b 5}]])
+  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1, :a 1, :b 2}]])
+
+  (xt/execute-tx tu/*node* [[:patch-docs :foo
+                             {:xt/id 1, :c 3}
+                             {:xt/id 2, :a 4, :b 5}]])
 
   (t/is (= [{:xt/id 1, :a 1, :b 2,
              :xt/valid-from (time/->zdt #inst "2020-01-01"),
