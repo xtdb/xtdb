@@ -14,6 +14,9 @@
                            ^int ideal-min-page-size
                            ^:unsynchronized-mutable ^int seen-rows]
   ICursor
+  (getCursorType [_] (.getCursorType cursor))
+  (getChildCursors [_] (.getChildCursors cursor))
+
   (tryAdvance [this c]
     (let [!rel-writer (volatile! nil)
           !rows-appended (volatile! 0)]

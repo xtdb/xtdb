@@ -18,6 +18,9 @@
 (deftype DistinctCursor [^ICursor in-cursor
                          ^DistinctRelationMap rel-map]
   ICursor
+  (getCursorType [_] "distinct")
+  (getChildCursors [_] [in-cursor])
+
   (tryAdvance [_ c]
     (let [advanced? (boolean-array 1)]
       (while (and (not (aget advanced? 0))
@@ -75,8 +78,9 @@
                    {:op :distinct
                     :children [inner-rel]
                     :fields inner-fields
-                    :->cursor (fn [{:keys [allocator]} in-cursor]
-                                (DistinctCursor. in-cursor (->relation-map allocator
-                                                                           {:build-fields inner-fields
-                                                                            :key-col-names (set (keys inner-fields))
-                                                                            :nil-keys-equal? true})))})))
+                    :->cursor (fn [{:keys [allocator explain-analyze?]} in-cursor]
+                                (cond-> (DistinctCursor. in-cursor (->relation-map allocator
+                                                                                   {:build-fields inner-fields
+                                                                                    :key-col-names (set (keys inner-fields))
+                                                                                    :nil-keys-equal? true}))
+                                  explain-analyze? (ICursor/wrapExplainAnalyze)))})))

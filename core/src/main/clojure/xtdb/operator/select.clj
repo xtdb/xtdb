@@ -4,7 +4,8 @@
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types])
-  (:import (xtdb.operator SelectCursor)))
+  (:import (xtdb ICursor)
+           (xtdb.operator SelectCursor)))
 
 (defmethod lp/ra-expr :select [_]
   (s/cat :op #{:σ :sigma :select}
@@ -21,8 +22,9 @@
             selector (expr/->expression-selection-spec (expr/form->expr predicate input-types) input-types)]
         {:op :select
          :children [inner-rel]
-         :explain {:predicate (pr-str predicate)}
+         :explain  {:predicate (pr-str predicate)}
          :fields inner-fields
-         :->cursor (fn [{:keys [allocator args schema]} in-cursor]
-                     (-> (SelectCursor. allocator in-cursor selector schema args)
-                         (coalesce/->coalescing-cursor allocator)))}))))
+         :->cursor (fn [{:keys [allocator args schema explain-analyze?]} in-cursor]
+                     (cond-> (-> (SelectCursor. allocator in-cursor selector schema args)
+                                 (coalesce/->coalescing-cursor allocator))
+                       explain-analyze? (ICursor/wrapExplainAnalyze)))}))))

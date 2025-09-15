@@ -32,6 +32,9 @@ class ScanCursor(
     private val iidPushdownBloom: BloomFilter?
 ) : ICursor {
 
+    override val cursorType get() = "scan"
+    override val childCursors get() = emptyList<ICursor>()
+
     private class LeafPointer(val evPtr: EventRowPointer, val relIdx: Int)
 
     private fun RelationReader.maybeSelect(iidPred: SelectionSpec?) =

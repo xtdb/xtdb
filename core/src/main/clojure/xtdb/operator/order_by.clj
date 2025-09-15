@@ -208,6 +208,9 @@
                         ^:unsynchronized-mutable ^VectorSchemaRoot read-root
                         ^:unsynchronized-mutable ^File sorted-file]
   ICursor
+  (getCursorType [_] "order-by")
+  (getChildCursors [_] [in-cursor])
+
   (tryAdvance [this c]
     (if-not consumed?
       (letfn [(load-next-batch []
@@ -267,5 +270,6 @@
        :children [rel]
        :explain {:order-specs (pr-str order-specs)}
        :fields fields
-       :->cursor (fn [{:keys [allocator]} in-cursor]
-                   (OrderByCursor. allocator in-cursor (rename-fields fields) order-specs false nil nil nil nil))})))
+       :->cursor (fn [{:keys [allocator explain-analyze?]} in-cursor]
+                   (cond-> (OrderByCursor. allocator in-cursor (rename-fields fields) order-specs false nil nil nil nil)
+                     explain-analyze? (ICursor/wrapExplainAnalyze)))})))

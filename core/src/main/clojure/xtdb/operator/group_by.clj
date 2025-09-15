@@ -575,6 +575,9 @@
                         ^List aggregate-specs
                         ^:unsynchronized-mutable ^boolean done?]
   ICursor
+  (getCursorType [_] "group-by")
+  (getChildCursors [_] [in-cursor])
+
   (tryAdvance [this c]
     (boolean
      (when-not done?
@@ -623,23 +626,24 @@
                                                                                types/field->col-type)}))))))]
           {:op :group-by
            :children [inner-rel]
-           :explain {:group-by (vec group-cols)
+           :explain {:group-by (mapv str group-cols)
                      :aggregates (->> aggs
                                       (mapv (fn [[_ agg]]
                                               (let [[to-column agg-form] (first agg)]
-                                                [to-column (pr-str agg-form)]))))}
+                                                [(str to-column) (pr-str agg-form)]))))}
            :fields (into (->> group-cols
                               (into {} (map (juxt identity fields))))
                          (->> agg-factories
                               (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
                                                   #(.getField ^IAggregateSpecFactory %))))))
 
-           :->cursor (fn [{:keys [allocator]} in-cursor]
-                       (util/with-close-on-catch [agg-specs (LinkedList.)]
-                         (doseq [^IAggregateSpecFactory factory agg-factories]
-                           (.add agg-specs (.build factory allocator)))
+           :->cursor (fn [{:keys [allocator explain-analyze?]} in-cursor]
+                       (cond-> (util/with-close-on-catch [agg-specs (LinkedList.)]
+                                 (doseq [^IAggregateSpecFactory factory agg-factories]
+                                   (.add agg-specs (.build factory allocator)))
 
-                         (GroupByCursor. allocator in-cursor
-                                         (->group-mapper allocator (select-keys fields group-cols))
-                                         (vec agg-specs)
-                                         false)))})))))
+                                 (GroupByCursor. allocator in-cursor
+                                                 (->group-mapper allocator (select-keys fields group-cols))
+                                                 (vec agg-specs)
+                                                 false))
+                         explain-analyze? (ICursor/wrapExplainAnalyze)))})))))

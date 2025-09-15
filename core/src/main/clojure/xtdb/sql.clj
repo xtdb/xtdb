@@ -2693,7 +2693,10 @@
 (defrecord StmtVisitor [env scope]
   SqlVisitor
   (visitQueryExpr [this ctx]
-    (let [query-vars (into {:explain? (boolean (.EXPLAIN ctx))}
+    (let [query-vars (into (cond
+                             (boolean (.ANALYZE ctx)) {:explain-analyze? true}
+                             (boolean (.EXPLAIN ctx)) {:explain? true}
+                             :else {})
                            (keep (partial accept-visitor this))
                            (some-> (.settingQueryVariables ctx)
                                    (.settingQueryVariable)))]
@@ -3057,7 +3060,7 @@
             (-> plan
                 (vary-meta (fn [m]
                              (-> (or m {})
-                                 (into (select-keys stmt [:explain? :current-time :snapshot-token]))
+                                 (into (select-keys stmt [:explain? :explain-analyze? :current-time :snapshot-token]))
                                  (assoc :param-count @!param-count
                                         :warnings @!warnings
                                         :ordered-outer-projection col-syms)))))))))))

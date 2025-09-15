@@ -41,6 +41,9 @@
 (deftype UnionAllCursor [^ICursor left-cursor
                          ^ICursor right-cursor]
   ICursor
+  (getCursorType [_] "union-all")
+  (getChildCursors [_] [left-cursor right-cursor])
+
   (tryAdvance [_ c]
     (let [advanced? (boolean-array 1 false)]
       (loop []
@@ -68,14 +71,18 @@
                     {:op :union-all
                      :children [left-rel right-rel]
                      :fields (union-fields left-fields right-fields)
-                     :->cursor (fn [_opts left-cursor right-cursor]
-                                 (UnionAllCursor. left-cursor right-cursor))})))
+                     :->cursor (fn [{:keys [explain-analyze?]} left-cursor right-cursor]
+                                 (cond-> (UnionAllCursor. left-cursor right-cursor)
+                                   explain-analyze? (ICursor/wrapExplainAnalyze)))})))
 
 (deftype IntersectionCursor [^ICursor left-cursor, ^ICursor right-cursor
                              ^BuildSide build-side, ->probe-side
                              difference?
                              ^:unsynchronized-mutable build-phase-ran?]
   ICursor
+  (getCursorType [_] (if difference? "difference" "intersection"))
+  (getChildCursors [_] [left-cursor right-cursor])
+
   (tryAdvance [this c]
     (when-not build-phase-ran?
       (.forEachRemaining right-cursor
@@ -113,39 +120,41 @@
 
 (defmethod lp/emit-expr :intersect [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
-    (fn [{left-fields :fields :as left-rel} {right-fields :fields :as right-rel}]
-      (let [fields (union-fields left-fields right-fields)
-            key-col-names (set (keys fields))]
-        {:op :intersect
-         :children [left-rel right-rel]
-         :fields fields
-         :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
-                     (let [build-side (join/->build-side allocator
-                                                         {:fields left-fields
-                                                          :key-col-names key-col-names})]
+                  (fn [{left-fields :fields :as left-rel} {right-fields :fields :as right-rel}]
+                    (let [fields (union-fields left-fields right-fields)
+                          key-col-names (set (keys fields))]
+                      {:op :intersect
+                       :children [left-rel right-rel]
+                       :fields fields
+                       :->cursor (fn [{:keys [allocator explain-analyze?]} left-cursor right-cursor]
+                                   (let [build-side (join/->build-side allocator
+                                                                       {:fields left-fields
+                                                                        :key-col-names key-col-names})]
 
-                       (IntersectionCursor. left-cursor right-cursor
-                                            build-side (join/->probe-side build-side
-                                                                          {:fields right-fields
-                                                                           :key-col-names key-col-names})
-                                            false false)))}))))
+                                     (cond-> (IntersectionCursor. left-cursor right-cursor
+                                                                              build-side (join/->probe-side build-side
+                                                                                                            {:fields right-fields
+                                                                                                             :key-col-names key-col-names})
+                                                                              false false)
+                                       explain-analyze? (ICursor/wrapExplainAnalyze))))}))))
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
-    (fn [{left-fields :fields :as left-rel} {right-fields :fields :as right-rel}]
-      (let [fields (union-fields left-fields right-fields)
-            key-col-names (set (keys fields))]
-        {:op :difference
-         :children [left-rel right-rel]
-         :fields fields
-         :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
-                     (let [build-side (join/->build-side allocator
-                                                         {:fields left-fields
-                                                          :key-col-names key-col-names})]
+                  (fn [{left-fields :fields :as left-rel} {right-fields :fields :as right-rel}]
+                    (let [fields (union-fields left-fields right-fields)
+                          key-col-names (set (keys fields))]
+                      {:op :difference
+                       :children [left-rel right-rel]
+                       :fields fields
+                       :->cursor (fn [{:keys [allocator explain-analyze?]} left-cursor right-cursor]
+                                   (let [build-side (join/->build-side allocator
+                                                                       {:fields left-fields
+                                                                        :key-col-names key-col-names})]
 
-                       (IntersectionCursor. left-cursor right-cursor
-                                            build-side (join/->probe-side build-side
-                                                                          {:build-fields left-fields
-                                                                           :probe-fields right-fields
-                                                                           :key-col-names key-col-names})
-                                            true false)))}))))
+                                     (cond-> (IntersectionCursor. left-cursor right-cursor
+                                                                              build-side (join/->probe-side build-side
+                                                                                                            {:build-fields left-fields
+                                                                                                             :probe-fields right-fields
+                                                                                                             :key-col-names key-col-names})
+                                                                              true false)
+                                       explain-analyze? (ICursor/wrapExplainAnalyze))))}))))

@@ -15,6 +15,9 @@ class PatchGapsCursor(
     private val validTo: Long,
 ) : ICursor {
 
+    override val cursorType get() = "patch-gaps"
+    override val childCursors get() = listOf(inner)
+
     private val iidWriter = out.vectorFor("_iid")
     private val vfWriter = out.vectorFor("_valid_from")
     private val vtWriter = out.vectorFor("_valid_to")

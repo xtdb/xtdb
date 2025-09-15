@@ -14,6 +14,10 @@ class ProjectCursor(
     private val schema: Map<String, Any>,
     private val args: RelationReader,
 ) : ICursor {
+
+    override val cursorType get() = "project"
+    override val childCursors get() = listOf(inCursor)
+
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean = inCursor.tryAdvance { inRel ->
         mutableListOf<VectorReader>().useAll { closeCols ->
             val outCols = specs.map { spec ->
