@@ -19,15 +19,6 @@ interface RelationWriter : RelationReader {
 
     fun endRow(): Int
 
-    fun rowCopier(rel: RelationReader): RowCopier {
-        val copiers = rel.vectors.map { it.rowCopier(vectorForOrNull(it.name) ?: error("missing ${it.name} vector")) }
-
-        return RowCopier { srcIdx ->
-            copiers.forEach { it.copyRow(srcIdx) }
-            endRow()
-        }
-    }
-
     fun append(rel: RelationReader) {
         rel.vectors.forEach { vectorFor(it.name, it.fieldType).append(it) }
         rowCount += rel.rowCount

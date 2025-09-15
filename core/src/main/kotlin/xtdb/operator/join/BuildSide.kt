@@ -7,7 +7,6 @@ import xtdb.arrow.IntVector
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.expression.map.IndexHasher
-import xtdb.trie.MutableMemoryHashTrie
 import xtdb.vector.OldRelationWriter
 import java.util.function.IntConsumer
 import java.util.function.IntUnaryOperator
@@ -38,7 +37,7 @@ class BuildSide(
         val inKeyCols = keyColNames.map { inRel.vectorForOrNull(it) as VectorReader }
 
         val hasher = IndexHasher.fromCols(inKeyCols)
-        val rowCopier = relWriter.rowCopier(inRel)
+        val rowCopier = inRel.rowCopier(relWriter)
 
         repeat(inRel.rowCount) { inIdx ->
             hashColumn.writeInt(hasher.hashCode(inIdx))

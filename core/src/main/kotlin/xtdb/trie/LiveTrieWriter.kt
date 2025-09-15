@@ -13,7 +13,7 @@ class LiveTrieWriter(
         DataFileWriter(al, bp, table, trieKey, dataRel.schema).use { dataFileWriter ->
             MetadataFileWriter(al, bp, table, trieKey, dataFileWriter.dataRel, calculateBlooms, false)
                 .use { metaFileWriter ->
-                    val copier = dataFileWriter.dataRel.rowCopier(dataRel)
+                    val copier = dataRel.rowCopier(dataFileWriter.dataRel)
 
                     fun MemoryHashTrie.Node.writeNode(): Int =
                         when (this) {

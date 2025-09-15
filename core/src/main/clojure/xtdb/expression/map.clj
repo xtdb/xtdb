@@ -92,7 +92,7 @@
                                     (types/->nullable-field)))
                               fields))]
     (util/with-close-on-catch [rel-writer (vw/->rel-writer allocator schema)]
-      (doto (.rowCopier rel-writer (->nil-rel (keys fields)))
+      (doto (.rowCopier (->nil-rel (keys fields)) rel-writer)
         (.copyRow 0))
       rel-writer)))
 

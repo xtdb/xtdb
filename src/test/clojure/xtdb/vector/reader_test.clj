@@ -28,8 +28,8 @@
             (.writeLong 42))
         (-> (.vectorFor my-column-wtr2 "utf8" (FieldType/notNullable #xt.arrow/type :utf8))
             (.writeObject "forty-two")))
-      (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
-            copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
+      (let [copier1 (.rowCopier (vw/rel-wtr->rdr rel-wtr1) rel-wtr3)
+            copier2 (.rowCopier (vw/rel-wtr->rdr rel-wtr2) rel-wtr3)]
         (.copyRow copier1 0)
         (.copyRow copier2 0))
       (t/is (= [{:my-column 42} {:my-column "forty-two"}]
@@ -51,8 +51,8 @@
             (.writeObject my-column-wtr1 {"foo" 42 "bar" "forty-two"})
             (.writeObject my-column-wtr2 {"foo" 42.0 "toto" :my-keyword}))
 
-          (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
-                copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
+          (let [copier1 (.rowCopier (vw/rel-wtr->rdr rel-wtr1) rel-wtr3)
+                copier2 (.rowCopier (vw/rel-wtr->rdr rel-wtr2) rel-wtr3)]
             (.copyRow copier1 0)
             (.copyRow copier2 0))
 
@@ -73,8 +73,8 @@
           (.writeObject my-column-wtr2 42)
           (.writeObject my-column-wtr2 :my-keyword))
 
-        (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
-              copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
+        (let [copier1 (.rowCopier (vw/rel-wtr->rdr rel-wtr1) rel-wtr3)
+              copier2 (.rowCopier (vw/rel-wtr->rdr rel-wtr2) rel-wtr3)]
           (.copyRow copier1 0)
           (.copyRow copier1 1)
           (.copyRow copier2 0)
@@ -101,8 +101,8 @@
           (t/is (= #xt/field ["my-column" :list ["$data$" :utf8]]
                    (.getField my-column-wtr2))))
 
-        (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
-              copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
+        (let [copier1 (.rowCopier (vw/rel-wtr->rdr rel-wtr1) rel-wtr3)
+              copier2 (.rowCopier (vw/rel-wtr->rdr rel-wtr2) rel-wtr3)]
           (.copyRow copier1 0)
           (.copyRow copier2 0))
 
@@ -128,8 +128,8 @@
           (t/is (= (types/->field "my-column" #xt.arrow/type :set false (types/col-type->field "$data$" :utf8))
                    (.getField my-column-wtr2)))
 
-          (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
-                copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
+          (let [copier1 (.rowCopier (vw/rel-wtr->rdr rel-wtr1) rel-wtr3)
+                copier2 (.rowCopier (vw/rel-wtr->rdr rel-wtr2) rel-wtr3)]
             (.copyRow copier1 0)
             (.copyRow copier2 0))
 
@@ -155,8 +155,8 @@
         (.writeDouble 42.0))
     (t/is (thrown-with-msg?
            RuntimeException #"Field type mismatch"
-           (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
-                 copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
+           (let [copier1 (.rowCopier (vw/rel-wtr->rdr rel-wtr1) rel-wtr3)
+                 copier2 (.rowCopier (vw/rel-wtr->rdr rel-wtr2) rel-wtr3)]
              (.copyRow copier1 0)
              (.copyRow copier2 0))))))
 

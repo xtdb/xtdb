@@ -38,6 +38,15 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     fun select(idxs: IntArray): RelationReader = from(vectors.map { it.select(idxs) }, idxs.size)
     fun select(startIdx: Int, len: Int): RelationReader = from(vectors.map { it.select(startIdx, len) }, len)
 
+    fun rowCopier(dest: RelationWriter): RowCopier {
+        val copiers = vectors.map { it.rowCopier(dest.vectorForOrNull(it.name) ?: dest.vectorFor(it.name, it.fieldType)) }
+
+        return RowCopier { srcIdx ->
+            copiers.forEach { it.copyRow(srcIdx) }
+            dest.endRow()
+        }
+    }
+
     override fun close() = vectors.closeAll()
 
     fun toTuples() = toTuples(KEBAB_CASE_KEYWORD)

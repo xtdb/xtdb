@@ -82,7 +82,7 @@ internal interface OutWriter : AutoCloseable {
 
         private class CopierFactory(private val dataRel: Relation) {
             fun rowCopier(dataReader: RelationReader) = object : RecencyRowCopier {
-                private val copier = dataRel.rowCopier(dataReader)
+                private val copier = dataReader.rowCopier(dataRel)
 
                 override fun copyRow(recency: RecencyMicros, sourceIndex: Int): Int = copier.copyRow(sourceIndex)
             }

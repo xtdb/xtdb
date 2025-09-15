@@ -239,8 +239,8 @@
           (.writeObject "forty-two")))
 
     ;; copying to rel-wtr3
-    (let [copier1 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr1))
-          copier2 (.rowCopier rel-wtr3 (vw/rel-wtr->rdr rel-wtr2))]
+    (let [copier1 (.rowCopier (vw/rel-wtr->rdr rel-wtr1) rel-wtr3)
+          copier2 (.rowCopier (vw/rel-wtr->rdr rel-wtr2) rel-wtr3)]
       (.copyRow copier1 0)
       (.copyRow copier2 0))
 

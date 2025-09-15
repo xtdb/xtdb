@@ -68,7 +68,7 @@ class PageTrieWriter(
                         fun Selection.soloIid(): Boolean =
                             iidReader.getPointer(first(), startPtr) == iidReader.getPointer(last(), endPtr)
 
-                        val rowCopier = dataRel.rowCopier(inRel)
+                        val rowCopier = inRel.rowCopier(dataRel)
 
                         fun writeLeaf(): RowIndex = metaFileWriter.writeLeaf().also { dataFileWriter.writePage() }
 

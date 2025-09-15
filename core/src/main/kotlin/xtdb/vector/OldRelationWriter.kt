@@ -47,17 +47,6 @@ class OldRelationWriter(private val allocator: BufferAllocator) : RelationWriter
                     writers[name] = it
                 }
 
-    override fun rowCopier(rel: RelationReader): RowCopier {
-        val copiers = rel.vectors.map {
-            it.rowCopier(vectorFor(it.name, it.fieldType))
-        }
-
-        return RowCopier { srcIdx ->
-            copiers.forEach { it.copyRow(srcIdx) }
-            endRow()
-        }
-    }
-
     override fun openSlice(al: BufferAllocator) = asReader.openSlice(al)
     override fun openDirectSlice(al: BufferAllocator) = asReader.openDirectSlice(al)
 

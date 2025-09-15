@@ -58,7 +58,7 @@ class DistinctRelationMap(
             ?: IntBinaryOperator { _, _ -> 1 }
 
         val hasher = IndexHasher.fromCols(inKeyCols)
-        val rowCopier = relWriter.rowCopier(inRel)
+        val rowCopier = inRel.rowCopier(relWriter)
 
         return object : RelationMapBuilder {
             override fun addIfNotPresent(inIdx: Int): Int {

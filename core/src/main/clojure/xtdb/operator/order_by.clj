@@ -126,7 +126,7 @@
         (with-open [out-rel (Relation/open allocator fields)
                     out-unl (.startUnload out-rel (Channels/newChannel (io/output-stream out-file)))]
           (dotimes [i k]
-            (aset copiers i (.rowCopier out-rel ^Relation (nth rels i))))
+            (aset copiers i (.rowCopier ^Relation (nth rels i) out-rel)))
 
           (letfn [(load-next-rel [i]
                     (when (.loadNextPage ^Relation$Loader (nth loaders i)
