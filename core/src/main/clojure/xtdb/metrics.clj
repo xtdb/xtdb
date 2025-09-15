@@ -24,8 +24,8 @@
     (.increment counter)))
 
 (defmacro record-callable! [timer & body]
-  `(if ~timer
-     (.recordCallable ^Timer ~timer (fn [] ~@body))
+  `(if-let [^Timer timer# ~timer]
+     (.recordCallable timer# (fn [] ~@body))
      (do ~@body)))
 
 (def percentiles [0.75 0.85 0.95 0.98 0.99 0.999])
