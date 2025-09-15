@@ -611,8 +611,8 @@ private object WriterForVectorVisitor : VectorVisitor<IVectorWriter, FieldChange
 
     override fun visit(vec: ExtensionTypeVector<*>, notify: FieldChangeListener?): IVectorWriter = when (vec) {
         is KeywordVector -> KeywordVectorWriter(vec)
-        is RegClassVector -> RegClassWriter(vec)
-        is RegProcVector -> RegProcWriter(vec)
+        is xtdb.vector.extensions.RegClassVector -> RegClassWriter(vec)
+        is xtdb.vector.extensions.RegProcVector -> RegProcWriter(vec)
         is UuidVector -> UuidVectorWriter(vec)
         is UriVector -> UriVectorWriter(vec)
         is TransitVector -> TransitVectorWriter(vec)

@@ -215,6 +215,9 @@ sealed class Vector : VectorReader, VectorWriter {
                                 al, name, isNullable,
                                 field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("\$data$")))
 
+                    RegClassType -> RegClassVector(IntVector(al, name, isNullable))
+                    RegProcType -> RegProcVector(IntVector(al, name, isNullable))
+
                     else -> error("unknown extension: $type")
                 }
             })
