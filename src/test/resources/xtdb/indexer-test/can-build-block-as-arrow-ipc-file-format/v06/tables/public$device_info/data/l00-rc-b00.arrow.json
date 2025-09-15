@@ -64,20 +64,6 @@
           "name" : "struct"
         },
         "children" : [{
-          "name" : "os_name",
-          "nullable" : false,
-          "type" : {
-            "name" : "utf8"
-          },
-          "children" : [ ]
-        },{
-          "name" : "model",
-          "nullable" : false,
-          "type" : {
-            "name" : "utf8"
-          },
-          "children" : [ ]
-        },{
           "name" : "_id",
           "nullable" : false,
           "type" : {
@@ -93,6 +79,20 @@
           "children" : [ ]
         },{
           "name" : "manufacturer",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "model",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "os_name",
           "nullable" : false,
           "type" : {
             "name" : "utf8"
@@ -140,18 +140,6 @@
         "count" : 2,
         "VALIDITY" : [1,1],
         "children" : [{
-          "name" : "os_name",
-          "count" : 2,
-          "VALIDITY" : [1,1],
-          "OFFSET" : [0,5,10],
-          "DATA" : ["6.0.1","6.0.1"]
-        },{
-          "name" : "model",
-          "count" : 2,
-          "VALIDITY" : [1,1],
-          "OFFSET" : [0,7,12],
-          "DATA" : ["mustang","pinto"]
-        },{
           "name" : "_id",
           "count" : 2,
           "VALIDITY" : [1,1],
@@ -169,6 +157,18 @@
           "VALIDITY" : [1,1],
           "OFFSET" : [0,6,12],
           "DATA" : ["iobeam","iobeam"]
+        },{
+          "name" : "model",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,7,12],
+          "DATA" : ["mustang","pinto"]
+        },{
+          "name" : "os_name",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,5,10],
+          "DATA" : ["6.0.1","6.0.1"]
         }]
       }]
     }]

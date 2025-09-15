@@ -64,10 +64,12 @@
           "name" : "struct"
         },
         "children" : [{
-          "name" : "bar",
+          "name" : "_id",
           "nullable" : false,
           "type" : {
-            "name" : "utf8"
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
           },
           "children" : [ ]
         },{
@@ -77,6 +79,13 @@
             "name" : "int",
             "bitWidth" : 64,
             "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "bar",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
           },
           "children" : [ ]
         },{
@@ -105,15 +114,6 @@
             },
             "children" : [ ]
           }]
-        },{
-          "name" : "_id",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
         }]
       }]
     }]
@@ -156,16 +156,21 @@
         "count" : 2,
         "VALIDITY" : [1,1],
         "children" : [{
-          "name" : "bar",
+          "name" : "_id",
           "count" : 2,
           "VALIDITY" : [1,1],
-          "OFFSET" : [0,5,10],
-          "DATA" : ["world","hello"]
+          "DATA" : ["1","0"]
         },{
           "name" : "foo",
           "count" : 2,
           "VALIDITY" : [1,1],
           "DATA" : ["1","2"]
+        },{
+          "name" : "bar",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,5,10],
+          "DATA" : ["world","hello"]
         },{
           "name" : "baz",
           "count" : 2,
@@ -182,11 +187,6 @@
             "VALIDITY" : [1],
             "DATA" : [3.3]
           }]
-        },{
-          "name" : "_id",
-          "count" : 2,
-          "VALIDITY" : [1,1],
-          "DATA" : ["1","0"]
         }]
       }]
     }]

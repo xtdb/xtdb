@@ -399,20 +399,22 @@
 
         (wrap-sql-args (.getParamCount pq)))))
 
-(defn- query-indexer [^IQuerySource q-src, db-cat, ^RelationIndexer rel-idxer, tx-opts, {:keys [stmt] :as query-opts}]
+(defn- query-indexer [allocator, ^IQuerySource q-src, db-cat, ^RelationIndexer rel-idxer, tx-opts, {:keys [stmt] :as query-opts}]
   (let [^PreparedQuery pq (.prepareQuery q-src stmt db-cat tx-opts)]
     (-> (fn eval-query [^RelationReader args]
           (with-open [res (-> (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
                                                  (assoc :args args, :close-args? false))))]
             (.forEachRemaining res
-                               (fn [in-rel]
-                                 (.indexOp rel-idxer in-rel query-opts)))))
+                               (fn [^RelationReader in-rel]
+                                 ;; HACK: only while queries return old-world relations
+                                 (util/with-open [in-rel (.openDirectSlice in-rel allocator)]
+                                   (.indexOp rel-idxer in-rel query-opts))))))
 
         (wrap-sql-args (.getParamCount pq)))))
 
 (defn- open-args-rdr ^org.apache.arrow.vector.ipc.ArrowReader [^BufferAllocator allocator, ^VectorReader args-rdr, ^long tx-op-idx]
   (when-not (.isNull args-rdr tx-op-idx)
-    (let [is (ByteArrayInputStream. (.array ^ByteBuffer (.getObject args-rdr tx-op-idx)))] ; could try to use getBytes
+    (let [is (ByteArrayInputStream. (.getObject args-rdr tx-op-idx))] ; could try to use getBytes
       (ArrowStreamReader. is allocator))))
 
 (defn- foreach-arg-row [^ArrowReader asr, eval-query]
@@ -567,15 +569,15 @@
                     tx-opts (assoc tx-opts :arg-fields (some-> args-arrow-rdr (.getVectorSchemaRoot) (.getSchema) (.getFields)))]
                 (case q-tag
                   :insert (foreach-arg-row args-arrow-rdr
-                                           (query-indexer q-src db-cat upsert-idxer tx-opts q-args))
+                                           (query-indexer allocator q-src db-cat upsert-idxer tx-opts q-args))
                   :patch (foreach-arg-row args-arrow-rdr
-                                          (query-indexer q-src db-cat patch-idxer tx-opts q-args))
+                                          (query-indexer allocator q-src db-cat patch-idxer tx-opts q-args))
                   :update (foreach-arg-row args-arrow-rdr
-                                           (query-indexer q-src db-cat upsert-idxer tx-opts q-args))
+                                           (query-indexer allocator q-src db-cat upsert-idxer tx-opts q-args))
                   :delete (foreach-arg-row args-arrow-rdr
-                                           (query-indexer q-src db-cat delete-idxer tx-opts q-args))
+                                           (query-indexer allocator q-src db-cat delete-idxer tx-opts q-args))
                   :erase (foreach-arg-row args-arrow-rdr
-                                          (query-indexer q-src db-cat erase-idxer tx-opts q-args))
+                                          (query-indexer allocator q-src db-cat erase-idxer tx-opts q-args))
                   :assert (foreach-arg-row args-arrow-rdr
                                            (->assert-idxer q-src db-cat tx-opts q-args))
 

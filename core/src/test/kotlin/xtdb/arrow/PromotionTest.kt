@@ -115,4 +115,16 @@ class PromotionTest {
             }
         }
     }
+
+    @Test
+    fun `rowCopier in a list-vec promotes the el-vector`(al: BufferAllocator) {
+        Vector.fromList(al, "src", listOf(listOf(1))).use { srcVec ->
+            Vector.open(al, "dest", Type.list(Type.NULL)).use { destVec ->
+                srcVec.rowCopier(destVec).copyRow(0)
+
+                assertEquals(listOf(listOf(1)), destVec.toList())
+                assertEquals(Type.list(Type.I32).toField("dest"), destVec.field)
+            }
+        }
+    }
 }

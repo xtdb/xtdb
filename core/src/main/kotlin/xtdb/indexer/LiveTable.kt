@@ -3,13 +3,10 @@ package xtdb.indexer
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
-import xtdb.storage.BufferPool
 import xtdb.api.TransactionKey
-import xtdb.arrow.RelationReader
-import xtdb.arrow.RelationWriter
-import xtdb.arrow.VectorReader
-import xtdb.arrow.VectorWriter
+import xtdb.arrow.*
 import xtdb.log.proto.TrieMetadata
+import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.*
@@ -32,28 +29,26 @@ constructor(
 
     @FunctionalInterface
     fun interface LiveTrieFactory {
-        operator fun invoke(iidWtr: VectorReader): MemoryHashTrie
+        operator fun invoke(iidVec: VectorReader): MemoryHashTrie
     }
 
-    val liveRelation: RelationWriter = Trie.openLogDataWriter(al)
+    val liveRelation: Relation = Trie.openLogDataWriter(al)
 
-    private val iidWtr = liveRelation.vectorFor("_iid")
-    private val systemFromWtr = liveRelation.vectorFor("_system_from")
-    private val validFromWtr = liveRelation.vectorFor("_valid_from")
-    private val validToWtr = liveRelation.vectorFor("_valid_to")
+    private val iidVec = liveRelation["_iid"]
+    private val systemFromVec = liveRelation["_system_from"]
+    private val validFromVec = liveRelation["_valid_from"]
+    private val validToVec = liveRelation["_valid_to"]
 
-    var liveTrie: MemoryHashTrie = liveTrieFactory(iidWtr.asReader)
+    var liveTrie: MemoryHashTrie = liveTrieFactory(iidVec)
 
-    private val iidRdr = iidWtr.asReader
-
-    private val opWtr = liveRelation.vectorFor("op")
-    private val putWtr by lazy { opWtr.vectorFor("put", Type.struct().fieldType) }
-    private val deleteWtr = opWtr.vectorFor("delete")
-    private val eraseWtr = opWtr.vectorFor("erase")
+    private val opVec = liveRelation["op"]
+    private val putVec by lazy { opVec.vectorFor("put", Type.struct().fieldType) }
+    private val deleteVec = opVec["delete"]
+    private val eraseVec = opVec["erase"]
 
     private val trieWriter = LiveTrieWriter(al, bp, calculateBlooms = false)
     private val trieMetadataCalculator = TrieMetadataCalculator(
-        iidRdr, validFromWtr.asReader, validToWtr.asReader, systemFromWtr.asReader
+        iidVec, validFromVec, validToVec, systemFromVec
     )
 
     private val hllCalculator = HllCalculator()
@@ -78,7 +73,7 @@ constructor(
         private val systemFrom: InstantMicros = txKey.systemTime.asMicros
 
         fun openSnapshot(): Snapshot = openSnapshot(transientTrie)
-        val docWriter: VectorWriter by lazy { putWtr }
+        val docWriter: VectorWriter by lazy { putVec }
         val liveRelation: RelationWriter = this@LiveTable.liveRelation
 
         private val startPos = liveRelation.rowCount
@@ -86,10 +81,10 @@ constructor(
         fun logPut(iid: ByteBuffer, validFrom: Long, validTo: Long, writeDocFun: Runnable) {
             val pos = liveRelation.rowCount
 
-            iidWtr.writeBytes(iid)
-            systemFromWtr.writeLong(systemFrom)
-            validFromWtr.writeLong(validFrom)
-            validToWtr.writeLong(validTo)
+            iidVec.writeBytes(iid)
+            systemFromVec.writeLong(systemFrom)
+            validFromVec.writeLong(validFrom)
+            validToVec.writeLong(validTo)
 
             writeDocFun.run()
 
@@ -102,11 +97,11 @@ constructor(
         fun logDelete(iid: ByteBuffer, validFrom: Long, validTo: Long) {
             val pos = liveRelation.rowCount
 
-            iidWtr.writeBytes(iid)
-            systemFromWtr.writeLong(systemFrom)
-            validFromWtr.writeLong(validFrom)
-            validToWtr.writeLong(validTo)
-            deleteWtr.writeNull()
+            iidVec.writeBytes(iid)
+            systemFromVec.writeLong(systemFrom)
+            validFromVec.writeLong(validFrom)
+            validToVec.writeLong(validTo)
+            deleteVec.writeNull()
             liveRelation.endRow()
 
             transientTrie += pos
@@ -116,11 +111,11 @@ constructor(
         fun logErase(iid: ByteBuffer) {
             val pos = liveRelation.rowCount
 
-            iidWtr.writeBytes(iid)
-            systemFromWtr.writeLong(systemFrom)
-            validFromWtr.writeLong(MIN_LONG)
-            validToWtr.writeLong(MAX_LONG)
-            eraseWtr.writeNull()
+            iidVec.writeBytes(iid)
+            systemFromVec.writeLong(systemFrom)
+            validFromVec.writeLong(MIN_LONG)
+            validToVec.writeLong(MAX_LONG)
+            eraseVec.writeNull()
             liveRelation.endRow()
 
             transientTrie += pos
@@ -130,7 +125,7 @@ constructor(
         fun commit(): LiveTable {
             val pos = liveRelation.rowCount
             trieMetadataCalculator.update(startPos, pos)
-            hllCalculator.update(opWtr.asReader, startPos, pos)
+            hllCalculator.update(opVec.asReader, startPos, pos)
 
             liveTrie = transientTrie
 
@@ -157,7 +152,7 @@ constructor(
         }
 
     private fun openSnapshot(trie: MemoryHashTrie): Snapshot {
-        // this can be openSlice once liveRel is a new-style relation
+        // this can be openSlice once scan et al use new-style vectors
         liveRelation.openDirectSlice(al).use { wmLiveRel ->
             wmLiveRel.openAsRoot(al).closeOnCatch { root ->
                 val relReader = RelationReader.from(root)

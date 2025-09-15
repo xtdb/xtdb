@@ -86,6 +86,7 @@ sealed class Vector : VectorReader, VectorWriter {
         if (dest is DenseUnionVector) return dest.rowCopier0(this)
 
         check(dest is Vector) { "can only copy to another Vector, got ${dest::class}" }
+        if (fieldType.type != dest.type) throw InvalidCopySourceException(fieldType, dest.fieldType)
 
         val copier = dest.rowCopier0(this)
         if (!nullable) return copier
@@ -102,6 +103,9 @@ sealed class Vector : VectorReader, VectorWriter {
     override fun toString() = VectorReader.toString(this)
 
     companion object {
+        @JvmStatic
+        fun open(al: BufferAllocator, name: ColumnName, type: Type): Vector = fromField(al, type.toField(name))
+
         @JvmStatic
         fun fromField(al: BufferAllocator, field: Field): Vector {
             val name: String = field.name

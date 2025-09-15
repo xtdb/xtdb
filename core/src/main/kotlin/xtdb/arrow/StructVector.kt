@@ -144,7 +144,6 @@ class StructVector private constructor(
         }
 
     override fun rowCopier0(src: VectorReader): RowCopier {
-        if (src.fieldType.type != type) throw InvalidCopySourceException(src.fieldType, fieldType)
         nullable = nullable || src.nullable
 
         check(src is StructVector)

@@ -190,8 +190,8 @@
               "name" : "col-name",
               "count" : 7,
               "VALIDITY" : [1,1,1,1,1,1,1],
-              "OFFSET" : [0,4,15,24,36,40,43,46],
-              "DATA" : ["_iid","_valid_from","_valid_to","_system_from","toto","bar","_id"]
+              "OFFSET" : [0,4,15,24,36,39,42,46],
+              "DATA" : ["_iid","_valid_from","_valid_to","_system_from","_id","bar","toto"]
             },{
               "name" : "root-col?",
               "count" : 7,
@@ -201,11 +201,11 @@
               "name" : "count",
               "count" : 7,
               "VALIDITY" : [1,1,1,1,1,1,1],
-              "DATA" : ["5","5","5","5","2","3","3"]
+              "DATA" : ["5","5","5","5","3","3","2"]
             },{
               "name" : "bytes",
               "count" : 7,
-              "VALIDITY" : [1,0,0,0,1,0,0],
+              "VALIDITY" : [1,0,0,0,0,0,1],
               "children" : [{
                 "name" : "bloom",
                 "count" : 7,
@@ -231,17 +231,17 @@
             },{
               "name" : "numbers",
               "count" : 7,
-              "VALIDITY" : [0,0,0,0,0,1,1],
+              "VALIDITY" : [0,0,0,0,1,1,0],
               "children" : [{
                 "name" : "min",
                 "count" : 7,
-                "VALIDITY" : [0,0,0,0,0,1,1],
-                "DATA" : [0.0,0.0,0.0,0.0,0.0,1.0,1.0]
+                "VALIDITY" : [0,0,0,0,1,1,0],
+                "DATA" : [0.0,0.0,0.0,0.0,1.0,1.0,0.0]
               },{
                 "name" : "max",
                 "count" : 7,
-                "VALIDITY" : [0,0,0,0,0,1,1],
-                "DATA" : [0.0,0.0,0.0,0.0,0.0,2.0,2.0]
+                "VALIDITY" : [0,0,0,0,1,1,0],
+                "DATA" : [0.0,0.0,0.0,0.0,2.0,2.0,0.0]
               }]
             }]
           }]

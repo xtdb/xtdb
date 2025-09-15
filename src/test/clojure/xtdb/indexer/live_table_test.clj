@@ -123,10 +123,10 @@
 (deftest test-live-table-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         rc (RowCounter.)]
-    (with-open [node (xtn/start-node (merge tu/*node-opts* {:compactor {:threads 0}}))
-                bp (.getBufferPool (db/primary-db node))
-                allocator (RootAllocator.)
-                live-table (LiveTable. allocator bp #xt/table foo rc)]
+    (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:compactor {:threads 0}}))
+                     bp (.getBufferPool (db/primary-db node))
+                     allocator (RootAllocator.)
+                     live-table (LiveTable. allocator bp #xt/table foo rc)]
       (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
             doc-wtr (.getDocWriter live-table-tx)]
 
@@ -137,11 +137,11 @@
 
         (.commit live-table-tx)
 
-        (with-open [live-table-snap (.openSnapshot live-table)]
+        (util/with-open [live-table-snap (.openSnapshot live-table)]
           (let [live-table-before (live-table-snap->data live-table-snap)]
 
             (.finishBlock live-table 0)
-            (.close live-table)
+            (.close live-table-tx)
 
             (let [live-table-after (live-table-snap->data live-table-snap)]
 

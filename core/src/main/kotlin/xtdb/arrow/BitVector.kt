@@ -57,12 +57,13 @@ class BitVector private constructor(
 
     override fun hashCode0(idx: Int, hasher: Hasher) = if (getBoolean(idx)) 17 else 19
 
-    override fun rowCopier0(src: VectorReader) =
-        if (src !is BitVector) throw InvalidCopySourceException(src.fieldType, fieldType)
-        else RowCopier { srcIdx ->
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        check(src is BitVector)
+        return RowCopier { srcIdx ->
             if (src.nullable && !nullable) nullable = true
             valueCount.apply { if (src.isNull(srcIdx)) writeNull() else writeBoolean(src.getBoolean(srcIdx)) }
         }
+    }
 
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))

@@ -61,6 +61,7 @@ abstract class ExtensionVector : Vector() {
 
     override fun rowCopier0(src: VectorReader): RowCopier {
         require(src is ExtensionVector)
+
         return inner.rowCopier0(src.inner)
     }
 

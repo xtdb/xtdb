@@ -16,8 +16,7 @@
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            (xtdb.arrow Relation)
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf Bucketer MemoryHashTrie$Leaf)
-           (xtdb.vector IVectorWriter)))
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf Bucketer MemoryHashTrie$Leaf)))
 
 (t/use-fixtures :each tu/with-allocator
   (tu/with-opts {:compactor {:threads 0}})
@@ -47,7 +46,7 @@
 
         (let [live-table (.liveTable live-index #xt/table my-table)
               live-rel (.getLiveRelation live-table)
-              iid-vec (.getVector ^IVectorWriter (.vectorFor live-rel "_iid"))
+              iid-vec (.vectorFor live-rel "_iid")
 
               trie (.getLiveTrie live-table)]
 

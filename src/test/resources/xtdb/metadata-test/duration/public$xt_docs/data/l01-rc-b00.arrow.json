@@ -50,18 +50,18 @@
           "name" : "struct"
         },
         "children" : [{
+          "name" : "_id",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
           "name" : "duration",
           "nullable" : false,
           "type" : {
             "name" : "duration",
             "unit" : "MICROSECOND"
-          },
-          "children" : [ ]
-        },{
-          "name" : "_id",
-          "nullable" : false,
-          "type" : {
-            "name" : "utf8"
           },
           "children" : [ ]
         }]
@@ -114,16 +114,16 @@
         "count" : 3,
         "VALIDITY" : [1,1,1],
         "children" : [{
-          "name" : "duration",
-          "count" : 3,
-          "VALIDITY" : [1,1,1],
-          "DATA" : [0,259200000000,3600000000]
-        },{
           "name" : "_id",
           "count" : 3,
           "VALIDITY" : [1,1,1],
           "OFFSET" : [0,3,6,9],
           "DATA" : ["baz","bar","foo"]
+        },{
+          "name" : "duration",
+          "count" : 3,
+          "VALIDITY" : [1,1,1],
+          "DATA" : [0,259200000000,3600000000]
         }]
       },{
         "name" : "delete",

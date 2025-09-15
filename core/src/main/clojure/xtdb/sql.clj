@@ -2674,8 +2674,10 @@
   (let [known-cols (mapv symbol (get table-info table))]
     (xt/template
      [:project [{_iid new/_iid}
-                {_valid_from (coalesce old/_valid_from ~valid-from (current-timestamp))}
-                {_valid_to (coalesce old/_valid_to ~valid-to xtdb/end-of-time)}
+                {_valid_from (cast (coalesce old/_valid_from ~valid-from (current-timestamp))
+                                   ~types/temporal-col-type)}
+                {_valid_to (cast (coalesce old/_valid_to ~valid-to xtdb/end-of-time)
+                                 ~types/temporal-col-type)}
                 {doc (_patch old/doc new/doc)}]
       [:left-outer-join [{new/_iid old/_iid}]
        [:rename new

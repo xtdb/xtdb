@@ -1,11 +1,11 @@
 {:row-count 6,
  :fields
- {"struct"
-  #xt/field ["struct" :struct :? ["a" :union ["i64" :i64] ["bool" :bool]] ["b" :union ["utf8" :utf8] ["struct" :struct ["c" :utf8] ["d" :utf8]]]],
-  "_id"
+ {"_id"
   #xt/field ["_id" :union ["utf8" :utf8] ["keyword" :keyword] ["i64" :i64]],
   "list"
-  #xt/field ["list" :list :? ["$data$" :union ["f64" :f64] ["utf8" :utf8] ["timestamp-tz-micro-utc" [:timestamp-tz :micro "UTC"]] ["bool" :bool]]]},
+  #xt/field ["list" :list :? ["$data$" :union ["f64" :f64] ["utf8" :utf8] ["timestamp-tz-micro-utc" [:timestamp-tz :micro "UTC"]] ["bool" :bool]]],
+  "struct"
+  #xt/field ["struct" :struct :? ["a" :union ["i64" :i64] ["bool" :bool]] ["b" :union ["utf8" :utf8] ["struct" :struct ["c" :utf8] ["d" :utf8]]]]},
  :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 5726,
@@ -19,6 +19,6 @@
     :row-count 6,
     :iid-bloom [788818467 30]}}],
  :hlls
- {"struct" [-1218887806 3.004403133222472],
-  "_id" [-1707429676 6.01764709272061],
-  "list" [2058620104 3.004403133222472]}}
+ {"_id" [-1707429676 6.01764709272061],
+  "list" [-791736731 3.004403133222472],
+  "struct" [1626147714 3.004403133222472]}}

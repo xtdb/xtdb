@@ -172,7 +172,7 @@
       (let [meta-file-path (Trie/metaFilePath "public$xt_docs" ^String (trie/->l0-trie-key 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
           (let [page-idx-pred (.build true-selector page-metadata)]
-            (t/is (= 4 (.rowIndex page-metadata "boolean_or_int" 0)))
+            (t/is (= 5 (.rowIndex page-metadata "boolean_or_int" 0)))
 
             (t/is (true? (.test page-idx-pred 0)))))))
 
@@ -182,7 +182,7 @@
       (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
           (let [page-idx-pred (.build true-selector page-metadata)]
-            (t/is (= 4 (.rowIndex page-metadata "boolean_or_int" 0)))
+            (t/is (= 5 (.rowIndex page-metadata "boolean_or_int" 0)))
 
             (t/is (true? (.test page-idx-pred 0)))))))))
 
@@ -230,7 +230,7 @@
       (let [metadata-mgr (.getMetadataManager (db/primary-db node))
             meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
         (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
-          (t/is (= 4 (.rowIndex page-metadata "duration" 0))))))))
+          (t/is (= 5 (.rowIndex page-metadata "duration" 0))))))))
 
 (t/deftest test-missing-type-metadata-4665
   (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo", :foo 4}]])

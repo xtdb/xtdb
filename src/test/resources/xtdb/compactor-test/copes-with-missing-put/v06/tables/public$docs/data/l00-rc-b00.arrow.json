@@ -64,19 +64,19 @@
           "name" : "struct"
         },
         "children" : [{
+          "name" : "_id",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
           "name" : "a",
           "nullable" : false,
           "type" : {
             "name" : "int",
             "bitWidth" : 64,
             "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "_id",
-          "nullable" : false,
-          "type" : {
-            "name" : "utf8"
           },
           "children" : [ ]
         }]
@@ -121,16 +121,16 @@
         "count" : 3,
         "VALIDITY" : [1,1,1],
         "children" : [{
-          "name" : "a",
-          "count" : 3,
-          "VALIDITY" : [1,1,1],
-          "DATA" : ["3","2","1"]
-        },{
           "name" : "_id",
           "count" : 3,
           "VALIDITY" : [1,1,1],
           "OFFSET" : [0,3,6,9],
           "DATA" : ["baz","bar","foo"]
+        },{
+          "name" : "a",
+          "count" : 3,
+          "VALIDITY" : [1,1,1],
+          "DATA" : ["3","2","1"]
         }]
       }]
     }]
