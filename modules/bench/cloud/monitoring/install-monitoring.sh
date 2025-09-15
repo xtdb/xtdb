@@ -60,10 +60,12 @@ add_helm_repo() {
 
 install_or_upgrade_stack() {
   log "Installing/Upgrading ${CHART} as release ${RELEASE_NAME} in namespace ${NAMESPACE}"
-  local set_args=()
-  if [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
-    set_args+=(--set "grafana.adminPassword=${GRAFANA_ADMIN_PASSWORD}")
+  # Require an explicit Grafana admin password to avoid deploying with defaults
+  if [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
+    error "GRAFANA_ADMIN_PASSWORD is required but not set"
   fi
+  local set_args=()
+  set_args+=(--set "grafana.adminPassword=${GRAFANA_ADMIN_PASSWORD}")
 
   if [ -f "${VALUES_FILE}" ]; then
     helm upgrade --install "${RELEASE_NAME}" "${CHART}" \

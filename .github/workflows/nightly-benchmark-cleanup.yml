@@ -151,15 +151,6 @@ jobs:
           echo "from=$FROM_PARAM" >> "$GITHUB_OUTPUT"
           echo "to=$TO_PARAM" >> "$GITHUB_OUTPUT"
 
-      - name: Ensure Grafana password present
-        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
-        run: |
-          set -euo pipefail
-          if [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
-            echo "GRAFANA_ADMIN_PASSWORD is required but not set" >&2
-            exit 1
-          fi
-
       - name: Port-forward Grafana (background)
         if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
         run: |
