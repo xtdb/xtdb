@@ -5,14 +5,12 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
-import xtdb.arrow.RelationWriter
 import xtdb.table.TableRef
-import xtdb.types.Type
 import xtdb.types.Schema
+import xtdb.types.Type
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
-import xtdb.vector.OldRelationWriter
 import java.nio.file.Path
 import java.time.LocalDate
 import java.time.format.DateTimeFormatterBuilder

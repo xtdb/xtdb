@@ -15,12 +15,9 @@
            (java.util Comparator)
            java.util.stream.IntStream
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector VectorSchemaRoot)
-           (org.apache.arrow.vector.ipc ArrowFileReader ArrowReader)
            (org.apache.arrow.vector.types.pojo Field)
-           (xtdb.arrow Relation Relation$Loader ArrowUnloader$Mode RelationReader RowCopier)
-           xtdb.ICursor
-           xtdb.vector.OldRelationWriter))
+           (xtdb.arrow Relation Relation$Loader ArrowUnloader$Mode RelationReader RowCopier Vector)
+           xtdb.ICursor))
 
 (s/def ::direction #{:asc :desc})
 (s/def ::null-ordering #{:nulls-first :nulls-last})
@@ -42,9 +39,9 @@
 (defn- ->file [tmp-dir batch-idx file-idx]
   (io/file tmp-dir (format "temp-sort-%d-%d.arrow" batch-idx file-idx)))
 
-(defn- write-rel [^BufferAllocator allocator, ^RelationReader rdr, ^OutputStream os]
+(defn- write-rel [^BufferAllocator allocator, ^Relation rel, ^OutputStream os]
   (util/with-open [ch (Channels/newChannel os)
-                   rel (.openDirectSlice rdr allocator)
+                   rel (.openDirectSlice rel allocator)
                    unl (.startUnload rel ch ArrowUnloader$Mode/FILE)]
     (.writePage unl)
     (.end unl)))
@@ -79,10 +76,9 @@
                                                    (vw/append-rel rel-writer src-rel)))))
                         (when (pos? (.getRowCount rel-writer))
                           (let [read-rel (vw/rel-wtr->rdr rel-writer)
-                                out-filename (->file tmp-dir 0 file-idx)]
-                            (with-open [out-rel (.select read-rel (sorted-idxs read-rel order-specs))
-
-                                        os (io/output-stream out-filename)]
+                                out-filename (->file tmp-dir 0 file-idx)
+                                out-rel (.select read-rel (sorted-idxs read-rel order-specs))]
+                            (with-open [os (io/output-stream out-filename)]
                               (write-rel allocator out-rel os)
                               out-filename))))]
       (recur (conj filenames filename) (inc file-idx))
@@ -204,8 +200,8 @@
                         order-specs
                         ^:unsynchronized-mutable ^boolean consumed?
                         ^:unsynchronized-mutable ^Path sort-dir
-                        ^:unsynchronized-mutable ^ArrowReader reader
-                        ^:unsynchronized-mutable ^VectorSchemaRoot read-root
+                        ^:unsynchronized-mutable ^Relation$Loader loader
+                        ^:unsynchronized-mutable ^Relation read-rel
                         ^:unsynchronized-mutable ^File sorted-file]
   ICursor
   (getCursorType [_] "order-by")
@@ -214,32 +210,45 @@
   (tryAdvance [this c]
     (if-not consumed?
       (letfn [(load-next-batch []
-                (if (.loadNextBatch ^ArrowReader (.reader this))
-                  (with-open [out-rel (vr/<-root (.read-root this))]
-                    (.accept c out-rel)
+                (if (.loadNextPage ^Relation$Loader (.loader this) (.read-rel this))
+                  ;; HACK won't need to openAsRoot once operators close over new rels
+                  (util/with-open [out-root (.openAsRoot ^Relation (.read-rel this) allocator)]
+                    (.accept c (vr/<-root out-root))
                     true)
                   (do
                     (io/delete-file (.sorted-file this))
                     (set! (.consumed? this) true)
                     false)))]
-        (if-not (nil? reader)
+
+        (if-not (nil? loader)
           (load-next-batch)
-          (with-open [rel-writer (OldRelationWriter. allocator ^List (vec (for [^Field field static-fields]
-                                                                            (vw/->writer (.createVector field allocator)))))]
-            (while (and (<= (.getRowCount rel-writer) ^int *block-size*)
+
+          (util/with-open [acc-rel (Relation. allocator
+                                              ^List (vec (for [^Field field static-fields]
+                                                           (Vector/fromField allocator field)))
+                                              0)]
+            (while (and (<= (.getRowCount acc-rel) ^int *block-size*)
                         (.tryAdvance in-cursor
                                      (fn [^RelationReader src-rel]
-                                       (.append rel-writer src-rel)))))
-            (let [pos (.getRowCount rel-writer)
-                  read-rel (vw/rel-wtr->rdr rel-writer)]
+                                       ;; HACK won't need to openDirectSlice once operators close over new rels
+                                       (with-open [src-rel (.openDirectSlice src-rel allocator)]
+                                         (.append acc-rel src-rel))))))
+
+            (let [pos (.getRowCount acc-rel)]
               (if (<= pos ^int *block-size*)
                 ;; in memory case
                 (if (zero? pos)
-                  (do (set! (.consumed? this) true)
-                      false)
-                  (do (.accept c (.select read-rel (sorted-idxs read-rel order-specs)))
-                      (set! (.consumed? this) true)
-                      true))
+                  (do
+                    (set! (.consumed? this) true)
+                    false)
+
+                  ;; HACK won't need to openDirectSlice/openAsRoot once operators close over new rels
+                  (with-open [out-rel (-> (.select acc-rel (sorted-idxs acc-rel order-specs))
+                                          (.openDirectSlice allocator))
+                              out-root (.openAsRoot out-rel allocator)]
+                    (.accept c (vr/<-root out-root))
+                    (set! (.consumed? this) true)
+                    true))
 
                 ;; first batch from external sort
                 (let [sort-dir (util/tmp-dir "external-sort")
@@ -247,20 +256,21 @@
                       first-filename (->file tmp-dir 0 0)]
                   (set! (.sort-dir this) sort-dir)
                   (.mkdirs tmp-dir)
-                  (with-open [out-rel (.select read-rel (sorted-idxs read-rel order-specs))
-                              os (io/output-stream first-filename)]
-                    (write-rel allocator out-rel os))
+                  (let [out-rel (.select acc-rel (sorted-idxs acc-rel order-specs))]
+                    (with-open [os (io/output-stream first-filename)]
+                      (write-rel allocator out-rel os)))
 
                   (let [sorted-file (external-sort allocator in-cursor order-specs static-fields tmp-dir first-filename)]
                     (set! (.sorted-file this) sorted-file)
-                    (set! (.reader this) (ArrowFileReader. (util/->file-channel (util/->path sorted-file)) allocator))
-                    (set! (.read-root this) (.getVectorSchemaRoot reader))
+                    (let [loader (Relation/loader allocator (util/->file-channel (util/->path sorted-file)))]
+                      (set! (.loader this) loader)
+                      (set! (.read-rel this) (Relation. allocator (.getSchema loader))))
                     (load-next-batch))))))))
       false))
 
   (close [_]
-    (util/try-close read-root)
-    (util/try-close reader)
+    (util/try-close read-rel)
+    (util/try-close loader)
     (util/try-close in-cursor)))
 
 (defmethod lp/emit-expr :order-by [{:keys [order-specs relation]} args]
