@@ -379,3 +379,7 @@
                (types/merge-fields nil set-field)))
       (t/is (= (types/->field "b" #xt.arrow/type :list true (types/->field "$data$" #xt.arrow/type :null true)) 
                (types/merge-fields nil list-field))))))
+
+(t/deftest field->col-type-error-on-empty-list-4774
+  (t/is (= [:union #{[:list :null] :null}] (types/field->col-type (types/->field "a" #xt.arrow/type :list true))))
+  (t/is (= [:union #{[:set :null] :null}] (types/field->col-type (types/->field "b" #xt.arrow/type :set true)))))
