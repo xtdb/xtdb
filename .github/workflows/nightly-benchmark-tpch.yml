@@ -23,6 +23,7 @@ jobs:
   benchmark:
     name: Run Nightly Benchmark TPC-H
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'schedule' || github.repository == 'xtdb/xtdb' }}
     timeout-minutes: 90
     env:
       SCALE_FACTOR: ${{ inputs.scale_factor || '0.5' }}
