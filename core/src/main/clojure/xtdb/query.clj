@@ -76,9 +76,9 @@
     (trySplit [_] (.trySplit cursor))
     (close [_] (.close cursor))))
 
-(defn- wrap-dynvars [^IResultCursor cursor
-                     current-time, snapshot-token, default-tz
-                     ^RefCounter ref-ctr]
+(defn- wrap-dynvars ^xtdb.IResultCursor [^IResultCursor cursor
+                                         current-time, snapshot-token, default-tz
+                                         ^RefCounter ref-ctr]
   (reify IResultCursor
     (getResultFields [_] (.getResultFields cursor))
     (tryAdvance [_ c]
@@ -398,18 +398,20 @@
                                                     :explain-analyze? (:explain-analyze? planned-query)})
 
                                          (wrap-result-fields fields)
-                                         (wrap-dynvars current-time expr/*snapshot-token* default-tz ref-ctr)
-                                         (wrap-closeables ref-ctr (cond->> [snaps allocator]
-                                                                    close-args? (cons args))))]
+                                         (wrap-dynvars current-time expr/*snapshot-token* default-tz ref-ctr))]
                           (if (:explain-analyze? planned-query)
                             (try
                               (.forEachRemaining cursor (fn [_]))
                               (-> (PagesCursor. allocator nil [(explain-analyze-results cursor)])
-                                  (wrap-result-fields explain-analyze-fields))
+                                  (wrap-result-fields explain-analyze-fields)
+                                  (wrap-closeables ref-ctr (cond->> [snaps allocator]
+                                                             close-args? (cons args))))
                               (finally
                                 (util/close cursor)))
 
-                            cursor))))
+                            (-> cursor
+                                (wrap-closeables ref-ctr (cond->> [snaps allocator]
+                                                           close-args? (cons args))))))))
 
                     (catch Throwable t
                       (.release ref-ctr)
