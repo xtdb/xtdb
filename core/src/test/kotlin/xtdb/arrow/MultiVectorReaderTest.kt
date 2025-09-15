@@ -26,6 +26,7 @@ class MultiVectorReaderTest {
                 }
 
                 val indirectRdr = MultiVectorReader(
+                    "my-int",
                     listOf(intVec1, intVec2),
                     VectorIndirection.selection(intArrayOf(0, 1, 0, 1)),
                     VectorIndirection.selection(intArrayOf(0, 0, 1, 1))
@@ -69,6 +70,7 @@ class MultiVectorReaderTest {
                     else structVec2.writeObject(m2)
                 }
                 val indirectRdr = MultiVectorReader(
+                    "my-struct",
                     listOf(structVec1, structVec2),
                     VectorIndirection.selection(intArrayOf(0, 1, 0, 1)),
                     VectorIndirection.selection(intArrayOf(0, 0, 1, 1))
@@ -101,6 +103,7 @@ class MultiVectorReaderTest {
                 stringVec.writeObject("second")
 
                 val indirectRdr = MultiVectorReader(
+                    "my-duv",
                     listOf(intVec, stringVec),
                     VectorIndirection.selection(intArrayOf(0, 1, 0, 1)),
                     VectorIndirection.selection(intArrayOf(0, 0, 1, 1))
@@ -148,6 +151,7 @@ class MultiVectorReaderTest {
                     duvVec.vectorFor("utf8").writeObject("fifth")
 
                     val indirectRdr = MultiVectorReader(
+                        "my-duv",
                         listOf(intVec, stringVec, duvVec),
                         VectorIndirection.selection(intArrayOf(0, 1, 2, 0, 1, 2)),
                         VectorIndirection.selection(intArrayOf(0, 0, 0, 1, 1, 1))
@@ -193,6 +197,7 @@ class MultiVectorReaderTest {
                 duv2.vectorFor("null").writeNull()
 
                 val indirectRdr = MultiVectorReader(
+                    "my-duv",
                     listOf(duv1, duv2),
                     VectorIndirection.selection(intArrayOf(0, 1, 0, 1, 0, 1)),
                     VectorIndirection.selection(intArrayOf(0, 0, 1, 1, 2, 2))
@@ -230,6 +235,7 @@ class MultiVectorReaderTest {
             duvVec1.vectorFor("i32").run { writeInt(0); writeInt(1) }
 
             val indirectRdr = MultiVectorReader(
+                "my-duv",
                 listOf(duvVec1),
                 VectorIndirection.selection(intArrayOf(0, 0)),
                 VectorIndirection.selection(intArrayOf(0, 1))
