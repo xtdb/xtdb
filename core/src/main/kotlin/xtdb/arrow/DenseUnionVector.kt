@@ -69,10 +69,7 @@ class DenseUnionVector private constructor(
 
     override val vectors: Iterable<Vector> get() = legVectors
 
-    internal inner class LegVector(
-        private val typeId: Byte, private val inner: VectorWriter, private val nested: Boolean = false
-    ) : VectorReader, VectorWriter {
-
+    internal inner class LegReader(val typeId: Byte, val inner: VectorReader, val nested: Boolean = false) : VectorReader {
         override val name get() = inner.name
         override val nullable get() = inner.nullable
         override val valueCount get() = this@DenseUnionVector.valueCount
@@ -92,24 +89,23 @@ class DenseUnionVector private constructor(
 
         override fun hashCode(idx: Int, hasher: Hasher) = inner.hashCode(getOffset(idx), hasher)
 
+        override val listElements get() = inner.listElements
+
         override fun getListCount(idx: Int) = inner.getListCount(getOffset(idx))
         override fun getListStartIndex(idx: Int) = inner.getListStartIndex(getOffset(idx))
-        override val listElements get() = inner.listElements
 
         override val keyNames: Set<String>? get() = inner.keyNames
         override val legNames get() = inner.legNames
 
-        override fun getLeg(idx: Int) = inner.getLeg(getOffset(idx))
-
-        override fun vectorForOrNull(name: String) =
-            inner.vectorForOrNull(name)?.let { LegVector(typeId, it, true) }
-
         override val mapKeys get() = inner.mapKeys
         override val mapValues get() = inner.mapValues
 
-        override fun openSlice(al: BufferAllocator) = unsupported("LegVector/openSlice")
+        override fun getLeg(idx: Int) = inner.getLeg(getOffset(idx))
 
-        override val metadataFlavours get() = inner.metadataFlavours
+        override fun rowCopier(dest: VectorWriter): RowCopier {
+            val innerCopier = inner.rowCopier(dest)
+            return RowCopier { srcIdx -> innerCopier.copyRow(getOffset(srcIdx)) }
+        }
 
         override fun valueReader(pos: VectorPosition) = inner.valueReader(object : VectorPosition {
             override var position: Int
@@ -118,6 +114,34 @@ class DenseUnionVector private constructor(
                     throw UnsupportedOperationException("setPosition not supported on LegVector")
                 }
         })
+
+        override fun openSlice(al: BufferAllocator) = unsupported("LegVector/openSlice")
+
+        override val metadataFlavours get() = inner.metadataFlavours
+
+        override fun close() = Unit
+
+        override fun toList() = inner.toList()
+    }
+
+    internal inner class LegVector(
+        private val typeId: Byte, private val inner: VectorWriter, private val nested: Boolean = false,
+        private val reader: LegReader = LegReader(typeId, inner, nested)
+    ) : VectorReader by reader, VectorWriter {
+
+        override val listElements get() = inner.listElements
+
+        override fun vectorForOrNull(name: String) =
+            inner.vectorForOrNull(name)?.let { LegVector(typeId, it, true) }
+
+        override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
+        override fun get(name: String) = vectorFor(name)
+
+        override fun vectorFor(name: String, fieldType: FieldType) =
+            LegVector(typeId, inner.vectorFor(name, fieldType), true)
+
+        override val mapKeys get() = inner.mapKeys
+        override val mapValues get() = inner.mapValues
 
         private fun writeValueThen(): VectorWriter {
             if (!nested) {
@@ -145,9 +169,6 @@ class DenseUnionVector private constructor(
 
         override fun writeValue0(v: ValueReader) = writeValueThen().writeValue0(v)
 
-        override fun vectorFor(name: String, fieldType: FieldType) =
-            LegVector(typeId, inner.vectorFor(name, fieldType), true)
-
         override fun endStruct() = writeValueThen().endStruct()
 
         override fun getListElements(fieldType: FieldType) = inner.getListElements(fieldType)
@@ -156,20 +177,13 @@ class DenseUnionVector private constructor(
         override fun getMapKeys(fieldType: FieldType) = inner.getMapKeys(fieldType)
         override fun getMapValues(fieldType: FieldType) = inner.getMapValues(fieldType)
 
-        override fun rowCopier(dest: VectorWriter): RowCopier {
-            val innerCopier = inner.rowCopier(dest)
-            return RowCopier { srcIdx -> innerCopier.copyRow(getOffset(srcIdx)) }
-        }
-
         fun rowCopierFrom(src: VectorReader): RowCopier {
             val innerCopier = src.rowCopier(inner)
             return RowCopier { srcIdx -> valueCount.also { writeValueThen(); innerCopier.copyRow(srcIdx) } }
         }
 
         override fun clear() = inner.clear()
-        override fun close() = Unit
-
-        override fun toList() = inner.toList()
+        override fun close() = reader.close()
     }
 
     private fun getTypeId(idx: Int) = typeBuffer.getByte(idx)
