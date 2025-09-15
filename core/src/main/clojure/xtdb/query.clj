@@ -31,6 +31,7 @@
             xtdb.operator.top
             xtdb.operator.unnest
             xtdb.operator.window
+            [xtdb.serde.types :as serde-types]
             [xtdb.sql :as sql]
             [xtdb.time :as time]
             [xtdb.types :as types]
@@ -233,14 +234,16 @@
       (types/col-type->field field-name (get col-types field-name)))))
 
 (def ^:private explain-analyze-fields
-  [#xt/field ["depth" :utf8]
-   #xt/field ["op" :keyword]
+  ;; for some reason we're not able to use the reader macro here.
+  ;; it's a bug with either Clojure AOT or Gradle Clojurephant, not sure which.
+  [(serde-types/->field ["depth" :utf8])
+   (serde-types/->field ["op" :keyword])
 
-   #xt/field ["total_time" [:duration :micro]]
-   #xt/field ["time_to_first_block" [:duration :micro]]
+   (serde-types/->field ["total_time" [:duration :micro]])
+   (serde-types/->field ["time_to_first_block" [:duration :micro]])
 
-   #xt/field ["block_count" :i64]
-   #xt/field ["row_count" :i64]])
+   (serde-types/->field ["block_count" :i64])
+   (serde-types/->field ["row_count" :i64])])
 
 (defn- explain-analyze-results [^IResultCursor cursor]
   (letfn [(->results [^ICursor cursor, depth]
