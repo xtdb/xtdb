@@ -1,13 +1,11 @@
 package xtdb.util
 
-import org.jetbrains.annotations.Contract
 import java.nio.channels.SeekableByteChannel
 import java.nio.channels.WritableByteChannel
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
 import kotlin.contracts.ExperimentalContracts
-import kotlin.contracts.InvocationKind
 import kotlin.contracts.InvocationKind.EXACTLY_ONCE
 import kotlin.contracts.contract
 import kotlin.io.path.createTempFile
@@ -49,6 +47,14 @@ inline fun <T : AutoCloseable?, R> T.closeOnCatch(block: (T) -> R): R {
 }
 
 inline fun <C : AutoCloseable?, L : Iterable<C>, R> L.closeAllOnCatch(block: (L) -> R): R =
+    try {
+        block(this)
+    } catch (e: Throwable) {
+        closeAll()
+        throw e
+    }
+
+inline fun <K, C : AutoCloseable?, M : Map<K, C>, R> M.closeAllOnCatch(block: (M) -> R): R =
     try {
         block(this)
     } catch (e: Throwable) {

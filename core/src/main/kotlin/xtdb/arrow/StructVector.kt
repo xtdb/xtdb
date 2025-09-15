@@ -17,24 +17,35 @@ import xtdb.error.Incorrect
 import xtdb.toFieldType
 import xtdb.types.Type
 import xtdb.util.Hasher
+import xtdb.util.closeAllOnCatch
+import xtdb.util.closeOnCatch
 import xtdb.util.normalForm
 import java.util.*
 
 internal val STRUCT = ArrowType.Struct.INSTANCE
 
-class StructVector
-@JvmOverloads constructor(
+class StructVector private constructor(
     private val allocator: BufferAllocator,
     override var name: String, override var nullable: Boolean,
+    private val validityBuffer: ExtensibleBuffer,
     private val childWriters: SequencedMap<String, Vector> = LinkedHashMap(),
     override var valueCount: Int = 0,
 ) : Vector(), MetadataFlavour.Struct {
 
+    @JvmOverloads
+    constructor(
+        allocator: BufferAllocator,
+        name: String, nullable: Boolean,
+        childWriters: SequencedMap<String, Vector> = LinkedHashMap(),
+        valueCount: Int = 0,
+    ) : this(
+        allocator, name, nullable,
+        ExtensibleBuffer(allocator), childWriters, valueCount
+    )
+
     override val type: ArrowType = STRUCT
 
     override val vectors: Iterable<Vector> get() = childWriters.sequencedValues()
-
-    private val validityBuffer = ExtensibleBuffer(allocator)
 
     override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
 
@@ -178,11 +189,16 @@ class StructVector
     }
 
     override fun openSlice(al: BufferAllocator) =
-        StructVector(
-            al, name, nullable,
-            childWriters.entries.associateTo(LinkedHashMap()) { it.key to it.value.openSlice(al) },
-            valueCount
-        )
+        validityBuffer.openSlice(al).closeOnCatch { validityBuffer ->
+            StructVector(
+                al, name, nullable, validityBuffer,
+                LinkedHashMap<String, Vector>().closeAllOnCatch { cws ->
+                    childWriters.entries.associateTo(cws) { it.key to it.value.openSlice(al) }
+                },
+                valueCount
+            )
+        }
+
 
     override fun clear() {
         validityBuffer.clear()
