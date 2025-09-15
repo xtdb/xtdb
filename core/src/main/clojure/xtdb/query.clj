@@ -396,7 +396,7 @@
 
                                          (wrap-result-fields fields)
                                          (wrap-dynvars current-time expr/*snapshot-token* default-tz ref-ctr)
-                                         (wrap-closeables ref-ctr (cond-> [snaps allocator]
+                                         (wrap-closeables ref-ctr (cond->> [snaps allocator]
                                                                     close-args? (cons args))))]
                           (if (:explain-analyze? planned-query)
                             (try
