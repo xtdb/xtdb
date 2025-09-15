@@ -14,6 +14,7 @@ on:
 permissions:
   id-token: write
   contents: read
+  actions: write
 
 concurrency:
   group: nightly-benchmark-tpch
@@ -49,6 +50,24 @@ jobs:
         run: |
           # exit 0 if exists, non-zero if not
           helm status xtdb-benchmark -n cloud-benchmark >/dev/null 2>&1
+
+      - name: Cancel workflow (existing deployment)
+        if: steps.check-deployment.outcome == 'success'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            core.notice('Existing deployment found. Cancelling this workflow run to avoid overlap.');
+            await github.rest.actions.cancelWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+            });
+
+      - name: Stop job after cancellation
+        if: steps.check-deployment.outcome == 'success'
+        run: |
+          echo "Workflow cancellation requested due to existing deployment. Stopping job." 
+          exit 0
 
       - name: Install Monitoring Stack
         if: steps.check-deployment.outcome != 'success'
@@ -97,9 +116,3 @@ jobs:
           message_format: "${{ steps.compose.outputs.msg }}"
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.BENCHMARK_SLACK_WEBHOOK_URL }}
-
-      - name: Fail if existing deployment
-        if: steps.check-deployment.outcome == 'success'
-        run: |
-          echo "Failing workflow due to existing deployment"
-          exit 1
