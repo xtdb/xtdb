@@ -32,14 +32,13 @@ class ByteVector private constructor(
 
     override fun getMetaDouble(idx: Int) = getByte(idx).toDouble()
 
-    override fun rowCopier0(src: VectorReader) =
-        if (src !is ByteVector) throw InvalidCopySourceException(src.fieldType, fieldType)
-        else {
-            if (src.nullable && !nullable) nullable = true
-            RowCopier { srcIdx ->
-                valueCount.also { writeByte(src.getByte(srcIdx)) }
-            }
+    override fun rowCopier0(src: VectorReader): RowCopier {
+        check(src is ByteVector)
+        if (src.nullable && !nullable) nullable = true
+        return RowCopier { srcIdx ->
+            valueCount.also { writeByte(src.getByte(srcIdx)) }
         }
+    }
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getByte(idx).toDouble())
 

@@ -403,7 +403,6 @@
                          actual-data (.toList duv)]
                      (tg/lists-equal-normalized? expected-data actual-data))))))
 
-;; TODO: fails due to #4748
 (t/deftest ^:property copy-two-duvs
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}

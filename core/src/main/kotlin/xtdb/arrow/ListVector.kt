@@ -121,8 +121,15 @@ class ListVector private constructor(
         }
 
     override fun rowCopier0(src: VectorReader): RowCopier {
-        require(src is ListVector)
-        val elCopier = src.elVector.rowCopier(elVector)
+        check(src is ListVector)
+
+        val elCopier = try {
+            src.elVector.rowCopier(elVector)
+        } catch (e: InvalidCopySourceException) {
+            elVector = elVector.maybePromote(al, src.elVector.fieldType)
+            src.elVector.rowCopier(elVector)
+        }
+
         return RowCopier { srcIdx ->
             (src.getListStartIndex(srcIdx) until src.getListEndIndex(srcIdx)).forEach { elIdx ->
                 elCopier.copyRow(elIdx)

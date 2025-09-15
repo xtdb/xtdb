@@ -1,7 +1,10 @@
 (ns xtdb.arrow-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.test-util :as tu]))
+            [xtdb.test-util :as tu]
+            [xtdb.util :as util])
+  (:import org.apache.arrow.vector.types.pojo.Schema
+           [xtdb.arrow Vector Relation]))
 
 (t/use-fixtures :each tu/with-node tu/with-allocator)
 
@@ -53,3 +56,16 @@
                                  [[] #{}])
                 copied-vec (.openSlice vec tu/*allocator*)]
       (= (.toList vec) (.toList copied-vec)))))
+
+(t/deftest copy-list-into-empty-rel-4748
+  (with-open [src-vec1 (Vector/fromList tu/*allocator* "0" [[1]])
+              dest-vec (Vector/fromField tu/*allocator* #xt/field ["list" :list])]
+    (let [copier1 (.rowCopier src-vec1 dest-vec)]
+      (.copyRow copier1 0)
+      (t/is (= [[1]] (.toList dest-vec)))))
+
+  (with-open [src-rel (Relation/openFromRows tu/*allocator* [{"list" [1]}])
+              dest-rel (Relation. tu/*allocator* (Schema. []))]
+    (let [copier (.rowCopier src-rel dest-rel)]
+      (.copyRow copier 0)
+      (t/is (= [{:list [1]}] (.toMaps dest-rel))))))

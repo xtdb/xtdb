@@ -44,14 +44,12 @@ class NullVector(override var name: String, override var valueCount: Int = 0) : 
     override fun rowCopier(dest: VectorWriter) =
         if (dest is DenseUnionVector) dest.rowCopier0(this)
         else {
-            require(dest.nullable)
             RowCopier {
                 dest.valueCount.also { dest.writeNull() }
             }
         }
 
     override fun rowCopier0(src: VectorReader): RowCopier {
-        require(src is NullVector)
         return RowCopier { valueCount.also { writeNull() } }
     }
 
@@ -60,7 +58,7 @@ class NullVector(override var name: String, override var valueCount: Int = 0) : 
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        val node = nodes.removeFirst() ?: error("missing node")
+        val node = nodes.removeFirst()
         valueCount = node.length
     }
 
