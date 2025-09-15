@@ -99,6 +99,8 @@ class DenseUnionVector private constructor(
         override val keyNames: Set<String>? get() = inner.keyNames
         override val legNames get() = inner.legNames
 
+        override fun getLeg(idx: Int) = inner.getLeg(getOffset(idx))
+
         override fun vectorForOrNull(name: String) =
             inner.vectorForOrNull(name)?.let { LegVector(typeId, it, true) }
 
@@ -130,6 +132,7 @@ class DenseUnionVector private constructor(
         override fun writeUndefined() = writeValueThen().writeUndefined()
         override fun writeNull() = writeValueThen().writeNull()
 
+        override fun writeBoolean(v: Boolean) = writeValueThen().writeBoolean(v)
         override fun writeByte(v: Byte) = writeValueThen().writeByte(v)
         override fun writeShort(v: Short) = writeValueThen().writeShort(v)
         override fun writeInt(v: Int) = writeValueThen().writeInt(v)
