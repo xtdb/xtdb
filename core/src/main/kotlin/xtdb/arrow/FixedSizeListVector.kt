@@ -14,7 +14,7 @@ import xtdb.util.Hasher
 import org.apache.arrow.vector.complex.FixedSizeListVector as ArrowFixedSizeListVector
 
 class FixedSizeListVector(
-    private val allocator: BufferAllocator,
+    private val al: BufferAllocator,
     override var name: String, override var nullable: Boolean, private val listSize: Int,
     private var elVector: Vector,
     override var valueCount: Int = 0
@@ -24,7 +24,7 @@ class FixedSizeListVector(
 
     override val vectors: Iterable<Vector> get() = listOf(elVector)
 
-    private val validityBuffer = ExtensibleBuffer(allocator)
+    private val validityBuffer = ExtensibleBuffer(al)
 
     override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
 
@@ -63,7 +63,7 @@ class FixedSizeListVector(
             elVector.field.fieldType == fieldType -> elVector
 
             elVector is NullVector && elVector.valueCount == 0 ->
-                fromField(allocator, Field("\$data\$", fieldType, emptyList())).also { elVector = it }
+                fromField(al, Field("\$data\$", fieldType, emptyList())).also { elVector = it }
 
             else -> TODO("promote elVector")
         }
@@ -86,7 +86,13 @@ class FixedSizeListVector(
         require(src is FixedSizeListVector)
         require(src.listSize == listSize)
 
-        val elCopier = src.elVector.rowCopier(elVector)
+        val elCopier = try {
+            src.elVector.rowCopier(elVector)
+        } catch (e: InvalidCopySourceException) {
+            elVector = elVector.maybePromote(al, src.elVector.fieldType)
+            src.elVector.rowCopier(elVector)
+        }
+
         return RowCopier { srcIdx ->
             val startIdx = src.getListStartIndex(srcIdx)
 
