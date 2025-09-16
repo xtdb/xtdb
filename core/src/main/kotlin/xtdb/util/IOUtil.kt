@@ -62,6 +62,14 @@ inline fun <K, C : AutoCloseable?, M : Map<K, C>, R> M.closeAllOnCatch(block: (M
         throw e
     }
 
+inline fun <R> Path.deleteOnCatch(block: (Path) -> R): R =
+    try {
+        block(this)
+    } catch (e: Throwable) {
+        deleteIfExists()
+        throw e
+    }
+
 inline fun <C : AutoCloseable?, L : Iterable<C>, R> L.useAll(block: (L) -> R): R =
     try {
         block(this)

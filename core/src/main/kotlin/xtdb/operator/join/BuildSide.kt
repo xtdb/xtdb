@@ -4,12 +4,15 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.NullVector
 import org.apache.arrow.vector.types.pojo.Schema
 import org.roaringbitmap.RoaringBitmap
-import xtdb.arrow.IntVector
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
-import xtdb.expression.map.IndexHasher
-import xtdb.types.FieldName
 import xtdb.vector.ValueVectorReader.from
+import xtdb.types.FieldName
+import xtdb.expression.map.IndexHasher
+import xtdb.arrow.Vector.Companion.openVector
+import xtdb.expression.map.IndexHasher.Companion.hasher
+import xtdb.types.Type.Companion.I32
+import xtdb.types.Type.Companion.ofType
 import java.util.function.IntConsumer
 import java.util.function.IntUnaryOperator
 
@@ -18,40 +21,73 @@ class BuildSide(
     val schema: Schema,
     val keyColNames: List<String>,
     trackUnmatchedIdxs: Boolean,
-    val withNilRow: Boolean
+    val withNilRow: Boolean,
+    val inMemoryThreshold: Int = 100_000,
 ) : AutoCloseable {
-    private val relWriter = Relation(al, schema)
+    private val dataRel = Relation(al, schema)
 
-    private val hashColumn: IntVector = IntVector.open(al, "xt/join-hash", false)
+    private var builtDataRel: RelationReader? = null
+    val builtRel get() = builtDataRel!!
+    var buildMap: BuildSideMap? = null; private set
 
-    private var _builtRel: RelationReader? = null
-    val builtRel get() = _builtRel!!
-    var buildMap: BuildSideMap? = null
+    internal var spill: Spill? = null; private set
 
     @Suppress("NAME_SHADOWING")
     fun append(inRel: RelationReader) {
         inRel.openDirectSlice(al).use { inRel ->
-            val inKeyCols = keyColNames.map { inRel[it] }
-
-            val hasher = IndexHasher.fromCols(inKeyCols)
-            val rowCopier = inRel.rowCopier(relWriter)
+            val rowCopier = inRel.rowCopier(dataRel)
 
             repeat(inRel.rowCount) { inIdx ->
-                hashColumn.writeInt(hasher.hashCode(inIdx))
                 rowCopier.copyRow(inIdx)
+            }
+
+            if (dataRel.rowCount > inMemoryThreshold) {
+                val spill = spill ?: Spill.open(al, dataRel).also { this.spill = it }
+
+                spill.spill()
             }
         }
     }
 
+    var shuffle: Shuffle? = null; private set
+
     fun build() {
-        unmatchedBuildIdxs?.add(0L, relWriter.rowCount.toLong())
+        "hashes".ofType(I32).openVector(al).use { hashCol ->
+            val spill = this.spill
 
-        if (withNilRow) relWriter.endRow()
-        buildMap?.close()
-        buildMap = BuildSideMap.from(al, hashColumn)
+            if (spill != null) {
+                spill.spill()
+                spill.end()
 
-        _builtRel?.close()
-        _builtRel = RelationReader.from(relWriter.openAsRoot(al))
+                val shuffle = Shuffle.open(
+                    al, dataRel, keyColNames, spill.rowCount, spill.blockCount
+                ).also { this.shuffle = it }
+
+                spill.openDataLoader().use { dataLoader ->
+                    while(dataLoader.loadNextPage(dataRel)) {
+                        shuffle.shuffle()
+                    }
+                }
+
+                shuffle.end()
+                dataRel.clear()
+                hashCol.clear()
+                repeat(shuffle.partCount) { partIdx ->
+                    shuffle.appendDataPart(dataRel, partIdx)
+                    shuffle.appendHashPart(hashCol, partIdx)
+                }
+            } else {
+                dataRel.hasher(keyColNames).writeAllHashes(hashCol)
+            }
+
+            unmatchedBuildIdxs?.add(0L, dataRel.rowCount.toLong())
+            if (withNilRow) dataRel.endRow()
+            builtDataRel?.close()
+            builtDataRel = RelationReader.from(dataRel.openAsRoot(al))
+
+            buildMap?.close()
+            buildMap = BuildSideMap.from(al, hashCol)
+        }
     }
 
     val nullRowIdx: Int
@@ -89,8 +125,11 @@ class BuildSide(
 
     override fun close() {
         buildMap?.close()
-        _builtRel?.close()
-        relWriter.close()
-        hashColumn.close()
+        builtDataRel?.close()
+
+        shuffle?.close()
+        spill?.close()
+
+        dataRel.close()
     }
 }

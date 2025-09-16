@@ -1,7 +1,10 @@
 (ns xtdb.operator.join-test
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t :refer [deftest]]
+            [next.jdbc :as jdbc]
+            [xtdb.api :as xt]
             [xtdb.logical-plan :as lp]
+            [xtdb.node :as xtn]
             [xtdb.operator.join :as join]
             [xtdb.test-util :as tu]))
 
@@ -1170,3 +1173,22 @@
                           [:table [{:a 1} {:a 2}]]
                           [:table [{:b 1}]]]))
         "left side built LOJ should return same results as right built LOJ (with right side having mostly unmatched rows)"))
+
+(deftest ^:integration test-on-disk-joining
+  (binding [join/*disk-join-threshold-rows* 10000]
+    (with-open [node (xtn/start-node)
+                conn (jdbc/get-connection node)]
+      (let [ids (range 100000)]
+        (doseq [batch (partition-all 1000 ids)
+                :let [docs (for [id batch]
+                             {:xt/id id})]]
+          (xt/submit-tx conn
+                        [(into [:put-docs :foo] docs)
+                         (into [:put-docs :bar] docs)]))
+
+        (t/is (=  [{:cnt 100000}]
+                  (tu/query-ra '[:group-by [{cnt (count_distinct foo.1/_id)}]
+                                 [:join [{foo.1/_id bar.2/_id}]
+                                  [:rename foo.1 [:scan {:table #xt/table foo} [_id]]]
+                                  [:rename bar.2 [:scan {:table #xt/table bar} [_id]]]]]
+                               {:node node})))))))
