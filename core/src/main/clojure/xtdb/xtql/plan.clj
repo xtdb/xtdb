@@ -10,7 +10,7 @@
             [xtdb.xtql :as xtql])
   (:import (clojure.lang MapEntry)
            (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)
-           (xtdb.xtql Aggregate DocsRelation From Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline QueryWithParams Return Unify Unnest Where With Without)))
+           (xtdb.xtql Aggregate Distinct DistinctTail DocsRelation Except ExceptAll ExceptAllTail ExceptTail From Intersect IntersectAll IntersectAllTail IntersectTail Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline QueryWithParams Return Union UnionAll UnionAllTail UnionTail Unify Unnest Where With Without)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -474,7 +474,67 @@
 
   ParamRelation
   (plan-query [{:keys [param bindings]}]
-    (plan-rel (plan-expr param) (mapv plan-out-spec bindings))))
+    (plan-rel (plan-expr param) (mapv plan-out-spec bindings)))
+
+  UnionAll
+  (plan-query [{:keys [union-all-queries]}]
+    (reduce (fn [left-plan query]
+              (let [right-plan (plan-query query)]
+                {:ra-plan [:union-all (:ra-plan left-plan) (:ra-plan right-plan)]
+                 :provided-vars (set/union (:provided-vars left-plan) (:provided-vars right-plan))}))
+            (plan-query (first union-all-queries))
+            (rest union-all-queries)))
+
+  Union
+  (plan-query [{:keys [union-queries]}]
+    (reduce (fn [left-plan query]
+              (let [right-plan (plan-query query)]
+                {:ra-plan [:distinct [:union-all (:ra-plan left-plan) (:ra-plan right-plan)]]
+                 :provided-vars (set/union (:provided-vars left-plan) (:provided-vars right-plan))}))
+            (plan-query (first union-queries))
+            (rest union-queries)))
+
+  Intersect
+  (plan-query [{:keys [intersect-queries]}]
+    (let [result (reduce (fn [left-plan query]
+                           (let [right-plan (plan-query query)]
+                             {:ra-plan [:intersect (:ra-plan left-plan) (:ra-plan right-plan)]
+                              :provided-vars (set/intersection (:provided-vars left-plan) (:provided-vars right-plan))}))
+                         (plan-query (first intersect-queries))
+                         (rest intersect-queries))]
+      {:ra-plan [:distinct (:ra-plan result)]
+       :provided-vars (:provided-vars result)}))
+
+  IntersectAll
+  (plan-query [{:keys [intersect-all-queries]}]
+    (reduce (fn [left-plan query]
+              (let [right-plan (plan-query query)]
+                {:ra-plan [:intersect (:ra-plan left-plan) (:ra-plan right-plan)]
+                 :provided-vars (set/intersection (:provided-vars left-plan) (:provided-vars right-plan))}))
+            (plan-query (first intersect-all-queries))
+            (rest intersect-all-queries)))
+
+  Except
+  (plan-query [{:keys [except-queries]}]
+    (let [[left-query right-query] except-queries
+          left-plan (plan-query left-query)
+          right-plan (plan-query right-query)]
+      {:ra-plan [:distinct [:difference (:ra-plan left-plan) (:ra-plan right-plan)]]
+       :provided-vars (:provided-vars left-plan)}))
+
+  ExceptAll
+  (plan-query [{:keys [except-all-queries]}]
+    (let [[left-query right-query] except-all-queries
+          left-plan (plan-query left-query)
+          right-plan (plan-query right-query)]
+      {:ra-plan [:difference (:ra-plan left-plan) (:ra-plan right-plan)]
+       :provided-vars (:provided-vars left-plan)}))
+
+  Distinct
+  (plan-query [{:keys [distinct-query]}]
+    (let [plan (plan-query distinct-query)]
+      {:ra-plan [:distinct (:ra-plan plan)]
+       :provided-vars (:provided-vars plan)})))
 
 (declare wrap-expr-subqueries*)
 
@@ -886,7 +946,48 @@
   Offset
   (plan-query-tail [{:keys [offset]} {:keys [ra-plan provided-vars]}]
     {:ra-plan [:top {:skip offset} ra-plan]
-     :provided-vars provided-vars}))
+     :provided-vars provided-vars})
+
+  DistinctTail
+  (plan-query-tail [_ {:keys [ra-plan provided-vars]}]
+    {:ra-plan [:distinct ra-plan]
+     :provided-vars provided-vars})
+
+  UnionTail
+  (plan-query-tail [{:keys [union-query]} {:keys [ra-plan provided-vars]}]
+    (let [right-plan (plan-query union-query)]
+      {:ra-plan [:distinct [:union-all ra-plan (:ra-plan right-plan)]]
+       :provided-vars (set/union provided-vars (:provided-vars right-plan))}))
+
+  UnionAllTail
+  (plan-query-tail [{:keys [union-all-query]} {:keys [ra-plan provided-vars]}]
+    (let [right-plan (plan-query union-all-query)]
+      {:ra-plan [:union-all ra-plan (:ra-plan right-plan)]
+       :provided-vars (set/union provided-vars (:provided-vars right-plan))}))
+
+  IntersectTail
+  (plan-query-tail [{:keys [intersect-query]} {:keys [ra-plan provided-vars]}]
+    (let [right-plan (plan-query intersect-query)]
+      {:ra-plan [:distinct [:intersect ra-plan (:ra-plan right-plan)]]
+       :provided-vars (set/intersection provided-vars (:provided-vars right-plan))}))
+
+  IntersectAllTail
+  (plan-query-tail [{:keys [intersect-all-query]} {:keys [ra-plan provided-vars]}]
+    (let [right-plan (plan-query intersect-all-query)]
+      {:ra-plan [:intersect ra-plan (:ra-plan right-plan)]
+       :provided-vars (set/intersection provided-vars (:provided-vars right-plan))}))
+
+  ExceptTail
+  (plan-query-tail [{:keys [except-query]} {:keys [ra-plan provided-vars]}]
+    (let [right-plan (plan-query except-query)]
+      {:ra-plan [:distinct [:difference ra-plan (:ra-plan right-plan)]]
+       :provided-vars provided-vars}))
+
+  ExceptAllTail
+  (plan-query-tail [{:keys [except-all-query]} {:keys [ra-plan provided-vars]}]
+    (let [right-plan (plan-query except-all-query)]
+      {:ra-plan [:difference ra-plan (:ra-plan right-plan)]
+       :provided-vars provided-vars})))
 
 (defn compile-query* [query {:keys [table-info]}]
   (binding [*gensym* (util/seeded-gensym "_" 0)
