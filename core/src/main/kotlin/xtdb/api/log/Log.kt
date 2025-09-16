@@ -62,6 +62,7 @@ interface Log : AutoCloseable {
             private const val LEGACY_FLUSH_BLOCK_HEADER: Byte = 2
             private const val PROTOBUF_HEADER: Byte = 3
 
+            @JvmStatic
             fun parse(bytes: ByteArray) =
                 when (bytes[0]) {
                     TX_HEADER -> Tx(bytes)
