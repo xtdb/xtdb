@@ -105,6 +105,19 @@ To attach YourKit:
 +
 This assumes YourKit is installed under `/opt/yourkit` (as it does from the AUR) - feel free to adapt the property (or even use its value) if you have it installed elsewhere.
 
+== Monitoring local dev
+
+We can use our own local monitoring stack to see a number of metrics from the dev node - assuming you have a node with a healthz server available on port 8080, from the the base of the repo:
+
+```
+cd monitoring
+docker-compose up -d
+```
+
+If you then go to http://localhost:3000/dashboards - you can log in (`admin/admin`) and see the prebuilt dashboards.
+
+If you wish to make changes to these dashboards, see the guide in monitoring/README.adoc.
+
 == Releasing XT2
 
 See link:RELEASING.adoc[].
