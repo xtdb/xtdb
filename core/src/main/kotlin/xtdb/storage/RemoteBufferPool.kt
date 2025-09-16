@@ -41,6 +41,7 @@ internal class RemoteBufferPool(
     val memoryCache: MemoryCache,
     val diskCache: DiskCache,
     meterRegistry: MeterRegistry? = null,
+    override val epoch: StorageEpoch,
     dbName: DatabaseName,
 ) : BufferPool, IEvictBufferTest, Closeable {
 

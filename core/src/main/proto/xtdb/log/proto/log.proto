@@ -21,6 +21,7 @@ message FlushBlock {
 
 message TriesAdded {
     int32 storage_version = 2;
+    int32 storage_epoch = 3;
     repeated TrieDetails tries = 1;
 }
 

@@ -55,7 +55,7 @@
 (defn object-store ^Closeable [prefix]
   (-> (CloudStorage/googleCloudStorage project-id test-bucket)
       (.prefix (util/->path (str prefix)))
-      (.openObjectStore xtdb.api.storage.Storage/STORAGE_ROOT)))
+      (.openObjectStore "gcp-test")))
 
 (t/deftest ^:google-cloud put-delete-test
   (let [os (object-store (random-uuid))]

@@ -25,7 +25,7 @@
 (defn object-store ^xtdb.aws.S3 [prefix]
   (-> (S3/s3 bucket)
       (.prefix (util/->path (str prefix)))
-      (.openObjectStore Storage/STORAGE_ROOT)))
+      (.openObjectStore "s3-test")))
 
 (t/deftest ^:s3 put-delete-test
   (with-open [os (object-store (random-uuid))]

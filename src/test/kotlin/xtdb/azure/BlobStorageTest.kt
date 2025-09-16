@@ -12,12 +12,11 @@ import org.junit.jupiter.api.Test
 import org.testcontainers.containers.GenericContainer
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.api.storage.ObjectStoreTest
-import xtdb.api.storage.Storage
-import xtdb.api.storage.Storage.STORAGE_ROOT
 import xtdb.azure.BlobStorage.Companion.azureBlobStorage
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
+import kotlin.io.path.Path
 import kotlin.random.Random
 import kotlin.random.nextLong
 import kotlin.test.assertEquals
@@ -54,7 +53,7 @@ class BlobStorageTest : ObjectStoreTest() {
             storageAccountKey("Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==")
 
             prefix(prefix)
-        }.openObjectStore(STORAGE_ROOT)
+        }.openObjectStore(Path("blob-store-test"))
 
     @Test
     fun `multipart put test`() = runTest(timeout = 10.seconds) {

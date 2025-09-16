@@ -22,6 +22,7 @@ import xtdb.symbol
 import xtdb.util.asPath
 import java.nio.file.Path
 import java.util.*
+import kotlin.io.path.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.time.Duration.Companion.seconds
@@ -58,7 +59,7 @@ class MinioTest : S3Test() {
         region(AWS_ISO_GLOBAL)
         prefix(prefix)
         pathStyleAccessEnabled(true)
-    }.openObjectStore()
+    }.openObjectStore(Path("test-root"))
 
     @Test
     fun writeBlock(@TempDir nodeDir: Path) {

@@ -89,7 +89,7 @@
             (tu/flush-block! node2)
 
             (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/database-test/block-boundary-post-detach")))
-                            (.resolve node-dir (format "xt/objects/%s/blocks" Storage/STORAGE_ROOT))
+                            (.resolve node-dir (format "xt/objects/%s/blocks" Storage/DEFAULT_STORAGE_ROOT))
                             {:update-fn #(dissoc % :latest-completed-tx)})))))))
 
 (t/deftest test-multi-db-through-xt-api-4652

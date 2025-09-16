@@ -1,17 +1,12 @@
 package xtdb.storage
 
 import com.github.benmanes.caffeine.cache.Caffeine
-import com.google.protobuf.Any
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.ArrowWriter
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.arrow.Relation
 import xtdb.arrow.unsupported
-import xtdb.database.proto.DatabaseConfig
-import xtdb.database.proto.RemoteStorage
-import xtdb.database.proto.inMemoryStorage
-import xtdb.database.proto.localStorage
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
 import java.nio.ByteBuffer
@@ -19,7 +14,12 @@ import java.nio.file.Path
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.toJavaDuration
 
+typealias StorageEpoch = Int
+
 sealed interface BufferPool : AutoCloseable {
+
+    val epoch: StorageEpoch
+
     /**
      * Get the whole file as an on-heap byte array.
      *
@@ -68,7 +68,7 @@ sealed interface BufferPool : AutoCloseable {
         val UNUSED = UnusedBufferPool
 
         object UnusedBufferPool : BufferPool {
-
+            override val epoch: StorageEpoch get() = unsupported("epoch")
             override fun getByteArray(key: Path) = unsupported("getByteArray")
             override fun getFooter(key: Path) = unsupported("getFooter")
             override fun getRecordBatch(key: Path, idx: Int) = unsupported("getRecordBatch")

@@ -16,9 +16,9 @@ import xtdb.compactor.PageTree.Companion.asTree
 import xtdb.database.Database
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.TrieMetadata
+import xtdb.segment.BufferPoolSegment.Companion.open
 import xtdb.table.TableRef
 import xtdb.trie.*
-import xtdb.segment.BufferPoolSegment.Companion.open
 import xtdb.util.*
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
@@ -170,7 +170,11 @@ interface Compactor : AutoCloseable {
                                         val addedTries = runInterruptible { job.execute() }
                                         jobTimer?.let { timer?.stop(it) }
                                         val messageMetadata =
-                                            log.appendMessage(TriesAdded(Storage.VERSION, addedTries)).await()
+                                            log.appendMessage(
+                                                TriesAdded(
+                                                    Storage.VERSION, db.bufferPool.epoch, addedTries
+                                                )
+                                            ).await()
                                         // add the trie to the catalog eagerly so that it's present
                                         // next time we run `availableJobs` (it's idempotent)
                                         trieCatalog.addTries(

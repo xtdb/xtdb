@@ -14,14 +14,17 @@ message LocalLog {
 }
 
 message InMemoryStorage {
+    int32 epoch = 1 [default = 0];
 }
 
 message LocalStorage {
     string path = 1;
+    int32 epoch = 2 [default = 0];
 }
 
 message RemoteStorage {
     google.protobuf.Any object_store = 1;
+    int32 epoch = 2 [default = 0];
 }
 
 message DatabaseConfig {

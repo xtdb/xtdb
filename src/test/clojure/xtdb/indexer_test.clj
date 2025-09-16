@@ -170,7 +170,7 @@
                                        :struct {:a true, :c "c"}}]]]
       (util/delete-dir node-dir)
 
-      (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :storage-epoch 1})]
         (xt/execute-tx node tx-ops)
 
         (tu/flush-block! node)
