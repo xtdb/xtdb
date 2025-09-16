@@ -35,7 +35,7 @@ if [ -z "${PROJECT_ROOT}" ]; then
 fi
 
 # Dashboard JSON source directory in the repo
-DASH_JSON_DIR="${DASH_JSON_DIR:-${PROJECT_ROOT}/dev/monitoring/dashboards}"
+DASH_JSON_DIR="${DASH_JSON_DIR:-${PROJECT_ROOT}/monitoring/dev-dashboards}"
 
 # Functions
 check_prerequisites() {
