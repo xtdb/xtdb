@@ -4,6 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Schema
 import org.roaringbitmap.RoaringBitmap
 import xtdb.arrow.IntVector
+import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.expression.map.IndexHasher
@@ -20,10 +21,12 @@ class BuildSide(
     val matchedBuildIdxs: RoaringBitmap?,
     private val withNilRow: Boolean
 ) : AutoCloseable {
-    private val relWriter = OldRelationWriter(al, schema)
+    private val relWriter = Relation(al, schema)
 
     private val hashColumn: IntVector = IntVector(al, "xt/join-hash", false)
 
+    private var _builtRel: RelationReader? = null
+    val builtRel get() = _builtRel!!
     var buildMap: BuildSideMap? = null
 
     init {
@@ -34,23 +37,26 @@ class BuildSide(
 
     @Suppress("NAME_SHADOWING")
     fun append(inRel: RelationReader) {
-        val inKeyCols = keyColNames.map { inRel.vectorForOrNull(it) as VectorReader }
+        inRel.openDirectSlice(al).use { inRel ->
+            val inKeyCols = keyColNames.map { inRel[it] }
 
-        val hasher = IndexHasher.fromCols(inKeyCols)
-        val rowCopier = inRel.rowCopier(relWriter)
+            val hasher = IndexHasher.fromCols(inKeyCols)
+            val rowCopier = inRel.rowCopier(relWriter)
 
-        repeat(inRel.rowCount) { inIdx ->
-            hashColumn.writeInt(hasher.hashCode(inIdx))
-            rowCopier.copyRow(inIdx)
+            repeat(inRel.rowCount) { inIdx ->
+                hashColumn.writeInt(hasher.hashCode(inIdx))
+                rowCopier.copyRow(inIdx)
+            }
         }
     }
 
     fun build() {
         buildMap?.close()
         buildMap = BuildSideMap.from(al, hashColumn, if (withNilRow) 1 else 0)
-    }
 
-    val builtRel get() = relWriter.asReader
+        _builtRel?.close()
+        _builtRel = RelationReader.from(relWriter.openAsRoot(al))
+    }
 
     fun addMatch(idx: Int) = matchedBuildIdxs?.add(idx)
 
@@ -62,6 +68,7 @@ class BuildSide(
 
     override fun close() {
         buildMap?.close()
+        _builtRel?.close()
         relWriter.close()
         hashColumn.close()
     }
