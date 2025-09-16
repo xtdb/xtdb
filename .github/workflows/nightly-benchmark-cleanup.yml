@@ -183,6 +183,7 @@ jobs:
           echo "Generated metrics.json:" && cat metrics.json
 
       - name: Post metrics to Azure Monitor
+        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success' && steps.logs.outputs.time_taken != ''
         env:
           DCR_IMMUTABLE_ID: ${{ secrets.BENCHMARK_DCR_IMMUTABLE_ID }}
           DCE_ENDPOINT: ${{ secrets.BENCHMARK_DCE_ENDPOINT }}
