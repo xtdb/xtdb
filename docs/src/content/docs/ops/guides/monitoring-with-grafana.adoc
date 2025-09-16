@@ -36,7 +36,7 @@ Provides an overview of the entire XTDB cluster, including node health and perfo
 
 image::/images/docs/cluster-monitoring.png["Cluster Monitoring Dashboard"^]
 
-Download the JSON template: https://github.com/xtdb/xtdb/blob/main/monitoring/grafana/dashboards/xtdb-monitoring.json[here].
+Download the JSON template: https://github.com/xtdb/xtdb/blob/main/monitoring/public-dashboards/xtdb-monitoring.json[here].
 
 === Node Debugging Dashboard
 
@@ -44,4 +44,4 @@ Focuses on individual XTDB nodes, showing metrics such as resource usage, perfor
 
 image::/images/docs/node-debugging.png["Node Debugging Dashboard"^]
 
-Download the JSON template: https://github.com/xtdb/xtdb/blob/main/monitoring/grafana/dashboards/xtdb-node-debugging.json[here].
+Download the JSON template: https://github.com/xtdb/xtdb/blob/main/monitoring/public-dashboards/xtdb-node-debugging.json[here].

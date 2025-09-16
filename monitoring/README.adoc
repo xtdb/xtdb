@@ -1,84 +1,81 @@
 = Monitoring
 
-This directory contains the monitoring configuration for XTDB, with the following structure:
-
-* `docker-compose.yml` - the `docker-compose` file for setting up the development monitoring stack.
-* `scripts/` - contains helper scripts for use with the monitoring stack. 
-* `docker-image/` - contains setup (a gradle project, logback and dockerfile) for building the XTDB monitoring docker image.
-* `grafana/`: contains all of the necessary `grafana-otel` setup config for scraping/monitoring XTDB
-** `grafana/dashboards/`: contains the **XTDB Cluster Monitoring** and **XTDB Node Debugging** dashboards.
-
 == User Guide
 
-For users of XTDB, we assume that you already have a running Grafana instance and Prometheus setup to scrape your XTDB cluster/node (ie, running on Kubernetes).
+XTDB provides prebuilt Grafana dashboards for monitoring.  
+We assume you already have a Grafana instance running with Prometheus configured to scrape your XTDB cluster or nodes (e.g. via Kubernetes).
 
-If the above is true, you can import the dashboards provided in the `grafana/dashboards/` directory into your Grafana instance.
+If so, you can import the dashboards from the `public-dashboards/` directory into Grafana:
 
-* Navigate to the `Dashboards -> New -> New dashboard`.
-* Click `Import dashboard`.
-* `Upload dashboard JSON file` -> Upload the desired dashboard from the `grafana/dashboards/` directory.
-** Select the `Prometheus` data source.
-** Click `Import`.
+. Navigate to *Dashboards → New → New dashboard*.
+. Click *Import dashboard*.
+. Under *Upload dashboard JSON file*, upload the desired file from `public-dashboards/`.
+.. Select your *Prometheus* data source.
+.. Click *Import*.
 
-There are two dashboards provided:
+XTDB provides two dashboards:
 
-* **XTDB Cluster Monitoring** - this dashboard provides an overview of the health of your XTDB cluster. 
-* **XTDB Node Debugging** - this dashboard provides a more detailed view of the health of individual XTDB nodes.
+* *XTDB Cluster Monitoring* – an overview of cluster health and performance.
+* *XTDB Node Debugging* – detailed insights into individual node behavior.
 
-== Developer Guide
+== XTDB Developer Guide
 
-=== Starting the development monitoring stack
+For local development, a monitoring stack can be started via Docker Compose. This setup runs:
 
-To set up the monitoring stack, we first need to build the `xtdb-monitoring` docker image.
+* *Prometheus* – metrics collection
+* *Grafana* – visualization, preloaded with dashboards and a Prometheus data source
 
-Under the `build/monitoring` directory, we have a gradle project & docker image to build a custom `xtdb-monitoring` image, that we use within the `docker-compose`. The contents of this directory can be edited however you see fit, and the image can be built with the following helper script:
+Grafana is preconfigured to:
 
-```bash
-./scripts/build-xtdb-monitoring-image.sh
-```
+* Use Prometheus as the default data source
+* Automatically load dashboards from `monitoring/public-dashboards/`
 
-Then, to run the monitoring stack itself, from the root of the directory, run:
-```bash
+Prometheus is configured to scrape metrics from `localhost:8080`.  
+This assumes the monitored service:
+
+* Exposes metrics at `:8080/metrics`
+* Is reachable *from inside the Prometheus container* at:
+** `172.17.0.1:8080`
+
+Start the stack with:
+
+[source,bash]
+----
 docker-compose up -d
-```
+----
 
-This will start the following services:
+If you then go to http://localhost:3000/dashboards - you can log in (`admin/admin`) and work on/use the dashboards.
 
-* Two XTDB nodes (using the standalone image)
-* Grafana OTEL
-** This is setup with a basic prometheus setup to scrape the XTDB node.
+=== Exporting Dashboards
 
-=== Updating the XTDB nodes
+When updating or creating dashboards, export them to both the *developer* and *public* dashboards directories.
 
-If you want to update the XTDB image after making changes, you can re-run `./scripts/build-xtdb-image.sh` and then restart the XTDB nodes in the monitoring stack:
-```bash
-docker-compose restart xtdb-node-1
-docker-compose restart xtdb-node-2
-```
+* For *dev-dashboards*:
+. Click *Share*.
+. Open the *Export* tab.
+. Click *Save to file*.
 
-=== Working with Grafana
+* For *public-dashboards*:
+. Click *Share*.
+. Open the *Export* tab.
+. Select *Export for sharing externally*.
+. Click *Save to file*.
 
-Grafana is exposed on `http://localhost:3004` by default - so one can navigate to this URL to access the Grafana UI.
+Replace the existing files in the relevant directories with your updated versions.
 
-**Prometheus** is already running and scraping the XTDB node, so we can start working on dashboards.
+=== Scraping Multiple Nodes
 
-As we are exporting dashboards for public release, we cannot automatically import them into Grafana. However, you can manually import the dashboards by following the steps below:
+To scrape multiple XTDB nodes or services:
 
-* Navigate to the `Dashboards -> New -> New dashboard`.
-* Click `Import dashboard`.
-* `Upload dashboard JSON file` -> Upload the desired dashboard from the `grafana/dashboards/` directory.
-** Select the `Prometheus` data source.
-** Click `Import`.
+. Ensure each node exposes its `/metrics` endpoint on a discoverable port.
+. Update `prometheus.yml` with either static targets or service discovery.
 
-=== Saving updated Dashboards
+Example (`prometheus.yml`):
 
-Any changes/additions made to either of the dashboards should be exported and committed for Users to import.
-
-To export a dashboard:
-
-* Click `Share`.
-* Click on the `Export` tab.
-* Ensure `Export for sharing externally` is selected.
-* Click `Save to file`.
-
-Once exported, replace the relevant file within the `grafana/dashboards/` directory, and commit the changes.
+[source,yaml]
+----
+scrape_configs:
+  - job_name: 'xtdb-nodes'
+    static_configs:
+      - targets: ['172.17.0.1:8080', '172.17.0.1:8081']
+----

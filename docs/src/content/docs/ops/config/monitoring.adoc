@@ -59,7 +59,7 @@ XTDB nodes can be configured to report metrics to the following cloud-based moni
 
 == Grafana Dashboards
 
-XTDB provides https://github.com/xtdb/xtdb/tree/main/monitoring/grafana/dashboards[pre-built Grafana dashboards^] for monitoring the health and performance of XTDB clusters and individual nodes.
+XTDB provides https://github.com/xtdb/xtdb/tree/main/monitoring/public-dashboards[pre-built Grafana dashboards^] for monitoring the health and performance of XTDB clusters and individual nodes.
 
 For more information on how to set these up on Grafana, see the link:../guides/monitoring-with-grafana["Monitoring XTDB with Grafana"^] guide.
 

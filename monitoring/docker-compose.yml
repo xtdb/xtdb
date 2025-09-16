@@ -1,80 +1,27 @@
 services:
-  kafka:
-    image: confluentinc/cp-kafka:7.8.0
-    hostname: kafka
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29094,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENERS: PLAINTEXT://kafka:29094,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_NODE_ID: 1
-      KAFKA_LOG_DIRS: '/tmp/kafka-logs'
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
-      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
     ports:
-      - '9092:9092'
-    healthcheck:
-      test: nc -z kafka 9092 || exit 1
-      interval: 2s
-      timeout: 60s
-      retries: 10
-      start_period: 30s
-    volumes: 
-      - kafka-data:/var/lib/kafka/data
-
-  xtdb-node-1:
-    image: xtdb-monitoring:latest
-    hostname: xtdb-node-1
-    ports:
-      - '5432:5432'
-      - '8080:8080'
-      - '3000:3000'
-    environment:
-      XTDB_NODE_ID: xtdb-node-1 # persistent node id for labelling grafana metrics
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29094
-      XTDB_LOG_TOPIC: xtdb-log
+      - "9090:9090"
     volumes:
-      - xtdb-log:/var/lib/xtdb/log
-      - xtdb-storage-1:/var/lib/xtdb/buffers
-    depends_on:
-      - kafka
-  
-  xtdb-node-2:
-    image: xtdb-monitoring:latest
-    hostname: xtdb-node-2
-    ports:
-      - '5433:5432'
-      - '8081:8080'
-      - '3001:3000'
-    environment:
-      XTDB_NODE_ID: xtdb-node-2 # persistent node id for labelling grafana metrics
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29094
-      XTDB_LOG_TOPIC: xtdb-log
-    volumes:
-      - xtdb-log:/var/lib/xtdb/log
-      - xtdb-storage-2:/var/lib/xtdb/buffers
-    depends_on:
-      - kafka
-
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      
   grafana:
-    image: grafana/otel-lgtm:0.8.0 # grafana, prometheus, loki, tempo, otel collector
-    restart: unless-stopped
-    volumes:
-      - ./grafana/otelcol-config.yaml:/otel-lgtm/otelcol-config.yaml
+    image: grafana/grafana:latest
+    container_name: grafana
     ports:
-      - 3004:3000
-      - 3100:3100
+      - "3000:3000"
     environment:
-      ENABLE_LOGS_GRAFANA: true
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml
+      - ./dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml
+      - ./dev-dashboards:/var/lib/grafana/dashboards
 
 volumes:
-  xtdb-log:
-  xtdb-storage-1:
-  xtdb-storage-2:
-  kafka-data:
+  grafana-storage:
