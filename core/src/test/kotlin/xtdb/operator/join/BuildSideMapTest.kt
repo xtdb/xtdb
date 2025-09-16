@@ -108,7 +108,7 @@ class BuildSideMapTest {
         IntVector.open(al, "hashes", false).use { hashCol ->
             repeat(20) { i -> hashCol.writeInt(i) }
             
-            BuildSideMap.from(al, hashCol, 0, 0.5).use { map ->
+            BuildSideMap.from(al, hashCol, 0.5).use { map ->
                 repeat(20) { i ->
                     assertEquals(listOf(i), map.getMatches(i), "Failed to find element $i")
                 }

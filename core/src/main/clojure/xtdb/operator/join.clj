@@ -223,13 +223,9 @@
 
          (when-let [matched-build-idxs (.getMatchedBuildIdxs build-side)]
            (let [build-rel (.getBuiltRel build-side)
-                 build-row-count (long (.getRowCount build-rel))
+                 build-row-count (cond-> (long (.getRowCount build-rel))
+                                   (.getWithNilRow build-side) (dec))
                  unmatched-build-idxs (RoaringBitmap/flip matched-build-idxs 0 build-row-count)]
-
-
-             ;; Only need to remove the nil-row-idx for full outer joins
-             (when (= (.getOuterJoinType join-type) JoinType$OuterJoinType/FULL)
-               (.remove unmatched-build-idxs emap/nil-row-idx))
 
              (when-not (.isEmpty unmatched-build-idxs)
                ;; this means .isEmpty will be true on the next iteration (we flip the bitmap)

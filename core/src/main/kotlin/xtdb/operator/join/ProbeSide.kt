@@ -18,6 +18,7 @@ class ProbeSide(
     }
 
     internal val buildRel = buildSide.builtRel
+    val nullRowIdx get() = buildSide.nullRowIdx
     val rowCount = probeRel.rowCount
 
     private val probeKeyCols = keyColNames.map { probeRel[it] }

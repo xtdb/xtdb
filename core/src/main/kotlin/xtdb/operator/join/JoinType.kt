@@ -37,7 +37,7 @@ interface JoinType {
                 }
 
                 if (outerJoinType != LEFT_FLIPPED && !matched) {
-                    matchingBuildIdxs.add(NULL_ROW_IDX)
+                    matchingBuildIdxs.add(nullRowIdx)
                     matchingProbeIdxs.add(probeIdx)
                 }
             }
@@ -147,7 +147,7 @@ interface JoinType {
                     }
 
                     if (!matched) {
-                        matchingBuildIdxs.add(NULL_ROW_IDX)
+                        matchingBuildIdxs.add(nullRowIdx)
                         matchingProbeIdxs.add(probeIdx)
                     }
                 }

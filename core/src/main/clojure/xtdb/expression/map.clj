@@ -78,4 +78,3 @@
                    (vr/vec->reader (doto (NullVector. (str col-name))
                                      (.setValueCount 1))))))
 
-(def nil-row-idx 0)

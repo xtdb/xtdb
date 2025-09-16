@@ -6,20 +6,16 @@ import org.roaringbitmap.RoaringBitmap
 import xtdb.arrow.IntVector
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
-import xtdb.arrow.VectorReader
 import xtdb.expression.map.IndexHasher
-import xtdb.vector.OldRelationWriter
 import java.util.function.IntConsumer
 import java.util.function.IntUnaryOperator
 
-internal const val NULL_ROW_IDX = 0
-
 class BuildSide(
-    val al: BufferAllocator,
+    private val al: BufferAllocator,
     val schema: Schema,
     val keyColNames: List<String>,
     val matchedBuildIdxs: RoaringBitmap?,
-    private val withNilRow: Boolean
+    val withNilRow: Boolean
 ) : AutoCloseable {
     private val relWriter = Relation(al, schema)
 
@@ -28,12 +24,6 @@ class BuildSide(
     private var _builtRel: RelationReader? = null
     val builtRel get() = _builtRel!!
     var buildMap: BuildSideMap? = null
-
-    init {
-        if (withNilRow) {
-            relWriter.endRow()
-        }
-    }
 
     @Suppress("NAME_SHADOWING")
     fun append(inRel: RelationReader) {
@@ -51,12 +41,19 @@ class BuildSide(
     }
 
     fun build() {
+        if (withNilRow) relWriter.endRow()
         buildMap?.close()
-        buildMap = BuildSideMap.from(al, hashColumn, if (withNilRow) 1 else 0)
+        buildMap = BuildSideMap.from(al, hashColumn)
 
         _builtRel?.close()
         _builtRel = RelationReader.from(relWriter.openAsRoot(al))
     }
+
+    val nullRowIdx: Int
+        get() {
+            check(withNilRow) { "no nil row in build side" }
+            return builtRel.rowCount - 1
+        }
 
     fun addMatch(idx: Int) = matchedBuildIdxs?.add(idx)
 

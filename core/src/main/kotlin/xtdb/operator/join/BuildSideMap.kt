@@ -3,6 +3,7 @@ package xtdb.operator.join
 import org.apache.arrow.memory.BufferAllocator
 import org.roaringbitmap.RoaringBitmap
 import xtdb.arrow.IntVector
+import xtdb.arrow.VectorReader
 import xtdb.util.closeOnCatch
 import java.util.function.IntConsumer
 import java.util.function.IntUnaryOperator
@@ -69,7 +70,7 @@ class BuildSideMap private constructor(
 
         @JvmStatic
         @JvmOverloads
-        fun from(al: BufferAllocator, hashCol: IntVector, offset: Int = 0, loadFactor: Double = DEFAULT_LOAD_FACTOR): BuildSideMap {
+        fun from(al: BufferAllocator, hashCol: VectorReader, loadFactor: Double = DEFAULT_LOAD_FACTOR): BuildSideMap {
 
             val rowCount = hashCol.valueCount
 
@@ -84,7 +85,7 @@ class BuildSideMap private constructor(
                         val hash = hashCol.getInt(idx)
                         val insertionIdx = srcIdxs.insertionIdx(hash and hashMask , hashMask, skipIndex)
 
-                        srcIdxs[insertionIdx] = idx + offset
+                        srcIdxs[insertionIdx] = idx
                         srcHashes[insertionIdx] = hash
                     }
                     BuildSideMap(srcIdxs, srcHashes, hashMask)
