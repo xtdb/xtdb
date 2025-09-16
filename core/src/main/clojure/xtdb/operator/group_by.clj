@@ -522,9 +522,9 @@
             (.endList list-writer))
           (.setValueCount out-vec (if (zero? value-count)
                                     (case on-empty
-                                     :null 1
-                                     :empty-rel 0
-                                     :empty-vec 1)
+                                      :null 1
+                                      :empty-rel 0
+                                      :empty-vec 1)
                                     value-count)))
         (vr/vec->reader out-vec))))
 
@@ -534,7 +534,9 @@
     (util/close out-vec)))
 
 (defmethod ->aggregate-factory :array_agg [{:keys [from-name from-type to-name zero-row?]}]
-  (let [to-type [:list from-type]]
+  (let [to-type (if zero-row?
+                  [:union #{:null [:list from-type]}]
+                  [:list from-type])]
     (reify IAggregateSpecFactory
       (getField [_] (types/col-type->field to-name to-type))
 
