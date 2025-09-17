@@ -275,7 +275,7 @@
 (def out-of-sync-log-message
   "Node failed to start due to an invalid transaction log state (%s) that does not correspond with the latest indexed transaction (epoch=%s and offset=%s).
 
-   Please see https://docs.xtdb.com/ops/ops/backup-and-restore/out-of-sync-log for more information and next steps.")
+   Please see https://docs.xtdb.com/ops/backup-and-restore/out-of-sync-log.html for more information and next steps.")
 
 (defn ->out-of-sync-exception [latest-completed-offset ^long latest-submitted-offset ^long epoch]
   (let [log-state-str (if (= -1 latest-submitted-offset)
