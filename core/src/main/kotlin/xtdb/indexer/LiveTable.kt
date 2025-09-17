@@ -11,6 +11,7 @@ import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.*
 import xtdb.types.Type
+import xtdb.types.Type.Companion.ofType
 import xtdb.util.HLL
 import xtdb.util.RowCounter
 import xtdb.util.closeOnCatch
@@ -42,7 +43,7 @@ constructor(
     var liveTrie: MemoryHashTrie = liveTrieFactory(iidVec)
 
     private val opVec = liveRelation["op"]
-    private val putVec by lazy { opVec.vectorFor("put", Type.struct().fieldType) }
+    private val putVec by lazy { opVec.vectorFor("put", Type.structOf().fieldType) }
     private val deleteVec = opVec["delete"]
     private val eraseVec = opVec["erase"]
 
@@ -58,7 +59,7 @@ constructor(
         val liveRelation: RelationReader,
         val liveTrie: MemoryHashTrie
     ) : AutoCloseable {
-        fun columnField(col: ColumnName): Field = columnFields[col] ?: Type.NULL.toField(col)
+        fun columnField(col: ColumnName): Field = columnFields[col] ?: col ofType Type.NULL
 
         override fun close() {
             liveRelation.close()

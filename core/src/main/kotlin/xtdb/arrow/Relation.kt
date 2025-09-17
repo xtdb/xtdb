@@ -22,6 +22,7 @@ import xtdb.arrow.ArrowUnloader.Mode.STREAM
 import xtdb.arrow.Vector.Companion.fromField
 import xtdb.trie.ColumnName
 import xtdb.types.Type
+import xtdb.types.Type.Companion.ofType
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
 import xtdb.util.normalForm
@@ -50,7 +51,7 @@ class Relation(
             : this(al, schema.fields.safeMap { fromField(al, it) }, 0)
 
     constructor(al: BufferAllocator, vararg fields: Pair<ColumnName, Type>) :
-            this(al, Schema(fields.map { it.second.toField(it.first) }))
+            this(al, Schema(fields.map { it.first ofType it.second }))
 
     override fun vectorForOrNull(name: String) = vecs[name]
     override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
@@ -223,7 +224,7 @@ class Relation(
 
         @JvmStatic
         fun open(al: BufferAllocator, fields: SequencedMap<String, Type>) =
-            open(al, fields.map { (name, field) -> field.toField(name) })
+            open(al, fields.map { (name, field) -> name ofType field })
 
         @JvmStatic
         fun openFromRows(al: BufferAllocator, rows: List<Map<*, *>>): Relation =

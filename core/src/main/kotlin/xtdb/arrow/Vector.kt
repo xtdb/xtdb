@@ -22,6 +22,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.toFieldType
 import xtdb.trie.ColumnName
 import xtdb.types.Type
+import xtdb.types.Type.Companion.ofType
 import xtdb.util.Hasher
 import xtdb.vector.extensions.*
 import java.time.ZoneId
@@ -104,7 +105,7 @@ sealed class Vector : VectorReader, VectorWriter {
 
     companion object {
         @JvmStatic
-        fun open(al: BufferAllocator, name: ColumnName, type: Type): Vector = fromField(al, type.toField(name))
+        fun open(al: BufferAllocator, name: ColumnName, type: Type): Vector = fromField(al, name ofType type)
 
         @JvmStatic
         fun fromField(al: BufferAllocator, field: Field): Vector {
@@ -249,6 +250,6 @@ sealed class Vector : VectorReader, VectorWriter {
 
         @JvmStatic
         fun fromList(al: BufferAllocator, name: ColumnName, values: List<*>) =
-            fromList(al, Type.NULL.toField(name), values)
+            fromList(al, name ofType Type.NULL, values)
     }
 }

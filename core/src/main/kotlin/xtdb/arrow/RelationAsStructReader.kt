@@ -5,6 +5,7 @@ import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.query.IKeyFn
 import xtdb.types.Type
+import xtdb.types.Type.Companion.ofType
 import xtdb.util.Hasher
 import xtdb.util.closeOnCatch
 
@@ -13,7 +14,7 @@ class RelationAsStructReader(
     private val rel: RelationReader
 ) : VectorReader {
     override val nullable = false
-    override val field: Field get() = Type.struct(rel.vectors.map { it.field }).toField(name)
+    override val field: Field get() = name ofType Type.structOf(rel.vectors.map { it.field })
 
     override val valueCount get() = rel.rowCount
 

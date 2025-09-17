@@ -6,8 +6,13 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
 import xtdb.table.TableRef
-import xtdb.types.Schema
+import xtdb.types.Arrow.withName
 import xtdb.types.Type
+import xtdb.types.Type.Companion.IID
+import xtdb.types.Type.Companion.NULL
+import xtdb.types.Type.Companion.TEMPORAL
+import xtdb.types.Type.Companion.ofType
+import xtdb.types.schema
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
@@ -103,16 +108,16 @@ object Trie {
 
     @JvmStatic
     fun dataRelSchema(putDocField: Field?): Schema =
-        Schema(
-            "_iid" to Type.IID,
-            "_system_from" to Type.TEMPORAL,
-            "_valid_from" to Type.TEMPORAL,
-            "_valid_to" to Type.TEMPORAL,
-            "op" to Type.union(
+        schema(
+            "_iid" ofType IID,
+            "_system_from" ofType TEMPORAL,
+            "_valid_from" ofType TEMPORAL,
+            "_valid_to" ofType TEMPORAL,
+            "op" ofType Type.unionOf(
                 *(listOfNotNull(
-                    putDocField?.let { "put" to Type(it.type, it.isNullable, it.children) },
-                    "delete" to Type.NULL,
-                    "erase" to Type.NULL
+                    putDocField?.withName("put"),
+                    "delete" ofType NULL,
+                    "erase" ofType NULL
                 ).toTypedArray())
             )
         )

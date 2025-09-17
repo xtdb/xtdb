@@ -9,8 +9,12 @@ import org.junit.jupiter.api.Test
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation.Companion.loader
 import xtdb.asKeyword
-import xtdb.types.Schema
+import xtdb.types.schema
 import xtdb.types.Type
+import xtdb.types.Type.Companion.asListOf
+import xtdb.types.Type.Companion.asUnionOf
+import xtdb.types.Type.Companion.maybe
+import xtdb.types.Type.Companion.ofType
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 
@@ -226,7 +230,7 @@ class RelationTest {
             rel.endRow()
 
             assertEquals(
-                Schema("foo" to Type.I32.nullable(), "bar" to Type.UTF8.nullable()),
+                schema("foo" ofType maybe(Type.I32), "bar" ofType maybe(Type.UTF8)),
                 rel.schema
             )
 
@@ -249,11 +253,11 @@ class RelationTest {
         )
         Relation.openFromRows(allocator, rows).use { rel ->
             assertEquals(
-                Schema(
-                    "foo" to Type.I32.nullable(),
-                    "bar" to Type.union(
-                        "utf8" to Type.UTF8.nullable(),
-                        "list" to Type.list(Type.UTF8, $$"$data$")
+                schema(
+                    "foo" ofType maybe(Type.I32),
+                    "bar".asUnionOf(
+                        "utf8" ofType maybe(Type.UTF8),
+                        "list" asListOf Type.UTF8
                     )
                 ),
                 rel.schema

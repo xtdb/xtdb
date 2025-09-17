@@ -133,6 +133,7 @@
     :utf8 (.getType Types$MinorType/VARCHAR)
     :varbinary (.getType Types$MinorType/VARBINARY)
 
+    :temporal (.getArrowType Type/TEMPORAL)
     :tstz-range TsTzRangeType/INSTANCE
     :keyword KeywordType/INSTANCE
     :regclass RegClassType/INSTANCE

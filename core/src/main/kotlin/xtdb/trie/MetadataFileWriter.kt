@@ -1,16 +1,27 @@
 package xtdb.trie
 
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.storage.BufferPool
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.indexer.TrieMetadataCalculator
 import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.ColumnMetadata
+import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.trie.Trie.metaFilePath
 import xtdb.types.Type
-import xtdb.types.Schema
+import xtdb.types.Type.Companion.BOOL
+import xtdb.types.Type.Companion.I32
+import xtdb.types.Type.Companion.I64
+import xtdb.types.Type.Companion.NULL
+import xtdb.types.Type.Companion.UTF8
+import xtdb.types.Type.Companion.asListOf
+import xtdb.types.Type.Companion.asStructOf
+import xtdb.types.Type.Companion.asUnionOf
+import xtdb.types.Type.Companion.listTypeOf
+import xtdb.types.Type.Companion.maybe
+import xtdb.types.Type.Companion.ofType
+import xtdb.types.schema
 
 class MetadataFileWriter(
     al: BufferAllocator, private val bp: BufferPool,
@@ -19,23 +30,23 @@ class MetadataFileWriter(
     calculateBlooms: Boolean, writeTrieMetadata: Boolean
 ) : AutoCloseable {
     companion object {
-        private val metadataField = Type.list(
-            Type.struct(
-                "col-name" to Type.UTF8,
-                "root-col?" to Type.BOOL,
-                "count" to Type.I64
+        private val metadataField = listTypeOf(
+            Type.structOf(
+                "col-name" ofType UTF8,
+                "root-col?" ofType BOOL,
+                "count" ofType I64
             ),
             elName = "col"
         )
 
         @JvmField
-        val metaRelSchema = Schema(
-            "nodes" to Type.union(
-                "nil" to Type.NULL,
-                "branch-iid" to Type.list(Type.I32.nullable()),
-                "leaf" to Type.struct(
-                    "data-page-idx" to Type.I32,
-                    "columns" to metadataField
+        val metaRelSchema = schema(
+            "nodes".asUnionOf(
+                "nil" ofType NULL,
+                "branch-iid" asListOf maybe(I32),
+                "leaf".asStructOf(
+                    "data-page-idx" ofType I32,
+                    "columns" ofType metadataField
                 )
             )
         )

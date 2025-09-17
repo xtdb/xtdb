@@ -9,36 +9,27 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
-import org.apache.arrow.vector.types.pojo.ArrowType.List.INSTANCE as LIST_TYPE
-import org.apache.arrow.vector.types.pojo.ArrowType.Null.INSTANCE as NULL_TYPE
-import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
 
 typealias FieldName = String
 
-private val Iterable<Pair<FieldName, Type>>.asFieldList
-    get() = map { it.second.toField(it.first) }
-
-fun Schema(vararg fields: Pair<FieldName, Type>) = Schema(fields.asIterable().asFieldList)
+fun schema(vararg fields: Field) = Schema(fields.asIterable())
 
 data class Type(val arrowType: ArrowType, val nullable: Boolean = false, val children: List<Field> = emptyList()) {
-    constructor(
-        arrowType: ArrowType, nullable: Boolean = false, vararg children: Pair<FieldName, Type>
-    ) : this(arrowType, nullable, children.asIterable().asFieldList)
-
-    constructor(
-        arrowType: ArrowType, vararg children: Pair<FieldName, Type>
-    ) : this(arrowType, false, children = children)
 
     val fieldType get() = FieldType(nullable, arrowType, null)
 
-    fun toField(name: FieldName) = Field(name, fieldType, children)
-
-    fun nullable() = copy(nullable = true)
+    fun nullable(nullable: Boolean) = copy(nullable = nullable)
 
     companion object {
 
+        fun maybe(type: Type) = type.copy(nullable = true)
+        fun maybe(type: ArrowType, children: List<Field> = emptyList()) = Type(type, true, children)
+        fun maybe(type: ArrowType, vararg children: Field) = maybe(type, children.toList())
+        fun just(type: ArrowType, children: List<Field> = emptyList()) = Type(type, false, children)
+        fun just(type: ArrowType, vararg children: Field) = just(type, children.toList())
+
         @JvmField
-        val NULL = Type(NULL_TYPE).nullable()
+        val NULL = Type(MinorType.NULL.type, true)
 
         @JvmField
         val BOOL = Type(MinorType.BIT.type)
@@ -53,26 +44,42 @@ data class Type(val arrowType: ArrowType, val nullable: Boolean = false, val chi
         val UTF8 = Type(MinorType.VARCHAR.type)
 
         @JvmField
-        val TEMPORAL = Type(ArrowType.Timestamp(MICROSECOND, "UTC"), children = arrayOf())
+        val TEMPORAL = Type(ArrowType.Timestamp(MICROSECOND, "UTC"))
 
         @JvmField
-        val IID = Type(ArrowType.FixedSizeBinary(16), children = arrayOf())
+        val IID = Type(ArrowType.FixedSizeBinary(16))
 
-        fun union(vararg legs: Pair<FieldName, Type>) =
-            Type(ArrowType.Union(UnionMode.Dense, null), children = legs)
+        @JvmField
+        val LIST_TYPE: ArrowType = MinorType.LIST.type
 
-        fun struct(vararg fields: Pair<FieldName, Type>) =
-            Type(STRUCT_TYPE, children = fields)
+        @JvmField
+        val STRUCT_TYPE: ArrowType = MinorType.STRUCT.type
 
-        fun struct(fields: List<Field>) = Type(STRUCT_TYPE, children = fields)
+        @JvmField
+        val UNION_TYPE: ArrowType = MinorType.DENSEUNION.type
 
-        fun list(el: Type, elName: FieldName = $$"$data$") =
-            Type(LIST_TYPE, elName to el)
+        fun unionOf(vararg legs: Field) = unionOf(legs.toList())
+        fun unionOf(legs: List<Field>) = Type(ArrowType.Union(UnionMode.Dense, null), children = legs)
+        fun FieldName.asUnionOf(vararg legs: Field) = asUnionOf(legs.toList())
+        infix fun FieldName.asUnionOf(legs: List<Field>) = ofType(unionOf(legs))
 
-        fun map(
-            key: Pair<FieldName, Type>, value: Pair<FieldName, Type>,
+        fun structOf(vararg fields: Field) = structOf(fields.toList())
+        fun structOf(fields: List<Field>) = Type(STRUCT_TYPE, children = fields)
+        fun FieldName.asStructOf(vararg fields: Field) = asStructOf(fields.toList())
+        infix fun FieldName.asStructOf(fields: List<Field>) = ofType(structOf(fields))
+
+        fun listTypeOf(el: Type, elName: FieldName = $$"$data$") =
+            just(LIST_TYPE, elName ofType el)
+
+        infix fun FieldName.asListOf(el: Type) = this ofType listTypeOf(el)
+
+        fun mapTypeOf(
+            key: Field, value: Field,
             sorted: Boolean = true, entriesName: FieldName = $$"$entries$",
         ) =
-            Type(ArrowType.Map(sorted), children = arrayOf(entriesName to struct(key, value)))
+            just(ArrowType.Map(sorted), entriesName.asStructOf(key, value))
+
+        @JvmStatic
+        infix fun FieldName.ofType(type: Type) = Field(this, type.fieldType, type.children)
     }
 }

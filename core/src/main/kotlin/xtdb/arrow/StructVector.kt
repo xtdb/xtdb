@@ -16,6 +16,7 @@ import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Incorrect
 import xtdb.toFieldType
 import xtdb.types.Type
+import xtdb.types.Type.Companion.NULL
 import xtdb.util.Hasher
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
@@ -153,7 +154,7 @@ class StructVector private constructor(
 
         val srcKeys = src.childWriters.keys
         for (child in childWriters.values) {
-            if (child.name !in srcKeys) child.maybePromote(allocator, Type.NULL.fieldType)
+            if (child.name !in srcKeys) child.maybePromote(allocator, NULL.fieldType)
         }
 
         return RowCopier { srcIdx ->
