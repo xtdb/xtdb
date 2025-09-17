@@ -23,7 +23,8 @@
            (xtdb.arrow Relation Vector)
            (xtdb.block.proto TableBlock)
            (xtdb.log.proto TrieDetails)
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$Node)))
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$Node)
+           [xtdb.api.log Log$Message]))
 
 #_{:clj-kondo/ignore [:unused-namespace :unused-referred-var]}
 (require '[xtdb.logging :refer [set-log-level!]])
@@ -178,3 +179,26 @@
 
 (comment
   (read-table-block-file "/home/james/tmp/readings-bench/objects/v06" "public/readings" 0x213))
+
+(defn byte-array->txs [^bytes ba]
+  (with-open [al (RootAllocator.)
+              r (Relation/openFromArrowStream al (.getPayload (Log$Message/parse ba)))]
+    (vec
+      (for [{:keys [query args]} (:tx-ops (first (.toMaps r)))]
+        (with-open [r2 (Relation/openFromArrowStream al args)]
+          {:query query
+           :args (.toMaps r2)})))))
+
+(comment
+  (require '[clojure.data.json :as json])
+
+  ; Example loading data downloaded with kcat (I think)
+  (def tx-data (-> (slurp "/Users/osm/Downloads/146734422-146744422-transactions.json")
+                   (json/read-str)
+                   last))
+
+  (-> tx-data
+      (get "valueAsUint8Array")
+      (->> (map unchecked-byte))
+      byte-array
+      byte-array->txs))
