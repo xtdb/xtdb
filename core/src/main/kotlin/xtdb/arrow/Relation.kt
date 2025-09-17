@@ -20,10 +20,12 @@ import xtdb.arrow.ArrowUnloader.Mode
 import xtdb.arrow.ArrowUnloader.Mode.FILE
 import xtdb.arrow.ArrowUnloader.Mode.STREAM
 import xtdb.arrow.Vector.Companion.fromField
+import xtdb.trie.ColumnName
 import xtdb.types.Type
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
 import xtdb.util.normalForm
+import xtdb.util.openWritableChannel
 import xtdb.util.safeMap
 import java.io.ByteArrayOutputStream
 import java.nio.channels.*
@@ -46,6 +48,9 @@ class Relation(
 
     constructor(al: BufferAllocator, schema: Schema)
             : this(al, schema.fields.safeMap { fromField(al, it) }, 0)
+
+    constructor(al: BufferAllocator, vararg fields: Pair<ColumnName, Type>) :
+            this(al, Schema(fields.map { it.second.toField(it.first) }))
 
     override fun vectorForOrNull(name: String) = vecs[name]
     override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
@@ -104,6 +109,9 @@ class Relation(
     @JvmOverloads
     fun startUnload(ch: WritableByteChannel, mode: Mode = FILE) =
         RelationUnloader(ArrowUnloader.open(ch, schema, mode))
+
+    fun startUnload(path: Path, mode: Mode = FILE) =
+        path.openWritableChannel().closeOnCatch { ch -> startUnload(ch, mode) }
 
     val asArrowStream: ByteArray
         get() {
