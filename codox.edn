@@ -1,8 +1,9 @@
 ;; Used by the "build-codox" gradle task - can see options here: 
 ;; https://github.com/weavejester/codox#project-options
 {:output-path "docs/public/drivers/clojure/codox"
- :source-paths ["api/src/main" "core/src/main"]
+ :source-paths ["api/src/main/clojure" "core/src/main/clojure"]
  :namespaces '[xtdb.api xtdb.node]
+ :exclude-vars #"^(map->|->)"
 
  :name "XTDB"
  :version "2.x-SNAPSHOT"

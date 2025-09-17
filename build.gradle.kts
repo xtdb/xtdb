@@ -471,8 +471,22 @@ if (hasProperty("fin")) {
 
 val codoxOpts = File("${projectDir}/codox.edn").readText()
 
+// Standalone codox configuration (massively reduces total docs build time)
+val codoxRuntime = configurations.create("codoxRuntime") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+dependencies.add("codoxRuntime", "org.clojure:clojure:1.12.0")
+dependencies.add("codoxRuntime", "codox:codox:0.10.8")
+
 tasks.register("build-codox", JavaExec::class) {
-    classpath = sourceSets.test.get().runtimeClasspath
+    dependsOn(":xtdb-api:compileClojure", ":xtdb-core:compileClojure")
+
+    classpath = codoxRuntime +
+               project(":xtdb-api").sourceSets.main.get().runtimeClasspath +
+               project(":xtdb-core").sourceSets.main.get().runtimeClasspath
+
     mainClass.set("clojure.main")
     jvmArgs(defaultJvmArgs + sixGBJvmArgs)
     val args = mutableListOf(
