@@ -179,6 +179,15 @@ class DenseUnionVector private constructor(
 
     override fun isNull(idx: Int) = leg(idx)?.isNull(getOffset(idx)) ?: true
 
+    override fun getBoolean(idx: Int): Boolean = leg(idx)!!.getBoolean(getOffset(idx))
+    override fun getByte(idx: Int): Byte = leg(idx)!!.getByte(getOffset(idx))
+    override fun getShort(idx: Int): Short = leg(idx)!!.getShort(getOffset(idx))
+    override fun getInt(idx: Int): Int = leg(idx)!!.getInt(getOffset(idx))
+    override fun getLong(idx: Int): Long = leg(idx)!!.getLong(getOffset(idx))
+    override fun getFloat(idx: Int): Float = leg(idx)!!.getFloat(getOffset(idx))
+    override fun getDouble(idx: Int): Double = leg(idx)!!.getDouble(getOffset(idx))
+    override fun getBytes(idx: Int): ByteBuffer = leg(idx)!!.getBytes(getOffset(idx))
+
     override fun writeUndefined() {
         typeBuffer.writeByte(-1)
         offsetBuffer.writeInt(0)
