@@ -156,7 +156,7 @@
            {::severity :fatal, ::error-code "3D000"}))
 
 (defn- err-invalid-auth-spec [msg] (ex-info msg {::severity :error, ::error-code "28000"}))
-(defn- err-query-cancelled [msg] (ex-info msg {::severity :error, :error-code "57014"}))
+(defn- err-query-cancelled [msg] (ex-info msg {::severity :error, ::error-code "57014"}))
 
 (defn- notice [msg]
   {:severity "NOTICE"
