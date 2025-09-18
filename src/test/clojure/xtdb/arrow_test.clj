@@ -69,3 +69,9 @@
     (let [copier (.rowCopier src-rel dest-rel)]
       (.copyRow copier 0)
       (t/is (= [{:list [1]}] (.toMaps dest-rel))))))
+
+(t/deftest cant-set-duv-nullable-4787
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:a false, :xt/id 1}]])
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:a false, :xt/id 1} {:a 0, :xt/id 1}]])
+  (t/is (= [{:a 0 :xt/id 1}]
+           (xt/q tu/*node* "SELECT * FROM docs ORDER BY _id"))))
