@@ -111,7 +111,8 @@
     (let [node-dir (util/->path "target/can-build-live-index")]
       (util/delete-dir node-dir)
 
-      (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir
+                                              :compactor-threads 0})]
         (let [bp (.getBufferPool (db/primary-db node))]
 
           (doseq [tx-ops txs]
