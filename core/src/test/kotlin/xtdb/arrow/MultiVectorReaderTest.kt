@@ -9,6 +9,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import xtdb.arrow.Vector.Companion.openVector
 import xtdb.test.AllocatorResolver
 
 fun <T> cycle(list: List<T>) = sequence { while (true) yieldAll(list) }
@@ -60,8 +61,8 @@ class MultiVectorReaderTest {
         val structField =
             Field("my-struct", FieldType(false, Struct.INSTANCE, null, null), listOf(fooField, barField))
 
-        Vector.fromField(alloc, structField).use { structVec1 ->
-            Vector.fromField(alloc, structField).use { structVec2 ->
+        structField.openVector(alloc).use { structVec1 ->
+            structField.openVector(alloc).use { structVec2 ->
                 val m1 = mapOf("foo" to false, "bar" to true)
                 val m2 = mapOf("foo" to true, "bar" to false)
 
@@ -83,7 +84,7 @@ class MultiVectorReaderTest {
                 val valueRdr = indirectRdr.valueReader(pos)
                 assertEquals(expected, r.map { readMaps(valueRdr).also { pos.getPositionAndIncrement() } })
 
-                Vector.fromField(alloc, structField).use { resVec ->
+                structField.openVector(alloc).use { resVec ->
                     val rowCopier = indirectRdr.rowCopier(resVec)
                     r.forEach { rowCopier.copyRow(it) }
                     assertEquals(expected, resVec.toList())
@@ -122,7 +123,7 @@ class MultiVectorReaderTest {
                     listOf(intVec.field, stringVec.field)
                 )
 
-                Vector.fromField(alloc, duvField).use { resVec ->
+                duvField.openVector(alloc).use { resVec ->
                     val rowCopier = indirectRdr.rowCopier(resVec)
                     r.forEach { rowCopier.copyRow(it) }
                     assertEquals(expected, resVec.toList())
@@ -146,7 +147,7 @@ class MultiVectorReaderTest {
                     listOf(intVec.field, stringVec.field)
                 )
 
-                Vector.fromField(alloc, duvField).use { duvVec ->
+                duvField.openVector(alloc).use { duvVec ->
                     duvVec.vectorFor("i32").writeInt(2)
                     duvVec.vectorFor("utf8").writeObject("fifth")
 
@@ -165,7 +166,7 @@ class MultiVectorReaderTest {
                     val valueRdr = indirectRdr.valueReader(pos)
                     assertEquals(expected, r.map { valueRdr.readObject().also { pos.getPositionAndIncrement() } })
 
-                    Vector.fromField(alloc, duvField).use { resVec ->
+                    duvField.openVector(alloc).use { resVec ->
                         val rowCopier = indirectRdr.rowCopier(resVec)
                         r.forEach { rowCopier.copyRow(it) }
 
@@ -187,8 +188,8 @@ class MultiVectorReaderTest {
             )
         )
 
-        Vector.fromField(alloc, duvField).use { duv1 ->
-            Vector.fromField(alloc, duvField).use { duv2 ->
+        duvField.openVector(alloc).use { duv1 ->
+            duvField.openVector(alloc).use { duv2 ->
                 duv1.vectorFor("i32").writeInt(0)
                 duv2.vectorFor("utf8").writeObject("first")
                 duv1.vectorFor("null").writeNull()
@@ -214,7 +215,7 @@ class MultiVectorReaderTest {
                     res
                 })
 
-                Vector.fromField(alloc, duvField).use { resVec ->
+                duvField.openVector(alloc).use { resVec ->
                     val rowCopier = indirectRdr.rowCopier(resVec)
                     r.forEach { rowCopier.copyRow(it) }
 
@@ -231,7 +232,7 @@ class MultiVectorReaderTest {
             listOf(Field("i32", FieldType.notNullable(INT.type), emptyList()))
         )
 
-        Vector.fromField(alloc, duvField).use { duvVec1 ->
+        duvField.openVector(alloc).use { duvVec1 ->
             duvVec1.vectorFor("i32").run { writeInt(0); writeInt(1) }
 
             val indirectRdr = MultiVectorReader(

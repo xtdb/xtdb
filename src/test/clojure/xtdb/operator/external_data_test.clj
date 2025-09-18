@@ -46,15 +46,17 @@
                                    {:preserve-pages? true, :with-col-types? true})))))
 
 (comment
+  (import 'xtdb.arrow.Relation)
+
   (let [arrow-path (-> (io/resource "xtdb/operator/arrow-cursor-test.arrow")
                        .toURI
                        util/->path)]
     (with-open [al (RootAllocator.)
-                rel (Relation/open al
-                                   (Schema. [(types/col-type->field "_id" :utf8)
-                                             (types/col-type->field "a_long" :i64)
-                                             (types/col-type->field "a_double" :f64)
-                                             (types/col-type->field "an_inst" [:timestamp-tz :micro "UTC"])]))
+                rel (Relation. al
+                               (Schema. [(types/col-type->field "_id" :utf8)
+                                         (types/col-type->field "a_long" :i64)
+                                         (types/col-type->field "a_double" :f64)
+                                         (types/col-type->field "an_inst" [:timestamp-tz :micro "UTC"])]))
                 ch (util/->file-channel arrow-path util/write-truncate-open-opts)
                 unl (.startUnload rel ch ArrowUnloader$Mode/FILE)]
       (doseq [page example-data]

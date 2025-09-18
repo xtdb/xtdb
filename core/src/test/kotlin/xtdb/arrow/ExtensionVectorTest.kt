@@ -9,6 +9,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.arrow.Vector.Companion.openVector
 import xtdb.types.ClojureForm
 import xtdb.types.ZonedDateTimeRange
 import xtdb.util.Hasher
@@ -43,7 +44,7 @@ class ExtensionVectorTest {
 
     fun testEqualHashcode(field: Field, value: Any) {
        field.createVector(al).use { oldVector ->
-           Vector.fromField(al, field).use { newVector ->
+           field.openVector(al).use { newVector ->
                val writer = writerFor(oldVector)
                writer.writeObject(value)
                writer.asReader

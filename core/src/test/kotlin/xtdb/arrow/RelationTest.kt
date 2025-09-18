@@ -66,7 +66,7 @@ class RelationTest {
         loader(allocator, buf.toByteArray().asChannel).use { loader ->
             assertEquals(2, loader.pageCount)
 
-            Relation.open(allocator, loader.schema).use { rel ->
+            Relation(allocator, loader.schema).use { rel ->
                 val i32 = rel["i32"]
                 val utf8 = rel["utf8"]
 
@@ -130,7 +130,7 @@ class RelationTest {
         loader(allocator, buf.toByteArray().asChannel).use { loader ->
             assertEquals(2, loader.pageCount)
 
-            Relation.open(allocator, loader.schema).use { rel ->
+            Relation(allocator, loader.schema).use { rel ->
                 val listVec = rel["list"]
 
                 loader.loadPage(0, rel)
@@ -197,13 +197,13 @@ class RelationTest {
         val row1 = mapOf("i32" to 4)
         val row2 = mapOf("i32" to 8)
 
-        val bytes = Relation.open(allocator, linkedMapOf("i32" to Type.I32)).use { rel ->
+        val bytes = Relation(allocator, "i32" ofType Type.I32).use { rel ->
             rel.writeRows(row1, row2)
             rel.asArrowStream
         }
 
         val rows = Relation.StreamLoader(allocator, bytes.asChannel).use { loader ->
-            Relation.open(allocator, loader.schema).use { rel ->
+            Relation(allocator, loader.schema).use { rel ->
                 assertTrue(loader.loadNextPage(rel))
 
                 rel.toMaps(SNAKE_CASE_STRING)

@@ -90,7 +90,7 @@ class MapVectorTest {
         }
 
         Relation.loader(allocator, buf.toByteArray().asChannel).use { loader ->
-            Relation.open(allocator, loader.schema).use { rel ->
+            Relation(allocator, loader.schema).use { rel ->
                 val mapVec = rel["map"]
 
                 assertEquals(2, loader.pageCount)

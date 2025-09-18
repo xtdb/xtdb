@@ -19,15 +19,8 @@ import xtdb.ArrowWriter
 import xtdb.arrow.ArrowUnloader.Mode
 import xtdb.arrow.ArrowUnloader.Mode.FILE
 import xtdb.arrow.ArrowUnloader.Mode.STREAM
-import xtdb.arrow.Vector.Companion.fromField
-import xtdb.trie.ColumnName
-import xtdb.types.Type
-import xtdb.types.Type.Companion.ofType
-import xtdb.util.closeAllOnCatch
-import xtdb.util.closeOnCatch
-import xtdb.util.normalForm
-import xtdb.util.openWritableChannel
-import xtdb.util.safeMap
+import xtdb.arrow.Vector.Companion.openVector
+import xtdb.util.*
 import java.io.ByteArrayOutputStream
 import java.nio.channels.*
 import java.nio.file.Files
@@ -47,11 +40,9 @@ class Relation(
     constructor(al: BufferAllocator, vectors: List<Vector>, rowCount: Int)
             : this(al, vectors.associateByTo(linkedMapOf()) { it.name }, rowCount)
 
-    constructor(al: BufferAllocator, schema: Schema)
-            : this(al, schema.fields.safeMap { fromField(al, it) }, 0)
-
-    constructor(al: BufferAllocator, vararg fields: Pair<ColumnName, Type>) :
-            this(al, Schema(fields.map { it.first ofType it.second }))
+    constructor(al: BufferAllocator, schema: Schema) : this(al, schema.fields)
+    constructor(al: BufferAllocator, fields: List<Field>) : this(al, fields.safeMap { it.openVector(al) }, 0)
+    constructor(al: BufferAllocator, vararg fields: Field) : this(al, fields.toList())
 
     override fun vectorForOrNull(name: String) = vecs[name]
     override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
@@ -60,7 +51,7 @@ class Relation(
     override fun vectorFor(name: String, fieldType: FieldType): Vector =
         vecs.compute(name) { _, v ->
             v?.maybePromote(al, fieldType)
-                ?: fromField(al, Field(name, fieldType, null))
+                ?: Field(name, fieldType, null).openVector(al)
                     .also { vec -> repeat(rowCount) { vec.writeNull() } }
         }!!
 
@@ -171,7 +162,7 @@ class Relation(
 
         private var lastPageIndex = -1
 
-        fun loadPage(idx: Int, al: BufferAllocator) = open(al, schema).closeOnCatch { loadPage(idx, it); it }
+        fun loadPage(idx: Int, al: BufferAllocator) = Relation(al, schema).closeOnCatch { loadPage(idx, it); it }
 
         fun loadPage(idx: Int, rel: Relation) {
             arrowFileLoader.openPage(idx).use { rel.load(it) }
@@ -209,22 +200,11 @@ class Relation(
 
         @JvmStatic
         fun fromRecordBatch(allocator: BufferAllocator, schema: Schema, recordBatch: ArrowRecordBatch): Relation {
-            val rel = open(allocator, schema)
+            val rel = Relation(allocator, schema)
             // this load retains the buffers
             rel.load(recordBatch)
             return rel
         }
-
-        @JvmStatic
-        fun open(al: BufferAllocator, schema: Schema) = open(al, schema.fields)
-
-        @JvmStatic
-        fun open(al: BufferAllocator, fields: List<Field>) =
-            Relation(al, fields.map { fromField(al, it) }, 0)
-
-        @JvmStatic
-        fun open(al: BufferAllocator, fields: SequencedMap<String, Type>) =
-            open(al, fields.map { (name, field) -> name ofType field })
 
         @JvmStatic
         fun openFromRows(al: BufferAllocator, rows: List<Map<*, *>>): Relation =

@@ -182,7 +182,7 @@
     (let [schema (Schema. [(types/col-type->field "a" :i32)])]
       (with-caches {}
         (with-open [bp (open-storage (Storage/local tmp-dir))
-                    rel (Relation/open tu/*allocator* schema)
+                    rel (Relation. tu/*allocator* schema)
                     _arrow-writer (.openArrowWriter bp (.toPath (io/file "foo")) rel)]
           (t/is (= [] (.listAllObjects bp))))))))
 

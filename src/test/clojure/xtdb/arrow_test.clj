@@ -59,7 +59,7 @@
 
 (t/deftest copy-list-into-empty-rel-4748
   (with-open [src-vec1 (Vector/fromList tu/*allocator* "0" [[1]])
-              dest-vec (Vector/fromField tu/*allocator* #xt/field ["list" :list])]
+              dest-vec (Vector/open tu/*allocator* #xt/field ["list" :list])]
     (let [copier1 (.rowCopier src-vec1 dest-vec)]
       (.copyRow copier1 0)
       (t/is (= [[1]] (.toList dest-vec)))))

@@ -37,10 +37,9 @@
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
   (Schema. [(types/->field "tx-ops" #xt.arrow/type :list false (types/field-with-name tx-ops-field "$data$"))
-
-            (types/col-type->field "system-time" types/nullable-temporal-type)
-            (types/col-type->field "default-tz" :utf8)
-            (types/->field "user" #xt.arrow/type :utf8 true)]))
+            #xt/field ["system-time" :temporal :?]
+            #xt/field ["default-tz" :utf8]
+            #xt/field ["user" :utf8 :?]]))
 
 (def ^:private forbidden-schemas #{"xt" "information_schema" "pg_catalog"})
 
@@ -206,7 +205,7 @@
 
 (defn serialize-tx-ops ^bytes [^BufferAllocator allocator tx-ops
                                {:keys [^Instant system-time, default-tz], {:keys [user]} :authn, :as opts}]
-  (with-open [rel (Relation/open allocator tx-schema)]
+  (with-open [rel (Relation. allocator tx-schema)]
     (let [ops-list-writer (.get rel "tx-ops")
 
           default-tz-writer (.get rel "default-tz")

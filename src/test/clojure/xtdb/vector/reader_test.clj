@@ -352,7 +352,7 @@
   ([^Vector src-vec ^BufferAllocator al]
    (copy-vector src-vec al 0 (.getValueCount src-vec)))
   ([^Vector src-vec ^BufferAllocator al start-idx end-idx]
-   (util/with-close-on-catch [out-vec (Vector/fromField al (.getField src-vec))]
+   (util/with-close-on-catch [out-vec (Vector/open al (.getField src-vec))]
      (let [copier (.rowCopier src-vec out-vec)]
        (doseq [i (range start-idx end-idx)]
          (.copyRow copier i))
@@ -384,7 +384,7 @@
                      (tg/lists-equal-normalized? expected-data actual-data))))))
 
 (defn- merge-vectors-into-duv ^Vector [^BufferAllocator al vectors]
-  (util/with-close-on-catch [^Vector duv-vec (Vector/fromField al (types/->field "mixed" #xt.arrow/type :union true))]
+  (util/with-close-on-catch [^Vector duv-vec (Vector/open al (types/->field "mixed" #xt.arrow/type :union true))]
     (doseq [^Vector vec vectors]
       (let [copier (.rowCopier vec duv-vec)]
         (dotimes [i (.getValueCount vec)]

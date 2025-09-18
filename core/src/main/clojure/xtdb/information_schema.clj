@@ -502,8 +502,8 @@
                                                (instance? TableRef k) k
                                                (symbol? k) (table/->ref db-name k)))))]
 
-          (util/with-close-on-catch [out-root (util/with-open [out-rel (Relation/open ^BufferAllocator allocator
-                                                                                      (Schema. (vec (vals derived-table-schema))))]
+          (util/with-close-on-catch [out-root (util/with-open [out-rel (Relation. ^BufferAllocator allocator
+                                                                                  (Schema. (vec (vals derived-table-schema))))]
 
                                                 (.writeRows out-rel (->> (case (table/ref->schema+table table)
                                                                            information_schema/tables (tables schema-info)

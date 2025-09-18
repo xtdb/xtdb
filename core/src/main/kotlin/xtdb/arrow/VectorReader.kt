@@ -6,6 +6,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.VectorIndirection.Companion.slice
 import xtdb.arrow.metadata.MetadataFlavour
@@ -106,7 +107,7 @@ interface VectorReader : ILookup, AutoCloseable {
     fun openSlice(al: BufferAllocator): VectorReader
 
     fun openDirectSlice(al: BufferAllocator): Vector =
-        Vector.fromField(al, field).closeOnCatch { outVec -> outVec.also { it.append(this) } }
+        field.openVector(al).closeOnCatch { outVec -> outVec.also { it.append(this) } }
 
     fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))
     fun select(startIdx: Int, len: Int): VectorReader = IndirectVector(this, slice(startIdx, len))

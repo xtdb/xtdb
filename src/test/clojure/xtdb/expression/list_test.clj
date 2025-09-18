@@ -19,7 +19,7 @@
               {:field field
                :size (some-> res (.getSize))
                :value (when res
-                        (util/with-open [out-vec (Vector/fromField tu/*allocator* field)]
+                        (util/with-open [out-vec (Vector/open tu/*allocator* field)]
                           (.writeTo res out-vec 0 (.getSize res))
                           (vec (.toList out-vec))))}))]
     (t/is (= {:field (types/col-type->field "$data$" :i64)

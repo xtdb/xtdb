@@ -105,26 +105,25 @@ sealed class Vector : VectorReader, VectorWriter {
 
     companion object {
         @JvmStatic
-        fun open(al: BufferAllocator, name: ColumnName, type: Type): Vector = fromField(al, name ofType type)
+        fun open(al: BufferAllocator, field: Field) = field.openVector(al)
 
-        @JvmStatic
-        fun fromField(al: BufferAllocator, field: Field): Vector {
-            val name: String = field.name
-            val isNullable = field.fieldType.isNullable
+        fun Field.openVector(al: BufferAllocator): Vector {
+            val name: String = this.name
+            val isNullable = this.fieldType.isNullable
 
-            return field.type.accept(object : ArrowTypeVisitor<Vector> {
+            return this.type.accept(object : ArrowTypeVisitor<Vector> {
                 override fun visit(type: Null) = NullVector(name)
 
                 override fun visit(type: Struct) =
                     StructVector(
                         al, name, isNullable,
-                        field.children.associateTo(linkedMapOf()) { it.name to fromField(al, it) }
+                        children.associateTo(linkedMapOf()) { it.name to it.openVector(al) }
                     )
 
                 override fun visit(type: ArrowType.List) =
                     ListVector(
                         al, name, isNullable,
-                        field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("\$data$")
+                        children.firstOrNull()?.let { it.openVector(al) } ?: NullVector("\$data$")
                     )
 
                 override fun visit(type: LargeList) = TODO("Not yet implemented")
@@ -132,18 +131,18 @@ sealed class Vector : VectorReader, VectorWriter {
                 override fun visit(type: FixedSizeList) =
                     FixedSizeListVector(
                         al, name, isNullable, type.listSize,
-                        field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("\$data$"))
+                        children.firstOrNull()?.let { it.openVector(al) } ?: NullVector("\$data$"))
 
                 override fun visit(type: ListView) = TODO("Not yet implemented")
                 override fun visit(type: LargeListView) = TODO("Not yet implemented")
 
                 override fun visit(type: Union) = when (type.mode!!) {
                     UnionMode.Sparse -> TODO("Not yet implemented")
-                    UnionMode.Dense -> DenseUnionVector(al, name, field.children.map { fromField(al, it) }, 0)
+                    UnionMode.Dense -> DenseUnionVector(al, name, children.map { it.openVector(al) }, 0)
                 }
 
                 override fun visit(type: ArrowType.Map): MapVector {
-                    val structVec = fromField(al, field.children.first())
+                    val structVec = children.first().openVector(al)
                     return MapVector(ListVector(al, name, isNullable, structVec), type.keysSorted)
                 }
 
@@ -207,14 +206,14 @@ sealed class Vector : VectorReader, VectorWriter {
                     TsTzRangeType -> TsTzRangeVector(
                         FixedSizeListVector(
                             al, name, isNullable, 2,
-                            field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("\$data$"))
+                            children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$"))
                     )
 
                     SetType ->
                         SetVector(
                             ListVector(
                                 al, name, isNullable,
-                                field.children.firstOrNull()?.let { fromField(al, it) } ?: NullVector("\$data$")))
+                                children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$")))
 
                     RegClassType -> RegClassVector(IntVector(al, name, isNullable))
                     RegProcType -> RegProcVector(IntVector(al, name, isNullable))
@@ -226,12 +225,12 @@ sealed class Vector : VectorReader, VectorWriter {
 
         @JvmStatic
         fun fromArrow(vec: ValueVector): Vector =
-            (if (vec is ArrowNullVector) NullVector(vec.name) else fromField(vec.allocator, vec.field))
+            (if (vec is ArrowNullVector) NullVector(vec.name) else vec.field.openVector(vec.allocator))
                 .apply { loadFromArrow(vec) }
 
         @JvmStatic
         fun fromList(al: BufferAllocator, field: Field, values: List<*>): Vector {
-            var vec = fromField(al, field)
+            var vec = field.openVector(al)
             try {
                 for (value in values) {
                     try {

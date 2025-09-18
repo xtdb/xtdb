@@ -15,7 +15,6 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Incorrect
 import xtdb.toFieldType
-import xtdb.types.Type
 import xtdb.types.Type.Companion.NULL
 import xtdb.util.Hasher
 import xtdb.util.closeAllOnCatch
@@ -65,7 +64,7 @@ class StructVector private constructor(
         childWriters.compute(name) { _, existingChild ->
             when {
                 existingChild == null ->
-                    fromField(allocator, Field(name, fieldType, emptyList())).also { newVec ->
+                    Field(name, fieldType, emptyList()).openVector(allocator).also { newVec ->
                         repeat(valueCount) { if (isNull(it)) newVec.writeUndefined() else newVec.writeNull() }
                     }
 

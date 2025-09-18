@@ -23,6 +23,7 @@ import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.test.AllocatorResolver
 import xtdb.types.Type
+import xtdb.types.Type.Companion.ofType
 import java.nio.file.Path
 import kotlin.io.path.listDirectoryEntries
 
@@ -61,7 +62,7 @@ class RemoteStorageTest : StorageTest() {
     @Test
     fun arrowIpcTest(al: BufferAllocator) {
         val path = Path.of("aw")
-        Relation.open(al, linkedMapOf("a" to Type.I32)).use { relation ->
+        Relation(al, "a" ofType Type.I32).use { relation ->
             remoteBufferPool.openArrowWriter(path, relation).use { writer ->
                 val v = relation["a"]
                 for (i in 0 until 10) v.writeInt(i)
@@ -83,7 +84,7 @@ class RemoteStorageTest : StorageTest() {
         val rootPath = remoteBufferPool.diskCache.rootPath
         val tmpDir = rootPath.resolve(".tmp")
         val schema = Schema(listOf(Field("a", FieldType(false, I32, null), null)))
-        Relation.open(al, schema).use { relation ->
+        Relation(al, schema).use { relation ->
             remoteBufferPool.openArrowWriter(Path.of("aw"), relation).use { writer ->
                 val v = relation["a"]
                 for (i in 0 until 10) v.writeInt(i)
@@ -95,7 +96,7 @@ class RemoteStorageTest : StorageTest() {
         assertEquals(0, tmpDir.listDirectoryEntries().size)
 
         val exception = assertThrows(Exception::class.java) {
-            Relation.open(al, schema).use { relation ->
+            Relation(al, schema).use { relation ->
                 remoteBufferPool.openArrowWriter(Path.of("aw2"), relation).use { writer ->
                     // tmp file present
                     assertEquals(1, tmpDir.listDirectoryEntries().size)

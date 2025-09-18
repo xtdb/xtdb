@@ -102,7 +102,7 @@ class ListVector private constructor(
             elVector.field.fieldType == fieldType -> elVector
 
             elVector is NullVector && elVector.valueCount == 0 ->
-                fromField(al, Field("\$data\$", fieldType, emptyList())).also { elVector = it }
+                Field("\$data\$", fieldType, emptyList()).openVector(al).also { elVector = it }
 
             else -> elVector.maybePromote(al, fieldType).also { elVector = it }
         }

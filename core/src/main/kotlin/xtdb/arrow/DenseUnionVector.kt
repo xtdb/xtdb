@@ -50,7 +50,7 @@ class DenseUnionVector private constructor(
     companion object {
         internal fun promote(al: BufferAllocator, vector: Vector, target: FieldType) =
             if (vector is NullVector)
-                fromField(al, Field(vector.name, target, emptyList()))
+                Field(vector.name, target, emptyList()).openVector(al)
                     .also { newVec -> repeat(vector.valueCount) { newVec.writeNull() } }
             else
                 DenseUnionVector(al, vector.name, listOf(vector), vector.valueCount)
@@ -245,7 +245,7 @@ class DenseUnionVector private constructor(
         }
 
         val typeId = legVectors.size.toByte()
-        val legVec = fromField(allocator, Field(name, fieldType, emptyList())).also { legVectors.add(it) }
+        val legVec = Field(name, fieldType, emptyList()).openVector(allocator).also { legVectors.add(it) }
         return LegVector(typeId, legVec)
     }
 

@@ -21,7 +21,6 @@ import xtdb.segment.Segment.Page
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.EventRowPointer
 import xtdb.trie.Trie.dataRelSchema
-import xtdb.types.Arrow.withName
 import xtdb.types.MergeTypes.Companion.mergeFields
 import xtdb.types.Type.Companion.ofType
 import xtdb.util.*
@@ -53,7 +52,7 @@ fun resolveSameSystemTimeEvents(
     val curIidPtr = ArrowBufPointer()
     var curSystemFrom: Long
 
-    val relWriter = Relation.open(al, dataReader.schema)
+    val relWriter = Relation(al, dataReader.schema)
     val iidVec = dataReader["_iid"].rowCopier(relWriter["_iid"])
     val sysFromVec = dataReader["_system_from"].rowCopier(relWriter["_system_from"])
     val validFromVec = relWriter["_valid_from"]
@@ -134,8 +133,8 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
     fun Result.openAllAsRelation() =
         Relation.loader(al, openForRead()).use { inLoader ->
             val schema = inLoader.schema
-            Relation.open(al, schema).closeOnCatch { outRel ->
-                Relation.open(al, schema).use { inRel ->
+            Relation(al, schema).closeOnCatch { outRel ->
+                Relation(al, schema).use { inRel ->
                     while (inLoader.loadNextPage(inRel))
                         outRel.append(inRel)
                 }
