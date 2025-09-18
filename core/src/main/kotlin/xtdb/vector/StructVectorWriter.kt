@@ -6,14 +6,15 @@ import org.apache.arrow.vector.NullVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.StructVector
-import org.apache.arrow.vector.complex.replaceChild
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.arrow.*
+import xtdb.arrow.InvalidCopySourceException
+import xtdb.arrow.InvalidWriteObjectException
+import xtdb.arrow.RowCopier
+import xtdb.arrow.ValueReader
 import xtdb.error.Incorrect
 import xtdb.toFieldType
 import xtdb.util.normalForm
-import org.apache.arrow.vector.types.pojo.ArrowType.Null.INSTANCE as NULL_TYPE
 import org.apache.arrow.vector.types.pojo.ArrowType.Union as UNION_TYPE
 
 class StructVectorWriter(override val vector: StructVector, private val notify: FieldChangeListener?) : IVectorWriter,
@@ -50,23 +51,9 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
         writers.values.forEach(IVectorWriter::writeNull)
     }
 
-    private fun promoteChild(childWriter: IVectorWriter, fieldType: FieldType): IVectorWriter =
-        if (childWriter.field.type is UNION_TYPE) childWriter
-        else writerFor(childWriter.promote(fieldType, vector.allocator)).also {
-            vector.replaceChild(it.vector)
-            upsertChildField(it.field)
-            writers[childWriter.vector.name] = it
-        }
-
-    private fun IVectorWriter.writeChildObject(v: Any?): IVectorWriter =
-        try {
-            if (v is ValueReader) writeValue(v) else writeObject(v)
-            this
-        } catch (e: InvalidWriteObjectException) {
-            promoteChild(this, e.obj.toFieldType()).also { promoted ->
-                if (v is ValueReader) promoted.writeValue(v) else promoted.writeObject(v)
-            }
-        }
+    private fun IVectorWriter.writeChildObject(v: Any?) {
+        if (v is ValueReader) writeValue(v) else writeObject(v)
+    }
 
     override fun writeObject0(obj: Any) {
         if (obj !is Map<*, *>) throw InvalidWriteObjectException(field.fieldType, obj)
@@ -110,50 +97,14 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
                 || it.field.type is UNION_TYPE
             )
                 it
-            else promoteChild(it, fieldType)
+            else error("promotion no longer supported in StructVectorWriter")
         }
             ?: newChildWriter(name, fieldType)
 
     override fun endStruct() {
         vector.setIndexDefined(valueCount)
         val pos = ++valueCount
-        writers.values.forEach { w ->
-            try {
-                w.populateWithAbsents(pos)
-            } catch (_: InvalidWriteObjectException) {
-                promoteChild(w, FieldType.nullable(NULL_TYPE)).populateWithAbsents(pos)
-            }
-        }
-    }
-
-    private inline fun childRowCopier(
-        srcName: String,
-        fieldType: FieldType,
-        toRowCopier: (IVectorWriter) -> RowCopier,
-    ): RowCopier {
-        val childWriter = vectorFor(srcName, fieldType)
-
-        return try {
-            toRowCopier(childWriter)
-        } catch (e: InvalidCopySourceException) {
-            return toRowCopier(promoteChild(childWriter, e.src))
-        }
-    }
-
-    override fun promoteChildren(field: Field) {
-        when {
-            field.type == NULL_TYPE && this.field.isNullable -> return
-
-            field.type != this.field.type || field.isNullable && !this.field.isNullable ->
-                throw FieldMismatch(field.fieldType, this.field.fieldType)
-
-            else -> for (child in field.children) {
-                var childWriter = writers[child.name] ?: newChildWriter(child.name, child.fieldType)
-                if ((child.type != childWriter.field.type || (child.isNullable && !childWriter.field.isNullable)) && childWriter.field.type !is UNION_TYPE)
-                    childWriter = promoteChild(childWriter, child.fieldType)
-                if (child.children.isNotEmpty()) childWriter.promoteChildren(child)
-            }
-        }
+        writers.values.forEach { w -> w.populateWithAbsents(pos) }
     }
 
     override fun rowCopier(src: ValueVector) = when (src) {
@@ -164,7 +115,7 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
                 throw InvalidCopySourceException(src.field.fieldType, field.fieldType)
 
             val innerCopiers =
-                src.map { child -> childRowCopier(child.name, child.field.fieldType) { w -> w.rowCopier(child) } }
+                src.map { child -> vectorFor(child.name, child.field.fieldType).rowCopier(child) }
 
             RowCopier { srcIdx ->
                 valueCount.also {
@@ -180,5 +131,4 @@ class StructVectorWriter(override val vector: StructVector, private val notify: 
 
         else -> throw InvalidCopySourceException(src.field.fieldType, field.fieldType)
     }
-
 }

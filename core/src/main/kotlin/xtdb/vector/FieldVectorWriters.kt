@@ -99,11 +99,6 @@ class NullVectorWriter(override val vector: NullVector) : ScalarVectorWriter(vec
         else -> throw InvalidCopySourceException(src.field.fieldType, field.fieldType)
     }
 
-    override fun promoteChildren(field: Field) {
-        if (field.type == ArrowType.Null.INSTANCE) return
-        if (field.type is ArrowType.Union && field.children.size == 1 && field.children[0].type == ArrowType.Null.INSTANCE) return
-        throw FieldMismatch(field.fieldType, this.field.fieldType)
-    }
 }
 
 private class BitVectorWriter(override val vector: BitVector) : ScalarVectorWriter(vector) {
@@ -530,16 +525,6 @@ internal class SetVectorWriter(vector: SetVector, notify: FieldChangeListener?) 
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
-    override fun promoteChildren(field: Field) {
-        when {
-            field.type == NULL_TYPE && this.field.isNullable -> return
-
-            field.type != this.field.type || field.isNullable && !this.field.isNullable ->
-                throw FieldMismatch(field.fieldType, this.field.fieldType)
-
-            else -> inner.promoteChildren(Field(field.name, inner.field.fieldType, field.children))
-        }
-    }
 }
 
 

@@ -2,7 +2,8 @@
 
 package xtdb.types
 
-import org.apache.arrow.vector.types.FloatingPointPrecision.DOUBLE
+import org.apache.arrow.vector.types.FloatingPointPrecision
+import org.apache.arrow.vector.types.FloatingPointPrecision.*
 import org.apache.arrow.vector.types.TimeUnit.MICROSECOND
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.UnionMode
@@ -46,6 +47,9 @@ data class Type(val arrowType: ArrowType, val nullable: Boolean = false, val chi
 
         @JvmField
         val I64 = Type(MinorType.BIGINT.type)
+
+        @JvmField
+        val F32 = Type(ArrowType.FloatingPoint(SINGLE))
 
         @JvmField
         val F64 = Type(ArrowType.FloatingPoint(DOUBLE))

@@ -40,31 +40,6 @@ interface IVectorWriter : VectorWriter, AutoCloseable {
 
     override fun openDirectSlice(al: BufferAllocator) = asReader.openDirectSlice(al)
 
-    // This is essentially the promoteChildren for monomorphic vectors except NullVector
-    fun promoteChildren(field: Field) {
-        when {
-            (field.type == ArrowType.Null.INSTANCE) -> {
-                if (!this.field.isNullable)
-                    throw FieldMismatch(field.fieldType, this.field.fieldType)
-            }
-
-            field.type is ArrowType.Union -> {
-                val nullable =
-                    field.children.fold(false) { acc, field -> acc || field.type == ArrowType.Null.INSTANCE || field.isNullable }
-                if (nullable && !this.field.isNullable)
-                    throw FieldMismatch(field.fieldType, this.field.fieldType)
-
-                val nonNullFields = field.children.filter { it.type != ArrowType.Null.INSTANCE }
-                if (nonNullFields.size > 1 || (nonNullFields.size == 1 && this.field.type != nonNullFields.first().type))
-                    throw FieldMismatch(field.fieldType, this.field.fieldType)
-            }
-
-            else ->
-                if (field.type != this.field.type || (field.isNullable && !this.field.isNullable))
-                    throw FieldMismatch(field.fieldType, this.field.fieldType)
-        }
-    }
-
     override fun rowCopier(dest: VectorWriter) = unsupported("rowCopier(VectorWriter)")
 
     fun rowCopier(src: ValueVector): RowCopier

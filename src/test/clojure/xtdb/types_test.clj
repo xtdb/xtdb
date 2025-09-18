@@ -64,19 +64,6 @@
                              (Instant/ofEpochSecond 3600 1234)]))
         "timestamp types")
 
-  (let [vs [[]
-            [2 3.14 [false nil]]
-            {}
-            {:b 2, :c 1, :f false}
-            {:b 2, :c 1, :f false}
-            [1 {:b [2]}]
-            [1 {:b [2]}]
-            {:b 3.14, :d {:e ["hello" -1]}}]]
-    (t/is (= {:vs vs
-              :vec-types [ListVector ListVector StructVector StructVector StructVector ListVector ListVector StructVector]}
-             (test-round-trip vs))
-          "nested types"))
-
   (let [vs [:foo :foo/bar #uuid "97a392d5-5e3f-406f-9651-a828ee79b156" (URI/create "https://xtdb.com") #xt/clj-form (fn [a b] (+ a b))]]
     (t/is (= {:vs vs
               :vec-types [KeywordVector KeywordVector UuidVector UriVector TransitVector]}

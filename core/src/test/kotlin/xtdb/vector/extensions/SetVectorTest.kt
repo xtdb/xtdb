@@ -10,6 +10,11 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.types.LIST_ELS_NAME
+import xtdb.types.Type
+import xtdb.types.Type.Companion.I64
+import xtdb.types.Type.Companion.just
+import xtdb.types.Type.Companion.ofType
 import xtdb.vector.writerFor
 
 class SetVectorTest {
@@ -28,15 +33,14 @@ class SetVectorTest {
 
     @Test
     fun `get underlying vector field`() {
-        val sv =  SetVector("foo", al, FieldType.notNullable(SetType))
-        val setWriter = writerFor(sv)
-        setWriter.writeObject(setOf(1L, 2L, 3L))
+        "foo".ofType(just(SetType, children = listOfNotNull(LIST_ELS_NAME ofType I64))).createVector(al).use { sv ->
+            val setWriter = writerFor(sv)
+            setWriter.writeObject(setOf(1L, 2L, 3L))
 
-        assertEquals(Field("foo", FieldType.notNullable(SetType), listOf(Field("\$data\$", FieldType.notNullable(Types.MinorType.BIGINT.type), emptyList()))), sv.field)
+            assertEquals(Field("foo", FieldType.notNullable(SetType), listOf(Field("\$data\$", FieldType.notNullable(Types.MinorType.BIGINT.type), emptyList()))), sv.field)
 
-        assertEquals(Field("foo", FieldType.notNullable(ArrowType.List.INSTANCE), listOf(Field("\$data\$", FieldType.notNullable(Types.MinorType.BIGINT.type), emptyList()))),
-            sv.underlyingVector.field)
-
-        sv.close()
+            assertEquals(Field("foo", FieldType.notNullable(ArrowType.List.INSTANCE), listOf(Field("\$data\$", FieldType.notNullable(Types.MinorType.BIGINT.type), emptyList()))),
+                (sv as SetVector).underlyingVector.field)
+        }
     }
 }

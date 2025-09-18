@@ -5,12 +5,9 @@ import org.apache.arrow.vector.NullVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
-import org.apache.arrow.vector.complex.replaceDataVector
-import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.*
-import xtdb.toFieldType
 
 class ListVectorWriter(override val vector: ListVector, private val notify: FieldChangeListener?) : IVectorWriter {
     override var field: Field = vector.field
@@ -21,13 +18,6 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
     }
 
     private var elWriter = writerFor(vector.dataVector, ::upsertElField)
-
-    private fun promoteElWriter(fieldType: FieldType): IVectorWriter {
-        val newVec = elWriter.promote(fieldType, vector.allocator)
-        vector.replaceDataVector(newVec)
-        upsertElField(newVec.field)
-        return writerFor(newVec, ::upsertElField).also { elWriter = it }
-    }
 
     override var valueCount = vector.valueCount
 
@@ -65,21 +55,10 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
     override fun writeObject0(obj: Any) {
         when (obj) {
             is ListValueReader ->
-                for (i in 0..<obj.size()) {
-                    try {
-                        elWriter.writeValue(obj.nth(i))
-                    } catch (e: InvalidWriteObjectException) {
-                        promoteElWriter(e.obj.toFieldType()).writeObject(obj.nth(i))
-                    }
-                }
+                for (i in 0..<obj.size())
+                    elWriter.writeValue(obj.nth(i))
 
-            is List<*> -> obj.forEach {
-                try {
-                    elWriter.writeObject(it)
-                } catch (e: InvalidWriteObjectException) {
-                    promoteElWriter(e.obj.toFieldType()).writeObject(it)
-                }
-            }
+            is List<*> -> obj.forEach { elWriter.writeObject(it) }
 
             else -> throw InvalidWriteObjectException(field.fieldType, obj)
         }
@@ -87,22 +66,6 @@ class ListVectorWriter(override val vector: ListVector, private val notify: Fiel
     }
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
-
-    override fun promoteChildren(field: Field) {
-        when {
-            field.type == NULL_TYPE && this.field.isNullable -> return
-
-            field.type != this.field.type || field.isNullable && !this.field.isNullable ->
-                throw FieldMismatch(field.fieldType, this.field.fieldType)
-
-            else -> {
-                val child = field.children.single()
-                if ((child.type != elWriter.field.type || (child.isNullable && !elWriter.field.isNullable)) && elWriter.field.type !is ArrowType.Union)
-                    promoteElWriter(child.fieldType)
-                if (child.children.isNotEmpty()) elWriter.promoteChildren(child)
-            }
-        }
-    }
 
     override fun rowCopier(src: ValueVector) = when (src) {
         is NullVector -> nullToVecCopier(this)

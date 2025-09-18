@@ -3,7 +3,6 @@ package xtdb.vector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.replaceChild
-import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.NULL_TYPE
@@ -200,18 +199,6 @@ class DenseUnionVectorWriter(
             else
                 copierMapping[src.getTypeId(srcIdx).toInt()]
                     .copyRow(src.getOffset(srcIdx))
-        }
-    }
-
-    override fun promoteChildren(field: Field) {
-        if (field.type is ArrowType.Union) {
-            for (child in field.children) {
-                val legWriter = vectorFor(child.type.toLeg(), child.fieldType)
-                if (child.children.isNotEmpty()) legWriter.promoteChildren(child)
-            }
-        } else {
-            val legWriter = vectorFor(field.type.toLeg(), field.fieldType)
-            if (field.children.isNotEmpty()) legWriter.promoteChildren(field)
         }
     }
 

@@ -5,7 +5,6 @@ import org.apache.arrow.vector.NullVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.FixedSizeListVector
-import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.FixedSizeList
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
@@ -84,20 +83,6 @@ internal class FixedSizeListVectorWriter(
     }
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
-
-    override fun promoteChildren(field: Field) {
-        if (field.type != this.field.type || (field.isNullable && !this.field.isNullable))
-            throw FieldMismatch(field.fieldType, this.field.fieldType)
-        val child = field.children.single()
-        if (
-            (child.type != elWriter.field.type
-                    || (child.isNullable && !elWriter.field.isNullable))
-            && elWriter.field.type !is ArrowType.Union
-        ) {
-            TODO("FSLV promotion")
-        }
-        if (child.children.isNotEmpty()) elWriter.promoteChildren(child)
-    }
 
     override fun rowCopier(src: ValueVector) = when (src) {
         is NullVector -> nullToVecCopier(this)

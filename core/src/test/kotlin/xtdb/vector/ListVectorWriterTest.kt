@@ -11,6 +11,13 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.arrow.I32
+import xtdb.arrow.Vector.Companion.openVector
+import xtdb.time.asOffsetDateTime
+import xtdb.types.Arrow.withName
+import xtdb.types.Type
+import xtdb.types.Type.Companion.asListOf
+import xtdb.types.Type.Companion.unionOf
 import xtdb.vector.extensions.KeywordType
 import org.apache.arrow.vector.types.pojo.ArrowType.List.INSTANCE as LIST_TYPE
 
@@ -57,7 +64,7 @@ class ListVectorWriterTest {
     fun `test write some lists with writeObject`() {
         val lists = listOf(listOf(12, 20), listOf(24, 32))
 
-        writerFor(ListVector.empty("foo", al)).use { w ->
+        writerFor("foo".asListOf(Type.I32).createVector(al)).use { w ->
             lists.forEach { w.writeObject(it) }
             assertEquals(lists, w.asReader.toList())
         }
@@ -67,28 +74,17 @@ class ListVectorWriterTest {
     fun `test copy some lists`() {
         val lists = listOf(listOf(12, 20), listOf(24, 32))
 
-        ListVector.empty("src", al).use { srcVec ->
+        "src".asListOf(Type.I32).createVector(al).use { srcVec ->
             writerFor(srcVec).apply {
                 lists.forEach { writeObject(it) }
             }
 
-            writerFor(ListVector.empty("dest", al)).use { dest ->
+            writerFor(srcVec.field.withName("dest").createVector(al)).use { dest ->
                 dest.rowCopier(srcVec).apply {
                     copyRow(0); copyRow(1)
                 }
                 assertEquals(lists, dest.asReader.toList())
-                assertEquals(
-                    Field(
-                        "dest", FieldType.nullable(LIST_TYPE),
-                        listOf(
-                            Field(
-                                "\$data\$", UNION_FIELD_TYPE,
-                                listOf(Field("i32", NN_I32, emptyList()))
-                            )
-                        )
-                    ),
-                    dest.field
-                )
+                assertEquals("dest".asListOf(Type.I32), dest.field)
             }
         }
     }
@@ -100,79 +96,19 @@ class ListVectorWriterTest {
             listOf(18.4, 36),
         )
 
-        ListVector.empty("src", al).use { srcVec ->
+        "src".asListOf(unionOf(Type.I32.asLegField, Type.F32.asLegField)).createVector(al).use { srcVec ->
             val w = writerFor(srcVec).apply {
                 lists.forEach { writeObject(it) }
             }
 
             assertEquals(lists, w.asReader.toList())
 
-            writerFor(ListVector.empty("dest", al)).use { dest ->
+            writerFor(srcVec.field.withName("dest").createVector(al)).use { dest ->
                 dest.rowCopier(srcVec).apply {
                     copyRow(0); copyRow(1)
                 }
                 assertEquals(lists, dest.asReader.toList())
             }
-        }
-    }
-
-    @Test
-    fun `test promote`() {
-        val lists = listOf(
-            listOf(12, 24),
-            listOf(null, 36),
-            listOf("foo"),
-        )
-
-        writerFor(ListVector.empty("foo", al)).use { w ->
-            w.writeObject(lists[0])
-
-            assertEquals(
-                Field(
-                    "foo", FieldType.nullable(LIST_TYPE),
-                    listOf(Field("\$data\$", NN_I32, emptyList()))
-                ), w.field
-            )
-
-            w.writeObject(lists[1])
-
-            assertEquals(
-                Field(
-                    "foo", FieldType.nullable(LIST_TYPE),
-                    listOf(Field("\$data\$", NULL_I32, emptyList()))
-                ), w.field
-            )
-
-            w.writeObject(lists[2])
-
-            assertEquals(
-                Field(
-                    "foo", FieldType.nullable(LIST_TYPE),
-                    listOf(
-                        Field(
-                            "\$data\$", UNION_FIELD_TYPE,
-                            listOf(
-                                Field("i32", NULL_I32, emptyList()),
-                                Field("utf8", NN_UTF8, emptyList()),
-                            )
-                        )
-                    )
-                ), w.field
-            )
-
-            assertEquals(lists, w.asReader.toList())
-        }
-    }
-
-    @Test
-    fun `promotes structs`() {
-        writerFor(ListVector("my-list", al, FieldType.notNullable(LIST_TYPE), null)).use { listWtr ->
-            val obj = listOf(mapOf("a" to Keyword.intern("foo")), mapOf("a" to "foo"))
-
-            listWtr.writeObject(obj)
-
-            assertEquals(listOf(obj), listWtr.asReader.toList())
-            assertEquals(PROMOTES_STRUCTS_FIELD, listWtr.field)
         }
     }
 }

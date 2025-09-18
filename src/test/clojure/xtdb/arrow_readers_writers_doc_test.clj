@@ -116,33 +116,12 @@
                  (.vectorFor "foo" (FieldType/notNullable #xt.arrow/type :i64))
                  (.getField)))))
 
-  ;; If you are asking for a different field type then the one specified in the beginning it'll promote the writer
-  (with-open [allocator (RootAllocator.)
-              struct-vec (.createVector #xt/field ["my-struct" :struct ["foo" :i64]] allocator)]
-    (t/is (= #xt/field ["my-struct" :struct ["foo" :union ["i64" :i64] ["utf8" :utf8]]]
-             (-> (vw/->writer struct-vec)
-                 (doto (.vectorFor "foo" (FieldType/notNullable #xt.arrow/type :utf8)))
-                 (.getField)))))
-
   ;; You can also create a struct key by providing a field-type
   (with-open [allocator (RootAllocator.)
               struct-vec (.createVector #xt/field ["my-struct" :struct] allocator)]
     (t/is (= #xt/field ["bar" :utf8]
              (-> (vw/->writer struct-vec)
                  (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :utf8))
-                 (.getField)))))
-
-  ;; If you first ask for one type and then later for different one, the underlying vector gets promoted to a union vector.
-  (with-open [allocator (RootAllocator.)
-              struct-vec (.createVector #xt/field ["my-struct" :struct] allocator)]
-    (-> (vw/->writer struct-vec)
-        (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :utf8))
-        (.getField))
-
-    (t/is (= #xt/field ["my-struct" :struct
-                        ["bar" :union ["utf8" :utf8] ["i64" :i64]]]
-             (-> (vw/->writer struct-vec)
-                 (doto (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :i64)))
                  (.getField)))))
 
   ;; Lets also look at how one would write to a duv.
