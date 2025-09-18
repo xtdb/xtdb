@@ -6,7 +6,6 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
-import xtdb.util.closeOnCatch
 import java.nio.ByteBuffer
 
 class IndirectVector(private val inner: VectorReader, private val sel: VectorIndirection) : VectorReader {
@@ -49,6 +48,13 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
         val innerCopier = inner.rowCopier(dest)
         return RowCopier { srcIdx -> innerCopier.copyRow(sel[srcIdx]) }
     }
+
+    override fun valueReader(pos: VectorPosition): ValueReader =
+        inner.valueReader(object : VectorPosition {
+            override var position: Int
+                get() = sel.getIndex(pos.position)
+                set(_) = throw UnsupportedOperationException()
+        })
 
     override fun close() = inner.close()
 }
