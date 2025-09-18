@@ -1,19 +1,16 @@
 package xtdb.arrow
 
-import clojure.lang.IFn
-import clojure.lang.RT
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.toLeg
 import xtdb.trie.ColumnName
-import xtdb.types.Arrow.withName
+import xtdb.types.MergeTypes.Companion.mergeFields
+import xtdb.types.Type.Companion.ofType
 import xtdb.util.Hasher
 import xtdb.util.closeAllOnCatch
-import xtdb.util.requiringResolve
 import xtdb.util.safeMap
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
@@ -29,12 +26,8 @@ class MultiVectorReader(
     private val legReaders = ConcurrentHashMap<String, VectorReader>()
     override val nullable get() = this.field.isNullable
 
-    companion object {
-        private val MERGE_FIELDS: IFn = requiringResolve("xtdb.types/merge-fields")
-    }
-
     override val field by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        (MERGE_FIELDS.applyTo(RT.seq(fields.filterNotNull())) as Field).withName(name)
+        name ofType mergeFields(fields)
     }
 
     override val fieldType: FieldType get() = this.field.fieldType

@@ -21,8 +21,9 @@ import xtdb.segment.Segment.Page
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.EventRowPointer
 import xtdb.trie.Trie.dataRelSchema
-import xtdb.types.Arrow.mergeFields
 import xtdb.types.Arrow.withName
+import xtdb.types.MergeTypes.Companion.mergeFields
+import xtdb.types.Type.Companion.ofType
 import xtdb.util.*
 import java.nio.file.Path
 import java.time.LocalDate
@@ -206,7 +207,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
                     .find { it.name == "put" && it.children.isNotEmpty() }
             })
 
-        val schema = dataRelSchema(mergedPutField.withName("put"))
+        val schema = dataRelSchema("put" ofType mergedPutField)
 
         val outWriter = when (recencyPartitioning) {
             RecencyPartitioning.Partition -> outWriters.PartitionedOutWriter(schema, recencyPartition)

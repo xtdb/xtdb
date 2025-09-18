@@ -284,33 +284,19 @@
                                                  c [:union #{:i64 :null}]}])
                (types/merge-fields struct0 struct1))))
 
-    (t/is (= #_(types/col-type->field '[:union #{:f64 [:struct {a [:union #{:utf8 :i64}]}]}])
-             (types/->field-default-name #xt.arrow/type :union false
-                                         [(types/col-type->field :f64)
-                                          (types/->field-default-name #xt.arrow/type :struct false
-                                                                      [(types/->field "a" #xt.arrow/type :union false
-                                                                                      (types/col-type->field :i64)
-                                                                                      (types/col-type->field :utf8))])])
-             (types/merge-fields (types/col-type->field '[:union #{:f64, [:struct {a :i64}]}])
-                                 (types/col-type->field '[:struct {a :utf8}]))))
+    (t/is (= #xt/field ["union" :union ["f64" :f64] ["struct" :struct ["a" :union ["i64" :i64] ["utf8" :utf8]]]]
+             (types/merge-fields #xt/field ["union" :union ["f64" :f64] ["struct" :struct ["a" :i64]]]
+                                 #xt/field ["struct" :struct ["a" :utf8]])))
 
-    (let [struct0 (types/col-type->field '[:struct {a :i64
-                                                    b [:struct {c :utf8, d :utf8}]}])
-          struct1 (types/col-type->field '[:struct {a :bool
-                                                    b :utf8}])]
-      (t/is (= #_(types/col-type->field [:struct '{a [:union #{:i64 :bool}]
-                                                   b [:union #{[:struct {c :utf8, d :utf8}]
-                                                               :utf8}]}])
-               (types/->field-default-name #xt.arrow/type :struct false
-                                           [(types/->field "a" #xt.arrow/type :union false
-                                                           (types/col-type->field :i64)
-                                                           (types/col-type->field :bool))
-                                            (types/->field "b" #xt.arrow/type :union false
-                                                           (types/->field-default-name #xt.arrow/type :struct false
-                                                                                       [(types/col-type->field "c" :utf8)
-                                                                                        (types/col-type->field "d" :utf8)])
-                                                           (types/col-type->field :utf8))])
-               (types/merge-fields struct0 struct1)))))
+    (t/is (= #xt/field ["struct" :struct
+                        ["a" :union ["i64" :i64] ["bool" :bool]]
+                        ["b" :union
+                         ["utf8" :utf8]
+                         ["struct" :struct ["c" :utf8], ["d" :utf8]]]]
+             (types/merge-fields #xt/field ["struct" :struct
+                                            ["a" :i64]
+                                            ["b" :struct ["c" :utf8], ["d" :utf8]]]
+                                 #xt/field ["struct" :struct ["a" :bool], ["b" :utf8]]))))
 
   (t/testing "null behaviour"
     (t/is (= (types/col-type->field :null)
@@ -322,22 +308,19 @@
     (t/is (= (types/col-type->field "a" [:union #{:null :i64}])
              (types/merge-fields (types/col-type->field "a" :null) (types/col-type->field "a" :i64))))
 
-    (t/is (= (types/col-type->field "a" [:union #{:null :i64 :f64}])
-             (types/merge-fields (types/col-type->field "a" :f64) (types/col-type->field "a" :null) (types/col-type->field "a" :i64))))
+    (t/is (= #xt/field ["a" :union ["f64" :f64] ["i64" :i64] ["null" :null :?]]
+             (types/merge-fields #xt/field ["a" :f64]
+                                 #xt/field ["a" :null :?]
+                                 #xt/field ["a" :i64])))
 
     (t/testing "nulls kept within the legs they were originally in"
-      (t/is (= (types/->field "a" #xt.arrow/type :union false
-                              (types/col-type->field :f64)
-                              (types/col-type->field "i64" [:union #{:null :i64}]))
-               (types/merge-fields (types/col-type->field "a" :f64)
-                                   (types/col-type->field "a" [:union #{:null :i64}]))))
+      (t/is (= #xt/field ["a" :union ["f64" :f64] ["i64" :i64 :?]]
+               (types/merge-fields #xt/field ["a" :f64]
+                                   #xt/field ["a" :i64 :?])))
 
-      (t/is (= (types/->field "union" #xt.arrow/type :union false
-                              (types/col-type->field :f64)
-                              (types/col-type->field :f32)
-                              (types/col-type->field "i64" [:union #{:null :i64}]))
-               (types/merge-fields (types/col-type->field [:union #{:f64 :f32}])
-                                   (types/col-type->field [:union #{:null :i64}])))
+      (t/is (= #xt/field ["union" :union ["f64" :f64] ["f32" :f32] ["i64" :i64 :?]]
+               (types/merge-fields #xt/field ["union" :union ["f64" :f64] ["f32" :f32]]
+                                   #xt/field ["union" :i64 :?]))
             "other unions flattened")))
 
   (t/testing "sets"
@@ -347,22 +330,21 @@
     (t/is (= (types/col-type->field [:set :i64])
              (types/merge-fields (types/col-type->field [:set :i64]) (types/col-type->field [:set :i64]))))
 
-    (t/is (= (types/col-type->field [:set [:union #{:i64 :utf8}]])
+    (t/is (= #xt/field ["set" :set ["$data$" :union ["utf8" :utf8] ["i64" :i64]]]
              (types/merge-fields (types/col-type->field [:set :utf8]) (types/col-type->field [:set :i64])))))
 
   (t/testing "no struct squashing"
     (t/is (= (types/col-type->field '[:struct {foo [:struct {bibble :bool}]}])
-             (types/merge-fields (types/col-type->field '[:struct {foo [:struct {bibble :bool}]}]))))
+             (types/merge-fields #xt/field ["struct" :struct ["foo" :struct ["bibble" :bool]]])))
 
-    (t/is (= (types/->field-default-name #xt.arrow/type :struct false
-                                         [(types/->field "foo" #xt.arrow/type :union false
-                                                         (types/->field-default-name #xt.arrow/type :struct false
-                                                                                     [(types/col-type->field "bibble" :bool)])
-                                                         (types/col-type->field :utf8))
-                                          (types/col-type->field "bar" [:union #{:null :i64}])])
+    (t/is (= #xt/field ["struct" :struct
+                        ["foo" :union
+                         ["utf8" :utf8]
+                         ["struct" :struct ["bibble" :bool]]]
+                        ["bar" :i64 :?]]
 
-             (types/merge-fields (types/col-type->field '[:struct {foo [:struct {bibble :bool}]}])
-                                 (types/col-type->field '[:struct {foo :utf8 bar :i64}]))))))
+             (types/merge-fields #xt/field ["struct" :struct ["foo" :struct ["bibble" :bool]]]
+                                 #xt/field ["struct" :struct ["foo" :utf8] ["bar" :i64]])))))
 
 (t/deftest test-reg-rountrip
   (let [vs [(RegClass. 101)

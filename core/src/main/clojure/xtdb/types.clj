@@ -9,6 +9,7 @@
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb Types)
+           (xtdb.types MergeTypes Type)
            (xtdb.vector.extensions IntervalMDMType KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -88,9 +89,6 @@
 
 (defn ->field-default-name ^org.apache.arrow.vector.types.pojo.Field [^ArrowType arrow-type nullable children]
   (apply ->field (name (arrow-type->leg arrow-type)) arrow-type nullable children))
-
-(defn ->canonical-field ^org.apache.arrow.vector.types.pojo.Field [^Field field]
-  (->field-default-name (.getType field) (.isNullable field) (.getChildren field)))
 
 (defn ->nullable-field ^org.apache.arrow.vector.types.pojo.Field [^Field field]
   (if (.isNullable field) field (apply ->field (.getName field) (.getType field) true (.getChildren field))))
@@ -179,81 +177,11 @@
 
 (def ^Field null-field (->field "null" ArrowType$Null/INSTANCE true))
 
-;; beware that anywhere this is used, naming of the fields (apart from struct subfields) should not matter
-(defn merge-fields* [& fields]
-  (letfn [(merge-field* [acc ^Field field]
-            (let [arrow-type (.getType field)]
-              (if (instance? ArrowType$Union arrow-type)
-                (reduce merge-field* acc (.getChildren field))
-
-                (-> acc
-                    (update arrow-type
-                            (fn [{:keys [nullable?] :as type-opts}]
-                              (into {:nullable? (or nullable? (.isNullable field))}
-                                    (condp = (class arrow-type)
-                                      ArrowType$List (let [child-field (first (.getChildren field))]
-                                                       {:el (cond-> (:el type-opts)
-                                                              child-field (merge-field* child-field))})
-                                      SetType (let [child-field (first (.getChildren field))]
-                                                {:el (cond-> (:el type-opts)
-                                                       child-field (merge-field* child-field))})
-                                      ArrowType$FixedSizeList (let [child-field (first (.getChildren field))]
-                                                                {:el (cond-> (:el type-opts)
-                                                                       child-field (merge-field* child-field))})
-                                      ArrowType$Struct {:fields (let [default-field-mapping (if type-opts {#xt.arrow/type :null {:nullable? true}} nil)
-                                                                      children (.getChildren field)]
-                                                                  (as-> (:fields type-opts) fields-acc
-                                                                    (reduce (fn [field-acc ^Field field]
-                                                                              (update field-acc (.getName field) (fnil merge-field* default-field-mapping) field))
-                                                                            fields-acc
-                                                                            children)
-                                                                    (reduce (fn [field-acc null-k]
-                                                                              (update field-acc null-k merge-field* null-field))
-                                                                            fields-acc
-                                                                            (set/difference (set (keys fields-acc))
-                                                                                            (set (map #(.getName ^Field %) children))))))}
-                                      {}))))))))
-
-          (kv->field [[arrow-type {:keys [nullable?] :as type-opts}]]
-            (condp instance? arrow-type
-              ArrowType$List (->field-default-name arrow-type nullable? [(-> (map->field (:el type-opts))
-                                                                             (field-with-name "$data$"))])
-              SetType (->field-default-name arrow-type nullable? [(-> (map->field (:el type-opts))
-                                                                      (field-with-name "$data$"))])
-              ArrowType$FixedSizeList (->field-default-name arrow-type nullable? [(-> (map->field (:el type-opts))
-                                                                                      (field-with-name "$data$"))])
-              ArrowType$Struct (->field-default-name arrow-type nullable?
-                                                     (map (fn [[name opts]]
-                                                            (let [^Field field (map->field opts)]
-                                                              (apply ->field name (.getType field) (.isNullable field)
-                                                                     (cond->> (.getChildren field)
-                                                                       (not= ArrowType$Struct (class (.getType field)))
-                                                                       (map ->canonical-field)))))
-                                                          (:fields type-opts)))
-
-              ArrowType$Null (->field-default-name #xt.arrow/type :null true nil)
-
-              TsTzRangeType (->field-default-name #xt.arrow/type :tstz-range nullable?
-                                                  [(->field "$data" temporal-arrow-type false)])
-
-              (->field-default-name arrow-type nullable? nil)))
-
-          (map->field [arrow-type-map]
-            (let [without-null (dissoc arrow-type-map #xt.arrow/type :null)
-                  nullable? (contains? arrow-type-map #xt.arrow/type :null)]
-              (case (count without-null)
-                0 null-field
-                1 (kv->field (let [[arrow-type type-opts] (first without-null)]
-                               [arrow-type (cond-> type-opts
-                                             nullable? (assoc :nullable? true))]))
-
-                (->field-default-name #xt.arrow/type :union false (map kv->field arrow-type-map)))))]
-
-    (-> (transduce (comp (remove nil?) (distinct)) (completing merge-field*) {} fields)
-        (map->field)
-        (cond-> (some identity fields) (field-with-name (.getName ^Field (some identity fields)))))))
-
-(def merge-fields (util/lru-memoize merge-fields*))
+(defn merge-fields [& fields]
+  (let [merged-type (MergeTypes/mergeFields (vec fields))]
+    (Type/ofType (or (some (fn [^Field f] (some-> f .getName)) fields)
+                     (Types/toLeg (.getArrowType merged-type)))
+                 merged-type)))
 
 ;;; time units
 
@@ -359,8 +287,8 @@
     :null :null
     [:union #{:null col-type}]))
 
-(defn field->col-type [^Field field] 
-  (let [inner-type (apply arrow-type->col-type (.getType field) (.getChildren field))]
+(defn field->col-type [^Field field]
+  (let [inner-type (apply arrow-type->col-type (.getType field) (or (.getChildren field) []))]
     (cond-> inner-type
       (.isNullable field) col-type->nullable-col-type)))
 
@@ -400,7 +328,7 @@
   (->field col-name (ArrowType$Map. (boolean sorted?)) nullable?
            (col-type->field inner-col-type)))
 
-(defmethod arrow-type->col-type ArrowType$Map [^ArrowType$Map arrow-field data-field]
+(defmethod arrow-type->col-type ArrowType$Map [^ArrowType$Map arrow-field & [data-field]]
   [:map {:sorted? (.getKeysSorted arrow-field)} (field->col-type data-field)])
 
 (defn unnest-field [^Field field]

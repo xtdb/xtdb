@@ -176,8 +176,8 @@
               "name" : "col-name",
               "count" : 7,
               "VALIDITY" : [1,1,1,1,1,1,1],
-              "OFFSET" : [0,4,15,24,36,39,43,50],
-              "DATA" : ["_iid","_valid_from","_valid_to","_system_from","_id","utf8","colours"]
+              "OFFSET" : [0,4,15,24,36,39,45,52],
+              "DATA" : ["_iid","_valid_from","_valid_to","_system_from","_id","$data$","colours"]
             },{
               "name" : "root-col?",
               "count" : 7,
