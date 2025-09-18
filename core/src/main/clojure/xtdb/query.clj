@@ -45,6 +45,7 @@
            java.lang.AutoCloseable
            (java.time Duration InstantSource)
            (java.util HashMap)
+           [java.util.concurrent.atomic AtomicBoolean]
            (java.util.function Function)
            [java.util.stream Stream StreamSupport]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
@@ -103,25 +104,27 @@
     (close [_] (.close cursor))))
 
 (defn- wrap-closeables ^xtdb.IResultCursor [^IResultCursor cursor, ^RefCounter ref-ctr, closeables]
-  (reify IResultCursor
-    (getResultFields [_] (.getResultFields cursor))
-    (tryAdvance [_ c] (.tryAdvance cursor c))
+  (let [!closed? (AtomicBoolean. false)]
+    (reify IResultCursor
+      (getResultFields [_] (.getResultFields cursor))
+      (tryAdvance [_ c] (.tryAdvance cursor c))
 
-    (getCursorType [_] (.getCursorType cursor))
-    (getChildCursors [_] (.getChildCursors cursor))
-    (getExplainAnalyze [_] (.getExplainAnalyze cursor))
+      (getCursorType [_] (.getCursorType cursor))
+      (getChildCursors [_] (.getChildCursors cursor))
+      (getExplainAnalyze [_] (.getExplainAnalyze cursor))
 
-    (characteristics [_] (.characteristics cursor))
-    (estimateSize [_] (.estimateSize cursor))
-    (getComparator [_] (.getComparator cursor))
-    (getExactSizeIfKnown [_] (.getExactSizeIfKnown cursor))
-    (hasCharacteristics [_ c] (.hasCharacteristics cursor c))
-    (trySplit [_] (.trySplit cursor))
+      (characteristics [_] (.characteristics cursor))
+      (estimateSize [_] (.estimateSize cursor))
+      (getComparator [_] (.getComparator cursor))
+      (getExactSizeIfKnown [_] (.getExactSizeIfKnown cursor))
+      (hasCharacteristics [_ c] (.hasCharacteristics cursor c))
+      (trySplit [_] (.trySplit cursor))
 
-    (close [_]
-      (.close cursor)
-      (some-> ref-ctr .release)
-      (util/close closeables))))
+      (close [_]
+        (when (.compareAndSet !closed? false true)
+          (.close cursor)
+          (some-> ref-ctr .release)
+          (util/close closeables))))))
 
 (defn- ->result-fields [ordered-outer-projection fields]
   (if ordered-outer-projection
