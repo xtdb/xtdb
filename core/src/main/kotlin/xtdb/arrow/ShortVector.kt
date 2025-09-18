@@ -20,6 +20,8 @@ class ShortVector private constructor(
 
     override fun getShort(idx: Int) = getShort0(idx)
     override fun writeShort(v: Short) = writeShort0(v)
+    override fun getInt(idx: Int) = getShort(idx).toInt()
+    override fun getLong(idx: Int) = getShort(idx).toLong()
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getShort(idx)
 

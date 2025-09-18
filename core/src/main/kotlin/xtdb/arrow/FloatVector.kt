@@ -20,6 +20,7 @@ class FloatVector private constructor(
 
     override fun getFloat(idx: Int) = getFloat0(idx)
     override fun writeFloat(v: Float) = writeFloat0(v)
+    override fun getDouble(idx: Int) = getFloat(idx).toDouble()
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getFloat(idx)
 

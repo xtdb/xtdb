@@ -38,6 +38,7 @@ class IntVector private constructor(
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(v: Int) = writeInt0(v)
+    override fun getLong(idx: Int) = getInt(idx).toLong()
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getInt(idx)
 
