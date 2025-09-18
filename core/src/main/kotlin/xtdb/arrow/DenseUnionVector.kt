@@ -25,8 +25,8 @@ internal val UNION_TYPE = ArrowType.Union(Dense, null)
 class DenseUnionVector private constructor(
     private val allocator: BufferAllocator,
     override var name: String, legVectors: List<Vector> = emptyList(),
-    private val typeBuffer: ExtensibleBuffer = ExtensibleBuffer(allocator),
-    private val offsetBuffer: ExtensibleBuffer = ExtensibleBuffer(allocator),
+    internal val typeBuffer: ExtensibleBuffer = ExtensibleBuffer(allocator),
+    internal val offsetBuffer: ExtensibleBuffer = ExtensibleBuffer(allocator),
     override var valueCount: Int = 0
 ) : Vector() {
 
@@ -47,29 +47,12 @@ class DenseUnionVector private constructor(
 
     override val type = UNION_TYPE
 
-    companion object {
-        internal fun promote(al: BufferAllocator, vector: Vector, target: FieldType) =
-            if (vector is NullVector)
-                Field(vector.name, target, emptyList()).openVector(al)
-                    .also { newVec -> repeat(vector.valueCount) { newVec.writeNull() } }
-            else
-                DenseUnionVector(al, vector.name, listOf(vector), vector.valueCount)
-                    .apply {
-                        vector.name = vector.fieldType.type.toLeg()
-
-                        repeat(vector.valueCount) { idx ->
-                            typeBuffer.writeByte(0)
-                            offsetBuffer.writeInt(idx)
-                        }
-                    }
-                    .also { it.vectorFor(target) }
-    }
-
     private val legVectors = legVectors.toMutableList()
 
     override val vectors: Iterable<Vector> get() = legVectors
 
-    internal inner class LegReader(val typeId: Byte, val inner: VectorReader, val nested: Boolean = false) : VectorReader {
+    internal inner class LegReader(val typeId: Byte, val inner: VectorReader, val nested: Boolean = false) :
+        VectorReader {
         override val name get() = inner.name
         override val nullable get() = inner.nullable
         override val valueCount get() = this@DenseUnionVector.valueCount
@@ -363,8 +346,9 @@ class DenseUnionVector private constructor(
             }
         }
 
-    override fun maybePromote(al: BufferAllocator, target: FieldType) = this.also {
-        if (target.type != type) it.legWriter(target)
+    override fun maybePromote(al: BufferAllocator, target: FieldType) = apply {
+        if (target.type != type)
+            legWriter(target)
     }
 
     override fun clear() {

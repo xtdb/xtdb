@@ -85,7 +85,7 @@ class ListVector private constructor(
                 try {
                     elVector.writeValue(el)
                 } catch (e: InvalidWriteObjectException) {
-                    elVector = DenseUnionVector.promote(al, elVector, e.obj.toFieldType())
+                    elVector = elVector.maybePromote(al, e.obj.toFieldType())
                     elVector.writeValue(el)
                 }
             }

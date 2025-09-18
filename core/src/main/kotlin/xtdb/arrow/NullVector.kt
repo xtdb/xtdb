@@ -5,6 +5,8 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
@@ -40,6 +42,12 @@ class NullVector(override var name: String, override var valueCount: Int = 0) : 
     override val metadataFlavours get() = emptyList<MetadataFlavour>()
 
     override fun hashCode0(idx: Int, hasher: Hasher) = error("hashCode0 called on NullVector")
+
+    override fun maybePromote(al: BufferAllocator, target: FieldType): Vector =
+        if (target.type == type) this
+        else
+            Field(this.name, target, emptyList()).openVector(al)
+                .also { newVec -> repeat(this.valueCount) { newVec.writeNull() } }
 
     override fun rowCopier(dest: VectorWriter) =
         if (dest is DenseUnionVector) dest.rowCopier0(this)

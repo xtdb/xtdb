@@ -20,6 +20,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.toFieldType
+import xtdb.toLeg
 import xtdb.trie.ColumnName
 import xtdb.types.Type
 import xtdb.types.Type.Companion.ofType
@@ -75,11 +76,25 @@ sealed class Vector : VectorReader, VectorWriter {
 
     internal open fun maybePromote(al: BufferAllocator, target: FieldType): Vector =
         // if it's a NullVector coming in, don't promote - we can just set ourselves to nullable. #4675
-        if (target.type != type && target.type != NULL_TYPE)
-            DenseUnionVector.promote(al, this, target)
-        else {
-            nullable = nullable || target.isNullable
-            this
+        when {
+            target.type != type && target.type != NULL_TYPE ->
+                DenseUnionVector(al, name, listOf(this), valueCount)
+                    .apply {
+                        repeat(this.valueCount) { idx ->
+                            typeBuffer.writeByte(0)
+                            offsetBuffer.writeInt(idx)
+                        }
+
+                        maybePromote(al, target)
+                    }
+                    .also {
+                        this@Vector.name = fieldType.type.toLeg()
+                    }
+
+            else -> {
+                nullable = nullable || target.isNullable
+                this
+            }
         }
 
     override fun rowCopier(dest: VectorWriter): RowCopier {
@@ -206,14 +221,17 @@ sealed class Vector : VectorReader, VectorWriter {
                     TsTzRangeType -> TsTzRangeVector(
                         FixedSizeListVector(
                             al, name, isNullable, 2,
-                            children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$"))
+                            children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$")
+                        )
                     )
 
                     SetType ->
                         SetVector(
                             ListVector(
                                 al, name, isNullable,
-                                children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$")))
+                                children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$")
+                            )
+                        )
 
                     RegClassType -> RegClassVector(IntVector.open(al, name, isNullable))
                     RegProcType -> RegProcVector(IntVector.open(al, name, isNullable))

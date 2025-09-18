@@ -391,7 +391,7 @@
   (str (name type-head) "-" (name time-unit) "-" (-> (str/lower-case tz) (str/replace #"[/:]" "_"))))
 
 (defmethod col-type->field* :timestamp-tz [col-name nullable? [_type-head time-unit tz]]
-  (assert (string? tz) )
+  (assert (string? tz))
   (->field col-name (ArrowType$Timestamp. (kw->time-unit time-unit) tz) nullable?))
 
 (defmethod col-type->field-name :timestamp-local [[type-head time-unit]]
@@ -523,7 +523,8 @@
 
 (defn with-nullable-fields [fields]
   (->> fields
-       (into {} (map (juxt key (comp #(merge-fields % null-field) val))))))
+       (into {} (map (juxt key (fn [[k v]]
+                                 (field-with-name (merge-fields v null-field) (str k))))))))
 
 (defn remove-nulls
   [typ]
