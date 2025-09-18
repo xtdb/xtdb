@@ -211,7 +211,7 @@ class Relation(
             Relation(al).closeOnCatch { rel -> rel.also { for (row in rows) it.writeRow(row) } }
 
         @JvmStatic
-        @Suppress("unused") // util if we ever need it
+        @Suppress("unused") // used in test-util
         fun openFromCols(al: BufferAllocator, cols: Map<*, List<*>>): Relation =
             cols.entries.safeMap { col ->
                 val normalKey = when (val k = col.key) {

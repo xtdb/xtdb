@@ -10,15 +10,12 @@
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.util :as util])
   (:import (java.time Duration Instant)
-           (java.util ArrayList HashMap)
+           (java.util HashMap)
            java.util.concurrent.TimeUnit
            org.apache.arrow.memory.BufferAllocator
-           (org.apache.arrow.vector VectorSchemaRoot)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
-           org.apache.arrow.vector.types.UnionMode
+           (org.apache.arrow.vector.types.pojo FieldType Schema)
            (xtdb.api IndexerConfig TransactionKey Xtdb$Config)
            (xtdb.api.log Log Log$Cluster$Factory Log$Factory Log$Message$Tx Log$MessageMetadata)
            (xtdb.api.tx TxOp TxOp$Sql)
@@ -32,11 +29,8 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-ops-field
-  (types/->field "tx-ops" (ArrowType$Union. UnionMode/Dense nil) false))
-
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
-  (Schema. [(types/->field "tx-ops" #xt.arrow/type :list false (types/field-with-name tx-ops-field "$data$"))
+  (Schema. [#xt/field ["tx-ops" :list ["$data$" :union]]
             #xt/field ["system-time" :temporal :?]
             #xt/field ["default-tz" :utf8]
             #xt/field ["user" :utf8 :?]]))
@@ -55,21 +49,13 @@
     (throw (err/illegal-arg :sql/arg-rows-different-lengths
                             {::err/message "All SQL arg-rows must have the same number of columns"
                              :arg-rows arg-rows}))
-    (let [param-count (count (first arg-rows))
-          vecs (ArrayList. param-count)]
-      (try
-        (dotimes [col-idx param-count]
-          (.add vecs
-                (vw/open-vec allocator (symbol (str "?_" col-idx))
-                             (mapv #(nth % col-idx nil) arg-rows))))
 
-        (let [root (doto (VectorSchemaRoot. vecs) (.setRowCount (count arg-rows)))]
-          (util/build-arrow-ipc-byte-buffer root :stream
-            (fn [write-page!]
-              (write-page!))))
-
-        (finally
-          (run! util/try-close vecs))))))
+    (util/with-open [rel (Relation/openFromRows allocator
+                                                (for [arg-row arg-rows]
+                                                  (into {}
+                                                        (map-indexed (fn [idx v] [(str "?_" idx) v]))
+                                                        arg-row)))]
+      (.getAsArrowStream rel))))
 
 (defn- ->sql-writer [^VectorWriter op-writer, ^BufferAllocator allocator]
   (let [sql-writer (.vectorFor op-writer "sql" (FieldType/notNullable #xt.arrow/type :struct))
