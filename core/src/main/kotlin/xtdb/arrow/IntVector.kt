@@ -19,7 +19,7 @@ class IntVector private constructor(
 
     companion object {
         private fun openBuffer(al: BufferAllocator, valueCount: Int) =
-            ExtensibleBuffer(al, valueCount.toLong() * Int.SIZE_BYTES).also { it.clear() }
+            ExtensibleBuffer(al, valueCount.toLong() * Int.SIZE_BYTES)
     }
 
     @JvmOverloads

@@ -18,7 +18,9 @@ internal val NULL_CHECKS =
 internal class ExtensibleBuffer(private val allocator: BufferAllocator, private var buf: ArrowBuf) : AutoCloseable {
 
     constructor(allocator: BufferAllocator) : this(allocator, allocator.empty)
-    constructor(allocator: BufferAllocator, initialSize: Long) : this(allocator, allocator.buffer(initialSize))
+    constructor(
+        allocator: BufferAllocator, initialSize: Long
+    ) : this(allocator, allocator.buffer(initialSize).apply { setZero(0, capacity()) })
 
     private fun newCapacity(currentCapacity: Long, targetCapacity: Long): Long {
         var newCapacity = max(currentCapacity, 128)
@@ -31,6 +33,8 @@ internal class ExtensibleBuffer(private val allocator: BufferAllocator, private 
 
         val newBuf = allocator.buffer(newCapacity(currentCapacity, targetCapacity)).apply {
             setBytes(0, buf, 0, currentCapacity)
+            setZero(currentCapacity, capacity() - currentCapacity)
+            readerIndex(buf.readerIndex())
             writerIndex(buf.writerIndex())
         }
 
