@@ -77,33 +77,34 @@
          :explain {:columns (pr-str columns)}
          :fields (merge-with types/merge-fields independent-fields out-dependent-fields)
 
-         :->cursor (let [mode-strat (->mode-strategy mode (for [[col-name field] out-dependent-fields]
-                                                            (types/field-with-name field (str col-name))))
+         :->cursor (let [out-dep-fields (for [[col-name field] out-dependent-fields]
+                                          (types/field-with-name field (str col-name)))
+                         mode-strat (->mode-strategy mode out-dep-fields)
                          open-dependent-cursor
                          (zmatch mode
-                                 [:mark-join mark-spec]
-                                 (let [[_col-name form] (first (:mark-join mark-spec))
-                                       input-types {:col-types (update-vals dependent-fields types/field->col-type)
-                                                    :param-types (update-vals param-fields types/field->col-type)}
-                                       projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
-                                   (fn [{:keys [allocator args explain-analyze?] :as query-opts}]
-                                     (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
-                                       (cond-> (reify ICursor
-                                                 (getCursorType [_] "apply-mark-join")
-                                                 (getChildCursors [_] [dep-cursor])
+                           [:mark-join mark-spec]
+                           (let [[_col-name form] (first (:mark-join mark-spec))
+                                 input-types {:col-types (update-vals dependent-fields types/field->col-type)
+                                              :param-types (update-vals param-fields types/field->col-type)}
+                                 projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
+                             (fn [{:keys [allocator args explain-analyze?] :as query-opts}]
+                               (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
+                                 (cond-> (reify ICursor
+                                           (getCursorType [_] "apply-mark-join")
+                                           (getChildCursors [_] [dep-cursor])
 
-                                                 (tryAdvance [_ c]
-                                                   (.tryAdvance dep-cursor (fn [in-rel]
-                                                                             (with-open [match-vec (.project projection-spec allocator in-rel {} args)]
-                                                                               (.accept c (vr/rel-reader [match-vec]))))))
+                                           (tryAdvance [_ c]
+                                             (.tryAdvance dep-cursor (fn [in-rel]
+                                                                       (with-open [match-vec (.project projection-spec allocator in-rel {} args)]
+                                                                         (.accept c (vr/rel-reader [match-vec]))))))
 
-                                                 (close [_] (.close dep-cursor)))
-                                         explain-analyze? (ICursor/wrapExplainAnalyze)))))
+                                           (close [_] (.close dep-cursor)))
+                                   explain-analyze? (ICursor/wrapExplainAnalyze)))))
 
-                                 [:otherwise _] ->dependent-cursor)]
+                           [:otherwise _] ->dependent-cursor)]
 
                      (fn [{:keys [allocator explain-analyze?] :as query-opts} independent-cursor]
-                       (cond-> (ApplyCursor. allocator mode-strat independent-cursor
+                       (cond-> (ApplyCursor. allocator mode-strat independent-cursor out-dep-fields
                                              (reify DependentCursorFactory
                                                (open [_this in-rel idx]
                                                  (open-dependent-cursor (-> query-opts

@@ -2,6 +2,8 @@ package xtdb.operator.apply
 
 import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ICursor
 import xtdb.arrow.RelationReader
 import xtdb.vector.OldRelationWriter
@@ -11,6 +13,7 @@ class ApplyCursor(
     private val al: BufferAllocator,
     private val mode: ApplyMode,
     private val independentCursor: ICursor,
+    private val depFields: List<Field>,
     private val depCursorFactory: DependentCursorFactory
 ) : ICursor {
 
@@ -26,7 +29,7 @@ class ApplyCursor(
     override fun tryAdvance(c: Consumer<in RelationReader>) =
         independentCursor.tryAdvance { inRel ->
             val idxs = IntArrayList()
-            OldRelationWriter(al).use { depOutWriter ->
+            OldRelationWriter(al, Schema(depFields)).use { depOutWriter ->
                 repeat(inRel.rowCount) { inIdx ->
                     depCursorFactory.open(inRel, inIdx).use { depCursor ->
                         mode.accept(depCursor, depOutWriter, idxs, inIdx)
