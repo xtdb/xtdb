@@ -4,13 +4,13 @@ import clojure.lang.IExceptionInfo
 import clojure.lang.IPersistentMap
 import clojure.lang.PersistentArrayMap
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.asKeyword
+import xtdb.kw
 import java.nio.ByteBuffer
 
 internal data class InvalidWriteObjectException(val fieldType: FieldType, val obj: Any?) :
     IllegalStateException("invalid writeObject"), IExceptionInfo {
     override fun getData(): IPersistentMap =
-        PersistentArrayMap.create(mapOf("field-type".asKeyword to fieldType, "obj".asKeyword to obj))
+        PersistentArrayMap.create(mapOf("field-type".kw to fieldType, "obj".kw to obj))
 }
 
 internal data class InvalidCopySourceException(val src: FieldType, val dest: FieldType) :

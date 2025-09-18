@@ -31,8 +31,6 @@ import java.nio.ByteBuffer
 import java.time.*
 import java.util.*
 
-internal val String.asKeyword: Keyword get() = Keyword.intern(this)
-
 private fun DateUnit.toLegPart() = when (this) {
     DAY -> "day"
     DateUnit.MILLISECOND -> "milli"

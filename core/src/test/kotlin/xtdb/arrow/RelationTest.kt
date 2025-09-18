@@ -8,7 +8,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation.Companion.loader
-import xtdb.asKeyword
+import xtdb.kw
 import xtdb.types.schema
 import xtdb.types.Type
 import xtdb.types.Type.Companion.asListOf
@@ -223,7 +223,7 @@ class RelationTest {
             intVec.writeInt(32)
             rel.endRow()
 
-            assertEquals(listOf(mapOf("foo".asKeyword to 32)), rel.toMaps())
+            assertEquals(listOf(mapOf("foo".kw to 32)), rel.toMaps())
 
             val strVec = rel.vectorFor("bar", Type.UTF8.fieldType)
             strVec.writeObject("hello")
@@ -236,8 +236,8 @@ class RelationTest {
 
             assertEquals(
                 listOf(
-                    mapOf("foo".asKeyword to 32),
-                    mapOf("bar".asKeyword to "hello")
+                    mapOf("foo".kw to 32),
+                    mapOf("bar".kw to "hello")
                 ),
                 rel.toMaps()
             )

@@ -18,5 +18,3 @@ val String.kw: Keyword get() = Keyword.intern(this)
 
 val String.symbol: Symbol get() = Symbol.intern(this)
 
-fun Map<*, *>.toClojureMap(): clojure.lang.IPersistentMap =
-    clojure.lang.PersistentHashMap.create(this)
