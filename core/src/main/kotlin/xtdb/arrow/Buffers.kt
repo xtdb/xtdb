@@ -15,9 +15,10 @@ internal val NULL_CHECKS =
         ?: System.getProperty("xtdb.vector.null-checks")?.toBoolean()
         ?: true
 
-internal class ExtensibleBuffer(private val allocator: BufferAllocator, private var buf: ArrowBuf) : AutoCloseable {
+internal class ExtensibleBuffer private constructor(private val allocator: BufferAllocator, private var buf: ArrowBuf) : AutoCloseable {
 
     constructor(allocator: BufferAllocator) : this(allocator, allocator.empty)
+
     constructor(
         allocator: BufferAllocator, initialSize: Long
     ) : this(allocator, allocator.buffer(initialSize).apply { setZero(0, capacity()) })

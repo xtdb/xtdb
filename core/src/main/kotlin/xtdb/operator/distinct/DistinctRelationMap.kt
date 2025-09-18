@@ -27,7 +27,7 @@ class DistinctRelationMap(
     private val relWriter = OldRelationWriter(allocator, schema)
     private val keyCols = keyColumnNames.map { relWriter[it].asReader }
 
-    private val hashColumn = IntVector(allocator, "xt/join-hash", false)
+    private val hashColumn = IntVector.open(allocator, "xt/join-hash", false)
     private var buildHashTrie =
         MutableMemoryHashTrie.builder(hashColumn.asReader)
             .setPageLimit(pageLimit).setLevelBits(levelBits)

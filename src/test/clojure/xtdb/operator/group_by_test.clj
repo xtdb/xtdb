@@ -120,7 +120,7 @@
           "aggregate without group")))
 
 (t/deftest test-promoting-sum
-  (with-open [group-mapping (doto (IntVector. tu/*allocator* "gm" false)
+  (with-open [group-mapping (doto (IntVector/open tu/*allocator* "gm" false)
                               (.writeAll (map int [0 0 0])))
               v0 (tu/open-rel {:v [1 2 3]})
               v1 (tu/open-rel {:v [1 2.0 3]})]
@@ -321,12 +321,12 @@
                                             {:a 12}]]]))))
 
 (t/deftest test-array-agg
-  (with-open [gm0 (doto (IntVector. tu/*allocator* "gm0" false)
+  (with-open [gm0 (doto (IntVector/open tu/*allocator* "gm0" false)
                     (.writeAll (map int [0 1 0])))
 
               k0 (vr/vec->reader (vw/open-vec tu/*allocator* "k" [1 2 3]))
 
-              gm1 (doto (IntVector. tu/*allocator* "gm1" false)
+              gm1 (doto (IntVector/open tu/*allocator* "gm1" false)
                     (.writeAll (map int [1 2 0])))
 
               k1 (vr/vec->reader (vw/open-vec tu/*allocator* "k" [4 5 6]))]

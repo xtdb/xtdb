@@ -29,7 +29,7 @@ class BuildSideMapTest {
 
     @Test
     fun testBasicPutAndGet(al: BufferAllocator) {
-        IntVector(al, "hashes", false).use { hashCol ->
+        IntVector.open(al, "hashes", false).use { hashCol ->
             hashCol.writeInt(100)
             hashCol.writeInt(200)
             hashCol.writeInt(300)
@@ -44,7 +44,7 @@ class BuildSideMapTest {
 
     @Test
     fun testNonExistentHash(al: BufferAllocator) {
-        IntVector(al, "hashes", false).use { hashCol ->
+        IntVector.open(al, "hashes", false).use { hashCol ->
             hashCol.writeInt(100)
             hashCol.writeInt(200)
             
@@ -56,7 +56,7 @@ class BuildSideMapTest {
 
     @Test
     fun testCollisionHandling(al: BufferAllocator) {
-        IntVector(al, "hashes", false).use { hashCol ->
+        IntVector.open(al, "hashes", false).use { hashCol ->
             val sameHash = 12345
             hashCol.writeInt(sameHash)
             hashCol.writeInt(sameHash)
@@ -70,7 +70,7 @@ class BuildSideMapTest {
 
     @Test
     fun testEmptyMap(al: BufferAllocator) {
-        IntVector(al, "hashes", false).use { hashCol ->
+        IntVector.open(al, "hashes", false).use { hashCol ->
             BuildSideMap.from(al, hashCol).use { map ->
                 assertTrue(map.getMatches(100).isEmpty())
             }
@@ -79,7 +79,7 @@ class BuildSideMapTest {
 
     @Test
     fun testSingleElement(al: BufferAllocator) {
-        IntVector(al, "hashes", false).use { hashCol ->
+        IntVector.open(al, "hashes", false).use { hashCol ->
             hashCol.writeInt(42)
             
             BuildSideMap.from(al, hashCol).use { map ->
@@ -92,7 +92,7 @@ class BuildSideMapTest {
     @Test
     fun testLargeDataset(al: BufferAllocator) {
         val size = 1000
-        IntVector(al, "hashes", false).use { hashCol ->
+        IntVector.open(al, "hashes", false).use { hashCol ->
             repeat(size) { i -> hashCol.writeInt(i * 7) }
             
             BuildSideMap.from(al, hashCol).use { map ->
@@ -105,7 +105,7 @@ class BuildSideMapTest {
 
     @Test
     fun testQuadraticProbing(al: BufferAllocator) {
-        IntVector(al, "hashes", false).use { hashCol ->
+        IntVector.open(al, "hashes", false).use { hashCol ->
             repeat(20) { i -> hashCol.writeInt(i) }
             
             BuildSideMap.from(al, hashCol, 0, 0.5).use { map ->
@@ -118,7 +118,7 @@ class BuildSideMapTest {
 
     @Test
     fun testZeroHash(al: BufferAllocator) {
-        IntVector(al, "hashes", false).use { hashCol ->
+        IntVector.open(al, "hashes", false).use { hashCol ->
             hashCol.writeInt(0)
             hashCol.writeInt(100)
             
@@ -130,7 +130,7 @@ class BuildSideMapTest {
 
     @Test
     fun testNegativeHashes(al: BufferAllocator) {
-        IntVector(al, "hashes", false).use { hashCol ->
+        IntVector.open(al, "hashes", false).use { hashCol ->
             hashCol.writeInt(-100)
             hashCol.writeInt(-200)
             hashCol.writeInt(Int.MIN_VALUE)
@@ -145,7 +145,7 @@ class BuildSideMapTest {
 
     @Test
     fun testMaxIntHash(al: BufferAllocator) {
-        IntVector(al, "hashes", false).use { hashCol ->
+        IntVector.open(al, "hashes", false).use { hashCol ->
             hashCol.writeInt(Int.MAX_VALUE)
             hashCol.writeInt(Int.MAX_VALUE - 1)
             
@@ -158,7 +158,7 @@ class BuildSideMapTest {
 
     @Test
     fun testMixedCollisionsAndUniqueHashes(al: BufferAllocator) {
-        IntVector(al, "hashes", false).use { hashCol ->
+        IntVector.open(al, "hashes", false).use { hashCol ->
             hashCol.writeInt(1000)  // unique
             hashCol.writeInt(2000)  // collision group
             hashCol.writeInt(2000)  // collision group
@@ -176,7 +176,7 @@ class BuildSideMapTest {
 
     @Test
     fun testFindValueAndRemoveOnMatch(al: BufferAllocator) {
-        IntVector(al, "hashes", false).use { hashCol ->
+        IntVector.open(al, "hashes", false).use { hashCol ->
             hashCol.writeInt(1000)  // unique
             hashCol.writeInt(2000)  // collision group
             hashCol.writeInt(2000)  // collision group
@@ -196,7 +196,7 @@ class BuildSideMapTest {
 
     @Test
     fun testQuadraticProbingCycles(al: BufferAllocator) {
-        IntVector(al, "hashes", false).use { hashCol ->
+        IntVector.open(al, "hashes", false).use { hashCol ->
             hashCol.writeInt(0)
             hashCol.writeInt(0)
 

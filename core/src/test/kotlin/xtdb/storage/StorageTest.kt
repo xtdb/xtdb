@@ -38,7 +38,7 @@ abstract class StorageTest {
     fun testArrowFileSize() {
         val bp = storage()
         RootAllocator().use { al ->
-            IntVector(al, "foo", false).use { fooVec ->
+            IntVector.open(al, "foo", false).use { fooVec ->
                 fooVec.apply { writeInt(10); writeInt(42); writeInt(15) }
                 val relation = Relation(al, listOf(fooVec), fooVec.valueCount)
                 bp.openArrowWriter("foo".asPath, relation).use { writer ->

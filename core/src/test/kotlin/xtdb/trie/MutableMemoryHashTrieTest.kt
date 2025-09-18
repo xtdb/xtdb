@@ -18,7 +18,7 @@ class MutableMemoryHashTrieTest {
     @BeforeEach
     fun setUp() {
         allocator = RootAllocator()
-        hashReader = IntVector(allocator, "hash", true)
+        hashReader = IntVector.open(allocator, "hash", true)
         trie = MutableMemoryHashTrie.builder(hashReader).build()
     }
 

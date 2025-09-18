@@ -23,7 +23,7 @@ class FixedWidthVectorTest {
 
     @Test
     fun testIntVector() {
-        IntVector(allocator,"foo", false).use { vector ->
+        IntVector.open(allocator,"foo", false).use { vector ->
             vector.writeInt(42)
             vector.writeInt(43)
             vector.writeInt(44)
@@ -43,7 +43,7 @@ class FixedWidthVectorTest {
             nullVector.writeNull()
             nullVector.writeNull()
 
-            IntVector(allocator, "v2", true).use { copy ->
+            IntVector.open(allocator, "v2", true).use { copy ->
                 val copier = nullVector.rowCopier(copy)
                 copier.copyRow(0)
                 copier.copyRow(1)

@@ -23,7 +23,7 @@ class BuildSide(
 ) : AutoCloseable {
     private val relWriter = Relation(al, schema)
 
-    private val hashColumn: IntVector = IntVector(al, "xt/join-hash", false)
+    private val hashColumn: IntVector = IntVector.open(al, "xt/join-hash", false)
 
     private var _builtRel: RelationReader? = null
     val builtRel get() = _builtRel!!

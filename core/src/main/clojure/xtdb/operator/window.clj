@@ -116,7 +116,7 @@
          ;; TODO we likely want to do some retaining here instead of copying
          (util/with-open [rel-wtr (OldRelationWriter. allocator ^List (vec (for [^Field field static-fields]
                                                                              (vw/->writer (.createVector field allocator)))))
-                          group-mapping (IntVector. allocator (str window-groups) false)]
+                          group-mapping (IntVector/open allocator (str window-groups) false)]
 
            (.forEachRemaining in-cursor (fn [in-rel]
                                           (vw/append-rel rel-wtr in-rel)

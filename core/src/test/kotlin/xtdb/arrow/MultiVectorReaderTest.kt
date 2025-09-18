@@ -19,8 +19,8 @@ class MultiVectorReaderTest {
 
     @Test
     fun testMonomorphicSimpleVectors(alloc: BufferAllocator) {
-        IntVector(alloc, "my-int", false).use { intVec1 ->
-            IntVector(alloc, "my-int", false).use { intVec2 ->
+        IntVector.open(alloc, "my-int", false).use { intVec1 ->
+            IntVector.open(alloc, "my-int", false).use { intVec2 ->
                 for (i in 0..4) {
                     if (i % 2 == 0) intVec1.writeInt(i)
                     else intVec2.writeInt(i)
@@ -39,7 +39,7 @@ class MultiVectorReaderTest {
                 val valueRdr = indirectRdr.valueReader(pos)
                 assertEquals(r.toList(), r.map { valueRdr.readInt().also { pos.getPositionAndIncrement() } })
 
-                IntVector(alloc, "my-int", false).use { resVec ->
+                IntVector.open(alloc, "my-int", false).use { resVec ->
                     val rowCopier = indirectRdr.rowCopier(resVec)
                     r.forEach { rowCopier.copyRow(it) }
                     assertEquals(r.toList(), resVec.toList())
@@ -95,7 +95,7 @@ class MultiVectorReaderTest {
 
     @Test
     fun testPolymorphicSimpleVectors(alloc: BufferAllocator) {
-        IntVector(alloc, "i32", false).use { intVec ->
+        IntVector.open(alloc, "i32", false).use { intVec ->
             intVec.writeInt(0)
             intVec.writeInt(1)
 
@@ -134,7 +134,7 @@ class MultiVectorReaderTest {
 
     @Test
     fun testPolymorphicSimpleAndComplexVectors(alloc: BufferAllocator) {
-        IntVector(alloc, "i32", false).use { intVec ->
+        IntVector.open(alloc, "i32", false).use { intVec ->
             intVec.writeInt(0)
             intVec.writeInt(3)
 

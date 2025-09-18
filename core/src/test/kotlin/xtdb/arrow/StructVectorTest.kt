@@ -30,7 +30,7 @@ class StructVectorTest {
     @Test
     fun structVectorValues() {
         val children = linkedMapOf<String, Vector>(
-            "i32" to IntVector(allocator, "i32", false),
+            "i32" to IntVector.open(allocator, "i32", false),
             "utf8" to Utf8Vector(allocator, "utf8", true)
         )
 
@@ -50,7 +50,7 @@ class StructVectorTest {
     @Test
     fun useNestedWriters() {
         val children = linkedMapOf<String, Vector>(
-            "i32" to IntVector(allocator, "i32", false),
+            "i32" to IntVector.open(allocator, "i32", false),
             "utf8" to Utf8Vector(allocator, "utf8", true)
         )
 
@@ -119,7 +119,7 @@ class StructVectorTest {
         val buf = ByteArrayOutputStream()
 
         val children = linkedMapOf<String, Vector>(
-            "i32" to IntVector(allocator, "i32", false),
+            "i32" to IntVector.open(allocator, "i32", false),
             "utf8" to Utf8Vector(allocator, "utf8", true)
         )
 
@@ -180,7 +180,7 @@ class StructVectorTest {
 
             StructVector(allocator, "v2", true,
                 linkedMapOf(
-                    "i32" to IntVector(allocator, "i32", false),
+                    "i32" to IntVector.open(allocator, "i32", false),
                     "utf8" to Utf8Vector(allocator, "utf8", true)
                 )).use { copy ->
                 val copier = nullVector.rowCopier(copy)
@@ -197,9 +197,9 @@ class StructVectorTest {
     @Test
     fun `use nested writers with DUV and nulls - 3946`() {
         val children = linkedMapOf(
-            "i32" to IntVector(allocator, "i32", false),
+            "i32" to IntVector.open(allocator, "i32", false),
             "duv" to DenseUnionVector(allocator, "duv", listOf(
-                IntVector(allocator, "i32", false),
+                IntVector.open(allocator, "i32", false),
                 Utf8Vector(allocator, "utf8", true)
             )))
 

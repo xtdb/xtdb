@@ -26,7 +26,7 @@ class DenseUnionVectorTest {
         DenseUnionVector(
             allocator, "duv",
             listOf(
-                IntVector(allocator, "i32", false),
+                IntVector.open(allocator, "i32", false),
                 Utf8Vector(allocator, "utf8", true)
             )
         ).use { duv ->
@@ -51,7 +51,7 @@ class DenseUnionVectorTest {
 
     @Test
     fun `scalar into DUV #3609`() {
-        IntVector(allocator, "my-int", false).use { myIntVec ->
+        IntVector.open(allocator, "my-int", false).use { myIntVec ->
             myIntVec.writeInt(32)
             myIntVec.writeInt(64)
 
@@ -59,7 +59,7 @@ class DenseUnionVectorTest {
                 allocator, "dest",
                 listOf(
                     Utf8Vector(allocator, "utf8", false),
-                    IntVector(allocator, "i32", true)
+                    IntVector.open(allocator, "i32", true)
                 )
             ).use { destVec ->
                 myIntVec.rowCopier(destVec).run {
@@ -123,7 +123,7 @@ class DenseUnionVectorTest {
             allocator, "v1",
             listOf(
                 NullVector("null"),
-                IntVector(allocator, "i32", false),
+                IntVector.open(allocator, "i32", false),
             )
         ).use { duv ->
             val intLeg = duv.vectorFor("i32")
@@ -134,7 +134,7 @@ class DenseUnionVectorTest {
 
             assertEquals(3, duv.valueCount)
 
-            IntVector(allocator, "mono", true).use { mono ->
+            IntVector.open(allocator, "mono", true).use { mono ->
                 duv.rowCopier(mono).run {
                     copyRow(0)
                     copyRow(1)
@@ -152,8 +152,8 @@ class DenseUnionVectorTest {
                 NullVector("null"),
                 StructVector(allocator, "struct", false,
                     linkedMapOf(
-                        "a" to IntVector(allocator, "i32", false),
-                        "b" to IntVector(allocator, "i32", false)
+                        "a" to IntVector.open(allocator, "i32", false),
+                        "b" to IntVector.open(allocator, "i32", false)
                     )
                 ),
             )
@@ -171,8 +171,8 @@ class DenseUnionVectorTest {
 
             StructVector(allocator, "mono", true,
                 linkedMapOf(
-                    "a" to IntVector(allocator, "i32", false),
-                    "b" to IntVector(allocator, "i32", false)
+                    "a" to IntVector.open(allocator, "i32", false),
+                    "b" to IntVector.open(allocator, "i32", false)
                 )
             ).use { mono ->
                 duv.rowCopier(mono).run {
@@ -190,7 +190,7 @@ class DenseUnionVectorTest {
             allocator, "v1",
             listOf(
                 NullVector("null"),
-                ListVector(allocator, "list", false, IntVector(allocator, "i32", false))
+                ListVector(allocator, "list", false, IntVector.open(allocator, "i32", false))
             ),
         )
         .use { duv ->
@@ -205,7 +205,7 @@ class DenseUnionVectorTest {
 
             assertEquals(3, duv.valueCount)
 
-            ListVector(allocator, "list", false, IntVector(allocator, "i32", false)).use { mono ->
+            ListVector(allocator, "list", false, IntVector.open(allocator, "i32", false)).use { mono ->
                 duv.rowCopier(mono).run {
                     copyRow(0)
                     copyRow(1)

@@ -36,7 +36,7 @@ class RelationTest {
     fun testScalarRoundTrip() {
         val buf = ByteArrayOutputStream()
 
-        IntVector(allocator, "i32", false).use { i32 ->
+        IntVector.open(allocator, "i32", false).use { i32 ->
             Utf8Vector(allocator, "utf8", true).use { utf8 ->
                 val rel = Relation(allocator, listOf(i32, utf8), 0)
 
@@ -99,7 +99,7 @@ class RelationTest {
     fun testListRoundTrip() {
         val buf = ByteArrayOutputStream()
 
-        val elVector = IntVector(allocator, "els", true)
+        val elVector = IntVector.open(allocator, "els", true)
 
         val list0 = listOf(1, 4, null, 12)
         val list1 = listOf(8)
@@ -158,7 +158,7 @@ class RelationTest {
         val duv = DenseUnionVector(
             allocator, "duv",
             listOf(
-                IntVector(allocator, "i32", false),
+                IntVector.open(allocator, "i32", false),
                 Utf8Vector(allocator, "utf8", true)
             )
         )

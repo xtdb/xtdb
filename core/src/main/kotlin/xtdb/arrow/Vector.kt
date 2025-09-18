@@ -151,7 +151,7 @@ sealed class Vector : VectorReader, VectorWriter {
                 override fun visit(type: ArrowType.Int): Vector = when (type.bitWidth) {
                     8 -> ByteVector(al, name, isNullable)
                     16 -> ShortVector(al, name, isNullable)
-                    32 -> IntVector(al, name, isNullable)
+                    32 -> IntVector.open(al, name, isNullable)
                     64 -> LongVector(al, name, isNullable)
                     else -> error("invalid bit-width: ${type.bitWidth}")
                 }
@@ -215,8 +215,8 @@ sealed class Vector : VectorReader, VectorWriter {
                                 al, name, isNullable,
                                 children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$")))
 
-                    RegClassType -> RegClassVector(IntVector(al, name, isNullable))
-                    RegProcType -> RegProcVector(IntVector(al, name, isNullable))
+                    RegClassType -> RegClassVector(IntVector.open(al, name, isNullable))
+                    RegProcType -> RegProcVector(IntVector.open(al, name, isNullable))
 
                     else -> error("unknown extension: $type")
                 }

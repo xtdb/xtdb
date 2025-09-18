@@ -1,11 +1,13 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.BitVectorHelper
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
+import xtdb.util.closeOnCatch
 
 internal val I32 = MinorType.INT.type
 
@@ -18,17 +20,21 @@ class IntVector private constructor(
     override val byteWidth = Int.SIZE_BYTES
 
     companion object {
-        private fun openBuffer(al: BufferAllocator, valueCount: Int) =
-            ExtensibleBuffer(al, valueCount.toLong() * Int.SIZE_BYTES)
-    }
+        private fun openValidityBuffer(al: BufferAllocator, valueCount: Int) =
+            ExtensibleBuffer(al, BitVectorHelper.getValidityBufferSize(valueCount).toLong())
 
-    @JvmOverloads
-    constructor(
-        al: BufferAllocator, name: String, nullable: Boolean, valueCount: Int = 0
-    ) : this(
-        name, nullable, valueCount,
-        openBuffer(al, valueCount), openBuffer(al, valueCount)
-    )
+        private fun openDataBuffer(al: BufferAllocator, valueCount: Int) =
+            ExtensibleBuffer(al, valueCount.toLong() * Int.SIZE_BYTES)
+
+        @JvmStatic
+        @JvmOverloads
+        fun open(al: BufferAllocator, name: String, nullable: Boolean, valueCount: Int = 0): IntVector =
+            openValidityBuffer(al, valueCount).closeOnCatch { validityBuffer ->
+                openDataBuffer(al, valueCount).closeOnCatch { dataBuffer ->
+                    IntVector(name, nullable, valueCount, validityBuffer, dataBuffer)
+                }
+            }
+    }
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(v: Int) = writeInt0(v)
@@ -46,5 +52,9 @@ class IntVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getInt(idx).toDouble())
 
     override fun openSlice(al: BufferAllocator) =
-        IntVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
+        validityBuffer.openSlice(al).closeOnCatch { validityBuffer ->
+            dataBuffer.openSlice(al).closeOnCatch { dataBuffer ->
+                IntVector(name, nullable, valueCount, validityBuffer, dataBuffer)
+            }
+        }
 }
