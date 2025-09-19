@@ -263,19 +263,23 @@
 
 (defn send-ex [{:keys [conn-state] :as conn}, ^Throwable ex]
   (let [ex-msg (ex-message ex)
-        {::keys [severity error-code routine]} (if (::error-code (ex-data ex))
-                                                 (ex-data ex)
-                                                 (ex->pgw-err (err/->anomaly ex {})))
+
+        {::keys [severity error-code routine], :keys [detail]}
+        (if (::error-code (ex-data ex))
+          (ex-data ex)
+          (let [ex (err/->anomaly ex {})]
+            (-> (ex->pgw-err ex)
+                (assoc :detail (case (get-in @conn-state [:session :parameters "fallback_output_format"])
+                                 :transit (serde/write-transit ex :json)
+                                 (pg-types/json-bytes ex))))))
+
         severity-str (str/upper-case (name severity))]
     (pgio/cmd-write-msg conn pgio/msg-error-response
                         {:error-fields (cond-> {:severity severity-str
                                                 :localized-severity severity-str
                                                 :sql-state error-code
-                                                :message ex-msg
-                                                :detail (when (instance? Anomaly ex)
-                                                          (case (get-in @conn-state [:session :parameters "fallback_output_format"])
-                                                            :transit (serde/write-transit ex :json)
-                                                            (pg-types/json-bytes ex)))}
+                                                :message ex-msg}
+                                         detail (assoc :detail detail)
                                          routine (assoc :routine routine))})))
 
 ;;; startup
@@ -1544,12 +1548,12 @@
   (try
     (log/trace "Read client msg" {:cid cid, :msg msg})
 
-    (err/wrap-anomaly {}
-      (if (and (:skip-until-sync? @conn-state) (not= :msg-sync msg-name))
-        (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg})
-        (handle-msg* conn msg)))
+    (if (and (:skip-until-sync? @conn-state) (not= :msg-sync msg-name))
+      (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg})
+      (handle-msg* conn msg))
 
     (catch Interrupted e (throw e))
+    (catch InterruptedException e (throw e))
 
     (catch Throwable e
       (log/debug e "error processing message: " (ex-message e))

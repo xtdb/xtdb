@@ -657,6 +657,17 @@
                  "DETAIL:  {\"category\":\"cognitect.anomalies\\/incorrect\",\"code\":\"xtdb.expression\\/division-by-zero\",\"message\":\"data exception - division by zero\"}"]
                 (read :stderr)))
 
+         (with-redefs [pgw/cmd-exec-query (fn [& _]  (throw (Exception. "unexpected")))]
+           (send "select 1;\n")
+           (is (= ["ERROR:  unexpected"
+                   "DETAIL:  {\"category\":\"cognitect.anomalies\\/fault\",\"code\":\"xtdb.error\\/unknown\",\"message\":\"unexpected\"}"]
+                  (read :stderr))))
+
+         (with-redefs [pgw/cmd-exec-query (fn [& _]  (throw (ex-info "with pg code" {::pgw/severity :error, ::pgw/error-code "XXXXX"})))]
+           (send "select 1;\n")
+           (is (= ["ERROR:  with pg code"]
+                  (read :stderr))))
+
          (testing "query error allows session to continue"
            (send "select 'ping';\n")
            (is (= [["_column_1"] ["ping"]] (read))))))))
