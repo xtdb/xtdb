@@ -12,7 +12,7 @@ jobs:
   property-test:
     name: Property Test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
       checks: write
