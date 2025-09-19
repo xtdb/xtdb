@@ -6,7 +6,7 @@ This guide will walk you through the process of configuring and running an XTDB 
 
 * Using **Azure Blob Storage** as the remote storage implementation.
 * Utilizing **Apache Kafka** as the shared message log implementation.
-* Exposing the cluster to the internet via a Postgres wire-compatible server and HTTP.
+* Exposing the cluster to the internet via a Postgres wire-compatible server.
  
 The required Azure infrastructure is provisioned using **Terraform**, and the XTDB cluster and it's resources are deployed on link:https://azure.microsoft.com/en-us/products/kubernetes-service[**Azure Managed Kubernetes Service (AKS)**^] using **Helm**, 
 

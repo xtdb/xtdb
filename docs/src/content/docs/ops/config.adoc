@@ -57,7 +57,7 @@ XTDB provides a suite of tools & templates to facilitate monitoring and observab
 
 == Authentication
 
-The pg-wire server and the http-server both support authentication which can be configured via authentication rules.
+The pg-wire server supports authentication which can be configured via authentication rules.
 See link:config/authentication[Authentication].
 
 == Other configuration:

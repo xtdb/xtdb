@@ -392,8 +392,6 @@ dependencies {
     projectDep(":xtdb-api")
     projectDep(":xtdb-core")
 
-    projectDep(":xtdb-http-server")
-
     projectDep(":modules:xtdb-kafka")
     projectDep(":modules:xtdb-aws")
     projectDep(":modules:xtdb-azure")

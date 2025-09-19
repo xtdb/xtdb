@@ -61,9 +61,6 @@
 (defmethod apply-config! :authn [config _ opts]
   (apply-config! config :xtdb/authn opts))
 
-(defmethod apply-config! :http-server [config _ opts]
-  (apply-config! config :xtdb/server opts))
-
 (defmethod apply-config! :flight-sql-server [config _ opts]
   (apply-config! config :xtdb.flight-sql/server opts))
 

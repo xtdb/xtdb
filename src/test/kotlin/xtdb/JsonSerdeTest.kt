@@ -7,8 +7,6 @@ import org.junit.jupiter.api.Test
 import xtdb.api.query.IKeyFn
 import xtdb.error.Incorrect
 import xtdb.error.Unsupported
-import xtdb.http.QueryOptions
-import xtdb.http.QueryRequest
 import java.math.BigDecimal
 import java.time.*
 import java.util.*
@@ -176,35 +174,5 @@ class JsonSerdeTest {
         val actualJson = JSON_SERDE.encodeToString(this)
         assertEquals(expectedJson, actualJson)
         assertEquals(this, JSON_SERDE.decodeFromString<T>(actualJson))
-    }
-
-    @Test
-    fun shouldDeserializeQueryRequest() {
-        QueryRequest(
-            "SELECT * FROM foo",
-            QueryOptions(
-                args = mapOf("foo" to "bar"),
-                snapshotToken = "foobarbaz",
-                currentTime = Instant.EPOCH,
-                awaitToken = "1",
-                txTimeout = Duration.parse("PT3H"),
-                defaultTz = ZoneId.of("America/Los_Angeles"),
-                explain = true,
-                keyFn = IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
-            )
-        ).assertRoundTrip2(
-            """{
-                "sql": "SELECT * FROM foo",
-                "queryOpts": {"args":{"foo":"bar"},
-                              "snapshotToken":"foobarbaz",
-                              "currentTime": "1970-01-01T00:00:00Z",
-                              "awaitToken":"1",
-                              "txTimeout":"PT3H",
-                              "defaultTz":"America/Los_Angeles",
-                              "explain":true,
-                              "keyFn":"KEBAB_CASE_KEYWORD"}
-              }
-            """.trimJson()
-        )
     }
 }

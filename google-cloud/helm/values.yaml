@@ -86,11 +86,6 @@ xtdbConfig:
       host: '*'
       port: 8080
 
-    modules:
-    - !HttpServer
-      host: '*'
-      port: 3000 
-
   # Volume size settings for XTDB Local Disk Cache (uses ephemeral storage)
   localDiskCache:
     sizeLimit: "50Gi"
@@ -123,11 +118,6 @@ xtdbService:
     targetPort: 5432
     # Port exposed by the service
     servicePort: 5432
-  httpServer:
-    # Port of the http server on the nodes
-    targetPort: 3000
-    # Port exposed by the service
-    servicePort: 3000
   healthzServer:
     # Port of the healthz server on the nodes
     targetPort: 8080

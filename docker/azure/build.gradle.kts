@@ -8,7 +8,6 @@ plugins {
 
 dependencies {
     implementation(project(":xtdb-core"))
-    implementation(project(":xtdb-http-server"))
     implementation(project(":modules:xtdb-kafka"))
     implementation(project(":modules:xtdb-azure"))
 

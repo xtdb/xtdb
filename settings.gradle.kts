@@ -12,9 +12,6 @@ include("api", "core")
 project(":api").name = "xtdb-api"
 project(":core").name = "xtdb-core"
 
-include("http-server")
-project(":http-server").name = "xtdb-http-server"
-
 include("lang:test-harness")
 project(":lang:test-harness").name = "test-harness"
 

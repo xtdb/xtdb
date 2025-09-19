@@ -23,16 +23,5 @@
 
   (status [node] [node opts]))
 
-(def http-routes
-  [["/tx" {:name :tx
-           :summary "Transaction"
-           :description "Submits a transaction to the cluster"}]
-
-   ["/query" {:name :query
-              :summary "Query"}]
-
-   ["/openapi.yaml" {:name :openapi
-                     :no-doc true}]])
-
 (defprotocol ExecuteOp
   (execute-op! [tx-op conn]))

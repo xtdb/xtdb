@@ -9,10 +9,9 @@ image::../../img/xtdb-node-1.svg[XTDB 2.x Architecture Diagram, 1000, 460]]
 
 Initial notes:
 
-* There are currently three ways of accessing an XTDB node, all of which use the same transaction lifecycle:
+* There are currently two ways of accessing an XTDB node, all of which use the same transaction lifecycle:
 ** 'pgwire' - a PostgreSQL wire-compatible server (preferred)
-** In-process Clojure-only API
-** HTTP (https://github.com/cognitect/transit-format[Transit^]) API
+** In-process Clojure-only API - this now talks over pgwire too.
 * XTDB has two 'golden stores' - the log and the object-store.
   XTDB nodes do not currently communicate with each other except through these external services.
   Hence, they _must_ agree on the contents of any shared files - i.e. the process to create the files (even the decision of _when_ to cut a file) must be entirely deterministic.

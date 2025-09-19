@@ -8,7 +8,6 @@
                 :import-classes {:classes-per-line -1}}}
  :source-paths ["api/src/main/java" "api/src/main/clojure"
                 "core/src/main/clojure" "core/src/main/java"
-                "http-server/src/main/clojure"
 
                 "modules/kafka/src/main/clojure"
                 "modules/aws/src/main/clojure" "modules/aws/src/main/java"

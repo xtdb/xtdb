@@ -8,7 +8,6 @@ plugins {
 
 dependencies {
     implementation(project(":xtdb-core"))
-    implementation(project(":xtdb-http-server"))
 
     runtimeOnly(libs.logback.classic)
     runtimeOnly(libs.slf4j.jpl)

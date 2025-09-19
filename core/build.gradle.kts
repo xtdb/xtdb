@@ -86,7 +86,6 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.clojure.test.check)
     testImplementation(project(":"))
-    testImplementation(project(":xtdb-http-server"))
     testImplementation(project(":modules:xtdb-kafka"))
     testImplementation(project(":modules:xtdb-aws"))
     testImplementation(project(":modules:xtdb-google-cloud"))

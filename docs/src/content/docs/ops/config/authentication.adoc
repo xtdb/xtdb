@@ -100,7 +100,3 @@ Authentication rules are evaluated in order until the first match. If no rules m
 ----
 
 This rule requires the `admin` user to provide a password when connecting from `localhost`.
-
-**Server Configuration**::
-Authentication rules are configured at server startup and apply to both Postgres wire protocol and HTTP connections. 
-For HTTP, authentication must be provided with each request as HTTP is stateless.

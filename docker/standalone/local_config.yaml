@@ -11,8 +11,3 @@ storage: !Local
 healthz:
   host: '*'
   port: 8080
-
-modules: 
-- !HttpServer
-  host: '*'
-  port: 3000

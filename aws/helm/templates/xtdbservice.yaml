@@ -16,9 +16,6 @@ spec:
   - port: {{ .Values.xtdbService.server.servicePort }}
     targetPort: {{ .Values.xtdbService.server.targetPort }}
     name: server
-  - port: {{ .Values.xtdbService.httpServer.servicePort }}
-    targetPort: {{ .Values.xtdbService.httpServer.targetPort }}
-    name: http
   - port: {{ .Values.xtdbService.healthzServer.servicePort }}
     targetPort: {{ .Values.xtdbService.healthzServer.targetPort }}
     name: healthz

@@ -6,7 +6,7 @@ This guide will walk you through the process of configuring and running an XTDB 
 
 * Using **AWS S3** as the remote storage implementation.
 * Utilizing **Apache Kafka** as the shared message log implementation.
-* Exposing the cluster to the internet via a Postgres wire-compatible server and HTTP.
+* Exposing the cluster to the internet via a Postgres wire-compatible server.
  
 The required AWS infrastructure is provisioned using **Terraform**, and the XTDB cluster and it's resources are deployed on link:https://aws.amazon.com/eks/[**Amazon Elastic Kubernetes Service**^] using **Helm**.
 

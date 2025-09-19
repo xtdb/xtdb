@@ -226,17 +226,12 @@ class YamlSerdeTest {
     fun testModuleDecoding() {
         val input = """
         modules:
-            - !HttpServer
-              port: 3001
-            - !FlightSqlServer
-              port: 9833
+          - !FlightSqlServer
+            port: 9833
         """.trimIndent()
 
         assertEquals(
-            listOf(
-                HttpServer.Factory(port = 3001),
-                FlightSqlServer.Factory(port = 9833)
-            ),
+            listOf(FlightSqlServer.Factory(port = 9833)),
             nodeConfig(input).getModules()
         )
     }

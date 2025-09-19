@@ -15,14 +15,6 @@ To access the XTDB service:
    ```
    localhost:{{ .Values.xtdbService.server.servicePort }}
    ```
-3. If you are using the HTTP server port re-run kubectl port-forward:
-   ```bash
-   kubectl port-forward service/xtdb-service -n {{ .Release.Namespace }} {{ .Values.xtdbService.httpServer.servicePort }}:{{ .Values.xtdbService.httpServer.servicePort }}
-   ```
-   and connect to the service at:
-   ```
-   http://localhost:{{ .Values.xtdbService.httpServer.servicePort }}
-   ```
 
 ## Additional Information
 
