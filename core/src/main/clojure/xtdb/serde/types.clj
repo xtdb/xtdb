@@ -226,7 +226,7 @@
 (defmethod print-method Schema [s w]
   (print-dup s w))
 
-(defmethod pp/simple-dispatch Schema [s]
+(defmethod pp/simple-dispatch Schema [^Schema s]
   (.write *out* "#xt/schema ")
   (pp/write-out (map render-field (.getFields s))))
 
