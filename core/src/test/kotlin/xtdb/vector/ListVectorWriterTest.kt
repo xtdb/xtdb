@@ -1,9 +1,7 @@
 package xtdb.vector
 
-import clojure.lang.Keyword
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.types.Types
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
@@ -11,9 +9,6 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.arrow.I32
-import xtdb.arrow.Vector.Companion.openVector
-import xtdb.time.asOffsetDateTime
 import xtdb.types.Arrow.withName
 import xtdb.types.Type
 import xtdb.types.Type.Companion.asListOf
@@ -66,7 +61,7 @@ class ListVectorWriterTest {
 
         writerFor("foo".asListOf(Type.I32).createVector(al)).use { w ->
             lists.forEach { w.writeObject(it) }
-            assertEquals(lists, w.asReader.toList())
+            assertEquals(lists, w.asReader.asList)
         }
     }
 
@@ -83,7 +78,7 @@ class ListVectorWriterTest {
                 dest.rowCopier(srcVec).apply {
                     copyRow(0); copyRow(1)
                 }
-                assertEquals(lists, dest.asReader.toList())
+                assertEquals(lists, dest.asReader.asList)
                 assertEquals("dest".asListOf(Type.I32), dest.field)
             }
         }
@@ -101,13 +96,13 @@ class ListVectorWriterTest {
                 lists.forEach { writeObject(it) }
             }
 
-            assertEquals(lists, w.asReader.toList())
+            assertEquals(lists, w.asReader.asList)
 
             writerFor(srcVec.field.withName("dest").createVector(al)).use { dest ->
                 dest.rowCopier(srcVec).apply {
                     copyRow(0); copyRow(1)
                 }
-                assertEquals(lists, dest.asReader.toList())
+                assertEquals(lists, dest.asReader.asList)
             }
         }
     }

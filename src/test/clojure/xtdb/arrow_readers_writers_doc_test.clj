@@ -135,7 +135,7 @@
       ;; here we first transform from writer to reader then read the objects out
       ;; of the reader
       (t/is (= [42 "forty-two"]
-               (.toList (vw/vec-wtr->rdr duv-writer))))))
+               (.getAsList (vw/vec-wtr->rdr duv-writer))))))
 
   ;; Writing to a relation is done in the same way as `VectorReader/vectorFor`
 
@@ -163,7 +163,7 @@
 
     (t/is (= [{:my-i64 42, :my-union 42} {:my-i64 43, :my-union "forty-three"}]
              (-> (vw/rel-wtr->rdr rel-wtr)
-                 (.toMaps)))))
+                 (.getAsMaps)))))
 
   ;; Beware that in order for columns to not be populated the types need to be :unions or nullables as otherwise
   ;; there is no way to signal the absence of that value.
@@ -177,7 +177,7 @@
     (.endRow rel-wtr)
     (t/is (= [{:my-first-column 42} {:my-second-column "forty-three"}]
              (-> (vw/rel-wtr->rdr rel-wtr)
-                 (.toMaps)))))
+                 (.getAsMaps)))))
   ;; =>
 
   ;; Let's now look at the readers and row-copiers. Readers are quite similar in nature (walking nested structures)
@@ -228,7 +228,7 @@
              (.getField (.vectorFor rel-wtr3 "my-column"))))
 
     (t/is (= [{:my-column 42} {:my-column "forty-two"}]
-             (.toMaps (vw/rel-wtr->rdr rel-wtr3))))))
+             (.getAsMaps (vw/rel-wtr->rdr rel-wtr3))))))
 
   ;; What is nice about the above example is that even though the types of "my-column" of rel-wtr1 and rel-wtr2
   ;; are base types the row copiers take care to create "union" types.

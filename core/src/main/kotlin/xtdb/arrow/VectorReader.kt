@@ -112,7 +112,7 @@ interface VectorReader : ILookup, AutoCloseable {
     fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))
     fun select(startIdx: Int, len: Int): VectorReader = IndirectVector(this, slice(startIdx, len))
 
-    fun toList() = List(valueCount) { getObject(it) }
+    val asList get() = List(valueCount) { getObject(it) }
     fun toList(keyFn: IKeyFn<*>) = List(valueCount) { getObject(it, keyFn) }
 
     val metadataFlavours: Collection<MetadataFlavour> get() = unsupported("metadataFlavours")
@@ -123,7 +123,7 @@ interface VectorReader : ILookup, AutoCloseable {
         fun toString(reader: VectorReader): String = reader.run {
             val content = when {
                 valueCount == 0 -> ""
-                valueCount <= 5 -> toList().joinToString(", ", prefix = " [", postfix = "]")
+                valueCount <= 5 -> asList.joinToString(", ", prefix = " [", postfix = "]")
                 else -> listOf(
                     getObject(0).toString(), getObject(1).toString(), getObject(2).toString(),
                     "...",

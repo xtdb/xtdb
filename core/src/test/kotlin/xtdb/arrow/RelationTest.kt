@@ -174,7 +174,7 @@ class RelationTest {
 
         val duvValues = listOf(12, "hello", "world!", 34, null)
 
-        assertEquals(duvValues, duv.toList())
+        assertEquals(duvValues, duv.asList)
 
         val buf = ByteArrayOutputStream()
 
@@ -187,7 +187,7 @@ class RelationTest {
 
         loader(allocator, buf.toByteArray().asChannel).use { loader ->
             loader.loadPage(0, allocator).use { rel ->
-                assertEquals(duvValues, rel["duv"].toList())
+                assertEquals(duvValues, rel["duv"].asList)
             }
         }
     }
@@ -223,7 +223,7 @@ class RelationTest {
             intVec.writeInt(32)
             rel.endRow()
 
-            assertEquals(listOf(mapOf("foo".kw to 32)), rel.toMaps())
+            assertEquals(listOf(mapOf("foo".kw to 32)), rel.asMaps)
 
             val strVec = rel.vectorFor("bar", Type.UTF8.fieldType)
             strVec.writeObject("hello")
@@ -239,7 +239,7 @@ class RelationTest {
                     mapOf("foo".kw to 32),
                     mapOf("bar".kw to "hello")
                 ),
-                rel.toMaps()
+                rel.asMaps
             )
         }
     }

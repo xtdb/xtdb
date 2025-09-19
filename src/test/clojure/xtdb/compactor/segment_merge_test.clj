@@ -70,7 +70,7 @@
 
                        (for [^SegmentMerge$Result res results]
                          (with-open [rel (.openAllAsRelation seg-merge res)]
-                           (->> (.toMaps rel)
+                           (->> (.getAsMaps rel)
                                 (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap))))))))))
 
           (t/testing "merge segments with path predicate"
@@ -93,7 +93,7 @@
 
                        (for [^SegmentMerge$Result res results]
                          (with-open [rel (.openAllAsRelation seg-merge res)]
-                           (->> (.toMaps rel)
+                           (->> (.getAsMaps rel)
                                 (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap))))))))))
 
           (t/testing "merge segments partitioning by recency"
@@ -135,6 +135,6 @@
                        (->> (for [^SegmentMerge$Result res results]
                               [(str (.getFileName (.getPath$xtdb_core res)))
                                (with-open [rel (.openAllAsRelation seg-merge res)]
-                                 (->> (.toMaps rel)
+                                 (->> (.getAsMaps rel)
                                       (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap)))))])
                             (into {})))))))))))

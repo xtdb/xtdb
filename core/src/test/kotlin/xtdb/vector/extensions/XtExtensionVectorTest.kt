@@ -15,7 +15,6 @@ import xtdb.types.ClojureForm
 import xtdb.types.ZonedDateTimeRange
 import xtdb.util.Hasher
 import xtdb.vector.ValueVectorReader.from
-import xtdb.vector.writerFor
 import java.time.ZonedDateTime
 import java.util.*
 
@@ -50,7 +49,7 @@ class XtExtensionVectorTest {
 
             assertEquals(uuidField, newVector.field)
             assertEquals(2, newVector.valueCount)
-            assertEquals(listOf(uuid1, uuid2), from(newVector).toList())
+            assertEquals(listOf(uuid1, uuid2), from(newVector).asList)
 
             newVector.close()
         }

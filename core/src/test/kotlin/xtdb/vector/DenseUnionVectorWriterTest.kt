@@ -59,7 +59,7 @@ class DenseUnionVectorWriterTest {
                 destVec.field
             )
 
-            assertEquals(listOf(12.3, null, 18.9), destWriter.asReader.toList())
+            assertEquals(listOf(12.3, null, 18.9), destWriter.asReader.asList)
         }
     }
 }

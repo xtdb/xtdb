@@ -20,8 +20,8 @@
                :size (some-> res (.getSize))
                :value (when res
                         (util/with-open [out-vec (Vector/open tu/*allocator* field)]
-                          (.writeTo res out-vec 0 (.getSize res))
-                          (vec (.toList out-vec))))}))]
+                                        (.writeTo res out-vec 0 (.getSize res))
+                                        (vec (.getAsList out-vec))))}))]
     (t/is (= {:field (types/col-type->field "$data$" :i64)
               :size 10
               :value [1 2 3 4 5 6 7 8 9 10]}
@@ -59,8 +59,8 @@
         ^ListExpression list-expr (->list-expr {} {})
         run-write-test (fn [start count]
                          (util/with-open [out-vec (tu/open-vec field)]
-                           (.writeTo list-expr out-vec start count)
-                           (vec (.toList (vw/vec-wtr->rdr out-vec)))))]
+                                         (.writeTo list-expr out-vec start count)
+                                         (vec (.getAsList (vw/vec-wtr->rdr out-vec)))))]
 
     (t/is (= [1 2 3 4 5 6 7 8 9 10]
              (run-write-test 0 (.getSize list-expr)))

@@ -49,12 +49,13 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
 
     override fun close() = vectors.closeAll()
 
+    @Suppress("unused") // was used in XT flight-sql last I checked
     fun toTuples() = toTuples(KEBAB_CASE_KEYWORD)
 
     fun toTuples(keyFn: IKeyFn<*> = KEBAB_CASE_KEYWORD) =
         List(rowCount) { idx -> vectors.map { it.getObject(idx, keyFn) } }
 
-    fun toMaps() = toMaps(KEBAB_CASE_KEYWORD)
+    val asMaps get() = toMaps(KEBAB_CASE_KEYWORD)
 
     fun <K> toMaps(keyFn: IKeyFn<K>): List<Map<K, *>> =
         List(rowCount) { idx ->

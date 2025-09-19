@@ -244,14 +244,14 @@
 
       (t/is (= [{:my-column {:flib {:true false}, :foo {:bibble true}, :bar {:baz -4113466}}}
                 {:my-column {:foo {:bibble true}, :bar {:baz 1001}}}]
-               (.toMaps rel))))))
+               (.getAsMaps rel))))))
 
 (deftest round-trips-nested-composite-types-2345
   (let [x [{:a [5], :b 1}
            {:a [12.0], :b 5, :c 1}
            {:b 1.5}]]
     (with-open [rel (tu/open-rel {:x x})]
-      (t/is (= x (mapv :x (.toMaps rel))))))
+      (t/is (= x (mapv :x (.getAsMaps rel))))))
 
   (let [x [{:a 42}
            {:a 12.0, :b 5, :c [1 2 3]}
@@ -259,7 +259,7 @@
            {:a 15, :b 25}
            10.0]]
     (with-open [rel (tu/open-rel {:x x})]
-      (t/is (= x (mapv :x (.toMaps rel)))))))
+      (t/is (= x (mapv :x (.getAsMaps rel)))))))
 
 (deftest writes-map-vector
   (let [maps [{}
@@ -283,4 +283,4 @@
 
           (.endList map-vec))
 
-        (t/is (= maps (.toList (vw/vec-wtr->rdr map-vec))))))))
+        (t/is (= maps (.getAsList (vw/vec-wtr->rdr map-vec))))))))

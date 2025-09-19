@@ -49,7 +49,7 @@
         (.copyRow 1))
 
       (t/is (= [42 43]
-               (.toList (vw/vec-wtr->rdr int-wrt)))
+               (.getAsList (vw/vec-wtr->rdr int-wrt)))
             "duv to monomorphic base type vector copying")))
 
   (with-open [duv (DenseUnionVector/empty "my-duv" tu/*allocator*)
@@ -76,7 +76,7 @@
       (let [copier (.rowCopier list-wrt duv)]
         (.copyRow copier 0))
       (t/is (= [[42 43]]
-               (.toList (vw/vec-wtr->rdr list-wrt)))
+               (.getAsList (vw/vec-wtr->rdr list-wrt)))
             "duv to monomorphic list type vector copying")))
 
   (with-open [duv (DenseUnionVector/empty "my-duv" tu/*allocator*)
@@ -113,7 +113,7 @@
       (.writeObject set-wrt #{4 5 6})
 
       (t/is (= [#{1 2 3} #{4 5 6}]
-               (.toList (vw/vec-wtr->rdr  set-wrt))))
+               (.getAsList (vw/vec-wtr->rdr set-wrt))))
 
       (let [pos (VectorPosition/build)]
         (.setPosition pos 0)
@@ -190,10 +190,10 @@
 
 (t/deftest ^:property vector-read-what-you-write
   (tu/run-property-test
-   {:num-tests tu/property-test-iterations}
-   (prop/for-all [{:keys [vs] :as vec-gen} tg/vector-vs-gen]
-                 (with-open [^Vector src-vec (tg/vec-gen->arrow-vec tu/*allocator* vec-gen)]
-                   (tg/lists-equal-normalized? vs (.toList src-vec))))))
+    {:num-tests tu/property-test-iterations}
+    (prop/for-all [{:keys [vs] :as vec-gen} tg/vector-vs-gen]
+      (with-open [^Vector src-vec (tg/vec-gen->arrow-vec tu/*allocator* vec-gen)]
+        (tg/lists-equal-normalized? vs (.getAsList src-vec))))))
 
 (defn- copy-vector ^Vector
   ([^Vector src-vec ^BufferAllocator al]
@@ -208,7 +208,7 @@
 (defn- vectors-equal?
   [^Vector src-vec ^Vector out-vec]
   (and (= (.getValueCount src-vec) (.getValueCount out-vec))
-       (tg/lists-equal-normalized? (.toList src-vec) (.toList out-vec))))
+       (tg/lists-equal-normalized? (.getAsList src-vec) (.getAsList out-vec))))
 
 (t/deftest ^:property full-vector-copy-preserves-data
   (tu/run-property-test
@@ -227,7 +227,7 @@
                  (with-open [^Vector src-vec (tg/vec-gen->arrow-vec tu/*allocator* vec-gen)
                              ^Vector copied-vec (copy-vector src-vec tu/*allocator* start-idx end-idx)]
                    (let [expected-data (subvec (:vs vec-gen) start-idx end-idx)
-                         actual-data (.toList copied-vec)]
+                         actual-data (.getAsList copied-vec)]
                      (tg/lists-equal-normalized? expected-data actual-data))))))
 
 (defn- merge-vectors-into-duv ^Vector [^BufferAllocator al vectors]
@@ -247,7 +247,7 @@
                              ^Vector src-vec2 (tg/vec-gen->arrow-vec tu/*allocator* vec-gen2)
                              ^Vector duv (merge-vectors-into-duv tu/*allocator* [src-vec1 src-vec2])]
                    (let [expected-data (concat (:vs vec-gen1) (:vs vec-gen2))
-                         actual-data (.toList duv)]
+                         actual-data (.getAsList duv)]
                      (tg/lists-equal-normalized? expected-data actual-data))))))
 
 (t/deftest ^:property copy-two-duvs
@@ -258,7 +258,7 @@
                              ^Vector src-vec2 (tg/vec-gen->arrow-vec tu/*allocator* vec-gen2)
                              ^Vector duv (merge-vectors-into-duv tu/*allocator* [src-vec1 src-vec2])]
                    (let [expected-data (concat (:vs vec-gen1) (:vs vec-gen2))
-                         actual-data (.toList duv)]
+                         actual-data (.getAsList duv)]
                      (tg/lists-equal-normalized? expected-data actual-data))))))
 
 (t/deftest ^:property multiple-type-promotions

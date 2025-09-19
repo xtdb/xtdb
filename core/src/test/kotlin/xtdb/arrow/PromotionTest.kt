@@ -7,7 +7,6 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.test.AllocatorResolver
-import xtdb.types.Type
 import xtdb.types.Type.Companion.I32
 import xtdb.types.Type.Companion.I64
 import xtdb.types.Type.Companion.NULL
@@ -60,7 +59,7 @@ class PromotionTest {
                 "v".asUnionOf("i32" ofType I32, "utf8" ofType UTF8),
                 promoted.field
             )
-            assertEquals(listOf(1, 2, 3, "4", 5, "6"), promoted.toList())
+            assertEquals(listOf(1, 2, 3, "4", 5, "6"), promoted.asList)
         }
 
         "v".asListOf(I32).openVector(al)
@@ -71,7 +70,7 @@ class PromotionTest {
             .use { promoted ->
                 promoted.writeAll(listOf("hello", listOf(4, 5), "world"))
 
-                assertEquals(listOf(listOf(1, 2), listOf(3), "hello", listOf(4, 5), "world"), promoted.toList())
+                assertEquals(listOf(listOf(1, 2), listOf(3), "hello", listOf(4, 5), "world"), promoted.asList)
                 assertEquals(
                     "v".asUnionOf("list" asListOf I32, "utf8" ofType UTF8),
                     promoted.field
@@ -92,7 +91,7 @@ class PromotionTest {
                 copier.copyRow(0)
                 copier.copyRow(1)
 
-                assertEquals(listOf("hello", "world", 1, 2), newDest.toList())
+                assertEquals(listOf("hello", "world", 1, 2), newDest.asList)
             }
         }
     }
@@ -106,7 +105,7 @@ class PromotionTest {
                 val copier = src.rowCopier(dest)
                 copier.copyRow(0)
 
-                assertEquals(listOf(mapOf("a" to "hello"), mapOf("a" to 1)), dest.toList())
+                assertEquals(listOf(mapOf("a" to "hello"), mapOf("a" to 1)), dest.asList)
             }
         }
 
@@ -123,7 +122,7 @@ class PromotionTest {
 
                 copier.copyRow(0)
 
-                assertEquals(listOf(mapOf("b" to 10), mapOf("a" to 4)), dest.toList())
+                assertEquals(listOf(mapOf("b" to 10), mapOf("a" to 4)), dest.asList)
             }
         }
     }
@@ -134,7 +133,7 @@ class PromotionTest {
             "dest".ofType(listTypeOf(NULL)).openVector(al).use { destVec ->
                 srcVec.rowCopier(destVec).copyRow(0)
 
-                assertEquals(listOf(listOf(1)), destVec.toList())
+                assertEquals(listOf(listOf(1)), destVec.asList)
                 assertEquals("dest" ofType listTypeOf(I32), destVec.field)
             }
         }

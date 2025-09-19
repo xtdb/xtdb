@@ -106,7 +106,7 @@ class DenseUnionVector private constructor(
 
         override fun close() = Unit
 
-        override fun toList() = inner.toList()
+        override val asList get() = inner.asList
     }
 
     internal inner class LegVector(

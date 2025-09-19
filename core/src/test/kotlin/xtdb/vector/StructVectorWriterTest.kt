@@ -3,14 +3,12 @@ package xtdb.vector
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.complex.StructVector
-import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
 import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
 
 class StructVectorWriterTest {
@@ -36,7 +34,7 @@ class StructVectorWriterTest {
 
         writerFor(StructVector.empty("foo", al)).use { w ->
             objs.forEach { w.writeObject(it) }
-            assertEquals(objs, w.asReader.toList())
+            assertEquals(objs, w.asReader.asList)
         }
     }
 
@@ -56,7 +54,7 @@ class StructVectorWriterTest {
                 dest.rowCopier(srcVec).apply {
                     copyRow(0); copyRow(1)
                 }
-                assertEquals(objs, dest.asReader.toList())
+                assertEquals(objs, dest.asReader.asList)
             }
         }
     }

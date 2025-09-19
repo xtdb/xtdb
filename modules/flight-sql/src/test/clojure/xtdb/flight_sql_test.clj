@@ -54,7 +54,7 @@
             ;; if this were a real client chances are they wouldn't just
             ;; eagerly turn the roots into Clojure maps...
             (.loadFromArrow rel root)
-            (swap! !res into (.toMaps rel))))
+            (swap! !res into (.getAsMaps rel))))
 
         @!res))))
 
@@ -203,6 +203,6 @@
           (t/is (= [{:xt/id #uuid "b82ae7b2-13cf-4828-858d-cd992fec9aa7"
                      :name "foo"
                      :created-at #xt/zoned-date-time "2020-01-01T12:34Z"}]
-                   (.toMaps rel))))
+                   (.getAsMaps rel))))
 
         (t/is (false? (.loadNextBatch rdr)))))))

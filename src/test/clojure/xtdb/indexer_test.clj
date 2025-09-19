@@ -662,7 +662,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
                          :xt/valid-from #xt/zdt "1970-01-01T00:00Z[UTC]",
                          :xt/valid-to #xt/zdt "1970-01-01T00:00Z[UTC]",
                          :op #xt/tagged [:put {:xt/id 3, :version 0}]}]
-                       (->> (.toMaps rel)
+                       (->> (.getAsMaps rel)
                             (mapv #(dissoc % :xt/iid)))))))
 
           (let [query-rel-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/query-rel.arrow" node-id))
@@ -670,19 +670,19 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
             (with-open [rb (.getRecordBatch bp query-rel-path 0)
                         rel (Relation/fromRecordBatch al (.getSchema footer) rb)]
               (t/is (= [{:foo "bar", :baz 32}, {:foo "baz", :baz 64}]
-                       (->> (.toMaps rel)
+                       (->> (.getAsMaps rel)
                             (mapv #(dissoc % :xt/iid)))))))
-          
+
           (let [tx-ops-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/tx-ops.arrow" node-id))
                 footer (.getFooter bp tx-ops-path)]
             (with-open [rb (.getRecordBatch bp tx-ops-path 0)
-                        rel (Relation/fromRecordBatch al (.getSchema footer) rb)] 
+                        rel (Relation/fromRecordBatch al (.getSchema footer) rb)]
               (t/is (= [[{"_id" 3, "version" 0}] [{"_id" 4, "version" 0}]]
                        (-> (.vectorFor rel "$data$")
                            (.vectorFor "put-docs")
                            (.vectorFor "documents")
                            (.vectorFor "public/foo")
-                           (.toList)))))))))))
+                           (.getAsList)))))))))))
 
 (t/deftest list-concat-doesnt-halt-ingestion-3326
   ;; will likely have to remove this once we actually implement list concat

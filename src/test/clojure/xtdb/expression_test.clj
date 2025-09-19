@@ -43,7 +43,7 @@
                                                   tu/*allocator* in-rel
                                                   {}
                                                   vw/empty-args)]
-                  (.toList project-col))))]
+                  (.getAsList project-col))))]
 
       (t/is (= (mapv (comp double +) (range 1000) (range 1000))
                (project '(+ a b))))

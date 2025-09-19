@@ -108,7 +108,7 @@
                 (.resolve path "objects")))))))))
 
 (defn live-table-snap->data [^LiveTable$Snapshot live-table-snap]
-  (let [live-rel-data (.toMaps (.getLiveRelation live-table-snap))
+  (let [live-rel-data (.getAsMaps (.getLiveRelation live-table-snap))
         live-trie (.compactLogs (.getLiveTrie live-table-snap))
         live-trie-leaf-data (->> live-trie
                                  (.getLeaves)

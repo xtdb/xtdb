@@ -114,7 +114,7 @@ sealed class Vector : VectorReader, VectorWriter {
 
     internal abstract fun rowCopier0(src: VectorReader): RowCopier
 
-    override fun toList() = (0 until valueCount).map { getObject(it) }
+    override val asList get() = (0 until valueCount).map { getObject(it) }
 
     override fun toString() = VectorReader.toString(this)
 

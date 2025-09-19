@@ -43,32 +43,32 @@
     (with-open [vec (tu/open-vec #xt/field ["0" :list ["1" :list ["2" :i64]]]
                                  [[]])
                 copied-vec (.openSlice vec tu/*allocator*)]
-      (t/is (= (.toList vec) (.toList copied-vec)))))
+      (t/is (= (.getAsList vec) (.getAsList copied-vec)))))
 
   (t/testing "empty set of lists"
     (with-open [vec (tu/open-vec #xt/field ["0" :set ["1" :list ["2" :i64]]]
                                  [#{}])
                 copied-vec (.openSlice vec tu/*allocator*)]
-      (= (.toList vec) (.toList copied-vec))))
+      (= (.getAsList vec) (.getAsList copied-vec))))
 
   (t/testing "empty list of sets"
     (with-open [vec (tu/open-vec #xt/field ["0" :list ["1" :set ["2" :i64]]]
                                  [[] #{}])
                 copied-vec (.openSlice vec tu/*allocator*)]
-      (= (.toList vec) (.toList copied-vec)))))
+      (= (.getAsList vec) (.getAsList copied-vec)))))
 
 (t/deftest copy-list-into-empty-rel-4748
   (with-open [src-vec1 (Vector/fromList tu/*allocator* "0" [[1]])
               dest-vec (Vector/open tu/*allocator* #xt/field ["list" :list])]
     (let [copier1 (.rowCopier src-vec1 dest-vec)]
       (.copyRow copier1 0)
-      (t/is (= [[1]] (.toList dest-vec)))))
+      (t/is (= [[1]] (.getAsList dest-vec)))))
 
   (with-open [src-rel (Relation/openFromRows tu/*allocator* [{"list" [1]}])
               dest-rel (Relation. tu/*allocator* (Schema. []))]
     (let [copier (.rowCopier src-rel dest-rel)]
       (.copyRow copier 0)
-      (t/is (= [{:list [1]}] (.toMaps dest-rel))))))
+      (t/is (= [{:list [1]}] (.getAsMaps dest-rel))))))
 
 (t/deftest cant-set-duv-nullable-4787
   (xt/execute-tx tu/*node* [[:put-docs :docs {:a false, :xt/id 1}]])

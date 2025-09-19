@@ -17,7 +17,7 @@ class SingletonListReader(override val name: String, private val elReader: Vecto
 
     override fun isNull(idx: Int) = false
 
-    override fun getObject(idx: Int) = listOf(elReader.toList())
+    override fun getObject(idx: Int) = listOf(elReader.asList)
     override fun getObject(idx: Int, keyFn: IKeyFn<*>) = listOf(elReader.toList(keyFn))
 
     override val listElements get() = elReader

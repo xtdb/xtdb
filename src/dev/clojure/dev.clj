@@ -121,7 +121,7 @@
         (loop [v init]
           (cond
             (reduced? v) (unreduced v)
-            (.loadNextBatch rdr) (recur (f v (.toMaps (vr/<-root (.getVectorSchemaRoot rdr)))))
+            (.loadNextBatch rdr) (recur (f v (.getAsMaps (vr/<-root (.getVectorSchemaRoot rdr)))))
             :else v))))))
 
 (comment
@@ -184,10 +184,10 @@
   (with-open [al (RootAllocator.)
               r (Relation/openFromArrowStream al (.getPayload (Log$Message/parse ba)))]
     (vec
-      (for [{:keys [query args]} (:tx-ops (first (.toMaps r)))]
+      (for [{:keys [query args]} (:tx-ops (first (.getAsMaps r)))]
         (with-open [r2 (Relation/openFromArrowStream al args)]
           {:query query
-           :args (.toMaps r2)})))))
+           :args (.getAsMaps r2)})))))
 
 (comment
   (require '[clojure.data.json :as json])

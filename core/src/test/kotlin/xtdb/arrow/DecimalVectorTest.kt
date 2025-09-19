@@ -35,7 +35,7 @@ class DecimalVectorTest {
             dec.writeNull()
 
             assertEquals(3, dec.valueCount)
-            assertEquals(listOf(BigDecimal("123.45"), BigDecimal("789.01"), null), dec.toList())
+            assertEquals(listOf(BigDecimal("123.45"), BigDecimal("789.01"), null), dec.asList)
 
 
             // precision error
@@ -61,7 +61,7 @@ class DecimalVectorTest {
             dec.writeObject(BigDecimal("24580955505371094.01"))
 
             assertEquals(2, dec.valueCount)
-            assertEquals(listOf(BigDecimal("0.01"), BigDecimal("24580955505371094.01")), dec.toList())
+            assertEquals(listOf(BigDecimal("0.01"), BigDecimal("24580955505371094.01")), dec.asList)
         }
     }
 
@@ -77,7 +77,7 @@ class DecimalVectorTest {
 
             assertEquals(2, dec.valueCount)
             assertEquals(-2, (dec.getObject(0) as BigDecimal).scale())
-            assertEquals(listOf(BigDecimal("1E+2"), BigDecimal("2E+2")), dec.toList())
+            assertEquals(listOf(BigDecimal("1E+2"), BigDecimal("2E+2")), dec.asList)
         }
     }
 

@@ -132,7 +132,7 @@
 
         (.aggregate sum-spec v0 group-mapping)
         (.aggregate sum-spec v1 group-mapping)
-        (t/is (= [12.0] (.toList (.finish sum-spec))))
+        (t/is (= [12.0] (.getAsList (.finish sum-spec))))
         (finally
           (util/try-close sum-spec))))))
 
@@ -334,12 +334,12 @@
     (let [agg-factory (group-by/->aggregate-factory {:f :array-agg, :from-name 'k, :from-type :i64
                                                      :to-name 'vs, :zero-row? true})]
       (util/with-open [agg-spec (.build agg-factory tu/*allocator*)]
-        (t/is (= [:union #{:null [:list :i64]}] (types/field->col-type (.getField agg-factory))))
+                      (t/is (= [:union #{:null [:list :i64]}] (types/field->col-type (.getField agg-factory))))
 
-        (.aggregate agg-spec (vr/rel-reader [k0]) gm0)
-        (.aggregate agg-spec (vr/rel-reader [k1]) gm1)
+                      (.aggregate agg-spec (vr/rel-reader [k0]) gm0)
+                      (.aggregate agg-spec (vr/rel-reader [k1]) gm1)
 
-        (t/is (= [[1 3 6] [2 4] [5]] (.toList (.finish agg-spec))))))))
+                      (t/is (= [[1 3 6] [2 4] [5]] (.getAsList (.finish agg-spec))))))))
 
 (t/deftest test-array-agg-of-empty-rel-returns-empty-array-3819
   (t/is (= [{}]
