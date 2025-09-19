@@ -1,0 +1,59 @@
+{:schema
+ #xt/schema (["nodes"
+              :union
+              ["nil" :null :?]
+              ["branch-iid" :list ["$data$" :i32 :?]]
+              ["leaf"
+               :struct
+               ["data-page-idx" :i32]
+               ["columns"
+                :list
+                ["col"
+                 :struct
+                 ["col-name" :utf8]
+                 ["root-col?" :bool]
+                 ["count" :i64]
+                 ["bytes" :struct :? ["bloom" :varbinary :?]]
+                 ["date-times" :struct :? ["min" :f64] ["max" :f64]]
+                 ["set" :i32 :?]]]]]),
+ :batches
+ ([{:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 0,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 1,
+                   :bytes
+                   {:bloom
+                    #bytes "3a300000050000000600000014000000210000002d0000003a000000300000003200000034000000360000003800000011d875e45c6143de2a5b"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 1,
+                   :date-times {:min 1.5778368E9, :max 1.5778368E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 1,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 1,
+                   :date-times {:min 1.5778368E9, :max 1.5778368E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 1,
+                   :bytes
+                   {:bloom
+                    #bytes "3a30000005000000000000000f0000001a00000026000000340000003000000032000000340000003600000038000000395ad90d1996591ef9d1"}}
+                  {:col-name "$data$",
+                   :root-col? false,
+                   :count 3,
+                   :bytes
+                   {:bloom
+                    #bytes "3a3000000e000000020001000400000005000000060000000a0000000e0000001000000012000000140000001c00000024000000290000003400000036000000780000007c0000007e00000080000000820000008400000086000000880000008a0000008c0000008e000000900000009200000094000000edc07cde607d54197fcf82c085b1653988a25da447db5acb297d57f20b1f"}}
+                  {:col-name "colours",
+                   :root-col? true,
+                   :count 1,
+                   :set 5}]}]}])}

@@ -1,0 +1,66 @@
+{:schema
+ #xt/schema (["nodes"
+              :union
+              ["nil" :null :?]
+              ["branch-iid" :list ["$data$" :i32 :?]]
+              ["leaf"
+               :struct
+               ["data-page-idx" :i32]
+               ["columns"
+                :list
+                ["col"
+                 :struct
+                 ["col-name" :utf8]
+                 ["root-col?" :bool]
+                 ["count" :i64]
+                 ["bytes" :struct :? ["bloom" :varbinary :?]]
+                 ["date-times"
+                  :struct
+                  :?
+                  ["min" :f64]
+                  ["max" :f64]]]]]]),
+ :batches
+ ([{:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 0,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 2,
+                   :bytes
+                   {:bloom
+                    #bytes "3a30000009000000090000001d000000200000002e0000002f0001003000000031000000330000003600000050000000520000005400000056000000580000005c0000005e000000600000006200000051e9ad57233275b5854995dda571b5057fa0f57a"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 2,
+                   :date-times {:min 1.5778368E9, :max 1.5779232E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 2,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 2,
+                   :date-times {:min 1.5778368E9, :max 1.5779232E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 2,
+                   :bytes {}}
+                  {:col-name "api_version",
+                   :root-col? true,
+                   :count 2,
+                   :bytes {}}
+                  {:col-name "manufacturer",
+                   :root-col? true,
+                   :count 2,
+                   :bytes {}}
+                  {:col-name "model",
+                   :root-col? true,
+                   :count 2,
+                   :bytes {}}
+                  {:col-name "os_name",
+                   :root-col? true,
+                   :count 2,
+                   :bytes {}}]}]}])}

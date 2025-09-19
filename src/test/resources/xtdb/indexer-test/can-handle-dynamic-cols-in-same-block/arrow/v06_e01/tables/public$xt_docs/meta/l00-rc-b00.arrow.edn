@@ -1,0 +1,79 @@
+{:schema
+ #xt/schema (["nodes"
+              :union
+              ["nil" :null :?]
+              ["branch-iid" :list ["$data$" :i32 :?]]
+              ["leaf"
+               :struct
+               ["data-page-idx" :i32]
+               ["columns"
+                :list
+                ["col"
+                 :struct
+                 ["col-name" :utf8]
+                 ["root-col?" :bool]
+                 ["count" :i64]
+                 ["bytes" :struct :? ["bloom" :varbinary :?]]
+                 ["date-times" :struct :? ["min" :f64] ["max" :f64]]
+                 ["numbers" :struct :? ["min" :f64] ["max" :f64]]
+                 ["bool" :bool :?]
+                 ["list" :i32 :?]
+                 ["struct" :list :? ["$data$" :i32]]]]]]),
+ :batches
+ ([{:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 0,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 6,
+                   :bytes
+                   {:bloom
+                    #bytes "3a300000170000000000020002000000060001000d00000010000000140001001f0000002100000022000000240000002700000028000000290000002d0000002f000000300001003600000037000000380000003a0000003c0000003e0001003f000100c0000000c6000000c8000000cc000000ce000000d0000000d4000000d6000000d8000000da000000dc000000de000000e0000000e2000000e4000000e6000000ea000000ec000000ee000000f0000000f2000000f4000000f80000009c472593aede38cc177911d84b3dd5bc87a675e49a175c6181702cb1435127d4ce5c43de381b1b49e9f12de5683583a52a5b7ec8b52122af8ab013fc"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 6,
+                   :date-times {:min 1.5778368E9, :max 1.5778368E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 6,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 6,
+                   :date-times {:min 1.5778368E9, :max 1.5778368E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 6,
+                   :bytes {},
+                   :numbers {:min 24.0, :max 52.0}}
+                  {:col-name "$data$",
+                   :root-col? false,
+                   :count 4,
+                   :bytes {},
+                   :date-times {:min 1.5778368E9, :max 1.5778368E9},
+                   :numbers {:min 12.0, :max 12.0},
+                   :bool true}
+                  {:col-name "list",
+                   :root-col? true,
+                   :count 2,
+                   :list 5}
+                  {:col-name "a",
+                   :root-col? false,
+                   :count 2,
+                   :numbers {:min 1.0, :max 1.0},
+                   :bool true}
+                  {:col-name "b",
+                   :root-col? false,
+                   :count 1,
+                   :bytes {}}
+                  {:col-name "c",
+                   :root-col? false,
+                   :count 1,
+                   :bytes {}}
+                  {:col-name "struct",
+                   :root-col? true,
+                   :count 2,
+                   :struct [7 8 9]}]}]}])}

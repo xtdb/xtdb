@@ -1,17 +1,10 @@
 (ns xtdb.database-test
-  (:require [clojure.java.io :as io]
-            [clojure.test :as t]
+  (:require [clojure.test :as t]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
-            [xtdb.check-pbuf :as cpb]
-            [xtdb.compactor :as c]
             [xtdb.node :as xtn]
             [xtdb.pgwire-test :as pgw-test]
-            [xtdb.test-json :as tj]
-            [xtdb.test-util :as tu]
-            [xtdb.util :as util])
-  (:import [java.nio.file Path]
-           xtdb.api.storage.Storage))
+            [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-mock-clock)
 
@@ -64,11 +57,9 @@
 
               (tu/flush-block! node)))
 
-          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/database-test/block-boundary")))
-                         node-dir)
-
-          (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/database-test/block-boundary")))
-                          node-dir)
+          (let [expected-dir (io/as-file (io/resource "xtdb/database-test/block-boundary"))]
+            (aet/check-arrow-edn-dir (io/file expected-dir "arrow") node-dir)
+            (cpb/check-pbuf (.toPath (io/file expected-dir "pbuf")) node-dir))
 
           (util/with-open [node2 (xtn/start-node node-config)
                            xt-db-conn (.build (.createConnectionBuilder node2))

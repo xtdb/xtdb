@@ -2,18 +2,17 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.arrow-edn-test :as aet]
             [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.node :as xtn]
-            [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
-           xtdb.api.storage.Storage
            xtdb.storage.LocalStorage
            xtdb.trie.Trie))
 
@@ -200,8 +199,8 @@
       (let [db (db/primary-db node)
             ^LocalStorage bp (.getBufferPool db)]
 
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
-                       (.resolve (.getRootPath bp) "tables"))
+        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/metadata-test/set")))
+                                 (.resolve (.getRootPath bp) "tables"))
 
         (let [metadata-mgr (.getMetadataManager (db/primary-db node))]
           (t/testing "L0"
@@ -230,9 +229,9 @@
       (let [db (db/primary-db node)
             ^LocalStorage bp (.getBufferPool db)
             metadata-mgr (.getMetadataManager db)]
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/metadata-test/duration")))
-                       (.resolve (.getRootPath bp) "tables")
-                       #"l01.*")
+        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/metadata-test/duration")))
+                                 (.resolve (.getRootPath bp) "tables")
+                                 #"l01.*")
 
         (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
           (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]

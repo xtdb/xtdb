@@ -2,13 +2,13 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.arrow-edn-test :as aet]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
             xtdb.node.impl
             [xtdb.object-store :as os]
             [xtdb.serde :as serde]
-            [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
@@ -129,11 +129,9 @@
           (t/is (= [(os/->StoredObject "tables/public$foo/meta/l00-rc-b00.arrow" 3966)]
                    (.listAllObjects bp (util/->path "tables/public$foo/meta")))))
 
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
-                       (.resolve node-dir "objects"))
-
-        (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
-                        (.resolve node-dir "objects"))))))
+        (let [expected-dir (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index"))]
+          (aet/check-arrow-edn-dir (io/file expected-dir "arrow") node-dir)
+          (cpb/check-pbuf (.toPath (io/file expected-dir "pbuf")) node-dir))))))
 
 (t/deftest test-new-table-discarded-on-abort-2721
   (let [live-index (.getLiveIndex (db/primary-db tu/*node*))]

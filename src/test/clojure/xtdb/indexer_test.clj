@@ -4,6 +4,7 @@
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
+            [xtdb.arrow-edn-test :as aet]
             [xtdb.basis :as basis]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
@@ -14,7 +15,6 @@
             [xtdb.object-store :as os]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
-            [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
@@ -27,8 +27,6 @@
            java.nio.file.Files
            (java.time Duration Instant InstantSource ZoneId)
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector.types UnionMode]
-           [org.apache.arrow.vector.types.pojo ArrowType$Union]
            (xtdb.arrow NullVector Relation)
            xtdb.trie.MemoryHashTrie))
 
@@ -105,11 +103,12 @@
 
           (t/is (= last-tx-key (.getLatestCompletedTx block-cat)))
 
-          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-block-as-arrow-ipc-file-format")))
-                         (.resolve node-dir "objects"))
+          (let [expected-dir (io/as-file (io/resource "xtdb/indexer-test/can-build-block-as-arrow-ipc-file-format"))]
+            (aet/check-arrow-edn-dir (io/file expected-dir "arrow")
+                                     (.resolve node-dir "objects"))
 
-          (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-block-as-arrow-ipc-file-format")))
-                          (.resolve node-dir "objects")))))))
+            (cpb/check-pbuf (.toPath (io/file expected-dir "pbuf"))
+                            (.resolve node-dir "objects"))))))))
 
 (t/deftest temporal-watermark-is-immutable-2354
   (let [tx (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :foo, :version 0}]])
@@ -175,15 +174,16 @@
 
         (tu/flush-block! node)
 
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-handle-dynamic-cols-in-same-block")))
-                       (.resolve node-dir "objects"))
+        (let [expected-dir (io/as-file (io/resource "xtdb/indexer-test/can-handle-dynamic-cols-in-same-block"))]
+          (aet/check-arrow-edn-dir (io/file expected-dir "arrow")
+                                   (.resolve node-dir "objects"))
 
-        (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-handle-dynamic-cols-in-same-block")))
-                        (.resolve node-dir "objects"))))))
+          (cpb/check-pbuf (.toPath (io/file expected-dir "pbuf"))
+                          (.resolve node-dir "objects")))))))
 
 (t/deftest test-compacted-trie-details
   (binding [c/*ignore-signal-block?* true]
-    (let [expected-path (.toPath (io/as-file (io/resource "xtdb/indexer-test/compacted-trie-details")))
+    (let [expected-path (.toPath (io/as-file (io/resource "xtdb/indexer-test/compacted-trie-details/pbuf")))
           node-dir (util/->path "target/compacted-trie-details")]
       (util/delete-dir node-dir)
 
@@ -193,14 +193,14 @@
         (tu/flush-block! node)
         (c/compact-all! node #xt/duration "PT1S")
 
-        (cpb/check-pbuf expected-path (.resolve node-dir "objects") {:file-pattern #"^b00.binpb.*"})
+        (cpb/check-pbuf expected-path node-dir {:file-pattern #"^b00.binpb.*"})
 
         (xt/execute-tx node [[:put-docs :foo {:xt/id 3, :a "foo"} {:xt/id 4, :a "bar"}]]
                        {:default-tz #xt/zone "Europe/London"})
         (tu/flush-block! node)
         (c/compact-all! node #xt/duration "PT1S")
 
-        (cpb/check-pbuf expected-path (.resolve node-dir "objects"))))))
+        (cpb/check-pbuf expected-path node-dir)))))
 
 ;; TODO misnomer: this should be multi-page-metadata
 (t/deftest test-multi-block-metadata
@@ -225,11 +225,9 @@
 
         (tu/flush-block! node)
 
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/multi-block-metadata")))
-                       (.resolve node-dir "objects"))
-
-        (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/multi-block-metadata")))
-                        (.resolve node-dir "objects"))
+        (let [expected-dir (io/as-file (io/resource "xtdb/indexer-test/multi-block-metadata"))]
+          (aet/check-arrow-edn-dir (io/file expected-dir "arrow") node-dir)
+          (cpb/check-pbuf (.toPath (io/file expected-dir "pbuf")) node-dir))
 
         (let [db (db/primary-db node)
               tc (.getTableCatalog db)]
@@ -311,11 +309,9 @@
 
         (tu/flush-block! node)
 
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/writes-log-file")))
-                       (.resolve node-dir "objects"))
-
-        (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/writes-log-file")))
-                        (.resolve node-dir "objects"))))))
+        (let [expected-dir (io/as-file (io/resource "xtdb/indexer-test/writes-log-file"))]
+          (aet/check-arrow-edn-dir (io/file expected-dir "arrow") node-dir)
+          (cpb/check-pbuf (.toPath (io/file expected-dir "pbuf")) node-dir))))))
 
 (t/deftest can-stop-node-without-writing-blocks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-blocks")
@@ -555,11 +551,12 @@
 
           (tu/flush-block! node)
 
-          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
-                         (.resolve node-dir "objects"))
+          (let [expected-dir (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert"))]
+            (aet/check-arrow-edn-dir (io/file expected-dir "arrow")
+                                     (.resolve node-dir "objects"))
 
-          (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
-                          (.resolve node-dir "objects")))))))
+            (cpb/check-pbuf (.toPath (io/file expected-dir "pbuf"))
+                            (.resolve node-dir "objects"))))))))
 
 (t/deftest ingestion-stopped-query-as-tx-op-3265
   (t/is (anomalous? [:incorrect :xtdb/queries-in-read-write-tx
@@ -721,8 +718,8 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
                            [:erase-docs :docs "baz"]])
       (tu/flush-block! node)
 
-      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/copes-with-missing-put")))
-                     (.resolve node-dir "objects"))
+      (aet/check-arrow-edn-dir (io/as-file (io/resource "xtdb/indexer-test/copes-with-missing-put/arrow"))
+                               node-dir)
 
       (t/is (= [{:xt/id "foo", :a 1,
                  :xt/valid-from #xt/zdt "2020-01-01Z[UTC]",

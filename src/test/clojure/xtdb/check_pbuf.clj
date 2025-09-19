@@ -3,6 +3,7 @@
             [clojure.pprint :as pp]
             [clojure.string :as str]
             [clojure.test :as t]
+            [xtdb.arrow-edn-test :as aet]
             [xtdb.block-catalog :as block-cat]
             [xtdb.table-catalog :as table-cat]
             [xtdb.trie-catalog :as trie-cat]
@@ -67,16 +68,16 @@
                                     #(some-> (ignoring-ex (TableBlock/parseFrom ^bytes %)) <-TableBlock)])
           update-fn identity}}]
 
-   ;; uncomment if you want to remove files
-   #_(delete-and-recreate-dir expected-dir) ;; <<no-commit>>
+   (when aet/*regen?*
+     (delete-and-recreate-dir expected-dir))
+
    (doseq [^Path path (iterator-seq (.iterator (Files/walk actual-dir (make-array FileVisitOption 0))))
            :let [file-name (str (.getFileName path))]
            :when (and (str/ends-with? file-name ".binpb")
                       (or (nil? file-pattern)
                           (re-matches file-pattern file-name)))]
      (doto (write-pbuf-edn-file path parse-fn update-fn)
-       ;; uncomment this to reset the expected file (but don't commit it)
-       #_(copy-expected-file expected-dir actual-dir))) ;; <<no-commit>>
+       (cond-> aet/*regen?* (copy-expected-file expected-dir actual-dir))))
 
    (doseq [^Path expected (iterator-seq (.iterator (Files/walk expected-dir (make-array FileVisitOption 0))))
            :let [file-name (str (.getFileName expected))]

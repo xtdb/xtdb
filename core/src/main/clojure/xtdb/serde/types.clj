@@ -221,7 +221,7 @@
 
 (defmethod print-dup Schema [^Schema s, ^Writer w]
   (.write w "#xt/schema ")
-  (print-dup (map render-field (.getFields s))))
+  (print-dup (map render-field (.getFields s)) w))
 
 (defmethod print-method Schema [s w]
   (print-dup s w))

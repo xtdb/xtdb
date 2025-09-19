@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.arrow-edn-test :as aet]
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
@@ -11,7 +12,6 @@
             [xtdb.object-store :as os]
             [xtdb.table-catalog :as table-cat]
             [xtdb.table-catalog-test :as table-test]
-            [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
@@ -335,8 +335,9 @@
 
           (t/is (= (range 500) (q)))
 
-          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l1-compaction")))
-                         (table-path node "public$foo") #"l01-rc-(.+)\.arrow"))))))
+          (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l1-compaction")))
+                                   (table-path node "public$foo")
+                                   #"l01-rc-(.+)\.arrow"))))))
 
 (t/deftest test-l1-compaction-by-recency
   (let [node-dir (util/->path "target/compactor/test-l1-compaction-by-recency")]
@@ -383,11 +384,11 @@
         (t/is (= [{:row-count 200}] (xt/q node "SELECT COUNT(*) row_count FROM readings FOR ALL VALID_TIME")))
         (t/is (= [{:row-count 200}] (xt/q node "SELECT COUNT(*) row_count FROM prices FOR ALL VALID_TIME")))
 
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l1-compaction-by-recency/readings")))
-                       (table-path node "public$readings") #"l01-(.+)\.arrow")
+        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l1-compaction-by-recency/readings")))
+                                 (table-path node "public$readings") #"l01-(.+)\.arrow")
 
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l1-compaction-by-recency/prices")))
-                       (table-path node "public$prices") #"l01-(.+)\.arrow")))))
+        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l1-compaction-by-recency/prices")))
+                                 (table-path node "public$prices") #"l01-(.+)\.arrow")))))
 
 (t/deftest test-l2+-compaction
   (let [node-dir (util/->path "target/compactor/test-l2+-compaction")]
@@ -427,8 +428,9 @@
 
           (t/is (= (set (range 2000)) (set (q))))
 
-          (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l2+-compaction")))
-                         (table-path node "public$foo") #"l(?!00|01)\d\d-(.+)\.arrow"))))))
+          (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l2+-compaction")))
+                                   (table-path node "public$foo")
+                                   #"l(?!00|01)\d\d-(.+)\.arrow"))))))
 
 (t/deftest test-l2+-compaction-by-recency
   (let [node-dir (util/->path "target/compactor/test-l2+-compaction-by-recency")]
@@ -454,11 +456,13 @@
 
         (c/compact-all! node #xt/duration "PT1S")
 
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l2+-compaction-by-recency/readings")))
-                       (table-path node "public$readings") #"l(?!00|01)(.+)\.arrow")
+        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l2+-compaction-by-recency/readings")))
+                                 (table-path node "public$readings")
+                                 #"l(?!00|01)(.+)\.arrow")
 
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l2+-compaction-by-recency/prices")))
-                       (table-path node "public$prices") #"l(?!00|01)(.+)\.arrow")))))
+        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l2+-compaction-by-recency/prices")))
+                                 (table-path node "public$prices")
+                                 #"l(?!00|01)(.+)\.arrow")))))
 
 (defn bad-uuid-seq
   ([n] (bad-uuid-seq 0 n))
@@ -561,8 +565,9 @@
                                   FROM docs FOR ALL VALID_TIME
                                   GROUP BY _id"))))
 
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/lose-data-on-compaction")))
-                       (table-path node "public$docs") #"(.+)\.arrow")))))
+        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/lose-data-on-compaction")))
+                                 (table-path node "public$docs")
+                                 #"(.+)\.arrow")))))
 
 (t/deftest test-compaction-promotion-bug-3673
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 0, :foo 12.0} {:xt/id 1}]])
@@ -619,8 +624,9 @@
           (t/is (= [{:xt/id id-before} {:xt/id id} {:xt/id id-after}]
                    (xt/q node "SELECT _id FROM foo FOR ALL VALID_TIME FOR ALL SYSTEM_TIME"))))
 
-        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/compaction-with-erase")))
-                       (table-path node "public$foo") #"l01-rc-(.+)\.arrow")))))
+        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/compaction-with-erase")))
+                                 (table-path node "public$foo")
+                                 #"l01-rc-(.+)\.arrow")))))
 
 (t/deftest compactor-trie-metadata
   (let [node-dir (util/->path "target/compactor/compactor-metadata-test")]
@@ -786,8 +792,8 @@
 
       (c/compact-all! node #xt/duration "PT2S")
 
-      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/compactor-test/copes-with-missing-put")))
-                     (.resolve node-dir "objects"))
+      (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/copes-with-missing-put")))
+                               (.resolve node-dir "objects"))
 
       (t/is (= [{:xt/id "foo", :a 1,
                  :xt/valid-from #xt/zdt "2020-01-01Z[UTC]",

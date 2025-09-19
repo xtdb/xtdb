@@ -1,12 +1,10 @@
 (ns xtdb.arrow
   "Utilities for working with Arrow things"
-  (:require [clojure.java.io :as io]
-            [clojure.pprint :as pp]
-            xtdb.mirrors.time-literals
+  (:require xtdb.mirrors.time-literals
             [xtdb.serde :as serde]
             xtdb.serde.types
             [xtdb.util :as util])
-  (:import (java.nio.file Files LinkOption Path)
+  (:import (java.nio.file Files)
            [java.util Spliterators]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.arrow Relation)))
@@ -32,7 +30,7 @@
      (f {:schema (.getSchema loader)
          :batches (->> (iterator-seq (Spliterators/iterator cursor))
                        (map (fn [^Relation rel]
-                              (vec (.getAsMaps rel)))))}))))
+                              (serde/->clj-types (.getAsMaps rel)))))}))))
 
 (defn read-arrow-file
   ([al path-ish]
@@ -45,23 +43,3 @@
      (fn [res]
        (update res :batches vec)))))
 
-(defn read-arrow-edn-file [path-ish]
-  (serde/->clj-types (read-string (slurp (.toFile (util/->path path-ish))))))
-
-(defn- write-expected-file [^Path path, data]
-  (with-open [out (io/writer (.toFile path))]
-    (pp/pprint data out)))
-
-(defn ->arrow-edn [^Relation rel]
-  {:schema (.getSchema rel), :data (serde/->clj-types (.getAsMaps rel))})
-
-(defn maybe-write-arrow-edn! [arrow-edn expected-path-ish]
-  (let [expected-path (util/->path expected-path-ish)]
-
-    #_{:clj-kondo/ignore [:single-logical-operand]}
-    (when (or (not (util/path-exists expected-path))
-              ;; uncomment to reset the expected files
-              #_true ;; <<no-commit>>
-              )
-      (write-expected-file expected-path arrow-edn) ; <<no-commit>>
-      )))

@@ -1,0 +1,32 @@
+{:schema
+ #xt/schema (["_iid" [:fixed-size-binary 16]]
+             ["_system_from" [:timestamp-tz :micro "UTC"]]
+             ["_valid_from" [:timestamp-tz :micro "UTC"]]
+             ["_valid_to" [:timestamp-tz :micro "UTC"]]
+             ["op"
+              :union
+              ["delete" :null :?]
+              ["erase" :null :?]
+              ["put" :struct ["_id" :uuid] ["b" :i64]]]),
+ :batches
+ ([{:xt/system-from #xt/zdt "2020-01-03T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "-290308-12-21T19:59:05.224192Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:erase nil],
+    :xt/iid #bytes "424f5622c8264deda5dbe2144d665c38"}
+   {:xt/system-from #xt/zdt "2020-01-02T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2023-01-01T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "2024-01-01T00:00Z[UTC]",
+    :op
+    #xt/tagged [:put
+                {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38",
+                 :b 3}],
+    :xt/iid #bytes "424f5622c8264deda5dbe2144d665c38"}
+   {:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op
+    #xt/tagged [:put
+                {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38",
+                 :b 2}],
+    :xt/iid #bytes "424f5622c8264deda5dbe2144d665c38"}])}

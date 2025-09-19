@@ -1,0 +1,61 @@
+{:schema
+ #xt/schema (["nodes"
+              :union
+              ["nil" :null :?]
+              ["branch-iid" :list ["$data$" :i32 :?]]
+              ["leaf"
+               :struct
+               ["data-page-idx" :i32]
+               ["columns"
+                :list
+                ["col"
+                 :struct
+                 ["col-name" :utf8]
+                 ["root-col?" :bool]
+                 ["count" :i64]
+                 ["bytes" :struct :? ["bloom" :varbinary :?]]
+                 ["date-times" :struct :? ["min" :f64] ["max" :f64]]
+                 ["numbers" :struct :? ["min" :f64] ["max" :f64]]
+                 ["bool" :bool :?]
+                 ["transit" :bool :?]]]]]),
+ :batches
+ ([{:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 0,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 6,
+                   :bytes
+                   {:bloom
+                    #bytes "3a3000001a00000000000000040000000500000006000000070000000d000000100000001100000013000000140000001e000000220000002300000025000100260001002b0000002d0000002f00000030000000330000003500000036000000380002003a0000003b0000003c000000d8000000da000000dc000000de000000e0000000e2000000e4000000e6000000e8000000ea000000ec000000ee000000f0000000f2000000f6000000fa000000fc000000fe00000000010000020100000401000006010000080100000e0100001001000012010000b5544307e3d2d3027579f4354fe89dfec12dd0d961042b3abdc6ebbadbeacd06cb1abbfba97b869a2e679229f6eb2ba57f015aaed9df8657be70e1fa"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 6,
+                   :date-times {:min 1.5778368E9, :max 1.5782688E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 6,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 6,
+                   :date-times {:min 1.5778368E9, :max 1.5782688E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 6,
+                   :numbers {:min 0.0, :max 12549.0}}
+                  {:col-name "system_time",
+                   :root-col? true,
+                   :count 6,
+                   :date-times {:min 1.5778368E9, :max 1.5782688E9}}
+                  {:col-name "committed",
+                   :root-col? true,
+                   :count 6,
+                   :bool true}
+                  {:col-name "error",
+                   :root-col? true,
+                   :count 1,
+                   :transit true}]}]}])}

@@ -2,7 +2,6 @@
     xtdb.serde
   (:require [clojure.pprint :as pp]
             [clojure.string :as str]
-            [clojure.walk :as w]
             [clojure.walk :as walk]
             [cognitect.transit :as transit]
             [xtdb.error :as err]
@@ -20,6 +19,7 @@
            (java.time Duration Period)
            [java.util Arrays Collection List Map]
            [org.apache.arrow.vector PeriodDuration]
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Field FieldType Schema)
            [org.apache.commons.codec.binary Hex]
            (org.postgresql.util PGobject PSQLException)
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
@@ -397,11 +397,11 @@
   (doto (PGobject.)
     (.setType "transit")
     (.setValue (-> v
-                   (->> (w/postwalk (fn [v]
-                                      (cond-> v
-                                        (map? v) (update-keys (fn [k]
-                                                                (if (keyword? k)
-                                                                  (NormalForm/normalForm ^Keyword k)
-                                                                  k)))))))
+                   (->> (walk/postwalk (fn [v]
+                                         (cond-> v
+                                           (map? v) (update-keys (fn [k]
+                                                                   (if (keyword? k)
+                                                                     (NormalForm/normalForm ^Keyword k)
+                                                                     k)))))))
                    (write-transit :json)
                    (String. StandardCharsets/UTF_8)))))

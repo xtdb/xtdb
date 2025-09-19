@@ -1,29 +1,23 @@
 (ns xtdb.indexer.live-table-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
-            [xtdb.block-catalog :as block-cat]
-            [xtdb.buffer-pool :as bp]
+            [xtdb.arrow-edn-test :as aet]
             [xtdb.db-catalog :as db]
             [xtdb.indexer.live-index :as li]
-            [xtdb.log :as log]
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
-            [xtdb.table-catalog :as table-cat]
-            [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
-            [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import (java.nio ByteBuffer)
            (java.util Arrays HashMap)
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory RootAllocator)
-           xtdb.storage.BufferPool
            (xtdb.indexer LiveIndex LiveTable LiveTable$Snapshot)
            (xtdb.trie MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)))
 
-(t/use-fixtures :each tu/with-node)
+(t/use-fixtures :each tu/with-allocator tu/with-node)
 
 (defn uuid-equal-to-path? [uuid path]
   (Arrays/equals
@@ -68,10 +62,8 @@
 
             (.finishBlock live-table 0)
 
-            (tu/with-allocator
-              #(tj/check-json
-                (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-s")))
-                (.resolve path "objects")))))))
+            (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-s")))
+                                     (.resolve path "objects"))))))
 
     (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
           n 50000]
@@ -102,10 +94,8 @@
 
             (.finishBlock live-table 0)
 
-            (tu/with-allocator
-              #(tj/check-json
-                (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
-                (.resolve path "objects")))))))))
+            (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
+                                     (.resolve path "objects"))))))))
 
 (defn live-table-snap->data [^LiveTable$Snapshot live-table-snap]
   (let [live-rel-data (.getAsMaps (.getLiveRelation live-table-snap))

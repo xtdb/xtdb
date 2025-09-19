@@ -1,0 +1,39 @@
+{:schema
+ #xt/schema (["_iid" [:fixed-size-binary 16]]
+             ["_system_from" [:timestamp-tz :micro "UTC"]]
+             ["_valid_from" [:timestamp-tz :micro "UTC"]]
+             ["_valid_to" [:timestamp-tz :micro "UTC"]]
+             ["op"
+              :union
+              ["delete" :null :?]
+              ["erase" :null :?]
+              ["put"
+               :struct
+               ["_id" :utf8]
+               ["api_version" :utf8]
+               ["manufacturer" :utf8]
+               ["model" :utf8]
+               ["os_name" :utf8]]]),
+ :batches
+ ([{:xt/system-from #xt/zdt "2020-01-02T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-01-02T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op
+    #xt/tagged [:put
+                {:xt/id "device-info-demo000001",
+                 :api-version "23",
+                 :manufacturer "iobeam",
+                 :model "mustang",
+                 :os-name "6.0.1"}],
+    :xt/iid #bytes "248daaa010bf702848523e4fa63f996c"}
+   {:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op
+    #xt/tagged [:put
+                {:xt/id "device-info-demo000000",
+                 :api-version "23",
+                 :manufacturer "iobeam",
+                 :model "pinto",
+                 :os-name "6.0.1"}],
+    :xt/iid #bytes "ef4f71005524e9af20ffaca545cde6e1"}])}

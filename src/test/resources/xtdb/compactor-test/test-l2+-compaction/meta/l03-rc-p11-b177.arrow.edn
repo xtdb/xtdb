@@ -1,0 +1,474 @@
+{:schema
+ #xt/schema (["nodes"
+              :union
+              ["nil" :null :?]
+              ["branch-iid" :list ["$data$" :i32 :?]]
+              ["leaf"
+               :struct
+               ["data-page-idx" :i32]
+               ["columns"
+                :list
+                ["col"
+                 :struct
+                 ["col-name" :utf8]
+                 ["root-col?" :bool]
+                 ["count" :i64]
+                 ["bytes" :struct :? ["bloom" :varbinary :?]]
+                 ["date-times" :struct :? ["min" :f64] ["max" :f64]]
+                 ["numbers" :struct :? ["min" :f64] ["max" :f64]]]]]]),
+ :batches
+ ([{:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 0,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 7,
+                   :bytes
+                   {:bloom
+                    #bytes "3a3000001d000000040000000600000007000000080000000b0001000c0000000d0000000e000000110000001300000016000000170000001e0000001f0000002000000021000000230000002500000028000000290000002b0002002e00000031000100330000003400000037000100390001003a0000003c000000f0000000f2000000f4000000f6000000f8000000fc000000fe00000000010000020100000401000006010000080100000a0100000c0100000e01000010010000120100001401000016010000180100001a010000200100002201000026010000280100002a0100002e010000320100003401000045b407c0b89c0627ff6519af5f085d1618f6ba5b0194fa727b4c59914a8b3eff839985519b44af318b6593828be6aaf1c97de809b3bc0796acfbdc79f2ac7c2d64f0ab9aff72"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 7,
+                   :date-times {:min 1.5834528E9, :max 1.5963264E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 7,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 7,
+                   :date-times {:min 1.5834528E9, :max 1.5963264E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 7,
+                   :numbers {:min 394.0, :max 1277.0}}]}]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 1,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 3,
+                   :bytes
+                   {:bloom
+                    #bytes "3a3000000d000000000000000900000011000000170000001b000000250001002a0000002b0000002c0001002d0000002e000000370000003e00000070000000720000007400000076000000780000007a0000007e000000800000008200000086000000880000008a0000008c000000d78619a306b3366cb6f8f814f61f26d9b87f91366aed43a41c5b956a1646"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 3,
+                   :date-times {:min 1.58112E9, :max 1.587168E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 3,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 3,
+                   :date-times {:min 1.58112E9, :max 1.587168E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 3,
+                   :numbers {:min 228.0, :max 645.0}}]}]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 2,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 2,
+                   :bytes
+                   {:bloom
+                    #bytes "3a30000008000000040000000a0000000b000100200001002f00000035000000360000003d000000480000004a0000004c000000500000005400000056000000580000005a000000464ec2eca7574e5bb9659ed02e27b0de36343e41"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 2,
+                   :date-times {:min 1.5859584E9, :max 1.5945984E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 2,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 2,
+                   :date-times {:min 1.5859584E9, :max 1.5945984E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 2,
+                   :numbers {:min 563.0, :max 1159.0}}]}]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 3,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 7,
+                   :bytes
+                   {:bloom
+                    #bytes "3a3000001b0000000000000001000100040001000600010007000000080000000a0000000b0001000e0001000f000100160000001c0000001f00000020000000220001002400000027000000290000002a0000002c0000002d0001002f000000360000003a0000003d0000003e0000003f000000e0000000e2000000e6000000ea000000ee000000f0000000f2000000f4000000f8000000fc00000000010000020100000401000006010000080100000c0100000e010000100100001201000014010000160100001a0100001c0100001e0100002001000022010000240100006416fa9a0ada0bd8fce93ddbc5f923f91c1586162d52dbd43e8f17b210437561252ca5ce913437f8ddbbd0ef275f418047e1aac6cbacb5c26fc8a412652a11dba64515926304"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 7,
+                   :date-times {:min 1.580256E9, :max 1.5984864E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 7,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 7,
+                   :date-times {:min 1.580256E9, :max 1.5984864E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 7,
+                   :numbers {:min 171.0, :max 1428.0}}]}]}
+   {:nodes #xt/tagged [:branch-iid [0 1 2 3]]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 4,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 6,
+                   :bytes
+                   {:bloom
+                    #bytes "3a3000001700000000000000010001000200000005000000060000000700000008000000090002001000000016000000180000001b0001001d0000001e00010021000000240001002e000100310000003300000036000000390000003a0000003f000000c0000000c2000000c6000000c8000000ca000000cc000000ce000000d0000000d6000000d8000000da000000dc000000e0000000e2000000e6000000e8000000ec000000f0000000f2000000f4000000f6000000f8000000fa0000003def9634309f96bfd930a60e8bf6f1c9391ff41fc528a5a4d89c597fbf7208f5acacbd7749810e181e6780bc1ccaf3eea5b441d0e04a8914c2248670"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 6,
+                   :date-times {:min 1.5838848E9, :max 1.5984864E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 6,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 6,
+                   :date-times {:min 1.5838848E9, :max 1.5984864E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 6,
+                   :numbers {:min 425.0, :max 1426.0}}]}]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 5,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 4,
+                   :bytes
+                   {:bloom
+                    #bytes "3a300000130000000200000005000000080000000c0000000d0000000e0000000f000000120000001400000017000000180000001f00000020000000270000002a0000002d00000030000100370000003b000000a0000000a2000000a4000000a6000000a8000000aa000000ac000000ae000000b0000000b2000000b4000000b6000000b8000000ba000000bc000000be000000c0000000c4000000c600000038cceb57cf58158b4b3defcd836bf14b87a6991ae1c29a17e99cab84ed124cfbbadbe9f1bdeee7e1"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 4,
+                   :date-times {:min 1.578528E9, :max 1.5939072E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 4,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 4,
+                   :date-times {:min 1.578528E9, :max 1.5939072E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 4,
+                   :numbers {:min 52.0, :max 1113.0}}]}]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 6,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 7,
+                   :bytes
+                   {:bloom
+                    #bytes "3a3000001a00000004000100050000000a0001000b0000000c0000000f000000100000001500000016000000180000001a00010020000000210000002500000027000000280000002b0001002c0000002f00000031000100330001003500010037000100380000003e0001003f000000d8000000dc000000de000000e2000000e4000000e6000000e8000000ea000000ec000000ee000000f0000000f4000000f6000000f8000000fa000000fc000000fe0000000201000004010000060100000a0100000e0100001201000016010000180100001c0100003979ebb01e01e159547856e468148aef0b4cc0669a38b1300b3ff6dd3bd68da11f5349c0ff5f8b5271b395152bcb7a9fe3e43c29c1808b450e98573695525516c747e8c18b38"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 7,
+                   :date-times {:min 1.5795648E9, :max 1.5981408E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 7,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 7,
+                   :date-times {:min 1.5795648E9, :max 1.5981408E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 7,
+                   :numbers {:min 121.0, :max 1402.0}}]}]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 7,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 8,
+                   :bytes
+                   {:bloom
+                    #bytes "3a3000001b0000000100000004000000060000000700010008000100090001000a0000000b0001000c0001000e0001001200000017000100190001001a0000001b0000001d0000001e00000022000100280000003000000032000000340000003500010037000000380002003a0001003c000000e0000000e2000000e4000000e6000000ea000000ee000000f2000000f4000000f8000000fc0000000001000002010000060100000a0100000c0100000e010000100100001201000016010000180100001a0100001c0100001e01000022010000240100002a0100002e0100005bbc6c3f7dc2190ed3ae1f7769cd8e45cf73b98c9bc29fc8094c12d2590ba58a853af8a2e9c1a33433d49d137de66b0b6e7c4905de7377f538e1471860cd094aed7f7982f7474bb60ecb923758ddabec"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 8,
+                   :date-times {:min 1.5782688E9, :max 1.5970176E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 8,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 8,
+                   :date-times {:min 1.5782688E9, :max 1.5970176E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 8,
+                   :numbers {:min 32.0, :max 1324.0}}]}]}
+   {:nodes #xt/tagged [:branch-iid [5 6 7 8]]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 8,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 4,
+                   :bytes
+                   {:bloom
+                    #bytes "3a3000001200000003000100050000000600000008000000090000000e000000100000001700000018000100220000002700000028000000290000002b0000002e00000032000000350000003e000000980000009c0000009e000000a0000000a2000000a4000000a6000000a8000000aa000000ae000000b0000000b2000000b4000000b6000000b8000000ba000000bc000000be000000eb37b8b6c47e0c9ce022b4a94e771365d86ffc62c9e1a6b7765f4ae609fbedbfda0c93f3390a8012"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 4,
+                   :date-times {:min 1.5843168E9, :max 1.5945984E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 4,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 4,
+                   :date-times {:min 1.5843168E9, :max 1.5945984E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 4,
+                   :numbers {:min 451.0, :max 1156.0}}]}]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 9,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 5,
+                   :bytes
+                   {:bloom
+                    #bytes "3a300000140000000200000004000000090000000d0000000f0001001000000011000100120000001300000014000000190000001a00000024000100250000002d0000002e00010034000000390001003b0000003d000000a8000000aa000000ac000000ae000000b0000000b4000000b6000000ba000000bc000000be000000c0000000c2000000c4000000c8000000ca000000cc000000d0000000d2000000d6000000d80000002cb8ecf017b27bf67b5a48b1a61d2101fe91fa50d3a0acf00ac4bb5a992dd0977db36bca2897e5d456c4fa11fcd441be7f70"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 5,
+                   :date-times {:min 1.5779232E9, :max 1.594512E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 5,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 5,
+                   :date-times {:min 1.5779232E9, :max 1.594512E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 5,
+                   :numbers {:min 11.0, :max 1153.0}}]}]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 10,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 3,
+                   :bytes
+                   {:bloom
+                    #bytes "3a3000000d0000000200000006000000080000000f00000015000000160000001e000000240001002a0000002b00000033000000360001003a00000070000000720000007400000076000000780000007a0000007c0000007e000000820000008400000086000000880000008c0000006bf7f2288673cb27b058b0ad4b666e88dae7ab9632ff2cb80bc734f95c39"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 3,
+                   :date-times {:min 1.5779232E9, :max 1.5952896E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 3,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 3,
+                   :date-times {:min 1.5779232E9, :max 1.5952896E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 3,
+                   :numbers {:min 7.0, :max 1208.0}}]}]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 11,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 4,
+                   :bytes
+                   {:bloom
+                    #bytes "3a30000012000000060000000d000000180000001a0000001c0001001e0000002000000025000000270000002a0001002c0000002f00000032000000340000003700000038000000390000003c000000980000009a0000009c0000009e000000a0000000a4000000a6000000a8000000aa000000ac000000b0000000b2000000b4000000b6000000b8000000ba000000bc000000be00000039e37dea8a91869aac2882a37eac7ab5815b5b3d1c51db66e2a6b7466910523cf0790aa5ed3177e3"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 4,
+                   :date-times {:min 1.5830208E9, :max 1.5980544E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 4,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 4,
+                   :date-times {:min 1.5830208E9, :max 1.5980544E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 4,
+                   :numbers {:min 363.0, :max 1400.0}}]}]}
+   {:nodes #xt/tagged [:branch-iid [10 11 12 13]]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 12,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 3,
+                   :bytes
+                   {:bloom
+                    #bytes "3a3000000e0000000100000003000000130000001b0000001c0000001f00010023000000260000002b0000002d00000033000000340000003b0000003e000000780000007a0000007c0000007e000000800000008200000086000000880000008a0000008c0000008e00000090000000920000009400000045bed269305523743963cf1441f54987ae4b815f8d82747e6cb94bf03d2c"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 3,
+                   :date-times {:min 1.5787008E9, :max 1.5912288E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 3,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 3,
+                   :date-times {:min 1.5787008E9, :max 1.5912288E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 3,
+                   :numbers {:min 60.0, :max 929.0}}]}]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 13,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 5,
+                   :bytes
+                   {:bloom
+                    #bytes "3a30000017000000000000000400000006000000080000000b0000000f0000001000000017000100190000001a0000001c00000024000000270000002b0000002c0001002f000000320000003300000035000000380000003b0000003e0000003f000000c0000000c2000000c4000000c6000000c8000000ca000000cc000000ce000000d2000000d4000000d6000000d8000000da000000dc000000de000000e2000000e4000000e6000000e8000000ea000000ec000000ee000000f0000000d98cf147abbe3d15de3f59c67e7ac147ef5b30739c420bad352633f9d7e2a505fb6f4d0d87590d87dee7641575085a9d91aa"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 5,
+                   :date-times {:min 1.5838848E9, :max 1.595808E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 5,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 5,
+                   :date-times {:min 1.5838848E9, :max 1.595808E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 5,
+                   :numbers {:min 421.0, :max 1242.0}}]}]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 14,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 7,
+                   :bytes
+                   {:bloom
+                    #bytes "3a3000001b000000010000000200010003000000040001000600000007000100080000000a000000100000001200000013000100160000001a0001001c000000230001002500010026000000280000002a0000002d0000002e0000003200010034000000360000003a0000003c0000003f000000e0000000e2000000e6000000e8000000ec000000ee000000f2000000f4000000f6000000f8000000fa000000fe0000000001000004010000060100000a0100000e01000010010000120100001401000016010000180100001c0100001e0100002001000022010000240100004483835fa59f568e3758eec5799c84395c8b15c5b2e4e606f1d86cca0be1314bff822788c4653763df691c018f46a52813ee4bbc749cd5735966a2ff63cfcc377341fa3728e3"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 7,
+                   :date-times {:min 1.5833664E9, :max 1.5967584E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 7,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 7,
+                   :date-times {:min 1.5833664E9, :max 1.5967584E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 7,
+                   :numbers {:min 385.0, :max 1309.0}}]}]}
+   {:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 15,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 4,
+                   :bytes
+                   {:bloom
+                    #bytes "3a30000012000000010000000200000003000100040000000500000008000000090000000f00000010000000140000001d00010021000000290000002c0000002d000000360000003a0000003b000000980000009a0000009c000000a0000000a2000000a4000000a6000000a8000000aa000000ac000000ae000000b2000000b4000000b6000000b8000000ba000000bc000000be0000002b59676da381e8b0df951baa9b12ba43aa4b28014c81c888aec9d68c08d9b24787fb4829b6c51107"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 4,
+                   :date-times {:min 1.5825024E9, :max 1.596672E9}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 4,
+                   :date-times
+                   {:min 9.223372036854775E12,
+                    :max 9.223372036854775E12}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 4,
+                   :date-times {:min 1.5825024E9, :max 1.596672E9}}
+                  {:col-name "_id",
+                   :root-col? true,
+                   :count 4,
+                   :numbers {:min 326.0, :max 1303.0}}]}]}
+   {:nodes #xt/tagged [:branch-iid [15 16 17 18]]}
+   {:nodes #xt/tagged [:branch-iid [4 9 14 19]]}
+   {:nodes #xt/tagged [:branch-iid [nil 20 nil nil]]}
+   {:nodes #xt/tagged [:branch-iid [nil 21 nil nil]]}])}

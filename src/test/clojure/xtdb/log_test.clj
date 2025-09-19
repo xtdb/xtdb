@@ -3,7 +3,7 @@
             [clojure.pprint :as pp]
             [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.arrow :as arrow]
+            [xtdb.arrow-edn-test :as aet]
             [xtdb.log :as log]
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
@@ -17,7 +17,10 @@
            xtdb.arrow.Relation
            [xtdb.util MsgIdUtil]))
 
-(t/use-fixtures :each tu/with-allocator)
+(t/use-fixtures :each
+  tu/with-allocator
+  #_aet/wrap-regen ; uncomment to regenerate expected Arrow EDN files <<no-commit>>
+  )
 
 (defn- test-serialize-tx-ops
   ([file tx-ops] (test-serialize-tx-ops file tx-ops {}))
@@ -33,9 +36,9 @@
 
 
        (with-open [rel (Relation/openFromArrowStream tu/*allocator* actual-bytes)]
-         (t/is (= (arrow/read-arrow-edn-file file)
-                  (doto (arrow/->arrow-edn rel)
-                    (arrow/maybe-write-arrow-edn! file)))
+         (t/is (= (aet/read-arrow-edn-file file)
+                  (doto (aet/->arrow-edn rel)
+                    (aet/maybe-write-arrow-edn! file)))
                (str "Mismatch in serialized tx-ops for " (.getName file))))))))
 
 (def devices-docs

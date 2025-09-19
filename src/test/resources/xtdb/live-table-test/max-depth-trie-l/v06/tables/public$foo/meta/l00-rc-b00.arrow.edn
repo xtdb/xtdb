@@ -1,0 +1,108 @@
+{:schema
+ #xt/schema (["nodes"
+              :union
+              ["nil" :null :?]
+              ["branch-iid" :list ["$data$" :i32 :?]]
+              ["leaf"
+               :struct
+               ["data-page-idx" :i32]
+               ["columns"
+                :list
+                ["col"
+                 :struct
+                 ["col-name" :utf8]
+                 ["root-col?" :bool]
+                 ["count" :i64]
+                 ["bytes" :struct :? ["bloom" :varbinary :?]]
+                 ["date-times"
+                  :struct
+                  :?
+                  ["min" :f64]
+                  ["max" :f64]]]]]]),
+ :batches
+ ([{:nodes
+    #xt/tagged [:leaf
+                {:data-page-idx 0,
+                 :columns
+                 [{:col-name "_iid",
+                   :root-col? true,
+                   :count 50000,
+                   :bytes
+                   {:bloom
+                    #bytes "3a300000050000000a0000000c0000000e000000100000001200000030000000320000003400000036000000380000002c3d7557be71078c50a6"}}
+                  {:col-name "_valid_from",
+                   :root-col? true,
+                   :count 50000,
+                   :date-times {:min 0.0, :max 0.0}}
+                  {:col-name "_valid_to",
+                   :root-col? true,
+                   :count 50000,
+                   :date-times {:min 0.0, :max 0.0}}
+                  {:col-name "_system_from",
+                   :root-col? true,
+                   :count 50000,
+                   :date-times {:min 9.466848E8, :max 9.466848E8}}]}]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 0]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 1]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 2]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 3]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 4]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 5]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 6]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 7]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 8]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 9]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 10]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 11]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 12]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 13]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 14]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 15]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 16]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 17]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 18]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 19]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 20]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 21]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 22]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 23]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 24]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 25]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 26]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 27]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 28]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 29]]}
+   {:nodes #xt/tagged [:branch-iid [30 nil nil nil]]}
+   {:nodes #xt/tagged [:branch-iid [nil 31 nil nil]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 32]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 33]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 34]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 35]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 36]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 37]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 38]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 39]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 40]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 41]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 42]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 43]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 44]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 45]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 46]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 47]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 48]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 49]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 50]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 51]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 52]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 53]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 54]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 55]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 56]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 57]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 58]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 59]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 60]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 61]]}
+   {:nodes #xt/tagged [:branch-iid [nil nil nil 62]]}
+   {:nodes #xt/tagged [:branch-iid [nil 63 nil nil]]}])}
