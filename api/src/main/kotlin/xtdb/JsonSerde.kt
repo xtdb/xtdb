@@ -292,25 +292,3 @@ fun encode(value: Any, outputStream: OutputStream) {
 fun <T : Any> encode(value: T, outputStream: OutputStream, clazz: Class<T>) {
     JSON_SERDE.encodeToStream(clazz.kotlin.serializer(), value, outputStream)
 }
-
-/**
- * @suppress
- */
-@Suppress("unused")
-fun encodeStatus(value: Map<String, Any?>): String {
-    return JSON_SERDE.encodeToString(value.mapKeys { it.key.kebabToCamelCase() })
-}
-
-/**
- * @suppress
- */
-@Suppress("unused")
-fun encodePretty(value: Any) = JSON_SERDE_PRETTY_PRINT.encodeToString(value)
-
-/**
- * @suppress
- */
-@Suppress("unused")
-@OptIn(InternalSerializationApi::class)
-fun <T : Any> encodePretty(value: T, clazz: Class<T>) =
-    JSON_SERDE_PRETTY_PRINT.encodeToString(clazz.kotlin.serializer(), value)

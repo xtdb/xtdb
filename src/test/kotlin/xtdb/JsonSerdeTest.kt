@@ -4,7 +4,6 @@ import clojure.lang.Keyword
 import clojure.lang.Symbol
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import xtdb.api.query.IKeyFn
 import xtdb.error.Incorrect
 import xtdb.error.Unsupported
 import java.math.BigDecimal
