@@ -1,4 +1,5 @@
 (ns xtdb.serde.types
+  (:require [clojure.pprint :as pp])
   (:import (java.io Writer)
            [java.util List]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
@@ -220,10 +221,14 @@
 
 (defmethod print-dup Schema [^Schema s, ^Writer w]
   (.write w "#xt/schema ")
-  (.write w (pr-str (mapv render-field (.getFields s)))))
+  (print-dup (map render-field (.getFields s))))
 
 (defmethod print-method Schema [s w]
   (print-dup s w))
+
+(defmethod pp/simple-dispatch Schema [s]
+  (.write *out* "#xt/schema ")
+  (pp/write-out (map render-field (.getFields s))))
 
 #_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]} ; reader-macro
 (defn ->schema [field-specs]

@@ -171,9 +171,6 @@
   (let [s (format "%x" l)]
     (format "%x%s" (dec (count s)) s)))
 
-(defn <-lex-hex-string [^String s]
-  (Long/parseLong (subs s 1) 16))
-
 ;;; Common specs
 
 (defn ->path ^Path [path-ish]
@@ -181,6 +178,7 @@
     (instance? Path path-ish) path-ish
     (instance? File path-ish) (.toPath ^File path-ish)
     (uri? path-ish) (Paths/get ^URI path-ish)
+    (instance? URL path-ish) (->path (.toURI ^URL path-ish))
     (string? path-ish) (let [uri (URI. path-ish)]
                          (if (.getScheme uri)
                            (Paths/get uri)

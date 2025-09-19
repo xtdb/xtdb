@@ -1,7 +1,9 @@
 (ns ^{:clojure.tools.namespace.repl/load false}
     xtdb.serde
-  (:require [clojure.string :as str]
+  (:require [clojure.pprint :as pp]
+            [clojure.string :as str]
             [clojure.walk :as w]
+            [clojure.walk :as walk]
             [cognitect.transit :as transit]
             [xtdb.error :as err]
             [xtdb.mirrors.time-literals :as tl]
@@ -16,14 +18,14 @@
            java.nio.charset.StandardCharsets
            (java.nio.file Path Paths)
            (java.time Duration Period)
-           [java.util List]
+           [java.util Collection List Map]
            [org.apache.arrow.vector PeriodDuration]
            [org.apache.commons.codec.binary Hex]
            (org.postgresql.util PGobject PSQLException)
-           xtdb.TaggedValue
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
            (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx TxOp$Sql TxOps)
+           xtdb.TaggedValue
            (xtdb.time Interval)
            (xtdb.tx_ops DeleteDocs EraseDocs PutDocs)
            (xtdb.types ClojureForm ZonedDateTimeRange)
@@ -194,6 +196,28 @@
 (defmethod print-method TaggedValue [tv w]
   (print-dup tv w))
 
+(defmethod pp/simple-dispatch TaggedValue [^TaggedValue tv]
+  (print "#xt/tagged ")
+  (pp/write-out [(.getTag tv)
+                 (walk/postwalk (fn [v]
+                                  (cond
+                                    (and (instance? Map v) (not (map? v)))
+                                    (into {} v)
+
+                                    (instance? Collection v) (vec v)
+
+                                    :else v))
+                                (.getValue tv))]))
+
+(defmethod print-dup (Class/forName "[B") [^bytes ba, ^Writer w]
+  (.write w (str "#bytes " (pr-str (Hex/encodeHexString ba)))))
+
+(defmethod print-method (Class/forName "[B") [ba w]
+  (print-dup ba w))
+
+(defmethod pp/simple-dispatch (Class/forName "[B") [ba]
+  (print-dup ba *out*))
+
 (do
   (def transit-read-handlers
     (merge transit/default-read-handlers
@@ -355,4 +379,3 @@
                                                                   k)))))))
                    (write-transit :json)
                    (String. StandardCharsets/UTF_8)))))
-

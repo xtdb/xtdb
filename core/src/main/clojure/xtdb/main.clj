@@ -2,6 +2,8 @@
   (:gen-class)
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
+            [clojure.pprint :as pp]
+            clojure.pprint.dispatch
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
@@ -165,8 +167,43 @@
 
     ((requiring-resolve 'xtdb.compactor.reset/reset-compactor!) (file->node-opts file) db-name {:dry-run? dry-run?})))
 
+(def read-arrow-file-cli-spec
+  [["-h" "--help"]])
+
+(defn read-arrow-file [args]
+  (let [{{:keys [help]} :options} (-> (parse-args args read-arrow-file-cli-spec)
+                                      (handling-arg-errors-or-help))]
+    (if help
+      (do
+        (println "Usage: read-arrow-file <file>")
+        (System/exit 0))
+
+      (if-let [file (first args)]
+        ((requiring-resolve 'xtdb.arrow/with-arrow-file) file pp/pprint)
+
+        (binding [*out* *err*]
+          (println "Usage: `read-arrow-file <file>`")
+          (System/exit 2))))))
+
+(defn read-arrow-stream-file [args]
+  (let [{{:keys [help]} :options} (-> (parse-args args read-arrow-file-cli-spec)
+                                      (handling-arg-errors-or-help))]
+    (if help
+      (do
+        (println "Usage: read-arrow-stream-file <file>")
+        (System/exit 0))
+
+      (if-let [file (first args)]
+        (pp/pprint ((requiring-resolve 'xtdb.arrow/read-arrow-stream-file) file))
+
+        (binding [*out* *err*]
+          (println "Usage: `read-arrow-stream-file <file>`")
+          (System/exit 2))))))
+
 (defn -main [& args]
-  (log/info (str "Starting " (version-string) " ..."))
+  (binding [*out* *err*]
+    (println (str "Starting " (version-string) " ...")))
+
   (util/install-uncaught-exception-handler!)
 
   (logging/set-from-env! (System/getenv))
@@ -181,6 +218,14 @@
         "reset-compactor" (do
                             (reset-compactor! more-args)
                             (System/exit 0))
+
+        "read-arrow-file" (do
+                            (read-arrow-file more-args)
+                            (System/exit 0))
+
+        "read-arrow-stream-file" (do
+                                   (read-arrow-stream-file more-args)
+                                   (System/exit 0))
 
         ("help" "-h" "--help") (do
                                  (print-help)
@@ -197,3 +242,4 @@
         (shutdown-agents)
         (log/error t "Uncaught exception running XTDB")
         (System/exit 1)))))
+

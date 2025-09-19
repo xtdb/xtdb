@@ -122,6 +122,18 @@ If you wish to make changes to these dashboards, see the guide in monitoring/REA
 
 See link:RELEASING.adoc[].
 
+== Tooling
+
+A couple of `./gradlew` tools:
+
+Reading an Arrow file::
++
+These tools output an Arrow file in EDN format
+--
+* `./gradlew -q :readArrowFile -Pfile=<file>`
+* `./gradlew -q :readArrowStreamFile -Pfile=<file>` if it's in 'stream IPC' format.
+--
+
 == Arrow Fork
 
 We maintain a fork of https://github.com/apache/arrow-java[Arrow Java] to fix a couple of issues in `DenseUnionVector` and commits that haven't made it into an arrow release yet - see link:https://github.com/apache/arrow-java/compare/main...xtdb:arrow-java:main[this diff] for more details.

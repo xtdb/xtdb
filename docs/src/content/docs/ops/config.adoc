@@ -133,6 +133,8 @@ You may want to also spin up a compactor-only node to help out with the re-compa
 
 At the moment, this can only reset all the way back to L0 - finer-grained reset will be added in a later release.
 --
+`read-arrow-file <file>`:: reads an Arrow file and emits it as EDN
+`read-arrow-stream-file <file>`:: reads an Arrow 'stream IPC format' file and emits it as EDN
 
 e.g.
 

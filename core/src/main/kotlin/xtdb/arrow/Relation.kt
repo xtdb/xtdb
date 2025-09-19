@@ -16,6 +16,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ArrowWriter
+import xtdb.ICursor
 import xtdb.arrow.ArrowUnloader.Mode
 import xtdb.arrow.ArrowUnloader.Mode.FILE
 import xtdb.arrow.ArrowUnloader.Mode.STREAM
@@ -27,6 +28,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption.READ
 import java.util.*
+import java.util.function.Consumer
 
 class Relation(
     private val al: BufferAllocator, val vecs: SequencedMap<String, Vector>, override var rowCount: Int
@@ -175,6 +177,29 @@ class Relation(
             loadPage(++lastPageIndex, rel)
             return true
         }
+
+        inner class Cursor(private val rel: Relation, private val closeRel: Boolean) : ICursor {
+            private var lastPageIndex = -1
+
+            override val cursorType: String get() = "loader"
+            override val childCursors: List<ICursor> get() = emptyList()
+
+            override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
+                if (lastPageIndex + 1 >= pageCount) return false
+
+                loadPage(++lastPageIndex, rel)
+                c.accept(rel)
+                return true
+            }
+
+            override fun close() {
+                if (closeRel) rel.close()
+            }
+
+        }
+
+        fun openCursor(al: BufferAllocator): ICursor = Cursor(Relation(al, schema), true)
+        fun openCursor(al: BufferAllocator, rel: Relation): ICursor = Cursor(rel, false)
 
         override fun close() = arrowFileLoader.close()
     }

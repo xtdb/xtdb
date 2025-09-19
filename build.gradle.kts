@@ -632,3 +632,23 @@ tasks.dokkaHtmlMultiModule {
         footerMessage = "© ${Year.now().value} JUXT Ltd"
     }
 }
+
+tasks.register<JavaExec>("readArrowFile") {
+    dependsOn(":xtdb-core:compileClojure", ":xtdb-core:compileKotlin")
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("clojure.main")
+    jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+    val file = project.property("file") as? String ?: error("Please provide -Pfile")
+    this.args = listOf("-m", "xtdb.main", "read-arrow-file", file)
+}
+
+tasks.register<JavaExec>("readArrowStreamFile") {
+    dependsOn(":xtdb-core:compileClojure", ":xtdb-core:compileKotlin")
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("clojure.main")
+    jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+    val file = project.property("file") as? String ?: error("Please provide -Pfile")
+    this.args = listOf("-m", "xtdb.main", "read-arrow-stream-file", file)
+}
