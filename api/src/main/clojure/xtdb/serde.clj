@@ -20,6 +20,7 @@
            [org.apache.arrow.vector PeriodDuration]
            [org.apache.commons.codec.binary Hex]
            (org.postgresql.util PGobject PSQLException)
+           xtdb.TaggedValue
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
            (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
            (xtdb.api.tx TxOp$Sql TxOps)
@@ -182,6 +183,16 @@
     (if (.getScheme uri)
       (Paths/get uri)
       (Paths/get path-ish (make-array String 0)))))
+
+#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]} ; reader-macro
+(defn read-tagged [[tag v]]
+  (TaggedValue. tag v))
+
+(defmethod print-dup TaggedValue [^TaggedValue tv, ^Writer w]
+  (.write w (format "#xt/tagged [%s %s]" (.getTag tv) (pr-str (.getValue tv)))))
+
+(defmethod print-method TaggedValue [tv w]
+  (print-dup tv w))
 
 (do
   (def transit-read-handlers

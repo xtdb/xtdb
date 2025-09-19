@@ -657,11 +657,11 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
               (t/is (= [{:xt/system-from (time/->zdt #inst "2020"),
                          :xt/valid-from (time/->zdt #inst "2020"),
                          :xt/valid-to (time/->zdt time/end-of-time)
-                         :op {:xt/id 2}}
+                         :op #xt/tagged [:put {:xt/id 2}]}
                         {:xt/system-from #xt/zdt "1970-01-01T00:00Z[UTC]",
                          :xt/valid-from #xt/zdt "1970-01-01T00:00Z[UTC]",
                          :xt/valid-to #xt/zdt "1970-01-01T00:00Z[UTC]",
-                         :op {:xt/id 3, :version 0}}]
+                         :op #xt/tagged [:put {:xt/id 3, :version 0}]}]
                        (->> (.toMaps rel)
                             (mapv #(dissoc % :xt/iid)))))))
 

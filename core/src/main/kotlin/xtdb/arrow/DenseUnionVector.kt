@@ -8,9 +8,11 @@ import org.apache.arrow.vector.types.UnionMode.Dense
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.TaggedValue
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Unsupported
+import xtdb.kw
 import xtdb.toFieldType
 import xtdb.toLeg
 import xtdb.util.Hasher
@@ -198,7 +200,14 @@ class DenseUnionVector private constructor(
         legWriter(FieldType.nullable(NULL_TYPE)).writeNull()
     }
 
-    override fun getObject(idx: Int, keyFn: IKeyFn<*>) = leg(idx)?.getObject(getOffset(idx), keyFn)
+    override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any? {
+        val leg = leg(idx) ?: error("no leg for index $idx")
+        val legName = leg.name
+        val value = leg.getObject(getOffset(idx), keyFn)
+
+        return if (legName == leg.type.toLeg()) value else TaggedValue(legName.kw, value)
+    }
+
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = throw UnsupportedOperationException()
 
     override fun writeObject0(value: Any) =
