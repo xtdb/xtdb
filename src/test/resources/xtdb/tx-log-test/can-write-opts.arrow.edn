@@ -1,0 +1,24 @@
+{:schema
+ #xt/schema (["tx-ops"
+              :list
+              ["$data$"
+               :union
+               ["put-docs"
+                :struct
+                ["iids" :list ["$data$" [:fixed-size-binary 16]]]
+                ["documents"
+                 :union
+                 ["public/foo" :list ["$data$" :struct ["_id" :i64]]]]
+                ["_valid_from" [:timestamp-tz :micro "UTC"] :?]
+                ["_valid_to" [:timestamp-tz :micro "UTC"] :?]]]]
+             ["system-time" [:timestamp-tz :micro "UTC"] :?]
+             ["default-tz" :utf8]
+             ["user" :utf8 :?]),
+ :data
+ [{:default-tz "Europe/London",
+   :tx-ops
+   [#xt/tagged [:put-docs
+                {:iids [#bytes "a4e167a76a05add8a8654c169b07b044"],
+                 :documents #xt/tagged [:public/foo [{:xt/id 0}]]}]],
+   :system-time #xt/zdt "2021-01-01T00:00Z[UTC]",
+   :user "xtdb"}]}

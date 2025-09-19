@@ -18,7 +18,7 @@
            java.nio.charset.StandardCharsets
            (java.nio.file Path Paths)
            (java.time Duration Period)
-           [java.util Collection List Map]
+           [java.util Arrays Collection List Map]
            [org.apache.arrow.vector PeriodDuration]
            [org.apache.commons.codec.binary Hex]
            (org.postgresql.util PGobject PSQLException)
@@ -186,6 +186,37 @@
       (Paths/get uri)
       (Paths/get path-ish (make-array String 0)))))
 
+(deftype ComparableBytes [^bytes bytes]
+  Object
+  (equals [_ other]
+    (and (instance? ComparableBytes other)
+         (Arrays/equals bytes ^bytes (.bytes ^ComparableBytes other))))
+
+  (hashCode [_] (Arrays/hashCode bytes)))
+
+(defmethod print-method ComparableBytes [^ComparableBytes b, ^Writer w]
+  (print-method (.bytes b) w))
+
+(defmethod print-dup ComparableBytes [^ComparableBytes b, ^Writer w]
+  (print-dup (.bytes b) w))
+
+(defn ->clj-types [v]
+  ;; largely used for equality within tests - not intended to be performant
+  (walk/prewalk (fn [v]
+                  (cond
+                    (and (instance? Map v) (not (map? v)))
+                    (into {} v)
+
+                    (instance? Collection v) (vec v)
+
+                    (instance? TaggedValue v)
+                    (TaggedValue. (.getTag ^TaggedValue v) (->clj-types (.getValue ^TaggedValue v)))
+
+                    (bytes? v) (ComparableBytes. ^bytes v)
+
+                    :else v))
+                v))
+
 #_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]} ; reader-macro
 (defn read-tagged [[tag v]]
   (TaggedValue. tag v))
@@ -198,16 +229,7 @@
 
 (defmethod pp/simple-dispatch TaggedValue [^TaggedValue tv]
   (print "#xt/tagged ")
-  (pp/write-out [(.getTag tv)
-                 (walk/postwalk (fn [v]
-                                  (cond
-                                    (and (instance? Map v) (not (map? v)))
-                                    (into {} v)
-
-                                    (instance? Collection v) (vec v)
-
-                                    :else v))
-                                (.getValue tv))]))
+  (pp/write-out [(.getTag tv) (->clj-types (.getValue tv))]))
 
 (defmethod print-dup (Class/forName "[B") [^bytes ba, ^Writer w]
   (.write w (str "#bytes " (pr-str (Hex/encodeHexString ba)))))
@@ -217,6 +239,10 @@
 
 (defmethod pp/simple-dispatch (Class/forName "[B") [ba]
   (print-dup ba *out*))
+
+#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]} ; reader-macro
+(defn read-bytes [^String s]
+  (Hex/decodeHex s))
 
 (do
   (def transit-read-handlers

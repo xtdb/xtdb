@@ -12,6 +12,7 @@
  xt/key-fn xtdb.serde/read-key-fn
  xt/error xtdb.error/read-error
  xt/tagged xtdb.serde/read-tagged
+ bytes xtdb.serde/read-bytes
 
  xt/period-duration xtdb.serde/period-duration-reader
  xt/interval xtdb.serde/interval-reader

@@ -1,0 +1,39 @@
+{:schema
+ #xt/schema (["tx-ops"
+              :list
+              ["$data$"
+               :union
+               ["put-docs"
+                :struct
+                ["iids" :list ["$data$" [:fixed-size-binary 16]]]
+                ["documents"
+                 :union
+                 ["public/foo"
+                  :list
+                  ["$data$"
+                   :struct
+                   ["_id" :union ["keyword" :keyword] ["utf8" :utf8]]
+                   ["a" :i64 :?]
+                   ["b" :i64 :?]]]
+                 ["public/bar"
+                  :list
+                  ["$data$" :struct ["_id" :i64] ["c" :i64]]]]
+                ["_valid_from" [:timestamp-tz :micro "UTC"] :?]
+                ["_valid_to" [:timestamp-tz :micro "UTC"] :?]]]]
+             ["system-time" [:timestamp-tz :micro "UTC"] :?]
+             ["default-tz" :utf8 :?]
+             ["user" :utf8 :?]),
+ :data
+ [{:tx-ops
+   [#xt/tagged [:put-docs
+                {:iids [#bytes "9665ad29257f8c97f62ddd4bbe177054"],
+                 :documents
+                 #xt/tagged [:public/foo [{:xt/id :a, :a 1}]]}]
+    #xt/tagged [:put-docs
+                {:iids [#bytes "b831b33e0c05b45e15bbdd9b3bfa4382"],
+                 :documents
+                 #xt/tagged [:public/foo [{:xt/id "b", :b 2}]]}]
+    #xt/tagged [:put-docs
+                {:iids [#bytes "9a83c6cb1126d93de4a30715b28f1f4b"],
+                 :documents
+                 #xt/tagged [:public/bar [{:xt/id 3, :c 3}]]}]]}]}

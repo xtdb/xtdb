@@ -82,19 +82,3 @@
                  file-name (str (.getFileName expected))]
            :when (.endsWith file-name ".arrow.json")]
      (check-arrow-json-file expected actual))))
-
-(defn arrow-streaming->json ^String [^bytes bytes]
-  (let [buf (ByteBuffer/wrap bytes)
-        json-file (File/createTempFile "arrow" "json")]
-    (try
-      (util/with-open [allocator (RootAllocator.)
-                       in-ch (util/->seekable-byte-channel buf)
-                       file-reader (ArrowStreamReader. in-ch allocator)
-                       file-writer (JsonFileWriter. json-file (.. (JsonFileWriter/config) (pretty true)))]
-        (let [root (.getVectorSchemaRoot file-reader)]
-          (.start file-writer (.getSchema root) nil)
-          (while (.loadNextBatch file-reader)
-            (.write file-writer root))))
-      (slurp json-file)
-      (finally
-        (.delete json-file)))))
