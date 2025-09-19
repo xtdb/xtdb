@@ -190,12 +190,7 @@
 
 (defn <-cursor
   ([^ICursor cursor] (<-cursor cursor #xt/key-fn :kebab-case-keyword))
-  ([^ICursor cursor ^IKeyFn key-fn]
-   (let [!res (volatile! (transient []))]
-     (.forEachRemaining cursor
-                        (fn [^RelationReader rel]
-                          (vswap! !res conj! (.toMaps rel key-fn))))
-     (persistent! @!res))))
+  ([^ICursor cursor ^IKeyFn key-fn] (.consume cursor key-fn)))
 
 (defn query-ra
   ([query] (query-ra query {}))
@@ -235,7 +230,6 @@
                     {:name "bar", :age 25}]
                    [{:name "baz", :age 30}]]]
         (with-open [cursor (->cursor pages)]
-
           (t/is (= pages (<-cursor cursor))))))))
 
 (defn ->local-node ^xtdb.api.Xtdb [{:keys [^Path node-dir ^String buffers-dir

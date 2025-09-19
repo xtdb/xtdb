@@ -1,6 +1,7 @@
 package xtdb
 
 import xtdb.api.query.IKeyFn
+import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.RelationReader
 import java.lang.AutoCloseable
@@ -8,7 +9,7 @@ import java.time.Duration
 import java.time.InstantSource
 import java.util.*
 import java.util.function.Consumer
-import java.util.stream.StreamSupport
+import java.util.stream.StreamSupport.stream
 
 interface ICursor : Spliterator<RelationReader>, AutoCloseable {
     interface Factory {
@@ -33,14 +34,12 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
 
     override fun close() = Unit
 
-    companion object {
-        @JvmStatic
-        fun ICursor.toMaps(): List<Map<*, *>> =
-            StreamSupport.stream(this, false).flatMap { it.toMaps(SNAKE_CASE_STRING).stream() }.toList()
+    fun consume() = consume(SNAKE_CASE_STRING)
 
-        @JvmStatic
-        fun <K> ICursor.toMaps(keyFn: IKeyFn<K>): List<Map<K, *>> =
-            StreamSupport.stream(this, false).flatMap { it.toMaps(keyFn).stream() }.toList()
+    fun <K> consume(keyFn: IKeyFn<K>): List<List<Map<K, *>>> =
+        stream(this, false).map { it.toMaps(keyFn) }.toList()
+
+    companion object {
 
         private class ExplainAnalyzeCursor(
             private val inner: ICursor,
