@@ -179,7 +179,8 @@
         (System/exit 0))
 
       (if-let [file (first args)]
-        ((requiring-resolve 'xtdb.arrow/with-arrow-file) file pp/pprint)
+        (binding [pp/*print-right-margin* 120]
+          ((requiring-resolve 'xtdb.arrow/with-arrow-file) file pp/pprint))
 
         (binding [*out* *err*]
           (println "Usage: `read-arrow-file <file>`")
@@ -194,7 +195,8 @@
         (System/exit 0))
 
       (if-let [file (first args)]
-        (pp/pprint ((requiring-resolve 'xtdb.arrow/read-arrow-stream-file) file))
+        (binding [pp/*print-right-margin* 120]
+          (pp/pprint ((requiring-resolve 'xtdb.arrow/read-arrow-stream-file) file)))
 
         (binding [*out* *err*]
           (println "Usage: `read-arrow-stream-file <file>`")
