@@ -221,21 +221,11 @@
                                             (.accept c out-rel))))))))
            (aget advanced? 0))
 
-         (when-let [matched-build-idxs (.getMatchedBuildIdxs build-side)]
-           (let [build-rel (.getBuiltRel build-side)
-                 build-row-count (cond-> (long (.getRowCount build-rel))
-                                   (.getWithNilRow build-side) (dec))
-                 unmatched-build-idxs (RoaringBitmap/flip matched-build-idxs 0 build-row-count)]
-
-             (when-not (.isEmpty unmatched-build-idxs)
-               ;; this means .isEmpty will be true on the next iteration (we flip the bitmap)
-               (.add matched-build-idxs 0 build-row-count)
-
-               (with-open [nil-rel (emap/->nil-rel (map Field/.getName (vals probe-fields)))]
-                 (let [build-sel (.toArray unmatched-build-idxs)
-                       probe-sel (int-array (alength build-sel))]
-                   (.accept c (join-rels join-type build-rel nil-rel [build-sel probe-sel]))
-                   true))))))))
+         (when-let [unmatched-build-idxs (.consumeUnmatchedIdxs build-side)]
+           (with-open [nil-rel (emap/->nil-rel (map Field/.getName (vals probe-fields)))]
+             (.accept c (join-rels join-type (.getBuiltRel build-side) nil-rel
+                                   [unmatched-build-idxs (int-array (alength unmatched-build-idxs))]))
+             true)))))
 
   (close [_]
     (run! #(.clear ^MutableRoaringBitmap %) pushdown-blooms)
@@ -311,13 +301,13 @@
   (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
 
 (defn ->build-side ^xtdb.operator.join.BuildSide [^BufferAllocator allocator,
-                                                  {:keys [fields, key-col-names, matched-build-idxs?, with-nil-row?]}]
+                                                  {:keys [fields, key-col-names, track-unmatched-build-idxs?, with-nil-row?]}]
   (let [schema (Schema. (->> fields
                              (mapv (fn [[field-name field]]
                                      (cond-> (-> field (types/field-with-name (str field-name)))
                                        with-nil-row? types/->nullable-field)))))]
     (BuildSide. allocator schema (map str key-col-names)
-                (when matched-build-idxs? (RoaringBitmap.))
+                (boolean track-unmatched-build-idxs?)
                 (boolean with-nil-row?))))
 
 (defn ->probe-side [build-side {:keys [build-fields probe-fields key-col-names theta-expr param-fields args with-nil-row?]}]
@@ -342,7 +332,7 @@
   [{:keys [condition left right]}
    {:keys [param-fields]}
    {:keys [build-side merge-fields-fn join-type
-           with-nil-row? pushdown-blooms? matched-build-idxs? mark-col-name]}]
+           with-nil-row? pushdown-blooms? track-unmatched-build-idxs? mark-col-name]}]
   (let [{left-fields :fields, ->left-cursor :->cursor} left
         {right-fields :fields, ->right-cursor :->cursor} right
         {equis :equi-condition, thetas :pred-expr} (group-by first condition)
@@ -409,7 +399,7 @@
                                             build-side (->build-side allocator {:fields build-fields
                                                                                 :key-col-names build-key-col-names
                                                                                 :with-nil-row? with-nil-row?
-                                                                                :matched-build-idxs? matched-build-idxs?})]
+                                                                                :track-unmatched-build-idxs? track-unmatched-build-idxs?})]
                    (letfn [(->probe-cursor-with-pushdowns [our-pushdown-blooms our-pushdown-iids]
                              (->probe-cursor (cond-> opts
                                                our-pushdown-blooms (update :pushdown-blooms (fnil into {}) our-pushdown-blooms)
@@ -478,7 +468,7 @@
                       {:build-side build-side
                        :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
                        :join-type ::left-outer-join-flipped
-                       :matched-build-idxs? true
+                       :track-unmatched-build-idxs? true
                        :pushdown-blooms? true}))))
 
 (defmethod lp/emit-expr :full-outer-join [join-expr args]
@@ -487,7 +477,7 @@
                                 :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields (types/with-nullable-fields left-fields) (types/with-nullable-fields right-fields)))
                                 :join-type ::full-outer-join
                                 :with-nil-row? true
-                                :matched-build-idxs? true}))
+                                :track-unmatched-build-idxs? true}))
 
 (defmethod lp/emit-expr :semi-join [join-expr args]
   (emit-join-expr-and-children join-expr args
@@ -509,7 +499,7 @@
                                   :merge-fields-fn (fn [left-fields _] (assoc left-fields mark-col-name (types/col-type->field mark-col-name [:union #{:null :bool}])))
                                   :mark-col-name mark-col-name
                                   :join-type ::mark-join
-                                  :matched-build-idxs? true
+                                  :track-unmatched-build-idxs? true
                                   :pushdown-blooms? true})))
 
 (defmethod lp/emit-expr :single-join [join-expr args]

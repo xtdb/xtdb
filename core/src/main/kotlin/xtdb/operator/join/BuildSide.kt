@@ -14,7 +14,7 @@ class BuildSide(
     private val al: BufferAllocator,
     val schema: Schema,
     val keyColNames: List<String>,
-    val matchedBuildIdxs: RoaringBitmap?,
+    trackUnmatchedIdxs: Boolean,
     val withNilRow: Boolean
 ) : AutoCloseable {
     private val relWriter = Relation(al, schema)
@@ -41,6 +41,8 @@ class BuildSide(
     }
 
     fun build() {
+        unmatchedBuildIdxs?.add(0L, relWriter.rowCount.toLong())
+
         if (withNilRow) relWriter.endRow()
         buildMap?.close()
         buildMap = BuildSideMap.from(al, hashColumn)
@@ -55,7 +57,17 @@ class BuildSide(
             return builtRel.rowCount - 1
         }
 
-    fun addMatch(idx: Int) = matchedBuildIdxs?.add(idx)
+    private val unmatchedBuildIdxs = if (trackUnmatchedIdxs) RoaringBitmap() else null
+
+    fun addMatch(idx: Int) = unmatchedBuildIdxs?.remove(idx)
+
+    fun consumeUnmatchedIdxs(): IntArray? =
+        unmatchedBuildIdxs
+            ?.takeIf { !it.isEmpty }
+            ?.let { idxs ->
+                idxs.toArray()
+                    .also { idxs.clear() }
+            }
 
     fun indexOf(hashCode: Int, cmp: IntUnaryOperator, removeOnMatch: Boolean): Int =
         requireNotNull(buildMap).findValue(hashCode, cmp, removeOnMatch)
