@@ -21,7 +21,7 @@
            (xtdb.arrow RelationReader RelationWriter)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
-           (xtdb.operator.join BuildSide JoinType JoinType$OuterJoinType ProbeSide ProbeSide$ComparatorFactory)))
+           (xtdb.operator.join BuildSide ComparatorFactory JoinType JoinType$OuterJoinType ProbeSide)))
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
@@ -318,19 +318,22 @@
   (let [param-types (update-vals param-fields types/field->col-type)]
     (fn ^xtdb.operator.join.ProbeSide [probe-rel]
       (ProbeSide. build-side probe-rel (map str key-col-names)
-                  (reify ProbeSide$ComparatorFactory
-                    (buildEqui [_ build-col probe-col]
-                      (emap/->equi-comparator build-col probe-col args
-                                              {:nil-keys-equal? with-nil-row?
-                                               :param-types param-types}))
+                  (ComparatorFactory/build
+                   (reify ComparatorFactory
+                     (buildEqui [_ build-col probe-col]
+                       (emap/->equi-comparator build-col probe-col args
+                                               {:nil-keys-equal? with-nil-row?
+                                                :param-types param-types}))
 
-                    (buildTheta [_ build-rel probe-rel]
-                      (when theta-expr
-                        (emap/->theta-comparator build-rel probe-rel theta-expr args
-                                                 {:nil-keys-equal? with-nil-row?
-                                                  :build-fields build-fields
-                                                  :probe-fields probe-fields
-                                                  :param-types param-types}))))))))
+                     (buildTheta [_ build-rel probe-rel]
+                       (when theta-expr
+                         (emap/->theta-comparator build-rel probe-rel theta-expr args
+                                                  {:nil-keys-equal? with-nil-row?
+                                                   :build-fields build-fields
+                                                   :probe-fields probe-fields
+                                                   :param-types param-types}))))
+
+                   build-side probe-rel (map str key-col-names))))))
 
 (defn- emit-join-expr {:style/indent 2}
   [{:keys [condition left right]}

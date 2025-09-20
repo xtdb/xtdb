@@ -1,7 +1,6 @@
 package xtdb.operator.join
 
 import xtdb.arrow.RelationReader
-import xtdb.arrow.VectorReader
 import xtdb.expression.map.IndexHasher
 import java.util.function.BiConsumer
 import java.util.function.IntBinaryOperator
@@ -9,34 +8,14 @@ import java.util.function.IntConsumer
 
 class ProbeSide(
     private val buildSide: BuildSide, val probeRel: RelationReader,
-    val keyColNames: List<String>, private val comparatorFactory: ComparatorFactory,
+    val keyColNames: List<String>, private val comparator: IntBinaryOperator,
 ) {
-
-    interface ComparatorFactory {
-        fun buildEqui(buildCol: VectorReader, probeCol: VectorReader): IntBinaryOperator
-        fun buildTheta(buildRel: RelationReader, probeRel: RelationReader): IntBinaryOperator?
-    }
 
     internal val buildRel = buildSide.builtRel
     val nullRowIdx get() = buildSide.nullRowIdx
     val rowCount = probeRel.rowCount
 
-    private val probeKeyCols = keyColNames.map { probeRel[it] }
-
-    private fun andIBO(p1: IntBinaryOperator, p2: IntBinaryOperator) = IntBinaryOperator { l, r ->
-        val lRes = p1.applyAsInt(l, r)
-        if (lRes == -1) -1 else minOf(lRes, p2.applyAsInt(l, r))
-    }
-
-    private val comparator =
-        buildSide.keyColNames
-            .map { buildRel[it] }.zip(probeKeyCols)
-            .map { (buildCol, probeCol) -> comparatorFactory.buildEqui(buildCol, probeCol) }
-            .plus(listOfNotNull(comparatorFactory.buildTheta(buildRel, probeRel)))
-            .reduceOrNull(::andIBO)
-            ?: IntBinaryOperator { _, _ -> 1 }
-
-    private val hasher = IndexHasher.fromCols(probeKeyCols)
+    private val hasher = IndexHasher.fromCols(keyColNames.map { probeRel[it] })
 
     fun forEachIndexOf(c: BiConsumer<Int, Int>, removeOnMatch: Boolean) =
         repeat(rowCount) { probeIdx ->
