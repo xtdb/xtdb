@@ -214,8 +214,7 @@
                        (.tryAdvance ^ICursor (.probe-cursor this)
                                     (fn [^RelationReader probe-rel]
                                       (when (pos? (.getRowCount probe-rel))
-                                        (with-open [out-rel (-> (.probe join-type (->probe-side probe-rel))
-                                                                (.openSlice allocator))]
+                                        (let [out-rel (.probe join-type (->probe-side probe-rel))]
                                           (when (pos? (.getRowCount out-rel))
                                             (aset advanced? 0 true)
                                             (.accept c out-rel))))))))
