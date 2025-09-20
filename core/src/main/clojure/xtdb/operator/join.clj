@@ -190,7 +190,6 @@
                      probe-fields probe-key-cols
                      ->probe-cursor, ->probe-side
                      ^:unsynchronized-mutable ^ICursor probe-cursor
-                     ^:unsynchronized-mutable ^RelationWriter nil-rel-writer
                      pushdown-blooms
                      ^Set pushdown-iids
                      ^JoinType join-type]
@@ -208,10 +207,6 @@
                                 (zipmap (map symbol probe-key-cols) pushdown-blooms))
                               (when pushdown-iids
                                 (zipmap probe-iid-keys (repeat pushdown-iids)))))))
-
-    (when (and (.getMatchedBuildIdxs build-side) (not nil-rel-writer))
-      (util/with-close-on-catch [nil-rel-writer (emap/->nillable-rel-writer allocator probe-fields)]
-        (set! (.nil-rel-writer this) nil-rel-writer)))
 
     (boolean
      (or (let [advanced? (boolean-array 1)]
@@ -240,16 +235,15 @@
                ;; this means .isEmpty will be true on the next iteration (we flip the bitmap)
                (.add matched-build-idxs 0 build-row-count)
 
-               (let [nil-rel (vw/rel-wtr->rdr nil-rel-writer)
-                     build-sel (.toArray unmatched-build-idxs)
-                     probe-sel (int-array (alength build-sel))]
-                 (.accept c (join-rels join-type build-rel nil-rel [build-sel probe-sel]))
-                 true)))))))
+               (with-open [nil-rel (emap/->nil-rel (map Field/.getName (vals probe-fields)))]
+                 (let [build-sel (.toArray unmatched-build-idxs)
+                       probe-sel (int-array (alength build-sel))]
+                   (.accept c (join-rels join-type build-rel nil-rel [build-sel probe-sel]))
+                   true))))))))
 
   (close [_]
     (run! #(.clear ^MutableRoaringBitmap %) pushdown-blooms)
     (util/try-close build-side)
-    (util/try-close nil-rel-writer)
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
@@ -442,7 +436,6 @@
                                                            (JoinCursor. allocator build-side build-cursor
                                                                         probe-fields probe-key-col-names
                                                                         ->probe-cursor-with-pushdowns ->probe-side nil
-                                                                        nil
                                                                         pushdown-blooms pushdown-iids
                                                                         (case join-type
                                                                           ::inner-join JoinType/INNER

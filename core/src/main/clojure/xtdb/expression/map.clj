@@ -3,13 +3,10 @@
             [xtdb.expression.walk :as ewalk]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.reader :as vr])
   (:import (java.util Map)
            java.util.function.IntBinaryOperator
-           (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector NullVector)
-           (org.apache.arrow.vector.types.pojo Schema)
            (xtdb.arrow RelationReader VectorReader)))
 
 (def ^:private left-rel (gensym 'left-rel))
@@ -44,7 +41,6 @@
 (def ^:private pg-class-schema-hack
   {"pg_catalog/pg_class" #{}})
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->equi-comparator [^VectorReader left-col, ^VectorReader right-col, params
                          {:keys [nil-keys-equal? param-types]}]
   (let [f (build-comparator {:op :call, :f (if nil-keys-equal? :null-eq :=)
@@ -58,7 +54,6 @@
        pg-class-schema-hack
        params)))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->theta-comparator [build-rel probe-rel theta-expr params {:keys [build-fields probe-fields param-types]}]
   (let [col-types (update-vals (merge build-fields probe-fields) types/field->col-type)
         f (build-comparator (->> (expr/form->expr theta-expr {:col-types col-types, :param-types param-types})
@@ -83,18 +78,4 @@
                    (vr/vec->reader (doto (NullVector. (str col-name))
                                      (.setValueCount 1))))))
 
-(defn ->nillable-rel-writer
-  "Returns a relation with a single row where all columns are nil, but the schema is nillable."
-  ^xtdb.arrow.RelationWriter [^BufferAllocator allocator fields]
-  (let [schema (Schema. (mapv (fn [[field-name field]]
-                                (-> field
-                                    (types/field-with-name (str field-name))
-                                    (types/->nullable-field)))
-                              fields))]
-    (util/with-close-on-catch [rel-writer (vw/->rel-writer allocator schema)]
-      (doto (.rowCopier (->nil-rel (keys fields)) rel-writer)
-        (.copyRow 0))
-      rel-writer)))
-
 (def nil-row-idx 0)
-
