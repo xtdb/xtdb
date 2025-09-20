@@ -161,22 +161,24 @@
 (defmethod lp/emit-expr :cross-join [join-expr args]
   (emit-cross-join (emit-join-children join-expr args)))
 
-(defn- build-phase [^BuildSide build-side, ^ICursor build-cursor, pushdown-blooms, ^Set pushdown-iids]
+(defn- build-phase [^BuildSide build-side, ^ICursor build-cursor]
   (.forEachRemaining build-cursor
-                     (fn [^RelationReader build-rel]
-                       (.append build-side build-rel)
-
-                       (when pushdown-blooms
-                         (let [build-key-col-names (vec (.getKeyColNames build-side))]
-                           (dotimes [col-idx (count build-key-col-names)]
-                             (let [build-col-name (nth build-key-col-names col-idx)
-                                   build-col (.vectorForOrNull build-rel (str build-col-name))
-                                   ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
-                               (dotimes [build-idx (.getRowCount build-rel)]
-                                 (when (and pushdown-iids (= (name build-col-name) "_iid"))
-                                   (.add pushdown-iids (.getBytes build-col build-idx)))
-                                 (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx)))))))))
+                     (fn [build-rel]
+                       (.append build-side build-rel)))
   (.build build-side))
+
+(defn- build-pushdowns [^BuildSide build-side, pushdown-blooms, ^Set pushdown-iids]
+  (when pushdown-blooms
+    (let [build-rel (.getBuiltRel build-side)
+          build-key-col-names (vec (.getKeyColNames build-side))]
+      (dotimes [col-idx (count build-key-col-names)]
+        (let [build-col-name (nth build-key-col-names col-idx)
+              build-col (.vectorForOrNull build-rel (str build-col-name))
+              ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
+          (dotimes [build-idx (.getRowCount build-rel)]
+            (when (and pushdown-iids (= (name build-col-name) "_iid"))
+              (.add pushdown-iids (.getBytes build-col build-idx)))
+            (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))
 
 (defn- join-rels [^JoinType join-type, ^RelationReader build-rel, ^RelationReader probe-rel, [^ints build-sel, ^ints probe-sel]]
   (let [selected-build-rel (.select build-rel build-sel)
@@ -199,14 +201,15 @@
 
   (tryAdvance [this c]
     (when-not probe-cursor
-      (build-phase build-side build-cursor pushdown-blooms pushdown-iids)
+      (build-phase build-side build-cursor)
+      (build-pushdowns build-side pushdown-blooms pushdown-iids)
 
-      (let [probe-iid-keys (filter #(= (name %) "_iid") probe-key-cols)]
-        (set! (.probe-cursor this)
-              (->probe-cursor (when pushdown-blooms
-                                (zipmap (map symbol probe-key-cols) pushdown-blooms))
-                              (when pushdown-iids
-                                (zipmap probe-iid-keys (repeat pushdown-iids)))))))
+      (set! (.probe-cursor this)
+            (->probe-cursor (when pushdown-blooms
+                              (zipmap (map symbol probe-key-cols) pushdown-blooms))
+                            (when pushdown-iids
+                              (zipmap (filter #(= (name %) "_iid") probe-key-cols)
+                                      (repeat pushdown-iids))))))
 
     (boolean
      (or (let [advanced? (boolean-array 1)]
@@ -245,7 +248,9 @@
   (tryAdvance [this c]
 
     (when-not probe-cursor
-      (build-phase build-side build-cursor pushdown-blooms nil)
+      (build-phase build-side build-cursor)
+      (build-pushdowns build-side pushdown-blooms nil)
+
       (set! (.probe-cursor this)
             (->probe-cursor (zipmap (map symbol (.getKeyColNames build-side))
                                     pushdown-blooms)
