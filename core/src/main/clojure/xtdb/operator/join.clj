@@ -9,19 +9,17 @@
             [xtdb.operator.project :as project]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.reader :as vr])
   (:import (java.util ArrayList HashSet Iterator List Set)
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.BitVector
            (org.apache.arrow.vector.types.pojo Field Schema)
            (org.roaringbitmap.buffer MutableRoaringBitmap)
-           org.roaringbitmap.RoaringBitmap
            (xtdb ICursor)
-           (xtdb.arrow RelationReader RelationWriter)
+           (xtdb.arrow RelationReader)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
-           (xtdb.operator.join BuildSide ComparatorFactory JoinType JoinType$OuterJoinType ProbeSide)))
+           (xtdb.operator.join BuildSide ComparatorFactory JoinType MemoryHashJoin ProbeSide)))
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
@@ -180,64 +178,42 @@
               (.add pushdown-iids (.getBytes build-col build-idx)))
             (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))
 
-(defn- join-rels [^JoinType join-type, ^RelationReader build-rel, ^RelationReader probe-rel, [^ints build-sel, ^ints probe-sel]]
-  (let [selected-build-rel (.select build-rel build-sel)
-        selected-probe-rel (.select probe-rel probe-sel)]
-    (vr/rel-reader (if (= JoinType$OuterJoinType/LEFT_FLIPPED (.getOuterJoinType join-type))
-                     (concat selected-probe-rel selected-build-rel)
-                     (concat selected-build-rel selected-probe-rel)))))
-
 (deftype JoinCursor [^BufferAllocator allocator,
                      ^BuildSide build-side, ^ICursor build-cursor,
-                     probe-fields probe-key-cols
-                     ->probe-cursor, ->probe-side
-                     ^:unsynchronized-mutable ^ICursor probe-cursor
-                     pushdown-blooms
-                     ^Set pushdown-iids
-                     ^JoinType join-type]
+                     probe-fields probe-key-cols ->probe-cursor
+                     ^:unsynchronized-mutable ^ICursor hash-join-cursor
+                     pushdown-blooms, ^Set pushdown-iids
+                     ^ComparatorFactory cmp-factory, ^JoinType join-type]
   ICursor
   (getCursorType [_] (.getJoinTypeName join-type))
-  (getChildCursors [_] [build-cursor probe-cursor])
+  (getChildCursors [_] (into [build-cursor] (.getChildCursors hash-join-cursor)))
 
   (tryAdvance [this c]
-    (when-not probe-cursor
+    (when-not hash-join-cursor
       (build-phase build-side build-cursor)
       (build-pushdowns build-side pushdown-blooms pushdown-iids)
 
-      (set! (.probe-cursor this)
-            (->probe-cursor (when pushdown-blooms
-                              (zipmap (map symbol probe-key-cols) pushdown-blooms))
-                            (when pushdown-iids
-                              (zipmap (filter #(= (name %) "_iid") probe-key-cols)
-                                      (repeat pushdown-iids))))))
+      (util/with-close-on-catch [probe-cursor (->probe-cursor (when pushdown-blooms
+                                                                (zipmap (map symbol probe-key-cols) pushdown-blooms))
+                                                              (when pushdown-iids
+                                                                (zipmap (filter #(= (name %) "_iid") probe-key-cols)
+                                                                        (repeat pushdown-iids))))]
+        (set! (.hash-join-cursor this)
+              (MemoryHashJoin. build-side probe-cursor
+                               (vals probe-fields) (map str probe-key-cols)
+                               join-type cmp-factory))))
 
-    (boolean
-     (or (let [advanced? (boolean-array 1)]
-           (while (and (not (aget advanced? 0))
-                       (.tryAdvance ^ICursor (.probe-cursor this)
-                                    (fn [^RelationReader probe-rel]
-                                      (when (pos? (.getRowCount probe-rel))
-                                        (let [out-rel (.probe join-type (->probe-side probe-rel))]
-                                          (when (pos? (.getRowCount out-rel))
-                                            (aset advanced? 0 true)
-                                            (.accept c out-rel))))))))
-           (aget advanced? 0))
-
-         (when-let [unmatched-build-idxs (.consumeUnmatchedIdxs build-side)]
-           (with-open [nil-rel (emap/->nil-rel (map Field/.getName (vals probe-fields)))]
-             (.accept c (join-rels join-type (.getBuiltRel build-side) nil-rel
-                                   [unmatched-build-idxs (int-array (alength unmatched-build-idxs))]))
-             true)))))
+    (.tryAdvance hash-join-cursor c))
 
   (close [_]
     (run! #(.clear ^MutableRoaringBitmap %) pushdown-blooms)
+    (util/try-close hash-join-cursor)
     (util/try-close build-side)
-    (util/try-close build-cursor)
-    (util/try-close probe-cursor)))
+    (util/try-close build-cursor)))
 
 (deftype MarkJoinCursor [^BufferAllocator allocator,
                          ^BuildSide build-side, ^ICursor build-cursor,
-                         ->probe-cursor, ->probe-side,
+                         ->probe-cursor, probe-key-col-names, ^ComparatorFactory cmp-factory,
                          ^:unsynchronized-mutable ^ICursor probe-cursor
                          mark-col-name
                          pushdown-blooms]
@@ -261,7 +237,8 @@
        (while (and (not (aget advanced? 0))
                    (.tryAdvance ^ICursor (.probe-cursor this)
                                 (fn [^RelationReader probe-rel]
-                                  (let [^ProbeSide probe-side (->probe-side probe-rel)
+                                  (let [cmp (ComparatorFactory/build cmp-factory build-side probe-rel probe-key-col-names)
+                                        ^ProbeSide probe-side (ProbeSide. build-side probe-rel probe-key-col-names cmp)
                                         row-count (.getRowCount probe-rel)]
                                     (when (pos? row-count)
                                       (aset advanced? 0 true)
@@ -314,26 +291,21 @@
                 (boolean track-unmatched-build-idxs?)
                 (boolean with-nil-row?))))
 
-(defn ->probe-side [build-side {:keys [build-fields probe-fields key-col-names theta-expr param-fields args with-nil-row?]}]
+(defn ->cmp-factory [{:keys [build-fields probe-fields theta-expr param-fields args with-nil-row?]}]
   (let [param-types (update-vals param-fields types/field->col-type)]
-    (fn ^xtdb.operator.join.ProbeSide [probe-rel]
-      (ProbeSide. build-side probe-rel (map str key-col-names)
-                  (ComparatorFactory/build
-                   (reify ComparatorFactory
-                     (buildEqui [_ build-col probe-col]
-                       (emap/->equi-comparator build-col probe-col args
-                                               {:nil-keys-equal? with-nil-row?
-                                                :param-types param-types}))
+    (reify ComparatorFactory
+      (buildEqui [_ build-col probe-col]
+        (emap/->equi-comparator build-col probe-col args
+                                {:nil-keys-equal? with-nil-row?
+                                 :param-types param-types}))
 
-                     (buildTheta [_ build-rel probe-rel]
-                       (when theta-expr
-                         (emap/->theta-comparator build-rel probe-rel theta-expr args
-                                                  {:nil-keys-equal? with-nil-row?
-                                                   :build-fields build-fields
-                                                   :probe-fields probe-fields
-                                                   :param-types param-types}))))
-
-                   build-side probe-rel (map str key-col-names))))))
+      (buildTheta [_ build-rel probe-rel]
+        (when theta-expr
+          (emap/->theta-comparator build-rel probe-rel theta-expr args
+                                   {:nil-keys-equal? with-nil-row?
+                                    :build-fields build-fields
+                                    :probe-fields probe-fields
+                                    :param-types param-types}))))))
 
 (defn- emit-join-expr {:style/indent 2}
   [{:keys [condition left right]}
@@ -413,8 +385,7 @@
                                                our-pushdown-iids (update :pushdown-iids (fnil into {}) our-pushdown-iids))))]
                      (let [pushdown-blooms (when pushdown-blooms? (->pushdown-blooms probe-key-col-names))
                            pushdown-iids (HashSet.)
-                           ->probe-side (->probe-side build-side
-                                                      {:build-fields build-fields
+                           cmp-factory (->cmp-factory {:build-fields build-fields
                                                        :probe-fields probe-fields
                                                        :with-nil-row? with-nil-row?
                                                        :key-col-names probe-key-col-names
@@ -424,12 +395,12 @@
                        (project/->project-cursor opts
                                                  (cond-> (if (= join-type ::mark-join)
                                                            (MarkJoinCursor. allocator build-side build-cursor
-                                                                            ->probe-cursor-with-pushdowns ->probe-side nil
+                                                                            ->probe-cursor-with-pushdowns (map str probe-key-col-names) cmp-factory nil
                                                                             mark-col-name pushdown-blooms)
                                                            (JoinCursor. allocator build-side build-cursor
                                                                         probe-fields probe-key-col-names
-                                                                        ->probe-cursor-with-pushdowns ->probe-side nil
-                                                                        pushdown-blooms pushdown-iids
+                                                                        ->probe-cursor-with-pushdowns nil
+                                                                        pushdown-blooms pushdown-iids cmp-factory
                                                                         (case join-type
                                                                           ::inner-join JoinType/INNER
                                                                           ::left-outer-join JoinType/LEFT_OUTER

@@ -8,7 +8,7 @@
   (:import java.util.stream.IntStream
            (xtdb ICursor)
            (xtdb.arrow RelationReader)
-           (xtdb.operator.join BuildSide ProbeSide)))
+           (xtdb.operator.join BuildSide ComparatorFactory ProbeSide)))
 
 (defmethod lp/ra-expr :intersect [_]
   (s/cat :op #{:∩ :intersect}
@@ -76,7 +76,8 @@
                                    explain-analyze? (ICursor/wrapExplainAnalyze)))})))
 
 (deftype IntersectionCursor [^ICursor left-cursor, ^ICursor right-cursor
-                             ^BuildSide build-side, ->probe-side
+                             ^BuildSide build-side, key-col-names
+                             cmp-factory
                              difference?
                              ^:unsynchronized-mutable build-phase-ran?]
   ICursor
@@ -96,10 +97,11 @@
      (let [advanced? (boolean-array 1)]
        (while (and (not (aget advanced? 0))
                    (.tryAdvance left-cursor
-                                (fn [^RelationReader in-rel]
-                                  (let [row-count (.getRowCount in-rel)]
+                                (fn [^RelationReader probe-rel]
+                                  (let [row-count (.getRowCount probe-rel)]
                                     (when (pos? row-count)
-                                      (let [^ProbeSide probe-side (->probe-side in-rel)
+                                      (let [cmp (ComparatorFactory/build cmp-factory build-side probe-rel key-col-names)
+                                            probe-side (ProbeSide. build-side probe-rel key-col-names cmp)
                                             idxs (IntStream/builder)]
                                         (.forEachIndexOf probe-side
                                                          (fn [probe-idx build-idx]
@@ -110,7 +112,7 @@
                                         (let [idxs (.toArray (.build idxs))]
                                           (when-not (empty? idxs)
                                             (aset advanced? 0 true)
-                                            (.accept c (.select in-rel idxs)))))))))))
+                                            (.accept c (.select probe-rel idxs)))))))))))
        (aget advanced? 0))))
 
   (close [_]
@@ -132,10 +134,10 @@
                                                                         :key-col-names key-col-names})]
 
                                      (cond-> (IntersectionCursor. left-cursor right-cursor
-                                                                              build-side (join/->probe-side build-side
-                                                                                                            {:fields right-fields
-                                                                                                             :key-col-names key-col-names})
-                                                                              false false)
+                                                                  build-side (mapv name key-col-names)
+                                                                  (join/->cmp-factory {:fields right-fields
+                                                                                       :key-col-names key-col-names})
+                                                                  false false)
                                        explain-analyze? (ICursor/wrapExplainAnalyze))))}))))
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
@@ -152,9 +154,8 @@
                                                                         :key-col-names key-col-names})]
 
                                      (cond-> (IntersectionCursor. left-cursor right-cursor
-                                                                              build-side (join/->probe-side build-side
-                                                                                                            {:build-fields left-fields
-                                                                                                             :probe-fields right-fields
-                                                                                                             :key-col-names key-col-names})
-                                                                              true false)
+                                                                  build-side (mapv name key-col-names)
+                                                                  (join/->cmp-factory {:fields right-fields
+                                                                                       :key-col-names key-col-names})
+                                                                  true false)
                                        explain-analyze? (ICursor/wrapExplainAnalyze))))}))))

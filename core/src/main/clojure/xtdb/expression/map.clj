@@ -6,7 +6,6 @@
             [xtdb.vector.reader :as vr])
   (:import (java.util Map)
            java.util.function.IntBinaryOperator
-           (org.apache.arrow.vector NullVector)
            (xtdb.arrow RelationReader VectorReader)))
 
 (def ^:private left-rel (gensym 'left-rel))
@@ -70,11 +69,3 @@
        probe-rel
        pg-class-schema-hack
        params)))
-
-(defn ->nil-rel
-  "Returns a single row relation where all columns are nil. (Useful for outer joins)."
-  ^xtdb.arrow.RelationReader [col-names]
-  (vr/rel-reader (for [col-name col-names]
-                   (vr/vec->reader (doto (NullVector. (str col-name))
-                                     (.setValueCount 1))))))
-

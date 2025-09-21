@@ -7,7 +7,7 @@ import xtdb.error.Incorrect
 import xtdb.operator.join.JoinType.OuterJoinType.*
 
 interface JoinType {
-    fun ProbeSide.probe(): RelationReader
+    fun probe(probeSide: ProbeSide): RelationReader
 
     val outerJoinType: OuterJoinType? get() = null
     val joinTypeName: String
@@ -23,27 +23,27 @@ interface JoinType {
             FULL -> "full-join"
         }
 
-        override fun ProbeSide.probe(): RelationReader {
+        override fun probe(probeSide: ProbeSide): RelationReader {
             val matchingBuildIdxs = IntArrayList()
             val matchingProbeIdxs = IntArrayList()
 
-            repeat(rowCount) { probeIdx ->
+            repeat(probeSide.rowCount) { probeIdx ->
                 var matched = false
 
-                forEachMatch(probeIdx) { buildIdx ->
+                probeSide.forEachMatch(probeIdx) { buildIdx ->
                     matched = true
                     matchingBuildIdxs.add(buildIdx)
                     matchingProbeIdxs.add(probeIdx)
                 }
 
                 if (outerJoinType != LEFT_FLIPPED && !matched) {
-                    matchingBuildIdxs.add(nullRowIdx)
+                    matchingBuildIdxs.add(probeSide.nullRowIdx)
                     matchingProbeIdxs.add(probeIdx)
                 }
             }
 
-            val outBuild = buildRel.select(matchingBuildIdxs.toArray())
-            val outProbe = probeRel.select(matchingProbeIdxs.toArray())
+            val outBuild = probeSide.buildRel.select(matchingBuildIdxs.toArray())
+            val outProbe = probeSide.probeRel.select(matchingProbeIdxs.toArray())
 
             return if (outerJoinType == LEFT_FLIPPED)
                 RelationReader.concatCols(outProbe, outBuild)
@@ -58,20 +58,20 @@ interface JoinType {
         val INNER = object : JoinType {
             override val joinTypeName = "inner-join"
             
-            override fun ProbeSide.probe(): RelationReader {
+            override fun probe(probeSide: ProbeSide): RelationReader {
                 val matchingBuildIdxs = IntArrayList()
                 val matchingProbeIdxs = IntArrayList()
 
-                repeat(rowCount) { probeIdx ->
-                    forEachMatch(probeIdx) { buildIdx ->
+                repeat(probeSide.rowCount) { probeIdx ->
+                    probeSide.forEachMatch(probeIdx) { buildIdx ->
                         matchingBuildIdxs.add(buildIdx)
                         matchingProbeIdxs.add(probeIdx)
                     }
                 }
 
                 return RelationReader.concatCols(
-                    buildRel.select(matchingBuildIdxs.toArray()),
-                    probeRel.select(matchingProbeIdxs.toArray())
+                    probeSide.buildRel.select(matchingBuildIdxs.toArray()),
+                    probeSide.probeRel.select(matchingProbeIdxs.toArray())
                 )
             }
         }
@@ -106,8 +106,8 @@ interface JoinType {
         val SEMI = object : JoinType {
             override val joinTypeName = "semi-join"
             
-            override fun ProbeSide.probe(): RelationReader {
-                return probeRel.select(semiJoinSelection())
+            override fun probe(probeSide: ProbeSide): RelationReader {
+                return probeSide.probeRel.select(probeSide.semiJoinSelection())
             }
         }
 
@@ -122,8 +122,8 @@ interface JoinType {
         val ANTI = object : JoinType {
             override val joinTypeName = "anti-join"
             
-            override fun ProbeSide.probe(): RelationReader {
-                return probeRel.select(antiJoinSelection())
+            override fun probe(probeSide: ProbeSide): RelationReader {
+                return probeSide.probeRel.select(probeSide.antiJoinSelection())
             }
         }
 
@@ -131,13 +131,13 @@ interface JoinType {
         val SINGLE = object : JoinType {
             override val joinTypeName = "single-join"
             
-            override fun ProbeSide.probe(): RelationReader {
+            override fun probe(probeSide: ProbeSide): RelationReader {
                 val matchingBuildIdxs = IntArrayList()
                 val matchingProbeIdxs = IntArrayList()
 
-                repeat(rowCount) { probeIdx ->
+                repeat(probeSide.rowCount) { probeIdx ->
                     var matched = false
-                    forEachMatch(probeIdx) { buildIdx ->
+                    probeSide.forEachMatch(probeIdx) { buildIdx ->
                         if (matched)
                             throw Incorrect("cardinality violation", "xtdb.single-join/cardinality-violation")
                         matched = true
@@ -147,14 +147,14 @@ interface JoinType {
                     }
 
                     if (!matched) {
-                        matchingBuildIdxs.add(nullRowIdx)
+                        matchingBuildIdxs.add(probeSide.nullRowIdx)
                         matchingProbeIdxs.add(probeIdx)
                     }
                 }
 
                 return RelationReader.concatCols(
-                    buildRel.select(matchingBuildIdxs.toArray()),
-                    probeRel.select(matchingProbeIdxs.toArray())
+                    probeSide.buildRel.select(matchingBuildIdxs.toArray()),
+                    probeSide.probeRel.select(matchingProbeIdxs.toArray())
                 )
             }
         }

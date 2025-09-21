@@ -1,12 +1,15 @@
 package xtdb.operator.join
 
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.NullVector
 import org.apache.arrow.vector.types.pojo.Schema
 import org.roaringbitmap.RoaringBitmap
 import xtdb.arrow.IntVector
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.expression.map.IndexHasher
+import xtdb.types.FieldName
+import xtdb.vector.ValueVectorReader.from
 import java.util.function.IntConsumer
 import java.util.function.IntUnaryOperator
 
@@ -60,13 +63,22 @@ class BuildSide(
     private val unmatchedBuildIdxs = if (trackUnmatchedIdxs) RoaringBitmap() else null
 
     fun addMatch(idx: Int) = unmatchedBuildIdxs?.remove(idx)
+    fun clearMatches() = unmatchedBuildIdxs?.clear()
 
-    fun consumeUnmatchedIdxs(): IntArray? =
+    fun unmatchedIdxsRel(nullColNames: List<FieldName>, joinType: JoinType): RelationReader? =
         unmatchedBuildIdxs
-            ?.takeIf { !it.isEmpty }
+            ?.takeIf { !it.isEmpty }?.toArray()
             ?.let { idxs ->
-                idxs.toArray()
-                    .also { idxs.clear() }
+                val buildRel = builtRel.select(idxs)
+                val probeRel =
+                    RelationReader
+                        .from(nullColNames.map { from(NullVector(it, 1)) })
+                        .select(IntArray(idxs.size))
+
+                if (joinType.outerJoinType == JoinType.OuterJoinType.LEFT_FLIPPED)
+                    RelationReader.concatCols(probeRel, buildRel)
+                else
+                    RelationReader.concatCols(buildRel, probeRel)
             }
 
     fun indexOf(hashCode: Int, cmp: IntUnaryOperator, removeOnMatch: Boolean): Int =
