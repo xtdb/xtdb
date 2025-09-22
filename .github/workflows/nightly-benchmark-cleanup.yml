@@ -184,7 +184,7 @@ jobs:
           JSON
           echo "Generated metrics.json:" && cat metrics.json
 
-      - name: Ship benchmark metrics via Logs Ingestion API
+      - name: Post metrics to Azure Monitor
         env:
           DCR_IMMUTABLE_ID: ${{ secrets.BENCHMARK_DCR_IMMUTABLE_ID }}
           DCE_ENDPOINT: ${{ secrets.BENCHMARK_DCE_ENDPOINT }}
