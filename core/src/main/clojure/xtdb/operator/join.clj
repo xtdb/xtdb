@@ -19,7 +19,7 @@
            (xtdb.arrow RelationReader)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
-           (xtdb.operator.join BuildSide ComparatorFactory JoinType MemoryHashJoin ProbeSide)))
+           (xtdb.operator.join BuildSide ComparatorFactory DiskHashJoin JoinType MemoryHashJoin ProbeSide)))
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
@@ -163,7 +163,7 @@
   (.forEachRemaining build-cursor
                      (fn [build-rel]
                        (.append build-side build-rel)))
-  (.build build-side))
+  (.end build-side))
 
 (defn- build-pushdowns [^BuildSide build-side, pushdown-blooms, ^Set pushdown-iids]
   (when pushdown-blooms
@@ -191,17 +191,24 @@
   (tryAdvance [this c]
     (when-not hash-join-cursor
       (build-phase build-side build-cursor)
-      (build-pushdowns build-side pushdown-blooms pushdown-iids)
+      (let [shuffle? (boolean (.getShuffle build-side))]
+        (when-not shuffle?
+          (build-pushdowns build-side pushdown-blooms pushdown-iids))
 
-      (util/with-close-on-catch [probe-cursor (->probe-cursor (when pushdown-blooms
-                                                                (zipmap (map symbol probe-key-cols) pushdown-blooms))
-                                                              (when pushdown-iids
-                                                                (zipmap (filter #(= (name %) "_iid") probe-key-cols)
-                                                                        (repeat pushdown-iids))))]
-        (set! (.hash-join-cursor this)
-              (MemoryHashJoin. build-side probe-cursor
-                               (vals probe-fields) (map str probe-key-cols)
-                               join-type cmp-factory))))
+        (util/with-close-on-catch [probe-cursor (->probe-cursor (when pushdown-blooms
+                                                                  (zipmap (map symbol probe-key-cols) pushdown-blooms))
+                                                                (when pushdown-iids
+                                                                  (zipmap (filter #(= (name %) "_iid") probe-key-cols)
+                                                                          (repeat pushdown-iids))))]
+          (set! (.hash-join-cursor this)
+                (if shuffle?
+                  (DiskHashJoin/open allocator build-side probe-cursor
+                                     (vals probe-fields) (map str probe-key-cols)
+                                     join-type cmp-factory)
+
+                  (MemoryHashJoin. build-side probe-cursor
+                                   (vals probe-fields) (map str probe-key-cols)
+                                   join-type cmp-factory))))))
 
     (.tryAdvance hash-join-cursor c))
 
@@ -281,6 +288,8 @@
 (defn- ->pushdown-blooms [key-col-names]
   (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
 
+(def ^:dynamic *disk-join-threshold-rows* 100000)
+
 (defn ->build-side ^xtdb.operator.join.BuildSide [^BufferAllocator allocator,
                                                   {:keys [fields, key-col-names, track-unmatched-build-idxs?, with-nil-row?]}]
   (let [schema (Schema. (->> fields
@@ -289,7 +298,8 @@
                                        with-nil-row? types/->nullable-field)))))]
     (BuildSide. allocator schema (map str key-col-names)
                 (boolean track-unmatched-build-idxs?)
-                (boolean with-nil-row?))))
+                (boolean with-nil-row?)
+                *disk-join-threshold-rows*)))
 
 (defn ->cmp-factory [{:keys [build-fields probe-fields theta-expr param-fields args with-nil-row?]}]
   (let [param-types (update-vals param-fields types/field->col-type)]

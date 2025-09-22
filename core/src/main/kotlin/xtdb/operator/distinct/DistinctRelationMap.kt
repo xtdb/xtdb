@@ -6,6 +6,7 @@ import xtdb.arrow.IntVector
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.expression.map.IndexHasher
+import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.expression.map.RelationMapBuilder
 import xtdb.trie.MutableMemoryHashTrie
 import xtdb.vector.OldRelationWriter
@@ -57,7 +58,7 @@ class DistinctRelationMap(
             .reduceOrNull(::andIBO)
             ?: IntBinaryOperator { _, _ -> 1 }
 
-        val hasher = IndexHasher.fromCols(inKeyCols)
+        val hasher = inRel.hasher(keyColumnNames)
         val rowCopier = inRel.rowCopier(relWriter)
 
         return object : RelationMapBuilder {
