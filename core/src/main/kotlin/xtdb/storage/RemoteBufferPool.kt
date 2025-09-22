@@ -2,9 +2,7 @@ package xtdb.storage
 
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
-import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.future.await
-import kotlinx.coroutines.future.future
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
@@ -113,14 +111,21 @@ internal class RemoteBufferPool(
             path
         }
 
-    override fun getByteArray(key: Path): ByteArray =
-        memoryCache.get(PathSlice(cacheRootPath.resolve(key))) { pathSlice ->
+    override fun getByteArray(key: Path): ByteArray {
+        val pathSlice = PathSlice(cacheRootPath.resolve(key))
+        val arrowBuf = memoryCache.get(pathSlice) { pathSlice ->
             memCacheMisses?.increment()
             diskCache.get(pathSlice.path) { k, tmpFile ->
                 diskCacheMisses?.increment()
                 getObject(cacheRootPath.relativize(k), tmpFile)
             }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
-        }.use { it.toByteArray() }
+        }
+        return try {
+            arrowBuf.toByteArray()
+        } finally {
+            releaseEntry(key)
+        }
+    }
 
     override fun getFooter(key: Path): ArrowFooter = arrowFooterCache.get(key) {
         diskCache
@@ -151,10 +156,15 @@ internal class RemoteBufferPool(
                 getObject(cacheRootPath.relativize(k), tmpFile)
             }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
         }.use { arrowBuf ->
-            arrowBuf.arrowBufToRecordBatch(
-                0, arrowBlock.metadataLength, arrowBlock.bodyLength,
-                "Failed opening record batch '$key' at block-idx $idx"
-            )
+            try {
+                arrowBuf.arrowBufToRecordBatch(
+                    0, arrowBlock.metadataLength, arrowBlock.bodyLength,
+                    "Failed opening record batch '$key' at block-idx $idx"
+                )
+            } catch (t: Throwable) {
+                releaseEntry(key)
+                throw t
+            }
         }
     }
 
@@ -198,6 +208,10 @@ internal class RemoteBufferPool(
     override fun putObject(key: Path, buffer: ByteBuffer) {
         networkWrite?.increment(buffer.capacity().toDouble())
         objectStore.putObject(key, buffer).get()
+    }
+
+    override fun releaseEntry(key: Path) {
+        memoryCache.releaseEntry(PathSlice(cacheRootPath.resolve(key)))
     }
 
     override fun evictCachedBuffer(key: Path) {

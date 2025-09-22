@@ -120,6 +120,9 @@ internal class MemoryStorage(
         }
     }
 
+    // No-op for MemoryStorage as it doesn't use MemoryCache
+    override fun releaseEntry(key: Path) {}
+
     override fun evictCachedBuffer(key: Path) {}
 
     override fun close() {

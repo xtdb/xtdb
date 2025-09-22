@@ -41,6 +41,12 @@ sealed interface BufferPool : AutoCloseable {
      */
     fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch
 
+    /**
+     * Explicitly called when consumers are done with the ArrowBufs
+     * Release the entry and attempt to unpin - logic handled by the pinning cache
+     */
+    fun releaseEntry(key: Path)
+
     fun putObject(key: Path, buffer: ByteBuffer)
 
     /**
@@ -78,6 +84,7 @@ sealed interface BufferPool : AutoCloseable {
             override fun copyObject(src: Path, dest: Path) = unsupported("copyObject")
             override fun deleteIfExists(key: Path) = unsupported("deleteIfExists")
             override fun openArrowWriter(key: Path, rel: Relation) = unsupported("openArrowWriter")
+            override fun releaseEntry(key: Path) = unsupported("releaseEntry")
 
             override fun close() = Unit
         }

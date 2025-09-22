@@ -154,11 +154,16 @@ class MemoryCache @JvmOverloads internal constructor(
         val nettyBuf = entry.nettyBuf
 
         // create a new ArrowBuf for each request.
-        // when the ref-count drops to zero, we release a ref-count in the cache.
+        // release0() is now a no-op - callers must explicitly call tryRelease()
         return al.wrapForeignAllocation(
             object : ForeignAllocation(nettyBuf.capacity().toLong(), nettyBuf.memoryAddress()) {
-                override fun release0() = pinningCache.releaseEntry(k)
+                override fun release0() { /* no-op */ }
             })
+    }
+
+
+    fun releaseEntry(k: PathSlice) {
+        pinningCache.releaseEntry(k)
     }
 
     fun invalidate(k: PathSlice) = pinningCache.invalidate(k)

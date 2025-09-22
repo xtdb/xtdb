@@ -61,15 +61,22 @@ internal class LocalStorage(
         private fun Path.orThrowIfMissing(key: Path) = takeIf { it.exists() } ?: throw objectMissingException(key)
     }
 
-    override fun getByteArray(key: Path): ByteArray =
-        memoryCache.get(PathSlice(cacheRootPath.resolve(key))) { pathSlice ->
+    override fun getByteArray(key: Path): ByteArray {
+        val pathSlice = PathSlice(cacheRootPath.resolve(key))
+        val arrowBuf = memoryCache.get(pathSlice) { pathSlice ->
             memCacheMisses?.increment()
             val bufferCachePath = this@LocalStorage.rootPath
                 .resolve(cacheRootPath.relativize(pathSlice.path))
                 .orThrowIfMissing(key)
 
             completedFuture(Pair(PathSlice(bufferCachePath, pathSlice.offset, pathSlice.length), null))
-        }.use { it.toByteArray() }
+        }
+        return try {
+            arrowBuf.toByteArray()
+        } finally {
+            releaseEntry(key)
+        }
+    }
 
     override fun getFooter(key: Path): ArrowFooter =
         arrowFooterCache.get(key) {
@@ -97,12 +104,17 @@ internal class LocalStorage(
 
             completedFuture(Pair(PathSlice(bufferCachePath, pathSlice.offset, pathSlice.length), null))
         }.use { arrowBuf ->
-            arrowBuf.arrowBufToRecordBatch(
-                0,
-                arrowBlock.metadataLength,
-                arrowBlock.bodyLength,
-                "Failed opening record batch '$path' at block-idx $idx"
-            )
+            try {
+                arrowBuf.arrowBufToRecordBatch(
+                    0,
+                    arrowBlock.metadataLength,
+                    arrowBlock.bodyLength,
+                    "Failed opening record batch '$path' at block-idx $idx"
+                )
+            } catch (t: Throwable) {
+                releaseEntry(key)
+                throw t
+            }
         }
     }
 
@@ -174,6 +186,10 @@ internal class LocalStorage(
                 }
             }
         }
+    }
+
+    override fun releaseEntry(key: Path) {
+        memoryCache.releaseEntry(PathSlice(cacheRootPath.resolve(key)))
     }
 
     override fun evictCachedBuffer(key: Path) {
