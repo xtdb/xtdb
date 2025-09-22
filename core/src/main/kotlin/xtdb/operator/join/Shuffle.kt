@@ -24,11 +24,13 @@ class Shuffle private constructor(
     val dataFile: Path, private val outDataRel: Relation, private val dataUnloader: RelationUnloader,
     val hashFile: Path, private val hashRel: Relation, private val hashUnloader: RelationUnloader,
 
-    expectedRowCount: Long, expectedBlockCount: Int
+    expectedRowCount: Long, expectedBlockCount: Int, minParts: Int
 ) : AutoCloseable {
 
-    val partCount: Int = (expectedBlockCount.takeHighestOneBit() shl 1).coerceAtLeast(1)
-    val hashMask: Int = partCount - 1
+    val schema get() = inDataRel.schema
+
+    val partCount: Int = (expectedBlockCount.takeHighestOneBit() shl 1).coerceAtLeast(minParts)
+    private val hashMask: Int = partCount - 1
     private val approxRowsPerPart = (expectedRowCount / expectedBlockCount / partCount).toInt()
     private val hashCol = hashRel[HASH_COL_NAME]
 
@@ -70,7 +72,8 @@ class Shuffle private constructor(
     private var reloader: Relation.Loader? = null
     private var reloadDataRel: Relation? = null
 
-    fun appendDataPart(dataRel: Relation, partIdx: Int) {
+    fun loadDataPart(dataRel: Relation, partIdx: Int) {
+        dataRel.clear()
         val reloader = this.reloader ?: Relation.loader(al, dataFile).also { this.reloader = it }
         val reloadDataRel = this.reloadDataRel ?: Relation(al, reloader.schema).also { this.reloadDataRel = it }
 
@@ -83,8 +86,8 @@ class Shuffle private constructor(
     private var hashReloader: Relation.Loader? = null
     private var reloadHashRel: Relation? = null
 
-    // temporary function to load hashes back in
-    fun appendHashPart(hashCol: VectorWriter, partIdx: Int) {
+    fun loadHashPart(hashCol: VectorWriter, partIdx: Int) {
+        hashCol.clear()
         val reloader = this.hashReloader ?: Relation.loader(al, hashFile).also { this.hashReloader = it }
         val reloadHashRel = this.reloadHashRel ?: Relation(al, reloader.schema).also { this.reloadHashRel = it }
 
@@ -117,7 +120,7 @@ class Shuffle private constructor(
 
         fun open(
             al: BufferAllocator, inDataRel: Relation, hashColNames: List<ColumnName>,
-            rowCount: Long, blockCount: Int
+            rowCount: Long, blockCount: Int, minParts: Int = 1
         ): Shuffle =
             createTempFile("xtdb-build-side-shuffle-", ".arrow").deleteOnCatch { dataFile ->
                 Relation(al, inDataRel.schema).closeOnCatch { outDataRel ->
@@ -131,7 +134,7 @@ class Shuffle private constructor(
                                         al, inDataRel, hashColNames,
                                         dataFile, outDataRel, dataUnloader,
                                         hashFile, outHashRel, hashUnloader,
-                                        rowCount, blockCount
+                                        rowCount, blockCount, minParts
                                     )
 
                                 }

@@ -6,13 +6,13 @@ import org.apache.arrow.vector.types.pojo.Schema
 import org.roaringbitmap.RoaringBitmap
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
-import xtdb.vector.ValueVectorReader.from
-import xtdb.types.FieldName
-import xtdb.expression.map.IndexHasher
 import xtdb.arrow.Vector.Companion.openVector
+import xtdb.arrow.VectorReader
 import xtdb.expression.map.IndexHasher.Companion.hasher
+import xtdb.types.FieldName
 import xtdb.types.Type.Companion.I32
 import xtdb.types.Type.Companion.ofType
+import xtdb.vector.ValueVectorReader.from
 import java.util.function.IntConsumer
 import java.util.function.IntUnaryOperator
 
@@ -22,9 +22,10 @@ class BuildSide(
     val keyColNames: List<String>,
     trackUnmatchedIdxs: Boolean,
     val withNilRow: Boolean,
-    val inMemoryThreshold: Int = 100_000,
+    private val inMemoryThreshold: Long = 100_000,
 ) : AutoCloseable {
     private val dataRel = Relation(al, schema)
+    private val hashCol = "hashes".ofType(I32).openVector(al)
 
     private var builtDataRel: RelationReader? = null
     val builtRel get() = builtDataRel!!
@@ -32,67 +33,78 @@ class BuildSide(
 
     internal var spill: Spill? = null; private set
 
+    private fun openSpill(): Spill = Spill.open(al, dataRel).also { this.spill = it }
+
     @Suppress("NAME_SHADOWING")
     fun append(inRel: RelationReader) {
         inRel.openDirectSlice(al).use { inRel ->
             val rowCopier = inRel.rowCopier(dataRel)
 
-            repeat(inRel.rowCount) { inIdx ->
-                rowCopier.copyRow(inIdx)
-            }
+            repeat(inRel.rowCount) { inIdx -> rowCopier.copyRow(inIdx) }
 
-            if (dataRel.rowCount > inMemoryThreshold) {
-                val spill = spill ?: Spill.open(al, dataRel).also { this.spill = it }
-
-                spill.spill()
-            }
+            if (dataRel.rowCount > inMemoryThreshold)
+                (this.spill ?: openSpill()).spill()
         }
     }
 
     var shuffle: Shuffle? = null; private set
 
-    fun build() {
-        "hashes".ofType(I32).openVector(al).use { hashCol ->
-            val spill = this.spill
+    private fun buildRel(dataRel: Relation, hashCol: VectorReader) {
+        unmatchedBuildIdxs?.let {
+            it.clear()
+            it.add(0L, dataRel.rowCount.toLong())
+        }
 
-            if (spill != null) {
-                spill.spill()
-                spill.end()
+        if (withNilRow) dataRel.endRow()
+        builtDataRel?.close()
+        builtDataRel = RelationReader.from(dataRel.openAsRoot(al))
 
-                val shuffle = Shuffle.open(
-                    al, dataRel, keyColNames, spill.rowCount, spill.blockCount
-                ).also { this.shuffle = it }
+        buildMap?.close()
+        buildMap = BuildSideMap.from(al, hashCol)
+    }
 
-                spill.openDataLoader().use { dataLoader ->
-                    while(dataLoader.loadNextPage(dataRel)) {
-                        shuffle.shuffle()
-                    }
+    fun end() {
+        val spill = this.spill
+
+        if (spill != null) {
+            spill.spill()
+            spill.end()
+
+            val shuffle = Shuffle.open(al, dataRel, keyColNames, spill.rowCount, spill.blockCount)
+                .also { this.shuffle = it }
+
+            spill.openDataLoader().use { dataLoader ->
+                while (dataLoader.loadNextPage(dataRel)) {
+                    shuffle.shuffle()
                 }
-
-                shuffle.end()
-                dataRel.clear()
-                hashCol.clear()
-                repeat(shuffle.partCount) { partIdx ->
-                    shuffle.appendDataPart(dataRel, partIdx)
-                    shuffle.appendHashPart(hashCol, partIdx)
-                }
-            } else {
-                dataRel.hasher(keyColNames).writeAllHashes(hashCol)
             }
+            shuffle.end()
 
-            unmatchedBuildIdxs?.add(0L, dataRel.rowCount.toLong())
-            if (withNilRow) dataRel.endRow()
+            dataRel.clear()
             builtDataRel?.close()
             builtDataRel = RelationReader.from(dataRel.openAsRoot(al))
-
-            buildMap?.close()
-            buildMap = BuildSideMap.from(al, hashCol)
+        } else {
+            dataRel.hasher(keyColNames).writeAllHashes(hashCol)
+            buildRel(dataRel, hashCol)
         }
     }
 
+
+    val partCount: Int get() = shuffle?.partCount ?: 0
+
+    fun loadPart(partIdx: Int) {
+        val shuffle = checkNotNull(shuffle) { "no spilled data" }
+
+        shuffle.loadDataPart(dataRel, partIdx)
+        shuffle.loadHashPart(hashCol, partIdx)
+
+        buildRel(dataRel, hashCol)
+    }
+
+
     val nullRowIdx: Int
         get() {
-            check(withNilRow) { "no nil row in build side" }
+            check(this.withNilRow) { "no nil row in build side" }
             return builtRel.rowCount - 1
         }
 
@@ -130,6 +142,7 @@ class BuildSide(
         shuffle?.close()
         spill?.close()
 
+        hashCol.close()
         dataRel.close()
     }
 }

@@ -1,5 +1,6 @@
 (ns xtdb.operator.join-test
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [clojure.test :as t :refer [deftest]]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
@@ -1178,17 +1179,92 @@
   (binding [join/*disk-join-threshold-rows* 10000]
     (with-open [node (xtn/start-node)
                 conn (jdbc/get-connection node)]
-      (let [ids (range 100000)]
+      ;; fizzbuzz ... sort of
+      (let [ids (range 100000)
+            fizzes (into #{} (remove #(zero? (mod % 300))) ids)
+            buzzes (into #{} (remove #(zero? (mod % 500))) ids)
+            count-f (count fizzes)
+            count-b (count buzzes)
+            f-and-b (count (set/intersection fizzes buzzes))
+            f-minus-b (count (set/difference fizzes buzzes))
+            b-minus-f (count (set/difference buzzes fizzes))
+            f-or-b (count (set/union fizzes buzzes))]
+
         (doseq [batch (partition-all 1000 ids)
                 :let [docs (for [id batch]
                              {:xt/id id})]]
           (xt/submit-tx conn
-                        [(into [:put-docs :foo] docs)
-                         (into [:put-docs :bar] docs)]))
+                        [(into [:put-docs :foo]
+                               (remove #(zero? (mod (:xt/id %) 300)))
+                               docs)
+                         (into [:put-docs :bar]
+                               (remove #(zero? (mod (:xt/id %) 500)))
+                               docs)]))
 
-        (t/is (=  [{:cnt 100000}]
-                  (tu/query-ra '[:group-by [{cnt (count_distinct foo.1/_id)}]
-                                 [:join [{foo.1/_id bar.2/_id}]
-                                  [:rename foo.1 [:scan {:table #xt/table foo} [_id]]]
-                                  [:rename bar.2 [:scan {:table #xt/table bar} [_id]]]]]
-                               {:node node})))))))
+        (t/testing "inner"
+          (let [join (set (tu/query-ra '[:join [{foo bar}]
+                                         [:rename {_id foo} [:scan {:table #xt/table foo} [_id]]]
+                                         [:rename {_id bar} [:scan {:table #xt/table bar} [_id]]]]
+                                       {:node node}))]
+            (t/is (= f-and-b (count join)))
+
+            (t/is (true? (contains? join {:foo 99999, :bar 99999})))
+            (t/is (false? (contains? join {:foo 99900, :bar 99900})))
+            (t/is (false? (contains? join {:foo 99500, :bar 99500})))))
+
+        (t/testing "LOJ"
+          (let [loj (set (tu/query-ra '[:left-outer-join [{foo bar}]
+                                        [:rename {_id foo}
+                                         [:scan {:table #xt/table foo} [_id]]]
+                                        [:rename {_id bar}
+                                         [:scan {:table #xt/table bar} [_id]]]]
+                                      {:node node}))
+                foos (into #{} (map :foo) loj)
+                bars (into #{} (map :bar) loj)]
+            (t/is (= count-f (count loj)))
+            (t/is (= count-f (count foos)))
+            (t/is (= (inc f-and-b) (count bars)))
+            (t/is (true? (contains? bars nil)))
+
+            (t/is (= f-minus-b (count (remove :bar loj))))
+            (t/is (true? (contains? loj {:foo 99999, :bar 99999})))
+            (t/is (true? (contains? loj {:foo 99500})))))
+
+        (t/testing "LOJ flipped"
+          (let [loj (set (tu/query-ra '[:left-outer-join [{bar foo}]
+                                        [:rename {_id bar} [:scan {:table #xt/table bar} [_id]]]
+                                        [:rename {_id foo} [:scan {:table #xt/table foo} [_id]]]]
+                                      {:node node}))
+                foos (into #{} (map :foo) loj)
+                bars (into #{} (map :bar) loj)]
+            (t/is (= count-b (count loj)))
+            (t/is (= (inc f-and-b) (count foos))) ; plus nil
+            (t/is (= count-b (count bars)))
+            (t/is (true? (contains? foos nil)))
+
+            (t/is (= b-minus-f (count (remove :foo loj))))
+            (t/is (true? (contains? loj {:foo 99999, :bar 99999})))
+            (t/is (true? (contains? loj {:bar 99300})))))
+
+        (t/testing "FOJ"
+          (let [foj (set (tu/query-ra '[:full-outer-join [{foo bar}]
+                                        [:rename {_id foo} [:scan {:table #xt/table foo} [_id]]]
+                                        [:rename {_id bar} [:scan {:table #xt/table bar} [_id]]]]
+                                      {:node node}))
+                foos (into #{} (map :foo) foj)
+                bars (into #{} (map :bar) foj)]
+            (t/is (= f-or-b (count foj)))
+            (t/is (= (inc count-f) (count foos))) ; original plus nil
+            (t/is (= (inc count-b) (count bars))) ; original plus nil
+            (t/is (true? (contains? foos nil)))
+            (t/is (true? (contains? bars nil)))
+
+            (t/is (= b-minus-f (count (remove :foo foj))))
+            (t/is (= f-minus-b (count (remove :bar foj))))
+            (t/is (true? (contains? foj {:foo 99999, :bar 99999})))
+            (t/is (true? (contains? foj {:bar 99300})))
+            (t/is (true? (contains? foj {:foo 99500})))
+
+            (t/is (false? (contains? foj {:foo 1500, :bar 1500})))
+            (t/is (false? (contains? foj {:foo 1500})))
+            (t/is (false? (contains? foj {:bar 1500})))))))))

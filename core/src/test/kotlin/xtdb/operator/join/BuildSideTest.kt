@@ -55,23 +55,36 @@ class BuildSideTest {
                 buildSide.append(rel)
                 buildSide.append(rel)
 
-                buildSide.build()
+                buildSide.end()
 
                 assertNotNull(buildSide.spill)
 
-                val builtRelation = buildSide.builtRel
+                assertEquals(4, buildSide.partCount)
+                buildSide.loadPart(0)
+                buildSide.builtRel.let { rel ->
+                    assertEquals(3, rel.rowCount)
+                    assertEquals(partOneRows, rel.toMaps(SNAKE_CASE_STRING))
 
-                assertEquals(9, builtRelation.rowCount)
+                    val hasher = rel.hasher(listOf("id"))
+                    val bobHash = hasher.hashCode(0)
+                    assertEquals(listOf(0, 1, 2), buildSide.getMatches(bobHash).sorted())
+                }
 
-                assertEquals(
-                    partOneRows + partTwoRows,
-                    builtRelation.toMaps(SNAKE_CASE_STRING)
-                )
+                buildSide.loadPart(1)
+                buildSide.builtRel.let { rel ->
+                    assertEquals(6, rel.rowCount)
+                    assertEquals(partTwoRows, rel.toMaps(SNAKE_CASE_STRING))
 
-                val hasher = rel.hasher(listOf("id"))
-                val val2Hash = hasher.hashCode(1) // hash for id=2
-                val expectedMatches = listOf(4, 6, 8)
-                assertEquals(expectedMatches, buildSide.getMatches(val2Hash).sorted())
+                    val hasher = rel.hasher(listOf("id"))
+                    val johnHash = hasher.hashCode(0)
+                    assertEquals(listOf(0, 2, 4), buildSide.getMatches(johnHash).sorted())
+                }
+
+                buildSide.loadPart(2)
+                assertEquals(0, buildSide.builtRel.rowCount)
+
+                buildSide.loadPart(3)
+                assertEquals(0, buildSide.builtRel.rowCount)
             }
 
             // with nil row
@@ -85,23 +98,31 @@ class BuildSideTest {
                 buildSide.append(rel)
                 buildSide.append(rel)
 
-                buildSide.build()
+                buildSide.end()
 
                 assertNotNull(buildSide.spill)
 
-                val builtRelation = buildSide.builtRel
+                assertEquals(4, buildSide.partCount)
 
-                assertEquals(10, builtRelation.rowCount)
+                buildSide.loadPart(0)
+                buildSide.builtRel.let { rel ->
+                    assertEquals(4, rel.rowCount)
 
-                assertEquals(
-                    partOneRows + partTwoRows + emptyMap(),
-                    builtRelation.toMaps(SNAKE_CASE_STRING)
-                )
+                    assertEquals(partOneRows + emptyMap(), rel.toMaps(SNAKE_CASE_STRING))
+                }
 
-                val hasher = rel.hasher(listOf("id"))
-                val val2Hash = hasher.hashCode(2) // hash for id=3
-                val expectedMatches = listOf(0, 1, 2)
-                assertEquals(expectedMatches, buildSide.getMatches(val2Hash).sorted())
+                buildSide.loadPart(1)
+                buildSide.builtRel.let { rel ->
+                    assertEquals(7, rel.rowCount)
+
+                    assertEquals(partTwoRows + emptyMap(), rel.toMaps(SNAKE_CASE_STRING))
+                }
+
+                buildSide.loadPart(2)
+                assertEquals(1, buildSide.builtRel.rowCount)
+
+                buildSide.loadPart(3)
+                assertEquals(1, buildSide.builtRel.rowCount)
             }
         }
     }
@@ -132,7 +153,7 @@ class BuildSideTest {
             ).use { buildSide ->
                 buildSide.append(rel)
 
-                buildSide.build()
+                buildSide.end()
 
                 assertNull(buildSide.spill)
 
