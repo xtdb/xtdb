@@ -19,7 +19,7 @@
            (java.time Clock Duration InstantSource)
            java.time.Duration
            (java.util Comparator Random)
-           (java.util.concurrent Executors TimeUnit)
+           (java.util.concurrent ExecutionException Executors TimeUnit)
            (java.util.concurrent.atomic AtomicLong)
            (oshi SystemInfo)))
 
@@ -224,13 +224,25 @@
                                                                        thread-loop)))))]
 
                 (fn run-pool [worker]
-                  (run! #(start-thread worker %) (range thread-count))
-                  (Thread/sleep (.toMillis duration))
-                  (.shutdown executor)
-                  (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
-                    (.shutdownNow executor)
+                  ;; Launch threads, collect Futures so we can collect any exceptions after termination
+                  (let [futures (mapv #(start-thread worker %) (range thread-count))]
+                    (Thread/sleep (.toMillis duration))
+                    (.shutdown executor)
                     (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
-                      (throw (ex-info "Pool threads did not stop within join-wait" {:task task, :executor executor}))))))
+                      (.shutdownNow executor)
+                      (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
+                        (throw (ex-info "Pool threads did not stop within join-wait" {:task task, :executor executor}))))
+                    ;; Propagate any worker exceptions to the main thread
+                    (doseq [f futures]
+                      (try
+                        (.get f) ; will throw ExecutionException if the Runnable raised
+                        (catch ExecutionException e
+                          (let [cause (.getCause e)]
+                            (log/error cause "Benchmark worker failed in :pool" {:task task})
+                            (throw (ex-info "Benchmark worker failed" {:task task} cause))))
+                        (catch InterruptedException e
+                          (log/error e "Interrupted while awaiting worker completion in :pool" {:task task})
+                          (throw (ex-info "Interrupted while awaiting worker completion" {:task task} e))))))))
 
         :concurrently (let [{:keys [^Duration duration, ^Duration join-wait, thread-tasks]} task
                             thread-task-fns (mapv compile-task thread-tasks)
@@ -245,13 +257,25 @@
                                                                                (assoc :thread-name (.getName (Thread/currentThread)))
                                                                                f)))))]
                         (fn run-concurrently [worker]
-                          (dorun (map-indexed #(start-thread worker %1 %2) thread-task-fns))
-                          (Thread/sleep (.toMillis duration))
-                          (.shutdown executor)
-                          (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
-                            (.shutdownNow executor)
+                          ;; Launch threads, collect Futures so we can collect any exceptions after termination
+                          (let [futures (mapv #(start-thread worker %1 %2) (range (count thread-task-fns)) thread-task-fns)]
+                            (Thread/sleep (.toMillis duration))
+                            (.shutdown executor)
                             (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
-                              (throw (ex-info "Task threads did not stop within join-wait" {:task task, :executor executor}))))))
+                              (.shutdownNow executor)
+                              (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
+                                (throw (ex-info "Task threads did not stop within join-wait" {:task task, :executor executor}))))
+                            ;; Propagate any worker exceptions to the main thread
+                            (doseq [f futures]
+                              (try
+                                (.get f) ; will throw ExecutionException if the Runnable raised
+                                (catch ExecutionException e
+                                  (let [cause (.getCause e)]
+                                    (log/error cause "Benchmark worker failed in :concurrently" {:task task})
+                                    (throw (ex-info "Benchmark worker failed" {:task task} cause))))
+                                (catch InterruptedException e
+                                  (log/error e "Interrupted while awaiting worker completion in :concurrently" {:task task})
+                                  (throw (ex-info "Interrupted while awaiting worker completion" {:task task} e))))))))
 
         :pick-weighted (let [{:keys [choices]} task
                              sample-fn (weighted-sample-fn (mapv (fn [[weight task]] [(compile-task task) weight]) choices))]
@@ -412,15 +436,15 @@
       :else (let [main-thread (Thread/currentThread)]
               (-> (Runtime/getRuntime)
                   (.addShutdownHook (Thread. (fn []
-                                             (let [shutdown-ms 10000]
-                                               (.interrupt main-thread)
-                                               (.join main-thread shutdown-ms)
-                                               (if (.isAlive main-thread)
-                                                 (do
-                                                   (log/warn "could not stop benchmark cleanly after" shutdown-ms "ms, forcing exit")
-                                                   (-> (Runtime/getRuntime) (.halt 1)))
-                                                 (log/info "Benchmark stopped."))))
-                                           "xtdb.shutdown-hook-thread")))
+                                               (let [shutdown-ms 10000]
+                                                 (.interrupt main-thread)
+                                                 (.join main-thread shutdown-ms)
+                                                 (if (.isAlive main-thread)
+                                                   (do
+                                                     (log/warn "could not stop benchmark cleanly after" shutdown-ms "ms, forcing exit")
+                                                     (-> (Runtime/getRuntime) (.halt 1)))
+                                                   (log/info "Benchmark stopped."))))
+                                             "xtdb.shutdown-hook-thread")))
 
               (let [ok? (atom false)]
                 (try
