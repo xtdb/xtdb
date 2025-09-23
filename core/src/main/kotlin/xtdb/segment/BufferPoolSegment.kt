@@ -44,20 +44,30 @@ class BufferPoolSegment private constructor(
 
         override fun loadDataPage(rootCache: RootCache): RelationReader =
             bp.getRecordBatch(dataFilePath, pageIndex).use { rb ->
-                val root = rootCache.openRoot(dataFilePath)
-                VectorLoader(root).load(rb)
-                RelationReader.Companion.from(root)
+                try {
+                    val root = rootCache.openRoot(dataFilePath)
+                    VectorLoader(root).load(rb)
+                    RelationReader.Companion.from(root)
+                } catch (t: Throwable) {
+                    bp.releaseEntry(dataFilePath)
+                    throw t
+                }
             }
 
         override fun openDataPage(al: BufferAllocator): RelationReader =
             bp.getRecordBatch(dataFilePath, pageIndex).use { rb ->
-                Relation.Companion.fromRecordBatch(al, schema, rb)
-                    .let { standardRel ->
-                        if (resolveSameSystemTimeEvents)
-                            resolveSameSystemTimeEvents(al, standardRel)
-                                .also { standardRel.close() }
-                        else standardRel
-                    }
+                try {
+                    Relation.Companion.fromRecordBatch(al, schema, rb)
+                        .let { standardRel ->
+                            if (resolveSameSystemTimeEvents)
+                                resolveSameSystemTimeEvents(al, standardRel)
+                                    .also { standardRel.close() }
+                            else standardRel
+                        }
+                } catch (t: Throwable) {
+                    bp.releaseEntry(dataFilePath)
+                    throw t
+                }
             }
     }
 

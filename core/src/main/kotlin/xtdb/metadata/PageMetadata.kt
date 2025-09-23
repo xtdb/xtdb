@@ -133,9 +133,14 @@ class PageMetadata private constructor(private val rel: Relation, private val pa
 
         fun openPageMetadata(metaFilePath: Path): PageMetadata =
             bp.getRecordBatch(metaFilePath, 0).use { rb ->
-                val footer = bp.getFooter(metaFilePath)
-                Relation.fromRecordBatch(al, footer.schema, rb).closeOnCatch { rel ->
-                    PageMetadata(rel, pageIdxCache.get(metaFilePath) { readPageIdxs(rel) })
+                try {
+                    val footer = bp.getFooter(metaFilePath)
+                    Relation.fromRecordBatch(al, footer.schema, rb).closeOnCatch { rel ->
+                        PageMetadata(rel, pageIdxCache.get(metaFilePath) { readPageIdxs(rel) })
+                    }
+                } catch (t: Throwable) {
+                    bp.releaseEntry(metaFilePath)
+                    throw t
                 }
             }
 
