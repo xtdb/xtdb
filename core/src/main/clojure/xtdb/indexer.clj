@@ -378,9 +378,7 @@
                                 (format "Parameter error: %d provided, %d expected" arg-count param-count)
                                 {:param-count param-count, :arg-count arg-count}))
 
-          (f (vr/rel-reader (->> args
-                                 (map-indexed (fn [idx ^VectorReader col]
-                                                (.withName col (str "?_" idx))))))))))))
+          (f args))))))
 
 (defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, db-cat, tx-opts, {:keys [stmt message]}]
   (let [^PreparedQuery pq (.prepareQuery q-src stmt db-cat tx-opts)]

@@ -8,19 +8,17 @@
             [xtdb.error :as err])
   (:import [clojure.lang Keyword MapEntry Symbol]
            (io.netty.buffer Unpooled)
-           (java.io ByteArrayOutputStream File)
+           (java.io File)
            java.lang.AutoCloseable
            (java.net MalformedURLException ServerSocket URI URL)
            java.nio.ByteBuffer
-           (java.nio.channels Channels ClosedByInterruptException ClosedByInterruptException FileChannel FileChannel$MapMode SeekableByteChannel)
+           (java.nio.channels ClosedByInterruptException ClosedByInterruptException FileChannel FileChannel$MapMode SeekableByteChannel)
            (java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption)
            java.nio.file.attribute.FileAttribute
            [java.security MessageDigest]
            (java.util Arrays Collections LinkedHashMap Map UUID WeakHashMap)
            (java.util.concurrent ExecutionException Executors ThreadFactory)
            (org.apache.arrow.memory BufferAllocator ForeignAllocation)
-           (org.apache.arrow.vector VectorSchemaRoot)
-           (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            xtdb.util.NormalForm))
 
@@ -123,13 +121,6 @@
              (.putLong (.getMostSignificantBits uuid))
              (.putLong (.getLeastSignificantBits uuid)))]
     (.position bb 0)
-    bb))
-
-(defn uri->byte-buffer ^ByteBuffer [^URI uri]
-  (let [^bytes ba (.getBytes (.toASCIIString uri))
-        bb (ByteBuffer/allocate (count ba))]
-    (.put bb ba)
-    (.flip bb)
     bb))
 
 (defn byte-buffer->uuid [^ByteBuffer bb]
@@ -324,11 +315,6 @@
   (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
     (delete-file)))
 
-(defn write-buffer-to-path [^ByteBuffer from-buffer ^Path to-path]
-  (with-open [file-ch (->file-channel to-path write-truncate-open-opts)
-              buf-ch (->seekable-byte-channel from-buffer)]
-    (.transferFrom file-ch buf-ch 0 (.size buf-ch))))
-
 (def ^Thread$UncaughtExceptionHandler uncaught-exception-handler
   (reify Thread$UncaughtExceptionHandler
     (uncaughtException [_ _thread throwable]
@@ -348,27 +334,6 @@
             (.setUncaughtExceptionHandler uncaught-exception-handler)))))))
 
 ;;; Type
-
-(defn build-arrow-ipc-byte-buffer ^java.nio.ByteBuffer {:style/indent 2}
-  [^VectorSchemaRoot root ipc-type f]
-
-  (try
-    (with-open [baos (ByteArrayOutputStream.)
-                ch (Channels/newChannel baos)
-                ^ArrowWriter sw (case ipc-type
-                                  :file (ArrowFileWriter. root nil ch)
-                                  :stream (ArrowStreamWriter. root nil ch))]
-
-      (.start sw)
-
-      (f (fn write-page! []
-           (.writeBatch sw)))
-
-      (.end sw)
-
-      (ByteBuffer/wrap (.toByteArray baos)))
-    (catch ClosedByInterruptException e
-      (throw (InterruptedException. (.getMessage e))))))
 
 (defn ->arrow-buf-view
   (^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer]
@@ -536,14 +501,6 @@
   (with-open [s (ServerSocket. 0)]
     (.getLocalPort s)))
 
-(defn unroll-interrupt-ex [e]
-  (letfn [(unroll [^Throwable e]
-            (if (or (instance? InterruptedException e) (instance? ClosedByInterruptException e))
-              e
-              (when-let [cause (.getCause e)]
-                (unroll cause))))]
-    (or (unroll e) e)))
-
 (defn seeded-gensym
   ([] (seeded-gensym "" 0))
   ([^long count-start] (seeded-gensym "" count-start))
@@ -568,30 +525,8 @@
                   xs seen)))]
      (step coll #{}))))
 
-(defn max-direct-memory
-  "Returns the maximum direct memory supposed to be used by the system.
-
-  Assumes the JVM option `io.netty.maxDirectMemory` is not set as otherwise that value is returned."
-  ^long []
-  (try
-    (io.netty.util.internal.PlatformDependent/maxDirectMemory)
-    (catch Throwable _t
-      ;; otherwise we use as much direct memory as there was heap specified
-      (.maxMemory (Runtime/getRuntime)))))
-
 (defn used-netty-memory []
   (io.netty.util.internal.PlatformDependent/usedDirectMemory))
-
-(defn throttle [f ^long ms]
-  (let [last-time (atom 0)
-        last-value (atom nil)]
-    (fn [& args]
-      (let [now (System/currentTimeMillis)]
-        (if (>= (- now ^long @last-time) ms)
-          (do
-            (reset! last-time now)
-            (reset! last-value (apply f args)))
-          @last-value)))))
 
 (defn implementation-version []
   (let [manifest (-> (ClassLoader/getSystemResource "META-INF/MANIFEST.MF")

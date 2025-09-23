@@ -11,7 +11,9 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import [com.google.protobuf Any ByteString]
+           [java.io ByteArrayOutputStream]
            [java.nio ByteBuffer]
+           [java.nio.channels Channels]
            [java.util ArrayList HashMap List Map]
            [java.util.concurrent ConcurrentHashMap]
            [java.util.function BiFunction]
@@ -19,10 +21,10 @@
            [org.apache.arrow.flight.sql FlightSqlProducer]
            [org.apache.arrow.flight.sql.impl FlightSql$ActionBeginTransactionResult FlightSql$ActionCreatePreparedStatementResult FlightSql$ActionEndTransactionRequest$EndTransaction FlightSql$CommandPreparedStatementQuery FlightSql$DoPutUpdateResult FlightSql$TicketStatementQuery]
            [org.apache.arrow.memory BufferAllocator]
-           [org.apache.arrow.vector VectorSchemaRoot]
-           [org.apache.arrow.vector.types.pojo Schema]
+           [org.apache.arrow.vector VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector.types.pojo Field Schema]
            [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
-           xtdb.arrow.Relation
+           (xtdb.arrow ArrowUnloader$Mode Relation)
            xtdb.database.Database$Catalog
            xtdb.IResultCursor
            [xtdb.query IQuerySource PreparedQuery]
@@ -66,11 +68,23 @@
 
     (vec rows)))
 
-(defn- flight-stream->bytes ^ByteBuffer [^FlightStream flight-stream]
-  (util/build-arrow-ipc-byte-buffer (.getRoot flight-stream) :stream
-                                    (fn [write-page!]
-                                      (while (.next flight-stream)
-                                        (write-page!)))))
+(defn- flight-stream->bytes ^ByteBuffer [allocator ^FlightStream flight-stream]
+  (let [root (.getRoot flight-stream)
+        root-unl (VectorUnloader. root)]
+    (with-open [out (ByteArrayOutputStream.)
+                rel (Relation. allocator
+                               (->> (.getFields (.getSchema root))
+                                    (map-indexed (fn [idx ^Field f]
+                                                   (types/field-with-name f (str "?_" idx))))))
+                unl (.startUnload rel (Channels/newChannel out) ArrowUnloader$Mode/STREAM)]
+      (while (.next flight-stream)
+        (with-open [rb (.getRecordBatch root-unl)]
+          (.load rel rb))
+
+        (.writePage unl))
+      (.end unl)
+
+      (ByteBuffer/wrap (.toByteArray out)))))
 
 (defn- ->fsql-producer [{:keys [allocator node, ^IQuerySource q-src, db-cat, ^Map fsql-txs, ^Map stmts, ^Map tickets]}]
   (letfn [(exec-dml [dml fsql-tx-id]
@@ -139,7 +153,7 @@
         (fn []
           (let [{:keys [sql fsql-tx-id]} (or (get stmts (.getPreparedStatementHandle cmd))
                                              (throw (UnsupportedOperationException. "invalid ps-id")))
-                dml (tx-ops/->SqlByteArgs sql (flight-stream->bytes flight-stream))]
+                dml (tx-ops/->SqlByteArgs sql (flight-stream->bytes allocator flight-stream))]
             (try
               (exec-dml dml fsql-tx-id)
               (send-do-put-update-res ack-stream allocator)

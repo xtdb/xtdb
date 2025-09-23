@@ -3009,3 +3009,25 @@ UNION ALL
                   WHERE col = 1
                   SELECT *
                   ORDER BY d DESC"))))
+
+(t/deftest update-with-many-params-4803
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id "id"}]])
+
+  (xt/execute-tx tu/*node* [["UPDATE docs SET c1=?,c2=?,c3=?,c4=?,c5=?,c6=?,c7=? WHERE _id=?"
+                             1 2 3 4 5 6 7 "id"]])
+
+  (t/is (= [{:xt/id "id", :c1 1, :c2 2, :c3 3, :c4 4, :c5 5, :c6 6, :c7 7}]
+           (xt/q tu/*node* "FROM docs")))
+
+  (xt/execute-tx tu/*node* [["UPDATE docs SET c1=?,c2=?,c3=?,c4=?,c5=?,c6=?,c7=?,c8=?,c9=? WHERE _id=?"
+                             1 2 3 4 5 6 7 8 9 "id"]])
+
+  (t/is (= [{:xt/id "id", :c1 1, :c2 2, :c3 3, :c4 4, :c5 5, :c6 6, :c7 7, :c8 8, :c9 9}]
+           (xt/q tu/*node* "FROM docs"))))
+
+(t/deftest scrambled-update-4803
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id "id"}]])
+  (xt/execute-tx tu/*node* [["UPDATE docs SET c1=?,c2=?,c3=?,c4=?,c5=?,c6=?,c7=?,c8=?,c9=? WHERE _id='id'"
+                             1 2 3 4 5 6 7 8 9]])
+  (t/is (= [{:xt/id "id", :c1 1, :c2 2, :c3 3, :c4 4, :c5 5, :c6 6, :c7 7, :c8 8, :c9 9}]
+           (xt/q tu/*node* "FROM docs"))))

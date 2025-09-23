@@ -31,7 +31,7 @@ class RelationAsStructReader(
         return RowCopier { idx ->
             copiers.forEach { it.copyRow(idx) }
             dest.endStruct()
-            idx
+            dest.valueCount - 1
         }
     }
 
