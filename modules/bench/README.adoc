@@ -294,3 +294,22 @@ If you need to add a new benchmark, you can do the following:
 4. Update the cloud/run-bench.sh to include the new benchmark
 5. Create a helm template for the new benchmark in cloud/helm/templates/
 6. Update the cloud/helm/values.yaml with the new benchmark configuration
+
+== CI and Grafana Dashboard Images
+
+=== GitHub Actions
+
+The repository includes CI workflows that can provision cloud infra, run the benchmark, and publish results.
+
+At a high level:
+
+* A nightly job will run benchmark workloads (e.g. TPC-H) against a permanent benchmark kubernetes cluster
+* After the run, scripts export dashboard snapshots from Grafana for the time range of the run
+* These snapshots (and other run artifacts) are uploaded to the workflow as GitHub Actions _artifacts_
+
+=== How to download Grafana dashboard images from a job
+
+1. Open GitHub → `Actions` → choose the latest benchmark run workflow
+2. Scroll to the bottom to the **Artifacts** section
+3. Download the artifact that contains Grafana snapshots (the name includes `grafana`)
+4. Extract the archive locally to view the exported PNG images
