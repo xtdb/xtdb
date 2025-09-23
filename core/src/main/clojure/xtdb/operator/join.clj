@@ -195,9 +195,9 @@
         (when-not shuffle?
           (build-pushdowns build-side pushdown-blooms pushdown-iids))
 
-        (util/with-close-on-catch [probe-cursor (->probe-cursor (when pushdown-blooms
+        (util/with-close-on-catch [probe-cursor (->probe-cursor (when (and (not shuffle?) pushdown-blooms)
                                                                   (zipmap (map symbol probe-key-cols) pushdown-blooms))
-                                                                (when pushdown-iids
+                                                                (when (and (not shuffle?) pushdown-iids)
                                                                   (zipmap (filter #(= (name %) "_iid") probe-key-cols)
                                                                           (repeat pushdown-iids))))]
           (set! (.hash-join-cursor this)
