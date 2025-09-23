@@ -31,7 +31,8 @@ class Shuffle private constructor(
 
     val partCount: Int = (expectedBlockCount.takeHighestOneBit() shl 1).coerceAtLeast(minParts)
     private val hashMask: Int = partCount - 1
-    private val approxRowsPerPart = (expectedRowCount / expectedBlockCount / partCount).toInt()
+    private val approxRowsPerPart =
+        (expectedRowCount / expectedBlockCount.coerceAtLeast(1) / partCount.coerceAtLeast(1)).toInt()
     private val hashCol = hashRel[HASH_COL_NAME]
 
     private val dataRowCopier = inDataRel.rowCopier(outDataRel)
