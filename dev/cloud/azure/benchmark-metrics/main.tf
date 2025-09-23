@@ -207,129 +207,139 @@ resource "azurerm_monitor_action_group" "bench_slack" {
     callback_url            = azapi_resource_action.bench_alert_relay_cb.output.value
     use_common_alert_schema = true
   }
+}
 
-  email_receiver {
-    name           = var.alert_email_receiver_name
-    email_address  = var.alert_email_address
+# Logic App: Scheduled anomaly detection (2σ over P30D via Logs Query API)
+resource "azapi_resource" "bench_anomaly" {
+  type      = "Microsoft.Logic/workflows@2019-05-01"
+  name      = var.anomaly_logic_app_name
+  location  = var.location
+  parent_id = azurerm_resource_group.rg.id
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  body = {
+    properties = {
+      state      = var.anomaly_alert_enabled ? "Enabled" : "Disabled"
+      definition = {
+        "$schema"        = "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#"
+        "contentVersion" = "1.0.0.0"
+        "parameters"     = {}
+        "triggers" = {
+          "recurrence" = {
+            "type"       = "Recurrence"
+            "recurrence" = {
+              "frequency" = var.anomaly_schedule_frequency
+              "interval"  = var.anomaly_schedule_interval
+            }
+          }
+        }
+        "actions" = {
+          "QueryLogs" = {
+            "type"   = "Http"
+            "inputs" = {
+              "method" = "POST"
+              "uri"    = "https://api.loganalytics.io/v1/workspaces/${azurerm_log_analytics_workspace.law.workspace_id}/query"
+              "authentication" = {
+                "type"     = "ManagedServiceIdentity"
+                "audience" = "https://api.loganalytics.io/"
+              }
+              "headers" = {
+                "Content-Type" = "application/json"
+              }
+              "body" = {
+                "timespan" = var.anomaly_timespan
+                "query"    = <<-KQL
+                  let N = toint(${var.anomaly_baseline_n});
+                  let latestBenchmark =
+                      ${var.table_name}
+                      | where step == "overall" and metric == "duration_ms"
+                      | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.anomaly_scale_factor}
+                      | where repo == "${var.anomaly_repo}"
+                      | summarize arg_max(TimeGenerated, *)
+                      | extend current_ms = todouble(value), k = 1;
+                  let prevN =
+                      ${var.table_name}
+                      | where step == "overall" and metric == "duration_ms"
+                      | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.anomaly_scale_factor}
+                      | where repo == "${var.anomaly_repo}"
+                      | order by TimeGenerated desc
+                      | top N+1 by TimeGenerated desc
+                      | top N by TimeGenerated asc
+                      | project value = todouble(value), TimeGenerated;
+                  let baseline = prevN | summarize baseline_mean = avg(value), baseline_std = stdev(value) | extend k = 1;
+                  latestBenchmark
+                    | join kind=inner baseline on k
+                    | where isnotnull(baseline_std) and baseline_std > 0
+                    | extend threshold_value_slow = baseline_mean + (${var.anomaly_sigma} * baseline_std),
+                             threshold_value_fast = baseline_mean - (${var.anomaly_sigma} * baseline_std)
+                    | extend slow_violation = current_ms > threshold_value_slow,
+                             fast_violation = current_ms < threshold_value_fast
+                    | where slow_violation or fast_violation
+                    | project run_id = tostring(run_id), slow_violation, fast_violation, TimeGenerated, current_ms, baseline_mean, baseline_std
+                KQL
+              }
+            }
+          }
+          "IfAnomaly" = {
+            "type"       = "If"
+            "expression" = {
+              "and" = [
+                {
+                  "greater" = [
+                    {
+                      "length" = [
+                        "@coalesce(body('QueryLogs')?['tables'][0]?['rows'], createArray())"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              ]
+            }
+            "runAfter" = {
+              "QueryLogs" = [
+                "Succeeded"
+              ]
+            }
+            "actions" = {
+              "PostAnomalyToSlack" = {
+                "type"   = "Http"
+                "inputs" = {
+                  "method" = "POST"
+                  "uri"    = var.slack_webhook_url
+                  "headers" = {
+                    "Content-Type" = "application/json"
+                  }
+                  "body" = {
+                    "attachments" = [
+                      {
+                        "color" = "#D32F2F"
+                        "title" = "@{concat('Benchmark anomaly: TPCH ', if(equals(first(body('QueryLogs')?['tables'][0]?['rows'])[1], true), 'ran slower', 'ran faster'))}"
+                        "text"  = "@{concat('*Scale factor:* ', string(${var.anomaly_scale_factor}), '\n', '*Condition:* ± ', string(${var.anomaly_sigma}), 'σ over last ', '${var.anomaly_baseline_n} runs', '\n', '*Run:* https://github.com/${var.anomaly_repo}/actions/runs/', string(first(body('QueryLogs')?['tables'][0]?['rows'])[0]))}"
+                        "mrkdwn_in" = ["text"]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+            "else" = {}
+          }
+        }
+        "outputs" = {}
+      }
+    }
   }
 }
 
-# Scheduled query alert: detect latest run slower than baseline
-resource "azurerm_monitor_scheduled_query_rules_alert_v2" "bench_slow_alert" {
-  name                = var.slow_alert_name
-  resource_group_name = var.resource_group_name
-  location            = var.location
-  severity            = var.alert_severity
-  enabled             = var.alert_enabled
 
-  evaluation_frequency = var.alert_evaluation_frequency
-  window_duration      = var.alert_window_duration
-
-  scopes = [azurerm_log_analytics_workspace.law.id]
-
-  criteria {
-    query = <<-KQL
-      let N = toint(${var.alert_baseline_n});
-      // Latest overall duration
-      let latestBenchmark =
-          ${var.table_name}
-          | where step == "overall" and metric == "duration_ms"
-          | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.alert_scale_factor}
-          | where repo == "xtdb/xtdb"
-          | summarize arg_max(TimeGenerated, *)
-          | extend current_ms = todouble(value), k = 1;
-      // Previous N overall durations (excluding the latest)
-      let prevN =
-          ${var.table_name}
-          | where step == "overall" and metric == "duration_ms"
-          | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.alert_scale_factor}
-          | where repo == "xtdb/xtdb"
-          | order by TimeGenerated desc
-          | top N+1 by TimeGenerated desc
-          | top N by TimeGenerated asc
-          | project value = todouble(value), TimeGenerated
-          ;
-      let baseline = prevN | summarize baseline_mean = avg(value), baseline_std = stdev(value) | extend k = 1;
-      latestBenchmark
-        | join kind=inner baseline on k
-        | where isnotnull(baseline_std) and baseline_std > 0
-        | extend threshold_value = baseline_mean + (${var.alert_sigma} * baseline_std)
-        | where current_ms > threshold_value
-        | project TimeGenerated
-    KQL
-    time_aggregation_method = "Count"
-    operator         = "GreaterThan"
-    threshold        = 0
-    failing_periods {
-      number_of_evaluation_periods = 1
-      minimum_failing_periods_to_trigger_alert = 1
-    }
-  }
-
-  action {
-    action_groups = [azurerm_monitor_action_group.bench_slack.id]
-  }
-
-  description = "Alert when latest 'overall' duration exceeds baseline mean + ${var.alert_sigma}σ over the previous ${var.alert_baseline_n} runs"
-}
-
-# Scheduled query alert: detect latest run faster than baseline
-resource "azurerm_monitor_scheduled_query_rules_alert_v2" "bench_fast_alert" {
-  name                = var.fast_alert_name
-  resource_group_name = var.resource_group_name
-  location            = var.location
-  severity            = var.alert_severity
-  enabled             = var.alert_enabled
-
-  evaluation_frequency = var.alert_evaluation_frequency
-  window_duration      = var.alert_window_duration
-
-  scopes = [azurerm_log_analytics_workspace.law.id]
-
-  criteria {
-    query = <<-KQL
-      let N = toint(${var.alert_baseline_n});
-      // Latest overall duration
-      let latestBenchmark =
-          ${var.table_name}
-          | where step == "overall" and metric == "duration_ms"
-          | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.alert_scale_factor}
-          | where repo == "xtdb/xtdb"
-          | summarize arg_max(TimeGenerated, *)
-          | extend current_ms = todouble(value), k = 1;
-      // Previous N overall durations (excluding the latest)
-      let prevN =
-          ${var.table_name}
-          | where step == "overall" and metric == "duration_ms"
-          | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.alert_scale_factor}
-          | where repo == "xtdb/xtdb"
-          | order by TimeGenerated desc
-          | top N+1 by TimeGenerated desc
-          | top N by TimeGenerated asc
-          | project value = todouble(value), TimeGenerated
-          ;
-      let baseline = prevN | summarize baseline_mean = avg(value), baseline_std = stdev(value) | extend k = 1;
-      latestBenchmark
-        | join kind=inner baseline on k
-        | where isnotnull(baseline_std) and baseline_std > 0
-        | extend threshold_value = baseline_mean - (${var.alert_sigma} * baseline_std)
-        | where current_ms < threshold_value
-        | project TimeGenerated
-    KQL
-    time_aggregation_method = "Count"
-    operator         = "GreaterThan"
-    threshold        = 0
-    failing_periods {
-      number_of_evaluation_periods = 1
-      minimum_failing_periods_to_trigger_alert = 1
-    }
-  }
-
-  action {
-    action_groups = [azurerm_monitor_action_group.bench_slack.id]
-  }
-
-  description = "Alert when latest 'overall' duration is below baseline mean - ${var.alert_sigma}σ over the previous ${var.alert_baseline_n} runs"
+resource "azurerm_role_assignment" "bench_anomaly_la_reader" {
+  scope                = azurerm_log_analytics_workspace.law.id
+  role_definition_name = "Log Analytics Reader"
+  principal_id         = azapi_resource.bench_anomaly.output.identity.principalId
 }
 
 # Scheduled query alert: missing ingestion (no TPC-H runs at the given scale factor within the window)
@@ -349,7 +359,8 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "bench_missing_ingesti
     query = <<-KQL
       ${var.table_name}
       | where step == "overall" and metric == "duration_ms"
-      | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.alert_scale_factor}
+      | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.anomaly_scale_factor}
+      | where repo == "${var.anomaly_repo}"
       | summarize c = count()
       | where c == 0
       | project trigger = 1
@@ -367,7 +378,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "bench_missing_ingesti
     action_groups = [azurerm_monitor_action_group.bench_slack.id]
   }
 
-  description = "Alert when no TPC-H scaleFactor=${var.alert_scale_factor} 'overall' rows are ingested within ${var.missing_alert_window_duration}"
+  description = "Alert when no TPC-H scaleFactor=${var.anomaly_scale_factor} 'overall' rows are ingested within ${var.missing_alert_window_duration}"
 }
 
 # Azure Portal Dashboard: 10 most recent runs (line chart)
@@ -435,8 +446,9 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
                   value      = <<-KQL
                     XTDBBenchmark_CL
                     | where step == "overall" and metric == "duration_ms"
-                    | where benchmark == "tpch"
-                    | top 10 by TimeGenerated desc
+                    | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.anomaly_scale_factor}
+                    | where repo == "${var.anomaly_repo}"
+                    | top 20 by TimeGenerated desc
                     | order by TimeGenerated asc
                     | project TimeGenerated, duration_ms = todouble(value)
                   KQL

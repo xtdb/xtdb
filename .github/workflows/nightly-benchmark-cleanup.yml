@@ -152,8 +152,6 @@ jobs:
           set -euo pipefail
 
           TS_NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          RUN_ID_PREFIX=$(date -u +"%Y-%m-%dT%H:%MZ")
-          SHORT_SHA=${GIT_SHA:0:7}
 
           # Defaults for params (numeric fields will be omitted if empty)
           SCALE_FACTOR_VAL=${SCALE_FACTOR:-}
@@ -168,7 +166,7 @@ jobs:
           cat > metrics.json <<JSON
           [
             {
-              "run_id": "${RUN_ID_PREFIX}#${SHORT_SHA}",
+              "run_id": "${GITHUB_RUN_ID}",
               "git_sha": "${GIT_SHA}",
               "repo": "${REPO}",
               "benchmark": "${BENCH_TYPE}",
