@@ -143,7 +143,7 @@
 
 ;; this could go into a util, nothing specific here
 (defn txs->file [path txs]
-  (with-open [out (util/open-output-stream (util/->path path))]
+  (with-open [out (io/output-stream (.toFile (util/->path path)))]
     (let [wtr (transit/writer out :json {:handlers serde/transit-write-handler-map})]
       (doseq [txs txs]
         (when (Thread/interrupted) (throw (InterruptedException.)))
@@ -152,7 +152,7 @@
         (.write out (int \newline))))))
 
 (defn with-file-txs [path f]
-  (with-open [in (util/open-input-stream (util/->path path))]
+  (with-open [in (io/input-stream (.toFile (util/->path path)))]
     (f (serde/transit-seq (transit/reader in :json {:handlers serde/transit-read-handler-map})))))
 
 (comment

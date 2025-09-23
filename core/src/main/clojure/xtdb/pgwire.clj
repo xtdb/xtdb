@@ -1,5 +1,6 @@
 (ns xtdb.pgwire
-  (:require [clojure.set :as set]
+  (:require [clojure.java.io :as io]
+            [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [cognitect.anomalies :as-alias anom]
@@ -42,7 +43,7 @@
            xtdb.api.module.XtdbModule
            xtdb.arrow.RelationReader
            xtdb.database.Database$Config
-           (xtdb.error Anomaly Incorrect Interrupted)
+           (xtdb.error Incorrect Interrupted)
            xtdb.IResultCursor
            (xtdb.query PreparedQuery)))
 
@@ -1481,7 +1482,7 @@
                             (cmd-begin conn {:implicit? true, :access-mode :read-write} {})
                             true)
               doc-count (try
-                          (let [docs (with-open [is (util/open-input-stream copy-file)]
+                          (let [docs (with-open [is (io/input-stream (.toFile copy-file))]
                                        (vec (serde/transit-seq (transit/reader is
                                                                                (case format
                                                                                  :transit-json :json
@@ -1790,7 +1791,7 @@
 
 (defn- ->ssl-ctx [^Path ks-path, ^String ks-password]
   (let [ks-password (.toCharArray ks-password)
-        ks (with-open [ks-file (util/open-input-stream ks-path)]
+        ks (with-open [ks-file (io/input-stream (.toFile ks-path))]
              (doto (KeyStore/getInstance "JKS")
                (.load ks-file ks-password)))
         kmf (doto (KeyManagerFactory/getInstance (KeyManagerFactory/getDefaultAlgorithm))

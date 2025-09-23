@@ -12,7 +12,7 @@
            java.lang.AutoCloseable
            (java.net MalformedURLException ServerSocket URI URL)
            java.nio.ByteBuffer
-           (java.nio.channels ClosedByInterruptException ClosedByInterruptException FileChannel FileChannel$MapMode SeekableByteChannel)
+           (java.nio.channels ClosedByInterruptException ClosedByInterruptException FileChannel FileChannel$MapMode)
            (java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption)
            java.nio.file.attribute.FileAttribute
            [java.security MessageDigest]
@@ -193,30 +193,6 @@
 
 ;;; IO
 
-(defn ->seekable-byte-channel ^java.nio.channels.SeekableByteChannel [^ByteBuffer buffer]
-  (let [buffer (.slice buffer)]
-    (reify SeekableByteChannel
-      (isOpen [_] true)
-
-      (close [_])
-
-      (^int read [_ ^ByteBuffer dst]
-       (let [^ByteBuffer src (-> buffer (.slice) (.limit (min (.remaining dst) (.remaining buffer))))]
-          (.put dst src)
-          (let [bytes-read (.position src)]
-            (.position buffer (+ (.position buffer) bytes-read))
-            bytes-read)))
-
-      (position [_] (.position buffer))
-
-      (^SeekableByteChannel position [this ^long new-position]
-        (.position buffer new-position)
-        this)
-
-      (size [_] (.capacity buffer))
-      (write [_ _src] (throw (UnsupportedOperationException.)))
-      (truncate [_ _size] (throw (UnsupportedOperationException.))))))
-
 (defn enum->kw [^Enum enum-value]
   (-> (.name enum-value)
       (str/lower-case)
@@ -228,12 +204,6 @@
        (into {} (map (juxt enum->kw identity)))))
 
 (def write-truncate-open-opts #{:create :write :truncate-existing})
-
-(defn open-input-stream ^java.io.InputStream [^Path path]
-  (Files/newInputStream path (into-array OpenOption [(standard-open-options :read)])))
-
-(defn open-output-stream ^java.io.OutputStream [^Path path]
-  (Files/newOutputStream path (into-array OpenOption (map #(standard-open-options % %) write-truncate-open-opts))))
 
 (defn ->file-channel
   (^java.nio.channels.FileChannel [^Path path]
