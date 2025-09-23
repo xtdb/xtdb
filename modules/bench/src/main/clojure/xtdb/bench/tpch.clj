@@ -3,7 +3,8 @@
             [xtdb.bench :as b]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
-            [xtdb.test-util :as tu])
+            [xtdb.test-util :as tu]
+            [xtdb.util :as util])
   (:import (java.time Duration)))
 
 (def qs (-> (into #{} (range (count tpch-ra/queries)))
@@ -71,3 +72,11 @@
            (queries-stage :cold-queries)
 
            (queries-stage :hot-queries)]})
+
+(comment
+  (-> (b/->benchmark :tpch
+                     {:scale-factor 0.5
+                      :no-load? true
+                      :seed 42})
+      (b/run-benchmark {:node-dir (util/->path (str (System/getProperty "user.home") "/tmp/tpch-0.05"))
+                        :no-load? true})))
