@@ -7,6 +7,7 @@
             [xtdb.datasets.tpch.ra :as tpch-ra]
             [xtdb.datasets.tpch.xtql :as tpch-xtql]
             [xtdb.log :as xt-log]
+            [xtdb.operator.join :as join]
             [xtdb.sql :as sql]
             xtdb.sql-test
             [xtdb.test-util :as tu]
@@ -98,6 +99,14 @@
     (fn []
       (dorun
        (map-indexed test-ra-query results-sf-01)))))
+
+(t/deftest ^:integration test-01-ra-dbj
+  (with-tpch-data {:method :docs, :scale-factor 0.01
+                   :node-dir (util/->path "target/tpch-queries-ra-sf-01")}
+    (fn []
+      (binding [join/*disk-join-threshold-rows* 1000]
+        (dorun
+         (map-indexed test-ra-query results-sf-01))))))
 
 (comment
   (binding [*qs* #{11 17}]
