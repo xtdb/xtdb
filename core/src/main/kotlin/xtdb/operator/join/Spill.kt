@@ -37,6 +37,7 @@ internal class Spill(
     }
 
     fun end() {
+        if (inRel.rowCount > 0) spill()
         unloader.end()
     }
 

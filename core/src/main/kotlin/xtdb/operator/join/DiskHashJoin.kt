@@ -108,7 +108,7 @@ class DiskHashJoin(
                     probeCursor.forEachRemaining { inRel ->
                         inRel.openDirectSlice(al).use { inRel ->
                             tmpRel.append(inRel)
-                            spill.spill()
+                            if (tmpRel.rowCount > buildSide.inMemoryThreshold) spill.spill()
                         }
                     }
 

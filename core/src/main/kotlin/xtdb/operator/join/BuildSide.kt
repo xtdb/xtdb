@@ -22,7 +22,7 @@ class BuildSide(
     val keyColNames: List<String>,
     trackUnmatchedIdxs: Boolean,
     val withNilRow: Boolean,
-    private val inMemoryThreshold: Long = 100_000,
+    val inMemoryThreshold: Long = 100_000,
 ) : AutoCloseable {
     private val dataRel = Relation(al, schema)
     private val hashCol = "hashes".ofType(I32).openVector(al)
