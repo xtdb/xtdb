@@ -288,7 +288,8 @@
 (defn- ->pushdown-blooms [key-col-names]
   (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
 
-(def ^:dynamic *disk-join-threshold-rows* 100000)
+;; temporarily disabled due to TPC-H probe side running out of disk space on benchmarks
+(def ^:dynamic *disk-join-threshold-rows* Long/MAX_VALUE)
 
 (defn ->build-side ^xtdb.operator.join.BuildSide [^BufferAllocator allocator,
                                                   {:keys [fields, key-col-names, track-unmatched-build-idxs?, with-nil-row?]}]
