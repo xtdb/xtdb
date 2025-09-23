@@ -14,8 +14,8 @@ import xtdb.util.closeOnCatch
 import java.util.function.Consumer
 
 class DiskHashJoin(
-    private val al: BufferAllocator,
-    private val buildSide: BuildSide, private val probeCursor: ICursor, private val probeShuffle: Shuffle,
+    al: BufferAllocator, private val buildSide: BuildSide,
+    private val probeCursor: ICursor, private val probeKeyColNames: List<FieldName>, private val probeShuffle: Shuffle,
     private val joinType: JoinType, private val comparatorFactory: ComparatorFactory,
 ) : ICursor {
     override val cursorType = "disk-hash-join"
@@ -69,8 +69,8 @@ class DiskHashJoin(
                 // temporary, while we have openAsRoot in BuildSide
                 // after that, we can create this once for the DHJ
                 val probeSide = ProbeSide(
-                    buildSide, probeRel, probeColNames,
-                    comparatorFactory.build(buildSide, probeRel, probeColNames)
+                    buildSide, probeRel, probeKeyColNames,
+                    comparatorFactory.build(buildSide, probeRel, probeKeyColNames)
                 )
 
                 val joinedRel = joinType.probe(probeSide)
@@ -120,7 +120,7 @@ class DiskHashJoin(
 
                             shuffle.end()
 
-                            DiskHashJoin(al, buildSide, probeCursor, shuffle, joinType, comparatorFactory)
+                            DiskHashJoin(al, buildSide, probeCursor, probeKeyColNames, shuffle, joinType, comparatorFactory)
                         }
                 }
             }
