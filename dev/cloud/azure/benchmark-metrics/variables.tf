@@ -55,72 +55,59 @@ variable "slack_webhook_url" {
   sensitive   = true
 }
 
-# Alert configuration
-variable "slow_alert_name" {
-  description = "Name of the scheduled query alert for slow runs"
+# Logic App anomaly detection
+variable "anomaly_logic_app_name" {
+  description = "Logic App name for scheduled anomaly detection"
   type        = string
-  default     = "xtdb-benchmark-slow-alert"
+  default     = "xtdb-bench-anomaly-schedule"
 }
 
-variable "fast_alert_name" {
-  description = "Name of the scheduled query alert for fast runs"
-  type        = string
-  default     = "xtdb-benchmark-fast-alert"
-}
-
-variable "alert_severity" {
-  description = "Alert severity (0=Sev0, 4=Sev4)"
-  type        = number
-  default     = 3
-}
-
-variable "alert_enabled" {
-  description = "Whether the scheduled query alert is enabled"
+variable "anomaly_alert_enabled" {
+  description = "Whether the anomaly detection Logic App is enabled"
   type        = bool
   default     = true
 }
 
-variable "alert_evaluation_frequency" {
-  description = "How often to evaluate the alert (ISO 8601 duration, e.g. PT1H)"
+variable "anomaly_repo" {
+  description = "Repository (owner/name) to filter anomaly and missing-ingestion alerts on"
   type        = string
-  default     = "PT1H"
+  default     = "xtdb/xtdb"
 }
 
-variable "alert_window_duration" {
-  description = "Time window for the alert query (ISO 8601 duration)"
+variable "anomaly_schedule_frequency" {
+  description = "Recurrence frequency for anomaly detection (Minute|Hour|Day|Week|Month)"
   type        = string
-  default     = "PT24H"
+  default     = "Day"
 }
 
-variable "alert_baseline_n" {
+variable "anomaly_schedule_interval" {
+  description = "Recurrence interval for anomaly detection"
+  type        = number
+  default     = 1
+}
+
+variable "anomaly_timespan" {
+  description = "Time span for Logs Query API (ISO8601, e.g., P30D)"
+  type        = string
+  default     = "P30D"
+}
+
+variable "anomaly_baseline_n" {
   description = "Number of previous runs to average for the baseline"
   type        = number
   default     = 20
 }
 
-variable "alert_sigma" {
-  description = "Sigma multiplier for the stddev-based alert threshold (e.g., 2.0 for 2σ)"
+variable "anomaly_sigma" {
+  description = "Sigma multiplier for the stddev-based threshold (e.g., 2.0 for 2σ)"
   type        = number
   default     = 2
 }
 
-variable "alert_scale_factor" {
-  description = "TPC-H scale factor to scope the alert to (e.g., 0.5)"
+variable "anomaly_scale_factor" {
+  description = "TPC-H scale factor to scope anomaly detection to (e.g., 0.5)"
   type        = number
   default     = 0.5
-}
-
-# Action Group email receiver configuration
-variable "alert_email_receiver_name" {
-  description = "Name for the Action Group email receiver"
-  type        = string
-  default     = "tim"
-}
-
-variable "alert_email_address" {
-  description = "Email address for the Action Group email receiver"
-  type        = string
-  default     = "tim@juxt.pro"
 }
 
 # Missing ingestion alert configuration
