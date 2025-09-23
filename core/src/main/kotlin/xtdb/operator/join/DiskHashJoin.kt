@@ -14,7 +14,7 @@ import xtdb.util.closeOnCatch
 import java.util.function.Consumer
 
 class DiskHashJoin(
-    al: BufferAllocator, private val buildSide: BuildSide,
+    private val al: BufferAllocator, private val buildSide: BuildSide,
     private val probeCursor: ICursor, private val probeKeyColNames: List<FieldName>, private val probeShuffle: Shuffle,
     private val joinType: JoinType, private val comparatorFactory: ComparatorFactory,
 ) : ICursor {
@@ -68,16 +68,20 @@ class DiskHashJoin(
 
                 // temporary, while we have openAsRoot in BuildSide
                 // after that, we can create this once for the DHJ
-                val probeSide = ProbeSide(
-                    buildSide, probeRel, probeKeyColNames,
-                    comparatorFactory.build(buildSide, probeRel, probeKeyColNames)
-                )
+                probeRel.openAsRoot(al).use { probeRoot ->
+                    val probeRel = RelationReader.from(probeRoot)
 
-                val joinedRel = joinType.probe(probeSide)
+                    val probeSide = ProbeSide(
+                        buildSide, probeRel, probeKeyColNames,
+                        comparatorFactory.build(buildSide, probeRel, probeKeyColNames)
+                    )
 
-                if (joinedRel.rowCount > 0) {
-                    c.accept(joinedRel)
-                    return true
+                    val joinedRel = joinType.probe(probeSide)
+
+                    if (joinedRel.rowCount > 0) {
+                        c.accept(joinedRel)
+                        return true
+                    }
                 }
             }
         }
@@ -120,7 +124,11 @@ class DiskHashJoin(
 
                             shuffle.end()
 
-                            DiskHashJoin(al, buildSide, probeCursor, probeKeyColNames, shuffle, joinType, comparatorFactory)
+                            DiskHashJoin(
+                                al, buildSide,
+                                probeCursor, probeKeyColNames,
+                                shuffle, joinType, comparatorFactory
+                            )
                         }
                 }
             }
