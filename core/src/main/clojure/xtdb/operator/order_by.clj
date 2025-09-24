@@ -186,7 +186,7 @@
              (let [new-batch (try
                                (k-way-merge allocator files order-specs fields tmp-dir batch-idx file-idx)
                                (finally
-                                 #_(run! io/delete-file files)))]
+                                 (run! io/delete-file files)))]
 
                (recur (drop k-way-constant batches)
                       (conj new-batches new-batch)
