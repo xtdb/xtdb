@@ -5,8 +5,7 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.reader :as vr])
   (:import (clojure.lang IPersistentMap)
            (java.io File OutputStream)
            (java.nio.channels Channels)
@@ -16,7 +15,7 @@
            java.util.stream.IntStream
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Field)
-           (xtdb.arrow Relation Relation$Loader ArrowUnloader$Mode RelationReader RowCopier Vector)
+           (xtdb.arrow ArrowUnloader$Mode Relation Relation$Loader RelationReader RowCopier Vector)
            xtdb.ICursor))
 
 (s/def ::direction #{:asc :desc})
@@ -69,17 +68,16 @@
   (loop [filenames [first-filename]
          ;; file-idx 1 as first-filename contains 0
          file-idx 1]
-    (if-let [filename (with-open [rel-writer (vw/->rel-writer allocator)]
-                        (while (and (<= (.getRowCount rel-writer) ^int *block-size*)
+    (if-let [filename (with-open [out-rel (Relation. allocator)]
+                        (while (and (<= (.getRowCount out-rel) ^int *block-size*)
                                     (.tryAdvance in-cursor
-                                                 (fn [src-rel]
-                                                   (vw/append-rel rel-writer src-rel)))))
-                        (when (pos? (.getRowCount rel-writer))
-                          (let [read-rel (vw/rel-wtr->rdr rel-writer)
-                                out-filename (->file tmp-dir 0 file-idx)
-                                out-rel (.select read-rel (sorted-idxs read-rel order-specs))]
+                                                 (fn [^RelationReader src-rel]
+                                                   (with-open [src-rel (.openDirectSlice src-rel allocator)]
+                                                     (.append out-rel src-rel))))))
+                        (when (pos? (.getRowCount out-rel))
+                          (let [out-filename (->file tmp-dir 0 file-idx)]
                             (with-open [os (io/output-stream out-filename)]
-                              (write-rel allocator out-rel os)
+                              (write-rel allocator (.select out-rel (sorted-idxs out-rel order-specs)) os)
                               out-filename))))]
       (recur (conj filenames filename) (inc file-idx))
       (mapv io/file filenames))))

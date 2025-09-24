@@ -1,7 +1,7 @@
 package xtdb
 
+import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
-import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.RelationReader
 import java.lang.AutoCloseable
@@ -79,5 +79,25 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
 
         @JvmStatic
         fun ICursor.wrapExplainAnalyze(): ICursor = ExplainAnalyzeCursor(this)
+
+        @JvmStatic
+        fun ICursor.wrapDirectSlice(al: BufferAllocator): ICursor = object : ICursor by this {
+            override fun tryAdvance(c: Consumer<in RelationReader>): Boolean =
+                this@wrapDirectSlice.tryAdvance { inRel ->
+                    inRel.openDirectSlice(al).use { directRel -> c.accept(directRel) }
+                }
+        }
+
+        @JvmStatic
+        fun ICursor.wrapAsOldRel(al: BufferAllocator): ICursor = object : ICursor by this {
+            override fun tryAdvance(c: Consumer<in RelationReader>): Boolean =
+                this@wrapAsOldRel.tryAdvance { outRel ->
+                    outRel.openDirectSlice(al).use { outRel ->
+                        outRel.openAsRoot(al).use { root ->
+                            c.accept(RelationReader.from(root))
+                        }
+                    }
+                }
+        }
     }
 }

@@ -68,8 +68,7 @@ interface ProjectionSpec {
         override fun project(
             allocator: BufferAllocator, inRel: RelationReader, schema: Map<String, Any>, args: RelationReader
         ) =
-            (field.name ofType Type.structOf(inRel.vectors.map { it.field.withName(it.name) })
-                    )
+            (field.name ofType Type.structOf(inRel.vectors.map { it.field.withName(it.name) }))
                 .createVector(allocator)
                 .let { it as StructVector }
                 .closeOnCatch { structVec ->

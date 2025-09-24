@@ -12,10 +12,9 @@
   (:import clojure.lang.MapEntry
            (java.util HashMap HashSet List Set)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            (xtdb ICursor)
-           (xtdb.arrow ListExpression Relation RelationReader RelationWriter VectorWriter)))
+           (xtdb.arrow ListExpression Relation RelationReader RelationWriter Vector VectorWriter)))
 
 (defmethod lp/ra-expr :table [_]
   (s/cat :op #{:table}
@@ -27,17 +26,19 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(deftype TableCursor [^:unsynchronized-mutable ^RelationReader out-rel]
+(deftype TableCursor [^BufferAllocator al,
+                      ^:unsynchronized-mutable ^Relation out-rel]
   ICursor
   (getCursorType [_] "table")
   (getChildCursors [_] [])
 
   (tryAdvance [this c]
     (boolean
-     (when-let [out-rel out-rel]
+     (when out-rel
        (try
          (set! (.out-rel this) nil)
-         (.accept c out-rel)
+         (util/with-open [root (.openAsRoot out-rel al)]
+           (.accept c (vr/<-root root)))
          true
          (finally
            (.close out-rel))))))
@@ -127,14 +128,14 @@
 
     {:fields fields
      :row-count row-count
-     :->out-rel (fn [{:keys [allocator] :as opts}]
+     :->out-rel (fn [{:keys [^BufferAllocator allocator] :as opts}]
                   (let [row-count (count rows)]
                     (when (pos? row-count)
-                      (util/with-close-on-catch [out-rel (vw/->rel-writer allocator (Schema. (or (vals fields) [])))]
+                      (util/with-close-on-catch [out-rel (Relation. allocator (Schema. (or (vals fields) [])))]
                         (doseq [{:keys [write-row!]} out-rows]
                           (write-row! opts out-rel))
 
-                        (vw/rel-wtr->rdr out-rel)))))}))
+                        out-rel))))}))
 
 (defn- emit-col-table [col-spec table-expr {:keys [param-fields schema] :as opts}]
   (let [[out-col v] (first col-spec)
@@ -145,13 +146,12 @@
         named-field (types/field-with-name field (str out-col))]
     {:fields (-> {(symbol (.getName named-field)) named-field}
                  (restrict-cols table-expr))
-     :->out-rel (fn [{:keys [allocator ^RelationReader args]}]
-                  (util/with-close-on-catch [out-vec (.createVector named-field allocator)]
-                    (let [^ListExpression list-expr (->list-expr schema args)
-                          out-vec-writer (vw/->writer out-vec)] 
+     :->out-rel (fn [{:keys [^BufferAllocator allocator, ^RelationReader args]}]
+                  (util/with-close-on-catch [out-vec (Vector/open allocator named-field)]
+                    (let [^ListExpression list-expr (->list-expr schema args)]
                       (when list-expr
-                        (.writeTo list-expr out-vec-writer 0 (.getSize list-expr)))
-                      (vr/rel-reader [(vw/vec-wtr->rdr out-vec-writer)]))))}))
+                        (.writeTo list-expr out-vec 0 (.getSize list-expr)))
+                      (Relation. allocator ^List (vector out-vec) (.getValueCount out-vec)))))}))
 
 (defn- emit-arg-table [param table-expr {:keys [param-fields]}]
   (let [fields (-> (into {} (for [^Field field (-> (or (get param-fields param)
@@ -184,12 +184,11 @@
                         el-struct-rdr (cond-> el-rdr
                                         (instance? ArrowType$Union (.getType (.getField el-rdr))) (.vectorFor "struct"))]
 
-                    (vr/<-root (.openAsRoot (Relation. allocator
-                                                       ^List (vec (for [k (some-> el-struct-rdr .getKeyNames)
-                                                                        :when (contains? fields (symbol k))]
-                                                                    (.vectorFor el-struct-rdr k)))
-                                                       (.getValueCount el-rdr))
-                                            allocator))))}))
+                    (Relation. allocator
+                               ^List (vec (for [k (some-> el-struct-rdr .getKeyNames)
+                                                :when (contains? fields (symbol k))]
+                                            (.openSlice (.vectorFor el-struct-rdr k) allocator)))
+                               (.getValueCount el-rdr))))}))
 
 (defmethod lp/emit-expr :table [{:keys [table] :as table-expr} opts] 
   (let [{:keys [fields ->out-rel row-count]} (zmatch table
@@ -201,6 +200,6 @@
      :children []
      :fields fields
      :stats (when row-count {:row-count row-count})
-     :->cursor (fn [{:keys [explain-analyze?] :as opts}]
-                 (cond-> (TableCursor. (->out-rel opts))
+     :->cursor (fn [{:keys [allocator explain-analyze?] :as opts}]
+                 (cond-> (TableCursor. allocator (->out-rel opts))
                    explain-analyze? (ICursor/wrapExplainAnalyze)))}))
