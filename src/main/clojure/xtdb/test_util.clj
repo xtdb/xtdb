@@ -1,8 +1,9 @@
 (ns xtdb.test-util
-  (:require [clojure.pprint :as pprint]
+  (:require [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [clojure.test.check :as tc]
+            [clojure.walk :as walk]
             [cognitect.anomalies :as-alias anom]
             [xtdb.api :as xt]
             [xtdb.db-catalog :as db]
@@ -19,18 +20,19 @@
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang ExceptionInfo)
+           [java.io Writer]
            java.net.ServerSocket
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
            (java.time Duration Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
            (java.time.temporal ChronoUnit)
-           (java.util List)
+           (java.util Collection List Map Set)
            (java.util.function IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector.types.pojo Field Schema)
            (org.testcontainers.containers GenericContainer)
-           (xtdb ICursor PagesCursor)
+           (xtdb Bytes ICursor PagesCursor TaggedValue)
            (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector)
@@ -187,6 +189,36 @@
      :->cursor (fn [{:keys [allocator explain-analyze?]}]
                  (cond-> (->cursor allocator schema pages)
                    explain-analyze? (ICursor/wrapExplainAnalyze)))}))
+
+(defn ->clj
+  "recursively converts Java collections to Clojure"
+  [v]
+  (walk/prewalk (fn [v]
+                  (cond
+                    (and (instance? Map v) (not (map? v)))
+                    (into {} v)
+
+                    (instance? Set v) (set v)
+
+                    (instance? Collection v) (vec v)
+
+                    (instance? TaggedValue v)
+                    (TaggedValue. (.getTag ^TaggedValue v) (->clj (.getValue ^TaggedValue v)))
+
+                    (bytes? v) (Bytes. v)
+
+                    :else v))
+                v))
+
+(defmethod pp/simple-dispatch TaggedValue [^TaggedValue tv]
+  (print "#xt/tagged ")
+  (pp/write-out [(.getTag tv) (->clj (.getValue tv))]))
+
+(defmethod print-method Bytes [^Bytes b, ^Writer w]
+  (print-method (.getBytes b) w))
+
+(defmethod print-dup Bytes [^Bytes b, ^Writer w]
+  (print-dup (.getBytes b) w))
 
 (defn <-cursor
   ([^ICursor cursor] (<-cursor cursor #xt/key-fn :kebab-case-keyword))
@@ -387,7 +419,7 @@
   ([opts property]
    (let [opts (merge {:num-tests property-test-iterations} opts)
          result (tc/quick-check (:num-tests opts) property (dissoc opts :num-tests))]
-     (t/is (:pass? result) (with-out-str (pprint/pprint result))))))
+     (t/is (:pass? result) (with-out-str (pp/pprint result))))))
 
 (defn remove-nils [m]
   (into {} (remove (comp nil? val) m)))

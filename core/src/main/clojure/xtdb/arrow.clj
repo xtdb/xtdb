@@ -1,8 +1,8 @@
 (ns xtdb.arrow
   "Utilities for working with Arrow things"
   (:require xtdb.mirrors.time-literals
-            [xtdb.serde :as serde]
             xtdb.serde.types
+            [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (java.nio.file Files)
            [java.util Spliterators]
@@ -30,7 +30,7 @@
      (f {:schema (.getSchema loader)
          :batches (->> (iterator-seq (Spliterators/iterator cursor))
                        (map (fn [^Relation rel]
-                              (serde/->clj-types (.getAsMaps rel)))))}))))
+                              (tu/->clj (.getAsMaps rel)))))}))))
 
 (defn read-arrow-file
   ([al path-ish]

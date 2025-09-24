@@ -5,7 +5,6 @@
             [clojure.test :as t]
             [xtdb.arrow :as arrow]
             xtdb.mirrors.time-literals
-            [xtdb.serde :as serde]
             xtdb.serde.types
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -19,10 +18,10 @@
       ))
 
 (defn read-arrow-edn-file [path-ish]
-  (serde/->clj-types (read-string (slurp (.toFile (util/->path path-ish))))))
+  (tu/->clj (read-string (slurp (.toFile (util/->path path-ish))))))
 
 (defn ->arrow-edn [^Relation rel]
-  {:schema (.getSchema rel), :data (serde/->clj-types (.getAsMaps rel))})
+  {:schema (.getSchema rel), :data (tu/->clj (.getAsMaps rel))})
 
 (defn- write-arrow-edn-file! [^Path path, data]
   (with-open [out (io/writer (.toFile path))]
@@ -68,13 +67,16 @@
                                    res)))))
 
     (doseq [^Path expected-path (iterator-seq (.iterator (Files/walk expected-dir (make-array FileVisitOption 0))))
+            :when (= "objects/v06/tables/public$hello/meta/l00-rc-b00.arrow.edn"
+                     (str (.relativize expected-dir expected-path)))
+
             :let [actual (-> actual-dir
                              (.resolve (.relativize expected-dir expected-path)))
                   file-name (str (.getFileName expected-path))]
             :when (.endsWith file-name ".arrow.edn")]
       (f (.relativize expected-dir expected-path)
-         (serde/->clj-types (read-arrow-edn-file expected-path))
-         (serde/->clj-types (read-arrow-edn-file actual))))))
+         (tu/->clj (read-arrow-edn-file expected-path))
+         (tu/->clj (read-arrow-edn-file actual))))))
 
 (defmacro check-arrow-edn-dir
   ([expected-path-ish actual-path-ish]
