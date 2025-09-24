@@ -55,6 +55,13 @@ class FixedSizeListVector private constructor(
             value.forEach { elVector.writeObject(it) }
         }
 
+        is ListValueReader -> {
+            val valueSize = value.size()
+            require(valueSize == listSize) { "invalid list size: expected $listSize, got $valueSize" }
+            writeNotNull()
+            repeat(value.size()) { elVector.writeValue(value.nth(it)) }
+        }
+
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
 
@@ -77,6 +84,25 @@ class FixedSizeListVector private constructor(
 
     override fun endList() {
         writeNotNull()
+    }
+
+    override fun valueReader(pos: VectorPosition): ValueReader {
+        val elPos = VectorPosition.build()
+        val elValueReader = elVector.valueReader(elPos)
+
+        val listValReader = object : ListValueReader {
+            override fun size(): Int = listSize
+
+            override fun nth(idx: Int): ValueReader {
+                elPos.position = getListStartIndex(pos.position) + idx
+                return elValueReader
+            }
+        }
+
+        return object : ValueReader {
+            override val isNull get() = this@FixedSizeListVector.isNull(pos.position)
+            override fun readObject() = listValReader
+        }
     }
 
     override val metadataFlavours get() = listOf(this)

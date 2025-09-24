@@ -79,8 +79,11 @@ class ListVector private constructor(
             }
         }
 
-        is ListValueReader ->
-            for (i in 0..<value.size()) {
+        is ListValueReader -> {
+            val len = value.size()
+            writeNotNull(len)
+
+            for (i in 0..<len) {
                 val el = value.nth(i)
                 try {
                     elVector.writeValue(el)
@@ -89,6 +92,7 @@ class ListVector private constructor(
                     elVector.writeValue(el)
                 }
             }
+        }
 
         else -> throw InvalidWriteObjectException(fieldType, value)
     }

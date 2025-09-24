@@ -11,7 +11,7 @@
   (:import [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            (org.apache.arrow.vector.types.pojo FieldType)
-           (xtdb.arrow ValueReader Vector VectorIndirection VectorPosition)
+           (xtdb.arrow ListValueReader ValueReader Vector VectorIndirection VectorPosition)
            (xtdb.vector IndirectMultiVectorReader)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -117,9 +117,12 @@
 
       (let [pos (VectorPosition/build)]
         (.setPosition pos 0)
-        (t/is (= #{1 2 3}
-                 (.readObject (.valueReader (vw/vec-wtr->rdr set-wrt) pos)))
-              "valueReader testing for set")))))
+        (let [^ListValueReader rdr (.readObject (.valueReader (vw/vec-wtr->rdr set-wrt) pos))]
+          (t/is (= 3 (.size rdr)))
+          (t/is (= #{1 2 3}
+                   (set [(.readObject (.nth rdr 0))
+                         (.readObject (.nth rdr 1))
+                         (.readObject (.nth rdr 2))]))))))))
 
 (deftest struct-normalisation-testing
   (t/testing "structs"

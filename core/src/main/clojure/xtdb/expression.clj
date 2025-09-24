@@ -19,10 +19,9 @@
            (java.util Arrays Date List Map UUID)
            (java.util.regex Pattern)
            (java.util.stream IntStream)
-           (org.apache.arrow.vector PeriodDuration ValueVector)
+           (org.apache.arrow.vector PeriodDuration)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.arrow ListValueReader RelationReader ValueReader VectorPosition VectorReader)
-           xtdb.arrow.ValueBox
+           (xtdb.arrow ListValueReader Relation RelationReader ValueBox ValueReader Vector VectorPosition VectorReader)
            (xtdb.operator ProjectionSpec SelectionSpec)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
@@ -1680,7 +1679,7 @@
 
 (defmethod codegen-call [:length :set] [_]
   {:return-type :i32
-   :->call-code #(do `(count ~@%))})
+   :->call-code #(do `(.size ~@%))})
 
 (defn count-non-empty [m]
   (loop [n 0, xs (vals m)]
@@ -1793,7 +1792,6 @@
   (throw (UnsupportedOperationException. "TODO: `<>` on sets")))
 
 (def out-vec-sym (gensym 'out_vec))
-(def ^:private out-writer-sym (gensym 'out_writer_sym))
 
 (defn batch-bindings [emitted-expr]
   (letfn [(child-seq [{:keys [children] :as expr}]
@@ -1809,18 +1807,17 @@
     (if (= (.getType field) #xt.arrow/type :union)
       (let [writer-syms (->> (.getChildren field)
                              (into {} (map (juxt types/field->col-type (fn [_] (gensym 'out-writer))))))]
-        {:writer-bindings (into [out-writer-sym `(vw/->writer ~out-vec-sym)]
+        {:writer-bindings (into []
                                 (mapcat (fn [[value-type writer-sym]]
-                                          [writer-sym `(.vectorFor ~out-writer-sym
+                                          [writer-sym `(.vectorFor ~out-vec-sym
                                                                    ~(types/arrow-type->leg (st/->arrow-type value-type)))]))
                                 writer-syms)
 
          :write-value-out! (fn [value-type code]
                              (write-value-code value-type (get writer-syms value-type) code))})
 
-      {:writer-bindings [out-writer-sym `(vw/->writer ~out-vec-sym)]
-       :write-value-out! (fn [value-type code]
-                           (write-value-code value-type out-writer-sym code))})))
+      {:write-value-out! (fn [value-type code]
+                           (write-value-code value-type out-vec-sym code))})))
 
 (defn wrap-zone-id-cache-buster [f]
   (fn [expr opts]
@@ -1852,7 +1849,7 @@
                              (-> `(fn [~(-> rel-sym (with-tag RelationReader))
                                        ~(-> schema-sym (with-tag IPersistentMap))
                                        ~(-> args-sym (with-tag RelationReader))
-                                       ~(-> out-vec-sym (with-tag ValueVector))]
+                                       ~(-> out-vec-sym (with-tag Vector))]
                                     (let [~@(batch-bindings emitted-expr)
                                           ~@writer-bindings
                                           row-count# (.getRowCount ~rel-sym)]
@@ -1890,13 +1887,8 @@
                                                   (types/field->col-type (.getField iv))]))))
 
               {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
-                                                                          :var->col-type var->col-type})
-              row-count (.getRowCount in-rel)]
-          (util/with-close-on-catch [out-vec (-> (types/col-type->field col-name return-type)
-                                                 (.createVector allocator))]
-            (doto out-vec
-              (.setInitialCapacity row-count)
-              (.allocateNew))
+                                                                          :var->col-type var->col-type})]
+          (util/with-open [out-vec (Vector/open allocator (types/col-type->field col-name return-type))]
             (try
               (@!projection-fn in-rel schema args out-vec)
               (catch ArithmeticException e
@@ -1907,8 +1899,10 @@
                 (throw (err/incorrect :xtdb.expression/class-cast-exception (ex-message e) {::err/cause e})))
               (catch IllegalArgumentException e
                 (throw (err/incorrect :xtdb.expression/illegal-argument-exception (ex-message e) {::err/cause e}))))
-            (.setValueCount out-vec row-count)
-            (vr/vec->reader out-vec)))))))
+
+            (util/with-close-on-catch [root (-> (Relation. allocator ^List (vector out-vec) (.getValueCount out-vec))
+                                                (.openAsRoot allocator))]
+              (vr/vec->reader (.getVector root 0)))))))))
 
 (defn ->expression-selection-spec ^SelectionSpec [expr input-types]
   (let [projector (->expression-projection-spec "select" {:op :call, :f :boolean, :args [expr]} input-types)]

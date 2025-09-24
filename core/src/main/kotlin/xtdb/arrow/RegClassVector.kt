@@ -9,6 +9,9 @@ import xtdb.vector.extensions.RegClassType
 class RegClassVector(override val inner: IntVector) : ExtensionVector(), MetadataFlavour.Presence {
     override val type = RegClassType
 
+    override fun getInt(idx: Int) = inner.getInt(idx)
+    override fun writeInt(v: Int) = inner.writeInt(v)
+
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = RegClass(inner.getInt(idx))
 
     override fun writeObject0(value: Any) = when (value) {

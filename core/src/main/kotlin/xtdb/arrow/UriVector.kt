@@ -18,6 +18,8 @@ class UriVector(override val inner: Utf8Vector) : ExtensionVector(), MetadataFla
         else -> throw InvalidWriteObjectException(fieldType, value)
     }
 
+    override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
+
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) = UriVector(inner.openSlice(al))

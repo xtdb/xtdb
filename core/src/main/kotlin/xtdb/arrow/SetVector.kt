@@ -17,8 +17,11 @@ class SetVector(override val inner: ListVector) : ExtensionVector(), MetadataFla
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = inner.getObject0(idx, keyFn).toSet()
 
     override fun writeObject0(value: Any) =
-        if (value !is Set<*>) throw InvalidWriteObjectException(fieldType, value)
-        else inner.writeObject(value.toList())
+        when (value) {
+            is Set<*> -> inner.writeObject(value.toList())
+            is ListValueReader -> inner.writeObject(value)
+            else -> throw InvalidWriteObjectException(fieldType, value)
+        }
 
     override fun hashCode0(idx: Int, hasher: Hasher): Int {
         val elVector = inner.listElements

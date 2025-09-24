@@ -65,6 +65,8 @@ abstract class ExtensionVector : Vector() {
         return inner.rowCopier0(src.inner)
     }
 
+    override fun valueReader(pos: VectorPosition): ValueReader = inner.valueReader(pos)
+
     override fun clear() = inner.clear()
     override fun close() = inner.close()
 }

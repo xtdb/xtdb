@@ -13,6 +13,7 @@ import xtdb.util.Hasher
 import xtdb.vector.extensions.IntervalMDMType
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.time.Duration
 
 private class IntervalValueReader(private val vec: VectorReader, private val pos: VectorPosition) : ValueReader {
     override val isNull: Boolean get() = vec.isNull(pos.position)
@@ -40,10 +41,14 @@ class IntervalYearMonthVector private constructor(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = Interval(getInt(idx), 0, 0)
 
     override fun writeObject0(value: Any) {
-        if (value !is Interval || value.days != 0 || value.nanos != 0L)
-            throw InvalidWriteObjectException(fieldType, value)
+        when (value) {
+            is PeriodDuration if (value.period.days == 0 && value.duration.equals(Duration.ZERO)) -> {
+                writeInt(value.period.toTotalMonths().toInt())
+            }
 
-        writeInt(value.months)
+            is Interval if (value.days == 0 && value.nanos == 0L) -> writeInt(value.months)
+            else -> throw InvalidWriteObjectException(fieldType, value)
+        }
     }
 
     override fun valueReader(pos: VectorPosition): ValueReader = IntervalValueReader(this, pos)
@@ -79,15 +84,29 @@ class IntervalDayTimeVector private constructor(
     private val buf: ByteBuffer = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
 
     override fun writeObject0(value: Any) =
-        if (value is Interval && value.months == 0 && value.nanos % NANOS_PER_MILLI == 0L) {
-            buf.run {
-                clear()
-                putInt(value.days)
-                putInt((value.nanos / NANOS_PER_MILLI).toInt())
-                flip()
-                writeBytes(this)
+        when (value) {
+            is Interval if (value.months == 0 && value.nanos % NANOS_PER_MILLI == 0L) -> {
+                buf.run {
+                    clear()
+                    putInt(value.days)
+                    putInt((value.nanos / NANOS_PER_MILLI).toInt())
+                    flip()
+                    writeBytes(this)
+                }
             }
-        } else throw InvalidWriteObjectException(fieldType, value)
+
+            is PeriodDuration if (value.period.toTotalMonths() == 0L && value.duration.toNanos() % NANOS_PER_MILLI == 0L) -> {
+                buf.run {
+                    clear()
+                    putInt(value.period.days)
+                    putInt((value.duration.toNanos() / NANOS_PER_MILLI).toInt())
+                    flip()
+                    writeBytes(this)
+                }
+            }
+
+            else -> throw InvalidWriteObjectException(fieldType, value)
+        }
 
     override fun valueReader(pos: VectorPosition): ValueReader = IntervalValueReader(this, pos)
 
@@ -132,6 +151,26 @@ class IntervalMonthDayNanoVector private constructor(
     override fun writeObject0(value: Any) =
         when (value) {
             is Interval -> writeObject0(value.months, value.days, value.nanos)
+
+            is PeriodDuration -> {
+                try {
+                    writeObject0(
+                        value.period.toTotalMonths().toInt(),
+                        value.period.days,
+                        value.duration.toNanos()
+                    )
+                } catch (_: ArithmeticException) {
+                    // we normalise iff the user gives us a Duration that's too big to fit in a long
+                    val extraDays = value.duration.toDays()
+                    val dur = value.duration.minusDays(extraDays)
+                    writeObject0(
+                        value.period.toTotalMonths().toInt(),
+                        (value.period.days + extraDays).toInt(),
+                        dur.toNanos()
+                    )
+                }
+            }
+
             else -> throw InvalidWriteObjectException(fieldType, value)
         }
 
@@ -153,8 +192,6 @@ class IntervalMonthDayMicroVector(
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = inner.getObject0(idx, keyFn)
     override fun writeObject0(value: Any) = inner.writeObject(value)
-
-    override fun valueReader(pos: VectorPosition): ValueReader = IntervalValueReader(this, pos)
 
     override val metadataFlavours get() = listOf(this)
 

@@ -43,6 +43,8 @@ class Time32Vector private constructor(
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(v: Int) = writeInt0(v)
 
+    override fun writeLong(v: Long) = writeInt(v.toInt())
+
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = unit.toLocalTime(getInt(idx))
 
     override fun writeObject0(value: Any) {

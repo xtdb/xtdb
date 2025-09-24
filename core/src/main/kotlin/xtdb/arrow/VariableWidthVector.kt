@@ -61,6 +61,10 @@ abstract class VariableWidthVector : Vector() {
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getByteArray(idx))
 
+    override fun valueReader(pos: VectorPosition): ValueReader {
+        return super.valueReader(pos)
+    }
+
     override fun rowCopier0(src: VectorReader): RowCopier {
         check(src is VariableWidthVector)
         nullable = nullable || src.nullable

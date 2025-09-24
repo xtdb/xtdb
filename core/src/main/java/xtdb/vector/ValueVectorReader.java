@@ -1164,12 +1164,7 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             public ValueReader valueReader(VectorPosition pos) {
-                return new BaseValueReader(pos) {
-                    @Override
-                    public Object readObject() {
-                        return PersistentHashSet.create((List<?>) listReader.getObject(pos.getPosition()));
-                    }
-                };
+                return listReader.valueReader(pos);
             }
 
             @Override

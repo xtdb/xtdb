@@ -25,6 +25,8 @@ import xtdb.trie.ColumnName
 import xtdb.types.Type
 import xtdb.types.Type.Companion.ofType
 import xtdb.util.Hasher
+import xtdb.util.closeOnCatch
+import xtdb.vector.ValueVectorReader
 import xtdb.vector.extensions.*
 import java.time.ZoneId
 import org.apache.arrow.vector.NullVector as ArrowNullVector
@@ -61,7 +63,11 @@ sealed class Vector : VectorReader, VectorWriter {
     protected abstract fun writeObject0(value: Any)
 
     override fun writeObject(obj: Any?) =
-        if (obj == null) writeNull() else writeObject0(obj)
+        when (obj) {
+            null -> writeNull()
+            is ValueReader -> writeValue(obj)
+            else -> writeObject0(obj)
+        }
 
     abstract fun hashCode0(idx: Int, hasher: Hasher): Int
     final override fun hashCode(idx: Int, hasher: Hasher) =
@@ -138,7 +144,7 @@ sealed class Vector : VectorReader, VectorWriter {
                 override fun visit(type: ArrowType.List) =
                     ListVector(
                         al, name, isNullable,
-                        children.firstOrNull()?.let { it.openVector(al) } ?: NullVector("\$data$")
+                        children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$")
                     )
 
                 override fun visit(type: LargeList) = TODO("Not yet implemented")
@@ -146,7 +152,7 @@ sealed class Vector : VectorReader, VectorWriter {
                 override fun visit(type: FixedSizeList) =
                     FixedSizeListVector(
                         al, name, isNullable, type.listSize,
-                        children.firstOrNull()?.let { it.openVector(al) } ?: NullVector("\$data$"))
+                        children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$"))
 
                 override fun visit(type: ListView) = TODO("Not yet implemented")
                 override fun visit(type: LargeListView) = TODO("Not yet implemented")
