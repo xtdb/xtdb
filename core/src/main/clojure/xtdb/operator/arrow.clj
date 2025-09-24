@@ -1,57 +1,57 @@
 (ns xtdb.operator.arrow
   (:require [clojure.spec.alpha :as s]
             [xtdb.logical-plan :as lp]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.util :as util])
   (:import java.io.BufferedInputStream
            java.net.URL
-           java.nio.channels.SeekableByteChannel
            (java.nio.file CopyOption Files Path)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (org.apache.arrow.vector.ipc ArrowFileReader ArrowReader ArrowStreamReader InvalidArrowFileException)
            org.apache.arrow.vector.types.pojo.Field
+           (xtdb.arrow Relation Relation$ILoader)
            xtdb.ICursor))
 
 (defmethod lp/ra-expr :arrow [_]
   (s/cat :op #{:arrow}
          :url ::util/url))
 
-(deftype ArrowCursor [^ArrowReader rdr on-close-fn]
+(deftype ArrowCursor [^Relation rel, ^Relation$ILoader loader, on-close-fn]
   ICursor
   (getCursorType [_] "arrow")
   (getChildCursors [_] [])
 
   (tryAdvance [_ c]
-    (if (.loadNextBatch rdr)
+    (if (.loadNextPage loader rel)
       (do
-        (.accept c (vr/<-root (.getVectorSchemaRoot rdr)))
+        (.accept c rel)
         true)
       false))
 
   (close [_]
-    (util/try-close rdr)
+    (util/try-close rel)
+    (util/try-close loader)
     (when on-close-fn
       (on-close-fn))))
 
 ;; HACK: detection of stream vs file IPC format.
-(defn- path->arrow-reader [^SeekableByteChannel ch ^BufferAllocator allocator]
+(defn- path->loader ^xtdb.arrow.Relation$ILoader [^BufferAllocator allocator, ^Path path]
   (try
-    (doto (ArrowFileReader. ch allocator)
-      (.initialize))
-    (catch InvalidArrowFileException _
-      (ArrowStreamReader. (.position ch 0) allocator))))
+    (Relation/loader allocator path)
+    (catch IllegalArgumentException _
+      (Relation/streamLoader allocator path))))
 
 ;; HACK: not ideal that we have to open the file in the emitter just to get the fields?
 (defn- path->cursor [^Path path on-close-fn]
   {:op :arrow
    :children []
    :fields (with-open [al (RootAllocator.)
-                       ^ArrowReader rdr (path->arrow-reader (util/->file-channel path) al)]
-             (->> (.getFields (.getSchema (.getVectorSchemaRoot rdr)))
+                       loader (path->loader al path)]
+             (->> (.getFields (.getSchema loader))
                   (into {} (map (juxt #(symbol (.getName ^Field %)) identity)))))
    :->cursor (fn [{:keys [^BufferAllocator allocator explain-analyze?]}]
-               (cond-> (ArrowCursor. (path->arrow-reader (util/->file-channel path) allocator) on-close-fn)
-                 explain-analyze? (ICursor/wrapExplainAnalyze)))})
+               (util/with-close-on-catch [loader (path->loader allocator path)
+                                          rel (Relation. allocator (.getSchema loader))]
+                 (cond-> (ArrowCursor. rel loader on-close-fn)
+                   explain-analyze? (ICursor/wrapExplainAnalyze))))})
 
 (defmethod lp/emit-expr :arrow [{:keys [^URL url]} _args]
   ;; TODO: should we make it possible to disable local files?

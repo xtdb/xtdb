@@ -5,15 +5,14 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.reader :as vr])
   (:import java.lang.AutoCloseable
            (java.nio.file Files)
            java.time.Duration
            (java.util Base64 Iterator)
            org.apache.arrow.memory.BufferAllocator
-           (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
+           (xtdb.arrow Relation VectorWriter)
            xtdb.ICursor))
 
 (s/def ::csv-col-type #{:bool :i64 :f64 :utf8 :varbinary :timestamp :duration})
@@ -28,7 +27,7 @@
 
 (deftype CSVCursor [^BufferAllocator allocator
                     ^AutoCloseable rdr
-                    ^VectorSchemaRoot root
+                    ^Relation rel
                     col-parsers
                     ^Iterator row-batches]
   ICursor
@@ -39,28 +38,27 @@
     (if (.hasNext row-batches)
       (let [row-batch (.next row-batches)
             row-count (count row-batch)]
-        (.clear root)
+        (.clear rel)
 
         (dorun
-         (map-indexed (fn [col-idx ^ValueVector fv]
-                        (when-let [parse-value (get col-parsers (.getName fv))]
-                          (let [writer (vw/->writer fv)]
-                            (dotimes [row-idx row-count]
-                              (.writeObject writer
-                                            (-> (nth row-batch row-idx)
-                                                (nth col-idx)
-                                                parse-value))))))
-                      (.getFieldVectors root)))
+         (map-indexed (fn [col-idx ^VectorWriter v]
+                        (when-let [parse-value (get col-parsers (.getName v))]
+                          (dotimes [row-idx row-count]
+                            (.writeObject v
+                                          (-> (nth row-batch row-idx)
+                                              (nth col-idx)
+                                              parse-value)))))
+                      (.getVectors rel)))
 
-        (.setRowCount root row-count)
-
-        (.accept c (vr/<-root root))
+        (.setRowCount rel row-count)
+        (with-open [root (.openAsRoot rel allocator)]
+          (.accept c (vr/<-root root)))
         true)
       false))
 
   (close [_]
     (util/try-close rdr)
-    (util/try-close root)))
+    (util/try-close rel)))
 
 (def ^:private ^java.util.Base64$Decoder b64-decoder
   (Base64/getDecoder))
@@ -89,12 +87,12 @@
     {:op :csv
      :children []
      :fields fields
-     :->cursor (fn [{:keys [allocator explain-analyze?]}]
+     :->cursor (fn [{:keys [^BufferAllocator allocator, explain-analyze?]}]
                  (cond-> (let [rdr (Files/newBufferedReader path)
                                rows (rest (csv/read-csv rdr))
                                schema (Schema. (vals fields))]
                            (CSVCursor. allocator rdr
-                                       (VectorSchemaRoot/create schema allocator)
+                                       (Relation. allocator schema)
                                        (->> fields (into {} (map (juxt (comp name key)
                                                                        (comp col-parsers types/field->col-type val)))))
                                        (.iterator ^Iterable (partition-all batch-size rows))))
