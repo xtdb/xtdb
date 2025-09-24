@@ -3,13 +3,13 @@ package xtdb.operator.distinct
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.IntVector
+import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.expression.map.IndexHasher
 import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.expression.map.RelationMapBuilder
 import xtdb.trie.MutableMemoryHashTrie
-import xtdb.vector.OldRelationWriter
 import java.util.function.IntBinaryOperator
 
 class DistinctRelationMap(
@@ -25,12 +25,12 @@ class DistinctRelationMap(
         fun buildEqui(l: VectorReader, r: VectorReader): IntBinaryOperator
     }
 
-    private val relWriter = OldRelationWriter(allocator, schema)
-    private val keyCols = keyColumnNames.map { relWriter[it].asReader }
+    private val accRel = Relation(allocator, schema)
+    private val keyCols = keyColumnNames.map { accRel[it] }
 
     private val hashColumn = IntVector.open(allocator, "xt/join-hash", false)
     private var buildHashTrie =
-        MutableMemoryHashTrie.builder(hashColumn.asReader)
+        MutableMemoryHashTrie.builder(hashColumn)
             .setPageLimit(pageLimit).setLevelBits(levelBits)
             .build()
 
@@ -58,8 +58,8 @@ class DistinctRelationMap(
             .reduceOrNull(::andIBO)
             ?: IntBinaryOperator { _, _ -> 1 }
 
-        val hasher = inRel.hasher(keyColumnNames)
-        val rowCopier = inRel.rowCopier(relWriter)
+        val hasher = inRel.hasher(inKeyCols.map { it.name })
+        val rowCopier = inRel.rowCopier(accRel)
 
         return object : RelationMapBuilder {
             override fun addIfNotPresent(inIdx: Int): Int {
@@ -91,10 +91,10 @@ class DistinctRelationMap(
         }
     }
 
-    fun getBuiltRelation(): RelationReader = relWriter.asReader
+    fun getBuiltRelation(): RelationReader = accRel
 
     override fun close() {
-        relWriter.close()
+        accRel.close()
         hashColumn.close()
     }
 }

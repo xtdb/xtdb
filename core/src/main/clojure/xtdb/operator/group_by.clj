@@ -43,7 +43,7 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IGroupMapper
   (^xtdb.arrow.VectorReader groupMapping [^xtdb.arrow.RelationReader inRelation])
-  (^Iterable #_<VectorReader> finish []))
+  (^xtdb.arrow.RelationReader finish []))
 
 (deftype NullGroupMapper [^VectorWriter group-mapping]
   IGroupMapper
@@ -54,27 +54,31 @@
         (.writeInt group-mapping 0))
       group-mapping))
 
-  (finish [_] [])
+  (finish [_] (vr/rel-reader [] 1))
 
   Closeable
   (close [_]
     (.close group-mapping)))
 
-(deftype GroupMapper [^List group-col-names
+(deftype GroupMapper [^BufferAllocator al
+                      ^List group-col-names
                       ^DistinctRelationMap rel-map
                       ^VectorWriter group-mapping]
   IGroupMapper
   (groupMapping [_ in-rel]
-    (.clear group-mapping)
-    (let [row-count (.getRowCount in-rel)
-          builder (.buildFromRelation rel-map in-rel)]
-      (dotimes [idx row-count]
-        (.writeInt group-mapping (DistinctRelationMap/insertedIdx (.addIfNotPresent builder idx))))
+    (util/with-open [in-rel (.openDirectSlice in-rel al)]
+      (.clear group-mapping)
+      (let [row-count (.getRowCount in-rel)
+            builder (.buildFromRelation rel-map in-rel)]
+        (dotimes [idx row-count]
+          (.writeInt group-mapping (DistinctRelationMap/insertedIdx (.addIfNotPresent builder idx))))
 
-      group-mapping))
+        group-mapping)))
 
   (finish [_]
-    (seq (.getBuiltRelation rel-map)))
+    (with-open [out-rel (.openDirectSlice (.getBuiltRelation rel-map) al)]
+      (util/with-close-on-catch [root (.openAsRoot out-rel al)]
+        (vr/<-root root))))
 
   Closeable
   (close [_]
@@ -84,7 +88,7 @@
 (defn ->group-mapper [^BufferAllocator allocator, group-fields]
   (let [gm-vec (IntVector/open allocator "group-mapping" false)]
     (if-let [group-col-names (not-empty (set (keys group-fields)))]
-      (GroupMapper. group-col-names
+      (GroupMapper. allocator group-col-names
                     (distinct/->relation-map allocator {:build-fields group-fields
                                                         :build-key-col-names (vec group-col-names)
                                                         :nil-keys-equal? true})
@@ -428,30 +432,31 @@
         (reify
           IAggregateSpec
           (aggregate [_ in-rel group-mapping]
-            (let [in-vec (.vectorForOrNull in-rel (str from-name))
-                  builders (ArrayList. (.size rel-maps))
-                  distinct-idxs (IntStream/builder)]
-              (dotimes [idx (.getValueCount in-vec)]
-                (let [group-idx (.getInt group-mapping idx)]
-                  (while (<= (.size rel-maps) group-idx)
-                    (.add rel-maps (distinct/->relation-map al {:build-fields {from-name (types/col-type->field from-type)}
-                                                                :build-key-col-names [from-name]})))
-                  (let [^DistinctRelationMap rel-map (nth rel-maps group-idx)]
-                    (while (<= (.size builders) group-idx)
-                      (.add builders nil))
+            (with-open [sliced-rel (.openDirectSlice in-rel al)]
+              (let [in-vec (.vectorForOrNull sliced-rel (str from-name))
+                    builders (ArrayList. (.size rel-maps))
+                    distinct-idxs (IntStream/builder)]
+                (dotimes [idx (.getValueCount in-vec)]
+                  (let [group-idx (.getInt group-mapping idx)]
+                    (while (<= (.size rel-maps) group-idx)
+                      (.add rel-maps (distinct/->relation-map al {:build-fields {from-name (types/col-type->field from-type)}
+                                                                  :build-key-col-names [from-name]})))
+                    (let [^DistinctRelationMap rel-map (nth rel-maps group-idx)]
+                      (while (<= (.size builders) group-idx)
+                        (.add builders nil))
 
-                    (let [^RelationMapBuilder
-                          builder (or (nth builders group-idx)
-                                      (let [builder (.buildFromRelation rel-map (vr/rel-reader [in-vec]))]
-                                        (.set builders group-idx builder)
-                                        builder))]
-                      (when (neg? (.addIfNotPresent builder idx))
-                        (.add distinct-idxs idx))))))
-              (let [distinct-idxs (.toArray (.build distinct-idxs))]
-                (.aggregate agg-spec
-                            (vr/rel-reader [(.select in-vec distinct-idxs)])
-                            (-> group-mapping
-                                (.select distinct-idxs))))))
+                      (let [^RelationMapBuilder
+                            builder (or (nth builders group-idx)
+                                        (let [builder (.buildFromRelation rel-map (vr/rel-reader [in-vec]))]
+                                          (.set builders group-idx builder)
+                                          builder))]
+                        (when (neg? (.addIfNotPresent builder idx))
+                          (.add distinct-idxs idx))))))
+                (let [distinct-idxs (.toArray (.build distinct-idxs))]
+                  (.aggregate agg-spec
+                              (.select in-rel distinct-idxs)
+                              (-> group-mapping
+                                  (.select distinct-idxs)))))))
 
           (finish [_] (.finish agg-spec))
 
@@ -591,8 +596,10 @@
                               (doseq [^IAggregateSpec agg-spec aggregate-specs]
                                 (.aggregate agg-spec in-rel group-mapping)))))
 
-       (util/with-open [agg-cols (map #(.finish ^IAggregateSpec %) aggregate-specs)]
-         (let [out-rel (vr/rel-reader (concat (.finish group-mapper) agg-cols))]
+       (util/with-open [gm-rel (.finish group-mapper)
+                        agg-cols (map #(.finish ^IAggregateSpec %) aggregate-specs)]
+         (let [^RelationReader out-rel (vr/rel-reader (concat (.getVectors gm-rel) agg-cols)
+                                                      (.getRowCount gm-rel))]
            (if (pos? (.getRowCount out-rel))
              (do
                (.accept c out-rel)

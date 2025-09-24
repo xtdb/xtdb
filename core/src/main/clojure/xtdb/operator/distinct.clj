@@ -3,7 +3,8 @@
             [xtdb.expression.map :as emap]
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.vector.reader :as vr])
   (:import java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.types.pojo.Schema
@@ -15,7 +16,8 @@
   (s/cat :op #{:δ :distinct}
          :relation ::lp/ra-expression))
 
-(deftype DistinctCursor [^ICursor in-cursor
+(deftype DistinctCursor [^BufferAllocator al
+                         ^ICursor in-cursor
                          ^DistinctRelationMap rel-map]
   ICursor
   (getCursorType [_] "distinct")
@@ -26,18 +28,22 @@
       (while (and (not (aget advanced? 0))
                   (.tryAdvance in-cursor
                                (fn [^RelationReader in-rel]
-                                 (let [row-count (.getRowCount in-rel)]
-                                   (when (pos? row-count)
-                                     (let [builder (.buildFromRelation rel-map in-rel)
-                                           idxs (IntStream/builder)]
-                                       (dotimes [idx row-count]
-                                         (when (neg? (.addIfNotPresent builder idx))
-                                           (.add idxs idx)))
+                                 ;; HACK while we're migrating to xt-arrow
+                                 (with-open [in-rel (.openDirectSlice in-rel al)]
+                                   (let [row-count (.getRowCount in-rel)]
+                                     (when (pos? row-count)
+                                       (let [builder (.buildFromRelation rel-map in-rel)
+                                             idxs (IntStream/builder)]
+                                         (dotimes [idx row-count]
+                                           (when (neg? (.addIfNotPresent builder idx))
+                                             (.add idxs idx)))
 
-                                       (let [idxs (.toArray (.build idxs))]
-                                         (when-not (empty? idxs)
-                                           (aset advanced? 0 true)
-                                           (.accept c (.select in-rel idxs)))))))))))
+                                         (let [idxs (.toArray (.build idxs))]
+                                           (when-not (empty? idxs)
+                                             (aset advanced? 0 true)
+                                             (with-open [out-rel (.openDirectSlice (.select in-rel idxs) al)
+                                                         root (.openAsRoot out-rel al)]
+                                               (.accept c (vr/<-root root)))))))))))))
       (aget advanced? 0)))
 
   (close [_]
@@ -79,8 +85,9 @@
                     :children [inner-rel]
                     :fields inner-fields
                     :->cursor (fn [{:keys [allocator explain-analyze?]} in-cursor]
-                                (cond-> (DistinctCursor. in-cursor (->relation-map allocator
-                                                                                   {:build-fields inner-fields
-                                                                                    :key-col-names (set (keys inner-fields))
-                                                                                    :nil-keys-equal? true}))
+                                (cond-> (DistinctCursor. allocator in-cursor
+                                                         (->relation-map allocator
+                                                                         {:build-fields inner-fields
+                                                                          :key-col-names (set (keys inner-fields))
+                                                                          :nil-keys-equal? true}))
                                   explain-analyze? (ICursor/wrapExplainAnalyze)))})))
