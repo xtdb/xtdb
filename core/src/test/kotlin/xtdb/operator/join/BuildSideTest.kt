@@ -15,7 +15,6 @@ import xtdb.types.Type.Companion.I32
 import xtdb.types.Type.Companion.maybe
 import xtdb.types.Type.Companion.ofType
 import xtdb.types.schema
-import xtdb.vector.OldRelationWriter
 
 @ExtendWith(AllocatorResolver::class)
 class BuildSideTest {
@@ -141,10 +140,9 @@ class BuildSideTest {
             mapOf("id" to 3, "name" to "Bob", "value" to 300)
         )
 
-        val relWriter = OldRelationWriter(al, schema)
-        relWriter.writeRows(*rows.toTypedArray())
+        Relation(al, schema).use { rel ->
+            rel.writeRows(*rows.toTypedArray())
 
-        relWriter.asReader.use { rel ->
             BuildSide(
                 al, schema, listOf("id"),
                 trackUnmatchedIdxs = false,
