@@ -14,21 +14,20 @@
            [java.io ByteArrayOutputStream]
            [java.nio ByteBuffer]
            [java.nio.channels Channels]
-           [java.util ArrayList HashMap List Map]
+           [java.util ArrayList HashMap Map]
            [java.util.concurrent ConcurrentHashMap]
            [java.util.function BiFunction]
            [org.apache.arrow.flight FlightEndpoint FlightInfo FlightProducer$ServerStreamListener FlightProducer$StreamListener FlightServer FlightServer$Builder FlightServerMiddleware FlightServerMiddleware$Factory FlightServerMiddleware$Key FlightStream Location PutResult Result Ticket]
            [org.apache.arrow.flight.sql FlightSqlProducer]
            [org.apache.arrow.flight.sql.impl FlightSql$ActionBeginTransactionResult FlightSql$ActionCreatePreparedStatementResult FlightSql$ActionEndTransactionRequest$EndTransaction FlightSql$CommandPreparedStatementQuery FlightSql$DoPutUpdateResult FlightSql$TicketStatementQuery]
            [org.apache.arrow.memory BufferAllocator]
-           [org.apache.arrow.vector VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.types.pojo Field Schema]
            [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
            (xtdb.arrow ArrowUnloader$Mode Relation)
            xtdb.database.Database$Catalog
            xtdb.IResultCursor
-           [xtdb.query IQuerySource PreparedQuery]
-           [xtdb.vector OldRelationWriter]))
+           [xtdb.query IQuerySource PreparedQuery]))
 
 (defn- new-id ^com.google.protobuf.ByteString []
   (ByteString/copyFrom (util/uuid->bytes (random-uuid))))
@@ -100,17 +99,17 @@
           (handle-get-stream [^IResultCursor cursor, ^FlightProducer$ServerStreamListener listener]
             (try
               (with-open [vsr (VectorSchemaRoot/create (Schema. (.getResultFields cursor)) allocator)]
-                (.start listener vsr)
+                (let [root-loader (VectorLoader. vsr)]
+                  (.start listener vsr)
 
-                (let [out-wtr (OldRelationWriter. allocator ^List (mapv vw/->writer (.getFieldVectors vsr)))]
                   (.forEachRemaining cursor
                                      (fn [in-rel]
-                                       (.clear out-wtr)
-                                       (vw/append-rel out-wtr in-rel)
-                                       (.setRowCount vsr (.getRowCount out-wtr))
-                                       (.putNext listener))))
+                                       (util/with-open [rel (.openDirectSlice in-rel allocator)
+                                                        rb (.openArrowRecordBatch rel)]
+                                         (.load root-loader rb)
+                                         (.putNext listener))))
 
-                (.completed listener))
+                  (.completed listener)))
               (catch Throwable t
                 (log/error t)
                 (throw t))))]

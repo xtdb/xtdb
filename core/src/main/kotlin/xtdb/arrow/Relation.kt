@@ -68,7 +68,7 @@ class Relation(
         rowCount = root.rowCount
     }
 
-    internal fun openArrowRecordBatch(): ArrowRecordBatch {
+    fun openArrowRecordBatch(): ArrowRecordBatch {
         val nodes = mutableListOf<ArrowFieldNode>()
         val buffers = mutableListOf<ArrowBuf>()
 
