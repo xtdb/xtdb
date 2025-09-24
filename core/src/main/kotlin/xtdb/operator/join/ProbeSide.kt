@@ -12,7 +12,7 @@ class ProbeSide(
     val keyColNames: List<String>, private val comparator: IntBinaryOperator,
 ) {
 
-    internal val buildRel = buildSide.builtRel
+    internal val buildRel = buildSide.dataRel
     val nullRowIdx get() = buildSide.nullRowIdx
     val rowCount = probeRel.rowCount
 

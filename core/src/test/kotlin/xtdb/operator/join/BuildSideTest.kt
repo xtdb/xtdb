@@ -60,7 +60,7 @@ class BuildSideTest {
 
                 assertEquals(4, buildSide.partCount)
                 buildSide.loadPart(0)
-                buildSide.builtRel.let { rel ->
+                buildSide.dataRel.let { rel ->
                     assertEquals(3, rel.rowCount)
                     assertEquals(partOneRows, rel.toMaps(SNAKE_CASE_STRING))
 
@@ -70,7 +70,7 @@ class BuildSideTest {
                 }
 
                 buildSide.loadPart(1)
-                buildSide.builtRel.let { rel ->
+                buildSide.dataRel.let { rel ->
                     assertEquals(6, rel.rowCount)
                     assertEquals(partTwoRows, rel.toMaps(SNAKE_CASE_STRING))
 
@@ -80,10 +80,10 @@ class BuildSideTest {
                 }
 
                 buildSide.loadPart(2)
-                assertEquals(0, buildSide.builtRel.rowCount)
+                assertEquals(0, buildSide.dataRel.rowCount)
 
                 buildSide.loadPart(3)
-                assertEquals(0, buildSide.builtRel.rowCount)
+                assertEquals(0, buildSide.dataRel.rowCount)
             }
 
             // with nil row
@@ -104,24 +104,24 @@ class BuildSideTest {
                 assertEquals(4, buildSide.partCount)
 
                 buildSide.loadPart(0)
-                buildSide.builtRel.let { rel ->
+                buildSide.dataRel.let { rel ->
                     assertEquals(4, rel.rowCount)
 
                     assertEquals(partOneRows + emptyMap(), rel.toMaps(SNAKE_CASE_STRING))
                 }
 
                 buildSide.loadPart(1)
-                buildSide.builtRel.let { rel ->
+                buildSide.dataRel.let { rel ->
                     assertEquals(7, rel.rowCount)
 
                     assertEquals(partTwoRows + emptyMap(), rel.toMaps(SNAKE_CASE_STRING))
                 }
 
                 buildSide.loadPart(2)
-                assertEquals(1, buildSide.builtRel.rowCount)
+                assertEquals(1, buildSide.dataRel.rowCount)
 
                 buildSide.loadPart(3)
-                assertEquals(1, buildSide.builtRel.rowCount)
+                assertEquals(1, buildSide.dataRel.rowCount)
             }
         }
     }
@@ -155,7 +155,7 @@ class BuildSideTest {
 
                 assertNull(buildSide.spill)
 
-                val builtRelation = buildSide.builtRel
+                val builtRelation = buildSide.dataRel
 
                 assertEquals(3, builtRelation.rowCount)
 

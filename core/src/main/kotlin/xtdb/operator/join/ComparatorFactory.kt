@@ -16,7 +16,7 @@ interface ComparatorFactory {
         fun ComparatorFactory.build(
             buildSide: BuildSide, probeRel: RelationReader, probeKeyColNames: List<FieldName>
         ): IntBinaryOperator {
-            val buildRel = buildSide.builtRel
+            val buildRel = buildSide.dataRel
 
             val buildKeyCols = buildSide.keyColNames.map { buildRel[it] }
             val probeKeyCols = probeKeyColNames.map { probeRel[it] }
