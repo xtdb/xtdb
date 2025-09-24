@@ -13,7 +13,7 @@ SELECT OBJECT(id: 1) FROM t1
 query T rowsort
 SELECT OBJECT (foo: 2, bar: OBJECT(baz: 'biff')) FROM t1
 ----
-{"bar" {"baz" "biff"}, "foo" 2}
+{"foo" 2, "bar" {"baz" "biff"}}
 
 query T rowsort
 SELECT OBJECT (foo: OBJECT(bibble: true),
@@ -21,7 +21,7 @@ SELECT OBJECT (foo: OBJECT(bibble: true),
                            flib: OBJECT(flob: false)))
 FROM t1
 ----
-{"bar" {"baz" -4113466, "flib" {"flob" false}}, "foo" {"bibble" true}}
+{"foo" {"bibble" true}, "bar" {"baz" -4113466, "flib" {"flob" false}}}
 
 query T rowsort
 SELECT ARRAY ['foo', 'bar'] FROM t1
@@ -41,7 +41,7 @@ SELECT ARRAY [true, FALSE, true, TRUE, false] FROM t1
 query T rowsort
 SELECT OBJECT (foo: 5, bar: OBJECT(baz: ARRAY [-45, 1, 24])) FROM t1
 ----
-{"bar" {"baz" [-45 1 24]}, "foo" 5}
+{"foo" 5, "bar" {"baz" [-45 1 24]}}
 
 query T rowsort
 SELECT ARRAY [OBJECT(foo: 5), OBJECT(foo: 5)] FROM t1
@@ -59,8 +59,8 @@ SELECT OBJECT (foo: OBJECT(bibble: true),
                            flib: OBJECT(flob: false)))
 FROM t1
 ----
-{"bar" {"baz" -4113466, "flib" {"flob" false}}, "foo" {"bibble" true}}
-{"bar" {"baz" -4113466, "flib" {"flob" false}}, "foo" {"bibble" true}}
+{"foo" {"bibble" true}, "bar" {"baz" -4113466, "flib" {"flob" false}}}
+{"foo" {"bibble" true}, "bar" {"baz" -4113466, "flib" {"flob" false}}}
 
 # testing field refs
 
@@ -96,8 +96,8 @@ VALUES(2, {foo: {bibble: true},
 query T rowsort
 SELECT t2.data FROM t2
 ----
-{"bar" {"baz" -4113466, "flib" {"flob" false}}, "foo" {"bibble" true}}
-{"bar" {"baz" 1001}, "foo" {"bibble" true}}
+{"foo" {"bibble" true}, "bar" {"baz" -4113466, "flib" {"flob" false}}}
+{"foo" {"bibble" true}, "bar" {"baz" 1001}}
 
 # SEE 440
 #query T rowsort

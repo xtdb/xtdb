@@ -53,6 +53,15 @@ sealed class Vector : VectorReader, VectorWriter {
     internal abstract fun getObject0(idx: Int, keyFn: IKeyFn<*>): Any
     override fun getObject(idx: Int, keyFn: IKeyFn<*>) = if (isNull(idx)) null else getObject0(idx, keyFn)
 
+    open fun ensureCapacity(valueCount: Int): Unit = unsupported("ensureCapacity")
+
+    open fun setNull(idx: Int): Unit = unsupported("setNull")
+    open fun setBoolean(idx: Int, v: Boolean): Unit = unsupported("setBoolean")
+    open fun setInt(idx: Int, v: Int): Unit = unsupported("setInt")
+    open fun setLong(idx: Int, v: Long): Unit = unsupported("setLong")
+    open fun setFloat(idx: Int, v: Float): Unit = unsupported("setFloat")
+    open fun setDouble(idx: Int, v: Double): Unit = unsupported("setDouble")
+
     override fun writeNull() {
         if (!nullable) nullable = true
         writeUndefined()

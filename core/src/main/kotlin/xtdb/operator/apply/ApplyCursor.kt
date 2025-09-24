@@ -5,8 +5,8 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ICursor
+import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
-import xtdb.vector.OldRelationWriter
 import java.util.function.Consumer
 
 class ApplyCursor(
@@ -29,7 +29,7 @@ class ApplyCursor(
     override fun tryAdvance(c: Consumer<in RelationReader>) =
         independentCursor.tryAdvance { inRel ->
             val idxs = IntArrayList()
-            OldRelationWriter(al, Schema(depFields)).use { depOutWriter ->
+            Relation(al, Schema(depFields)).use { depOutWriter ->
                 repeat(inRel.rowCount) { inIdx ->
                     depCursorFactory.open(inRel, inIdx).use { depCursor ->
                         mode.accept(depCursor, depOutWriter, idxs, inIdx)

@@ -2,8 +2,8 @@
   (:require [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import org.apache.arrow.memory.BufferAllocator
-           xtdb.ICursor
-           (xtdb.arrow RelationReader)))
+           (xtdb.arrow Relation RelationReader)
+           xtdb.ICursor))
 
 ;; We pass the first 100 results through immediately, so that any limit-like queries don't need to wait for a full page to return rows.
 ;; Then, we coalesce small pages together into pages of at least 100, to share the per-page costs.
@@ -18,7 +18,7 @@
   (getChildCursors [_] (.getChildCursors cursor))
 
   (tryAdvance [this c]
-    (let [!rel-writer (volatile! nil)
+    (let [!out-rel (volatile! nil)
           !rows-appended (volatile! 0)]
       (try
         (loop []
@@ -38,15 +38,15 @@
                                              ;; this page is big enough, and we don't have rows waiting
                                              ;; send it straight through, no copy.
                                              (and (>= row-count ideal-min-page-size)
-                                                  (nil? @!rel-writer))
+                                                  (nil? @!out-rel))
                                              (do
                                                (.accept c read-rel)
                                                (vreset! !passed-on? true))
 
                                              ;; otherwise, add it to the pending rows.
                                              :else
-                                             (let [rel-writer (vswap! !rel-writer #(or % (vw/->rel-writer allocator)))]
-                                               (vw/append-rel rel-writer read-rel)
+                                             (let [out-rel (vswap! !out-rel #(or % (Relation. allocator)))]
+                                               (vw/append-rel out-rel read-rel)
                                                (vswap! !rows-appended + row-count))))))
                 rows-appended @!rows-appended]
 
@@ -58,15 +58,16 @@
               (and advanced? (< rows-appended ideal-min-page-size)) (recur)
 
               ;; we've got rows, and either the source is done or there's enough already - send them through
-              (pos? rows-appended) (do
-                                     (.accept c (vw/rel-wtr->rdr @!rel-writer))
-                                     true)
+              (pos? rows-appended)
+              (do
+                (.accept c @!out-rel)
+                true)
 
               ;; no more rows in input, and none to pass through, we're done
               :else false)))
 
         (finally
-          (util/try-close @!rel-writer)))))
+          (util/try-close @!out-rel)))))
 
   (close [_]
     (.close cursor)))

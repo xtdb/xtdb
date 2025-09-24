@@ -4,11 +4,11 @@
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
             [xtdb.time :as time]
-            [xtdb.types :as types]
-            [xtdb.vector.writer :as vw])
-  (:import org.apache.arrow.vector.types.pojo.Schema
+            [xtdb.types :as types])
+  (:import org.apache.arrow.memory.BufferAllocator
+           org.apache.arrow.vector.types.pojo.Schema
            (xtdb ICursor)
-           [xtdb.arrow RelationReader]
+           [xtdb.arrow Relation RelationReader]
            xtdb.operator.PatchGapsCursor))
 
 (s/def ::instantable
@@ -42,7 +42,7 @@
          :explain {:valid-from (pr-str valid-from)
                    :valid-to (pr-str valid-to)}
          :fields fields
-         :->cursor (fn [{:keys [allocator current-time explain-analyze?] :as qopts} inner]
+         :->cursor (fn [{:keys [^BufferAllocator allocator current-time explain-analyze?] :as qopts} inner]
                      (let [valid-from (time/instant->micros (->instant (or valid-from [:literal current-time]) qopts))
                            valid-to (or (some-> valid-to (->instant qopts) time/instant->micros) Long/MAX_VALUE)]
                        (if (> valid-from valid-to)
@@ -51,9 +51,9 @@
                                                {:valid-from (time/micros->instant valid-from)
                                                 :valid-to (time/micros->instant valid-to)}))
                          (cond-> (PatchGapsCursor. inner
-                                                   (vw/->rel-writer allocator
-                                                                    (Schema. (for [[nm field] fields]
-                                                                               (types/field-with-name field (str nm)))))
+                                                   (Relation. allocator
+                                                              (Schema. (for [[nm field] fields]
+                                                                         (types/field-with-name field (str nm)))))
                                                    valid-from
                                                    valid-to)
                            explain-analyze? (ICursor/wrapExplainAnalyze)))))}))))

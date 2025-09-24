@@ -5,8 +5,7 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.reader :as vr])
   (:import (clojure.lang IPersistentMap)
            (java.io File OutputStream)
            (java.nio.channels Channels)
@@ -16,7 +15,7 @@
            java.util.stream.IntStream
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Field)
-           (xtdb.arrow Relation Relation$Loader ArrowUnloader$Mode RelationReader RowCopier Vector)
+           (xtdb.arrow ArrowUnloader$Mode Relation Relation$Loader RelationReader RowCopier Vector)
            xtdb.ICursor))
 
 (s/def ::direction #{:asc :desc})
@@ -69,17 +68,15 @@
   (loop [filenames [first-filename]
          ;; file-idx 1 as first-filename contains 0
          file-idx 1]
-    (if-let [filename (with-open [rel-writer (vw/->rel-writer allocator)]
-                        (while (and (<= (.getRowCount rel-writer) ^int *block-size*)
+    (if-let [filename (with-open [out-rel (Relation. allocator)]
+                        (while (and (<= (.getRowCount out-rel) ^int *block-size*)
                                     (.tryAdvance in-cursor
-                                                 (fn [src-rel]
-                                                   (vw/append-rel rel-writer src-rel)))))
-                        (when (pos? (.getRowCount rel-writer))
-                          (let [read-rel (vw/rel-wtr->rdr rel-writer)
-                                out-filename (->file tmp-dir 0 file-idx)
-                                out-rel (.select read-rel (sorted-idxs read-rel order-specs))]
+                                                 (fn [^RelationReader src-rel]
+                                                   (.append out-rel src-rel)))))
+                        (when (pos? (.getRowCount out-rel))
+                          (let [out-filename (->file tmp-dir 0 file-idx)]
                             (with-open [os (io/output-stream out-filename)]
-                              (write-rel allocator out-rel os)
+                              (write-rel allocator (.select out-rel (sorted-idxs out-rel order-specs)) os)
                               out-filename))))]
       (recur (conj filenames filename) (inc file-idx))
       (mapv io/file filenames))))
@@ -211,9 +208,8 @@
     (if-not consumed?
       (letfn [(load-next-batch []
                 (if (.loadNextPage ^Relation$Loader (.loader this) (.read-rel this))
-                  ;; HACK won't need to openAsRoot once operators close over new rels
-                  (util/with-open [out-root (.openAsRoot ^Relation (.read-rel this) allocator)]
-                    (.accept c (vr/<-root out-root))
+                  (do
+                    (.accept c (.read-rel this))
                     true)
                   (do
                     (io/delete-file (.sorted-file this))
@@ -230,9 +226,7 @@
             (while (and (<= (.getRowCount acc-rel) ^int *block-size*)
                         (.tryAdvance in-cursor
                                      (fn [^RelationReader src-rel]
-                                       ;; HACK won't need to openDirectSlice once operators close over new rels
-                                       (with-open [src-rel (.openDirectSlice src-rel allocator)]
-                                         (.append acc-rel src-rel))))))
+                                       (.append acc-rel src-rel)))))
 
             (let [pos (.getRowCount acc-rel)]
               (if (<= pos ^int *block-size*)
@@ -242,11 +236,8 @@
                     (set! (.consumed? this) true)
                     false)
 
-                  ;; HACK won't need to openDirectSlice/openAsRoot once operators close over new rels
-                  (with-open [out-rel (-> (.select acc-rel (sorted-idxs acc-rel order-specs))
-                                          (.openDirectSlice allocator))
-                              out-root (.openAsRoot out-rel allocator)]
-                    (.accept c (vr/<-root out-root))
+                  (do
+                    (.accept c (.select acc-rel (sorted-idxs acc-rel order-specs)))
                     (set! (.consumed? this) true)
                     true))
 

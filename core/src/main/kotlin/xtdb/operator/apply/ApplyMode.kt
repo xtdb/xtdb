@@ -1,14 +1,15 @@
 package xtdb.operator.apply
 
 import com.carrotsearch.hppc.IntArrayList
-import org.apache.arrow.vector.NullVector
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.ICursor
+import xtdb.arrow.NullVector
 import xtdb.arrow.RelationWriter
 import xtdb.error.Incorrect
 import xtdb.trie.ColumnName
 import xtdb.types.Type
 import xtdb.types.Type.Companion.BOOL
+import xtdb.types.Type.Companion.maybe
 import xtdb.vector.ValueVectorReader
 
 sealed interface ApplyMode {
@@ -22,7 +23,7 @@ sealed interface ApplyMode {
             idxs: IntArrayList, inIdx: Int
         ) {
             idxs.add(inIdx)
-            val outWriter = dependentOutWriter.vectorFor(columnName, Type.Companion.maybe(BOOL).fieldType)
+            val outWriter = dependentOutWriter.vectorFor(columnName, maybe(BOOL).fieldType)
             var match = -1
             while (match != 1) {
                 dependentCursor.tryAdvance { depRel ->
@@ -73,7 +74,7 @@ sealed interface ApplyMode {
                 idxs.add(inIdx)
                 for (field in dependentFields) {
                     dependentOutWriter.vectorFor(field.name, field.fieldType)
-                        .append(ValueVectorReader.from(NullVector(field.name).also { it.valueCount = 1 }))
+                        .append(NullVector(field.name).also { it.valueCount = 1 })
                 }
             }
         }
@@ -143,7 +144,7 @@ sealed interface ApplyMode {
                 idxs.add(inIdx)
                 for (field in dependentFields) {
                     dependentOutWriter.vectorFor(field.name, field.fieldType)
-                        .append(ValueVectorReader.from(NullVector(field.name).also { it.valueCount = 1 }))
+                        .append(NullVector(field.name).also { it.valueCount = 1 })
                 }
             }
         }

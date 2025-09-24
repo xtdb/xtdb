@@ -68,7 +68,7 @@ class Relation(
         rowCount = root.rowCount
     }
 
-    internal fun openArrowRecordBatch(): ArrowRecordBatch {
+    fun openArrowRecordBatch(): ArrowRecordBatch {
         val nodes = mutableListOf<ArrowFieldNode>()
         val buffers = mutableListOf<ArrowBuf>()
 
@@ -128,11 +128,16 @@ class Relation(
         rowCount = recordBatch.length
     }
 
-    class StreamLoader(al: BufferAllocator, ch: ReadableByteChannel) : AutoCloseable {
+    interface ILoader : AutoCloseable {
+        val schema: Schema
+        fun loadNextPage(rel: Relation): Boolean
+    }
+
+    class StreamLoader(al: BufferAllocator, ch: ReadableByteChannel) : ILoader {
 
         private val reader = MessageChannelReader(ReadChannel(ch), al)
 
-        val schema: Schema
+        override val schema: Schema
 
         init {
             val schemaMessage = (reader.readNext() ?: error("empty stream")).message
@@ -141,7 +146,7 @@ class Relation(
             schema = MessageSerializer.deserializeSchema(schemaMessage)
         }
 
-        fun loadNextPage(rel: Relation): Boolean {
+        override fun loadNextPage(rel: Relation): Boolean {
             val msg = reader.readNext() ?: return false
 
             msg.message.headerType().let {
@@ -157,9 +162,9 @@ class Relation(
         override fun close() = reader.close()
     }
 
-    class Loader(private val arrowFileLoader: ArrowFileLoader) : AutoCloseable {
+    class Loader(private val arrowFileLoader: ArrowFileLoader) : ILoader {
 
-        val schema: Schema get() = arrowFileLoader.schema
+        override val schema: Schema get() = arrowFileLoader.schema
         val pageCount get() = arrowFileLoader.pageCount
 
         private var lastPageIndex = -1
@@ -171,7 +176,7 @@ class Relation(
             lastPageIndex = idx
         }
 
-        fun loadNextPage(rel: Relation): Boolean {
+        override fun loadNextPage(rel: Relation): Boolean {
             if (lastPageIndex + 1 >= pageCount) return false
 
             loadPage(++lastPageIndex, rel)
@@ -218,6 +223,9 @@ class Relation(
 
         @JvmStatic
         fun loader(buf: ArrowBuf) = Loader(ArrowFileLoader.openFromArrowBuf(buf))
+
+        @JvmStatic
+        fun streamLoader(al: BufferAllocator, path: Path) = StreamLoader(al, path.openReadableChannel())
 
         @JvmStatic
         fun fromRoot(al: BufferAllocator, vsr: VectorSchemaRoot) =

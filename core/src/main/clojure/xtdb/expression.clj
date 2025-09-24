@@ -313,6 +313,28 @@
   :hierarchy #'types/col-type-hierarchy)
 
 #_{:clj-kondo/ignore [:unused-binding]}
+(defmulti set-value-code
+  (fn [col-type & args]
+    (types/col-type-head col-type))
+  :default ::default
+  :hierarchy #'types/col-type-hierarchy)
+
+(defmethod set-value-code :null [_ w idx _val] `(.setNull ~w ~idx))
+(defmethod set-value-code :bool [_ w idx val] `(.setBoolean ~w ~idx ~val))
+(defmethod set-value-code :i32 [_ w idx val] `(.setInt ~w ~idx ~val))
+(defmethod set-value-code :i64 [_ w idx val] `(.setLong ~w ~idx ~val))
+(defmethod set-value-code :f32 [_ w idx val] `(.setFloat ~w ~idx ~val))
+(defmethod set-value-code :f64 [_ w idx val] `(.setDouble ~w ~idx ~val))
+(defmethod set-value-code :duration [_ w idx val] `(.setLong ~w ~idx ~val))
+(defmethod set-value-code :timestamp-local [_ w idx val] `(.setLong ~w ~idx ~val))
+(defmethod set-value-code :timestamp-tz [_ w idx val] `(.setLong ~w ~idx ~val))
+
+(defmethod set-value-code :date [[_ date-unit] w idx val]
+  (case date-unit
+    :day `(.setInt ~w ~idx ~val)
+    :milli `(.setLong ~w ~idx ~val)))
+
+#_{:clj-kondo/ignore [:unused-binding]}
 (defmulti write-value-code
   (fn [col-type & args]
     (types/col-type-head col-type))
@@ -1888,7 +1910,7 @@
 
               {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
                                                                           :var->col-type var->col-type})]
-          (util/with-open [out-vec (Vector/open allocator (types/col-type->field col-name return-type))]
+          (util/with-close-on-catch [out-vec (Vector/open allocator (types/col-type->field col-name return-type))]
             (try
               (@!projection-fn in-rel schema args out-vec)
               (catch ArithmeticException e
@@ -1900,9 +1922,7 @@
               (catch IllegalArgumentException e
                 (throw (err/incorrect :xtdb.expression/illegal-argument-exception (ex-message e) {::err/cause e}))))
 
-            (util/with-close-on-catch [root (-> (Relation. allocator ^List (vector out-vec) (.getValueCount out-vec))
-                                                (.openAsRoot allocator))]
-              (vr/vec->reader (.getVector root 0)))))))))
+            out-vec))))))
 
 (defn ->expression-selection-spec ^SelectionSpec [expr input-types]
   (let [projector (->expression-projection-spec "select" {:op :call, :f :boolean, :args [expr]} input-types)]

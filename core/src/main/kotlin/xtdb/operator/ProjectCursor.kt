@@ -2,9 +2,9 @@ package xtdb.operator
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.ICursor
+import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.util.useAll
-import xtdb.arrow.RelationReader
 import java.util.function.Consumer
 
 class ProjectCursor(
@@ -18,19 +18,20 @@ class ProjectCursor(
     override val cursorType get() = "project"
     override val childCursors get() = listOf(inCursor)
 
-    override fun tryAdvance(c: Consumer<in RelationReader>): Boolean = inCursor.tryAdvance { inRel ->
-        mutableListOf<VectorReader>().useAll { closeCols ->
-            val outCols = specs.map { spec ->
-                spec.project(al, inRel, schema, args)
-                    .also {
-                        if (spec !is ProjectionSpec.Identity && spec !is ProjectionSpec.Rename)
-                            closeCols.add(it)
-                    }
-            }
+    override fun tryAdvance(c: Consumer<in RelationReader>): Boolean =
+        inCursor.tryAdvance { inRel ->
+            mutableListOf<VectorReader>().useAll { closeCols ->
+                val outCols = specs.map { spec ->
+                    spec.project(al, inRel, schema, args)
+                        .also {
+                            if (spec !is ProjectionSpec.Identity && spec !is ProjectionSpec.Rename)
+                                closeCols.add(it)
+                        }
+                }
 
-            c.accept(RelationReader.from(outCols, inRel.rowCount))
+                c.accept(RelationReader.from(outCols, inRel.rowCount))
+            }
         }
-    }
 
     override fun close() = inCursor.close()
 }

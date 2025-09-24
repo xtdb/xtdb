@@ -66,22 +66,17 @@ class DiskHashJoin(
                 probeShuffle.loadDataPart(probeRel, probePartIdx)
                 probeShuffle.loadHashPart(hashCol, probePartIdx)
 
-                // temporary, while we have openAsRoot in BuildSide
-                // after that, we can create this once for the DHJ
-                probeRel.openAsRoot(al).use { probeRoot ->
-                    val probeRel = RelationReader.from(probeRoot)
+                // TODO can probably try move this to a field now
+                val probeSide = ProbeSide(
+                    buildSide, probeRel, probeKeyColNames,
+                    comparatorFactory.build(buildSide, probeRel, probeKeyColNames)
+                )
 
-                    val probeSide = ProbeSide(
-                        buildSide, probeRel, probeKeyColNames,
-                        comparatorFactory.build(buildSide, probeRel, probeKeyColNames)
-                    )
+                val joinedRel = joinType.probe(probeSide)
 
-                    val joinedRel = joinType.probe(probeSide)
-
-                    if (joinedRel.rowCount > 0) {
-                        c.accept(joinedRel)
-                        return true
-                    }
+                if (joinedRel.rowCount > 0) {
+                    c.accept(joinedRel)
+                    return true
                 }
             }
         }
@@ -106,10 +101,8 @@ class DiskHashJoin(
             Relation(al, probeFields).use { tmpRel ->
                 Spill.open(al, tmpRel).use { spill ->
                     probeCursor.forEachRemaining { inRel ->
-                        inRel.openDirectSlice(al).use { inRel ->
-                            tmpRel.append(inRel)
-                            if (tmpRel.rowCount > buildSide.inMemoryThreshold) spill.spill()
-                        }
+                        tmpRel.append(inRel)
+                        if (tmpRel.rowCount > buildSide.inMemoryThreshold) spill.spill()
                     }
 
                     spill.end()

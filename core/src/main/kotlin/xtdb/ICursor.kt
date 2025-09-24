@@ -1,7 +1,7 @@
 package xtdb
 
+import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
-import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.RelationReader
 import java.lang.AutoCloseable

@@ -3,7 +3,8 @@
             [xtdb.expression.map :as emap]
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.vector.reader :as vr])
   (:import java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.types.pojo.Schema
@@ -15,7 +16,8 @@
   (s/cat :op #{:δ :distinct}
          :relation ::lp/ra-expression))
 
-(deftype DistinctCursor [^ICursor in-cursor
+(deftype DistinctCursor [^BufferAllocator al
+                         ^ICursor in-cursor
                          ^DistinctRelationMap rel-map]
   ICursor
   (getCursorType [_] "distinct")
@@ -79,8 +81,9 @@
                     :children [inner-rel]
                     :fields inner-fields
                     :->cursor (fn [{:keys [allocator explain-analyze?]} in-cursor]
-                                (cond-> (DistinctCursor. in-cursor (->relation-map allocator
-                                                                                   {:build-fields inner-fields
-                                                                                    :key-col-names (set (keys inner-fields))
-                                                                                    :nil-keys-equal? true}))
+                                (cond-> (DistinctCursor. allocator in-cursor
+                                                         (->relation-map allocator
+                                                                         {:build-fields inner-fields
+                                                                          :key-col-names (set (keys inner-fields))
+                                                                          :nil-keys-equal? true}))
                                   explain-analyze? (ICursor/wrapExplainAnalyze)))})))

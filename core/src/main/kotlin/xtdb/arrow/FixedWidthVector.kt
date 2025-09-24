@@ -3,6 +3,7 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.BaseFixedWidthVector
+import org.apache.arrow.vector.BitVectorHelper
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.TimeUnit
@@ -62,10 +63,45 @@ sealed class FixedWidthVector : Vector() {
         if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
         else dataBuffer.getInt(idx)
 
-    operator fun set(idx: Int, v: Int) {
+    override fun ensureCapacity(valueCount: Int) {
+        if (valueCount > this.valueCount) {
+            this.valueCount = valueCount
+            validityBuffer.ensureCapacity(BitVectorHelper.getValidityBufferSize(valueCount).toLong())
+            dataBuffer.ensureCapacity((valueCount * byteWidth).toLong())
+        }
+    }
+
+    override fun setNull(idx: Int) {
+        ensureCapacity(idx + 1)
+        validityBuffer.setBit(idx, 0)
+    }
+
+    override fun setInt(idx: Int, v: Int) {
+        ensureCapacity(idx + 1)
         setNotNull(idx)
         dataBuffer[idx] = v
     }
+
+    override fun setLong(idx: Int, v: Long) {
+        ensureCapacity(idx + 1)
+        setNotNull(idx)
+        dataBuffer[idx] = v
+    }
+
+    override fun setFloat(idx: Int, v: Float) {
+        ensureCapacity(idx + 1)
+        setNotNull(idx)
+        dataBuffer[idx] = v
+    }
+
+    override fun setDouble(idx: Int, v: Double) {
+        ensureCapacity(idx + 1)
+        setNotNull(idx)
+        dataBuffer[idx] = v
+    }
+
+    operator fun set(idx: Int, v: Int) = setInt(idx, v)
+    operator fun set(idx: Int, v: Long) = setLong(idx, v)
 
     protected fun writeInt0(value: Int) {
         dataBuffer.writeInt(value)

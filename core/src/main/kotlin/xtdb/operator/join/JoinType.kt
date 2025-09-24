@@ -1,7 +1,7 @@
 package xtdb.operator.join
 
 import com.carrotsearch.hppc.IntArrayList
-import org.apache.arrow.vector.BitVector
+import xtdb.arrow.BitVector
 import xtdb.arrow.RelationReader
 import xtdb.error.Incorrect
 import xtdb.operator.join.JoinType.OuterJoinType.*
@@ -90,8 +90,8 @@ interface JoinType {
             repeat(rowCount) { probeIdx ->
                 when (matches(probeIdx)) {
                     0 -> markCol.setNull(probeIdx)
-                    1 -> markCol.set(probeIdx, 1)
-                    -1 -> markCol.set(probeIdx, 0)
+                    1 -> markCol.setBoolean(probeIdx, true)
+                    -1 -> markCol.setBoolean(probeIdx, false)
                 }
             }
         }

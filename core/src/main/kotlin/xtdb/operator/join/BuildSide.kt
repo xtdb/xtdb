@@ -24,11 +24,9 @@ class BuildSide(
     val withNilRow: Boolean,
     val inMemoryThreshold: Long = 100_000,
 ) : AutoCloseable {
-    private val dataRel = Relation(al, schema)
+    val dataRel = Relation(al, schema)
     private val hashCol = "hashes".ofType(I32).openVector(al)
 
-    private var builtDataRel: RelationReader? = null
-    val builtRel get() = builtDataRel!!
     var buildMap: BuildSideMap? = null; private set
 
     internal var spill: Spill? = null; private set
@@ -37,14 +35,12 @@ class BuildSide(
 
     @Suppress("NAME_SHADOWING")
     fun append(inRel: RelationReader) {
-        inRel.openDirectSlice(al).use { inRel ->
-            val rowCopier = inRel.rowCopier(dataRel)
+        val rowCopier = inRel.rowCopier(dataRel)
 
-            repeat(inRel.rowCount) { inIdx -> rowCopier.copyRow(inIdx) }
+        repeat(inRel.rowCount) { inIdx -> rowCopier.copyRow(inIdx) }
 
-            if (dataRel.rowCount > inMemoryThreshold)
-                (this.spill ?: openSpill()).spill()
-        }
+        if (dataRel.rowCount > inMemoryThreshold)
+            (this.spill ?: openSpill()).spill()
     }
 
     var shuffle: Shuffle? = null; private set
@@ -56,8 +52,6 @@ class BuildSide(
         }
 
         if (withNilRow) dataRel.endRow()
-        builtDataRel?.close()
-        builtDataRel = RelationReader.from(dataRel.openAsRoot(al))
 
         buildMap?.close()
         buildMap = BuildSideMap.from(al, hashCol)
@@ -81,8 +75,6 @@ class BuildSide(
             shuffle.end()
 
             dataRel.clear()
-            builtDataRel?.close()
-            builtDataRel = RelationReader.from(dataRel.openAsRoot(al))
         } else {
             dataRel.hasher(keyColNames).writeAllHashes(hashCol)
             buildRel(dataRel, hashCol)
@@ -105,7 +97,7 @@ class BuildSide(
     val nullRowIdx: Int
         get() {
             check(this.withNilRow) { "no nil row in build side" }
-            return builtRel.rowCount - 1
+            return dataRel.rowCount - 1
         }
 
     private val unmatchedBuildIdxs = if (trackUnmatchedIdxs) RoaringBitmap() else null
@@ -117,7 +109,7 @@ class BuildSide(
         unmatchedBuildIdxs
             ?.takeIf { !it.isEmpty }?.toArray()
             ?.let { idxs ->
-                val buildRel = builtRel.select(idxs)
+                val buildRel = dataRel.select(idxs)
                 val probeRel =
                     RelationReader
                         .from(nullColNames.map { from(NullVector(it, 1)) })
@@ -137,7 +129,6 @@ class BuildSide(
 
     override fun close() {
         buildMap?.close()
-        builtDataRel?.close()
 
         shuffle?.close()
         spill?.close()

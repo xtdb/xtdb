@@ -120,7 +120,9 @@ class ScanCursor(
                     }
 
                 if (rel.rowCount > 0) {
-                    c.accept(rel)
+                    rel.openDirectSlice(al).use { rel ->
+                        c.accept(rel)
+                    }
                     return true
                 }
             }

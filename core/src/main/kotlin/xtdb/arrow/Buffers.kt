@@ -48,7 +48,7 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
         return buf
     }
 
-    private fun ensureCapacity(capacity: Long): ArrowBuf {
+    fun ensureCapacity(capacity: Long): ArrowBuf {
         while (buf.capacity() < capacity) realloc(capacity)
         return buf
     }
@@ -100,6 +100,8 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
         buf.writeLong(value)
     }
 
+    operator fun set(idx: Int, v: Long) = buf.setLong(idx.toLong() * Long.SIZE_BYTES, v)
+
     fun getFloat(idx: Int) = buf.getFloat((idx * Float.SIZE_BYTES).toLong())
 
     fun writeFloat(value: Float) {
@@ -107,12 +109,16 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
         buf.writeFloat(value)
     }
 
+    operator fun set(idx: Int, v: Float) = buf.setFloat(idx.toLong() * Float.SIZE_BYTES, v)
+
     fun getDouble(idx: Int) = buf.getDouble((idx * Double.SIZE_BYTES).toLong())
 
     fun writeDouble(value: Double) {
         ensureWritable(Double.SIZE_BYTES.toLong())
         buf.writeDouble(value)
     }
+
+    operator fun set(idx: Int, v: Double) = buf.setDouble(idx.toLong() * Double.SIZE_BYTES, v)
 
     fun getBytes(start: Int, len: Int): ByteBuffer = buf.nioBuffer(start.toLong(), len)
 

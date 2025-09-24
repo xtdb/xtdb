@@ -12,11 +12,10 @@
             [xtdb.vector.reader :as vr])
   (:import (java.util ArrayList HashSet Iterator List Set)
            (org.apache.arrow.memory BufferAllocator)
-           org.apache.arrow.vector.BitVector
            (org.apache.arrow.vector.types.pojo Field Schema)
            (org.roaringbitmap.buffer MutableRoaringBitmap)
            (xtdb ICursor)
-           (xtdb.arrow RelationReader)
+           (xtdb.arrow BitVector RelationReader)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
            (xtdb.operator.join BuildSide ComparatorFactory DiskHashJoin JoinType MemoryHashJoin ProbeSide)))
@@ -167,7 +166,7 @@
 
 (defn- build-pushdowns [^BuildSide build-side, pushdown-blooms, ^Set pushdown-iids]
   (when pushdown-blooms
-    (let [build-rel (.getBuiltRel build-side)
+    (let [build-rel (.getDataRel build-side)
           build-key-col-names (vec (.getKeyColNames build-side))]
       (dotimes [col-idx (count build-key-col-names)]
         (let [build-col-name (nth build-key-col-names col-idx)
@@ -250,11 +249,10 @@
                                     (when (pos? row-count)
                                       (aset advanced? 0 true)
 
-                                      (with-open [mark-col (doto (BitVector. (name mark-col-name) allocator)
-                                                             (.allocateNew row-count)
-                                                             (.setValueCount row-count))]
+                                      (with-open [mark-col (doto (BitVector. allocator (name mark-col-name) true)
+                                                             (.ensureCapacity row-count))]
                                         (JoinType/mark probe-side mark-col)
-                                        (let [out-cols (conj (seq probe-rel) (vr/vec->reader mark-col))]
+                                        (let [out-cols (conj (seq probe-rel) mark-col)]
                                           (.accept c (vr/rel-reader out-cols row-count))))))))))
        (aget advanced? 0))))
 

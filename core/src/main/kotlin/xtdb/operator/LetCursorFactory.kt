@@ -43,10 +43,7 @@ class LetCursorFactory(
                 Relation(al, batch.schema).use { rel ->
                     rel.load(batch.recordBatch)
 
-                    // TODO: don't need all this openAsRoot dance when the operators all use xtdb.arrow
-                    rel.openAsRoot(al).use { root ->
-                        c.accept(RelationReader.from(root))
-                    }
+                    c.accept(rel)
                 }
             }
 

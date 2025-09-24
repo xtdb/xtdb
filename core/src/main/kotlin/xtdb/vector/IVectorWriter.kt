@@ -44,7 +44,7 @@ interface IVectorWriter : VectorWriter, AutoCloseable {
 
     fun rowCopier(src: ValueVector): RowCopier
 
-    override fun writeUndefined() = TODO("writeUndefined on IVectorWriter...? could probably do this")
+    override fun writeUndefined() = writeNull()
 
     override fun writeNull() {
         vector.setNull(valueCount++)
