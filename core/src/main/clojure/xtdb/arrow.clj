@@ -3,11 +3,13 @@
   (:require xtdb.mirrors.time-literals
             xtdb.serde.types
             [xtdb.test-util :as tu]
+            [xtdb.trie :as trie]
             [xtdb.util :as util])
   (:import (java.nio.file Files)
            [java.util Spliterators]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb.arrow Relation)))
+           (xtdb.arrow NullVector Relation) 
+           (xtdb.trie MemoryHashTrie)))
 
 (defn read-arrow-stream-file
   ([path-ish]
@@ -42,4 +44,7 @@
    (with-arrow-file path-ish
      (fn [res]
        (update res :batches vec)))))
+
+(defn read-hash-trie-file [path-ish]
+  (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (Files/readAllBytes (util/->path path-ish)) (NullVector. "_iid" 0))))
 
