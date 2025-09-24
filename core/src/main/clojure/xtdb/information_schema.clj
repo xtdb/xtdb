@@ -357,25 +357,26 @@
   [{:_id "xtdb", :username "xtdb", :usesuper true, :passwd (authn.crypt/encrypt-pw "xtdb")}])
 
 (defn pg-user-template-page+trie [allocator]
-  (util/with-close-on-catch [out-rel-writer (Trie/openLogDataWriter allocator (Trie/dataRelSchema pg-user-field))]
-    (let [{^VectorWriter iid-wrt "_iid",
-           ^VectorWriter sys-wrt "_system_from"
-           ^VectorWriter vf-wrt "_valid_from",
-           ^VectorWriter vt-wrt "_valid_to"} out-rel-writer
+  (util/with-open [out-rel (Trie/openLogDataWriter allocator (Trie/dataRelSchema pg-user-field))]
+    (let [{^VectorWriter iid-vec "_iid",
+           ^VectorWriter sf-vec "_system_from"
+           ^VectorWriter vf-vec "_valid_from",
+           ^VectorWriter vt-vec "_valid_to"} out-rel
 
-          ^VectorWriter put-wrt (get-in out-rel-writer ["op" "put"])]
+          ^VectorWriter put-vec (get-in out-rel ["op" "put"])]
 
       (doseq [user initial-user-data]
-        (.writeObject iid-wrt (util/->iid (:_id user)))
-        (.writeLong sys-wrt 0)
-        (.writeLong vf-wrt 0)
-        (.writeLong vt-wrt Long/MAX_VALUE)
-        (.writeObject put-wrt user)
-        (.endRow out-rel-writer))
-      (let [out-rel (vw/rel-wtr->rdr out-rel-writer)
-            iid-rdr (vw/vec-wtr->rdr iid-wrt)
-            dummy-trie (reduce #(.plus ^MemoryHashTrie %1 %2) (trie/->live-trie 32 1024 iid-rdr) (range (count initial-user-data)))]
-        [out-rel dummy-trie]))))
+        (.writeObject iid-vec (util/->iid (:_id user)))
+        (.writeLong sf-vec 0)
+        (.writeLong vf-vec 0)
+        (.writeLong vt-vec Long/MAX_VALUE)
+        (.writeObject put-vec user)
+        (.endRow out-rel))
+      (let [dummy-trie (reduce #(.plus ^MemoryHashTrie %1 %2)
+                               (trie/->live-trie 32 1024 iid-vec)
+                               (range (count initial-user-data)))]
+        (util/with-close-on-catch [out-root (.openAsRoot out-rel allocator)]
+          [(vr/<-root out-root) dummy-trie])))))
 
 (defn trie-stats [^TrieCatalog trie-catalog]
   (for [^TableRef table (.getTables trie-catalog)
