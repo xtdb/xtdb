@@ -33,7 +33,7 @@ internal class FixedSizeListVectorWriter(
 
     override fun writeNull() {
         super.writeNull()
-        repeat(listSize) { elWriter.writeNull() }
+        repeat(listSize) { elWriter.writeUndefined() }
     }
 
     override val listElements: IVectorWriter

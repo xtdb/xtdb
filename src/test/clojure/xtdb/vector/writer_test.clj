@@ -22,8 +22,8 @@
           my-set-wtr (.vectorFor duv "set" (FieldType/notNullable #xt.arrow/type :set))]
 
       (t/is (= #xt/field ["my-duv" :union
-                          ["list" :list ["$data$" :null :?]]
-                          ["set" :set ["$data$" :null :?]]]
+                          ["list" :list ["$data$" :null]]
+                          ["set" :set ["$data$" :null]]]
 
                (.getField duv))
 

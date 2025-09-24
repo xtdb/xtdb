@@ -25,8 +25,6 @@ import xtdb.trie.ColumnName
 import xtdb.types.Type
 import xtdb.types.Type.Companion.ofType
 import xtdb.util.Hasher
-import xtdb.util.closeOnCatch
-import xtdb.vector.ValueVectorReader
 import xtdb.vector.extensions.*
 import java.time.ZoneId
 import org.apache.arrow.vector.NullVector as ArrowNullVector
@@ -144,7 +142,7 @@ sealed class Vector : VectorReader, VectorWriter {
                 override fun visit(type: ArrowType.List) =
                     ListVector(
                         al, name, isNullable,
-                        children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$")
+                        children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$", false)
                     )
 
                 override fun visit(type: LargeList) = TODO("Not yet implemented")
@@ -152,7 +150,8 @@ sealed class Vector : VectorReader, VectorWriter {
                 override fun visit(type: FixedSizeList) =
                     FixedSizeListVector(
                         al, name, isNullable, type.listSize,
-                        children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$"))
+                        children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$", false)
+                    )
 
                 override fun visit(type: ListView) = TODO("Not yet implemented")
                 override fun visit(type: LargeListView) = TODO("Not yet implemented")
@@ -227,7 +226,7 @@ sealed class Vector : VectorReader, VectorWriter {
                     TsTzRangeType -> TsTzRangeVector(
                         FixedSizeListVector(
                             al, name, isNullable, 2,
-                            children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$")
+                            children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$", false)
                         )
                     )
 
@@ -235,7 +234,7 @@ sealed class Vector : VectorReader, VectorWriter {
                         SetVector(
                             ListVector(
                                 al, name, isNullable,
-                                children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$")
+                                children.firstOrNull()?.openVector(al) ?: NullVector($$"$data$", false)
                             )
                         )
 
@@ -248,9 +247,13 @@ sealed class Vector : VectorReader, VectorWriter {
         }
 
         @JvmStatic
-        fun fromArrow(vec: ValueVector): Vector =
-            (if (vec is ArrowNullVector) NullVector(vec.name) else vec.field.openVector(vec.allocator))
-                .apply { loadFromArrow(vec) }
+        fun fromArrow(vec: ValueVector): Vector {
+            val vector =
+                if (vec is ArrowNullVector) NullVector(vec.name, vec.field.isNullable)
+                else vec.field.openVector(vec.allocator)
+
+            return vector.apply { loadFromArrow(vec) }
+        }
 
         @JvmStatic
         fun fromList(al: BufferAllocator, field: Field, values: List<*>): Vector {

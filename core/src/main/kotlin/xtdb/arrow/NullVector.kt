@@ -14,12 +14,11 @@ import org.apache.arrow.vector.NullVector as ArrowNullVector
 
 internal val NULL_TYPE = ArrowType.Null.INSTANCE
 
-class NullVector(override var name: String, override var valueCount: Int = 0) : Vector() {
+class NullVector(
+    // nullable = false used for vectors that only contain 'undefined' values
+    override var name: String, override var nullable: Boolean = true, override var valueCount: Int = 0
+) : Vector() {
     override val vectors = emptyList<Vector>()
-
-    override var nullable: Boolean
-        get() = true
-        set(_) {}
 
     override val type: ArrowType = NULL_TYPE
 
@@ -30,6 +29,7 @@ class NullVector(override var name: String, override var valueCount: Int = 0) : 
     }
 
     override fun writeNull() {
+        if (!nullable) nullable = true
         valueCount++
     }
 
@@ -47,7 +47,12 @@ class NullVector(override var name: String, override var valueCount: Int = 0) : 
         if (target.type == type) this
         else
             Field(this.name, target, emptyList()).openVector(al)
-                .also { newVec -> repeat(this.valueCount) { newVec.writeNull() } }
+                .also { newVec ->
+                    repeat(this.valueCount) {
+                        // if we've only ever written undefined, write undefineds in the new vec
+                        if (nullable) newVec.writeNull() else newVec.writeUndefined()
+                    }
+                }
 
     override fun rowCopier(dest: VectorWriter) =
         if (dest is DenseUnionVector) dest.rowCopier0(this)

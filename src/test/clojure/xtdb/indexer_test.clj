@@ -641,11 +641,11 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
 
           (t/is (= {:tree [:leaf [0]], :page-limit 1024, :log-limit 64}
                    (let [path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/live-trie.binpb" node-id))]
-                     (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (.getByteArray bp path) (NullVector. "_iid" 0))))))
+                     (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (.getByteArray bp path) (NullVector. "_iid" true 0))))))
 
           (t/is (= {:tree [:leaf [1 0]], :page-limit 1024, :log-limit 64}
                    (let [path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/live-trie-tx.binpb" node-id))]
-                     (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (.getByteArray bp path) (NullVector. "_iid" 0))))))
+                     (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (.getByteArray bp path) (NullVector. "_iid" true 0))))))
 
           (let [live-table-tx-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/live-table-tx.arrow" node-id))
                 footer (.getFooter bp live-table-tx-path)]
