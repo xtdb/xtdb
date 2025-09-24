@@ -7,7 +7,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import [xtdb.arrow IntVector]))
+  (:import [xtdb.arrow IntVector Vector]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -80,6 +80,7 @@
                          {:a 1 :b 20}
                          {:a 2 :b 10}
                          {:a 2 :b 20}]
+
                         [{:a 1 :b 10}
                          {:a 1 :b 20}
                          {:a 2 :b 10}
@@ -132,7 +133,8 @@
 
         (.aggregate sum-spec v0 group-mapping)
         (.aggregate sum-spec v1 group-mapping)
-        (t/is (= [12.0] (.getAsList (.finish sum-spec))))
+        (with-open [res (.finish sum-spec)]
+          (t/is (= [12.0] (.getAsList res))))
         (finally
           (util/try-close sum-spec))))))
 
@@ -324,22 +326,23 @@
   (with-open [gm0 (doto (IntVector/open tu/*allocator* "gm0" false)
                     (.writeAll (map int [0 1 0])))
 
-              k0 (vr/vec->reader (vw/open-vec tu/*allocator* "k" [1 2 3]))
+              k0 (Vector/fromList tu/*allocator* "k" [1 2 3])
 
               gm1 (doto (IntVector/open tu/*allocator* "gm1" false)
                     (.writeAll (map int [1 2 0])))
 
-              k1 (vr/vec->reader (vw/open-vec tu/*allocator* "k" [4 5 6]))]
+              k1 (Vector/fromList tu/*allocator* "k" [4 5 6])]
 
     (let [agg-factory (group-by/->aggregate-factory {:f :array-agg, :from-name 'k, :from-type :i64
                                                      :to-name 'vs, :zero-row? true})]
       (util/with-open [agg-spec (.build agg-factory tu/*allocator*)]
-                      (t/is (= [:union #{:null [:list :i64]}] (types/field->col-type (.getField agg-factory))))
+        (t/is (= [:union #{:null [:list :i64]}] (types/field->col-type (.getField agg-factory))))
 
-                      (.aggregate agg-spec (vr/rel-reader [k0]) gm0)
-                      (.aggregate agg-spec (vr/rel-reader [k1]) gm1)
+        (.aggregate agg-spec (vr/rel-reader [k0]) gm0)
+        (.aggregate agg-spec (vr/rel-reader [k1]) gm1)
 
-                      (t/is (= [[1 3 6] [2 4] [5]] (.getAsList (.finish agg-spec))))))))
+        (with-open [res (.finish agg-spec)]
+          (t/is (= [[1 3 6] [2 4] [5]] (.getAsList res))))))))
 
 (t/deftest test-array-agg-of-empty-rel-returns-empty-array-3819
   (t/is (= [{}]

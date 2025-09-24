@@ -2,6 +2,8 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.BitVectorHelper
+import org.apache.arrow.vector.BitVectorHelper.getValidityBufferSize
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
@@ -25,11 +27,23 @@ class BitVector private constructor(
     override val type: ArrowType = BIT_TYPE
     override val vectors: Iterable<Vector> = emptyList()
 
+    override fun ensureCapacity(valueCount: Int) {
+        this.valueCount = this.valueCount.coerceAtLeast(valueCount)
+        val capacity = getValidityBufferSize(valueCount).toLong()
+        validityBuffer.ensureCapacity(capacity)
+        dataBuffer.ensureCapacity(capacity)
+    }
+
     override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
 
     override fun writeUndefined() {
         validityBuffer.writeBit(valueCount, 0)
         dataBuffer.writeBit(valueCount++, 0)
+    }
+
+    override fun setNull(idx: Int) {
+        ensureCapacity(idx + 1)
+        validityBuffer.setBit(idx, 0)
     }
 
     override fun writeNull() {
@@ -39,6 +53,13 @@ class BitVector private constructor(
 
     override fun getBoolean(idx: Int) =
         if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx") else dataBuffer.getBit(idx)
+
+    override fun setBoolean(idx: Int, v: Boolean) {
+        ensureCapacity(idx + 1)
+
+        validityBuffer.setBit(idx, 1)
+        dataBuffer.setBit(idx, if (v) 1 else 0)
+    }
 
     override fun writeBoolean(v: Boolean) {
         validityBuffer.writeBit(valueCount, 1)

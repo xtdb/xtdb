@@ -28,6 +28,14 @@ class NullVector(
         valueCount++
     }
 
+    override fun ensureCapacity(valueCount: Int) {
+        this.valueCount = this.valueCount.coerceAtLeast(valueCount)
+    }
+
+    override fun setNull(idx: Int) {
+        valueCount = valueCount.coerceAtLeast(idx + 1)
+    }
+
     override fun writeNull() {
         if (!nullable) nullable = true
         valueCount++
@@ -88,5 +96,5 @@ class NullVector(
     override fun close() {
     }
 
-    override fun openSlice(al: BufferAllocator) = NullVector(name)
+    override fun openSlice(al: BufferAllocator) = NullVector(name, nullable, valueCount)
 }

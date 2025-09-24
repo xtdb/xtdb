@@ -14,11 +14,9 @@
            (java.util ArrayList LinkedList List Spliterator)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector Float8Vector ValueVector)
-           (org.apache.arrow.vector.complex ListVector)
            (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb ICursor)
-           (xtdb.arrow IntVector RelationReader VectorReader VectorWriter)
+           (xtdb.arrow IntVector ListVector LongVector RelationReader Vector VectorReader VectorWriter)
            (xtdb.expression.map RelationMapBuilder)
            xtdb.operator.distinct.DistinctRelationMap))
 
@@ -66,19 +64,15 @@
                       ^VectorWriter group-mapping]
   IGroupMapper
   (groupMapping [_ in-rel]
-    (util/with-open [in-rel (.openDirectSlice in-rel al)]
-      (.clear group-mapping)
-      (let [row-count (.getRowCount in-rel)
-            builder (.buildFromRelation rel-map in-rel)]
-        (dotimes [idx row-count]
-          (.writeInt group-mapping (DistinctRelationMap/insertedIdx (.addIfNotPresent builder idx))))
+    (.clear group-mapping)
+    (let [row-count (.getRowCount in-rel)
+          builder (.buildFromRelation rel-map in-rel)]
+      (dotimes [idx row-count]
+        (.writeInt group-mapping (DistinctRelationMap/insertedIdx (.addIfNotPresent builder idx))))
 
-        group-mapping)))
+      group-mapping))
 
-  (finish [_]
-    (with-open [out-rel (.openDirectSlice (.getBuiltRelation rel-map) al)]
-      (util/with-close-on-catch [root (.openAsRoot out-rel al)]
-        (vr/<-root root))))
+  (finish [_] (.getBuiltRelation rel-map))
 
   Closeable
   (close [_]
@@ -116,24 +110,21 @@
     (getField [_] (types/col-type->field to-name :i64))
 
     (build [_ al]
-      (let [^BigIntVector out-vec (-> (types/col-type->field to-name :i64)
-                                      (.createVector al))]
+      (let [out-vec (LongVector. al (str to-name) false)]
         (reify
           IAggregateSpec
           (aggregate [_ in-rel group-mapping]
             (dotimes [idx (.getRowCount in-rel)]
               (let [group-idx (.getInt group-mapping idx)]
                 (when (<= (.getValueCount out-vec) group-idx)
-                  (.setValueCount out-vec (inc group-idx))
-                  (.set out-vec group-idx 0))
+                  (.setLong out-vec group-idx 0))
 
-                (.set out-vec group-idx (inc (.get out-vec group-idx))))))
+                (.setLong out-vec group-idx (inc (.getLong out-vec group-idx))))))
 
           (finish [_]
             (when (and zero-row? (zero? (.getValueCount out-vec)))
-              (.setValueCount out-vec 1)
-              (.set out-vec 0 0))
-            (vr/vec->reader out-vec))
+              (.setLong out-vec 0 0))
+            (.openSlice out-vec al))
 
           Closeable
           (close [_] (.close out-vec)))))))
@@ -143,8 +134,7 @@
     (getField [_] (types/col-type->field to-name :i64))
 
     (build [_ al]
-      (let [^BigIntVector out-vec (-> (types/col-type->field to-name :i64)
-                                      (.createVector al))]
+      (let [out-vec (LongVector. al (str to-name) false)]
         (reify
           IAggregateSpec
           (aggregate [_ in-rel group-mapping]
@@ -152,27 +142,27 @@
               (dotimes [idx (.getRowCount in-rel)]
                 (let [group-idx (.getInt group-mapping idx)]
                   (when (<= (.getValueCount out-vec) group-idx)
-                    (.setValueCount out-vec (inc group-idx))
                     (.set out-vec group-idx 0))
 
                   (when-not (.isNull in-col idx)
-                    (.set out-vec group-idx (inc (.get out-vec group-idx))))))))
+                    (.setLong out-vec group-idx
+                              (inc (if-not (.isNull out-vec group-idx)
+                                     (.getLong out-vec group-idx)
+                                     0))))))))
 
           (finish [_]
             (when (and zero-row? (zero? (.getValueCount out-vec)))
-              (.setValueCount out-vec 1)
-              (.set out-vec 0 0))
-            (vr/vec->reader out-vec))
+              (.writeLong out-vec 0))
+
+            (.openSlice out-vec al))
 
           Closeable
           (close [_] (.close out-vec)))))))
 
 (def ^:private acc-sym (gensym 'acc))
-(def ^:private acc-col-sym (gensym 'acc_col))
 (def ^:private group-idx-sym (gensym 'group_idx))
 (def ^:private acc-local (gensym 'acc_local))
 (def ^:private val-local (gensym 'val_local))
-(def ^:private acc-writer-sym (gensym 'acc_writer))
 
 (def emit-agg
   (-> (fn [{:keys [to-type val-expr step-expr]} input-opts]
@@ -180,7 +170,7 @@
 
               return-type [:union (conj #{:null} to-type)]
 
-              acc-expr {:op :variable, :variable acc-col-sym, :idx group-idx-sym
+              acc-expr {:op :variable, :variable acc-sym, :idx group-idx-sym
                         :extract-vec-from-rel? false}
               agg-expr (-> {:op :if-some, :local val-local, :expr val-expr
                             :then {:op :if-some, :local acc-local,
@@ -194,21 +184,16 @@
               {:keys [continue] :as emitted-expr} (expr/codegen-expr agg-expr input-opts)]
 
           {:return-type return-type
-           :eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag ValueVector))
+           :eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag Vector))
                                ~(-> expr/rel-sym (expr/with-tag RelationReader))
                                ~(-> group-mapping-sym (expr/with-tag VectorReader))]
-                            (let [~acc-col-sym (vr/vec->reader ~acc-sym)
-                                  ~acc-writer-sym (vw/->writer ~acc-sym)
-                                  ~@(expr/batch-bindings emitted-expr)]
+                            (let [~@(expr/batch-bindings emitted-expr)]
                               (dotimes [~expr/idx-sym (.getRowCount ~expr/rel-sym)]
                                 (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
-                                  (when (<= (.getValueCount ~acc-sym) ~group-idx-sym)
-                                    (.setValueCount ~acc-sym (inc ~group-idx-sym)))
+                                  (.ensureCapacity ~acc-sym (inc ~group-idx-sym))
 
                                   ~(continue (fn [acc-type acc-code]
-                                               `(do
-                                                  (.setValueCount ~acc-writer-sym ~group-idx-sym)
-                                                  ~(expr/write-value-code acc-type acc-writer-sym acc-code))))))))
+                                               (expr/set-value-code acc-type acc-sym group-idx-sym acc-code)))))))
                          #_(doto clojure.pprint/pprint) ;; <<no-commit>>
                          eval)}))
       (util/lru-memoize))) ;; <<no-commit>>
@@ -221,12 +206,12 @@
       (getField [_] to-field)
 
       (build [_ al]
-        (let [^ValueVector out-vec (.createVector to-field al)]
+        (let [out-vec (Vector/open al to-field)]
           (reify
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
               (let [input-opts {:var->col-type (->> in-rel
-                                                    (into {acc-col-sym to-type}
+                                                    (into {acc-sym to-type}
                                                           (map (juxt #(symbol (.getName ^VectorReader %))
                                                                      #(-> (.getField ^VectorReader %) types/field->col-type)))))}
                     {:keys [eval-agg]} (emit-agg agg-opts input-opts)]
@@ -234,9 +219,9 @@
 
             (finish [_]
               (when (and zero-row? (zero? (.getValueCount out-vec)))
-                (.setValueCount out-vec 1))
+                (.writeNull out-vec))
 
-              (vr/vec->reader out-vec))
+              (.openSlice out-vec al))
 
             Closeable
             (close [_] (.close out-vec))))))))
@@ -359,8 +344,7 @@
       (getField [_] (.getField finish-projecter))
 
       (build [_ al]
-        (let [variance-agg (.build variance-agg al)
-              res-vec (Float8Vector. (str to-name) al)]
+        (let [variance-agg (.build variance-agg al)]
           (reify
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
@@ -372,7 +356,6 @@
 
             Closeable
             (close [_]
-              (util/close res-vec)
               (util/close variance-agg))))))))
 
 (defmethod ->aggregate-factory :stddev_pop [agg-opts]
@@ -489,7 +472,6 @@
 (deftype ArrayAggAggregateSpec [^BufferAllocator allocator
                                 from-name to-name to-type
                                 ^VectorWriter acc-col
-                                ^:unsynchronized-mutable ^ListVector out-vec
                                 ^:unsynchronized-mutable ^long base-idx
                                 ^List group-idxmaps
                                 on-empty]
@@ -508,35 +490,28 @@
 
       (set! (.base-idx this) (+ base-idx row-count))))
 
-  (finish [this]
-    (let [out-vec (-> (types/col-type->field to-name to-type)
-                      (.createVector allocator))]
-      (set! (.out-vec this) out-vec)
-
-      (let [list-writer (vw/->writer out-vec)
-            el-writer (.getListElements list-writer)
-            row-copier (.rowCopier (vw/vec-wtr->rdr acc-col) el-writer)]
+  (finish [_]
+    (util/with-close-on-catch [out-vec (Vector/open allocator (types/col-type->field to-name to-type))]
+      (let [el-writer (.getListElements out-vec)
+            row-copier (.rowCopier acc-col el-writer)]
         (doseq [^IntStream$Builder isb group-idxmaps]
           (.forEach (.build isb)
                     (fn [^long idx]
                       (.copyRow row-copier idx)))
-          (.endList list-writer))
+          (.endList out-vec))
 
         (let [value-count (.size group-idxmaps)]
-          (when (and (zero? value-count) (= :empty-vec on-empty))
-            (.endList list-writer))
-          (.setValueCount out-vec (if (zero? value-count)
-                                    (case on-empty
-                                      :null 1
-                                      :empty-rel 0
-                                      :empty-vec 1)
-                                    value-count)))
-        (vr/vec->reader out-vec))))
+          (when (zero? value-count)
+            (case on-empty
+              :null (.writeNull out-vec)
+              :empty-vec (.endList out-vec)
+              nil)))
+
+        out-vec)))
 
   Closeable
   (close [_]
-    (util/close acc-col)
-    (util/close out-vec)))
+    (util/close acc-col)))
 
 (defmethod ->aggregate-factory :array_agg [{:keys [from-name from-type to-name zero-row?]}]
   (let [to-type (if zero-row?
@@ -546,9 +521,9 @@
       (getField [_] (types/col-type->field to-name to-type))
 
       (build [_ al]
-        (ArrayAggAggregateSpec. al from-name to-name to-type
-                                (vw/->vec-writer al (str to-name) (FieldType/notNullable #xt.arrow/type :union))
-                                nil 0 (ArrayList.) (if zero-row? :null :empty-rel))))))
+        (util/with-close-on-catch [acc-col (Vector/open al (types/col-type->field "$data$" from-type))]
+          (ArrayAggAggregateSpec. al from-name to-name to-type acc-col
+                                  0 (ArrayList.) (if zero-row? :null :empty-rel)))))))
 
 (defmethod ->aggregate-factory :array_agg_distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :array_agg))
@@ -560,9 +535,9 @@
       (getField [_] (types/col-type->field to-name to-type))
 
       (build [_ al]
-        (ArrayAggAggregateSpec. al from-name to-name to-type
-                                (vw/->vec-writer al (str to-name) (FieldType/notNullable #xt.arrow/type :union))
-                                nil 0 (ArrayList.) (if zero-row? :empty-vec :empty-rel))))))
+        (util/with-close-on-catch [acc-col (Vector/open al (types/col-type->field "$data$" from-type))]
+          (ArrayAggAggregateSpec. al from-name to-name to-type acc-col
+                                  0 (ArrayList.) (if zero-row? :empty-vec :empty-rel)))))))
 
 (defn- bool-agg-factory [step-f-kw {:keys [from-name] :as agg-opts}]
   (reducing-agg-factory (into agg-opts
@@ -591,18 +566,20 @@
        (set! (.done? this) true)
 
        (.forEachRemaining in-cursor
-                          (fn [in-rel]
-                            (let [group-mapping (.groupMapping group-mapper in-rel)]
-                              (doseq [^IAggregateSpec agg-spec aggregate-specs]
-                                (.aggregate agg-spec in-rel group-mapping)))))
+                          (fn [^RelationReader in-rel]
+                            (util/with-open [in-rel (.openDirectSlice in-rel allocator)]
+                              (let [group-mapping (.groupMapping group-mapper in-rel)]
+                                (doseq [^IAggregateSpec agg-spec aggregate-specs]
+                                  (.aggregate agg-spec in-rel group-mapping))))))
 
-       (util/with-open [gm-rel (.finish group-mapper)
-                        agg-cols (map #(.finish ^IAggregateSpec %) aggregate-specs)]
-         (let [^RelationReader out-rel (vr/rel-reader (concat (.getVectors gm-rel) agg-cols)
+       (util/with-open [agg-cols (map #(.finish ^IAggregateSpec %) aggregate-specs)]
+         (let [gm-rel (.finish group-mapper)
+               ^RelationReader out-rel (vr/rel-reader (concat (.getVectors gm-rel) agg-cols)
                                                       (.getRowCount gm-rel))]
            (if (pos? (.getRowCount out-rel))
-             (do
-               (.accept c out-rel)
+             (with-open [out-rel (.openDirectSlice out-rel allocator)
+                         root (.openAsRoot out-rel allocator)]
+               (.accept c (vr/<-root root))
                true)
              false))))))
 

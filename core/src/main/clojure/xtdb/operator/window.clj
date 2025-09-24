@@ -14,12 +14,10 @@
            (java.io Closeable)
            (java.util LinkedList List Spliterator)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector)
            (org.apache.arrow.vector.types.pojo Field)
            (xtdb ICursor)
-           (xtdb.arrow IntVector RelationReader)
-           (xtdb.operator.group_by IGroupMapper)
-           (xtdb.vector OldRelationWriter)))
+           (xtdb.arrow IntVector LongVector RelationReader Relation)
+           (xtdb.operator.group_by IGroupMapper)))
 
 (s/def ::window-name symbol?)
 
@@ -80,18 +78,16 @@
     (getToColumnField [_] (types/col-type->field :i64))
 
     (build [_ al]
-      (let [^BigIntVector out-vec (-> (types/col-type->field to-name :i64)
-                                      (.createVector al))
+      (let [out-vec (LongVector. al (str to-name) false)
             ^LongLongMap group-to-cnt (LongLongHashMap.)]
         (reify
           IWindowFnSpec
           (aggregate [_ group-mapping sortMapping _in-rel]
             (let [offset (.getValueCount out-vec)
                   row-count (.getValueCount group-mapping)]
-              (.setValueCount out-vec (+ offset row-count))
               (dotimes [idx row-count]
-                (.set out-vec (+ offset idx) (.putOrAdd group-to-cnt (.getInt group-mapping (aget sortMapping idx)) 1 1)))
-              (vr/vec->reader out-vec)))
+                (.setLong out-vec (+ offset idx) (.putOrAdd group-to-cnt (.getInt group-mapping (aget sortMapping idx)) 1 1)))
+              (.openSlice out-vec al)))
 
           Closeable
           (close [_] (.close out-vec)))))))
@@ -114,23 +110,23 @@
 
        (let [window-groups (gensym "window-groups")]
          ;; TODO we likely want to do some retaining here instead of copying
-         (util/with-open [rel-wtr (OldRelationWriter. allocator ^List (vec (for [^Field field static-fields]
-                                                                             (vw/->writer (.createVector field allocator)))))
+         (util/with-open [out-rel (Relation. allocator ^List static-fields)
                           group-mapping (IntVector/open allocator (str window-groups) false)]
 
-           (.forEachRemaining in-cursor (fn [in-rel]
-                                          (vw/append-rel rel-wtr in-rel)
-                                          (.append group-mapping (.groupMapping group-mapper in-rel))))
+           (.forEachRemaining in-cursor (fn [^RelationReader in-rel]
+                                          (util/with-open [in-rel (.openDirectSlice in-rel allocator)]
+                                            (vw/append-rel out-rel in-rel)
+                                            (.append group-mapping (.groupMapping group-mapper in-rel)))))
 
-           (let [rel-rdr (vw/rel-wtr->rdr rel-wtr)
-                 sort-mapping (order-by/sorted-idxs (RelationReader/from (conj (seq rel-rdr) group-mapping) (.getValueCount group-mapping))
+           (let [sort-mapping (order-by/sorted-idxs (RelationReader/from (conj (seq out-rel) group-mapping) (.getValueCount group-mapping))
                                                     (into [[window-groups]] order-specs))]
              (util/with-open [window-cols (->> window-specs
-                                               (mapv #(.aggregate ^IWindowFnSpec % group-mapping sort-mapping rel-rdr)))]
-               (let [out-rel (vr/rel-reader (concat (.select rel-rdr sort-mapping) window-cols))]
+                                               (mapv #(.aggregate ^IWindowFnSpec % group-mapping sort-mapping out-rel)))]
+               (let [out-rel (vr/rel-reader (concat (.select out-rel sort-mapping) window-cols))]
                  (if (pos? (.getRowCount out-rel))
-                   (do
-                     (.accept c out-rel)
+                   (with-open [out-rel (.openDirectSlice out-rel allocator)
+                               root (.openAsRoot out-rel allocator)]
+                     (.accept c (vr/<-root root))
                      true)
                    false)))))))))
 
