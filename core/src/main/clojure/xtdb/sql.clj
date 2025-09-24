@@ -2611,17 +2611,14 @@
       (dml-stmt-valid-time-portion (-> (.from ctx) (.accept expr-visitor))
                                    (some-> (.to ctx) (.accept expr-visitor))))))
 
+(def ^:private default-vt-extents (dml-stmt-valid-time-portion '(current-timestamp) 'xtdb/end-of-time))
+
 (defrecord PatchValidTimeExtentsVisitor [env scope]
   SqlVisitor
   (visitPatchStatementValidTimePortion [_ ctx]
     (let [expr-visitor (->ExprPlanVisitor env scope)]
       [(or (some-> (.from ctx) (.accept expr-visitor)) time/start-of-time)
        (or (some-> (.to ctx) (.accept expr-visitor)) time/end-of-time)])))
-
-
-(def ^:private default-vt-extents-projection
-  [{vf-col (list 'greatest vf-col (list 'cast '(current-timestamp) types/temporal-col-type))}
-   {vt-col 'xtdb/end-of-time}])
 
 (defrecord EraseTableRef [env table-name table-alias unique-table-alias cols ^Map !reqd-cols]
   Scope
@@ -2775,8 +2772,9 @@
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
-          {:keys [for-valid-time], vt-projection :projection} (some-> (.dmlStatementValidTimeExtents ctx)
-                                                                      (.accept (->DmlValidTimeExtentsVisitor env scope)))
+          {:keys [for-valid-time], vt-projection :projection} (or (some-> (.dmlStatementValidTimeExtents ctx)
+                                                                          (.accept (->DmlValidTimeExtentsVisitor env scope)))
+                                                                  default-vt-extents)
 
           table-cols (if-let [cols (or (get table-info table)
                                        (get table-info (table/ref->schema+table table)))]
@@ -2812,7 +2810,7 @@
                              (->ProjectedCol {col-sym col} col-sym))
 
           outer-projection (vec (concat '[_iid]
-                                        (or vt-projection default-vt-extents-projection)
+                                        vt-projection
                                         set-clauses-cols
                                         (mapv :col-sym all-non-set-cols)))]
 
@@ -2837,8 +2835,9 @@
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
-          {:keys [for-valid-time], vt-projection :projection} (some-> (.dmlStatementValidTimeExtents ctx)
-                                                                      (.accept (->DmlValidTimeExtentsVisitor env scope)))
+          {:keys [for-valid-time], vt-projection :projection} (or (some-> (.dmlStatementValidTimeExtents ctx)
+                                                                          (.accept (->DmlValidTimeExtentsVisitor env scope)))
+                                                                  default-vt-extents)
 
           table-cols (if-let [cols (or (get table-info table)
                                        (get table-info (table/ref->schema+table table)))]
@@ -2855,7 +2854,7 @@
                               {:predicate (.accept search-clause (map->ExprPlanVisitor {:env env, :scope dml-scope, :!subqs !subqs}))
                                :subqs (not-empty (into {} !subqs))}))
 
-          projection (into '[_iid] (or vt-projection default-vt-extents-projection))]
+          projection (into '[_iid] vt-projection)]
 
       (->QueryExpr [:project projection
                     (as-> (plan-rel dml-scope) plan

@@ -3,8 +3,15 @@
   {_valid_from
    (greatest
     _valid_from
-    (cast (current-timestamp) [:timestamp-tz :micro "UTC"]))}
-  {_valid_to xtdb/end-of-time}
+    (cast
+     (coalesce (current-timestamp) xtdb/start-of-time)
+     [:timestamp-tz :micro "UTC"]))}
+  {_valid_to
+   (least
+    (coalesce _valid_to xtdb/end-of-time)
+    (coalesce
+     (cast xtdb/end-of-time [:timestamp-tz :micro "UTC"])
+     xtdb/end-of-time))}
   col1]
  [:project
   ({_iid t1.1/_iid}
@@ -13,4 +20,7 @@
    {col1 30})
   [:rename
    t1.1
-   [:scan {:table #xt/table t1} [_valid_to _valid_from _iid]]]]]
+   [:scan
+    {:table #xt/table t1,
+     :for-valid-time [:in (current-timestamp) xtdb/end-of-time]}
+    [_valid_to _valid_from _iid]]]]]

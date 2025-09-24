@@ -364,25 +364,32 @@
 
 (t/deftest no-portion-of-valid-time-dml-4650
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, _valid_from: ?, _valid_to: ?}" [1 #inst "2010" #inst "2040"]]])
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, bar: 2, _valid_from: ?, _valid_to: ?}" [1 #inst "2050" #inst "2080"]]])
 
   (xt/execute-tx tu/*node* [[:sql "UPDATE users SET foo = 1 WHERE _id = 1"]])
 
   (t/is (= [{:xt/id 1,
              :xt/valid-from #xt/zdt "2010-01-01T00:00Z[UTC]",
-             :xt/valid-to #xt/zdt "2020-01-02T00:00Z[UTC]"}
+             :xt/valid-to #xt/zdt "2020-01-03T00:00Z[UTC]"}
             {:xt/id 1,
-             :xt/valid-from #xt/zdt "2020-01-02T00:00Z[UTC]"
-             :foo 1,}]
+             :foo 1,
+             :xt/valid-from #xt/zdt "2020-01-03T00:00Z[UTC]",
+             :xt/valid-to #xt/zdt "2040-01-01T00:00Z[UTC]"}
+            {:xt/id 1,
+             :foo 1
+             :bar 2,
+             :xt/valid-from #xt/zdt "2050-01-01T00:00Z[UTC]",
+             :xt/valid-to #xt/zdt "2080-01-01T00:00Z[UTC]"}]
            (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM users FOR ALL VALID_TIME WHERE _id = 1 ORDER BY _valid_from")))
 
-  (xt/execute-tx tu/*node* [[:sql "DELETE FROM users WHERE _id = 1"]])
+  (xt/execute-tx tu/*node* [[:sql "DELETE FROM users WHERE _id = 1" ]])
 
   (t/is (= [{:xt/id 1,
              :xt/valid-from #xt/zdt "2010-01-01T00:00Z[UTC]",
-             :xt/valid-to #xt/zdt "2020-01-02T00:00Z[UTC]"}
+             :xt/valid-to #xt/zdt "2020-01-03T00:00Z[UTC]"}
             {:xt/id 1,
-             :xt/valid-from #xt/zdt "2020-01-02T00:00Z[UTC]"
-             :xt/valid-to #xt/zdt "2020-01-03T00:00Z[UTC]"
+             :xt/valid-from #xt/zdt "2020-01-03T00:00Z[UTC]"
+             :xt/valid-to #xt/zdt "2020-01-04T00:00Z[UTC]"
              :foo 1,}]
            (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM users FOR ALL VALID_TIME WHERE _id = 1 ORDER BY _valid_from"))))
 
