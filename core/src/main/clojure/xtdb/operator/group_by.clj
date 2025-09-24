@@ -415,31 +415,30 @@
         (reify
           IAggregateSpec
           (aggregate [_ in-rel group-mapping]
-            (with-open [sliced-rel (.openDirectSlice in-rel al)]
-              (let [in-vec (.vectorForOrNull sliced-rel (str from-name))
-                    builders (ArrayList. (.size rel-maps))
-                    distinct-idxs (IntStream/builder)]
-                (dotimes [idx (.getValueCount in-vec)]
-                  (let [group-idx (.getInt group-mapping idx)]
-                    (while (<= (.size rel-maps) group-idx)
-                      (.add rel-maps (distinct/->relation-map al {:build-fields {from-name (types/col-type->field from-type)}
-                                                                  :build-key-col-names [from-name]})))
-                    (let [^DistinctRelationMap rel-map (nth rel-maps group-idx)]
-                      (while (<= (.size builders) group-idx)
-                        (.add builders nil))
+            (let [in-vec (.vectorForOrNull in-rel (str from-name))
+                  builders (ArrayList. (.size rel-maps))
+                  distinct-idxs (IntStream/builder)]
+              (dotimes [idx (.getValueCount in-vec)]
+                (let [group-idx (.getInt group-mapping idx)]
+                  (while (<= (.size rel-maps) group-idx)
+                    (.add rel-maps (distinct/->relation-map al {:build-fields {from-name (types/col-type->field from-type)}
+                                                                :build-key-col-names [from-name]})))
+                  (let [^DistinctRelationMap rel-map (nth rel-maps group-idx)]
+                    (while (<= (.size builders) group-idx)
+                      (.add builders nil))
 
-                      (let [^RelationMapBuilder
-                            builder (or (nth builders group-idx)
-                                        (let [builder (.buildFromRelation rel-map (vr/rel-reader [in-vec]))]
-                                          (.set builders group-idx builder)
-                                          builder))]
-                        (when (neg? (.addIfNotPresent builder idx))
-                          (.add distinct-idxs idx))))))
-                (let [distinct-idxs (.toArray (.build distinct-idxs))]
-                  (.aggregate agg-spec
-                              (.select in-rel distinct-idxs)
-                              (-> group-mapping
-                                  (.select distinct-idxs)))))))
+                    (let [^RelationMapBuilder
+                          builder (or (nth builders group-idx)
+                                      (let [builder (.buildFromRelation rel-map (vr/rel-reader [in-vec]))]
+                                        (.set builders group-idx builder)
+                                        builder))]
+                      (when (neg? (.addIfNotPresent builder idx))
+                        (.add distinct-idxs idx))))))
+              (let [distinct-idxs (.toArray (.build distinct-idxs))]
+                (.aggregate agg-spec
+                            (.select in-rel distinct-idxs)
+                            (-> group-mapping
+                                (.select distinct-idxs))))))
 
           (finish [_] (.finish agg-spec))
 
@@ -567,19 +566,17 @@
 
        (.forEachRemaining in-cursor
                           (fn [^RelationReader in-rel]
-                            (util/with-open [in-rel (.openDirectSlice in-rel allocator)]
-                              (let [group-mapping (.groupMapping group-mapper in-rel)]
-                                (doseq [^IAggregateSpec agg-spec aggregate-specs]
-                                  (.aggregate agg-spec in-rel group-mapping))))))
+                            (let [group-mapping (.groupMapping group-mapper in-rel)]
+                              (doseq [^IAggregateSpec agg-spec aggregate-specs]
+                                (.aggregate agg-spec in-rel group-mapping)))))
 
        (util/with-open [agg-cols (map #(.finish ^IAggregateSpec %) aggregate-specs)]
          (let [gm-rel (.finish group-mapper)
                ^RelationReader out-rel (vr/rel-reader (concat (.getVectors gm-rel) agg-cols)
                                                       (.getRowCount gm-rel))]
            (if (pos? (.getRowCount out-rel))
-             (with-open [out-rel (.openDirectSlice out-rel allocator)
-                         root (.openAsRoot out-rel allocator)]
-               (.accept c (vr/<-root root))
+             (do
+               (.accept c out-rel)
                true)
              false))))))
 

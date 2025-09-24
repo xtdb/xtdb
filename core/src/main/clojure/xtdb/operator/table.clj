@@ -37,8 +37,7 @@
      (when out-rel
        (try
          (set! (.out-rel this) nil)
-         (util/with-open [root (.openAsRoot out-rel al)]
-           (.accept c (vr/<-root root)))
+         (.accept c out-rel)
          true
          (finally
            (.close out-rel))))))

@@ -2257,13 +2257,13 @@ ORDER BY t.oid DESC LIMIT 1"
         (t/is (Arrays/equals ba ^bytes (:v (first (jdbc/execute! conn ["SELECT '00f0'::bytea AS v"]))))))
 
       (t/testing "nested varbinary"
-        (t/is (= [{:v {:ba (ByteBuffer/wrap (byte-array [0x00 0xf0]))}}]
-                 (q conn ["SELECT OBJECT(ba: X('00f0')) AS v"]))
+        (t/is (= (tu/->clj [{:v {:ba (byte-array [0x00 0xf0])}}])
+                 (tu/->clj (q conn ["SELECT OBJECT(ba: X('00f0')) AS v"])))
               "reading nested varbinary result")))
 
     (with-open [conn (jdbc-conn {"options" "-c fallback_output_format=transit"})]
       (let [res (:v (first  (q conn ["SELECT OBJECT(ba: X('00f0')) AS v"])))]
-        (t/is (Arrays/equals  ba (.array ^ByteBuffer (:ba res)))))))
+        (t/is (Arrays/equals ba ^bytes (:ba res))))))
 
   (t/testing "uri literals"
     (with-open [conn (jdbc-conn)]
@@ -2533,11 +2533,11 @@ ORDER BY 1,2;")
          (send (str sql ";\n"))
          (t/is (= [["depth" "op" "explain"]
                    ["->" "project"
-                    "{\"append?\":false,\"project\":\"[{_id foo.1\\/_id}]\"}"]
+                    "{\"project\":\"[{_id foo.1\\/_id}]\",\"append?\":false}"]
                    ["  ->" "rename"
                     "{\"prefix\":\"foo.1\"}"]
                    ["    ->" "scan"
-                    "{\"predicates\":[],\"columns\":[\"_id\"],\"table\":\"xtdb.public.foo\"}"]]
+                    "{\"columns\":[\"_id\"],\"table\":\"xtdb.public.foo\",\"predicates\":[]}"]]
 
                   (read))))))))
 

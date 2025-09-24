@@ -75,11 +75,7 @@ class DiskHashJoin(
                 val joinedRel = joinType.probe(probeSide)
 
                 if (joinedRel.rowCount > 0) {
-                    joinedRel.openDirectSlice(al).use { outRel ->
-                        outRel.openAsRoot(al).use { root ->
-                            c.accept(RelationReader.from(root))
-                        }
-                    }
+                    c.accept(joinedRel)
                     return true
                 }
             }
@@ -105,10 +101,8 @@ class DiskHashJoin(
             Relation(al, probeFields).use { tmpRel ->
                 Spill.open(al, tmpRel).use { spill ->
                     probeCursor.forEachRemaining { inRel ->
-                        inRel.openDirectSlice(al).use { inRel ->
-                            tmpRel.append(inRel)
-                            if (tmpRel.rowCount > buildSide.inMemoryThreshold) spill.spill()
-                        }
+                        tmpRel.append(inRel)
+                        if (tmpRel.rowCount > buildSide.inMemoryThreshold) spill.spill()
                     }
 
                     spill.end()

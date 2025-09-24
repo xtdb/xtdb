@@ -243,21 +243,17 @@
        (while (and (not (aget advanced? 0))
                    (.tryAdvance ^ICursor (.probe-cursor this)
                                 (fn [^RelationReader probe-rel]
-                                  (util/with-open [probe-rel (.openDirectSlice probe-rel allocator)]
-                                    (let [cmp (ComparatorFactory/build cmp-factory build-side probe-rel probe-key-col-names)
-                                          ^ProbeSide probe-side (ProbeSide. build-side probe-rel probe-key-col-names cmp)
-                                          row-count (.getRowCount probe-rel)]
-                                      (when (pos? row-count)
-                                        (aset advanced? 0 true)
+                                  (let [cmp (ComparatorFactory/build cmp-factory build-side probe-rel probe-key-col-names)
+                                        ^ProbeSide probe-side (ProbeSide. build-side probe-rel probe-key-col-names cmp)
+                                        row-count (.getRowCount probe-rel)]
+                                    (when (pos? row-count)
+                                      (aset advanced? 0 true)
 
-                                        (with-open [mark-col (doto (BitVector. allocator (name mark-col-name) true)
-                                                               (.ensureCapacity row-count))]
-                                          (JoinType/mark probe-side mark-col)
-                                          (let [out-cols (conj (seq probe-rel) mark-col)]
-                                            (with-open [out-rel (-> ^RelationReader (vr/rel-reader out-cols row-count)
-                                                                    (.openDirectSlice allocator))
-                                                        out-root (.openAsRoot out-rel allocator)]
-                                              (.accept c (vr/<-root out-root))))))))))))
+                                      (with-open [mark-col (doto (BitVector. allocator (name mark-col-name) true)
+                                                             (.ensureCapacity row-count))]
+                                        (JoinType/mark probe-side mark-col)
+                                        (let [out-cols (conj (seq probe-rel) mark-col)]
+                                          (.accept c (vr/rel-reader out-cols row-count))))))))))
        (aget advanced? 0))))
 
   (close [_]

@@ -27,10 +27,10 @@ class PagesCursor(
                     Relation(al, schema).closeOnCatch {
                         it.apply { writeRows(*rows.toTypedArray()) }
                     }
-
-            rel.use { rel ->
-                // TODO won't need openAsRoot call when operators use xtdb.arrow
-                rel.openAsRoot(al).use { root -> c.accept(RelationReader.from(root)) }
+            try {
+                c.accept(rel)
+            } finally {
+                rel.close()
             }
         }
 }

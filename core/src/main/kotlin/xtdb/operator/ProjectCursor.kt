@@ -20,22 +20,16 @@ class ProjectCursor(
 
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean =
         inCursor.tryAdvance { inRel ->
-            inRel.openDirectSlice(al).use { inRel ->
-                mutableListOf<VectorReader>().useAll { closeCols ->
-                    val outCols = specs.map { spec ->
-                        spec.project(al, inRel, schema, args)
-                            .also {
-                                if (spec !is ProjectionSpec.Identity && spec !is ProjectionSpec.Rename)
-                                    closeCols.add(it)
-                            }
-                    }
-
-                    RelationReader.from(outCols, inRel.rowCount).openDirectSlice(al).use { outRel ->
-                        outRel.openAsRoot(al).use { root ->
-                            c.accept(RelationReader.from(root))
+            mutableListOf<VectorReader>().useAll { closeCols ->
+                val outCols = specs.map { spec ->
+                    spec.project(al, inRel, schema, args)
+                        .also {
+                            if (spec !is ProjectionSpec.Identity && spec !is ProjectionSpec.Rename)
+                                closeCols.add(it)
                         }
-                    }
                 }
+
+                c.accept(RelationReader.from(outCols, inRel.rowCount))
             }
         }
 

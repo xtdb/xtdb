@@ -36,8 +36,7 @@
     (let [advanced? (boolean-array 1)]
       (while (and (.tryAdvance in-cursor
                                (fn [^RelationReader in-rel]
-                                 (with-open [in-rel (.openDirectSlice in-rel allocator)
-                                             out-vec (Vector/open allocator to-field)]
+                                 (with-open [out-vec (Vector/open allocator to-field)]
                                    (let [out-cols (LinkedList.)
 
                                          vec-rdr (.vectorForOrNull in-rel from-column-name)
@@ -86,10 +85,7 @@
 
                                              (.add out-cols (.select in-col idxs)))
 
-                                           (util/with-open [out-rel (-> ^RelationReader (vr/rel-reader out-cols (alength idxs))
-                                                                        (.openDirectSlice allocator))
-                                                            root (.openAsRoot out-rel allocator)]
-                                             (.accept c (vr/<-root root)))
+                                           (.accept c (vr/rel-reader out-cols (alength idxs)))
                                            (aset advanced? 0 true))))))))
 
                   (not (aget advanced? 0))))

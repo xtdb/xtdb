@@ -28,22 +28,18 @@
       (while (and (not (aget advanced? 0))
                   (.tryAdvance in-cursor
                                (fn [^RelationReader in-rel]
-                                 ;; HACK while we're migrating to xt-arrow
-                                 (with-open [in-rel (.openDirectSlice in-rel al)]
-                                   (let [row-count (.getRowCount in-rel)]
-                                     (when (pos? row-count)
-                                       (let [builder (.buildFromRelation rel-map in-rel)
-                                             idxs (IntStream/builder)]
-                                         (dotimes [idx row-count]
-                                           (when (neg? (.addIfNotPresent builder idx))
-                                             (.add idxs idx)))
+                                 (let [row-count (.getRowCount in-rel)]
+                                   (when (pos? row-count)
+                                     (let [builder (.buildFromRelation rel-map in-rel)
+                                           idxs (IntStream/builder)]
+                                       (dotimes [idx row-count]
+                                         (when (neg? (.addIfNotPresent builder idx))
+                                           (.add idxs idx)))
 
-                                         (let [idxs (.toArray (.build idxs))]
-                                           (when-not (empty? idxs)
-                                             (aset advanced? 0 true)
-                                             (with-open [out-rel (.openDirectSlice (.select in-rel idxs) al)
-                                                         root (.openAsRoot out-rel al)]
-                                               (.accept c (vr/<-root root)))))))))))))
+                                       (let [idxs (.toArray (.build idxs))]
+                                         (when-not (empty? idxs)
+                                           (aset advanced? 0 true)
+                                           (.accept c (.select in-rel idxs)))))))))))
       (aget advanced? 0)))
 
   (close [_]

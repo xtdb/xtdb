@@ -35,14 +35,12 @@ class BuildSide(
 
     @Suppress("NAME_SHADOWING")
     fun append(inRel: RelationReader) {
-        inRel.openDirectSlice(al).use { inRel ->
-            val rowCopier = inRel.rowCopier(dataRel)
+        val rowCopier = inRel.rowCopier(dataRel)
 
-            repeat(inRel.rowCount) { inIdx -> rowCopier.copyRow(inIdx) }
+        repeat(inRel.rowCount) { inIdx -> rowCopier.copyRow(inIdx) }
 
-            if (dataRel.rowCount > inMemoryThreshold)
-                (this.spill ?: openSpill()).spill()
-        }
+        if (dataRel.rowCount > inMemoryThreshold)
+            (this.spill ?: openSpill()).spill()
     }
 
     var shuffle: Shuffle? = null; private set

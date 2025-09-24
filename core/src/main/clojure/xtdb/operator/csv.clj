@@ -51,8 +51,7 @@
                       (.getVectors rel)))
 
         (.setRowCount rel row-count)
-        (with-open [root (.openAsRoot rel allocator)]
-          (.accept c (vr/<-root root)))
+        (.accept c rel)
         true)
       false))
 

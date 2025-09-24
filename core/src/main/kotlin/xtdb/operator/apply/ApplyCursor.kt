@@ -28,19 +28,17 @@ class ApplyCursor(
     override val childCursors get() = listOf(independentCursor)
     override fun tryAdvance(c: Consumer<in RelationReader>) =
         independentCursor.tryAdvance { inRel ->
-            inRel.openDirectSlice(al).use { inRel ->
-                val idxs = IntArrayList()
-                Relation(al, Schema(depFields)).use { depOutWriter ->
-                    repeat(inRel.rowCount) { inIdx ->
-                        depCursorFactory.open(inRel, inIdx).use { depCursor ->
-                            mode.accept(depCursor, depOutWriter, idxs, inIdx)
-                        }
+            val idxs = IntArrayList()
+            Relation(al, Schema(depFields)).use { depOutWriter ->
+                repeat(inRel.rowCount) { inIdx ->
+                    depCursorFactory.open(inRel, inIdx).use { depCursor ->
+                        mode.accept(depCursor, depOutWriter, idxs, inIdx)
                     }
-
-                    val sel = idxs.toArray()
-                    val cols = inRel.vectors.map { it.select(sel) } + depOutWriter.asReader.vectors
-                    c.accept(RelationReader.from(cols, sel.size))
                 }
+
+                val sel = idxs.toArray()
+                val cols = inRel.vectors.map { it.select(sel) } + depOutWriter.asReader.vectors
+                c.accept(RelationReader.from(cols, sel.size))
             }
         }
 

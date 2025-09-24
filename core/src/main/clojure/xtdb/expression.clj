@@ -1910,7 +1910,7 @@
 
               {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
                                                                           :var->col-type var->col-type})]
-          (util/with-open [out-vec (Vector/open allocator (types/col-type->field col-name return-type))]
+          (util/with-close-on-catch [out-vec (Vector/open allocator (types/col-type->field col-name return-type))]
             (try
               (@!projection-fn in-rel schema args out-vec)
               (catch ArithmeticException e
@@ -1922,9 +1922,7 @@
               (catch IllegalArgumentException e
                 (throw (err/incorrect :xtdb.expression/illegal-argument-exception (ex-message e) {::err/cause e}))))
 
-            (util/with-close-on-catch [root (-> (Relation. allocator ^List (vector out-vec) (.getValueCount out-vec))
-                                                (.openAsRoot allocator))]
-              (vr/vec->reader (.getVector root 0)))))))))
+            out-vec))))))
 
 (defn ->expression-selection-spec ^SelectionSpec [expr input-types]
   (let [projector (->expression-projection-spec "select" {:op :call, :f :boolean, :args [expr]} input-types)]

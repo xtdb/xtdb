@@ -88,8 +88,7 @@
                                               :param-types (update-vals param-fields types/field->col-type)}
                                  projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
                              (fn [{:keys [allocator args explain-analyze?] :as query-opts}]
-                               (let [^ICursor dep-cursor (-> (->dependent-cursor query-opts)
-                                                             (ICursor/wrapDirectSlice allocator))]
+                               (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
                                  (cond-> (reify ICursor
                                            (getCursorType [_] "apply-mark-join")
                                            (getChildCursors [_] [dep-cursor])
@@ -105,18 +104,16 @@
                            [:otherwise _] ->dependent-cursor)]
 
                      (fn [{:keys [allocator explain-analyze?] :as query-opts} independent-cursor]
-                       (cond-> (ApplyCursor. allocator mode-strat (-> independent-cursor (ICursor/wrapDirectSlice allocator)) out-dep-fields
+                       (cond-> (ApplyCursor. allocator mode-strat independent-cursor out-dep-fields
                                              (reify DependentCursorFactory
                                                (open [_this in-rel idx]
-                                                 (-> (open-dependent-cursor (-> query-opts
-                                                                                (update :args
-                                                                                        (fn [^RelationReader args]
-                                                                                          (RelationReader/from (concat args
-                                                                                                                       (for [[ik dk] columns]
-                                                                                                                         (-> (.vectorForOrNull in-rel (str ik))
-                                                                                                                             (.select (int-array [idx]))
-                                                                                                                             (.withName (str dk)))))
-                                                                                                               1)))))
-                                                     (ICursor/wrapDirectSlice allocator)))))
-                         explain-analyze? (ICursor/wrapExplainAnalyze)
-                         true (ICursor/wrapAsOldRel allocator))))}))))
+                                                 (open-dependent-cursor (-> query-opts
+                                                                            (update :args
+                                                                                    (fn [^RelationReader args]
+                                                                                      (RelationReader/from (concat args
+                                                                                                                   (for [[ik dk] columns]
+                                                                                                                     (-> (.vectorForOrNull in-rel (str ik))
+                                                                                                                         (.select (int-array [idx]))
+                                                                                                                         (.withName (str dk)))))
+                                                                                                           1))))))))
+                         explain-analyze? (ICursor/wrapExplainAnalyze))))}))))
