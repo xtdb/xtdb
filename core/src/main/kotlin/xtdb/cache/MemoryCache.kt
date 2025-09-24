@@ -7,6 +7,7 @@ import com.github.benmanes.caffeine.cache.RemovalCause
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import io.netty.buffer.ByteBuf
+import io.netty.buffer.PooledByteBufAllocatorL
 import io.netty.buffer.Unpooled
 import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.ArrowBuf
@@ -14,9 +15,11 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.ForeignAllocation
 import xtdb.cache.PinningCache.IEntry
 import xtdb.util.maxDirectMemory
+import xtdb.util.openReadableChannel
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import java.util.concurrent.CompletableFuture
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
@@ -89,28 +92,29 @@ class MemoryCache @JvmOverloads internal constructor(
 
         companion object {
             operator fun invoke() = object : PathLoader {
+                private val pool = PooledByteBufAllocatorL()
                 override fun load(path: Path) =
                     try {
-                        val ch = FileChannel.open(path)
-                        val size = ch.size()
-                        val nettyBuf = Unpooled.directBuffer(size.toInt())
-                        val bbuf = nettyBuf.nioBuffer(0, size.toInt())
-                        ch.read(bbuf)
-                        nettyBuf
-
+                        path.openReadableChannel().use { ch ->
+                            val size = ch.size()
+                            val nettyBuf = pool.allocate(size)
+                            val bbuf = nettyBuf.nioBuffer(0, size.toInt())
+                            ch.read(bbuf)
+                            nettyBuf
+                        }
                     } catch (e: ClosedByInterruptException) {
                         throw InterruptedException(e.message)
                     }
 
                 override fun load(pathSlice: PathSlice) =
                     try {
-                        val ch = FileChannel.open(pathSlice.path)
-                        val nettyBuf = Unpooled.directBuffer(pathSlice.length!!.toInt())
-                        val bbuf = nettyBuf.nioBuffer(0, pathSlice.length.toInt())
-                        ch.position(pathSlice.offset!!)
-                        ch.read(bbuf)
-                        nettyBuf
-
+                        pathSlice.path.openReadableChannel().use { ch ->
+                            val nettyBuf = pool.allocate(pathSlice.length!!)
+                            val bbuf = nettyBuf.nioBuffer(0, pathSlice.length.toInt())
+                            ch.position(pathSlice.offset!!)
+                            ch.read(bbuf)
+                            nettyBuf
+                        }
                     } catch (e: ClosedByInterruptException) {
                         throw InterruptedException(e.message)
                     }
