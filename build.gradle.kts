@@ -650,3 +650,13 @@ tasks.register<JavaExec>("readArrowStreamFile") {
     val file = project.property("file") as? String ?: error("Please provide -Pfile")
     this.args = listOf("-m", "xtdb.main", "read-arrow-stream-file", file)
 }
+
+tasks.register<JavaExec>("readHashTrieFile") {
+    dependsOn(":xtdb-core:compileClojure", ":xtdb-core:compileKotlin")
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("clojure.main")
+    jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+    val file = project.property("file") as? String ?: error("Please provide -Pfile")
+    this.args = mutableListOf("-m", "xtdb.main", "read-hash-trie-file", file)
+}
