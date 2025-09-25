@@ -224,7 +224,7 @@
   (prepare-xtql [this query query-opts]
     (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
           ast (cond
-                (sequential? query) (xtql/parse-query query nil)
+                (sequential? query) (xtql/parse-query query query-opts)
                 (instance? XtqlQuery query) query
                 :else (throw (err/illegal-arg :xtdb/unsupported-query-type
                                               {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]

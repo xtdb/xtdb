@@ -4,7 +4,6 @@
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
             [xtdb.operator.group-by :as group-by]
-            [xtdb.table :as table]
             xtdb.tx-ops
             [xtdb.util :as util]
             [xtdb.xtql :as xtql])
@@ -413,8 +412,7 @@
     {scan-col (list* 'and col-preds)}))
 
 (defn- plan-from [{:keys [table for-valid-time for-system-time bindings project-all-cols?]}]
-  (let [table (table/->ref "xtdb" table) ; TODO multi-db
-        planned-bind-specs (concat (cond-> (mapv plan-out-spec bindings)
+  (let [planned-bind-specs (concat (cond-> (mapv plan-out-spec bindings)
                                      project-all-cols?
                                      (concat (->> (get *table-info* table)
                                                   (mapv symbol)

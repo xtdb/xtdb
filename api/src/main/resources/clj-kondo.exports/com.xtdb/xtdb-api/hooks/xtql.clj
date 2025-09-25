@@ -224,10 +224,10 @@
 
 (defmethod lint-source-op 'from [node]
   (let [[_ table opts] (some-> node :children)]
-    (when-not (node-keyword? table)
+    (when-not (or (node-keyword? table) (node-map? table))
       (api/reg-finding!
         (assoc (meta table)
-               :message "expected 'table' to be a keyword"
+               :message "expected 'table' to be a keyword or a map"
                :type :xtql/type-mismatch)))
     (case (:tag opts)
       :vector (->> opts :children (run! lint-bind))

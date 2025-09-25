@@ -376,7 +376,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
     (.close node)))
 
 (t/deftest test-query-with-errors
-  (t/is (anomalous? [:incorrect nil #"Illegal argument: 'xtql/malformed-table'"]
+  (t/is (anomalous? [:incorrect :xtql/malformed-from]
                     #_{:clj-kondo/ignore [:xtql/type-mismatch]}
                     (xt/q tu/*node* '(from docs [name]))))
 

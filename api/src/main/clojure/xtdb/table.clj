@@ -4,7 +4,8 @@
             [clojure.string :as str]
             [cognitect.transit :as transit]
             [xtdb.error :as err])
-  (:import [xtdb.table TableRef]
+  (:import clojure.lang.Symbol
+           [xtdb.table TableRef]
            xtdb.util.NormalForm))
 
 (defmethod print-method TableRef [^TableRef ref, ^java.io.Writer w]
@@ -31,6 +32,8 @@
 
   (^xtdb.table.TableRef [db-name schema+table]
    (cond
+     (keyword? db-name) (recur (symbol db-name) schema+table)
+     (symbol? db-name) (recur (str (NormalForm/normalForm ^Symbol db-name)) schema+table)
      (string? schema+table) (let [[table schema] (reverse (str/split schema+table #"/" 2))]
                               (->ref db-name schema table))
      (simple-symbol? schema+table) (->ref db-name nil schema+table)

@@ -127,3 +127,35 @@
                            "Can't set :default-db when connectable is not an XT node"]
                           (xt/q xtdb-conn ["SELECT * FROM foo"]
                                 {:database :new_db})))))))
+
+(t/deftest test-multi-db-xtql
+  (with-open [node (xtn/start-node)
+              xtdb-conn (.build (.createConnectionBuilder node))]
+    (jdbc/execute! xtdb-conn ["ATTACH DATABASE new_db"])
+
+    (with-open [new-db-conn (.build (-> (.createConnectionBuilder node)
+                                        (.database "new_db")))]
+      (xt/execute-tx xtdb-conn [[:put-docs :foo {:xt/id "xtdb"}]])
+      (t/is (= [{:xt/id "xtdb"}] (xt/q xtdb-conn '(from :foo [xt/id]))))
+
+      (xt/execute-tx new-db-conn [[:put-docs :foo {:xt/id "new-db"}]])
+
+      (t/is (= [{:xt/id "new-db"}]
+               (xt/q new-db-conn '(from :foo [xt/id]))))
+
+      (t/is (= [{:xt/id "new-db"}]
+               (xt/q xtdb-conn '(from {:db :new-db, :table :foo} [xt/id]))))
+
+      (t/is (= [{:xt/id "xtdb"}]
+               (xt/q new-db-conn '(from {:db :xtdb, :table :foo} [xt/id]))))
+
+      (t/is (= [{:new-db-id "new-db", :xtdb-id "xtdb"}]
+               (xt/q xtdb-conn '(unify
+                                 (from {:db :new-db, :table :foo} [{:xt/id new-db-id}])
+                                 (from :foo [{:xt/id xtdb-id}])))))
+
+      (xt/execute-tx xtdb-conn [[:put-docs :foo {:xt/id "xtdb", :version 2}]])
+
+      (t/is (= [{:xt/id "xtdb", :version 2}] (xt/q xtdb-conn '(from :foo [xt/id version]))))
+
+      (t/is (= [{:xt/id "new-db"}] (xt/q new-db-conn '(from :foo [xt/id])))))))

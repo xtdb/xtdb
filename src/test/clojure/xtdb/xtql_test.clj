@@ -3,7 +3,7 @@
             [xtdb.xtql :as xtql]))
 
 (defn- roundtrip-expr [expr]
-  (xtql/unparse (xtql/parse-expr expr {})))
+  (xtql/unparse (xtql/parse-expr expr {:default-db "xtdb"})))
 
 (t/deftest test-parse-expr
   (t/is (= nil (roundtrip-expr nil)))
@@ -53,17 +53,17 @@
                  (roundtrip-expr '(. foo))))))
 
 (t/deftest test-expr-subquery
-  (t/is (= '(exists? (from :foo [a]))
+  (t/is (= '(exists? (from #xt/table :foo [a]))
            (roundtrip-expr '(exists? (from :foo [a])))))
 
-  (t/is (= '(exists? [(fn [a] (from :foo [a])) a])
+  (t/is (= '(exists? [(fn [a] (from #xt/table :foo [a])) a])
            (roundtrip-expr '(exists? (fn [a] (from :foo [a]))))))
 
-  (t/is (= '(q (from :foo [a]))
+  (t/is (= '(q (from #xt/table :foo [a]))
            (roundtrip-expr '(q (from :foo [a]))))))
 
 (defn- roundtrip-q
-  ([q] (roundtrip-q q {}))
+  ([q] (roundtrip-q q {:default-db "xtdb"}))
   ([q env] (xtql/unparse-query (xtql/parse-query q env))))
 
 (defn- roundtrip-q-tail
@@ -71,23 +71,23 @@
   ([q env] (xtql/unparse-query-tail (xtql/parse-query-tail q env))))
 
 (defn- roundtrip-unify-clause
-  ([q] (roundtrip-unify-clause q {}))
+  ([q] (roundtrip-unify-clause q {:default-db "xtdb"}))
   ([q env] (xtql/unparse-unify-clause (xtql/parse-unify-clause q env))))
 
 (t/deftest test-parse-from
-  (t/is (= '(from :foo [a])
+  (t/is (= '(from #xt/table :foo [a])
            (roundtrip-q '(from :foo [a]))))
 
-  (t/is (= '(from :foo {:for-valid-time (at #inst "2020"), :bind [a]})
+  (t/is (= '(from #xt/table :foo {:for-valid-time (at #inst "2020"), :bind [a]})
            (roundtrip-q '(from :foo {:for-valid-time (at #inst "2020"), :bind [a]}))))
 
-  (t/is (= '(from :foo {:for-system-time (at #inst "2020"), :bind [a]})
+  (t/is (= '(from #xt/table :foo {:for-system-time (at #inst "2020"), :bind [a]})
            (roundtrip-q '(from :foo {:for-system-time (at #inst "2020"), :bind [a]}))))
 
-  (t/is (= '(from :foo [a {:xt/id b} c {:d "fish"}])
+  (t/is (= '(from #xt/table :foo [a {:xt/id b} c {:d "fish"}])
            (roundtrip-q '(from :foo [a {:xt/id b} {:c c} {:d "fish"}]))))
 
-  (let [q '(from :foo [{:foo {:baz 1}}])]
+  (let [q '(from #xt/table :foo [{:foo {:baz 1}}])]
     (t/is (= q
              (roundtrip-q q))))
 
@@ -98,17 +98,17 @@
                     (roundtrip-q '(from :foo [{bar x "fish" y}])))))
 
 (t/deftest test-from-star
-  (t/is (= '(from :foo [* a {:xt/id b} {:d "fish"}])
+  (t/is (= '(from #xt/table :foo [* a {:xt/id b} {:d "fish"}])
            (roundtrip-q '(from :foo [a {:xt/id b} * {:d "fish"}]))))
 
-  (t/is (= '(from :foo {:bind [* a {:xt/id b} {:d "fish"}]
+  (t/is (= '(from #xt/table :foo {:bind [* a {:xt/id b} {:d "fish"}]
                         :for-system-time :all-time})
            (roundtrip-q '(from :foo {:bind [a {:xt/id b} * {:d "fish"}]
                                      :for-system-time :all-time})))))
 
 (t/deftest test-parse-unify
-  (t/is (= '(unify (from :foo [{:baz b}])
-                   (from :bar [{:baz b}]))
+  (t/is (= '(unify (from #xt/table :foo [{:baz b}])
+                   (from #xt/table :bar [{:baz b}]))
 
            (roundtrip-q '(unify (from :foo [{:baz b}])
                                 (from :bar [{:baz b}]))))))
@@ -119,7 +119,7 @@
              (roundtrip-q-tail q)))))
 
 (t/deftest test-parse-pipeline
-  (let [q '(-> (from :foo [a])
+  (let [q '(-> (from #xt/table :foo [a])
                (without :a))]
     (t/is (= q
              (roundtrip-q q)))))
@@ -147,7 +147,7 @@
                     (roundtrip-unify-clause '(with {:bar (+ 1 1)})))))
 
 (t/deftest test-parse-without
-  (let [q '(-> (from :foo [xt/id a])
+  (let [q '(-> (from #xt/table :foo [xt/id a])
                (without :a :xt/id :f))]
     (t/is (= q
              (roundtrip-q q)))
@@ -156,19 +156,19 @@
                       (roundtrip-q-tail '(without {:bar baz}))))))
 
 (t/deftest test-parse-return
-  (let [q '(-> (from :foo [a])
+  (let [q '(-> (from #xt/table :foo [a])
                (return a {:b a}))]
     (t/is (= q
              (roundtrip-q q)))))
 
 (t/deftest test-parse-aggregate
-  (let [q '(-> (from :foo [a c])
+  (let [q '(-> (from #xt/table :foo [a c])
                (return c {:b (sum a)}))]
     (t/is (= q
              (roundtrip-q q)))))
 
 (t/deftest test-parse-join
-  (t/is (= '(join (from :foo [a c])
+  (t/is (= '(join (from #xt/table :foo [a c])
                   [{:a b} c])
            (roundtrip-unify-clause '(join (from :foo [a c])
                                           [{:a b} c]))))
@@ -202,8 +202,8 @@
                     (roundtrip-q-tail '(order-by {:val x :nulls :fish})))))
 
 (t/deftest test-parse-union-all
-  (t/is (= '(union-all (from :foo [{:baz b}])
-                       (from :bar [{:baz b}]))
+  (t/is (= '(union-all (from #xt/table :foo [{:baz b}])
+                       (from #xt/table :bar [{:baz b}]))
            (roundtrip-q '(union-all (from :foo [{:baz b}])
                                     (from :bar [{:baz b}]))))))
 
@@ -232,7 +232,7 @@
              (roundtrip-q q))
           "rel in pipeline"))
 
-  (let [q '(unify (from :docs [first-name])
+  (let [q '(unify (from #xt/table :docs [first-name])
                   (rel [{:first-name "Ivan"} {:first-name "Petr"}] [first-name]))]
     (t/is (= q
              (roundtrip-q q))
@@ -249,8 +249,8 @@
           "rel as a parameter")))
 
 (deftest test-generated-queries
-  (let [q '(unify (from :users [{:xt/id user-id} first-name last-name])
-                  (from :articles [{:author-id user-id} title content]))]
+  (let [q '(unify (from #xt/table :users [{:xt/id user-id} first-name last-name])
+                  (from #xt/table :articles [{:author-id user-id} title content]))]
     (t/is (= q
              (roundtrip-q (roundtrip-q q)))
           "roundtripping twice to test generated queries (i.e. cons ...)")

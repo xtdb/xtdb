@@ -1,9 +1,11 @@
 (ns xtdb.xtql
   (:require [clojure.set :as set]
-            [xtdb.error :as err])
+            [xtdb.error :as err]
+            [xtdb.table :as table])
   (:import (clojure.lang MapEntry)
            (java.util List)
-           (xtdb.api.query Binding Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery Exprs TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilters XtqlQuery XtqlQuery$QueryTail XtqlQuery$UnifyClause)))
+           (xtdb.api.query Binding Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery Exprs TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilters XtqlQuery XtqlQuery$QueryTail XtqlQuery$UnifyClause)
+           (xtdb.table TableRef)))
 
 (defn check-opt-keys [valid-keys opts]
   (when-let [invalid-opt-keys (not-empty (set/difference (set (keys opts)) valid-keys))]
@@ -316,15 +318,15 @@
     (throw (err/illegal-arg :xtql/malformed-unify {:unify this, :message "Unify most contain at least one sub clause"})))
   (->Unify (mapv #(parse-unify-clause % env) clauses)))
 
-(defrecord From [table for-valid-time for-system-time bindings project-all-cols?]
+(defrecord From [^TableRef table for-valid-time for-system-time bindings project-all-cols?]
   XtqlQuery
   XtqlQuery$UnifyClause
 
   UnparseQuery
-  (unparse-query [from]
+  (unparse-query [_]
     (let [bind (mapv unparse-out-spec bindings)
           bind (if project-all-cols? (vec (cons '* bind)) bind)]
-      (list 'from (keyword (.table from))
+      (list 'from table
             (if (or for-valid-time for-system-time)
               (cond-> {:bind bind}
                 for-valid-time (assoc :for-valid-time (unparse for-valid-time))
@@ -347,9 +349,18 @@
     :bind []}
    bindings))
 
-(defn parse-from [[_ table opts :as this] env]
-  (if-not (keyword? table)
-    (throw (err/illegal-arg :xtql/malformed-table {:table table, :from this}))
+(defn parse-from [[_ table-or-opts opts :as this] {:keys [default-db] :as env}]
+  (let [table-ref (cond
+                    (instance? TableRef table-or-opts) table-or-opts
+                    (map? table-or-opts) (let [{:keys [db table]} table-or-opts]
+                                           (when-not table
+                                             (throw (err/incorrect :xtql/malformed-from "`table` key must be present in `table` map"
+                                                                   {:from this})))
+
+                                           (table/->ref (or db default-db) table))
+                    (keyword? table-or-opts) (table/->ref default-db table-or-opts)
+                    :else (throw (err/incorrect :xtql/malformed-from "`table` must be a keyword or map"
+                                                {:from this})))]
 
     (cond
       (or (nil? opts) (map? opts))
@@ -367,7 +378,7 @@
 
             :else
             (let [{:keys [bind project-all-cols?]} (find-star-projection '* bind)]
-              (->From table
+              (->From table-ref
                       (some-> for-valid-time (parse-temporal-filter :for-valid-time this env))
                       (some-> for-system-time (parse-temporal-filter :for-system-time this env))
                       (parse-out-specs bind this env)
@@ -375,7 +386,7 @@
 
       (vector? opts)
       (let [{:keys [bind project-all-cols?]} (find-star-projection '* opts)]
-        (map->From {:table table
+        (map->From {:table table-ref
                     :bindings (parse-out-specs bind this env)
                     :project-all-cols? project-all-cols?}))
 
