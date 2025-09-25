@@ -61,11 +61,12 @@
 (def duration-gen (gen/return #xt/duration "PT1S"))
 (def interval-gen (gen/return #xt/interval "P1YT1S"))
 
+;; Exclude varbinary generators due to issue #4793
 (def simple-type-gens
   [nil-gen bool-gen
    i8-gen i16-gen i32-gen i64-gen
    f64-gen decimal-gen
-   utf8-gen varbinary-gen
+   utf8-gen #_varbinary-gen
    keyword-gen uuid-gen uri-gen
    instant-gen local-date-gen local-time-gen
    local-datetime-gen offset-datetime-gen zoned-datetime-gen
@@ -147,14 +148,10 @@
      :vs vs
      :type element-gen}))
 
-;; Can exclude specific type generators on errors
 (defn single-type-vector-vs-gen 
-  ([min-length max-length]
-   (single-type-vector-vs-gen min-length max-length #{}))
-  ([min-length max-length excluded-types]
-   (let [available-gens (remove excluded-types simple-type-gens)]
-     (gen/let [type-gen (gen/elements available-gens)]
-       (typed-vector-vs-gen type-gen min-length max-length)))))
+  [min-length max-length]
+  (gen/let [type-gen (gen/elements simple-type-gens)]
+    (typed-vector-vs-gen type-gen min-length max-length)))
 
 (defn dense-union-vector-vs-gen
   [min-length max-length]
@@ -170,16 +167,13 @@
    [[3 (single-type-vector-vs-gen length length)]
     [1 (dense-union-vector-vs-gen length length)]]))
 
-(defn two-distinct-single-type-vecs-gen
-  ([]
-   (two-distinct-single-type-vecs-gen #{}))
-  ([excluded-types]
-   (gen/let [vec1 (single-type-vector-vs-gen 1 100 excluded-types)
-             vec2 (gen/such-that #(and (not= (:type %) (:type vec1))
-                                       (not= (:vec-name %) (:vec-name vec1)))
-                                 (single-type-vector-vs-gen 1 100 excluded-types)
-                                 100)]
-     [vec1 vec2])))
+(def two-distinct-single-type-vecs-gen
+  (gen/let [vec1 (single-type-vector-vs-gen 1 100)
+            vec2 (gen/such-that #(and (not= (:type %) (:type vec1))
+                                      (not= (:vec-name %) (:vec-name vec1)))
+                                (single-type-vector-vs-gen 1 100)
+                                100)]
+    [vec1 vec2]))
 
 (def two-distinct-duvs-gen
   (gen/let [duv1 (dense-union-vector-vs-gen 1 100)

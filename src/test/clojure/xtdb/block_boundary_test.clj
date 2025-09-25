@@ -137,8 +137,7 @@
 (t/deftest ^:property type-change-across-blocks
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
-   ;; Exclude varbinary generators due to issue #4793
-   (prop/for-all [[vec1 vec2] (tg/two-distinct-single-type-vecs-gen #{tg/varbinary-gen})]
+   (prop/for-all [[vec1 vec2] tg/two-distinct-single-type-vecs-gen]
                  (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
                                                    :compactor {:threads 0}})]
                    (let [values1 (:vs vec1)
@@ -163,8 +162,7 @@
 (t/deftest ^:property single-typed-value-to-nils-across-blocks
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
-   ;; Exclude varbinary generators due to issue #4793
-   (prop/for-all [single-type-vec (tg/single-type-vector-vs-gen 1 100 #{tg/varbinary-gen})]
+   (prop/for-all [single-type-vec (tg/single-type-vector-vs-gen 1 100)]
                  (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
                                                    :compactor {:threads 0}})]
                    (let [values (:vs single-type-vec)
