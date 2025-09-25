@@ -647,8 +647,11 @@ tasks.register<JavaExec>("readArrowFile") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("clojure.main")
     jvmArgs(defaultJvmArgs + sixGBJvmArgs)
-    val file = project.property("file") as? String ?: error("Please provide -Pfile")
-    this.args = listOf("-m", "xtdb.main", "read-arrow-file", file)
+
+    args("-m", "xtdb.main", "read-arrow-file")
+
+    if (project.hasProperty("file"))
+        args(project.property("file") as? String ?: error("file property must be a string"))
 }
 
 tasks.register<JavaExec>("readArrowStreamFile") {
@@ -657,8 +660,10 @@ tasks.register<JavaExec>("readArrowStreamFile") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("clojure.main")
     jvmArgs(defaultJvmArgs + sixGBJvmArgs)
-    val file = project.property("file") as? String ?: error("Please provide -Pfile")
-    this.args = listOf("-m", "xtdb.main", "read-arrow-stream-file", file)
+    args("-m", "xtdb.main", "read-arrow-stream-file")
+
+    if (project.hasProperty("file"))
+        args(project.property("file") as? String ?: error("file property must be a string"))
 }
 
 tasks.register<JavaExec>("readHashTrieFile") {
@@ -667,6 +672,8 @@ tasks.register<JavaExec>("readHashTrieFile") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("clojure.main")
     jvmArgs(defaultJvmArgs + sixGBJvmArgs)
-    val file = project.property("file") as? String ?: error("Please provide -Pfile")
-    this.args = mutableListOf("-m", "xtdb.main", "read-hash-trie-file", file)
+    args("-m", "xtdb.main", "read-hash-trie-file")
+
+    if (project.hasProperty("file"))
+        args(project.property("file") as? String ?: error("file property must be a string"))
 }
