@@ -29,8 +29,6 @@ import xtdb.trie.TrieCatalog
 import java.time.Duration
 import java.util.*
 
-typealias DatabaseName = String
-
 data class Database(
     val name: DatabaseName, val config: Config,
 

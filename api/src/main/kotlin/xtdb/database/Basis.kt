@@ -7,10 +7,11 @@ import xtdb.error.Incorrect
 import xtdb.proto.basis.TxBasis
 import xtdb.proto.basis.messageIds
 import xtdb.proto.basis.txBasis
-import java.util.function.BiFunction
+import kotlin.collections.iterator
 import kotlin.io.encoding.Base64
 import kotlin.math.max
 
+typealias DatabaseName = String
 typealias TxBasisToken = Map<DatabaseName, List<MessageId>>
 
 fun TxBasisToken.encodeTxBasisToken(): String =
