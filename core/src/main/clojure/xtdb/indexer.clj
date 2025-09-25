@@ -23,16 +23,14 @@
             [xtdb.vector.reader :as vr])
   (:import (clojure.lang MapEntry)
            (io.micrometer.core.instrument Counter Timer)
-           (java.io ByteArrayInputStream)
            (java.nio ByteBuffer)
            (java.time Instant InstantSource)
            (java.time.temporal ChronoUnit)
            (java.util List)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.ipc ArrowReader ArrowStreamReader)
            (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.api.TransactionKey
-           (xtdb.arrow Relation RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
+           (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            (xtdb.database Database Database$Catalog)
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.indexer Indexer Indexer$ForDatabase LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
@@ -404,25 +402,21 @@
                                                  (assoc :args args, :close-args? false))))]
             (.forEachRemaining res
                                (fn [^RelationReader in-rel]
-                                 ;; HACK: only while queries return old-world relations
-                                 (util/with-open [in-rel (.openDirectSlice in-rel allocator)]
-                                   (.indexOp rel-idxer in-rel query-opts))))))
+                                 (.indexOp rel-idxer in-rel query-opts)))))
 
         (wrap-sql-args (.getParamCount pq)))))
 
-(defn- open-args-rdr ^org.apache.arrow.vector.ipc.ArrowReader [^BufferAllocator allocator, ^VectorReader args-rdr, ^long tx-op-idx]
+(defn- open-args-rdr ^xtdb.arrow.Relation$Loader [^BufferAllocator allocator, ^VectorReader args-rdr, ^long tx-op-idx]
   (when-not (.isNull args-rdr tx-op-idx)
-    (let [is (ByteArrayInputStream. (.getObject args-rdr tx-op-idx))] ; could try to use getBytes
-      (ArrowStreamReader. is allocator))))
+    (Relation/streamLoader allocator ^bytes (.getObject args-rdr tx-op-idx))))
 
-(defn- foreach-arg-row [^ArrowReader asr, eval-query]
-  (if-not asr
+(defn- foreach-arg-row [^BufferAllocator al, ^Relation$ILoader loader, eval-query]
+  (if-not loader
     (eval-query nil)
 
-    (let [param-root (.getVectorSchemaRoot asr)]
-      (while (.loadNextBatch asr)
-        (let [param-rel (vr/<-root param-root)
-              selection (int-array 1)]
+    (with-open [param-rel (Relation. al (.getSchema loader))]
+      (while (.loadNextPage loader param-rel)
+        (let [selection (int-array 1)]
           (dotimes [idx (.getRowCount param-rel)]
             (err/wrap-anomaly {:arg-idx idx}
               (aset selection 0 idx)
@@ -562,21 +556,21 @@
       (indexOp [_ tx-op-idx]
         (let [query-str (.getObject query-rdr tx-op-idx)]
           (err/wrap-anomaly {:sql query-str, :tx-op-idx tx-op-idx, :tx-key tx-key}
-            (util/with-open [^ArrowReader args-arrow-rdr (open-args-rdr allocator args-rdr tx-op-idx)]
+            (util/with-open [^Relation$ILoader args-loader (open-args-rdr allocator args-rdr tx-op-idx)]
               (let [[q-tag q-args] (parse-sql/parse-statement query-str {:default-db default-db})
-                    tx-opts (assoc tx-opts :arg-fields (some-> args-arrow-rdr (.getVectorSchemaRoot) (.getSchema) (.getFields)))]
+                    tx-opts (assoc tx-opts :arg-fields (some-> args-loader (.getSchema) (.getFields)))]
                 (case q-tag
-                  :insert (foreach-arg-row args-arrow-rdr
+                  :insert (foreach-arg-row allocator args-loader
                                            (query-indexer allocator q-src db-cat upsert-idxer tx-opts q-args))
-                  :patch (foreach-arg-row args-arrow-rdr
+                  :patch (foreach-arg-row allocator args-loader
                                           (query-indexer allocator q-src db-cat patch-idxer tx-opts q-args))
-                  :update (foreach-arg-row args-arrow-rdr
+                  :update (foreach-arg-row allocator args-loader
                                            (query-indexer allocator q-src db-cat upsert-idxer tx-opts q-args))
-                  :delete (foreach-arg-row args-arrow-rdr
+                  :delete (foreach-arg-row allocator args-loader
                                            (query-indexer allocator q-src db-cat delete-idxer tx-opts q-args))
-                  :erase (foreach-arg-row args-arrow-rdr
+                  :erase (foreach-arg-row allocator args-loader
                                           (query-indexer allocator q-src db-cat erase-idxer tx-opts q-args))
-                  :assert (foreach-arg-row args-arrow-rdr
+                  :assert (foreach-arg-row allocator args-loader
                                            (->assert-idxer q-src db-cat tx-opts q-args))
 
                   :create-user (let [{:keys [username password]} q-args]

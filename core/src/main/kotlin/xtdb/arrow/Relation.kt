@@ -133,7 +133,7 @@ class Relation(
         fun loadNextPage(rel: Relation): Boolean
     }
 
-    class StreamLoader(al: BufferAllocator, ch: ReadableByteChannel) : ILoader {
+    class StreamLoader(private val al: BufferAllocator, ch: ReadableByteChannel) : ILoader {
 
         private val reader = MessageChannelReader(ReadChannel(ch), al)
 
@@ -153,7 +153,7 @@ class Relation(
                 check(it == MessageHeader.RecordBatch) { "unexpected Type message type: $it" }
             }
 
-            MessageSerializer.deserializeRecordBatch(msg.message, msg.bodyBuffer)
+            MessageSerializer.deserializeRecordBatch(msg.message, msg.bodyBuffer ?: al.empty)
                 .use { rel.load(it) }
 
             return true
@@ -226,6 +226,9 @@ class Relation(
 
         @JvmStatic
         fun streamLoader(al: BufferAllocator, path: Path) = StreamLoader(al, path.openReadableChannel())
+
+        @JvmStatic
+        fun streamLoader(al: BufferAllocator, bytes: ByteArray) = StreamLoader(al, bytes.asChannel)
 
         @JvmStatic
         fun fromRoot(al: BufferAllocator, vsr: VectorSchemaRoot) =
