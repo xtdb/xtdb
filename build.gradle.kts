@@ -167,6 +167,7 @@ allprojects {
             testImplementation(libs.junit.jupiter.api)
             testRuntimeOnly(libs.junit.jupiter.engine)
             testRuntimeOnly(libs.junit.platform.launcher)
+
             testImplementation(libs.testcontainers)
             testImplementation(libs.testcontainers.kafka)
             testImplementation(libs.testcontainers.keycloak)
@@ -432,6 +433,15 @@ dependencies {
     testImplementation("clj-kondo", "clj-kondo", "2023.12.15")
     testImplementation("com.github.igrishaev", "pg2-core", "0.1.33")
     testImplementation(libs.hato)
+    
+    // test check
+    api(libs.clojure.test.check)
+
+    // test containers
+    api(libs.testcontainers)
+    api(libs.testcontainers.kafka)
+    api(libs.testcontainers.keycloak)
+    api(libs.testcontainers.minio)
 
     // For generating clojure docs
     testImplementation("codox", "codox", "0.10.8")
