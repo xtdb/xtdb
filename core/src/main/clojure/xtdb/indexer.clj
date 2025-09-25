@@ -630,7 +630,8 @@
                                ^Timer tx-timer
                                ^Counter tx-error-counter]
   Indexer$ForDatabase
-  (close [_])
+  (close [_]
+    (util/close allocator))
 
   (indexTx [this msg-id msg-ts tx-ops-rdr
             system-time default-tz _user]
@@ -745,7 +746,7 @@
         tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
     (reify Indexer
       (openForDatabase [_ db]
-        (util/with-close-on-catch [allocator (-> (.getAllocator db) (util/->child-allocator "indexer"))]
+        (util/with-close-on-catch [allocator (-> (.getAllocator db) (util/->child-allocator (str "indexer/" (.getName db))))]
           ;; TODO add db-name to allocator gauge
           (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
 
@@ -765,6 +766,9 @@
 (defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base,
                                     :keys [query-db]}]
   (.openForDatabase indexer query-db))
+
+(defmethod ig/halt-key! ::for-db [_ indexer-for-db]
+  (util/close indexer-for-db))
 
 (defn <-node ^xtdb.indexer.Indexer [node]
   (util/component node :xtdb/indexer))

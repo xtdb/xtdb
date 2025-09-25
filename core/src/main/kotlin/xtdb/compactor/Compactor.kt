@@ -227,6 +227,8 @@ interface Compactor : AutoCloseable {
                         ?: LOGGER.warn("failed to close compactor cleanly in 10s")
                 }
 
+                al.close()
+
                 LOGGER.debug("compactor closed")
             }
         }
