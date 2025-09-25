@@ -7,10 +7,8 @@ import xtdb.arrow.NullVector
 import xtdb.arrow.RelationWriter
 import xtdb.error.Incorrect
 import xtdb.trie.ColumnName
-import xtdb.types.Type
 import xtdb.types.Type.Companion.BOOL
 import xtdb.types.Type.Companion.maybe
-import xtdb.vector.ValueVectorReader
 
 sealed interface ApplyMode {
     fun accept(

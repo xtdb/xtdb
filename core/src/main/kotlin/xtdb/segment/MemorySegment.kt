@@ -6,7 +6,6 @@ import xtdb.arrow.RelationReader
 import xtdb.log.proto.TemporalMetadata
 import xtdb.metadata.PageMetadata
 import xtdb.metadata.UNBOUND_TEMPORAL_METADATA
-import xtdb.operator.scan.RootCache
 import xtdb.trie.MemoryHashTrie
 
 /**
@@ -26,8 +25,6 @@ class MemorySegment(override val trie: MemoryHashTrie, val rel: RelationReader) 
         override val schema: Schema get() = this@MemorySegment.schema
 
         private fun loadPage() = rel.select(leaf.mergeSort(trie))
-
-        override fun loadDataPage(rootCache: RootCache) = loadPage()
 
         override fun openDataPage(al: BufferAllocator) = loadPage().openSlice(al)
     }

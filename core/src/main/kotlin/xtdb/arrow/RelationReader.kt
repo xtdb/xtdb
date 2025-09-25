@@ -9,7 +9,6 @@ import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.util.closeAll
 import xtdb.util.closeAllOnCatch
 import xtdb.util.safeMap
-import xtdb.vector.ValueVectorReader
 import java.util.*
 
 interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
@@ -86,13 +85,6 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
         @JvmStatic
         fun from(cols: Iterable<VectorReader>, rowCount: Int): RelationReader =
             FromCols(cols.associateByTo(linkedMapOf()) { it.name }, rowCount)
-
-        @JvmStatic
-        fun from(root: VectorSchemaRoot): RelationReader =
-            from(
-                root.fieldVectors.map { v -> ValueVectorReader.from(v) },
-                root.rowCount
-            )
 
         @JvmStatic
         fun concatCols(rel1: RelationReader, rel2: RelationReader): RelationReader {

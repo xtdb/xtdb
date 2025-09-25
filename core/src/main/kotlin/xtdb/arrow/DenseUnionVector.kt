@@ -53,13 +53,19 @@ class DenseUnionVector private constructor(
 
     override val vectors: Iterable<Vector> get() = legVectors
 
-    internal inner class LegReader(val typeId: Byte, val inner: VectorReader, val nested: Boolean = false) :
-        VectorReader {
+    internal class LegReader(
+        override val valueCount: Int,
+        private val typeBuffer: ExtensibleBuffer, private val offsetBuffer: ExtensibleBuffer,
+        private val closeBuffers: Boolean,
+        val typeId: Byte, val inner: VectorReader, val nested: Boolean = false
+    ) : VectorReader {
         override val name get() = inner.name
         override val nullable get() = inner.nullable
-        override val valueCount get() = this@DenseUnionVector.valueCount
         override val fieldType get() = inner.fieldType
         override val field get() = inner.field
+
+        fun getTypeId(idx: Int) = typeBuffer.getByte(idx)
+        fun getOffset(idx: Int) = offsetBuffer.getInt(idx)
 
         override fun isNull(idx: Int) = getTypeId(idx) != typeId || inner.isNull(getOffset(idx))
         override fun getBoolean(idx: Int) = inner.getBoolean(getOffset(idx))
@@ -100,18 +106,31 @@ class DenseUnionVector private constructor(
                 }
         })
 
-        override fun openSlice(al: BufferAllocator) = unsupported("LegVector/openSlice")
+        override fun openSlice(al: BufferAllocator): VectorReader =
+            typeBuffer.openSlice(al).closeOnCatch {
+                offsetBuffer.openSlice(al).closeOnCatch {
+                    inner.openSlice(al).closeOnCatch { inner ->
+                        LegReader(valueCount, typeBuffer, offsetBuffer, true, typeId, inner, nested)
+                    }
+                }
+            }
 
         override val metadataFlavours get() = inner.metadataFlavours
 
-        override fun close() = Unit
+        override fun close() {
+            if (closeBuffers) {
+                typeBuffer.close()
+                offsetBuffer.close()
+                inner.close()
+            }
+        }
 
         override val asList get() = inner.asList
     }
 
     internal inner class LegVector(
         private val typeId: Byte, private val inner: VectorWriter, private val nested: Boolean = false,
-        private val reader: LegReader = LegReader(typeId, inner, nested)
+        private val reader: LegReader = LegReader(valueCount, typeBuffer, offsetBuffer, false, typeId, inner, nested)
     ) : VectorReader by reader, VectorWriter {
 
         override val listElements get() = inner.listElements
@@ -161,6 +180,8 @@ class DenseUnionVector private constructor(
 
         override fun getMapKeys(fieldType: FieldType) = inner.getMapKeys(fieldType)
         override fun getMapValues(fieldType: FieldType) = inner.getMapValues(fieldType)
+
+        override fun openSlice(al: BufferAllocator) = reader.openSlice(al)
 
         fun rowCopierFrom(src: VectorReader): RowCopier {
             val innerCopier = src.rowCopier(inner)

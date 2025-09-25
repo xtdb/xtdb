@@ -32,7 +32,7 @@
            xtdb.ICursor
            (xtdb.indexer Snapshot Snapshot$Source)
            (xtdb.metadata MetadataPredicate PageMetadata PageMetadata$Factory)
-           (xtdb.operator.scan IidSelector RootCache ScanCursor)
+           (xtdb.operator.scan IidSelector ScanCursor)
            (xtdb.segment BufferPoolSegment MemorySegment MergePlanner MergeTask)
            (xtdb.storage BufferPool)
            xtdb.table.TableRef
@@ -296,8 +296,7 @@
                                                     (into [] (keep (fn [^MergeTask mt]
                                                                      (when-let [leaves (trie/filter-meta-objects (.getPages mt) temporal-bounds)]
                                                                        (MergeTask. leaves (.getPath mt)))))))]
-                               (cond-> (ScanCursor. allocator (RootCache. allocator buffer-pool)
-                                                    col-names col-preds
+                               (cond-> (ScanCursor. allocator col-names col-preds
                                                     temporal-bounds
                                                     (.iterator ^Iterable merge-tasks)
                                                     schema args

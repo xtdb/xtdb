@@ -11,7 +11,6 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.microsAsInstant
 import xtdb.types.ZonedDateTimeRange
-import xtdb.vector.from
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlin.apply
@@ -40,10 +39,10 @@ class TsTzRangeVector(name: String, allocator: BufferAllocator, fieldType: Field
     private fun Long.toZdt(): ZonedDateTime = microsAsInstant.atZone(ZoneId.of("UTC"))
 
     override fun getObject0(index: Int): ZonedDateTimeRange =
-        from(underlyingVector.dataVector).let { elVec ->
+        (underlyingVector.dataVector as TimeStampMicroTZVector).let { elVec ->
             ZonedDateTimeRange(
-                elVec.getLong(index * 2).takeUnless { it == Long.MIN_VALUE }?.toZdt(),
-                elVec.getLong(index * 2 + 1).takeUnless { it == Long.MAX_VALUE }?.toZdt()
+                elVec.get(index * 2).takeUnless { it == Long.MIN_VALUE }?.toZdt(),
+                elVec.get(index * 2 + 1).takeUnless { it == Long.MAX_VALUE }?.toZdt()
             )
         }
 

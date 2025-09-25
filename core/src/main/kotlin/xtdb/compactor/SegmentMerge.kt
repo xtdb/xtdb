@@ -13,7 +13,6 @@ import xtdb.compactor.OutWriter.RecencyRowCopier
 import xtdb.compactor.RecencyPartition.WEEK
 import xtdb.metadata.PageMetadata
 import xtdb.metadata.UNBOUND_TEMPORAL_METADATA
-import xtdb.operator.scan.RootCache
 import xtdb.segment.MergePlanner
 import xtdb.segment.MergeTask
 import xtdb.segment.Segment
@@ -247,9 +246,6 @@ private class LocalSegment(
 
         override fun testMetadata() = true
         override val temporalMetadata get() = UNBOUND_TEMPORAL_METADATA
-
-        override fun loadDataPage(rootCache: RootCache) =
-            dataLoader.loadPage(leaf.dataPageIndex, al)
 
         override fun openDataPage(al: BufferAllocator) =
             dataLoader.loadPage(leaf.dataPageIndex, al).openSlice(al)

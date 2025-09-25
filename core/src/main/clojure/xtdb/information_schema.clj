@@ -357,7 +357,7 @@
   [{:_id "xtdb", :username "xtdb", :usesuper true, :passwd (authn.crypt/encrypt-pw "xtdb")}])
 
 (defn pg-user-template-page+trie [allocator]
-  (util/with-open [out-rel (Trie/openLogDataWriter allocator (Trie/dataRelSchema pg-user-field))]
+  (util/with-close-on-catch [out-rel (Trie/openLogDataWriter allocator (Trie/dataRelSchema pg-user-field))]
     (let [{^VectorWriter iid-vec "_iid",
            ^VectorWriter sf-vec "_system_from"
            ^VectorWriter vf-vec "_valid_from",
@@ -375,8 +375,7 @@
       (let [dummy-trie (reduce #(.plus ^MemoryHashTrie %1 %2)
                                (trie/->live-trie 32 1024 iid-vec)
                                (range (count initial-user-data)))]
-        (util/with-close-on-catch [out-root (.openAsRoot out-rel allocator)]
-          [(vr/<-root out-root) dummy-trie])))))
+        [out-rel dummy-trie]))))
 
 (defn trie-stats [^TrieCatalog trie-catalog]
   (for [^TableRef table (.getTables trie-catalog)

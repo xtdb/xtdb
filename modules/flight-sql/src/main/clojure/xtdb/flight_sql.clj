@@ -8,8 +8,7 @@
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.reader :as vr])
   (:import [com.google.protobuf Any ByteString]
            [java.io ByteArrayOutputStream]
            [java.nio ByteBuffer]
@@ -24,7 +23,7 @@
            [org.apache.arrow.vector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.types.pojo Field Schema]
            [xtdb.api FlightSqlServer FlightSqlServer$Factory Xtdb$Config]
-           (xtdb.arrow ArrowUnloader$Mode Relation)
+           (xtdb.arrow ArrowUnloader$Mode Relation Vector)
            xtdb.database.Database$Catalog
            xtdb.IResultCursor
            [xtdb.query IQuerySource PreparedQuery]))
@@ -136,8 +135,7 @@
                                        ;; TODO we likely needn't take these out and put them back.
                                        (util/with-close-on-catch [new-args (-> (first (flight-stream->rows allocator flight-stream))
                                                                                (->> (sequence (map-indexed (fn [idx v]
-                                                                                                             (-> (vw/open-vec allocator (symbol (str "?_" idx)) [v])
-                                                                                                                 (vr/vec->reader))))))
+                                                                                                             (Vector/fromList allocator (str "?_" idx) [v])))))
                                                                                (vr/rel-reader 1))]
                                          (doto ps
                                            (some-> (.put :cursor (.openQuery prepd-query {:args new-args}))

@@ -3,13 +3,12 @@
             [next.jdbc :as jdbc]
             [xtdb.flight-sql]
             [xtdb.test-util :as tu]
-            [xtdb.types :as types]
-            [xtdb.vector.writer :as vw])
+            [xtdb.types :as types])
   (:import (org.apache.arrow.adbc.core AdbcConnection)
            org.apache.arrow.adbc.driver.flightsql.FlightSqlDriver
            (org.apache.arrow.flight CallOption FlightClient FlightEndpoint FlightInfo Location)
            (org.apache.arrow.flight.sql FlightSqlClient)
-           (org.apache.arrow.vector FieldVector VectorSchemaRoot)
+           (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
            xtdb.api.FlightSqlServer
            xtdb.arrow.Relation))
@@ -114,15 +113,13 @@
                       (flight-info->rows)))))))
 
 (defn populate-root ^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root rows]
-  (.clear root)
+  (with-open [rel (Relation. tu/*allocator* (.getSchema root))]
+    (doseq [row rows]
+      (.writeRow rel row))
 
-  (let [field-vecs (.getFieldVectors root)
-        row-count (count rows)]
-    (doseq [^FieldVector field-vec field-vecs]
-      (vw/write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
-
-    (.setRowCount root row-count)
-    root))
+    (with-open [rb (.openArrowRecordBatch rel)]
+      (let [ldr (VectorLoader. root)]
+        (.load ldr rb)))))
 
 (t/deftest test-prepared-stmts
   (with-open [ps (.prepare *client* "INSERT INTO users (_id, name) VALUES (?, ?)" empty-call-opts)

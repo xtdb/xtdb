@@ -10,7 +10,6 @@ import xtdb.compactor.resolveSameSystemTimeEvents
 import xtdb.log.proto.TemporalMetadata
 import xtdb.metadata.MetadataPredicate
 import xtdb.metadata.PageMetadata
-import xtdb.operator.scan.RootCache
 import xtdb.table.TableRef
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.Trie
@@ -42,16 +41,9 @@ class BufferPoolSegment private constructor(
     ) : Segment.Page {
         override fun testMetadata() = pageIdxPredicate?.test(pageIndex) ?: true
 
-        override fun loadDataPage(rootCache: RootCache): RelationReader =
-            bp.getRecordBatch(dataFilePath, pageIndex).use { rb ->
-                val root = rootCache.openRoot(dataFilePath)
-                VectorLoader(root).load(rb)
-                RelationReader.Companion.from(root)
-            }
-
         override fun openDataPage(al: BufferAllocator): RelationReader =
             bp.getRecordBatch(dataFilePath, pageIndex).use { rb ->
-                Relation.Companion.fromRecordBatch(al, schema, rb)
+                Relation.fromRecordBatch(al, schema, rb)
                     .let { standardRel ->
                         if (resolveSameSystemTimeEvents)
                             resolveSameSystemTimeEvents(al, standardRel)

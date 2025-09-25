@@ -1,151 +1,11 @@
 (ns xtdb.types-test
   (:require [clojure.test :as t]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]
-            [xtdb.types :as types]
-            [xtdb.vector.writer :as vw])
-  (:import (java.math BigDecimal)
-           java.net.URI
-           java.nio.ByteBuffer
-           (java.time Instant LocalDate LocalTime OffsetDateTime ZonedDateTime)
-           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DecimalVector Float4Vector Float8Vector IntVector IntervalMonthDayNanoVector NullVector SmallIntVector TimeNanoVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
-           (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
-           (org.apache.arrow.vector.types.pojo ArrowType FieldType)
-           xtdb.time.Interval
-           (xtdb.types RegClass RegProc)
-           (xtdb.arrow VectorWriter)
-           (xtdb.vector.extensions IntervalMonthDayMicroVector KeywordVector RegClassVector RegProcVector TransitVector UriVector UuidVector)))
+            [xtdb.types :as types])
+  (:import (xtdb.types RegClass RegProc)
+           (xtdb.vector.extensions RegClassVector RegProcVector)))
 
 (t/use-fixtures :each tu/with-allocator)
-
-(defn- test-read [arrow-type-fn write-fn vs]
-  ;; TODO no longer types, but there are other things in here that depend on `test-read`
-  (with-open [duv (DenseUnionVector/empty "" tu/*allocator*)]
-    (let [duv-writer (vw/->writer duv)]
-      (doseq [v vs]
-        (let [^ArrowType arrow-type (arrow-type-fn v)]
-          (doto (.vectorFor duv-writer (types/arrow-type->leg arrow-type) (FieldType. (= arrow-type #xt.arrow/type :null) arrow-type nil))
-            (write-fn v))))
-
-      (let [duv-rdr (vw/vec-wtr->rdr duv-writer)]
-        {:vs (vec (for [idx (range (count vs))]
-                    (.getObject duv-rdr idx #xt/key-fn :kebab-case-keyword)))
-         :vec-types (vec (for [idx (range (count vs))]
-                           (class (.getVectorByType duv (.getTypeId duv idx)))))}))))
-
-(defn- test-round-trip [vs]
-  (test-read vw/value->arrow-type #(.writeObject ^VectorWriter %1 %2) vs))
-
-(t/deftest round-trips-values
-  (t/is (= {:vs [false nil 2 1 6 4 3.14 2.0 BigDecimal/ONE]
-            :vec-types [BitVector NullVector BigIntVector TinyIntVector SmallIntVector IntVector Float8Vector Float4Vector DecimalVector]}
-           (test-round-trip [false nil (long 2) (byte 1) (short 6) (int 4) (double 3.14) (float 2) BigDecimal/ONE]))
-        "primitives")
-
-  (t/is (= {:vs ["Hello"
-                 (ByteBuffer/wrap (byte-array [1, 2, 3]))
-                 (ByteBuffer/wrap (byte-array [1, 2, 3]))]
-            :vec-types [VarCharVector VarBinaryVector VarBinaryVector]}
-           (test-round-trip ["Hello"
-                             (byte-array [1 2 3])
-                             (ByteBuffer/wrap (byte-array [1 2 3]))]))
-        "binary types")
-
-  (t/is (= {:vs [#xt/zdt "1999-01-01Z[UTC]"
-                 #xt/zdt "2021-09-02T13:54:35.809Z[UTC]"
-                 #xt/zdt "2021-09-02T15:54:35.809+02:00[Europe/Stockholm]"
-                 #xt/zdt "2021-09-02T15:54:35.809+02:00"
-                 #xt/zdt "1970-01-01T01:00:00.000001Z[UTC]"]
-            :vec-types (repeat 5 TimeStampMicroTZVector)}
-           (test-round-trip [#inst "1999"
-                             (time/->instant #inst "2021-09-02T13:54:35.809Z")
-                             (ZonedDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #xt/zone "Europe/Stockholm")
-                             (OffsetDateTime/ofInstant (time/->instant #inst "2021-09-02T13:54:35.809Z") #xt/zone "+02:00")
-                             (Instant/ofEpochSecond 3600 1234)]))
-        "timestamp types")
-
-  (let [vs [:foo :foo/bar #uuid "97a392d5-5e3f-406f-9651-a828ee79b156" (URI/create "https://xtdb.com") #xt/clj-form (fn [a b] (+ a b))]]
-    (t/is (= {:vs vs
-              :vec-types [KeywordVector KeywordVector UuidVector UriVector TransitVector]}
-             (test-round-trip vs))
-          "extension types")))
-
-(t/deftest decimal-vector-test
-  (let [vs [BigDecimal/ONE 123.45M 12.3M]]
-    (->> "BigDecimal can be round tripped"
-         (t/is (= {:vs vs
-                   :vec-types [DecimalVector DecimalVector DecimalVector]}
-                  (test-round-trip vs))))))
-
-(t/deftest date-vector-test
-  (let [vs [(LocalDate/of 2007 12 11)]]
-    (->> "LocalDate can be round tripped through DAY date vectors"
-         (t/is (= {:vs vs
-                   :vec-types [DateDayVector]}
-                  (test-round-trip vs))))
-
-    (->> "LocalDate can be read from MILLISECOND date vectors"
-         (t/is (= vs (:vs (test-read (constantly #xt.arrow/type [:date :milli])
-                                     (fn [^VectorWriter w ^LocalDate v]
-                                       (.writeLong w (long (.toEpochDay v))))
-                                     vs)))))))
-
-(t/deftest time-vector-test
-  (let [secs [(LocalTime/of 13 1 14 0)]
-        micros [(LocalTime/of 13 1 14 1e3)]
-        millis [(LocalTime/of 13 1 14 1e6)]
-        nanos [(LocalTime/of 13 1 14 1e8)]
-        all (concat secs millis micros nanos)]
-    (->> "LocalTime can be round tripped through NANO time vectors"
-         (t/is (= {:vs all
-                   :vec-types (map (constantly TimeNanoVector) all)}
-                  (test-round-trip all))))
-
-    (->> "LocalTime can be read from SECOND time vectors"
-         (t/is (= secs (:vs (test-read (constantly #xt.arrow/type [:time-local :second])
-                                       (fn [^VectorWriter w, ^LocalTime v]
-                                         (.writeLong w (.toSecondOfDay v)))
-                                       secs)))))
-
-    (let [millis+ (concat millis secs)]
-      (->> "LocalTime can be read from MILLI time vectors"
-           (t/is (= millis+ (:vs (test-read (constantly #xt.arrow/type [:time-local :milli])
-                                            (fn [^VectorWriter w, ^LocalTime v]
-                                              (.writeLong w (int (quot (.toNanoOfDay v) 1e6))))
-                                            millis+))))))
-
-    (let [micros+ (concat micros millis secs)]
-      (->> "LocalTime can be read from MICRO time vectors"
-           (t/is (= micros+ (:vs (test-read (constantly #xt.arrow/type [:time-local :micro])
-                                            (fn [^VectorWriter w, ^LocalTime v]
-                                              (.writeLong w (long (quot (.toNanoOfDay v) 1e3))))
-                                            micros+))))))))
-
-(t/deftest interval-vector-test
-  ;; for years/months we lose the years as a separate component, it has to be folded into months.
-  (let [iym #xt/interval "P35M"]
-    (t/is (= [iym]
-             (:vs (test-read (constantly #xt.arrow/type [:interval :year-month])
-                             (fn [^VectorWriter w, ^Interval v]
-                               (.writeObject w v))
-                             [iym])))))
-
-  (let [idt #xt/interval "P1434DT0.023S"]
-    (t/is (= [idt]
-             (:vs (test-read (constantly #xt.arrow/type [:interval :day-time])
-                             (fn [^VectorWriter w, ^Interval v]
-                               (.writeObject w v))
-                             [idt])))))
-
-  (let [imdm #xt/interval "P33M244DT0.003443S"]
-    (t/is (= {:vs [imdm]
-              :vec-types [IntervalMonthDayMicroVector]}
-             (test-round-trip [imdm]))))
-
-  (let [imdn #xt/interval "P33M244DT0.003444443S"]
-    (t/is (= {:vs [imdn]
-              :vec-types [IntervalMonthDayNanoVector]}
-             (test-round-trip [imdn])))))
 
 (t/deftest test-merge-col-types
   (t/is (= :utf8 (types/merge-col-types :utf8 :utf8)))
@@ -332,13 +192,6 @@
 
              (types/merge-fields #xt/field ["struct" :struct ["foo" :struct ["bibble" :bool]]]
                                  #xt/field ["struct" :struct ["foo" :utf8] ["bar" :i64]])))))
-
-(t/deftest test-reg-rountrip
-  (let [vs [(RegClass. 101)
-            (RegProc. 750)]]
-    (t/is (= {:vs vs
-              :vec-types [RegClassVector RegProcVector]}
-             (test-round-trip vs)))))
 
 (t/deftest test-npe-on-empty-list-children-4721
   (t/testing "merge fields with empty list children shouldn't throw NPE"

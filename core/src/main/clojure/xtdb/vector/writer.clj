@@ -8,20 +8,13 @@
            (java.nio ByteBuffer)
            (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZonedDateTime)
            (java.util Date List Map Set UUID)
-           (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector ValueVector)
-           (org.apache.arrow.vector.types.pojo Field FieldType Schema)
            (xtdb.arrow Relation RelationReader RelationWriter)
            xtdb.error.Anomaly
            xtdb.time.Interval
            xtdb.Types
-           (xtdb.types ClojureForm ZonedDateTimeRange)
-           (xtdb.vector FieldVectorWriters OldRelationWriter)))
+           (xtdb.types ClojureForm ZonedDateTimeRange)))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(defn ->writer ^xtdb.vector.IVectorWriter [arrow-vec]
-  (FieldVectorWriters/writerFor arrow-vec))
 
 (defn value->arrow-type [v] (Types/valueToArrowType v))
 
@@ -135,42 +128,6 @@
   Anomaly
   (value->col-type [_] :transit))
 
-(defn write-vec! [^ValueVector v, vs]
-  (.clear v)
-
-  (let [writer (->writer v)]
-    (doseq [v vs]
-      (.writeObject writer v))
-
-    (.getAsReader writer)
-
-    v))
-
-(defn ->vec-writer ^xtdb.vector.IVectorWriter [^BufferAllocator allocator, ^String col-name, ^FieldType field-type]
-  (->writer (.createNewSingleVector field-type col-name allocator nil)))
-
-(defn ->rel-writer
-  (^xtdb.arrow.RelationWriter [^BufferAllocator allocator]
-   (OldRelationWriter. allocator))
-  (^xtdb.arrow.RelationWriter [^BufferAllocator allocator, ^Schema schema]
-   (OldRelationWriter. allocator schema)))
-
-(defmulti open-vec (fn [_allocator col-name-or-field _vs]
-                     (if (instance? Field col-name-or-field)
-                       :field
-                       :col-name)))
-
-(alter-meta! #'open-vec assoc :tag ValueVector)
-
-(defmethod open-vec :col-name [^BufferAllocator allocator, ^String col-name, vs]
-  (util/with-close-on-catch [res (-> (FieldType/notNullable #xt.arrow/type :union)
-                                     (.createNewSingleVector (str col-name) allocator nil))]
-    (doto res (write-vec! vs))))
-
-(defmethod open-vec :field [allocator ^Field field vs]
-  (util/with-close-on-catch [res (.createVector field allocator)]
-    (doto res (write-vec! vs))))
-
 (defn open-args ^xtdb.arrow.RelationReader [allocator args]
   (let [args-map (->> args
                       (into {} (map-indexed (fn [idx v]
@@ -181,12 +138,6 @@
     (Relation/openFromRows allocator [args-map])))
 
 (def empty-args RelationReader/DUAL)
-
-(defn vec-wtr->rdr ^xtdb.arrow.VectorReader [^xtdb.arrow.VectorWriter w]
-  (.getAsReader w))
-
-(defn rel-wtr->rdr ^xtdb.arrow.RelationReader [^xtdb.arrow.RelationWriter w]
-  (.getAsReader w))
 
 (defn append-rel [^RelationWriter dest-rel, ^RelationReader src-rel]
   (.append dest-rel src-rel))
