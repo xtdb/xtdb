@@ -594,3 +594,8 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                (xt/q client "SELECT * FROM docs ORDER BY _id"))
 
             "submit-tx through a connection awaits the previous transaction"))))
+
+(t/deftest execute-two-transactions-4809
+  (let [client (xt/client {:port (.getServerPort tu/*node*)})]
+    (xt/execute-tx client [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
+    (xt/execute-tx client [[:put-docs :docs {:xt/id :bar, :name "Bar"}]])))

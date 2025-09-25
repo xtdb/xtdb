@@ -10,6 +10,7 @@
   (:require [clojure.string :as str]
             [next.jdbc :as jdbc]
             [xtdb.backtick :as backtick]
+            [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.protocols :as xtp]
@@ -383,10 +384,8 @@
       (setAwaitToken [_ await-token]
         (loop []
           (let [old-token (.get !await-token)]
-            (when (or (nil? old-token)
-                      (and await-token
-                           (< ^long (parse-long old-token) ^long (parse-long await-token))))
-              (when-not (.compareAndSet !await-token old-token await-token)
+            (when (or (nil? old-token) await-token)
+              (when-not (.compareAndSet !await-token old-token (basis/merge-tx-tokens old-token await-token))
                 (recur))))))
 
       (createConnectionBuilder [_]
