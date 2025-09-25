@@ -234,26 +234,31 @@
                         (cond-> node (-> (update :await-token (fnil identity (xtp/await-token node)))
                                          (doto (-> :await-token (->> (xt-log/await-node node)))))))
 
-         ^IQuerySource q-src (if node
-                               (util/component node ::q/query-source)
-                               (q/->query-source {:allocator allocator
-                                                  :ref-ctr (RefCounter.)}))
+         [^IQuerySource q-src close-q-src?] (if node
+                                              [(util/component node ::q/query-source) false]
+                                              [(q/->query-source {:allocator allocator
+                                                                  :ref-ctr (RefCounter.)})
+                                               true])]
 
-         ^PreparedQuery pq (.prepareQuery q-src query (or (db/<-node node) Database$Catalog/EMPTY) query-opts)]
+     (try
+       (let [^PreparedQuery pq (.prepareQuery q-src query (or (db/<-node node) Database$Catalog/EMPTY) query-opts)]
 
-     (util/with-open [^RelationReader args-rel (if args
-                                                 (vw/open-args allocator args)
-                                                 vw/empty-args)
-                      res (.openQuery pq (-> (select-keys query-opts [:snapshot-token :current-time :await-token :table-args :default-tz])
-                                             (assoc :args args-rel, :close-args? false)))]
-       (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
-                      (cond->> (not preserve-pages?) (into [] cat)))]
-         (if with-col-types?
-           {:res rows,
-            :col-types (->> (.getResultFields res)
-                            (into {} (map (juxt #(symbol (.getName ^Field %))
-                                                types/field->col-type))))}
-           rows))))))
+         (util/with-open [^RelationReader args-rel (if args
+                                                     (vw/open-args allocator args)
+                                                     vw/empty-args)
+                          res (.openQuery pq (-> (select-keys query-opts [:snapshot-token :current-time :await-token :table-args :default-tz])
+                                                 (assoc :args args-rel, :close-args? false)))]
+           (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
+                          (cond->> (not preserve-pages?) (into [] cat)))]
+             (if with-col-types?
+               {:res rows,
+                :col-types (->> (.getResultFields res)
+                                (into {} (map (juxt #(symbol (.getName ^Field %))
+                                                    types/field->col-type))))}
+               rows))))
+       (finally
+         (when close-q-src?
+           (util/close q-src)))))))
 
 (t/deftest round-trip-cursor
   (with-allocator
