@@ -11,8 +11,7 @@
   (:import [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            (org.apache.arrow.vector.types.pojo FieldType)
-           (xtdb.arrow ListValueReader ValueReader Vector VectorIndirection VectorPosition)
-           (xtdb.vector IndirectMultiVectorReader)))
+           (xtdb.arrow ListValueReader MultiVectorReader ValueReader Vector VectorIndirection VectorPosition)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -169,7 +168,7 @@
             str-rdr (vr/vec->reader struct-str-vec)
             rdr-ind (VectorIndirection/selection (int-array (concat (repeat 2 0) (repeat 2 1))))
             vec-ind (VectorIndirection/selection (int-array (concat (range 2) (range 2))))
-            indirect-rdr (IndirectMultiVectorReader. "foo" [int-rdr str-rdr] rdr-ind vec-ind)
+            indirect-rdr (MultiVectorReader. "foo" [int-rdr str-rdr] rdr-ind vec-ind)
             vpos (VectorPosition/build)
             value-rdr (.valueReader indirect-rdr vpos)]
 

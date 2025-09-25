@@ -17,7 +17,7 @@
            (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb.arrow VectorIndirection VectorReader)
            (xtdb.types ClojureForm)
-           (xtdb.vector IndirectMultiVectorReader)))
+           (xtdb.arrow MultiVectorReader)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -163,9 +163,9 @@
                              (apply concat))
           vec-indirects (mapcat #(range (.getValueCount ^VectorReader %)) rdrs)
           [rdr-indirects vec-indirects] (same-shuffle rdr-indirects vec-indirects)]
-      (IndirectMultiVectorReader. "foo" rdrs
-                                  (VectorIndirection/selection (int-array rdr-indirects))
-                                  (VectorIndirection/selection (int-array vec-indirects))))))
+      (MultiVectorReader. "foo" rdrs
+                          (VectorIndirection/selection (int-array rdr-indirects))
+                          (VectorIndirection/selection (int-array vec-indirects))))))
 
 #_
 (defspec ^:integration read-multi-vec 20

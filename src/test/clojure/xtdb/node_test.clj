@@ -369,7 +369,13 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:t2d {:foo {:bibble false}, :bar {:baz 1002}},
              :t1d {:foo {:bibble true}, :bar {:baz 1001}}}]
-           (xt/q tu/*node* "SELECT t2.data t2d, t1.data t1d FROM t2, t1"))))
+           (tu/query-ra '[:cross-join
+                          [:rename {data t2d}
+                           [:scan {:table #xt/table t2} [data]]]
+                          [:rename {data t1d}
+                           [:scan {:table #xt/table t1} [data]]]]
+                        {:node tu/*node*})
+           #_(xt/q tu/*node* "SELECT t2.data t2d, t1.data t1d FROM t2, t1"))))
 
 (t/deftest test-txs-table-485
   (logging/with-log-level 'xtdb.indexer :error

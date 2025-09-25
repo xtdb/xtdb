@@ -153,15 +153,10 @@ constructor(
         }
 
     private fun openSnapshot(trie: MemoryHashTrie): Snapshot {
-        // this can be openSlice once scan et al use new-style vectors
-        liveRelation.openDirectSlice(al).use { wmLiveRel ->
-            wmLiveRel.openAsRoot(al).closeOnCatch { root ->
-                val relReader = RelationReader.from(root)
+        liveRelation.openDirectSlice(al).closeOnCatch { wmLiveRel ->
+            val wmLiveTrie = trie.withIidReader(wmLiveRel["_iid"])
 
-                val wmLiveTrie = trie.withIidReader(relReader["_iid"])
-
-                return Snapshot(liveRelation.fields, relReader, wmLiveTrie)
-            }
+            return Snapshot(liveRelation.fields, wmLiveRel, wmLiveTrie)
         }
     }
 
