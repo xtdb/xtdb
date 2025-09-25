@@ -25,11 +25,6 @@ import java.util.*
 import java.util.concurrent.CompletableFuture
 import com.google.protobuf.Any as ProtoAny
 
-typealias LogOffset = Long
-typealias LogTimestamp = Instant
-typealias MessageId = Long
-
-typealias LogClusterAlias = String
 
 interface Log : AutoCloseable {
 
