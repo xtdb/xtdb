@@ -6,7 +6,6 @@ import xtdb.arrow.RelationReader
 import xtdb.log.proto.TemporalMetadata
 import xtdb.metadata.PageMetadata
 import xtdb.operator.scan.Metadata
-import xtdb.operator.scan.RootCache
 import xtdb.trie.HashTrie
 
 interface Segment<L> : AutoCloseable {
@@ -25,10 +24,7 @@ interface Segment<L> : AutoCloseable {
         override fun testMetadata(): Boolean
         override val temporalMetadata: TemporalMetadata
 
-        // two very similar functions here - `openDataPage` for the compactor, `loadDataPage` for scan.
-
         fun openDataPage(al: BufferAllocator): RelationReader
-        fun loadDataPage(rootCache: RootCache): RelationReader
     }
 
     fun page(leaf: L): Page

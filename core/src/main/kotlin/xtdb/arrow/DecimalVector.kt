@@ -8,8 +8,9 @@ import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Unsupported
 import xtdb.util.Hasher
-import xtdb.vector.DECIMAL_ERROR_KEY
 import java.math.BigDecimal
+
+private const val DECIMAL_ERROR_KEY = "xtdb.error/decimal-error"
 
 class DecimalVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,

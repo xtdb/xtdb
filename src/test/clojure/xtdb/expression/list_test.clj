@@ -4,8 +4,7 @@
             [xtdb.expression.list :as list-expr]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.util :as util])
   (:import (org.apache.arrow.vector.types.pojo Field)
            (xtdb.arrow ListExpression Vector)))
 
@@ -58,9 +57,9 @@
         {:keys [->list-expr ^Field field]} (list-expr/compile-list-expr expr {})
         ^ListExpression list-expr (->list-expr {} {})
         run-write-test (fn [start count]
-                         (util/with-open [out-vec (tu/open-vec field)]
-                                         (.writeTo list-expr out-vec start count)
-                                         (vec (.getAsList (vw/vec-wtr->rdr out-vec)))))]
+                         (util/with-open [out-vec (Vector/open tu/*allocator* field)]
+                           (.writeTo list-expr out-vec start count)
+                           (vec (.getAsList out-vec))))]
 
     (t/is (= [1 2 3 4 5 6 7 8 9 10]
              (run-write-test 0 (.getSize list-expr)))

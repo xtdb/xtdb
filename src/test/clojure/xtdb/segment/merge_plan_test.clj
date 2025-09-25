@@ -79,7 +79,6 @@
 
 (defrecord MockPage [page metadata-matches? temporal-metadata]
   Segment$Page
-  (loadDataPage [_ _root-cache] (throw (UnsupportedOperationException.)))
   (testMetadata [_] metadata-matches?)
   (getTemporalMetadata [_] temporal-metadata))
 

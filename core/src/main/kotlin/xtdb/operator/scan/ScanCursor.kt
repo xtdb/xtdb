@@ -23,7 +23,7 @@ import java.util.Comparator.comparing
 import java.util.function.Consumer
 
 class ScanCursor(
-    private val al: BufferAllocator, private val rootCache: RootCache,
+    private val al: BufferAllocator,
 
     private val colNames: Set<ColumnName>, private val colPreds: Map<ColumnName, SelectionSpec>,
     private val temporalBounds: TemporalBounds,
@@ -51,8 +51,6 @@ class ScanCursor(
         val isValidPtr = ArrowBufPointer()
         val iidPred = colPreds["_iid"]
         while (mergeTasks.hasNext()) {
-            rootCache.reset()
-
             val task = mergeTasks.next()
             val taskPath = task.path
             val mergeQueue = PriorityQueue<LeafPointer>(comparing({ it.evPtr }, EventRowPointer.comparator()))
@@ -74,7 +72,7 @@ class ScanCursor(
                         val evPtr = EventRowPointer(leafReader, taskPath)
                         if (!evPtr.isValid(isValidPtr, taskPath)) return@forEachIndexed
                         val passesBloomFilter =
-                            skipBloomCheck || checkBloomFilter(leafReader, evPtr.index, iidPushdownBloom!!)
+                            skipBloomCheck || checkBloomFilter(leafReader, evPtr.index, iidPushdownBloom)
                         if (passesBloomFilter) mergeQueue.add(LeafPointer(evPtr, idx))
                     }
 
@@ -133,7 +131,5 @@ class ScanCursor(
         return false
     }
 
-    override fun close() {
-        rootCache.close()
-    }
+    override fun close() = Unit
 }

@@ -3,7 +3,6 @@ package xtdb.vector.extensions
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.FixedSizeBinaryVector
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.vector.setBytes
 import java.nio.ByteBuffer
 import java.util.*
 
@@ -12,6 +11,13 @@ class UuidVector(name: String, allocator: BufferAllocator, fieldType: FieldType)
 
     init {
         require(fieldType.type == UuidType)
+    }
+
+    companion object {
+        private fun FixedSizeBinaryVector.setBytes(idx: Int, bytes: ByteBuffer) {
+            setIndexDefined(idx)
+            dataBuffer.setBytes((idx * byteWidth).toLong(), bytes)
+        }
     }
 
     override fun getObject0(index: Int): UUID {

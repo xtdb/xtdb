@@ -11,11 +11,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import xtdb.types.ClojureForm
-import xtdb.types.ZonedDateTimeRange
-import xtdb.util.Hasher
-import xtdb.vector.ValueVectorReader.from
-import java.time.ZonedDateTime
 import java.util.*
 
 class XtExtensionVectorTest {
@@ -45,11 +40,12 @@ class XtExtensionVectorTest {
             val newVector = uuidVector
                 .getTransferPair(uuidField, al)
                 .also { it.transfer() }
-                .to as FieldVector
+                .to as UuidVector
 
             assertEquals(uuidField, newVector.field)
             assertEquals(2, newVector.valueCount)
-            assertEquals(listOf(uuid1, uuid2), from(newVector).asList)
+            assertEquals(uuid1, newVector.getObject(0))
+            assertEquals(uuid2, newVector.getObject(1))
 
             newVector.close()
         }
@@ -59,36 +55,5 @@ class XtExtensionVectorTest {
     fun `test correct fieldType` () {
         assertThrows<IllegalArgumentException> { UuidVector("uuid", al, FieldType.nullable(MinorType.INT.type)) }
         assertThrows<IllegalArgumentException> { TransitVector("transit", al, FieldType.nullable(MinorType.INT.type)) }
-    }
-
-    @Test
-    fun `test ExtensionVector hashCode` () {
-        UuidVector("uuid", al, FieldType.notNullable(UuidType)).use {  uuidVector ->
-            uuidVector.setObject(0, UUID.randomUUID())
-            uuidVector.valueCount = 1
-
-            val rdr = from(uuidVector)
-            val hasher = Hasher.Xx()
-            rdr.hashCode(0, hasher)
-        }
-
-        TransitVector("transit", al, FieldType.notNullable(TransitType)).use {  transitVector ->
-            transitVector.setObject(0, ClojureForm(clojure.lang.Symbol.create("foo")))
-            transitVector.valueCount = 1
-
-            val rdr = from(transitVector)
-            val hasher = Hasher.Xx()
-            rdr.hashCode(0, hasher)
-
-        }
-
-        TsTzRangeVector("tstzrange", al, FieldType.notNullable(TsTzRangeType)).use {  tstzrangeVector ->
-            tstzrangeVector.setObject(0, ZonedDateTimeRange(ZonedDateTime.now(), ZonedDateTime.now()))
-            tstzrangeVector.valueCount = 1
-
-            val rdr = from(tstzrangeVector)
-            val hasher = Hasher.Xx()
-            rdr.hashCode(0, hasher)
-        }
     }
 }

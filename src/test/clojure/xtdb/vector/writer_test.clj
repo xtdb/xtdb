@@ -261,26 +261,3 @@
     (with-open [rel (tu/open-rel {:x x})]
       (t/is (= x (mapv :x (.getAsMaps rel)))))))
 
-(deftest writes-map-vector
-  (let [maps [{}
-              {"mal" "Malcolm", "jdt" "Jeremy"}
-              {"jms" "James"}]]
-    (with-open [map-vec (Vector/open tu/*allocator*
-                                     #xt/field ["x" [:map {:sorted? true}]
-                                                ["entries" :struct
-                                                 ["username" :utf8]
-                                                 ["first-name" :utf8]]])]
-
-      ;; with maps, we write them as [:list [:struct #{k v}]]
-      (let [entry-wtr (.getListElements map-vec)
-            k-wtr (.vectorFor entry-wtr "username")
-            v-wtr (.vectorFor entry-wtr "first-name")]
-        (doseq [m maps]
-          (doseq [[k v] (sort-by key m)]
-            (.writeObject k-wtr k)
-            (.writeObject v-wtr v)
-            (.endStruct entry-wtr))
-
-          (.endList map-vec))
-
-        (t/is (= maps (.getAsList (vw/vec-wtr->rdr map-vec))))))))

@@ -1,9 +1,9 @@
 package xtdb.operator.join
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.NullVector
 import org.apache.arrow.vector.types.pojo.Schema
 import org.roaringbitmap.RoaringBitmap
+import xtdb.arrow.NullVector
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector.Companion.openVector
@@ -12,7 +12,6 @@ import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.types.FieldName
 import xtdb.types.Type.Companion.I32
 import xtdb.types.Type.Companion.ofType
-import xtdb.vector.ValueVectorReader.from
 import java.util.function.IntConsumer
 import java.util.function.IntUnaryOperator
 
@@ -112,7 +111,7 @@ class BuildSide(
                 val buildRel = dataRel.select(idxs)
                 val probeRel =
                     RelationReader
-                        .from(nullColNames.map { from(NullVector(it, 1)) })
+                        .from(nullColNames.map { NullVector(it, true, 1) })
                         .select(IntArray(idxs.size))
 
                 if (joinType.outerJoinType == JoinType.OuterJoinType.LEFT_FLIPPED)

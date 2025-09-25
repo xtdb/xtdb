@@ -477,7 +477,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (t/is (= #{{} {:new 1}}
            (set (xt/q tu/*node* "SELECT * EXCLUDE (_id, b) RENAME a AS new FROM foo"))))
 
-  (xt/submit-tx tu/*node*
+  (xt/execute-tx tu/*node*
                 [[:sql "INSERT INTO bing (SELECT * FROM foo)"]])
 
   (t/is (= #{{:a 1, :xt/id 1} {:b 2, :xt/id 2}}
