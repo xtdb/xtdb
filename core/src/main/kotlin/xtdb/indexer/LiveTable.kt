@@ -5,6 +5,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.TransactionKey
 import xtdb.arrow.*
+import xtdb.arrow.VectorWriter
 import xtdb.log.proto.TrieMetadata
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
@@ -126,7 +127,7 @@ constructor(
         fun commit(): LiveTable {
             val pos = liveRelation.rowCount
             trieMetadataCalculator.update(startPos, pos)
-            hllCalculator.update(opVec.asReader, startPos, pos)
+            hllCalculator.update(opVec, startPos, pos)
 
             liveTrie = transientTrie
 
@@ -172,7 +173,6 @@ constructor(
     )
 
     fun finishBlock(blockIdx: BlockIndex): FinishedBlock? {
-        liveRelation.vectors.forEach { it.asReader }
         val rowCount = liveRelation.rowCount
         if (rowCount == 0) return null
         val trieKey = Trie.l0Key(blockIdx).toString()

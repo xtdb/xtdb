@@ -23,11 +23,6 @@ internal data class InvalidCopySourceException(val src: FieldType, val dest: Fie
 
 interface VectorWriter : VectorReader, AutoCloseable {
 
-    /**
-     * to ease xtdb.arrow migration - once xtdb.vector is gone we can inline this
-     */
-    val asReader: VectorReader get() = this
-
     override val nullable: Boolean
 
     fun writeUndefined()
