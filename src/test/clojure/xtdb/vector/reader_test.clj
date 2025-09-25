@@ -65,7 +65,7 @@
 (t/deftest ^:property copy-two-distinct-single-typed-vectors
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
-   (prop/for-all [[vec-gen1 vec-gen2] tg/two-distinct-single-type-vecs-gen]
+   (prop/for-all [[vec-gen1 vec-gen2] (tg/two-distinct-single-type-vecs-gen)]
                  (with-open [^Vector src-vec1 (tg/vec-gen->arrow-vec tu/*allocator* vec-gen1)
                              ^Vector src-vec2 (tg/vec-gen->arrow-vec tu/*allocator* vec-gen2)
                              ^Vector duv (merge-vectors-into-duv tu/*allocator* [src-vec1 src-vec2])]

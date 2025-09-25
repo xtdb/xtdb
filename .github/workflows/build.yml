@@ -178,12 +178,11 @@ jobs:
   #     - name: SLT 2
   #       timeout-minutes: 40
 
-  # FIXME #4721
-  # property-test:
-  #   uses: ./.github/workflows/property-test.yml
-  #   secrets: inherit
-  #   with:
-  #     iteration_count: "100"
-  #   permissions:
-  #     contents: read
-  #     checks: write
+  property-test:
+    uses: ./.github/workflows/property-test.yml
+    secrets: inherit
+    with:
+      iteration_count: "100"
+    permissions:
+      contents: read
+      checks: write

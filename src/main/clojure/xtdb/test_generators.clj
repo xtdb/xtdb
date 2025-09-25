@@ -147,9 +147,14 @@
      :vs vs
      :type element-gen}))
 
-(defn single-type-vector-vs-gen [min-length max-length]
-  (gen/let [type-gen (gen/elements simple-type-gens)]
-    (typed-vector-vs-gen type-gen min-length max-length)))
+;; Can exclude specific type generators on errors
+(defn single-type-vector-vs-gen 
+  ([min-length max-length]
+   (single-type-vector-vs-gen min-length max-length #{}))
+  ([min-length max-length excluded-types]
+   (let [available-gens (remove excluded-types simple-type-gens)]
+     (gen/let [type-gen (gen/elements available-gens)]
+       (typed-vector-vs-gen type-gen min-length max-length)))))
 
 (defn dense-union-vector-vs-gen
   [min-length max-length]
@@ -165,13 +170,16 @@
    [[3 (single-type-vector-vs-gen length length)]
     [1 (dense-union-vector-vs-gen length length)]]))
 
-(def two-distinct-single-type-vecs-gen
-  (gen/let [vec1 (single-type-vector-vs-gen 1 100)
-            vec2 (gen/such-that #(and (not= (:type %) (:type vec1))
-                                      (not= (:vec-name %) (:vec-name vec1)))
-                                (single-type-vector-vs-gen 1 100)
-                                100)]
-    [vec1 vec2]))
+(defn two-distinct-single-type-vecs-gen
+  ([]
+   (two-distinct-single-type-vecs-gen #{}))
+  ([excluded-types]
+   (gen/let [vec1 (single-type-vector-vs-gen 1 100 excluded-types)
+             vec2 (gen/such-that #(and (not= (:type %) (:type vec1))
+                                       (not= (:vec-name %) (:vec-name vec1)))
+                                 (single-type-vector-vs-gen 1 100 excluded-types)
+                                 100)]
+     [vec1 vec2])))
 
 (def two-distinct-duvs-gen
   (gen/let [duv1 (dense-union-vector-vs-gen 1 100)

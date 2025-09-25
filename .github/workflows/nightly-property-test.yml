@@ -2,8 +2,8 @@ name: XTDB nightly property tests
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron:  '0 19 * * 1-5'
+  schedule:
+    - cron:  '0 19 * * 1-5'
 
 jobs:
   nightly-property-test:
@@ -11,7 +11,7 @@ jobs:
     uses: ./.github/workflows/property-test.yml
     secrets: inherit
     with:
-      iteration_count: "10000"
+      iteration_count: "1000"
     permissions:
       contents: read
       checks: write

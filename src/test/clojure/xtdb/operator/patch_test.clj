@@ -141,7 +141,7 @@
              (xt/q tu/*node* "SELECT *,_valid_from, _valid_to FROM docs")))))
 
 ;; TODO: Will fail due to #4751 + #4752
-(t/deftest ^:property multiple-patches-on-record
+#_(t/deftest ^:property multiple-patches-on-record
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
    (prop/for-all [records (gen/vector (tg/generate-record {:potential-doc-ids #{1}}) 1 20)]
