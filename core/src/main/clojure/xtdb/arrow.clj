@@ -46,5 +46,4 @@
        (update res :batches vec)))))
 
 (defn read-hash-trie-file [path-ish]
-  (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (Files/readAllBytes (util/->path path-ish)) (NullVector. "_iid" 0))))
-
+  (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (Files/readAllBytes (util/->path path-ish)) (NullVector. "_iid" true 0))))
