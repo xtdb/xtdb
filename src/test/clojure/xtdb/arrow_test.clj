@@ -1,12 +1,11 @@
 (ns xtdb.arrow-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.test-util :as tu])
   (:import org.apache.arrow.vector.types.pojo.Schema
-           [xtdb.arrow Vector Relation]))
+           [xtdb.arrow Relation Vector]))
 
-(t/use-fixtures :each tu/with-node tu/with-allocator)
+(t/use-fixtures :each tu/with-allocator tu/with-mock-clock tu/with-node)
 
 (t/deftest test-extensiontype-in-struct-transfer-pairs-3305
   (xt/submit-tx tu/*node* [[:put-docs :table
@@ -75,3 +74,22 @@
   (xt/execute-tx tu/*node* [[:put-docs :docs {:a false, :xt/id 1} {:a 0, :xt/id 1}]])
   (t/is (= [{:a 0 :xt/id 1}]
            (xt/q tu/*node* "SELECT * FROM docs ORDER BY _id"))))
+
+(t/deftest field-type-mismatch-timestamp-4613
+  (let [query "WITH data AS (
+                 SELECT _system_from AS t
+                 FROM docs
+               )
+               (
+                 SELECT t::timestamp AS t
+                 FROM data
+                 UNION ALL
+                 FROM data
+               )
+               ORDER BY t"]
+    (with-open [conn (.build (.createConnectionBuilder tu/*node*))]
+      (xt/execute-tx conn [[:put-docs :docs {:xt/id 1}]])
+      (t/is (= [{:t #xt/ldt "2019-12-31T19:00"}
+                {:t #xt/zdt "2020-01-01T00:00Z[UTC]"}]
+               (xt/q conn query
+                     {:default-tz "America/New_York"}))))))
