@@ -1258,6 +1258,11 @@
 
     #xt/interval "PT2H-3M" '(abs #xt/interval "PT-2H3M")))
 
+(t/deftest test-duration-abs
+  (t/testing "Duration ABS function"
+    (t/is (= #xt/duration "PT1S" (et/project1 '(abs #xt/duration "PT1S") {})))
+    (t/is (= #xt/duration "PT1S" (et/project1 '(abs #xt/duration "PT-1S") {})))))
+
 (def single-interval-constructor-gen
   (->> (tcg/hash-map
         :unit (tcg/elements ["YEAR" "MONTH" "DAY" "HOUR" "MINUTE" "SECOND"])

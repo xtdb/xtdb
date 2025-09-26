@@ -424,3 +424,10 @@
              :xt/valid-from #xt/zdt "2020-01-06T00:00Z[UTC]"}]
 
            (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs FOR VALID_TIME ALL ORDER BY _valid_from"))))
+
+(t/deftest duration-abs-sql-test
+  (t/testing "ABS function works with duration values"
+    (t/is (= {:result #xt/duration "PT1S"}
+             (first (xt/q tu/*node* "SELECT ABS(DURATION 'PT1S') AS result"))))
+    (t/is (= {:result #xt/duration "PT1S"}
+             (first (xt/q tu/*node* "SELECT ABS(DURATION 'PT-1S') AS result"))))))
