@@ -13,9 +13,13 @@ export default defineConfig({
         starlight({
             title: 'XTDB',
 
-            social: {
-                github: 'https://github.com/xtdb/xtdb',
-            },
+            social: [
+                {
+                    icon: 'github',
+                    href: 'https://github.com/xtdb/xtdb',
+                    label: 'GitHub',
+                },
+            ],
 
             favicon: '/shared/favicon.svg',
 
