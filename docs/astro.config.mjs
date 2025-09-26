@@ -3,7 +3,7 @@ import starlight from '@astrojs/starlight';
 import tailwind from '@astrojs/tailwind';
 import yaml from '@rollup/plugin-yaml';
 import swup from '@swup/astro';
-import adoc from '/shared/src/adoc';
+import adoc from './shared/src/adoc.js';
 
 // https://astro.build/config
 export default defineConfig({
@@ -13,9 +13,13 @@ export default defineConfig({
         starlight({
             title: 'XTDB',
 
-            social: {
-                github: 'https://github.com/xtdb/xtdb',
-            },
+            social: [
+                {
+                    icon: 'github',
+                    href: 'https://github.com/xtdb/xtdb',
+                    label: 'GitHub',
+                },
+            ],
 
             favicon: '/shared/favicon.svg',
 
