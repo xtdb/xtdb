@@ -37,3 +37,50 @@
 
       (finally
         (util/delete-dir tmp-root)))))
+
+(t/deftest test-compactor-reset-specific-table
+  (let [node-root (util/->path "src/test/resources/xtdb/compactor-reset-node")
+        tmp-root (util/->path "src/test/resources/xtdb/compactor-reset-node-tmp-specific")]
+    (util/delete-dir tmp-root)
+    (try
+      (util/copy-dir node-root tmp-root)
+
+      ;; Test resetting specific table only
+      (cr/reset-compactor! (doto (Xtdb$Config.)
+                             (.log (Log/localLog (.resolve tmp-root "log")))
+                             (.storage (Storage/local (.resolve tmp-root "objects"))))
+                           "xtdb"
+                           {:dry-run? false, :table-names ["foo"]})
+
+      (with-open [node (tu/->local-node {:node-dir tmp-root, :compactor-threads 0})]
+        (t/is (= [{:xt/id 1, :name "foo", :bar-name "baz"}]
+                 (xt/q node "SELECT f._id, f.name, b.name AS bar_name
+                       FROM foo f
+                       JOIN bar b ON f._id = b._id"))))
+
+      (with-open [node (tu/->local-node {:node-dir tmp-root})]
+        (c/compact-all! node #xt/duration "PT5M")
+        (t/is (= [{:xt/id 1, :name "foo", :bar-name "baz"}]
+                 (xt/q node "SELECT f._id, f.name, b.name AS bar_name
+                       FROM foo f
+                       JOIN bar b ON f._id = b._id"))))
+
+      (finally
+        (util/delete-dir tmp-root)))))
+
+(t/deftest test-compactor-reset-dry-run-with-tables
+  (let [node-root (util/->path "src/test/resources/xtdb/compactor-reset-node")
+        tmp-root (util/->path "src/test/resources/xtdb/compactor-reset-node-tmp-dry")]
+    (util/delete-dir tmp-root)
+    (try
+      (util/copy-dir node-root tmp-root)
+
+      ;; Test dry run with specific tables
+      (t/is (nil? (cr/reset-compactor! (doto (Xtdb$Config.)
+                                         (.log (Log/localLog (.resolve tmp-root "log")))
+                                         (.storage (Storage/local (.resolve tmp-root "objects"))))
+                                       "xtdb"
+                                       {:dry-run? true, :table-names ["foo" "bar"]})))
+
+      (finally
+        (util/delete-dir tmp-root)))))
