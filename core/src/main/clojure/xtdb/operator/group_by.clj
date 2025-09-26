@@ -251,7 +251,13 @@
                                         :to-name 'cnt, :zero-row? zero-row?})
         input-types {:col-types {'sum (types/field->col-type (.getField sum-agg))
                                  'cnt (types/field->col-type (.getField count-agg))}}
-        projecter (->projector to-name '(/ (double sum) cnt) input-types)]
+        ;; For durations, don't convert to double - divide duration by count directly
+        ;; For numeric types, convert to double for precision
+        sum-type (types/field->col-type (.getField sum-agg))
+        avg-formula (if (isa? types/col-type-hierarchy (types/col-type-head sum-type) :duration)
+                      '(/ sum cnt)  ; duration / count = duration
+                      '(/ (double sum) cnt))  ; number / count = double
+        projecter (->projector to-name avg-formula input-types)]
     (reify IAggregateSpecFactory
       (getField [_] (.getField projecter))
 
@@ -272,7 +278,7 @@
             Closeable
             (close [_]
               (util/close sum-agg)
-              (util/close count-agg))))))))
+              (util/close count-agg)))))))))
 
 (defn- ->variance-agg-factory [variance-op {:keys [from-name from-type to-name zero-row?]}]
   (let [countx-agg (->aggregate-factory {:f :count, :from-name from-name, :from-type from-type
