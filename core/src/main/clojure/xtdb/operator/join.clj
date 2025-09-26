@@ -286,7 +286,9 @@
 (defn- ->pushdown-blooms [key-col-names]
   (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
 
-(def ^:dynamic *disk-join-threshold-rows* 100000)
+(def ^:dynamic *disk-join-threshold-rows*
+  (or (some-> (System/getenv "XTDB_JOIN_SPILL_THRESHOLD") parse-long)
+      100000))
 
 (defn ->build-side ^xtdb.operator.join.BuildSide [^BufferAllocator allocator,
                                                   {:keys [fields, key-col-names, track-unmatched-build-idxs?, with-nil-row?]}]
