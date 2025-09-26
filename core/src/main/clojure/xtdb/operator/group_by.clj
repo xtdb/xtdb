@@ -231,9 +231,10 @@
 
 (defmethod ->aggregate-factory :sum [{:keys [from-name from-type] :as agg-opts}]
   (let [to-type (->> (types/flatten-union-types from-type)
-                     ;; TODO handle non-num types, if appropriate? (durations?)
-                     ;; do we want to runtime error, or treat them as nulls?
-                     (filter (comp #(isa? types/col-type-hierarchy % :num) types/col-type-head))
+                     ;; Support both numeric types and duration types
+                     (filter (comp #(or (isa? types/col-type-hierarchy % :num)
+                                        (isa? types/col-type-hierarchy % :duration)) 
+                                   types/col-type-head))
                      (types/least-upper-bound))]
     (reducing-agg-factory (into agg-opts
                                 {:to-type to-type
