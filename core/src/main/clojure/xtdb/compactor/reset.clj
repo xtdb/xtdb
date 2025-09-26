@@ -31,7 +31,10 @@
 (defn- filter-tables [all-tables table-names]
   "Filter tables based on specified table names. If no table names specified, return all tables."
   (if (seq table-names)
-    (filter #(table-matches? % table-names) all-tables)
+    (let [non-empty-names (remove str/blank? table-names)]
+      (if (seq non-empty-names)
+        (filter #(table-matches? % non-empty-names) all-tables)
+        all-tables))
     all-tables))
 
 (defn reset-compactor! [node-opts db-name {:keys [dry-run? table-names]}]
@@ -57,24 +60,26 @@
           
           ;; Validate table names if specified
           (when (seq table-names)
-            (let [all-table-names (set (map (fn [^TableRef t] 
-                                              (let [schema (.getSchemaName t)
-                                                    table-name (.getTableName t)]
-                                                (if (= schema "public")
-                                                  table-name
-                                                  (str schema "." table-name)))) 
-                                            all-tables))
-                  invalid-tables (remove (fn [table-name]
-                                           (or (contains? all-table-names table-name)
-                                               (some (fn [^TableRef t]
-                                                       (table-matches? t [table-name]))
-                                                     all-tables)))
-                                         table-names)]
-              (when (seq invalid-tables)
-                (throw (err/incorrect ::table-not-found 
-                                      (format "Tables not found: %s. Available tables: %s" 
-                                              (str/join ", " invalid-tables)
-                                              (str/join ", " (sort all-table-names))))))))
+            (let [non-empty-names (remove str/blank? table-names)]
+              (when (seq non-empty-names)
+                (let [all-table-names (set (map (fn [^TableRef t] 
+                                                  (let [schema (.getSchemaName t)
+                                                        table-name (.getTableName t)]
+                                                    (if (= schema "public")
+                                                      table-name
+                                                      (str schema "." table-name)))) 
+                                                all-tables))
+                      invalid-tables (remove (fn [table-name]
+                                               (or (contains? all-table-names table-name)
+                                                   (some (fn [^TableRef t]
+                                                           (table-matches? t [table-name]))
+                                                         all-tables)))
+                                             non-empty-names)]
+                  (when (seq invalid-tables)
+                    (throw (err/incorrect ::table-not-found 
+                                          (format "Tables not found: %s. Available tables: %s" 
+                                                  (str/join ", " invalid-tables)
+                                                  (str/join ", " (sort all-table-names))))))))))
           
           (if (seq table-names)
             (log/infof "Processing %d specified table(s): %s" 
