@@ -97,6 +97,18 @@ jobs:
             --set "providerConfig.env.AZURE_USER_MANAGED_IDENTITY_CLIENT_ID=${{ secrets.BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID }}" \
             --set "providerConfig.serviceAccountAnnotations.azure\.workload\.identity/client-id=${{ secrets.BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID }}"
 
+      - name: Remove Monitoring Stack on Failure
+        if: failure() && steps.check-deployment.outcome != 'success'
+        run: |
+          if helm status monitoring -n monitoring >/dev/null 2>&1; then
+            echo "Uninstalling monitoring stack due to benchmark failure..."
+            helm uninstall monitoring -n monitoring || true
+            # Attempt to delete the namespace (ignore if it contains other resources or is already gone)
+            kubectl delete namespace monitoring --ignore-not-found=true || true
+          else
+            echo "Monitoring stack not found; skipping."
+          fi
+
       - name: Compose Slack Message
         id: compose
         if: always()
