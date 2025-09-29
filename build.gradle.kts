@@ -102,6 +102,11 @@ allprojects {
             withSourcesJar()
         }
 
+        tasks.withType<JavaCompile> {
+            // temporarily remove sun.misc.Unsafe warnings while Netty and Protobuf have loads
+            options.compilerArgs.add("-Xlint:-removal")
+        }
+
         tasks.jar {
             manifest {
                 attributes(
