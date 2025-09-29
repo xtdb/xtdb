@@ -1,6 +1,6 @@
 plugins {
     `java-library`
-    id("dev.clojurephant.clojure")
+    alias(libs.plugins.clojurephant)
 
     `maven-publish`
     signing

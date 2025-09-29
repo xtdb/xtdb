@@ -2,7 +2,7 @@ import xtdb.DataReaderTransformer
 
 plugins {
     `java-library`
-    id("dev.clojurephant.clojure")
+    alias(libs.plugins.clojurephant)
     id("com.gradleup.shadow")
 }
 

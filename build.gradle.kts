@@ -18,11 +18,11 @@ buildscript {
 plugins {
     `java-library`
     application
-    id("dev.clojurephant.clojure") version "0.8.0"
-    id("io.freefair.aggregate-javadoc-legacy") version "8.13.1"
-    kotlin("jvm")
-    kotlin("plugin.serialization")
-    id("org.jetbrains.dokka")
+    alias(libs.plugins.clojurephant)
+    alias(libs.plugins.freefair.javadoc)
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.dokka)
     alias(libs.plugins.jreleaser)
 }
 

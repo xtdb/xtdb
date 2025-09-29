@@ -4,7 +4,12 @@ arrow = "18.3.0"
 arrow-adbc = "0.20.0"
 clojure = "1.12.0"
 exposed = "0.61.0"
+kotlin = "2.2.0"
 kotlin-coroutines = "1.10.2"
+dokka = "1.9.10"
+clojurephant = "0.8.0"
+shadow = "8.3.6"
+freefair-javadoc = "8.13.1"
 junit = "5.13.0"
 junit-launcher = "1.12.2"
 netty = "4.2.2.Final"
@@ -109,5 +114,11 @@ slf4j-jpl = { group = "org.slf4j", name = "slf4j-jdk-platform-logging", version.
 logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback" } # use this in applications
 
 [plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
+clojurephant = { id = "dev.clojurephant.clojure", version.ref = "clojurephant" }
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
+freefair-javadoc = { id = "io.freefair.aggregate-javadoc-legacy", version.ref = "freefair-javadoc" }
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }
 jreleaser = { id = "org.jreleaser", version = "1.18.0" }
