@@ -45,7 +45,7 @@ dependencies {
     testImplementation(libs.next.jdbc)
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(24))
 
 tasks.javadoc {
     exclude("xtdb/util/*")

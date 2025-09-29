@@ -1,4 +1,4 @@
-FROM eclipse-temurin:21
+FROM eclipse-temurin:24
 
 LABEL org.opencontainers.image.source=https://github.com/xtdb/xtdb
 LABEL org.opencontainers.image.description="XTDB 2.x"

@@ -6,7 +6,7 @@ plugins {
     signing
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(24))
 
 dependencies {
     api(project(":"))
