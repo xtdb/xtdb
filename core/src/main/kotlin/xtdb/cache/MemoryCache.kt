@@ -8,25 +8,20 @@ import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.PooledByteBufAllocatorL
-import io.netty.buffer.Unpooled
 import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.ForeignAllocation
+import xtdb.cache.MemoryCache.PathSlice
 import xtdb.cache.PinningCache.IEntry
 import xtdb.util.maxDirectMemory
 import xtdb.util.openReadableChannel
 import java.nio.channels.ClosedByInterruptException
-import java.nio.channels.FileChannel
 import java.nio.file.Path
-import java.nio.file.StandardOpenOption
 import java.util.concurrent.CompletableFuture
+import kotlin.io.path.fileSize
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
-
-data class PathSlice(val path: Path, val offset: Long? = null, val length: Long? = null) {
-    constructor(path: Path) : this(path, null, null)
-}
 
 private typealias PinningCacheMapEntry = Map.Entry<PathSlice, CompletableFuture<MemoryCache.Entry>>
 
@@ -45,6 +40,16 @@ class MemoryCache @JvmOverloads internal constructor(
     maxSizeBytes: Long,
     private val pathLoader: PathLoader = PathLoader()
 ) : AutoCloseable {
+
+    data class Slice(val offset: Long, val length: Long) {
+        companion object {
+            fun from(path: Path) = Slice(0, path.fileSize())
+        }
+    }
+
+    internal data class PathSlice(val path: Path, val slice: Slice? = null) {
+        constructor(path: Path, offset: Long, length: Long) : this(path, Slice(offset, length))
+    }
 
     /**
      * @property maxSizeRatio max size of the cache, as a proportion of the maximum direct memory of the JVM
@@ -65,7 +70,7 @@ class MemoryCache @JvmOverloads internal constructor(
         internal companion object {
             operator fun invoke(slices: List<PinningCacheMapEntry>): SectionStats {
                 val size = slices.size
-                val weightBytes = slices.sumOf { it.key.length ?: 0 }
+                val weightBytes = slices.sumOf { it.key.slice?.length ?: 0 }
                 val pinned = slices.sumOf { if (it.value.get().inner.refCount.get() > 0) 1L else 0L }
                 return SectionStats(size, weightBytes, pinned, size - pinned)
             }
@@ -87,31 +92,18 @@ class MemoryCache @JvmOverloads internal constructor(
     val stats: Stats get() = statsCache[Unit]
 
     interface PathLoader {
-        fun load(path: Path): ByteBuf
-        fun load(pathSlice: PathSlice): ByteBuf
+        fun load(path: Path, slice: Slice): ByteBuf
 
         companion object {
             operator fun invoke() = object : PathLoader {
                 private val pool = PooledByteBufAllocatorL()
-                override fun load(path: Path) =
+
+                override fun load(path: Path, slice: Slice) =
                     try {
                         path.openReadableChannel().use { ch ->
-                            val size = ch.size()
-                            val nettyBuf = pool.allocate(size)
-                            val bbuf = nettyBuf.nioBuffer(0, size.toInt())
-                            ch.read(bbuf)
-                            nettyBuf
-                        }
-                    } catch (e: ClosedByInterruptException) {
-                        throw InterruptedException(e.message)
-                    }
-
-                override fun load(pathSlice: PathSlice) =
-                    try {
-                        pathSlice.path.openReadableChannel().use { ch ->
-                            val nettyBuf = pool.allocate(pathSlice.length!!)
-                            val bbuf = nettyBuf.nioBuffer(0, pathSlice.length.toInt())
-                            ch.position(pathSlice.offset!!)
+                            val nettyBuf = pool.allocate(slice.length)
+                            val bbuf = nettyBuf.nioBuffer(0, slice.length.toInt())
+                            ch.position(slice.offset)
                             ch.read(bbuf)
                             nettyBuf
                         }
@@ -138,19 +130,15 @@ class MemoryCache @JvmOverloads internal constructor(
         /**
          * @return a pair containing the on-disk path and an optional cleanup action
          */
-        operator fun invoke(k: PathSlice): CompletableFuture<Pair<PathSlice, AutoCloseable?>>
+        operator fun invoke(k: Path): CompletableFuture<Pair<Path, AutoCloseable?>>
     }
 
     @Suppress("NAME_SHADOWING")
-    fun get(k: PathSlice, fetch: Fetch): ArrowBuf {
-        val entry = pinningCache.get(k) { k ->
-            fetch(k).thenApplyAsync { (pathSlice, onEvict) ->
-                val nettyBuf =
-                    if (pathSlice.offset != null && pathSlice.length != null) {
-                        pathLoader.load(pathSlice)
-                    } else {
-                        pathLoader.load(pathSlice.path)
-                    }
+    fun get(key: Path, slice: Slice? = null, fetch: Fetch): ArrowBuf {
+        val cacheKey = PathSlice(key, slice)
+        val entry = pinningCache.get(cacheKey) { k ->
+            fetch(k.path).thenApplyAsync { (path, onEvict) ->
+                val nettyBuf = pathLoader.load(path, k.slice ?: Slice.from(path))
                 Entry(pinningCache.Entry(nettyBuf.capacity().toLong()), onEvict, nettyBuf)
             }
         }.get()!!
@@ -161,11 +149,11 @@ class MemoryCache @JvmOverloads internal constructor(
         // when the ref-count drops to zero, we release a ref-count in the cache.
         return al.wrapForeignAllocation(
             object : ForeignAllocation(nettyBuf.capacity().toLong(), nettyBuf.memoryAddress()) {
-                override fun release0() = pinningCache.releaseEntry(k)
+                override fun release0() = pinningCache.releaseEntry(cacheKey)
             })
     }
 
-    fun invalidate(k: PathSlice) = pinningCache.invalidate(k)
+    internal fun invalidate(key: Path, slice: Slice? = null) = pinningCache.invalidate(PathSlice(key, slice))
 
     override fun close() {
         pinningCache.close()

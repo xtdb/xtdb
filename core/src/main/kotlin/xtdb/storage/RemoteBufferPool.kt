@@ -2,9 +2,7 @@ package xtdb.storage
 
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
-import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.future.await
-import kotlinx.coroutines.future.future
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
@@ -21,7 +19,6 @@ import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.Relation
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
-import xtdb.cache.PathSlice
 import xtdb.database.DatabaseName
 import xtdb.multipart.SupportsMultipart
 import xtdb.multipart.SupportsMultipart.Companion.uploadMultipartBuffers
@@ -114,12 +111,12 @@ internal class RemoteBufferPool(
         }
 
     override fun getByteArray(key: Path): ByteArray =
-        memoryCache.get(PathSlice(cacheRootPath.resolve(key))) { pathSlice ->
+        memoryCache.get(cacheRootPath.resolve(key)) { path ->
             memCacheMisses?.increment()
-            diskCache.get(pathSlice.path) { k, tmpFile ->
+            diskCache.get(path) { k, tmpFile ->
                 diskCacheMisses?.increment()
                 getObject(cacheRootPath.relativize(k), tmpFile)
-            }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
+            }.thenApply { entry -> Pair(entry.path, entry) }
         }.use { it.toByteArray() }
 
     override fun getFooter(key: Path): ArrowFooter = arrowFooterCache.get(key) {
@@ -139,17 +136,14 @@ internal class RemoteBufferPool(
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
 
         return memoryCache.get(
-            PathSlice(
-                cacheRootPath.resolve(key),
-                arrowBlock.offset,
-                arrowBlock.metadataLength + arrowBlock.bodyLength
-            )
-        ) { pathSlice ->
+            cacheRootPath.resolve(key),
+            MemoryCache.Slice(arrowBlock.offset, arrowBlock.metadataLength + arrowBlock.bodyLength)
+        ) { path ->
             memCacheMisses?.increment()
-            diskCache.get(pathSlice.path) { k, tmpFile ->
+            diskCache.get(path) { k, tmpFile ->
                 diskCacheMisses?.increment()
                 getObject(cacheRootPath.relativize(k), tmpFile)
-            }.thenApply { entry -> Pair(PathSlice(entry.path, pathSlice.offset, pathSlice.length), entry) }
+            }.thenApply { entry -> Pair(entry.path, entry) }
         }.use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(
                 0, arrowBlock.metadataLength, arrowBlock.bodyLength,
@@ -201,7 +195,7 @@ internal class RemoteBufferPool(
     }
 
     override fun evictCachedBuffer(key: Path) {
-        memoryCache.invalidate(PathSlice(key))
+        memoryCache.invalidate(key)
     }
 
     override fun close() {

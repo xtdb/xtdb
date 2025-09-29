@@ -15,7 +15,6 @@ import xtdb.arrow.ArrowUtil.readArrowFooter
 import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.Relation
 import xtdb.cache.MemoryCache
-import xtdb.cache.PathSlice
 import xtdb.database.DatabaseName
 import xtdb.trie.FileSize
 import xtdb.util.*
@@ -62,13 +61,13 @@ internal class LocalStorage(
     }
 
     override fun getByteArray(key: Path): ByteArray =
-        memoryCache.get(PathSlice(cacheRootPath.resolve(key))) { pathSlice ->
+        memoryCache.get(cacheRootPath.resolve(key)) { path ->
             memCacheMisses?.increment()
             val bufferCachePath = this@LocalStorage.rootPath
-                .resolve(cacheRootPath.relativize(pathSlice.path))
+                .resolve(cacheRootPath.relativize(path))
                 .orThrowIfMissing(key)
 
-            completedFuture(Pair(PathSlice(bufferCachePath, pathSlice.offset, pathSlice.length), null))
+            completedFuture(Pair(bufferCachePath, null))
         }.use { it.toByteArray() }
 
     override fun getFooter(key: Path): ArrowFooter =
@@ -88,14 +87,15 @@ internal class LocalStorage(
             ?: throw IndexOutOfBoundsException("Record batch index out of bounds of arrow file")
 
         return memoryCache.get(
-            PathSlice(cacheRootPath.resolve(key), arrowBlock.offset, arrowBlock.metadataLength + arrowBlock.bodyLength)
-        ) { pathSlice ->
+            cacheRootPath.resolve(key),
+            MemoryCache.Slice(arrowBlock.offset, arrowBlock.metadataLength + arrowBlock.bodyLength)
+        ) { path ->
             memCacheMisses?.increment()
             val bufferCachePath =
-                rootPath.resolve(cacheRootPath.relativize(pathSlice.path))
+                rootPath.resolve(cacheRootPath.relativize(path))
                     .takeIf { it.exists() } ?: throw objectMissingException(path)
 
-            completedFuture(Pair(PathSlice(bufferCachePath, pathSlice.offset, pathSlice.length), null))
+            completedFuture(Pair(bufferCachePath, null))
         }.use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(
                 0,
@@ -177,7 +177,7 @@ internal class LocalStorage(
     }
 
     override fun evictCachedBuffer(key: Path) {
-        memoryCache.invalidate(PathSlice(cacheRootPath.resolve(key)))
+        memoryCache.invalidate(cacheRootPath.resolve(key))
     }
 
     override fun close() {
