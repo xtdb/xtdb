@@ -6,5 +6,5 @@ version: 0.1.0
 appVersion: "nightly"
 dependencies:
   - name: kafka
-    version: 32.4.2
+    version: 32.4.3
     repository: oci://registry-1.docker.io/bitnamicharts
