@@ -427,7 +427,9 @@
 
 (t/deftest duration-abs-sql-test
   (t/testing "ABS function works with duration values"
-    (t/is (= {:result #xt/duration "PT1S"}
-             (first (xt/q tu/*node* "SELECT ABS(DURATION 'PT1S') AS result"))))
-    (t/is (= {:result #xt/duration "PT1S"}
-             (first (xt/q tu/*node* "SELECT ABS(DURATION 'PT-1S') AS result"))))))
+    (t/are [sql expected] (= expected (first (xt/q tu/*node* sql)))
+      "SELECT ABS(DURATION 'PT1S') AS result" {:result #xt/duration "PT1S"}
+      "SELECT ABS(DURATION 'PT-1S') AS result" {:result #xt/duration "PT1S"}
+      "SELECT ABS(DURATION 'PT0S') AS result" {:result #xt/duration "PT0S"}
+      "SELECT ABS(DURATION 'PT-1H-30M-45S') AS result" {:result #xt/duration "PT1H30M45S"}
+      "SELECT ABS(DURATION 'PT-1.123456S') AS result" {:result #xt/duration "PT1.123456S"})))

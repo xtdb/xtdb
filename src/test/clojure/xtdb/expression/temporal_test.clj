@@ -1259,9 +1259,12 @@
     #xt/interval "PT2H-3M" '(abs #xt/interval "PT-2H3M")))
 
 (t/deftest test-duration-abs
-  (t/testing "Duration ABS function"
-    (t/is (= #xt/duration "PT1S" (et/project1 '(abs #xt/duration "PT1S") {})))
-    (t/is (= #xt/duration "PT1S" (et/project1 '(abs #xt/duration "PT-1S") {})))))
+  (t/are [expected expr] (= expected (et/project1 expr {}))
+    #xt/duration "PT1S" '(abs #xt/duration "PT1S")
+    #xt/duration "PT1S" '(abs #xt/duration "PT-1S")
+    #xt/duration "PT0S" '(abs #xt/duration "PT0S")
+    #xt/duration "PT1H30M45S" '(abs #xt/duration "PT-1H-30M-45S")
+    #xt/duration "PT1.123456S" '(abs #xt/duration "PT-1.123456S")))
 
 (def single-interval-constructor-gen
   (->> (tcg/hash-map
