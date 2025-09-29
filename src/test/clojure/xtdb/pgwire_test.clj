@@ -1802,8 +1802,8 @@
                :await-token (basis/->tx-basis-str {"xtdb" [0]})}]
              (q conn ["SHOW LATEST_SUBMITTED_TX"])))
 
-    (t/is (= [{:db-name "xtdb", :part 0, :tx-id 0}]
-             (q conn ["SHOW LATEST_SUBMITTED_TXS"])))
+    (t/is (= [{:db-name "xtdb", :part 0, :msg-id 0}]
+             (q conn ["SHOW LATEST_SUBMITTED_MSG_IDS"])))
 
     (t/is (thrown? PSQLException (jdbc/execute! conn ["ASSERT FALSE"])))
 
@@ -2907,7 +2907,7 @@ ORDER BY 1,2;")
   (with-open [conn (jdbc-conn)]
     (t/is (thrown-with-msg? PSQLException #"Cannot put documents with columns.*_system_from"
                             (jdbc/execute! conn ["INSERT INTO docs RECORDS {_id: 1, _system_from: TIMESTAMP '2024-01-01T00:00:00Z'}"])))
-    
+
     (t/is (thrown-with-msg? PSQLException #"Cannot put documents with columns.*_system_from"
                             (jdbc/execute! conn ["INSERT INTO docs RECORDS ?"
                                                  {:_id 2, :_system_from #inst "2024-01-01T00:00:00Z"}])))

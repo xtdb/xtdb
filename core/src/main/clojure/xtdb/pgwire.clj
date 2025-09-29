@@ -881,10 +881,10 @@
 
 (defn- show-var-query [variable]
   (case variable
-    "latest_completed_txs" (-> '[:table ?_0]
-                               (with-meta {:param-count 1}))
-    "latest_submitted_txs" (-> '[:table ?_0]
-                               (with-meta {:param-count 1}))
+    ("latest_completed_txs" "latest_submitted_msg_ids" "latest_processed_msg_ids")
+    (-> '[:table ?_0]
+        (with-meta {:param-count 1}))
+
     "latest_submitted_tx" (-> '[:select (not (nil? tx_id))
                                 [:table [{:tx_id ?_0, :system_time ?_1,
                                           :committed ?_2, :error ?_3,
@@ -900,9 +900,9 @@
                                              'part :i32
                                              'tx_id :i64
                                              'system_time types/temporal-col-type}]]]
-    "latest_submitted_txs" [[:list [:struct {'db_name :utf8
-                                             'part :i32
-                                             'tx_id :i64}]]]
+    ("latest_submitted_msg_ids" "latest_processed_msg_ids") [[:list [:struct {'db_name :utf8
+                                                                              'part :i32
+                                                                              'msg_id :i64}]]]
     "latest_submitted_tx" [:i64 types/temporal-col-type :bool :transit :utf8]
     "await_token" [:utf8]
     "standard_conforming_strings" [:bool]
@@ -1084,11 +1084,18 @@
                                                                                                   :part (int part-idx)
                                                                                                   :tx_id tx-id
                                                                                                   :system_time system-time})]
-                                                                       "latest_submitted_txs" [(for [[db-name parts] (xtp/latest-submitted-tx-ids node)
-                                                                                                     [part-idx tx-id] (map vector (range) parts)]
-                                                                                                 {:db_name db-name
-                                                                                                  :part (int part-idx)
-                                                                                                  :tx_id tx-id})]
+                                                                       "latest_submitted_msg_ids" [(for [[db-name parts] (xtp/latest-submitted-msg-ids node)
+                                                                                                         [part-idx msg-id] (map vector (range) parts)]
+                                                                                                     {:db_name db-name
+                                                                                                      :part (int part-idx)
+                                                                                                      :msg_id msg-id})]
+
+                                                                       "latest_processed_msg_ids" [(for [[db-name parts] (xtp/latest-processed-msg-ids node)
+                                                                                                         [part-idx msg-id] (map vector (range) parts)]
+                                                                                                     {:db_name db-name
+                                                                                                      :part (int part-idx)
+                                                                                                      :msg_id msg-id})]
+
                                                                        "latest_submitted_tx" (mapv (into {} (assoc (:latest-submitted-tx @conn-state)
                                                                                                                    :await-token await-token))
                                                                                                    [:tx-id :system-time :committed? :error :await-token])

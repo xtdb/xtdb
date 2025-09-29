@@ -15,7 +15,8 @@
   (^xtdb.query.PreparedQuery prepare-ra [node ra-plan query-opts]))
 
 (defprotocol PStatus
-  (latest-submitted-tx-ids [node])
+  (latest-submitted-msg-ids [node])
+  (latest-processed-msg-ids [node])
   (latest-completed-txs [node])
 
   (await-token [node])

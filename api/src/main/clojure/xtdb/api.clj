@@ -416,9 +416,13 @@
                                       (update-vals (fn [txs]
                                                      (mapv #(serde/map->TxKey (select-keys % [:tx-id :system-time])) txs))))
 
-            :latest-submitted-txs (-> (status-q conn ["SHOW LATEST_SUBMITTED_TXS"])
-                                      (->> (group-by :db-name))
-                                      (update-vals #(mapv :tx-id %)))}
+            :latest-submitted-msg-ids (-> (status-q conn ["SHOW LATEST_SUBMITTED_MSG_IDS"])
+                                          (->> (group-by :db-name))
+                                          (update-vals #(mapv :msg-id %)))
+
+            :latest-processed-msg-ids (-> (status-q conn ["SHOW LATEST_PROCESSED_MSG_IDS"])
+                                          (->> (group-by :db-name))
+                                          (update-vals #(mapv :msg-id %)))}
 
            (finally
              (jdbc/execute! conn ["ROLLBACK"]))))))))

@@ -599,3 +599,10 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (let [client (xt/client {:port (.getServerPort tu/*node*)})]
     (xt/execute-tx client [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
     (xt/execute-tx client [[:put-docs :docs {:xt/id :bar, :name "Bar"}]])))
+
+(t/deftest processed-msg-ids-equal-to-submitted-msg-ids-4813
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
+  (tu/flush-block! tu/*node*)
+
+  (let [{:keys [latest-submitted-tx-ids latest-processed-tx-ids]} (xt/status tu/*node*)]
+    (t/is (= latest-submitted-tx-ids latest-processed-tx-ids))))

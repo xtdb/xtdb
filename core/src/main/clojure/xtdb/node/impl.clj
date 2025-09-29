@@ -186,7 +186,7 @@
                                        (.getLiveIndex)
                                        (.getLatestCompletedTx))]])))))
 
-  (latest-submitted-tx-ids [_]
+  (latest-submitted-msg-ids [_]
     (->> (.getDatabaseNames db-cat)
          (into {} (map (fn [db-name]
                          ;; TODO multi-part
@@ -194,16 +194,24 @@
                                        (.getLogProcessor)
                                        (.getLatestSubmittedMsgId))]])))))
 
+  (latest-processed-msg-ids [_]
+    (->> (.getDatabaseNames db-cat)
+         (into {} (map (fn [db-name]
+                         ;; TODO multi-part
+                         [db-name [(-> (.databaseOrNull db-cat db-name)
+                                       (.getLogProcessor)
+                                       (.getLatestProcessedMsgId))]])))))
+
   (await-token [this]
-    (basis/->tx-basis-str (xtp/latest-submitted-tx-ids this)))
+    (basis/->tx-basis-str (xtp/latest-submitted-msg-ids this)))
 
   (snapshot-token [this]
     (basis/->time-basis-str (-> (xtp/latest-completed-txs this)
                                 (update-vals #(mapv :system-time %)))))
-  
+
   (status [this]
     {:latest-completed-txs (xtp/latest-completed-txs this)
-     :latest-submitted-tx-ids (xtp/latest-submitted-tx-ids this)
+     :latest-submitted-tx-ids (xtp/latest-submitted-msg-ids this)
 
      :await-token (xtp/await-token this)})
 
@@ -268,22 +276,27 @@
                                    :tx-error-counter (metrics/add-counter metrics-registry "tx.error"))))]
 
     (doto metrics-registry
-      (metrics/add-gauge "node.tx.latestSubmittedTxId"
-                         (fn []
-                           (-> (xtp/latest-submitted-tx-ids node)
-                               (get-in ["xtdb" 0] -1))))
-
       (metrics/add-gauge "node.tx.latestCompletedTxId"
                          (fn []
                            (-> (xtp/latest-completed-txs node)
                                (get-in ["xtdb" 0 :tx-id] -1))))
 
-      (metrics/add-gauge "node.tx.lag.TxId"
+      (metrics/add-gauge "node.tx.latestSubmittedMsgId"
                          (fn []
-                           (max (- (long (-> (xtp/latest-submitted-tx-ids node)
+                           (-> (xtp/latest-submitted-msg-ids node)
+                               (get-in ["xtdb" 0] -1))))
+
+      (metrics/add-gauge "node.tx.latestProcessedMsgId"
+                         (fn []
+                           (-> (xtp/latest-processed-msg-ids node)
+                               (get-in ["xtdb" 0] -1))))
+
+      (metrics/add-gauge "node.tx.lag.MsgId"
+                         (fn []
+                           (max (- (long (-> (xtp/latest-submitted-msg-ids node)
                                              (get-in ["xtdb" 0] -1)))
-                                   (long (-> (xtp/latest-completed-txs node)
-                                             (get-in ["xtdb" 0 :tx-id] -1))))
+                                   (long (-> (xtp/latest-processed-msg-ids node)
+                                             (get-in ["xtdb" 0] -1))))
                                 0))))
     node))
 

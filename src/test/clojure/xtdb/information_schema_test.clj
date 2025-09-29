@@ -476,7 +476,7 @@
                                     "live-index.allocator.allocated_memory"
                                     "buffer-pool.allocator.allocated_memory"
                                     "jvm.memory.used"
-                                    "node.tx.latestSubmittedTxId"}
+                                    "node.tx.latestSubmittedMsgId"}
                                   (into #{} (map :name) res)))
           "at least has these ones, maybe others"))
 
