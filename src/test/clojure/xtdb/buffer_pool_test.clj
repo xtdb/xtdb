@@ -23,7 +23,7 @@
 
 (t/use-fixtures :each tu/with-allocator)
 
-(def ^:dynamic *mem-cache* nil)
+(def ^:dynamic ^xtdb.cache.MemoryCache *mem-cache* nil)
 (def ^:dynamic ^java.nio.file.Path *disk-cache-dir* nil)
 (def ^:dynamic *disk-cache* nil)
 
@@ -75,16 +75,11 @@
       (t/testing "expect a file to exist under our :disk-store"
         (let [cache-path (.resolve root-path (.resolve (util/->path "xtdb/0") k))]
           (t/is (util/path-exists cache-path))
-          (t/is (= 0 (util/compare-nio-buffers-unsigned expected (util/->mmap-path cache-path))))))
-
-      (t/testing "if the buffer is evicted, it is loaded from disk"
-        (.evictCachedBuffer bp k)
-        (t/is (= 0 (util/compare-nio-buffers-unsigned expected (ByteBuffer/wrap (.getByteArray bp k)))))))
+          (t/is (= 0 (util/compare-nio-buffers-unsigned expected (util/->mmap-path cache-path)))))))
 
     (when object-store
       (t/testing "if the buffer is evicted and deleted from disk, it is delivered from object storage"
-        (.evictCachedBuffer bp k)
-        ;; Evicted from map and deleted from disk (ie, replicating effects of 'eviction' here)
+        ;; Deleted from disk (ie, replicating effects of 'eviction' here)
         (-> (.asMap (.getCache (.getPinningCache disk-cache)))
             (.remove k))
         (util/delete-file (.resolve root-path k))
@@ -108,6 +103,11 @@
         (t/is (= [StoreOperation/PUT] (get-remote-calls bp)))
         (test-get-object bp (util/->path "min-part-put") (utf8-buf "12"))))))
 
+(defn open-mem-cache-entry [^BufferPool bp k len]
+  (let [^ByteBuffer buf (utf8-buf (apply str (repeat len "a")))]
+    (.putObject bp k buf)
+    (.getPinnedObject bp k)))
+
 (defn file-info [^Path dir]
   (let [files (filter #(.isFile ^File %) (file-seq (.toFile dir)))]
     {:file-count (count files) :file-names (set (map #(.getName ^File %) files))}))
@@ -126,18 +126,18 @@
         (insert-utf8-to-local-cache bp (util/->path "b") 4)
         (t/is (= {:file-count 2 :file-names #{"a" "b"}} (file-info *disk-cache-dir*))))
 
-      (t/testing "going above max size - all entries still present in memory cache (which isn't above limit) - should return all elements"
+      (t/testing "going above max size - removes an entry"
         (insert-utf8-to-local-cache bp (util/->path "c") 4)
-        (t/is (= {:file-count 3 :file-names #{"a" "b" "c"}} (file-info *disk-cache-dir*))))
+        (t/is (= {:file-count 2 :file-names #{"b" "c"}} (file-info *disk-cache-dir*))))
 
       (t/testing "entries unpinned (cleared from memory cache by new entries) - should evict entries since above size limit"
         (insert-utf8-to-local-cache bp (util/->path "d") 4)
         (Thread/sleep 100)
-        (t/is (= 3 (:file-count (file-info *disk-cache-dir*))))
+        (t/is (= 2 (:file-count (file-info *disk-cache-dir*))))
 
         (insert-utf8-to-local-cache bp (util/->path "e") 4)
         (Thread/sleep 100)
-        (t/is (= 3 (:file-count (file-info *disk-cache-dir*))))))))
+        (t/is (= 2 (:file-count (file-info *disk-cache-dir*))))))))
 
 (defn no-op-object-store-factory []
   (reify ObjectStore$Factory

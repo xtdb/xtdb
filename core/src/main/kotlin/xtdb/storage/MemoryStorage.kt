@@ -120,8 +120,6 @@ internal class MemoryStorage(
         }
     }
 
-    override fun evictCachedBuffer(key: Path) {}
-
     override fun close() {
         deleteAllObjects()
         allocator.close()

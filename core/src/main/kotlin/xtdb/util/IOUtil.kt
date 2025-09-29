@@ -1,5 +1,6 @@
 package xtdb.util
 
+import java.nio.channels.FileChannel
 import java.nio.channels.SeekableByteChannel
 import java.nio.channels.WritableByteChannel
 import java.nio.file.Files
@@ -11,7 +12,7 @@ import kotlin.contracts.contract
 import kotlin.io.path.createTempFile
 import kotlin.io.path.deleteIfExists
 
-internal fun Path.openReadableChannel(): SeekableByteChannel = Files.newByteChannel(this, READ)
+internal fun Path.openReadableChannel(): FileChannel = FileChannel.open(this, READ)
 internal fun Path.openWritableChannel(): WritableByteChannel = Files.newByteChannel(this, WRITE, CREATE)
 
 internal fun <R> useTempFile(prefix: String, suffix: String, block: (Path) -> R): R =

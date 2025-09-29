@@ -95,15 +95,6 @@ class PinningCache<K : Any, V : PinningCache.IEntry<K>>(
                 }
         }!!
 
-    fun invalidate(k: K) {
-        cache.synchronous().run {
-            invalidate(k)
-            cleanUp()
-        }
-
-        ForkJoinPool.commonPool().awaitQuiescence(100, MILLISECONDS)
-    }
-
     override fun close() {
         cache.asMap().clear()
         cache.synchronous().cleanUp()

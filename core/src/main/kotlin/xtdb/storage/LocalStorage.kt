@@ -176,10 +176,6 @@ internal class LocalStorage(
         }
     }
 
-    override fun evictCachedBuffer(key: Path) {
-        memoryCache.invalidate(cacheRootPath.resolve(key))
-    }
-
     override fun close() {
         allocator.close()
     }

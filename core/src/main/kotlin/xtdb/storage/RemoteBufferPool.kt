@@ -194,10 +194,6 @@ internal class RemoteBufferPool(
         objectStore.putObject(key, buffer).get()
     }
 
-    override fun evictCachedBuffer(key: Path) {
-        memoryCache.invalidate(key)
-    }
-
     override fun close() {
         objectStore.close()
         allocator.close()
