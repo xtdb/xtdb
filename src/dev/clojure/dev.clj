@@ -12,8 +12,7 @@
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.util :as util])
   (:import [java.nio.file Path]
            java.time.Duration
            [java.util List]
@@ -121,7 +120,7 @@
         (loop [v init]
           (cond
             (reduced? v) (unreduced v)
-            (.loadNextBatch rdr) (recur (f v (.getAsMaps (vr/<-root (.getVectorSchemaRoot rdr)))))
+            (.loadNextBatch rdr) (recur (f v (.getAsMaps (Relation/fromRoot al (.getVectorSchemaRoot rdr)))))
             :else v))))))
 
 (comment
