@@ -38,7 +38,9 @@
 
 (defmethod ig/init-key :xtdb/config [_ cfg] cfg)
 
-(defmethod ig/init-key :xtdb/allocator [_ _] (RootAllocator.))
+(defmethod ig/init-key :xtdb/allocator [_ _]
+  (RootAllocator. (long (* 0.9 (util/max-direct-memory)))))
+
 (defmethod ig/halt-key! :xtdb/allocator [_ ^BufferAllocator a]
   (util/close a))
 

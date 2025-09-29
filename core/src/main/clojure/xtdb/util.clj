@@ -8,6 +8,7 @@
             [xtdb.error :as err])
   (:import [clojure.lang Keyword MapEntry Symbol]
            (io.netty.buffer Unpooled)
+           io.netty.util.internal.PlatformDependent
            (java.io File)
            java.lang.AutoCloseable
            (java.net MalformedURLException ServerSocket URI URL)
@@ -494,6 +495,17 @@
                           (cons x (step (rest s) (conj seen v)))))))
                   xs seen)))]
      (step coll #{}))))
+
+(defn max-direct-memory
+  "Returns the maximum direct memory supposed to be used by the system.
+
+  Assumes the JVM option `io.netty.maxDirectMemory` is not set as otherwise that value is returned."
+  ^long []
+  (try
+    (PlatformDependent/maxDirectMemory)
+    (catch Throwable _t
+      ;; otherwise we use as much direct memory as there was heap specified
+      (.maxMemory (Runtime/getRuntime)))))
 
 (defn used-netty-memory []
   (io.netty.util.internal.PlatformDependent/usedDirectMemory))
