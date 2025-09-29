@@ -1,4 +1,6 @@
 name: Nightly Benchmark Cleanup
+run-name: >-
+  Benchmark Cleanup: ${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType }}
 
 on:
   workflow_dispatch:
@@ -284,6 +286,52 @@ jobs:
             kubectl delete namespace monitoring --ignore-not-found=true || true
           else
             echo "Monitoring stack not found; skipping."
+          fi
+
+      - name: Write Job Summary
+        if: always()
+        run: |
+          set -euo pipefail
+          bench="${{ inputs.benchType }}"
+          case "$bench" in
+            tpch) bench_friendly="TPC-H" ;;
+            auctionmark) bench_friendly="AuctionMark" ;;
+            readings) bench_friendly="Readings" ;;
+            *) bench_friendly="$bench" ;;
+          esac
+
+          duration_iso="${{ steps.logs.outputs.time_taken_iso || '' }}"
+          node_id="${{ inputs.nodeId }}"
+          status_input="${{ inputs.status }}"
+          repo="${{ github.repository }}"
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          scale_factor_val="${{ env.SCALE_FACTOR || '' }}"
+          concurrency_val="${{ env.CONCURRENCY || '' }}"
+
+          echo "# Benchmark Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Benchmark**: ${bench_friendly}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Status**: ${status_input}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Node ID**: ${node_id}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$duration_iso" ]; then
+            echo "- **Run duration**: ${duration_iso}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -n "$scale_factor_val" ]; then
+            echo "- **Scale factor**: ${scale_factor_val}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -n "$concurrency_val" ]; then
+            echo "- **Concurrency**: ${concurrency_val}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "- **Repository**: ${repo}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Parameters (raw EDN captured, if any)
+          if [ -n "${{ steps.logs.outputs.params_edn || '' }}" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "## Raw Parameters (EDN)" >> "$GITHUB_STEP_SUMMARY"
+            echo '```edn' >> "$GITHUB_STEP_SUMMARY"
+            echo "${{ steps.logs.outputs.params_edn }}" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Compose Slack Message
