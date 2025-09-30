@@ -5,14 +5,9 @@ title: Numeric functions
 Notes:
 
 - If any input expression is null, the result will also be null.
-- If all arguments are integers, the result will also be an integer;
-    otherwise, all arguments will be cast to floating-point values
-    before applying the function. Particularly, the division function
-    performs integer division if it's only given integer values.
-
-- If the result would under-/overflow the widest type of the input
-    arguments, a runtime exception will be thrown.
-
+- If all arguments are integers, the result will also be an integer; otherwise, all arguments will be cast to floating-point values before applying the function.
+  Particularly, the division function performs integer division if it's only given integer values.
+- If the result would under-/overflow the widest type of the input arguments, a runtime exception will be thrown.
 - Trying to divide by zero will result in a runtime exception.
 
 ## Basic arithmetic functions
@@ -28,43 +23,43 @@ The standard arithmetic functions are available:
 
 `ABS(x)`
 
-:   absolute value of `x`
+: absolute value of `x`
 
 `CEIL(x)` | `CEILING(x)`
 
-:   nearest integer greater than or equal to `x`
+: nearest integer greater than or equal to `x`
 
 `EXP(x)`
 
-:   ℯ (base of natural logarithms) raised to the power of `x`
+: ℯ (base of natural logarithms) raised to the power of `x`
 
 `FLOOR(x)`
 
-:   nearest integer less than or equal to `x`
+: nearest integer less than or equal to `x`
 
 `LN(x)`
 
-:   natural logarithm
+: natural logarithm
 
 `LOG(x, y)`
 
-:   logarithm of `x`, base `y`
+: logarithm of `x`, base `y`
 
 `LOG10(x)`
 
-:   logarithm of `x`, base 10
+: logarithm of `x`, base 10
 
 `MOD(x, y)`
 
-:   modulus of `x`, base `y`
+: modulus of `x`, base `y`
 
 `POWER(x, y)`
 
-:   `x` raised to the \`y\`th power
+: `x` raised to the \`y\`th power
 
 `SQRT(x)`
 
-:   square root
+: square root
 
 ## Trigonometric functions
 

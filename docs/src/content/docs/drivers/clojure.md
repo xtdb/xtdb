@@ -2,7 +2,7 @@
 title: Using XTDB from Clojure
 ---
 
-Clojure users can execute SQL queries using standard JDBC tooling, via XTDB's PostgreSQL wire-compatible server. 
+Clojure users can execute SQL queries using standard JDBC tooling, via XTDB's PostgreSQL wire-compatible server.
 Additionally, there is an [XTDB Clojure API](#clojure-api) for both SQL and XTQL queries.
 
 ## JDBC
@@ -72,9 +72,7 @@ You can run XTDB nodes either in-process, or connect to a remote XTDB server via
 
 For Maven (pom.xml) or Gradle (build.gradle.kts), see the [Java getting-started guide](/drivers/java).
 
-From here, check out the [`xtdb.api` API
-docs](/drivers/clojure/codox/xtdb.api.html) to submit data and run
-queries.
+From here, check out the [`xtdb.api` API docs](/drivers/clojure/codox/xtdb.api.html) to submit data and run queries.
 
 ### In process
 

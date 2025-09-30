@@ -17,9 +17,7 @@ The following control structures are available in XTDB:
 
 `CASE` takes two forms:
 
-1. With a `test-expr`, `CASE` tests the result of the `test-expr`
-    against each of the
-    `` value-expr`s until a match is found - it then returns the value of the corresponding `result-expr ``.
+1. With a `test-expr`, `CASE` tests the result of the `test-expr` against each of the `` value-expr`s until a match is found - it then returns the value of the corresponding `result-expr ``.
 
     ``` sql
     CASE <test-expr>
@@ -32,9 +30,7 @@ The following control structures are available in XTDB:
     If no match is found, and a `default-expr` is present, it will
     return the value of that expression, otherwise it will return null.
 
-2. With a series of predicates, `CASE` checks the value of each
-    `predicate` expression in turn, until one is true - it then returns
-    the value of the corresponding `result-expr`.
+2. With a series of predicates, `CASE` checks the value of each `predicate` expression in turn, until one is true - it then returns the value of the corresponding `result-expr`.
 
     ``` sql
     CASE
@@ -56,8 +52,7 @@ The following control structures are available in XTDB:
 COALESCE(<expr>, ...)
 ```
 
-`NULLIF` returns null if `expr1` equals `expr2`; otherwise it returns
-the value of `expr1`.
+`NULLIF` returns null if `expr1` equals `expr2`; otherwise it returns the value of `expr1`.
 
 ``` sql
 NULLIF(<expr1>, <expr2>)

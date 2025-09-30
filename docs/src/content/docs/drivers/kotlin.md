@@ -6,8 +6,7 @@ In Kotlin, you can talk to a running XTDB node using standard [Java JDBC](https:
 
 ## Install
 
-To install the XTDB JDBC driver, add the following dependency to your
-Gradle `build.gradle.kts`:
+To install the XTDB JDBC driver, add the following dependency to your Gradle `build.gradle.kts`:
 
 ``` kotlin
 // https://mvnrepository.com/artifact/com.xtdb/xtdb-api
@@ -27,8 +26,7 @@ Or, for Maven:
 
 ## Connect
 
-Once you've [started your XTDB node](/intro/installation-via-docker),
-you can use the following code to connect to it:
+Once you've [started your XTDB node](/intro/installation-via-docker), you can use the following code to connect to it:
 
 ``` kotlin
 import java.sql.DriverManager

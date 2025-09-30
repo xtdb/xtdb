@@ -9,7 +9,7 @@ OIDC authentication supports multiple OAuth 2.0 flows for different client types
 
 **Required Capabilities**
 
-:   -   OpenID Connect Discovery (/.well-known/openid_configuration)
+: - OpenID Connect Discovery (/.well-known/openid_configuration)
 
     - At least one of the following OAuth 2.0 grant types:
         - Client Credentials flow (widely supported)
@@ -67,23 +67,22 @@ The username provided in database connections serves different purposes dependin
 
 **PASSWORD Method**
 
-:   The username is used both for rule matching AND for actual OIDC
+: The username is used both for rule matching AND for actual OIDC
     authentication with your identity provider.
 
 **CLIENT_CREDENTIALS and DEVICE_AUTH Methods**
 
-:   The username is used ONLY for rule matching to determine which
+: The username is used ONLY for rule matching to determine which
     authentication method to apply. The actual username value is ignored
     during authentication.
 
 **Rule Filtering**
 
-:   -   If using only CLIENT_CREDENTIALS or only DEVICE_AUTH, you don't
+: - If using only CLIENT_CREDENTIALS or only DEVICE_AUTH, you don't
     need user-specific rules - you can use a catch-all rule with
     just `method: CLIENT_CREDENTIALS` or `method: DEVICE_AUTH`
 
-    - User filtering is needed when supporting multiple flows and you
-    want to differentiate by the connection's username
+    - User filtering is needed when supporting multiple flows and you want to differentiate by the connection's username
 
 ## Authentication Flows
 
@@ -99,7 +98,7 @@ Uses OAuth Client Credentials flow for service accounts and automated processes.
 
 **Connection Details**
 
-:   -   **Username**: Must match the `user` value in your
+: - **Username**: Must match the `user` value in your
     CLIENT_CREDENTIALS rule (e.g., `oidc-client` in the example
     above)
 
@@ -107,7 +106,7 @@ Uses OAuth Client Credentials flow for service accounts and automated processes.
 
 **Client Usage Example**
 
-:   
+:
 
 ``` bash
 ## Using the username from your configuration rule
@@ -120,7 +119,7 @@ Uses OAuth Resource Owner Password Credentials flow for interactive users.
 
 **Client Usage**
 
-:   
+:
 
 ``` bash
 psql -h localhost -p 5432 -U username -d xtdb
@@ -133,12 +132,13 @@ Uses OAuth Device Authorization flow for applications that cannot securely store
 
 **Connection Details**
 
-:   -   **Username**: Must match the `user` value in your DEVICE_AUTH
+: - **Username**: Must match the `user` value in your DEVICE_AUTH
     rule (e.g., `oidc-device` in the example above)
 
 **Flow Process**
 
-:   1.  Client requests device code from XTDB
+: 1.
+Client requests device code from XTDB
 
     2. User visits verification URL and enters user code
     3. XTDB polls identity provider until user completes authentication
@@ -146,7 +146,7 @@ Uses OAuth Device Authorization flow for applications that cannot securely store
 
 **Client Usage Example**
 
-:   
+:
 
 ``` bash
 ## Using the username from your configuration rule
@@ -158,22 +158,22 @@ psql -h localhost -p 5432 -U oidc-device -d xtdb
 
 **Validation**
 
-:   Tokens are validated before query and data operations. Connections
+: Tokens are validated before query and data operations.
+Connections
     terminate if validation fails.
 
 **Refresh**
 
-:   -   PASSWORD/DEVICE_AUTH: Automatic refresh using refresh tokens
+: - PASSWORD/DEVICE_AUTH: Automatic refresh using refresh tokens
 
-    - CLIENT_CREDENTIALS: New tokens requested using client
-    credentials
+    - CLIENT_CREDENTIALS: New tokens requested using client credentials
 
 ## Troubleshooting
 
 **Authentication Failed**
 
-:   Verify client ID/secret configuration and issuer URL accessibility.
+: Verify client ID/secret configuration and issuer URL accessibility.
 
 **Token Expired**
 
-:   Check access token lifespan settings in identity provider.
+: Check access token lifespan settings in identity provider.

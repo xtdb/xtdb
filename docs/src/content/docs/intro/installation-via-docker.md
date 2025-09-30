@@ -5,11 +5,8 @@ title: Installation via Docker
 
 ## Try Online
 
-If you want to avoid running your own XTDB server locally, you can
-instantly play with inserting data and querying right now using the
-[XTDB Play](https://play.xtdb.com/) web-based console. The interactive
-[SQL Quickstart](/quickstart/sql-overview.html) uses this console to
-showcase XTDB's SQL dialect and bitemporal capabilities.
+If you want to avoid running your own XTDB server locally, you can instantly play with inserting data and querying right now using the [XTDB Play](https://play.xtdb.com/) web-based console.
+The interactive [SQL Quickstart](/quickstart/sql-overview.html) uses this console to showcase XTDB's SQL dialect and bitemporal capabilities.
 
 Otherwise, let's get XTDB downloaded and running on your own machine...​
 
@@ -25,9 +22,9 @@ You can start a 'standalone' (i.e. non-production, non-distributed) XTDB server 
 ## `nightly`: built every night from `main` branch
 ## `edge`: latest nightly plus urgent fixes
 
-docker run -it --pull=always 
-  -p 5432:5432 
-  -p 8080:8080 
+docker run -it --pull=always
+  -p 5432:5432
+  -p 8080:8080
   ghcr.io/xtdb/xtdb
 
 ## 5432: Postgres wire-compatible server (primary API)
@@ -40,10 +37,7 @@ By default your data will only be stored temporarily using a local directory wit
 
 ### (Optional) Mount a host directory
 
-You can attach a host volume to preserve your data across container
-restarts, e.g. by adding `-v /tmp/xtdb-data-dir:/var/lib/xtdb`, however
-because the XTDB container runs as a non-root user by default (UID
-20000), you must ensure the container can write to it:
+You can attach a host volume to preserve your data across container restarts, e.g. by adding `-v /tmp/xtdb-data-dir:/var/lib/xtdb`, however because the XTDB container runs as a non-root user by default (UID 20000), you must ensure the container can write to it:
 
 :::note
 This currently applies only to nightly and edge releases.
@@ -55,24 +49,21 @@ For Docker, before running the container:
 sudo chown -R 20000:20000 /tmp/xtdb-data-dir
 ```
 
-For Podman, ensure the directory is owned by your user and use
-`--userns=keep-id`, e.g.:
+For Podman, ensure the directory is owned by your user and use `--userns=keep-id`, e.g.:
 
 ``` bash
-podman run -it --pull=always 
-  --userns=keep-id 
-  -p 5432:5432 
-  -p 8080:8080 
-  -v /tmp/xtdb-data-dir:/var/lib/xtdb 
+podman run -it --pull=always
+  --userns=keep-id
+  -p 5432:5432
+  -p 8080:8080
+  -v /tmp/xtdb-data-dir:/var/lib/xtdb
   ghcr.io/xtdb/xtdb
 ```
 :::
 
 ## Wait for XTDB to start
 
-After seeing a 'Node started' log message (e.g.
-`09:00:00 | INFO xtdb.cli | Node started`) you are able to confirm your
-XTDB server is running using cURL:
+After seeing a 'Node started' log message (e.g. `09:00:00 | INFO xtdb.cli | Node started`) you are able to confirm your XTDB server is running using cURL:
 
 ``` bash
 curl http://localhost:8080/healthz/alive

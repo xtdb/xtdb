@@ -6,12 +6,8 @@ XTQL queries consist of composable operators, optionally combined with a pipelin
 
 ## Operators
 
-- [Source operators](#source-operators) are valid at the start of a
-    pipeline, or in isolation.
-
-- [Tail operators](#tail-operators) transform data in a pipeline -
-    they aren't valid as the first operator, because they don't source
-    data, but can appear anywhere else in the pipeline.
+- [Source operators](#source-operators) are valid at the start of a pipeline, or in isolation.
+- [Tail operators](#tail-operators) transform data in a pipeline - they aren't valid as the first operator, because they don't source data, but can appear anywhere else in the pipeline.
 
 A pipeline consists of a source operator, and optionally many tail operators:
 
@@ -86,15 +82,11 @@ Pipelines are optional - queries with just a source operator (i.e. no tails) can
 
 ### Unify clauses
 
-Joins in XTQL are specified using the ['unify'](#unify) operator -
-this combines multiple input relations using [Datalog-style
-unification](#unify_explanation). This allows for very declarative yet
-terse method of specifying join conditions; how relations relate to each
-other.
+Joins in XTQL are specified using the ['unify'](#unify) operator - this combines multiple input relations using [Datalog-style unification](#unify_explanation).
+This allows for very declarative yet terse method of specifying join conditions; how relations relate to each other.
 
-'Unify clauses' are inputs to the unify operator. They are a selection
-of [source](#source-operators) and [tail](#tail-operators) operators
-with a few extra operators that are only valid in unification.
+'Unify clauses' are inputs to the unify operator.
+They are a selection of [source](#source-operators) and [tail](#tail-operators) operators with a few extra operators that are only valid in unification.
 
 +------------------+---------------------------------------------------+
 | Clause           | Purpose                                           |
@@ -121,12 +113,10 @@ with a few extra operators that are only valid in unification.
 
 ### Aggregate
 
-The 'aggregate' operator aggregates rows in a query according to a
-list of aggregate specs. An aggregate spec is either a grouping
-variable/column or (new) column plus an [expression](#expressions).
+The 'aggregate' operator aggregates rows in a query according to a list of aggregate specs.
+An aggregate spec is either a grouping variable/column or (new) column plus an [expression](#expressions).
 
-The available aggregate functions are documented
-[here](../stdlib/aggregates).
+The available aggregate functions are documented [here](../stdlib/aggregates).
 
     Aggregate :: (aggregate AggSpec*)
 
@@ -179,10 +169,8 @@ For example:
 (from :users [{:username $username} first-name last-name])
 ```
 
-Additionally, 'from' supports a special column reference -
-`projectAllCols` in JSON and the `*` symbol in Clojure. Like in SQL,
-this can be used to specify that all columns of a given table are to be
-projected out.
+Additionally, 'from' supports a special column reference - `projectAllCols` in JSON and the `*` symbol in Clojure.
+Like in SQL, this can be used to specify that all columns of a given table are to be projected out.
 
 ``` clojure
 ;; `SELECT * FROM users`
@@ -193,14 +181,9 @@ projected out.
 ```
 
 :::caution
-Note that, due to the implicit unification properties of 'from'
-outlined in the [binding specs](#binding-specs) section, explicitly
-projected columns will unify with those projected out as a result of
-`projectAllCols`/`*`.
+Note that, due to the implicit unification properties of 'from' outlined in the [binding specs](#binding-specs) section, explicitly projected columns will unify with those projected out as a result of `projectAllCols`/`*`.
 
-It is due to this property of implicit unification and projection that
-`projectAllCols`/`*` as a column reference in 'from' is not supported
-within a unification context.
+It is due to this property of implicit unification and projection that `projectAllCols`/`*` as a column reference in 'from' is not supported within a unification context.
 
 ``` clojure
 ;; INVALID
@@ -213,23 +196,15 @@ within a unification context.
 
 Temporal filters control the document versions that are visible to the query.
 
-- `at <timestamp>`: rows that were/will be visible at the specified
-    timestamp - i.e. `row-from <= timestamp < row-to`
-
-- `from <timestamp>`: rows that have been visible any time after the
-    timestamp - i.e. `row-to > timestamp`
-
-- `to <timestamp>`: rows that were visible any time before the
-    timestamp - i.e. `row-from < timestamp`
-
-- `in <from-timestamp> <to-timestamp>`: rows that were visible any
-    time within the period - i.e.
+- `at <timestamp>`: rows that were/will be visible at the specified timestamp - i.e. `row-from <= timestamp < row-to`
+- `from <timestamp>`: rows that have been visible any time after the timestamp - i.e. `row-to > timestamp`
+- `to <timestamp>`: rows that were visible any time before the timestamp - i.e. `row-from < timestamp`
+- `in <from-timestamp> <to-timestamp>`: rows that were visible any time within the period - i.e.
     `row-to > <from-timestamp> && row-from < <to-timestamp>`
 
 - `all-time`: all rows, throughout history.
 
-Unless otherwise specified, queries will see the current version of the
-row, `at <now>`, in both valid time and system time.
+Unless otherwise specified, queries will see the current version of the row, `at <now>`, in both valid time and system time.
 
     TemporalFilter :: (at Timestamp)
     | (from Timestamp)
@@ -249,28 +224,15 @@ Without any temporal filters, it is valid to just specify the binding specs with
 
 ### Joins - join, left join
 
-The 'join' and 'left join' [unify clauses](#unify-clauses) further
-constrain a unification by joining against the given query.
+The 'join' and 'left join' [unify clauses](#unify-clauses) further constrain a unification by joining against the given query.
 
-We join the inner query to the rest of the unify inputs using the
-binding specs - see the [binding specs](#binding-specs) section for
-more details. These binding specs act as both 'join conditions' (if
-the logic variables are reused within the [unify](#unify) operator) and
-a specification of which columns from the sub-query should be returned
-from the outer query.
+We join the inner query to the rest of the unify inputs using the binding specs - see the [binding specs](#binding-specs) section for more details.
+These binding specs act as both 'join conditions' (if the logic variables are reused within the [unify](#unify) operator) and a specification of which columns from the sub-query should be returned from the outer query.
 
-- The 'join' operator performs an inner, or required, join with the
-    sub-query - if a row from the outer query doesn't match, it won't be
-    returned
+- The 'join' operator performs an inner, or required, join with the sub-query - if a row from the outer query doesn't match, it won't be returned
+- The 'left-join' operator performs an outer, or optional, join with the sub-query - if a row from the outer query matches, it'll be returned; if it doesn't, it will still be returned, but with null values in the sub-query columns.
 
-- The 'left-join' operator performs an outer, or optional, join with
-    the sub-query - if a row from the outer query matches, it'll be
-    returned; if it doesn't, it will still be returned, but with null
-    values in the sub-query columns.
-
-Parameters in the sub-query can be fulfilled by passing a vector of
-arguments or, if the symbols all match, the arguments may be omitted -
-see the [argument specs](#argument-specs) section for more details.
+Parameters in the sub-query can be fulfilled by passing a vector of arguments or, if the symbols all match, the arguments may be omitted - see the [argument specs](#argument-specs) section for more details.
 
     Join :: (join Subquery [BindSpec+])
     LeftJoin :: (left-join Subquery [BindSpec+])
@@ -281,16 +243,12 @@ see the [argument specs](#argument-specs) section for more details.
                   [customer-id order-id order-value])))
 ```
 
-In this case, `customer-id` is specified multiple times, so this adds a
-join-condition constraint; `order-id` and `order-value` are not
-specified elsewhere within the unify, so these columns are simply
-returned.
+In this case, `customer-id` is specified multiple times, so this adds a join-condition constraint; `order-id` and `order-value` are not specified elsewhere within the unify, so these columns are simply returned.
 
 ### Limit
 
-The 'limit' operator limits the rows returned by the query. Without an
-explicit preceding [order by](#order-by), the rows selected for return
-are undefined.
+The 'limit' operator limits the rows returned by the query.
+Without an explicit preceding [order by](#order-by), the rows selected for return are undefined.
 
     Limit :: (limit LimitN)
     LimitN :: non-negative integer
@@ -352,8 +310,7 @@ When multiple order spec are supplied priority is given from left to right.
 The 'return' operator specifies the columns to return from the query.
 It also allows additional projections, should you want to return a new column based on existing columns.
 
-If you want to introduce a projected column while keeping the existing
-columns see the [with](#with) operator.
+If you want to introduce a projected column while keeping the existing columns see the [with](#with) operator.
 
     Return :: (return ReturnSpec*)
     ReturnSpec :: ReturnVar | {Column Expr, ...}
@@ -373,14 +330,11 @@ columns see the [with](#with) operator.
 
 ### Rel(ation)
 
-The 'rel' operator creates an inline relation with the provided
-values. The first argument is an array of maps, either as a literal, a
-parameter, or a value nested within another document. The 'rel'
-operator yields each element as a row, with the values in the map
-[bound/constrained](#binding-specs) as required.
+The 'rel' operator creates an inline relation with the provided values.
+The first argument is an array of maps, either as a literal, a parameter, or a value nested within another document.
+The 'rel' operator yields each element as a row, with the values in the map [bound/constrained](#binding-specs) as required.
 
-- To unwrap an array of values rather than an array of maps, with a
-    variable bound to each row instead, see [`unnest`](#unnest).
+- To unwrap an array of values rather than an array of maps, with a variable bound to each row instead, see [`unnest`](#unnest).
 
 <!-- -->
 
@@ -411,11 +365,8 @@ operator yields each element as a row, with the values in the map
 
 The 'unify' operator combines multiple input relations using Datalog-style unification (explained below), to achieve join-like behaviour.
 
-Each input relation defines a set of 'logic variables' in its binding
-specs - if a logic variable appears more than once within a single
-`unify` operator, the results are constrained such that the logic
-variable has the same value everywhere it's used. This has the effect of
-imposing 'join conditions' over the inputs.
+Each input relation defines a set of 'logic variables' in its binding specs - if a logic variable appears more than once within a single `unify` operator, the results are constrained such that the logic variable has the same value everywhere it's used.
+This has the effect of imposing 'join conditions' over the inputs.
 
     Unify :: (unify UnifyClause+)
     UnifyClause :: From | Join | LeftJoin | Rel | Where | With
@@ -425,9 +376,7 @@ imposing 'join conditions' over the inputs.
        (from :orders [{:xt/id order-id} customer-id order-value]))
 ```
 
-Because this query uses the `customer-id` logic variable twice, we add a
-constraint that the two occurrences must be equal - it's therefore
-equivalent to the following SQL:
+Because this query uses the `customer-id` logic variable twice, we add a constraint that the two occurrences must be equal - it's therefore equivalent to the following SQL:
 
 ``` sql
 SELECT c._id AS customer_id, customer_name,
@@ -436,38 +385,21 @@ FROM customers c
   JOIN orders o ON (c._id = o.customer_id)
 ```
 
-- In [rel](#rel) and [from](#from) clauses any logic variables
-    specified in its binding specs are unified.
+- In [rel](#rel) and [from](#from) clauses any logic variables specified in its binding specs are unified.
+- [Join](#joins) and [left join](#joins) clauses work in a similar way to [from](#from), except they execute a full sub-query (e.g.
+    another pipeline) rather than reading a single table. Any logic variables specified in their binding specs are unified in the same way.
 
-- [Join](#joins) and [left join](#joins) clauses work in a similar
-    way to [from](#from), except they execute a full sub-query (e.g.
-    another pipeline) rather than reading a single table. Any logic
-    variables specified in their binding specs are unified in the same
-    way.
-
-- [Where](#where) clauses further constrain the results using
-    predicates - these have access to any logic variable bound in the
-    containing unify operator.
-
-- [With](#with) clauses within unify may define additional logic
-    variables or, if these logic variables are used elsewhere, the value
-    of the [with](#with) result must agree with the value elsewhere in
-    the unify.
-
-- The unify operator returns a relation containing a column for every
-    logic variable bound in any of its clauses.
+- [Where](#where) clauses further constrain the results using predicates - these have access to any logic variable bound in the containing unify operator.
+- [With](#with) clauses within unify may define additional logic variables or, if these logic variables are used elsewhere, the value of the [with](#with) result must agree with the value elsewhere in the unify.
+- The unify operator returns a relation containing a column for every logic variable bound in any of its clauses.
 
 ### Unnest
 
 The 'unnest' operator extracts values from an array - returning one row for each element.
 The other columns in the query are duplicated for each row.
 
-- To unwrap an array of maps (a relation) rather than an array of
-    values, with a variable bound to each map-key instead, see
-    [rel](#rel).
-
-- If the value in question isn't an array, or the array is empty, the
-    row is filtered out.
+- To unwrap an array of maps (a relation) rather than an array of values, with a variable bound to each map-key instead, see [rel](#rel).
+- If the value in question isn't an array, or the array is empty, the row is filtered out.
 
 <!-- -->
 
@@ -505,17 +437,10 @@ The other columns in the query are duplicated for each row.
 ### Where
 
 The 'where' operator filters rows in a query or unification operator.
-It expects (optionally) many
-[predicates](/reference/main/stdlib/predicates) - rows that match all of
-the predicates will be returned; rows that fail to match one or more
-will be filtered out.
+It expects (optionally) many [predicates](/reference/main/stdlib/predicates) - rows that match all of the predicates will be returned; rows that fail to match one or more will be filtered out.
 
-- Like all other XTQL expressions, `where` respects 'three-valued
-    logic' - if an expression returns either false or null, the row
-    will be filtered out.
-
-- `where` is short-circuiting - if an earlier predicate doesn't return
-    true for a row, the remaining predicates won't be evaluated.
+- Like all other XTQL expressions, `where` respects 'three-valued logic' - if an expression returns either false or null, the row will be filtered out.
+- `where` is short-circuiting - if an earlier predicate doesn't return true for a row, the remaining predicates won't be evaluated.
 
 <!-- -->
 
@@ -537,10 +462,9 @@ will be filtered out.
 
 ### With
 
-The 'with' operator specifies columns to add to the query. It takes a
-collection of with specs. A with spec takes a column name (in the
-pipeline context) or a logic var (in the unify context) and an
-[expression](#expressions) to bind that column/logic var to.
+The 'with' operator specifies columns to add to the query.
+It takes a collection of with specs.
+A with spec takes a column name (in the pipeline context) or a logic var (in the unify context) and an [expression](#expressions) to bind that column/logic var to.
 
     With :: (with WithSpec*)
 
@@ -575,8 +499,7 @@ pipeline context) or a logic var (in the unify context) and an
 
 The 'without' operator removes columns from the ongoing query:
 
-For example, in this query, we only want the `customer-id` to join on -
-we don't want it returned - so we exclude it in a `without` operator.
+For example, in this query, we only want the `customer-id` to join on - we don't want it returned - so we exclude it in a `without` operator.
 
     Without :: (without Column*)
     Column :: keyword
@@ -591,31 +514,18 @@ we don't want it returned - so we exclude it in a `without` operator.
 
 XTQL expressions are valid within predicates, projections, bindings and arguments.
 
-- Call expressions can use functions from the [XTDB standard
-    library](../stdlib).
-
-- Variable expressions can refer to any variable in scope - within a
-    `unify` clause, any logic variable; within any other operator, any
-    column returned in the previous step.
+- Call expressions can use functions from the [XTDB standard library](../stdlib).
+- Variable expressions can refer to any variable in scope - within a `unify` clause, any logic variable; within any other operator, any column returned in the previous step.
 
 ### Subqueries
 
-- Subquery expressions must return a single row containing a single
-    column - otherwise, a runtime exception will be thrown.
-
-- 'Exists' expressions will return false if the subquery returns no
-    rows; true otherwise.
-
-- 'Pull' expressions must return a single row - otherwise, a runtime
-    exception will be thrown. The columns in the returned row will be
-    nested into a map in the outer expression.
-
-- 'Pull many' expressions may return any number of rows. The rows
-    will be nested into an array of maps in the outer expression.
-
-- The arguments to sub-queries are referred to as parameters in the
-    inner query; no other variables from the outer scope are available
-    in the inner query.
+- Subquery expressions must return a single row containing a single column - otherwise, a runtime exception will be thrown.
+- 'Exists' expressions will return false if the subquery returns no rows; true otherwise.
+- 'Pull' expressions must return a single row - otherwise, a runtime exception will be thrown.
+  The columns in the returned row will be nested into a map in the outer expression.
+- 'Pull many' expressions may return any number of rows.
+  The rows will be nested into an array of maps in the outer expression.
+- The arguments to sub-queries are referred to as parameters in the inner query; no other variables from the outer scope are available in the inner query.
 
 <!-- -->
 
@@ -706,22 +616,16 @@ Binding specs define which columns are retrieved from a relation, and specify co
     ;;      `SELECT first_name, last_name FROM users WHERE username = ?`
     ```
 
-(In these examples, we use ['from'](#from) - but the same applies to
-['join'](#joins) and ['left join'](#joins).)
+(In these examples, we use ['from'](#from) - but the same applies to ['join'](#joins) and ['left join'](#joins).)
 
-Within unify operators, these output names (`first-name`, `last-name`
-etc.) create 'logic variables' which, if they are re-used within the
-same unify operator, will add a 'join condition' - see the
-[unify](#unify) operator for more details.
+Within unify operators, these output names (`first-name`, `last-name` etc.) create 'logic variables' which, if they are re-used within the same unify operator, will add a 'join condition' - see the [unify](#unify) operator for more details.
 
 ## Arguments
 
 Arguments are used to pass values into a query, both for the query itself and for sub-queries.
 By using parameters, we can create reusable queries that can be re-executed with different values.
 
-Where [bindings](#binding-specs) specify how to join the **output** of
-the sub-query/join to the outer query, arguments specify the **inputs**
-to the sub-query/join from the outer query.
+Where [bindings](#binding-specs) specify how to join the **output** of the sub-query/join to the outer query, arguments specify the **inputs** to the sub-query/join from the outer query.
 
     Subquery :: [ Query Expr* ] | Query
     Expr :: <defined separately>
@@ -747,9 +651,7 @@ to the sub-query/join from the outer query.
                                   (limit 3))))}))
 ```
 
-As well as 'pull', this is quite commonly used in left joins, because
-we don't want to filter out rows that don't match (which would happen if
-the `<>` here was in the outer unify).
+As well as 'pull', this is quite commonly used in left joins, because we don't want to filter out rows that don't match (which would happen if the `<>` here was in the outer unify).
 
 Instead, we want to preserve them, albeit without values for the columns in the right-hand side of the left-join.
 
@@ -784,22 +686,13 @@ XTQL query options are an optional map of the following keys:
 
 `await-token`
 
-:   requires that the node has indexed *at least* as far as the
+: requires that the node has indexed *at least* as far as the
     specified await-token.
 
-    - If not provided, XTDB clients will default it to the latest
-    transaction submitted through that client. This is so that, by
-    default, transactions submitted to a client are guaranteed to be
-    visible to any later query to that same client.
-
-    - If submitting transactions and queries to different clients
-    (e.g. via a non-sticky load-balancer), it is the user's
-    responsibility to pass the await-token returned after
-    `submit-tx` as the `await-token` for subsequent queries to
-    guarantee this same read-after-write consistency level.
-
-    - If the requested transaction hasn't been indexed, the XTDB
-    client will wait (see `tx-timeout`) before evaluating the query.
+    - If not provided, XTDB clients will default it to the latest transaction submitted through that client.
+      This is so that, by default, transactions submitted to a client are guaranteed to be visible to any later query to that same client.
+    - If submitting transactions and queries to different clients (e.g. via a non-sticky load-balancer), it is the user's responsibility to pass the await-token returned after `submit-tx` as the `await-token` for subsequent queries to guarantee this same read-after-write consistency level.
+    - If the requested transaction hasn't been indexed, the XTDB client will wait (see `tx-timeout`) before evaluating the query.
 
         ``` clojure
     (xt/q node ['#(from :users [{:username %}]) "james"])
@@ -807,51 +700,39 @@ XTQL query options are an optional map of the following keys:
 
 `snapshot-token`
 
-:   a token that specifies the exact transactions that'll be visible to
+: a token that specifies the exact transactions that'll be visible to
     the query.
 
-    - If the requested transaction hasn't been indexed, the XTDB
-    client will wait (see `tx-timeout`) before evaluating the query.
-
-    - If not provided, this will default to the latest available
-    transaction on the node.
+    - If the requested transaction hasn't been indexed, the XTDB client will wait (see `tx-timeout`) before evaluating the query.
+    - If not provided, this will default to the latest available transaction on the node.
 
 `current-time`
 
-:   overrides the wall-clock time used in any
+: overrides the wall-clock time used in any
     [functions](../stdlib/temporal#_current_time) that require it.
 
-    - If not provided, defaults to the current wall-clock time of the
-    executing node
-
-    - In addition, when reading from tables, unless specified
-    explicitly for an individual table, XTDB will also use this time
-    as the valid-time to read the table at.
+    - If not provided, defaults to the current wall-clock time of the executing node
+    - In addition, when reading from tables, unless specified explicitly for an individual table, XTDB will also use this time as the valid-time to read the table at.
 
 `default-tz`
 
-:   (defaults to JVM timezone on the executing node): the default
+: (defaults to JVM timezone on the executing node): the default
     timezone to use in [functions](../stdlib/temporal) that require it.
 
 `explain?`
 
-:   rather than returning results, setting this flag to `true` returns
+: rather than returning results, setting this flag to `true` returns
     the query plan for the query (default `false`).
 
 `key-fn`
 
-:   specifies how keys are returned in query results.
+: specifies how keys are returned in query results.
 
-    - `:kebab-case-keyword` (default): kebab-case, dot-namespaced
-    keywords (e.g. `:foo.bar/baz-quux`)
+    - `:kebab-case-keyword` (default): kebab-case, dot-namespaced keywords (e.g. `:foo.bar/baz-quux`)
 
 `tx-timeout`
 
-:   duration to wait for the requested transaction (`await-token`) to be
+: duration to wait for the requested transaction (`await-token`) to be
     indexed before timing out (default unlimited).
 
-These query options (in particular, `snapshot-token`, `current-time`,
-`default-tz` - together, the 'basis') allow for truly immutable,
-repeatable database snapshots - two queries run with the same basis will
-see exactly the same version of the whole database, regardless of any
-other transactions that have occurred in the meantime.
+These query options (in particular, `snapshot-token`, `current-time`, `default-tz` - together, the 'basis') allow for truly immutable, repeatable database snapshots - two queries run with the same basis will see exactly the same version of the whole database, regardless of any other transactions that have occurred in the meantime.

@@ -6,16 +6,12 @@ This document outlines maintenance actions that can be manually triggered agains
 
 ## POST /system/finish-block
 
-This endpoint allows clients to manually trigger a block boundary in the
-transaction log by sending a `finish-block` message. This is especially
-useful in operational contexts such as after significant batch jobs,
-data imports, or migrations.
+This endpoint allows clients to manually trigger a block boundary in the transaction log by sending a `finish-block` message.
+This is especially useful in operational contexts such as after significant batch jobs, data imports, or migrations.
 
-When called, the endpoint sends a `finish-block` message to the
-transaction log.
+When called, the endpoint sends a `finish-block` message to the transaction log.
 
-The endpoint is exposed via the `healthz` service on the configured HTTP
-port (typically `8080`):
+The endpoint is exposed via the `healthz` service on the configured HTTP port (typically `8080`):
 
     POST /system/finish-block
 

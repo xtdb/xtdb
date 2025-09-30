@@ -4,11 +4,7 @@ title: XTDB community
 
 XTDB is fundamentally free-to-use and open-source (under the [MPL license](https://opensource.org/license/mpl-2-0/)).
 
-For your peace of mind, though, XTDB is the flagship product of
-[JUXT](https://juxt.pro) - a widely-respected software consultancy who
-have been building high-quality, scalable and resilient software for
-some of the world's largest (and smallest!) companies for over ten
-years.
+For your peace of mind, though, XTDB is the flagship product of [JUXT](https://juxt.pro) - a widely-respected software consultancy who have been building high-quality, scalable and resilient software for some of the world's largest (and smallest!) companies for over ten years.
 
 JUXT additionally provide [enterprise XTDB support](https://xtdb.com/support) for companies looking to adopt or extend their usage of XTDB - including training, consultancy and production support.
 

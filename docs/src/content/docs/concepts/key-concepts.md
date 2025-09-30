@@ -52,7 +52,8 @@ This works by representing each update as a new row that sits alongside the prev
 
 However given that XTDB does not account for schema ahead of time, the only means of correlating updates to a row is to impose a single ubiquitous schema requirement: each row asserted must contain an explicit `id` column.
 
-The value provided for the `id` column can be any of the supported ID types, but must be determined by the user. XTDB does not offer a means of generating new IDs automatically although use of surrogate keys (e.g. UUIDs) is encouraged.
+The value provided for the `id` column can be any of the supported ID types, but must be determined by the user.
+XTDB does not offer a means of generating new IDs automatically although use of surrogate keys (e.g. UUIDs) is encouraged.
 
 The ID allows a set of rows to be interpreted as the evolution of a single 'record', such that each row corresponds with a particular version of a record.
 The `id` column together with the built-in temporal columns forms the default primary key for each table in XTDB.
@@ -78,7 +79,7 @@ The values of these columns are maintained automatically and the respective pair
 The combination of these columns is called 'bitemporality' and can be visualized in 2 dimensions.
 For example:
 
-![Bitemporal Visualizer](/images/docs/bitemp-viz.webp)
+[Bitemporal Visualizer](/images/docs/bitemp-viz.webp)
 
 This definition of the bitemporal model was first defined by Richard Snodgrass and Christian Jensen as the "Bitemporal Conceptual Data Model" in 1994 and was (much) later adopted as the basis of the ISO SQL:2011 standard.
 

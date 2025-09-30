@@ -5,16 +5,15 @@ title: String functions
 Notes:
 
 - String positions are 1-based, in line with the SQL spec.
-- If any argument to these functions is null, the function will return
-    null.
+- If any argument to these functions is null, the function will return null.
 
 `CHARACTER_LENGTH(s)` | `CHAR_LENGTH(s)`
 
-:   length of string, in UTF8 characters
+: length of string, in UTF8 characters
 
 `str [NOT] LIKE like_pattern`
 
-:   Returns true iff the `str` matches (/ doesn't match) the
+: Returns true iff the `str` matches (/ doesn't match) the
     `like_pattern`.
 
     `like_pattern` can contain:
@@ -24,23 +23,23 @@ Notes:
 
 `str [NOT] LIKE_REGEX regex [FLAG flags]`
 
-:   Returns true iff the `str` matches (/ doesn't match) the `regex`.
+: Returns true iff the `str` matches (/ doesn't match) the `regex`.
 
     See [Regular expressions in XTDB](#regexes) for more details.
 
 `REGEXP_REPLACE(s, pattern, replacement [, flags])`
 
-:   Replace all occurrences of `pattern` in `s` with `replacement`.
+: Replace all occurrences of `pattern` in `s` with `replacement`.
 
     See [Regular expressions in XTDB](#regexes) for more details.
 
 `LOWER(str)`
 
-:   lower-case
+: lower-case
 
 `OVERLAY(str PLACING replacement FROM start_pos [FOR length])`
 
-:   replace `length` characters of `str` starting at `start_pos` with
+: replace `length` characters of `str` starting at `start_pos` with
     `replacement`
 
     - `start_pos`: 1-based start position
@@ -48,43 +47,43 @@ Notes:
 
 `POSITION(search IN str [USING CHARACTERS])`
 
-:   position of `search` within `str`, in characters
+: position of `search` within `str`, in characters
 
     - Return value is 1-based.
     - Returns 0 if not found.
 
 `TRIM([trim_char FROM] str)` | `TRIM(BOTH [trim_char] FROM str)`
 
-:   remove any occurrences of `trim_char` from the start and end of
+: remove any occurrences of `trim_char` from the start and end of
     `str`
 
     - `trim_char`: single character (defaults to 'space').
 
 `TRIM(LEADING [trim_char] FROM str)`
 
-:   remove any occurrences of `trim_char` from the start of `str`
+: remove any occurrences of `trim_char` from the start of `str`
 
     - `trim_char`: single character (defaults to 'space').
 
 `TRIM(TRAILING [trim_char] FROM str)`
 
-:   remove any occurrences of `trim_char` from the end of \`str
+: remove any occurrences of `trim_char` from the end of \`str
 
     - `trim_char`: single character (defaults to 'space').
 
 `OCTET_LENGTH(s)`
 
-:   length of string, in octets
+: length of string, in octets
 
 `POSITION(search IN str USING OCTETS)`
 
-:   position of `search` within `str`, in octets
+: position of `search` within `str`, in octets
 
     Returns 0 if not found.
 
 `SUBSTRING(str FROM from_pos)` | `SUBSTRING(str FROM from_pos FOR length)`
 
-:   Returns the sub-string of the given `str` from `from_pos` for
+: Returns the sub-string of the given `str` from `from_pos` for
     `length` characters
 
     - `from_pos`: 1-based start position
@@ -92,13 +91,11 @@ Notes:
 
 `UPPER(str)`
 
-:   upper-case
+: upper-case
 
 ## Regular expressions ('regexes') in XTDB
 
-XTDB regular expressions use Java's
-[Pattern](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/regex/Pattern.html)
-syntax.
+XTDB regular expressions use Java's [Pattern](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/regex/Pattern.html) syntax.
 
 Supported flags (string, e.g. `'im'`) are as follows:
 

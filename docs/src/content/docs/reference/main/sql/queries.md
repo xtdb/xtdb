@@ -2,26 +2,20 @@
 title: SQL Queries
 ---
 
-For examples on how to run SQL queries in each client library, see the
-[individual driver documentation](/drivers).
+For examples on how to run SQL queries in each client library, see the [individual driver documentation](/drivers).
 
 ## Top-level queries
 
 At the top-level, XTDB SQL queries augment the SQL standard in the following ways:
 
 - `SELECT` is optional - if not provided, it defaults to `SELECT *`
-- `FROM` is optional - if not provided, it defaults to a 0-column,
-    1-row table.
+- `FROM` is optional - if not provided, it defaults to a 0-column, 1-row table.
 
     This enables queries of the form `SELECT 1 + 2` - e.g. to quickly
     evaluate a data-less calculation.
 
-- `SELECT` may optionally be provided between `GROUP BY` and
-    `ORDER BY`, for readability - at the place in the pipeline where
-    it's actually evaluated.
-
-- `GROUP BY` is inferred if not provided to be every column reference
-    used outside of an aggregate function.
+- `SELECT` may optionally be provided between `GROUP BY` and `ORDER BY`, for readability - at the place in the pipeline where it's actually evaluated.
+- `GROUP BY` is inferred if not provided to be every column reference used outside of an aggregate function.
 
     e.g. for `SELECT a, SUM(b) FROM foo`, XT will infer `GROUP BY a`
 
@@ -59,13 +53,8 @@ const withClause = rr.Sequence(rr.Optional("MATERIALIZED", "skip"), "<query name
 return rr.Diagram(rr.Sequence("WITH", rr.OneOrMore(withClause, ",")))
 ```
 
-- `WITH` clauses in XTDB are 'optimization fences' - XTDB will not
-attempt to optimize an outer query into a `WITH` clause, or across
-`WITH` clauses.
-
-- Supply `MATERIALIZED` to eagerly materialize a `WITH` clause, so
-that the results can be re-used multiple times in the same query.
-
+- `WITH` clauses in XTDB are 'optimization fences' - XTDB will not attempt to optimize an outer query into a `WITH` clause, or across `WITH` clauses.
+- Supply `MATERIALIZED` to eagerly materialize a `WITH` clause, so that the results can be re-used multiple times in the same query.
 - `WITH RECURSIVE` is not yet supported in XTDB.
 
 ### <query term>
@@ -93,36 +82,19 @@ return rr.Diagram(rr.Choice(0, selectFirst, fromFirst, values, xtql, binary, rr.
 
 NB:
 
-- `SELECT` is optional in XTDB - if not provided, it defaults to
-`SELECT *`
-
-- `SELECT` may be placed after `GROUP BY` in XTDB, so that the query
-clauses are written in the order that they're executed in practice.
-
-- `GROUP BY` is optional in XTDB - if not provided, it defaults to all
-of the columns used outside of an aggregate function.
-
-- If you start your query with `FROM`, you may then include
-arbitrarily many sets of `WHERE`/`GROUP BY`/`SELECT` clauses, which
-will be evaluated in order.
-
-- Predicates can be comma-separated in XTDB, to aid with SQL
-generation - these are treated as conjuncts. There may be an
-arbitrary number of commas at the start, between any two predicate
-expressions, or at the end.
-
+- `SELECT` is optional in XTDB - if not provided, it defaults to `SELECT *`
+- `SELECT` may be placed after `GROUP BY` in XTDB, so that the query clauses are written in the order that they're executed in practice.
+- `GROUP BY` is optional in XTDB - if not provided, it defaults to all of the columns used outside of an aggregate function.
+- If you start your query with `FROM`, you may then include arbitrarily many sets of `WHERE`/`GROUP BY`/`SELECT` clauses, which will be evaluated in order.
+- Predicates can be comma-separated in XTDB, to aid with SQL generation - these are treated as conjuncts.
+  There may be an arbitrary number of commas at the start, between any two predicate expressions, or at the end.
 - XTQL queries are sent within an SQL string literal - e.g.
-`'(-> (from ...) ...)'`. Given the possible presence of single
-quotes within the query, it is recommended to use dollar-delimited
-strings here: `XTQL $$ <xtql query> $$`
+`'(-> (from ...) ...)'`.
+Given the possible presence of single quotes within the query, it is recommended to use dollar-delimited strings here: `XTQL $$ <xtql query> $$`
 
-Due to implementation details in some drivers (e.g. PGJDBC), it is
-required to additionally specify the params in standard SQL (`?`)
-following your XTQL query, so that the driver knows how many
-arguments to allow.
+Due to implementation details in some drivers (e.g. PGJDBC), it is required to additionally specify the params in standard SQL (`?`) following your XTQL query, so that the driver knows how many arguments to allow.
 
-For more details on XTQL queries, see the [XTQL
-documentation](/xtql/tutorials/introducing-xtql).
+For more details on XTQL queries, see the [XTQL documentation](/xtql/tutorials/introducing-xtql).
 
 ### <select clause>
 
@@ -261,9 +233,7 @@ const dateTimeLiteral = rr.Choice(0, dateLiteral, timeLiteral, timestampLiteral,
 return rr.Diagram(rr.Choice(0, "NULL", "<numeric literal>", stringLiteral, dateTimeLiteral))
 ```
 
-- See [Date/time
-    types](/reference/main/data-types.html#datetime-types) for more
-    details on XTDB's timestamp literals.
+- See [Date/time types](/reference/main/data-types.html#datetime-types) for more details on XTDB's timestamp literals.
 
 ### <predicate>
 
@@ -298,12 +268,9 @@ return rr.Diagram(rr.Optional(wfnPartition), rr.Optional(wfnOrder))
 
 ## Nested sub-queries
 
-Nested sub-queries allow you to easily create tree-shaped results, using
-`NEST_MANY` and `NEST_ONE`:
+Nested sub-queries allow you to easily create tree-shaped results, using `NEST_MANY` and `NEST_ONE`:
 
-- For example, if you have a one-to-many relationship (e.g. customers
-    → orders), you can write a query that, for each customer, returns an
-    array of their orders as nested objects:
+- For example, if you have a one-to-many relationship (e.g. customers → orders), you can write a query that, for each customer, returns an array of their orders as nested objects:
 
     ``` sql
     SELECT c._id AS customer_id, c.name,
@@ -332,9 +299,7 @@ Nested sub-queries allow you to easily create tree-shaped results, using
     ]
     ```
 
-- In the other direction (many-to-one) - for each order, additionally
-    return details about the customer - use `NEST_ONE` to get a single
-    nested object:
+- In the other direction (many-to-one) - for each order, additionally return details about the customer - use `NEST_ONE` to get a single nested object:
 
     ``` sql
     SELECT o._id AS order_id, o.value,

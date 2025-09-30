@@ -4,7 +4,7 @@ title: Kafka
 
 v2.1: multi-database support
 
-:   As part of multi-database support, `logClusters` were extracted in
+: As part of multi-database support, `logClusters` were extracted in
     v2.1.
 
     Prior to that, the configuration in `logClusters` was within the
@@ -34,36 +34,19 @@ v2.1: multi-database support
       # autoCreateTopic: true
     ```
 
-[Apache Kafka](https://kafka.apache.org/) can be used as an XTDB message
-log.
+[Apache Kafka](https://kafka.apache.org/) can be used as an XTDB message log.
 
 ## Setup
 
-1. Add a dependency to the `com.xtdb/xtdb-kafka` module in your
-    dependency manager.
-
-2. On your Kafka cluster, XTDB requires a Kafka topic to use as its
-    message log:
-
-    - This can be created manually and provided to the node config, or
-    XTDB can create it automatically.
-
-    - If allowing XTDB to create the topic **automatically**, ensure
-    that the connection properties supplied to the XTDB node have
-    the appropriate permissions to create topics - XTDB will create
-    the topic with some expected configuration values.
-
+1. Add a dependency to the `com.xtdb/xtdb-kafka` module in your dependency manager.
+2. On your Kafka cluster, XTDB requires a Kafka topic to use as its message log:
+    - This can be created manually and provided to the node config, or XTDB can create it automatically.
+    - If allowing XTDB to create the topic **automatically**, ensure that the connection properties supplied to the XTDB node have the appropriate permissions to create topics - XTDB will create the topic with some expected configuration values.
 3. The log topic should be configured with the following properties:
-    - **A single partition** - this ensures that the message log is
-    strictly ordered.
-
-    - `message.timestamp.type` set to `LogAppendTime` - this ensures
-    that the timestamp of the message is the time it was appended to
-    the log, rather than the time it was sent by the producer.
-
-    - The XTDB log is generally set up using the default values for
-    configuration. A few key values to consider:
-
+    - **A single partition** - this ensures that the message log is strictly ordered.
+    - `message.timestamp.type` set to `LogAppendTime` - this ensures that the timestamp of the message is the time it was appended to the log, rather than the time it was sent by the producer.
+    - The XTDB log is generally set up using the default values for configuration.
+      A few key values to consider:
         - `retention.ms`: as messages are not required to be
     permanently on the log, this value does not need to be
     particularly high. The default value of **1 day** is
@@ -82,18 +65,11 @@ log.
     topic cleanup policy should use the default value of
             **delete**.
 
-4. XTDB should be configured to use the log topic, and the Kafka
-    cluster the topic is hosted on. It should also be authorised to
-    perform all of the necessary operations the topic.
-
-    - For configuring the kafka module to authenticate with the Kafka
-    cluster, the `propertiesFile` or `propertiesMap` configuration
-    options to supply the necessary connection properties. See the
-    [example configuration](#auth_example) below.
-
-    - If using the Kafka cluster is using **ACLs**, ensure that the
-    XTDB node has the following permissions on the topic:
-
+4. XTDB should be configured to use the log topic, and the Kafka cluster the topic is hosted on.
+  It should also be authorised to perform all of the necessary operations the topic.
+    - For configuring the kafka module to authenticate with the Kafka cluster, the `propertiesFile` or `propertiesMap` configuration options to supply the necessary connection properties.
+      See the [example configuration](#auth_example) below.
+    - If using the Kafka cluster is using **ACLs**, ensure that the XTDB node has the following permissions on the topic:
         - `Describe`
         - `Read`
         - `Write`
@@ -150,9 +126,7 @@ log: !Kafka
 
 The following piece of node configuration demonstrates the following common use case:
 
-- Cluster is secured with SASL - authentication is required from the
-    module.
-
+- Cluster is secured with SASL - authentication is required from the module.
 - Topic has already been created manually.
 - Configuration values are being passed in as environment variables.
 
@@ -170,9 +144,7 @@ log: !Kafka
   autoCreateTopic: false
 ```
 
-The `KAFKA_SASL_JAAS_CONFIG` environment variable will likely contain a
-string similar to the following, and should be passed in as a secret
-value:
+The `KAFKA_SASL_JAAS_CONFIG` environment variable will likely contain a string similar to the following, and should be passed in as a secret value:
 
     org.apache.kafka.common.security.plain.PlainLoginModule required username="username" password="password";
 
@@ -184,13 +156,9 @@ Kafka-backed logs offer strong durability, but require tuning and backup strateg
 
 To minimize the risk of data loss:
 
-- **Replicate the topic** - set a replication factor of `3+` for fault
-    tolerance
-
+- **Replicate the topic** - set a replication factor of `3+` for fault tolerance
 - **Enforce quorum writes** - use `min.insync.replicas > 1`
-- **Tune retention** - ensure `retention.ms` and/or `retention.bytes`
-    keep unindexed messages long enough to allow for safe backup or
-    flushing
+- **Tune retention** - ensure `retention.ms` and/or `retention.bytes` keep unindexed messages long enough to allow for safe backup or flushing
 
 XTDB sets safe producer defaults, but you must verify your topic-level configs.
 
@@ -206,13 +174,10 @@ There are three main ways to safeguard your XTDB Kafka log:
 
 :::caution
 Always back up the storage module **before** backing up the log.
-Restoring a log without its corresponding flushed storage state may
-result in inconsistency and force an epoch reset.
+Restoring a log without its corresponding flushed storage state may result in inconsistency and force an epoch reset.
 
 - Take backups **after** a successful XTDB storage flush.
-- Capture **only committed** Kafka messages (exclude in-flight
-    transactions).
-
+- Capture **only committed** Kafka messages (exclude in-flight transactions).
 - Use Kafka tooling or snapshotting scripts.
 :::
 
@@ -221,8 +186,7 @@ result in inconsistency and force an epoch reset.
 Use Kafka-native tools to replicate log data between clusters:
 
 - [MirrorMaker](https://kafka.apache.org/documentation/#basic_ops_mirror_maker)
-- [Confluent
-    Replicator](https://docs.confluent.io/platform/current/multi-dc-deployments/replicator/index.html)
+- [Confluent Replicator](https://docs.confluent.io/platform/current/multi-dc-deployments/replicator/index.html)
 
 This allows for:
 
@@ -230,8 +194,7 @@ This allows for:
 - Low-RPO disaster recovery
 - Hot-standby clusters
 
-Note: Replication **does not** replace backups --- it only increases
-availability.
+Note: Replication **does not** replace backups --- it only increases availability.
 
 #### Application-Level Transaction Replay
 

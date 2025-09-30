@@ -2,8 +2,7 @@
 title: What is XTDB?
 ---
 
-XTDB is a **bitemporal** and **dynamic** **relational** database for
-regulated data.
+XTDB is a **bitemporal** and **dynamic** **relational** database for regulated data.
 
 At the core of XTDB is a novel relational database engine designed to help developers who are building dynamic and temporal applications with immutable data.
 
@@ -27,29 +26,18 @@ You only need to reach for temporal features when the situations arise - otherwi
 
 ## Philosophy
 
-- Immutability - losing information is bad for business and
-    destructive database operations are a bad default in 2023. By
-    contrast, XTDB keeps accurate, auditable records at all times and
-    implements strong consistency via ACID transactions by default
+- Immutability - losing information is bad for business and destructive database operations are a bad default in 2023.
+  By contrast, XTDB keeps accurate, auditable records at all times and implements strong consistency via ACID transactions by default
 
-- Temporality - flexible record versioning and querying through
-    history are common business expectations for IT applications, and
-    across many industries auditable versioning is a regulatory
-    required. XTDB makes temporal requirements easy
+- Temporality - flexible record versioning and querying through history are common business expectations for IT applications, and across many industries auditable versioning is a regulatory required.
+  XTDB makes temporal requirements easy
 
-- Schemaless-ness - normalized schemas are wonderful but it is
-    increasingly necessary to handle records with arbitrarily nested
-    data and irregular shapes. XTDB allows these records to be
-    dynamically interpreted, joined and analyzed. Schema can be
-    gradually defined and integrated with your application as
-    requirements evolve
+- Schemaless-ness - normalized schemas are wonderful but it is increasingly necessary to handle records with arbitrarily nested data and irregular shapes.
+  XTDB allows these records to be dynamically interpreted, joined and analyzed.
+  Schema can be gradually defined and integrated with your application as requirements evolve
 
-- Openness - data is valuable and usually outlives code, therefore
-    businesses should be mindful of being locked in to non-open data
-    systems. XTDB builds upon open source technologies, and is itself
-    open source software (MPL License), but more importantly the entire
-    processing and storage architecture is built around Apache Arrow - a
-    high-performance polyglot data format for cutting edge systems
+- Openness - data is valuable and usually outlives code, therefore businesses should be mindful of being locked in to non-open data systems.
+  XTDB builds upon open source technologies, and is itself open source software (MPL License), but more importantly the entire processing and storage architecture is built around Apache Arrow - a high-performance polyglot data format for cutting edge systems
 
 ## Design
 
@@ -67,25 +55,10 @@ Non-valid historical data is filtered out during low-level processing using a de
 
 ## Feature Highlights
 
-- Supports the full spectrum between normalized relational modeling
-    and dynamic document-like storage without compromising data type
-    fidelity (i.e. unlike JSONB).
-
-- A native SQL dialect combined with 'XTQL' (XTDB's composable query
-    language designed for developers) offers a more productive
-    application development experience alongside rich data analysis
-    (without ETL to another system).
-
-- Strong data consistency built around linearized, single-writer
-    transaction processing.
-
-- Accurate and immutable temporal record versioning to mitigate the
-    complexities of application logic and handle out-of-order data
-    ingestion.
-
+- Supports the full spectrum between normalized relational modeling and dynamic document-like storage without compromising data type fidelity (i.e. unlike JSONB).
+- A native SQL dialect combined with 'XTQL' (XTDB's composable query language designed for developers) offers a more productive application development experience alongside rich data analysis (without ETL to another system).
+- Strong data consistency built around linearized, single-writer transaction processing.
+- Accurate and immutable temporal record versioning to mitigate the complexities of application logic and handle out-of-order data ingestion.
 - Apache Arrow unlocks data for external integration.
-- Advanced temporal querying allows you to analyze the evolution of
-    your data.
-
-- Deploy across your choice of cloud database services or on-premise
-    to meet reliability and redundancy requirements.
+- Advanced temporal querying allows you to analyze the evolution of your data.
+- Deploy across your choice of cloud database services or on-premise to meet reliability and redundancy requirements.

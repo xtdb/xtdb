@@ -4,7 +4,7 @@ title: Clojure Configuration Cookbook
 
 v2.1: multi-database support
 
-:   Prior to 2.1, the `:disk-cache` and `:memory-cache` keys were nested
+: Prior to 2.1, the `:disk-cache` and `:memory-cache` keys were nested
     under the local/remote storage:
 
     ``` clojure
@@ -32,11 +32,9 @@ v2.1: multi-database support
     }]}
     ```
 
-This document provides examples for the EDN configuration of XTDB
-components, to be supplied to `xtdb.node/start-node`.
+This document provides examples for the EDN configuration of XTDB components, to be supplied to `xtdb.node/start-node`.
 
-See the [main configuration documentation](/ops/config) for more
-details.
+See the [main configuration documentation](/ops/config) for more details.
 
 ## Log
 
@@ -130,7 +128,7 @@ Main article: [remote storage](/ops/config/storage#remote)
 
 ``` clojure
 {:storage [:remote {;; -- required
-                    
+
                     ;; Each object store implementation has its own configuration -
                     ;; see below for some examples.
                     :object-store [:object-store-implementation {}]}]}

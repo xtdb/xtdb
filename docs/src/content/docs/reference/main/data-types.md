@@ -8,29 +8,29 @@ The following types are available within XTDB:
 
 `SMALLINT`
 
-:   16-bit signed integer
+: 16-bit signed integer
 
 `INT` | `INTEGER`
 
-:   32-bit signed integer
+: 32-bit signed integer
 
 `BIGINT`
 
-:   64-bit signed integer
+: 64-bit signed integer
 
 `FLOAT` | `REAL`
 
-:   32-bit (IEEE single-precision) floating-point number
+: 32-bit (IEEE single-precision) floating-point number
 
 `DOUBLE`
 
-:   64-bit (IEEE double-precision) floating-point number
+: 64-bit (IEEE double-precision) floating-point number
 
 ### Decimal type
 
 `NUMERIC` | `DECIMAL`
 
-:   fixed-point numeric type with user-defined precision and scale.
+: fixed-point numeric type with user-defined precision and scale.
 
 We recommend to store decimals with an explicit 32 precision or 64 precision as other precisions still have a bitwidth of 128 and 256 respectively once stored.
 
@@ -38,14 +38,13 @@ Decimal operations follow consistent rules for precision and scale:
 
 Precision Rules
 
-:   -   If both operands have precision ≤ 32 → result precision = 32
+: - If both operands have precision ≤ 32 → result precision = 32
 
-    - Otherwise → result precision = 64 (assuming the result fits a
-    precision 64 decimal)
+    - Otherwise → result precision = 64 (assuming the result fits a precision 64 decimal)
 
 Scale Rules
 
-:   -   Addition (`+`) → scale = max(s1, s2)
+: - Addition (`+`) → scale = max(s1, s2)
 
     - Subtraction (`-`) → scale = max(s1, s2)
     - Multiplication (`*`) → scale = s1 + s2
@@ -53,7 +52,7 @@ Scale Rules
 
 Comparison Operations
 
-:   Standard comparison operators are supported for decimals:
+: Standard comparison operators are supported for decimals:
 
     `<`, `⇐`, `=`, `>=`, `>`, `<>`
 
@@ -62,18 +61,15 @@ Comparison Operations
 
 Type Widening
 
-:   Operations between `DECIMAL` and non-`DECIMAL` types uses the
+: Operations between `DECIMAL` and non-`DECIMAL` types uses the
     following rules:
 
-    - Integer operand types get converted to decimal before the
-    operation.
-
-    - Floating operand types results in the decimal part being
-    converted to a floating point before the operation.
+    - Integer operand types get converted to decimal before the operation.
+    - Floating operand types results in the decimal part being converted to a floating point before the operation.
 
 Casting
 
-:   Explicit casts to `DECIMAL` types are honoured in storage and
+: Explicit casts to `DECIMAL` types are honoured in storage and
     computation:
 
     - `::DECIMAL(p, s)` → Precision = `p`, Scale = `s`
@@ -82,46 +78,40 @@ Casting
 
 Cast Behaviour
 
-:   -   Casting from a non-decimal to `::DECIMAL` uses the default
+: - Casting from a non-decimal to `::DECIMAL` uses the default
     precision and scale unless specified.
 
-    - Casting from an existing decimal with `::DECIMAL` (unspecified)
-    is a no-op --- the original precision and scale are preserved.
+    - Casting from an existing decimal with `::DECIMAL` (unspecified) is a no-op --- the original precision and scale are preserved.
 
 Examples
 
-:   -   `CAST(123.45 AS DECIMAL(5,2))` → `DECIMAL(5,2)`
+: - `CAST(123.45 AS DECIMAL(5,2))` → `DECIMAL(5,2)`
 
     - `CAST(123 AS DECIMAL(5))` → `DECIMAL(5,0)`
-    - `CAST(123.456 AS DECIMAL)` → `DECIMAL(64,9)` (unless already
-    `DECIMAL`)
+    - `CAST(123.456 AS DECIMAL)` → `DECIMAL(64,9)` (unless already `DECIMAL`)
 
 Edge Case Limitation
 
-:   Addition of large `DECIMAL` values near the 32-precision boundary
+: Addition of large `DECIMAL` values near the 32-precision boundary
     may require a precision-64 result.
 
-    - If an operation would overflow a precision-32 result, an
-    exception is raised, even though precision-64 types are
-    generally supported. The reasoning here is that we try to
-    preserve the original precision. If a larger precision is needed
-    use an explicit cast.
+    - If an operation would overflow a precision-32 result, an exception is raised, even though precision-64 types are generally supported.
+      The reasoning here is that we try to preserve the original precision.
+      If a larger precision is needed use an explicit cast.
 
 ## Date/time types
 
 `DATE`
 
-:   date without time.
+: date without time.
 
     e.g. `DATE '2007-06-29'`
 
 `TIMESTAMP [WITHOUT TIMEZONE]`
 
-:   date and time, without a time-zone offset.
+: date and time, without a time-zone offset.
 
-    - SQL standard:
-    `TIMESTAMP [WITHOUT TIMEZONE] '2020-01-01 00:00:00'`
-
+    - SQL standard: `TIMESTAMP [WITHOUT TIMEZONE] '2020-01-01 00:00:00'`
         - extension: without time-part:
     `TIMESTAMP [WITHOUT TIMEZONE] '2020-01-01'` - defaults to
     midnight
@@ -132,11 +122,9 @@ Edge Case Limitation
 
 `TIMESTAMP WITH TIMEZONE`
 
-:   date and time, with a time-zone offset.
+: date and time, with a time-zone offset.
 
-    - SQL standard:
-    `TIMESTAMP WITH TIMEZONE '2020-01-01 18:00:00+00:00'`
-
+    - SQL standard: `TIMESTAMP WITH TIMEZONE '2020-01-01 18:00:00+00:00'`
     - ISO8601 (`WITH TIMEZONE` optional):
         - `TIMESTAMP [WITH TIMEZONE] '2020-01-01T18:00:00Z'`
         - `TIMESTAMP [WITH TIMEZONE] '2020-01-01T18:00:00+00:00'`
@@ -150,13 +138,13 @@ Edge Case Limitation
 
 `TIME [WITHOUT TIMEZONE]`
 
-:   time-of-day, without a time-zone offset.
+: time-of-day, without a time-zone offset.
 
     e.g. `TIME '22:15:04.1237'`
 
 `DURATION`
 
-:   (SQL extension) a fixed amount of time.
+: (SQL extension) a fixed amount of time.
 
     Days are assumed to be 24 hours, months and years are not supported.
 
@@ -164,21 +152,19 @@ Edge Case Limitation
 
 `INTERVAL`
 
-:   a value representing the difference between two timestamps
+: a value representing the difference between two timestamps
 
     Intervals can either be expressed as years/months or
     days/hours/minutes/seconds (although these cannot overlap). Years
     are assumed to be 12 months, no other assumptions are either made or
     allowed.
 
-    - SQL standard: `INTERVAL '1 3' YEAR TO MONTH`,
-    `INTERVAL '163 12:00:00' DAY TO SECOND`
-
+    - SQL standard: `INTERVAL '1 3' YEAR TO MONTH`, `INTERVAL '163 12:00:00' DAY TO SECOND`
     - ISO8601: `INTERVAL 'P1Y3M'`, `INTERVAL 'P163DT12H'`
 
 `PERIOD`
 
-:   a pair of timestamps representing a temporal range, with inclusive
+: a pair of timestamps representing a temporal range, with inclusive
     start and exclusive end ('closed-open').
 
     - `PERIOD(DATE '1998-01-05', DATE '1998-01-12')`
@@ -189,27 +175,16 @@ Edge Case Limitation
 There are a number of considerations when casting between temporal types:
 
 - Casting from `DATE` to `TIMESTAMP` assumes the start of the day.
-- Casting to `TIMESTAMP WITH TIME ZONE` will use the system default
-    time zone.
-
-- When explicitly casting to most temporal types, can specify an
-    optional fractional precision to truncate the value to:
-
-    - In SQL, the syntax for this would be
-    `CAST(value AS TYPE(<precision>))`.
-
-- Casting to/from `VARCHAR` involves formatting or parsing as ISO8601
-    strings.
-
-- Intervals have specific casting behaviors, which are detailed in the
-    next section.
+- Casting to `TIMESTAMP WITH TIME ZONE` will use the system default time zone.
+- When explicitly casting to most temporal types, can specify an optional fractional precision to truncate the value to:
+    - In SQL, the syntax for this would be `CAST(value AS TYPE(<precision>))`.
+- Casting to/from `VARCHAR` involves formatting or parsing as ISO8601 strings.
+- Intervals have specific casting behaviors, which are detailed in the next section.
 
 ### Casting between Intervals
 
-Explicitly casting between intervals is supported, but only between
-**intervals of the same type**. When casting between intervals, it is
-required to specify an interval qualifier, otherwise the cast operation
-will not do anything.
+Explicitly casting between intervals is supported, but only between **intervals of the same type**.
+When casting between intervals, it is required to specify an interval qualifier, otherwise the cast operation will not do anything.
 
 Casting to an interval qualifier will:
 
@@ -228,70 +203,51 @@ Casting to an interval qualifier will:
 When casting to/from intervals from other types, the following rules apply:
 
 - Casting from `VARCHAR` to an interval:
-    - **Without** specifying an interval qualifier: will parse the
-    string as an ISO8601 interval, and will return a day-time
-    interval.
-
-    - **With** an interval qualifier: will parse the string and output
-    the type of interval based on the qualifier.
-
-- Casting from an `INTERVAL` to `VARCHAR` will format the interval as
-    an ISO8601 string.
-
+    - **Without** specifying an interval qualifier: will parse the string as an ISO8601 interval, and will return a day-time interval.
+    - **With** an interval qualifier: will parse the string and output the type of interval based on the qualifier.
+- Casting from an `INTERVAL` to `VARCHAR` will format the interval as an ISO8601 string.
 - Casting from an `INTERVAL` to `DURATION`:
     - Will only work if the interval is a day-time interval.
-    - Will return the entire interval as its ISO 8601 duration - any
-    days will be converted to 24 hours.
-
+    - Will return the entire interval as its ISO 8601 duration - any days will be converted to 24 hours.
 - Casting from a `DURATION` to `INTERVAL`:
     - Always returns a day-time interval.
-    - **Without** specifying an interval qualifier: always returns
-    with zero days and put the whole duration into the time part of
-    the interval.
-
-    - **With** an interval qualifier: will normalize and truncate the
-    duration according to the interval qualifier (will normalize
-    hours to days, with 1 day = 24 hours, if qualifier contains
-    `DAY`).
+    - **Without** specifying an interval qualifier: always returns with zero days and put the whole duration into the time part of the interval.
+    - **With** an interval qualifier: will normalize and truncate the duration according to the interval qualifier (will normalize hours to days, with 1 day = 24 hours, if qualifier contains `DAY`).
 
 ## Other scalar types
 
 `BOOLEAN`
 
-:   3-valued boolean: TRUE, FALSE or NULL
+: 3-valued boolean: TRUE, FALSE or NULL
 
 `VARBINARY`
 
-:   a variable-length byte array
+: a variable-length byte array
 
     e.g. `X('41af8e01')`
 
 `VARCHAR` | `TEXT`
 
-:   a variable-length character array
+: a variable-length character array
 
     e.g.:
 
     - `'hello world!'`
-    - `E'hellon world!'` - string containing C-style escape
-    characters:
-
+    - `E'hellon world!'` - string containing C-style escape characters:
         - `ooo`: octal
         - `xXX`, `uXXXX`, `UXXXXXXXX`: 2, 4 or 8 hex digits
         - `r`, `n`, `t`, `\\`, `'`
-    - `$$dollar quoted string$$`: no need to escape single/double
-    quotes etc in here.
-
+    - `$$dollar quoted string$$`: no need to escape single/double quotes etc in here.
         - dollars can also contain a tag, for nesting purposes:
     `$mytag$…​$mytag$`
 
 `URI`
 
-:   e.g. `URI 'https://xtdb.com'`
+: e.g. `URI 'https://xtdb.com'`
 
 `UUID`
 
-:   e.g. `UUID '97a392d5-5e3f-406f-9651-a828ee79b156'`
+: e.g. `UUID '97a392d5-5e3f-406f-9651-a828ee79b156'`
 
 ## Collection Types
 
@@ -299,7 +255,7 @@ XTDB supports arbitrarily nested data in a first-class way, without needing to s
 
 `ARRAY`
 
-:   an ordered list of values
+: an ordered list of values
 
     e.g.
 
@@ -308,7 +264,7 @@ XTDB supports arbitrarily nested data in a first-class way, without needing to s
 
 `OBJECT` | `RECORD`
 
-:   a mapping of keys to values:
+: a mapping of keys to values:
 
     e.g.
 

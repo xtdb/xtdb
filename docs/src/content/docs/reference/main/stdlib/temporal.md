@@ -4,9 +4,7 @@ title: Temporal functions
 
 Notes:
 
-- For information on what temporal types we support and how to
-    construct temporal literals, see [**data
-    types**](/reference/main/data-types).
+- For information on what temporal types we support and how to construct temporal literals, see [**data types**](/reference/main/data-types).
 
 ## Temporal arithmetic
 
@@ -14,7 +12,7 @@ The following functions are available for performing arithmetic on temporal type
 
 addition
 
-:   -   `date_time + duration` → date-time
+: - `date_time + duration` → date-time
 
     - `duration + date_time` → date-time
     - `date_time + interval` → date-time
@@ -24,7 +22,7 @@ addition
 
 subtraction
 
-:   -   `date_time - duration` → date-time
+: - `date_time - duration` → date-time
 
     - `date_time - interval` → date-time
     - `duration - duration` → duration
@@ -33,7 +31,7 @@ subtraction
 
 multiplication
 
-:   -   `duration * num` → duration
+: - `duration * num` → duration
 
     - `num * duration` → duration
     - `interval * num` → interval
@@ -41,98 +39,81 @@ multiplication
 
 division
 
-:   -   `duration / num` → duration
+: - `duration / num` → duration
 
     - `interval / num` → interval
 
 absolute value
 
-:   -   `ABS(duration)` → duration
+: - `ABS(duration)` → duration
 
     - `ABS(interval)` → interval
 
 Notes:
 
-- Date-times are first cast to comparable resolutions before
-    performing arithmetic.
+- Date-times are first cast to comparable resolutions before performing arithmetic.
 
     e.g. adding a date-time with second resolution to a duration with
     microsecond resolution will first cast the date-time to microsecond
     resolution.
 
-- If local and TZ-aware date-times are passed to the same operation,
-    the local date-time is first converted to a TZ-aware date-time using
-    the query's time zone.
-
-- If any part of any operation would cause an overflow (including
-    implicit casts), a runtime exception will be raised.
+- If local and TZ-aware date-times are passed to the same operation, the local date-time is first converted to a TZ-aware date-time using the query's time zone.
+- If any part of any operation would cause an overflow (including implicit casts), a runtime exception will be raised.
 
 ## Current time
 
 XTDB allows fine-grained control over user requests for the 'current time', to allow for fully repeatable queries.
 
-- The wall-clock time of a query is fixed when the query starts. It
-    can be explicitly specified by prefixing the query with
-    `SETTING CLOCK_TIME TO TIMESTAMP '…​'`; otherwise, it will snapshot
-    the current-time of the XTDB node.
-
-- The wall-clock time of a query within a transaction is fixed to the
-    system-time of the transaction, as recorded by the log (or
-    overridden by starting the transaction with
-    `BEGIN READ WRITE WITH (SYSTEM_TIME TIMESTAMP '…​')`).
-
-- The time zone of the connection can be set with
-    `SET TIME ZONE TO '…​'`
+- The wall-clock time of a query is fixed when the query starts.
+  It can be explicitly specified by prefixing the query with `SETTING CLOCK_TIME TO TIMESTAMP '…​'`; otherwise, it will snapshot the current-time of the XTDB node.
+- The wall-clock time of a query within a transaction is fixed to the system-time of the transaction, as recorded by the log (or overridden by starting the transaction with `BEGIN READ WRITE WITH (SYSTEM_TIME TIMESTAMP '…​')`).
+- The time zone of the connection can be set with `SET TIME ZONE TO '…​'`
 
 The following functions are available for retrieving the current time:
 
 `CURRENT_TIMESTAMP` | `CURRENT_TIMESTAMP(precision)`
 
-:   returns the current wall-clock date/time as a timestamp with
+: returns the current wall-clock date/time as a timestamp with
     time-zone.
 
 `CURRENT_DATE` | `CURRENT_DATE(precision)`
 
-:   returns the current UTC wall-clock date (without time-zone).
+: returns the current UTC wall-clock date (without time-zone).
 
 `CURRENT_TIME` | `CURRENT_TIME(precision)`
 
-:   returns the current UTC wall-clock time (without time-zone).
+: returns the current UTC wall-clock time (without time-zone).
 
 `LOCAL_TIMESTAMP` | `LOCAL_TIMESTAMP(precision)`
 
-:   returns the current wall-clock date/time as a local timestamp
+: returns the current wall-clock date/time as a local timestamp
     (without time-zone), as in the query's time-zone.
 
 `LOCAL_DATE` | `LOCAL_DATE(precision)`
 
-:   returns the current wall-clock date (without time-zone), as in the
+: returns the current wall-clock date (without time-zone), as in the
     query's time-zone.
 
 `LOCAL_TIME` | `LOCAL_TIME(precision)`
 
-:   returns the current wall-clock time as a local time (without
+: returns the current wall-clock time as a local time (without
     time-zone), as in the query's time-zone.
 
-`LOCALDATE`, `LOCALTIME` and `LOCALTIMESTAMP` are aliases for their
-respective functions above, for SQL spec compliance.
+`LOCALDATE`, `LOCALTIME` and `LOCALTIMESTAMP` are aliases for their respective functions above, for SQL spec compliance.
 
 ## Periods
 
-Periods in XTDB are represented as a pair of timestamps with inclusive
-start and exclusive end ('closed-open'). They are constructed with the
-`PERIOD` function:
+Periods in XTDB are represented as a pair of timestamps with inclusive start and exclusive end ('closed-open').
+They are constructed with the `PERIOD` function:
 
 `PERIOD(from, to)`
 
-:   Returns a new period from `from` to `to`.
+: Returns a new period from `from` to `to`.
 
 Most of the below period comparators have 'strictly' and 'immediate' variants.
 
 - 'strictly' variants check that the two periods don't meet - e.g.
-    `PRECEDES` will return true if the earlier period ends at the same
-    time the second period starts; `STRICTLY PRECEDES` will return
-    false.
+    `PRECEDES` will return true if the earlier period ends at the same time the second period starts; `STRICTLY PRECEDES` will return false.
 
 - 'immediately' variants check that the two periods *do* meet.
 
@@ -140,7 +121,7 @@ These functions will return null if any of their arguments are null.
 
 `p1 [STRICTLY] CONTAINS p2`
 
-:   returns true iff `p1` starts before `p2` starts and ends after `p2`
+: returns true iff `p1` starts before `p2` starts and ends after `p2`
     ends.
 
     - `CONTAINS`: `p1-start <= p2-start`, `p1-end >= p2-end`
@@ -148,13 +129,13 @@ These functions will return null if any of their arguments are null.
 
 `p1 EQUALS p2`
 
-:   returns true iff the two periods are equal
+: returns true iff the two periods are equal
 
     - `EQUALS`: `p1-start = p2-start`, `p1-end = p2-end`
 
 `p1 [STRICTLY|IMMEDIATELY] LAGS p2`
 
-:   returns true iff `p1` starts after `p2` starts and ends after `p2`
+: returns true iff `p1` starts after `p2` starts and ends after `p2`
     ends.
 
     - `LAGS`: `p1-start >= p2-start`, `p1-end > p2-end`
@@ -163,7 +144,7 @@ These functions will return null if any of their arguments are null.
 
 `p1 [STRICTLY|IMMEDIATELY] LEADS p2`
 
-:   returns true iff `p1` starts before `p2` starts and ends before `p2`
+: returns true iff `p1` starts before `p2` starts and ends before `p2`
     ends.
 
     - `LEADS`: `p1-start < p2-start`, `p1-end <= p2-end`
@@ -172,7 +153,7 @@ These functions will return null if any of their arguments are null.
 
 `p1 [STRICTLY] OVERLAPS p2`
 
-:   returns true iff `p1` starts before `p2` ends and ends after `p2`
+: returns true iff `p1` starts before `p2` ends and ends after `p2`
     starts
 
     - `OVERLAPS`: `p1-start < p2-end`, `p1-end > p2-start`
@@ -180,7 +161,7 @@ These functions will return null if any of their arguments are null.
 
 `p1 [STRICTLY|IMMEDIATELY] PRECEDES p2`
 
-:   returns true iff `p1` ends before `p2` starts
+: returns true iff `p1` ends before `p2` starts
 
     - `PRECEDES`: `p1-end <= p2-start`
     - `STRICTLY PRECEDES`: `p1-end < p2-start`
@@ -188,7 +169,7 @@ These functions will return null if any of their arguments are null.
 
 `p1 [STRICTLY|IMMEDIATELY] SUCCEEDS p2`
 
-:   returns true iff `p1` starts after `p2` ends
+: returns true iff `p1` starts after `p2` ends
 
     - `SUCCEEDS`: `p1-start >= p2-end`
     - `STRICTLY SUCCEEDS`: `p1-start > p2-end`
@@ -198,38 +179,34 @@ The below functions operate on periods:
 
 `LOWER(p)`
 
-:   returns the lower bound of the provided period, or null if it is
+: returns the lower bound of the provided period, or null if it is
     infinite.
 
 `LOWER_INF(p)`
 
-:   returns true iff the lower bound of the provided period is infinite.
+: returns true iff the lower bound of the provided period is infinite.
 
 `UPPER(p)`
 
-:   returns the upper bound of the provided period, or null if it is
+: returns the upper bound of the provided period, or null if it is
     infinite.
 
 `UPPER_INF(p)`
 
-:   returns true iff the upper bound of the provided period is infinite.
+: returns true iff the upper bound of the provided period is infinite.
 
 `p1 * p2`
 
-:   returns the intersection of the two periods.
+: returns the intersection of the two periods.
 
-    - if you have periods for `[2020, 2022]` and `[2021, 2023]`, the
-    intersection is `[2021, 2022]`
-
-    - if the periods do not intersect (including if they 'meet' -
-    `[2020, 2022]` and `[2022, 2024]`), this function will return
-    null.
+    - if you have periods for `[2020, 2022]` and `[2021, 2023]`, the intersection is `[2021, 2022]`
+    - if the periods do not intersect (including if they 'meet' - `[2020, 2022]` and `[2022, 2024]`), this function will return null.
 
 ## Other temporal functions
 
 `AGE(date_time, date_time)`
 
-:   returns an **interval** representing the difference between two
+: returns an **interval** representing the difference between two
     date-times - subtracting the second value from the first.
 
     Works for any combination of **date times**, **date times with time
@@ -237,14 +214,14 @@ The below functions operate on periods:
 
 `DATE_TRUNC(unit, date_time)`
 
-:   truncates the date-time to the given time-unit, which must be one of
+: truncates the date-time to the given time-unit, which must be one of
     `MILLENNIUM`, `CENTURY`, `DECADE`, `YEAR`, `QUARTER`, `MONTH`,
     `WEEK`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND` or
     `MICROSECOND`
 
 `DATE_TRUNC(unit, date_time, time_zone)`
 
-:   truncates a **timezone aware** date-time to the given time-unit,
+: truncates a **timezone aware** date-time to the given time-unit,
     which must be one of `MILLENNIUM`, `CENTURY`, `DECADE`, `YEAR`,
     `QUARTER`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, `SECOND`,
     `MILLISECOND` or `MICROSECOND`, and then converts it to the
@@ -255,7 +232,7 @@ The below functions operate on periods:
 
 `DATE_BIN(stride, timestamp [, origin])`
 
-:   Bins the given timestamp within the given 'stride' interval,
+: Bins the given timestamp within the given 'stride' interval,
     optionally relative to the given origin (or '1970-01-01' if not
     supplied).
 
@@ -264,7 +241,7 @@ The below functions operate on periods:
 
 `EXTRACT(field FROM date_time)`
 
-:   extracts the given field from the date-time.
+: extracts the given field from the date-time.
 
     Field must be one of `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE` or
     `SECOND`.
@@ -274,50 +251,46 @@ The below functions operate on periods:
 
 `EXTRACT(field FROM date)`
 
-:   extracts the given field from the date.
+: extracts the given field from the date.
 
     Field must be one of `YEAR`, `MONTH` or `DAY`.
 
 `EXTRACT(field FROM time)`
 
-:   extracts the given field from the time.
+: extracts the given field from the time.
 
     Field must be one of `HOUR`, `MINUTE` or `SECOND`.
 
 `EXTRACT(field FROM interval)`
 
-:   extracts the given field from the interval.
+: extracts the given field from the interval.
 
     Field must be one of `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE` or
     `SECOND`.
 
 `GENERATE_SERIES(start, end, stride)`
 
-:   Generates a series of timestamps from the given start (inclusive) to
+: Generates a series of timestamps from the given start (inclusive) to
     the given end (exclusive), with the given stride interval.
 
     e.g.
 
-    - `GENERATE_SERIES(DATE '2020-01-01', DATE '2020-01-04', INTERVAL '1' DAY)`
-    yields:
+    - `GENERATE_SERIES(DATE '2020-01-01', DATE '2020-01-04', INTERVAL '1' DAY)` yields:
 
     `[DATE '2020-01-01', DATE '2020-01-02', DATE '2020-01-03']`
 
-    - `GENERATE_SERIES(TIMESTAMP '2020-01-01T00:00:00Z', TIMESTAMP '2020-01-01T01:00:00Z', INTERVAL 'PT15M')`
-    yields:
+    - `GENERATE_SERIES(TIMESTAMP '2020-01-01T00:00:00Z', TIMESTAMP '2020-01-01T01:00:00Z', INTERVAL 'PT15M')` yields:
 
     `[TIMESTAMP '2020-01-01T00:00:00Z', TIMESTAMP '2020-01-01T00:15:00Z', TIMESTAMP '2020-01-01T00:30:00Z', TIMESTAMP '2020-01-01T00:45:00Z']`
 
-    - `GENERATE_SERIES(TIMESTAMP '2020-03-29T00:00:00Z[Europe/London]', TIMESTAMP '2020-03-31T00:00:00+01:00[Europe/London]', INTERVAL 'P1D')`
-    yields:
+    - `GENERATE_SERIES(TIMESTAMP '2020-03-29T00:00:00Z[Europe/London]', TIMESTAMP '2020-03-31T00:00:00+01:00[Europe/London]', INTERVAL 'P1D')` yields:
 
     `[TIMESTAMP '2020-03-29T00:00:00Z[Europe/London]', TIMESTAMP '2020-03-30T00:00:00+01:00[Europe/London]']`
 
     Note that, if a time-zone is specified, the series will honour
     any daylight savings transitions that occur within the series.
 
-    - `GENERATE_SERIES(TIMESTAMP '2020-03-29T00:00:00Z[Europe/London]', TIMESTAMP '2020-03-31T00:00:00+01:00[Europe/London]', INTERVAL 'PT24')`
-    yields:
+    - `GENERATE_SERIES(TIMESTAMP '2020-03-29T00:00:00Z[Europe/London]', TIMESTAMP '2020-03-31T00:00:00+01:00[Europe/London]', INTERVAL 'PT24')` yields:
 
     `[TIMESTAMP '2020-03-29T00:00:00Z[Europe/London]', TIMESTAMP '2020-03-29T23:00:00+01:00[Europe/London]']`
 
@@ -330,7 +303,7 @@ The below functions operate on periods:
 
 `RANGE_BINS(stride, period [, origin])`
 
-:   Aligns the given period within bins of the given 'stride'
+: Aligns the given period within bins of the given 'stride'
     interval, optionally relative to the given origin (or '1970-01-01'
     if not supplied).
 
@@ -340,8 +313,7 @@ The below functions operate on periods:
 
     e.g.
 
-    - A period of 00:05-00:10 within 15 minute bins yields one bin,
-    00:00-00:15 with weight 1.0:
+    - A period of 00:05-00:10 within 15 minute bins yields one bin, 00:00-00:15 with weight 1.0:
 
         ``` sql
     RANGE_BINS(INTERVAL 'PT15M',
@@ -351,8 +323,7 @@ The below functions operate on periods:
         -- [{_from: '2020-01-01T00:00Z', _to: '2020-01-01T00:15Z', _weight: 1.0}]
         ```
 
-    - A period of 12:57-13:02 within hourly bins yields two bins,
-    12:00-13:00 with weight 0.6, and 13:00-14:00 with weight 0.4:
+    - A period of 12:57-13:02 within hourly bins yields two bins, 12:00-13:00 with weight 0.6, and 13:00-14:00 with weight 0.4:
 
         ``` sql
     RANGE_BINS(INTERVAL 'PT1H',

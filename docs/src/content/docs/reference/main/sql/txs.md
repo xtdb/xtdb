@@ -23,13 +23,9 @@ return rr.Diagram(rr.Stack(insertIntoTable, rr.Choice(0, values, records, select
 ```
 
 - Documents must contain an `_id` column.
-- By default, the document will be inserted for valid-time between now
-    and end-of-time. This can be overridden by including `_valid_from`
-    and/or `_valid_to` columns in the document.
-
-- If the document already exists, 'insert' behaves like an upsert -
-    it will overwrite the existing document for the valid-time range
-    specified (or now → end-of-time if not provided).
+- By default, the document will be inserted for valid-time between now and end-of-time.
+  This can be overridden by including `_valid_from` and/or `_valid_to` columns in the document.
+- If the document already exists, 'insert' behaves like an upsert - it will overwrite the existing document for the valid-time range specified (or now → end-of-time if not provided).
 
 ### `UPDATE`
 
@@ -47,16 +43,9 @@ const predicate = rr.Optional(rr.Sequence("WHERE", "<predicate>"), "skip")
 return rr.Diagram(rr.Stack(updateTable, rr.Optional(forValidTime, "skip"), rr.Sequence(setClause, predicate)))
 ```
 
-- If the valid-time range is not provided, the effective valid-time
-    range of the update will be from now to the end of time. (SQL:2011
-    specifies that updates without this clause should be effective for
-    all valid time; the now→end-of-time default is an XTDB deviation.)
-
-- The `_id` column cannot be updated - instead, users should delete
-    this document and re-insert a new one.
-
-- The valid-time columns cannot be updated outside of the
-    for-valid-time clause (i.e. not in the `SET` clause).
+- If the valid-time range is not provided, the effective valid-time range of the update will be from now to the end of time. (SQL:2011 specifies that updates without this clause should be effective for all valid time; the now→end-of-time default is an XTDB deviation.)
+- The `_id` column cannot be updated - instead, users should delete this document and re-insert a new one.
+- The valid-time columns cannot be updated outside of the for-valid-time clause (i.e. not in the `SET` clause).
 
 ### `PATCH`
 
@@ -72,20 +61,10 @@ const records = rr.Sequence("RECORDS", objs)
 return rr.Diagram(rr.Stack(patchTable, rr.Optional(forValidTime, "skip"), records))
 ```
 
-- If the valid-time range is not provided, the effective valid-time
-    range of the update will be from now to the end of time.
-
-- The `_id` column cannot be patched - instead, users should delete
-    this document and re-insert a new one.
-
-- The valid-time columns cannot be updated outside of the
-    for-valid-time clause (i.e. not in the records themselves).
-
-- Documents are currently merged at the granularity of individual
-    keys - e.g. if a key is present in the patch document, it will
-    override the same key in the database document; if a key is absent
-    or null, the key from the document already in the database will be
-    preserved.
+- If the valid-time range is not provided, the effective valid-time range of the update will be from now to the end of time.
+- The `_id` column cannot be patched - instead, users should delete this document and re-insert a new one.
+- The valid-time columns cannot be updated outside of the for-valid-time clause (i.e. not in the records themselves).
+- Documents are currently merged at the granularity of individual keys - e.g. if a key is present in the patch document, it will override the same key in the database document; if a key is absent or null, the key from the document already in the database will be preserved.
 
 ### `DELETE`
 
@@ -102,10 +81,7 @@ const predicate = rr.Optional(rr.Sequence("WHERE", "<predicate>"), "skip")
 return rr.Diagram(rr.Stack(deleteTable, rr.Optional(forValidTime, "skip"), predicate))
 ```
 
-- If the valid-time clause is not provided, the effective valid-time
-    range of the delete will be from now to the end of time. (SQL:2011
-    specifies that deletes without this clause should be effective for
-    all valid time; the now→end-of-time default is an XTDB deviation.)
+- If the valid-time clause is not provided, the effective valid-time range of the delete will be from now to the end of time. (SQL:2011 specifies that deletes without this clause should be effective for all valid time; the now→end-of-time default is an XTDB deviation.)
 
 ### `ERASE`
 
@@ -132,8 +108,7 @@ return rr.Diagram(rr.Sequence("ASSERT", "<predicate>", rr.Optional("<message>"))
 
 If the optional message string is provided, it replaces the default error message text "Assert failed", should the predicate fail.
 
-- We check to see whether the email address already exists in the
-    database - if not, we can insert the new user.
+- We check to see whether the email address already exists in the database - if not, we can insert the new user.
 
     ``` sql
     ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@example.com'), 'Email already exists!'
@@ -141,8 +116,7 @@ If the optional message string is provided, it replaces the default error messag
     INSERT INTO users (_id, name, email) VALUES ('james', 'James', 'james@example.com')
     ```
 
-- Check the `xt.txs` table for the transaction result to see if the
-    assertion failed.
+- Check the `xt.txs` table for the transaction result to see if the assertion failed.
 
     ``` sql
     SELECT * FROM xt.txs;
@@ -159,8 +133,7 @@ If the optional message string is provided, it replaces the default error messag
 
 ### `COPY`
 
-Copies data directly into an XTDB table - usually significantly more
-efficiently than the equivalent \`INSERT\`s.
+Copies data directly into an XTDB table - usually significantly more efficiently than the equivalent \`INSERT\`s.
 
 ```railroad
 const formatOpt = rr.Sequence("FORMAT", rr.Optional('=', 'skip'), rr.Choice(0, "'transit-json'", "'transit-msgpack'"))
@@ -171,26 +144,10 @@ return rr.Diagram(rr.Stack(
 ))
 ```
 
-- A single `COPY` will atomically insert all of its documents within
-    one transaction - if you're using Kafka, we recommend you split your
-    documents into batches of ~1-10k so as not to exceed Kafka's
-    message size limits.
-
-- If you're using `psql` (or a similar tool) to connect to XTDB, those
-    tools also support other sources in addition to `STDIN` - please see
-    their own documentation for more details. For example, `psql` has a
-    [`copy`](https://www.postgresql.org/docs/current/app-psql.html#APP-PSQL-META-COMMANDS-COPY)
-    command which supports loading from a file.
-
-- Currently, there are two accepted formats: `'transit-json'` and
-    `'transit-msgpack'`. For more details on the Transit format, see the
-    [available
-    libraries](https://github.com/cognitect/transit-format?tab=readme-ov-file#implementations)
-    for your language.
-
-- On the JVM, you can use Postgres's
-    [`CopyManager`](https://jdbc.postgresql.org/documentation/publicapi/org/postgresql/copy/CopyManager.html)
-    with an XTDB connection by calling
-    `conn.unwrap(PGConnection.class).getCopyAPI()`.
-
+- A single `COPY` will atomically insert all of its documents within one transaction - if you're using Kafka, we recommend you split your documents into batches of ~1-10k so as not to exceed Kafka's message size limits.
+- If you're using `psql` (or a similar tool) to connect to XTDB, those tools also support other sources in addition to `STDIN` - please see their own documentation for more details.
+  For example, `psql` has a [`copy`](https://www.postgresql.org/docs/current/app-psql.html#APP-PSQL-META-COMMANDS-COPY) command which supports loading from a file.
+- Currently, there are two accepted formats: `'transit-json'` and `'transit-msgpack'`.
+  For more details on the Transit format, see the [available libraries](https://github.com/cognitect/transit-format?tab=readme-ov-file#implementations) for your language.
+- On the JVM, you can use Postgres's [`CopyManager`](https://jdbc.postgresql.org/documentation/publicapi/org/postgresql/copy/CopyManager.html) with an XTDB connection by calling `conn.unwrap(PGConnection.class).getCopyAPI()`.
 - In the Clojure API, `:put-docs` uses `COPY` commands on your behalf.

@@ -2,14 +2,10 @@
 title: XTQL Transactions (Clojure)
 ---
 
-Transactions in XTDB are submitted to the [log](/ops/config/log), to be
-processed asynchronously. They each consist of an array of
-[operations](#tx-ops).
+Transactions in XTDB are submitted to the [log](/ops/config/log), to be processed asynchronously.
+They each consist of an array of [operations](#tx-ops).
 
-This document provides examples for EDN transaction operations, to be
-submitted to
-[`xt/execute-tx`](/drivers/clojure/codox/xtdb.api.html#var-execute-tx)
-or [`xt/submit-tx`](/drivers/clojure/codox/xtdb.api.html#var-submit-tx).
+This document provides examples for EDN transaction operations, to be submitted to [`xt/execute-tx`](/drivers/clojure/codox/xtdb.api.html#var-execute-tx) or [`xt/submit-tx`](/drivers/clojure/codox/xtdb.api.html#var-submit-tx).
 
 ## Transaction operations
 
@@ -132,9 +128,8 @@ Documents are currently merged at the granularity of individual keys - e.g. if a
 
 ### `delete-docs`
 
-Deletes documents from the given table, optionally during the given
-valid time period. The default valid time behaviour is the same as
-[put](#put-docs), above.
+Deletes documents from the given table, optionally during the given valid time period.
+The default valid time behaviour is the same as [put](#put-docs), above.
 
 ``` clojure
 [:delete-docs

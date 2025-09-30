@@ -4,7 +4,7 @@ title: Storage
 
 v2.1: multi-database support
 
-:   As part of the multi-database support, the `memoryCache` and
+: As part of the multi-database support, the `memoryCache` and
     `diskCache` keys were extracted from the local/remote storage.
 
     Prior to that, the keys related to the `memoryCache` and `diskCache`
@@ -55,9 +55,7 @@ One of the key components of an XTDB node is the storage module - used to store 
 We offer the following implementations of the storage module:
 
 - [In memory](#in-memory): transient in-memory storage.
-- [Local disk](#local-disk): storage persisted to the local
-    filesystem.
-
+- [Local disk](#local-disk): storage persisted to the local filesystem.
 - [Remote](#remote): storage persisted remotely.
 
 ## In memory
@@ -98,15 +96,11 @@ memoryCache:
 A persistent storage implementation that:
 
 - Persists data remotely to a provided, cloud based object store.
-- Maintains an local-disk cache and in-memory cache of the working
-    set.
+- Maintains an local-disk cache and in-memory cache of the working set.
 
 :::note
-When using a remote storage implementation as part of a distributed
-cluster of XTDB nodes, we **must** ensure that all nodes are able to
-efficiently communicate the stream of file changes they make to the
-remote storage. We achieve this inter-node messaging using a [**remote
-log**](log#Remote) implementation.
+When using a remote storage implementation as part of a distributed cluster of XTDB nodes, we **must** ensure that all nodes are able to efficiently communicate the stream of file changes they make to the remote storage.
+We achieve this inter-node messaging using a [**remote log**](log#Remote) implementation.
 
 ``` yaml
 storage: !Remote

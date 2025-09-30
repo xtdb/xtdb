@@ -7,14 +7,9 @@ This setup includes:
 
 - Using **Azure Blob Storage** as the remote storage implementation.
 - Utilizing **Apache Kafka** as the shared message log implementation.
-- Exposing the cluster to the internet via a Postgres wire-compatible
-    server.
+- Exposing the cluster to the internet via a Postgres wire-compatible server.
 
-The required Azure infrastructure is provisioned using **Terraform**,
-and the XTDB cluster and it's resources are deployed on [**Azure Managed
-Kubernetes Service
-(AKS)**](https://azure.microsoft.com/en-us/products/kubernetes-service)
-using **Helm**,
+The required Azure infrastructure is provisioned using **Terraform**, and the XTDB cluster and it's resources are deployed on [**Azure Managed Kubernetes Service (AKS)**](https://azure.microsoft.com/en-us/products/kubernetes-service) using **Helm**,
 
 Although we provide numerous parameters to configure the templates, you are encouraged to edit them, use them as a foundation for more advanced use cases, and reuse existing infrastructure when suitable.
 These templates serve as a simple starting point for running XTDB on Azure and Kubernetes, and should be adapted to meet your specific needs, especially in production environments.
@@ -25,33 +20,22 @@ This guide assumes that you are using the default templates.
 
 Before starting, ensure you have the following installed:
 
-- The **Azure CLI** - See the [**Installation
-    Instructions**](https://learn.microsoft.com/en-us/cli/azure/).
-
-- **Terraform** - See the [**Installation
-    Instructions**](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli).
-
-- **kubectl** - The Kubernetes CLI, used to interact with the AKS
-    cluster. See the [**Installation
-    Instructions**](https://kubernetes.io/docs/tasks/tools/install-kubectl/).
-
-- **Helm** - The Kubernetes package manager, used to deploy numerous
-    components to AKS. See the [**Installation
-    Instructions**](https://helm.sh/docs/intro/install/).
+- The **Azure CLI** - See the [**Installation Instructions**](https://learn.microsoft.com/en-us/cli/azure/).
+- **Terraform** - See the [**Installation Instructions**](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli).
+- **kubectl** - The Kubernetes CLI, used to interact with the AKS cluster.
+  See the [**Installation Instructions**](https://kubernetes.io/docs/tasks/tools/install-kubectl/).
+- **Helm** - The Kubernetes package manager, used to deploy numerous components to AKS.
+  See the [**Installation Instructions**](https://helm.sh/docs/intro/install/).
 
 ### Authenticating the Azure CLI
 
 Within Azure, ensure that you have an existing Subscription, and that you are authenticated with the Azure CLI.
 
-Ensure that your existing Subscription has the necessary resource
-providers - see [**this
-article**](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/resource-providers-and-types)
-for more information. This guide requires the following providers:
+Ensure that your existing Subscription has the necessary resource providers - see [**this article**](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/resource-providers-and-types) for more information.
+This guide requires the following providers:
 
 - `Microsoft.ContainerService` - for the AKS resources.
-- `Microsoft.ManagedIdentity` - for the user assigned managed identity
-    resources.
-
+- `Microsoft.ManagedIdentity` - for the user assigned managed identity resources.
 - `Microsoft.Storage` - for the storage account resources.
 
 To login to Azure using the command line, run the following:
@@ -69,11 +53,8 @@ az account set --subscription "Subscription Name"
 This allows you to perform necessary operations on Azure via Terraform using the User Principal on the Azure CLI.
 
 :::note
-There are other ways to authenticate Terraform with Azure besides using
-the User Principal available via the Azure CLI. For other authentication
-scenarios, see the [**azurerm backend
-authentication**](https://developer.hashicorp.com/terraform/language/settings/backends/azurerm)
-docs.
+There are other ways to authenticate Terraform with Azure besides using the User Principal available via the Azure CLI.
+For other authentication scenarios, see the [**azurerm backend authentication**](https://developer.hashicorp.com/terraform/language/settings/backends/azurerm) docs.
 :::
 
 ## Getting started with Terraform
@@ -87,31 +68,22 @@ First, make the following `terraform init` call:
 This will download the Terraform files from the XTDB repository, and initialize the working directory.
 
 :::note
-For the sake of this guide, we store Terraform state locally. However,
-to persist the state onto Azure, you will need to configure a remote
-backend using Azure Blob Storage. This allows you to share the state
-file across teams, maintain versioning, and ensure consistency during
-deployments. For more info, see the [**Terraform azurem
-backend**](https://developer.hashicorp.com/terraform/language/backend/azurerm)
-documentation.
+For the sake of this guide, we store Terraform state locally.
+However, to persist the state onto Azure, you will need to configure a remote backend using Azure Blob Storage.
+This allows you to share the state file across teams, maintain versioning, and ensure consistency during deployments.
+For more info, see the [**Terraform azurem backend**](https://developer.hashicorp.com/terraform/language/backend/azurerm) documentation.
 :::
 
 ## What is being deployed on Azure?
 
-The sample Terraform directory sets up a few distinct parts of the infrastructure required by XTDB.
-If using the default configuration, the following will be created:
+The sample Terraform directory sets up a few distinct parts of the infrastructure required by XTDB. If using the default configuration, the following will be created:
 
 - **XTDB Resource Group and User Assigned Managed Identity**
 - **Azure Storage Account** (with a container for object storage)
-    - Configured with associated resources using the
-    [**Azure/avm-res-storage-storageaccount**](https://registry.terraform.io/modules/Azure/avm-res-storage-storageaccount/azurerm/latest)
-    Terraform module.
-
+    - Configured with associated resources using the [**Azure/avm-res-storage-storageaccount**](https://registry.terraform.io/modules/Azure/avm-res-storage-storageaccount/azurerm/latest) Terraform module.
     - Adds required permissions to the User Assigned Managed Identity.
 - **AKS Cluster**
-    - Configured with associated resources using the
-    [**Azure/aks**](https://registry.terraform.io/modules/Azure/aks/azurerm/latest)
-    Terraform module.
+    - Configured with associated resources using the [**Azure/aks**](https://registry.terraform.io/modules/Azure/aks/azurerm/latest) Terraform module.
 
 :::note
 The above infrastructure is designed for creating a simple starting point for running XTDB on Azure & Kubernetes.
@@ -120,25 +92,12 @@ The VM sizes and resource tiers can & should be adjusted to suit your specific r
 
 ## Deploying the Azure Infrastructure
 
-Before creating the Terraform resources, review and update the
-`terraform.tfvars` file to ensure the parameters are correctly set for
-your environment:
+Before creating the Terraform resources, review and update the `terraform.tfvars` file to ensure the parameters are correctly set for your environment:
 
-- You are **required** to set a unique and valid
-    `storage_account_name` for your environment.
-
-- You may also wish to change resource tiers, the location of the
-    resource group, or the VM sizes used by the AKS cluster.
-
-    - The VM sizes used within the examples may not always be
-    available in your subscription - if this is the case, see
-    alternative/equivalent VM sizes that you can use within the
-    [**Azure VM
-    Sizes**](https://docs.microsoft.com/en-us/azure/virtual-machines/sizes)
-    document.
-
-    - Ensure that the quota for the VM size and region is set
-    appropriately in `Subscription > Settings > Usage + Quotas`.
+- You are **required** to set a unique and valid `storage_account_name` for your environment.
+- You may also wish to change resource tiers, the location of the resource group, or the VM sizes used by the AKS cluster.
+    - The VM sizes used within the examples may not always be available in your subscription - if this is the case, see alternative/equivalent VM sizes that you can use within the [**Azure VM Sizes**](https://docs.microsoft.com/en-us/azure/virtual-machines/sizes) document.
+    - Ensure that the quota for the VM size and region is set appropriately in `Subscription > Settings > Usage + Quotas`.
 
 To get a full list of the resources that will be deployed by the templates, run:
 
@@ -181,8 +140,7 @@ Run the following command:
 az aks get-credentials --resource-group xtdb-resource-group --name xtdb-aks-cluster
 ```
 
-Now that `kubectl` is authenticated with the AKS cluster, you can set up
-the namespace for the XTDB deployment:
+Now that `kubectl` is authenticated with the AKS cluster, you can set up the namespace for the XTDB deployment:
 
 ``` bash
 kubectl create namespace xtdb-deployment
@@ -192,51 +150,39 @@ The AKS cluster is now ready for deployment,
 
 ### Deploying an example Kafka
 
-To deploy a basic set of Kafka resources within AKS, you can make use of
-the `bitnami/kafka` Helm chart. Run the following command:
+To deploy a basic set of Kafka resources within AKS, you can make use of the `bitnami/kafka` Helm chart.
+Run the following command:
 
 ``` bash
-helm install kafka oci://registry-1.docker.io/bitnamicharts/kafka 
-  --version 31.3.1 
-  --namespace xtdb-deployment 
-  --set listeners.client.protocol=PLAINTEXT 
-  --set listeners.controller.protocol=PLAINTEXT 
-  --set controller.resourcesPreset=medium 
+helm install kafka oci://registry-1.docker.io/bitnamicharts/kafka
+  --version 31.3.1
+  --namespace xtdb-deployment
+  --set listeners.client.protocol=PLAINTEXT
+  --set listeners.controller.protocol=PLAINTEXT
+  --set controller.resourcesPreset=medium
   --set controller.nodeSelector.node_pool=xtdbpool
 ```
 
 This command will create:
 
-- A simple, **unauthenticated** Kafka deployment on the AKS cluster,
-    which XTDB will use as its message log, along with its dependent
-    infrastructure and persistent storage.
-
-- A Kubernetes service to expose the Kafka instance to the XTDB
-    cluster.
+- A simple, **unauthenticated** Kafka deployment on the AKS cluster, which XTDB will use as its message log, along with its dependent infrastructure and persistent storage.
+- A Kubernetes service to expose the Kafka instance to the XTDB cluster.
 
 #### Considerations of the Kafka Deployment
 
-The Kafka instance set up above is for **demonstration purposes only**
-and is **not recommended for production use**. This example lacks
-authentication for the Kafka cluster and allows XTDB to manage Kafka
-topic creation and configuration itself.
+The Kafka instance set up above is for **demonstration purposes only** and is **not recommended for production use**.
+This example lacks authentication for the Kafka cluster and allows XTDB to manage Kafka topic creation and configuration itself.
 
 For production environments, consider the following:
 
 - Use a more robust Kafka deployment.
 - Pre-create the required Kafka topics.
-- Configure XTDB appropriately to interact with the production Kafka
-    setup.
+- Configure XTDB appropriately to interact with the production Kafka setup.
 
 Additional resources:
 
-- For further configuration options for the Helm chart, refer to the
-    [**Bitnami Kafka Chart
-    Documentation**](https://artifacthub.io/packages/helm/bitnami/kafka).
-
-- For detailed configuration guidance when using Kafka with XTDB, see
-    the [**XTDB Kafka Setup
-    Documentation**](https://docs.xtdb.com/ops/config/log/kafka.html#setup).
+- For further configuration options for the Helm chart, refer to the [**Bitnami Kafka Chart Documentation**](https://artifacthub.io/packages/helm/bitnami/kafka).
+- For detailed configuration guidance when using Kafka with XTDB, see the [**XTDB Kafka Setup Documentation**](https://docs.xtdb.com/ops/config/log/kafka.html#setup).
 
 ### Verifying the Kafka Deployment
 
@@ -258,10 +204,7 @@ By verifying the status and reviewing the logs, you can ensure the Kafka instanc
 
 ### Setting up the XTDB Workload Identity
 
-In order for the XTDB nodes to access an Azure storage account securely,
-a Kubernetes Service Account (KSA) must be set up and linked to a User
-Assigned Managed Identity using [**Workload Identity
-Federation**](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation).
+In order for the XTDB nodes to access an Azure storage account securely, a Kubernetes Service Account (KSA) must be set up and linked to a User Assigned Managed Identity using [**Workload Identity Federation**](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation).
 
 To set up the Kubernetes Service Account, run the following command:
 
@@ -269,32 +212,27 @@ To set up the Kubernetes Service Account, run the following command:
 kubectl create serviceaccount xtdb-service-account --namespace xtdb-deployment
 ```
 
-Fetch the name of the User Assigned Managed Identity
-(`user_assigned_managed_identity_name`) and the OIDC issuer URL of the
-AKS cluster (`oidc_issuer_url`) from the Terraform outputs.
+Fetch the name of the User Assigned Managed Identity (`user_assigned_managed_identity_name`) and the OIDC issuer URL of the AKS cluster (`oidc_issuer_url`) from the Terraform outputs.
 
 To create the federated identity run the `az` CLI command:
 
 ``` bash
-az identity federated-credential create 
-  --name "xtdb-federated-identity" 
-  --resource-group "xtdb-resource-group" 
-  --subject "system:serviceaccount:xtdb-deployment:xtdb-service-account" 
-  --audience "api://AzureADTokenExchange" 
-  --identity-name "<user_assigned_managed_identity_name>" 
+az identity federated-credential create
+  --name "xtdb-federated-identity"
+  --resource-group "xtdb-resource-group"
+  --subject "system:serviceaccount:xtdb-deployment:xtdb-service-account"
+  --audience "api://AzureADTokenExchange"
+  --identity-name "<user_assigned_managed_identity_name>"
   --issuer "<oidc_issuer_url>"
 ```
 
 The subject name must include the namespace and Kubernetes ServiceAccount name.
 
-Fetch the client ID of the User Assigned Managed Identity
-(`user_assigned_managed_identity_client_id`), and use it to annotate the
-Kubernetes Service Account to establish the link between the KSA and the
-User Assigned Managed Identity:
+Fetch the client ID of the User Assigned Managed Identity (`user_assigned_managed_identity_client_id`), and use it to annotate the Kubernetes Service Account to establish the link between the KSA and the User Assigned Managed Identity:
 
 ``` bash
-kubectl annotate serviceaccount xtdb-service-account 
-  --namespace xtdb-deployment 
+kubectl annotate serviceaccount xtdb-service-account
+  --namespace xtdb-deployment
   azure.workload.identity/client-id="<user_assigned_managed_identity_client_id>"
 ```
 
@@ -302,24 +240,20 @@ With the XTDB service account set up, we can now deploy the XTDB cluster to the 
 
 ### Deploying the XTDB cluster
 
-In order to deploy the XTDB cluster and it's constituent parts into the
-AKS cluster, we provide an `xtdb-azure` Helm chart/directory.
+In order to deploy the XTDB cluster and it's constituent parts into the AKS cluster, we provide an `xtdb-azure` Helm chart/directory.
 
-This can be found on the [**XTDB Github Container
-Registry**](https://github.com/xtdb/xtdb/pkgs/container/helm-xtdb-azure),
-and can be used directly with `helm` commands.
+This can be found on the [**XTDB Github Container Registry**](https://github.com/xtdb/xtdb/pkgs/container/helm-xtdb-azure), and can be used directly with `helm` commands.
 
-With the values from the [Terraform outputs](#terraform-outputs), you
-can now deploy the XTDB cluster. Run the following command, substituting
-the values as appropriate:
+With the values from the [Terraform outputs](#terraform-outputs), you can now deploy the XTDB cluster.
+Run the following command, substituting the values as appropriate:
 
 ``` bash
-helm install xtdb-azure oci://ghcr.io/xtdb/helm-xtdb-azure 
-  --version 2.0.0-snapshot 
-  --namespace xtdb-deployment 
-  --set xtdbConfig.serviceAccount="xtdb-service-account" 
-  --set xtdbConfig.storageContainerName=<storage_account_container> 
-  --set xtdbConfig.storageAccountName=<storage_account_name> 
+helm install xtdb-azure oci://ghcr.io/xtdb/helm-xtdb-azure
+  --version 2.0.0-snapshot
+  --namespace xtdb-deployment
+  --set xtdbConfig.serviceAccount="xtdb-service-account"
+  --set xtdbConfig.storageContainerName=<storage_account_container>
+  --set xtdbConfig.storageAccountName=<storage_account_name>
   --set xtdbConfig.userManagedIdentityClientId=<user_managed_identity_client_id>
 ```
 
@@ -327,8 +261,7 @@ The following are created by the templates:
 
 - A `ConfigMap` containing the XTDB YAML configuration.
 - A `StatefulSet` containing the XTDB nodes.
-- A `LoadBalancer` Kubernetes service to expose the XTDB cluster to
-    the internet.
+- A `LoadBalancer` Kubernetes service to expose the XTDB cluster to the internet.
 
 To check the status of the XTDB statefulset, run:
 
@@ -344,13 +277,9 @@ kubectl logs -f xtdb-statefulset-n --namespace xtdb-deployment
 
 #### Customizing the XTDB Deployment
 
-The above deployment uses the `xtdb-azure` chart defaults, individually
-setting the terraform outputs as `xtdbConfig` settings using the command
-line.
+The above deployment uses the `xtdb-azure` chart defaults, individually setting the terraform outputs as `xtdbConfig` settings using the command line.
 
-For more information on the available configuration options and fetching
-the charts locally for customization, see the [`xtdb-azure` Helm
-documentation](/ops/azure#helm)
+For more information on the available configuration options and fetching the charts locally for customization, see the [`xtdb-azure` Helm documentation](/ops/azure#helm)
 
 ### Accessing the XTDB Cluster
 

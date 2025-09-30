@@ -7,7 +7,8 @@ import { Query, Txs, Xtplay } from 'xtplay-components'
 A typical trade flow will include the following steps:
 
 1. A trade is booked on a certain day at a certain time
-2. At some time later, the trade is entered into a risk system. This might even be after the market has closed.
+2. At some time later, the trade is entered into a risk system.
+  This might even be after the market has closed.
 
 Whenever a trade arrives in our risk system we can set the valid-time (the business curated timeline) to the exact time of the trade. This backfilling of histoical data allows us to understand and report on the risk position of our trade portfolio as-of any point in the past.
 

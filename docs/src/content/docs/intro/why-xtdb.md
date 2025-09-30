@@ -14,18 +14,18 @@ Experience has made clear to us that no single piece of software infrastructure 
 However, we believe existing database technologies (Postgres, SQL Server, MongoDB etc.) are far from "finished" and that many important problems still remain unsolved across the database industry.
 Instead, these problems are left for users of such databases to work around and solve ad-hoc in their application code.
 
-One of the biggest sources of complexity in application code we hope to address is **time**, and therefore XTDB is a database built for the hard problems of: accurate record keeping (with full ACID transaction support), time-travel queries (XT stands for "across time"), and data evolution. 
+One of the biggest sources of complexity in application code we hope to address is **time**, and therefore XTDB is a database built for the hard problems of: accurate record keeping (with full ACID transaction support), time-travel queries (XT stands for "across time"), and data evolution.
 These problems are most acute wherever an organization is handling **regulated data**.
 
 ## The Problems
 
 In this era of rapidly evolving regulatory requirements, we see an increasing number of organizations across all industries feeling frustrated by the friction with [update-in-place](https://www.youtube.com/watch?v=JxMz-tyicgo) databases that don't support basic auditing requirements, let alone the accurate time-based versioning that many applications working with regulated data demand.
 
-From GDPR to HIPAA to MiFID II, all kinds of regulatory requirements justify a fundamental level of accuracy and accountability in how your software stack stores and represents key information. 
-The implications extend across the entire transactional to analytical data lifecycle. 
+From GDPR to HIPAA to MiFID II, all kinds of regulatory requirements justify a fundamental level of accuracy and accountability in how your software stack stores and represents key information.
+The implications extend across the entire transactional to analytical data lifecycle.
 XTDB is our answer for how a database can better support developers with satisfying basic regulatory requirements, thanks to its ubiquitous ['bitemporal'](https://en.wikipedia.org/wiki/Bitemporal_modeling) time-based versioning of records.
 
-We believe that DIY versioning within database schemas should be a thing of the past, and that all database technologies should offer [reliable & well-understood methods](https://www.juxt.pro/blog/bitemporality-and-the-art-of-maintaining-accurate-databases/) for versioning. 
+We believe that DIY versioning within database schemas should be a thing of the past, and that all database technologies should offer [reliable & well-understood methods](https://www.juxt.pro/blog/bitemporality-and-the-art-of-maintaining-accurate-databases/) for versioning.
 Preserving historical data should not have to be an explicit process which requires conscious design effort and careful development work.
 
 In support of this mission, XTDB solves 4 distinct problems we see with existing databases:
@@ -33,7 +33,7 @@ In support of this mission, XTDB solves 4 distinct problems we see with existing
 1. **Inconsistent reporting over historical data** - accurate reporting requires some notion of "time travel" queries, but without a stable *bitemporal* basis enforced by the database ad hoc solutions will inevitably resort to copying snapshots of entire data sets in a search for consistency.
 2. **Inadequate auditing & compliance** - audit tables and triggers and change data capture are all workarounds for the absence of basic audit facilities within a database.
 3. **Challenging data integration & evolution** - strict schema definitions, update-in-place mutations, and poor support for semi-structured data are all impediments to using relational databases as integration points.
-4. **Difficulty of managing SQL with an ad hoc bitemporal schema** - composing SQL is unnecessarily hard and is a common source of developer friction. 
+4. **Difficulty of managing SQL with an ad hoc bitemporal schema** - composing SQL is unnecessarily hard and is a common source of developer friction.
    Bitemporal versioning makes it harder still.
 
 ## The Solution

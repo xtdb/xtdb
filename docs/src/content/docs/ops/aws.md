@@ -2,14 +2,10 @@
 title: AWS
 ---
 
-XTDB provides modular support for AWS environments, including a
-pre-built Docker image, integrations for **S3 storage** and **CloudWatch
-metrics**, and configuration options for deploying onto AWS
-infrastructure.
+XTDB provides modular support for AWS environments, including a pre-built Docker image, integrations for **S3 storage** and **CloudWatch metrics**, and configuration options for deploying onto AWS infrastructure.
 
 :::note
-For more information on setting up an XTDB cluster on AWS, see the
-["Getting Started with AWS"](guides/starting-with-aws) guide.
+For more information on setting up an XTDB cluster on AWS, see the ["Getting Started with AWS"](guides/starting-with-aws) guide.
 :::
 
 ## Required infrastructure
@@ -18,12 +14,9 @@ In order to run an AWS based XTDB cluster, the following infrastructure is requi
 
 - An **S3 bucket** for remote storage.
 - A **Kafka cluster** for the message log.
-    - For more information on setting up Kafka for usage with XTDB,
-    see the [Kafka configuration](config/log/kafka) docs.
-
+    - For more information on setting up Kafka for usage with XTDB, see the [Kafka configuration](config/log/kafka) docs.
 - IAM policies which grant XTDB permission to the S3 bucket
-- XTDB nodes configured to communicate with the Kafka cluster and S3
-    bucket.
+- XTDB nodes configured to communicate with the Kafka cluster and S3 bucket.
 
 ## Terraform Templates
 
@@ -40,48 +33,26 @@ terraform init -from-module github.com/xtdb/xtdb.git//aws/terraform
 By default, running the templates will deploy the following infrastructure:
 
 - Amazon S3 Storage Bucket for remote storage.
-    - Configured with associated resources using the
-    [**terraform-aws-modules/s3-bucket**](https://registry.terraform.io/modules/terraform-aws-modules/s3-bucket/aws/latest)
-    Terraform module.
-
-    - Enables object ownership control and applies necessary
-    permissions for XTDB.
-
+    - Configured with associated resources using the [**terraform-aws-modules/s3-bucket**](https://registry.terraform.io/modules/terraform-aws-modules/s3-bucket/aws/latest) Terraform module.
+    - Enables object ownership control and applies necessary permissions for XTDB.
 - IAM Policy for granting access to the S3 storage bucket.
-    - Configured with associated resources using the
-    [**terraform-aws-modules/iam-policy**](https://registry.terraform.io/modules/terraform-aws-modules/iam/aws/latest/submodules/iam-policy)
-    Terraform module.
-
-    - Grants permissions for XTDB to read, write, and manage objects
-    within the specified S3 bucket.
-
+    - Configured with associated resources using the [**terraform-aws-modules/iam-policy**](https://registry.terraform.io/modules/terraform-aws-modules/iam/aws/latest/submodules/iam-policy) Terraform module.
+    - Grants permissions for XTDB to read, write, and manage objects within the specified S3 bucket.
 - Virtual Private Cloud (VPC) for the XTDB EKS cluster.
-    - Configured with associated resources using the
-    [**terraform-aws-modules/vpc**](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest)
-    Terraform module.
-
-    - Enables DNS resolution, assigns public subnets, and configures
-    networking for the cluster.
-
-- Amazon Elastic Kubernetes Service (EKS) Cluster for running XTDB
-    resources.
-
-    - Configured with associated resources using the
-    [**terraform-aws-modules/eks**](https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/latest)
-    Terraform module.
-
+    - Configured with associated resources using the [**terraform-aws-modules/vpc**](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest) Terraform module.
+    - Enables DNS resolution, assigns public subnets, and configures networking for the cluster.
+- Amazon Elastic Kubernetes Service (EKS) Cluster for running XTDB resources.
+    - Configured with associated resources using the [**terraform-aws-modules/eks**](https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/latest) Terraform module.
     - Provisions a managed node group dedicated to XTDB workloads.
 
 ### Configuration
 
-In order to customize the deployment, we provide a number of pre-defined
-variables within the `terraform.tfvars` file. These variables can be
-modified to tailor the infrastructure to your specific needs.
+In order to customize the deployment, we provide a number of pre-defined variables within the `terraform.tfvars` file.
+These variables can be modified to tailor the infrastructure to your specific needs.
 
 The following variables are **required** to be set:
 
-- `s3_bucket_name`: The (globally unique) name of the S3 bucket used
-    by XTDB.
+- `s3_bucket_name`: The (globally unique) name of the S3 bucket used by XTDB.
 
 For more advanced usage, the Terraform templates themselves can be modified to suit your specific requirements.
 
@@ -113,15 +84,11 @@ The Terraform templates will return several outputs:
 
 ## `xtdb-aws` Helm Charts
 
-For setting up a production-ready XTDB cluster on AWS, we provide a
-**Helm** chart built specifically for AWS environments.
+For setting up a production-ready XTDB cluster on AWS, we provide a **Helm** chart built specifically for AWS environments.
 
 ### Pre-requisites
 
-To allow the XTDB nodes to access AWS resources, a Kubernetes Service
-Account (KSA) must be setup and linked with an IAM role that has any
-necessary permissions, using [**IAM Roles for Service Accounts
-(IRSA)**](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html).
+To allow the XTDB nodes to access AWS resources, a Kubernetes Service Account (KSA) must be setup and linked with an IAM role that has any necessary permissions, using [**IAM Roles for Service Accounts (IRSA)**](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html).
 
 #### Setting Up the Kubernetes Service Account:
 
@@ -133,13 +100,9 @@ kubectl create serviceaccount xtdb-service-account --namespace xtdb-deployment
 
 #### Setting up the IAM Service Account
 
-Fetch the ARN of a policy granting access to s3
-(`s3_access_policy_arn`), the OpenID Connect identity provider of the
-EKS cluster (`oidc_provider`) and ARN for the OIDC provider
-(`oidc_provider_arn`).
+Fetch the ARN of a policy granting access to s3 (`s3_access_policy_arn`), the OpenID Connect identity provider of the EKS cluster (`oidc_provider`) and ARN for the OIDC provider (`oidc_provider_arn`).
 
-Create a file `eks_policy_document.json` for the trust policy, replacing
-values as appropriate:
+Create a file `eks_policy_document.json` for the trust policy, replacing values as appropriate:
 
 ``` json
 {
@@ -190,27 +153,22 @@ kubectl annotate serviceaccount xtdb-service-account --namespace xtdb-deployment
 
 ### Installation
 
-The Helm chart can be installed directly from the [**Github Container
-Registry**
-releases](https://github.com/xtdb/xtdb/pkgs/container/helm-xtdb-aws).
+The Helm chart can be installed directly from the [**Github Container Registry** releases](https://github.com/xtdb/xtdb/pkgs/container/helm-xtdb-aws).
 
 This will use the default configuration for the deployment, setting any required values as needed:
 
 ``` bash
-helm install xtdb-aws oci://ghcr.io/xtdb/helm-xtdb-aws 
-  --version 2.0.0-snapshot 
-  --namespace xtdb-deployment 
-  --set xtdbConfig.serviceAccount="xtdb-service-account" 
+helm install xtdb-aws oci://ghcr.io/xtdb/helm-xtdb-aws
+  --version 2.0.0-snapshot
+  --namespace xtdb-deployment
+  --set xtdbConfig.serviceAccount="xtdb-service-account"
   --set xtdbConfig.s3Bucket=<s3_bucket>
 ```
 
-We provide a number of parameters for configuring numerous parts of the
-deployment, see the [`values.yaml`
-file](https://github.com/xtdb/xtdb/tree/main/aws/helm) or call
-`helm show values`:
+We provide a number of parameters for configuring numerous parts of the deployment, see the [`values.yaml` file](https://github.com/xtdb/xtdb/tree/main/aws/helm) or call `helm show values`:
 
 ``` bash
-helm show values oci://ghcr.io/xtdb/helm-xtdb-aws 
+helm show values oci://ghcr.io/xtdb/helm-xtdb-aws
   --version 2.0.0-snapshot
 ```
 
@@ -219,36 +177,28 @@ helm show values oci://ghcr.io/xtdb/helm-xtdb-aws
 By default, the following resources are deployed by the Helm chart:
 
 - A `ConfigMap` containing the XTDB YAML configuration.
-- A `StatefulSet` containing a configurable number of XTDB nodes,
-    using the [**xtdb-aws** docker image](#docker-image)
-
-- A `LoadBalancer` Kubernetes service to expose the XTDB cluster to
-    the internet.
+- A `StatefulSet` containing a configurable number of XTDB nodes, using the [**xtdb-aws** docker image](#docker-image)
+- A `LoadBalancer` Kubernetes service to expose the XTDB cluster to the internet.
 
 ### Pulling the Chart Locally
 
-The chart can also be pulled from the **Github Container Registry**,
-allowing further configuration of the templates within:
+The chart can also be pulled from the **Github Container Registry**, allowing further configuration of the templates within:
 
 ``` bash
-helm pull oci://ghcr.io/xtdb/helm-xtdb-aws 
-  --version 2.0.0-snapshot 
+helm pull oci://ghcr.io/xtdb/helm-xtdb-aws
+  --version 2.0.0-snapshot
   --untar
 ```
 
 ## `xtdb-aws` Docker Image
 
-The [**xtdb-aws**](https://github.com/xtdb/xtdb/pkgs/container/xtdb-aws)
-image is optimized for running XTDB in AWS environments, and is deployed
-on every release to XTDB.
+The [**xtdb-aws**](https://github.com/xtdb/xtdb/pkgs/container/xtdb-aws) image is optimized for running XTDB in AWS environments, and is deployed on every release to XTDB.
 
-By default, it will use **S3** for storage and **Kafka** for the message
-log, including dependencies for both.
+By default, it will use **S3** for storage and **Kafka** for the message log, including dependencies for both.
 
 ### Configuration
 
-The following environment variables are used to configure the `xtdb-aws`
-image:
+The following environment variables are used to configure the `xtdb-aws` image:
 
 +---------------------------+------------------------------------------+
 | Variable                  | Description                              |
@@ -265,8 +215,7 @@ image:
 |                           | Prometheus metrics.                      |
 +---------------------------+------------------------------------------+
 
-You can also [set the XTDB log level](/ops/troubleshooting#loglevel)
-using environment variables.
+You can also [set the XTDB log level](/ops/troubleshooting#loglevel) using environment variables.
 
 ### Using a Custom Node Configuration
 
@@ -275,8 +224,7 @@ For advanced usage, XTDB allows the above YAML configuration to be overridden to
 In order to override the default configuration:
 
 1. Mount a custom YAML configuration file to the container.
-2. Override the `COMMAND` of the docker container to use the custom
-    configuration file, ie:
+2. Override the `COMMAND` of the docker container to use the custom configuration file, ie:
 
     ``` bash
     CMD ["-f", "/path/to/custom-config.yaml"]
@@ -284,8 +232,7 @@ In order to override the default configuration:
 
 ## S3 Storage
 
-[**Amazon S3**](https://aws.amazon.com/s3/) can be used as a shared
-object-store for XTDB's [remote storage](config/storage#remote) module.
+[**Amazon S3**](https://aws.amazon.com/s3/) can be used as a shared object-store for XTDB's [remote storage](config/storage#remote) module.
 
 ### Infrastructure Requirements
 
@@ -310,9 +257,7 @@ To use S3 as the object store, the following infrastructure is required:
     ```
 
 ::: informalexample
-If you are using an S3 compatible object storage you might need to pass
-the environment variable `AWS_S3_FORCE_PATH_STYLE=true`, because
-alternative S3 solutions often still use the older S3 path style.
+If you are using an S3 compatible object storage you might need to pass the environment variable `AWS_S3_FORCE_PATH_STYLE=true`, because alternative S3 solutions often still use the older S3 path style.
 
 ### Authentication
 
@@ -356,9 +301,7 @@ diskCache:
   path: /var/cache/xtdb/object-store
 ```
 
-If configured as an in-process node, you can also specify an
-`S3Configurator` instance - this is used to modify the requests sent to
-S3.
+If configured as an in-process node, you can also specify an `S3Configurator` instance - this is used to modify the requests sent to S3.
 
 ## Protecting XTDB Data
 
@@ -366,18 +309,11 @@ Amazon S3 provides [strong durability guarantees](https://docs.aws.amazon.com/Am
 
 To minimize risk:
 
-- Enable [S3
-    Versioning](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html)
-    --- allows recovery of deleted or overwritten objects
-
+- Enable [S3 Versioning](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html) --- allows recovery of deleted or overwritten objects
     - Will use delete markers or retention policies for soft delete
-- Use [Cross-Region
-    Replication](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication.html)
-    for disaster recovery scenarios
-
+- Use [Cross-Region Replication](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication.html) for disaster recovery scenarios
 - Apply S3 bucket lifecycle and retention policies with care
-- Lock down IAM access to prevent destructive operations from
-    untrusted sources
+- Lock down IAM access to prevent destructive operations from untrusted sources
 
 For shared guidance on storage backup strategies, see the [Backup Overview](/ops/backup-and-restore/overview).
 
@@ -388,19 +324,14 @@ XTDB storage files in S3 are immutable and ideally suited for snapshot-based bac
 To perform a full backup:
 
 - Back up the entire S3 prefix (or bucket) used by XTDB
-- Ensure all files associated with the latest flushed block are
-    present
-
-- Avoid copying in-progress files --- only finalized storage files are
-    valid for recovery
+- Ensure all files associated with the latest flushed block are present
+- Avoid copying in-progress files --- only finalized storage files are valid for recovery
 
 You can use [AWS Backup](https://docs.aws.amazon.com/aws-backup/latest/devguide/whatisbackup.html) for scheduled, versioning-aware backups of entire buckets.
 
 ## CloudWatch Monitoring
 
-XTDB supports reporting metrics to [**AWS
-Cloudwatch**](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/WhatIsCloudWatch.html)
-for performance and health monitoring.
+XTDB supports reporting metrics to [**AWS Cloudwatch**](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/WhatIsCloudWatch.html) for performance and health monitoring.
 
 ### Configuration
 
@@ -414,5 +345,4 @@ modules:
 Authentication is handled via the AWS SDK, using the default AWS credential provider chain.
 See the [AWS documentation](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html) for setup instructions.
 
-The associated credentials must have permissions to write metrics to a
-pre-configured `CloudWatch` namespace.
+The associated credentials must have permissions to write metrics to a pre-configured `CloudWatch` namespace.

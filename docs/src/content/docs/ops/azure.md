@@ -2,10 +2,7 @@
 title: Azure
 ---
 
-XTDB provides modular support for Azure environments, including a
-prebuilt Docker image, integrations with **Azure Blob Storage**,
-**Application Insights monitoring** and configuration options for
-deploying onto Azure infrastructure.
+XTDB provides modular support for Azure environments, including a prebuilt Docker image, integrations with **Azure Blob Storage**, **Application Insights monitoring** and configuration options for deploying onto Azure infrastructure.
 
 :::note
 For more details on getting started with Azure, see the ["Getting Started with Azure"](guides/starting-with-azure) guide.
@@ -15,22 +12,12 @@ For more details on getting started with Azure, see the ["Getting Started with A
 
 In order to run an Azure based XTDB cluster, the following infrastructure is required:
 
-- An **Azure Storage Account**, containing a **Storage Account
-    Container**.
-
-- A **User Assigned Managed Identity** for authentication with Azure
-    services.
-
+- An **Azure Storage Account**, containing a **Storage Account Container**.
+- A **User Assigned Managed Identity** for authentication with Azure services.
 - A **Kafka cluster** for the message log.
-    - For more information on setting up Kafka for usage with XTDB,
-    see the [Kafka configuration](config/log/kafka) docs.
-
-- XTDB nodes configured to communicate with the Kafka cluster and
-    Azure Storage Account/Container.
-
-- (On Kubernetes) A **Federated Identity Credential** setup for the
-    desired Kubernetes Namespace/Service account to give access to the
-    **User Assigned Managed Identity**.
+    - For more information on setting up Kafka for usage with XTDB, see the [Kafka configuration](config/log/kafka) docs.
+- XTDB nodes configured to communicate with the Kafka cluster and Azure Storage Account/Container.
+- (On Kubernetes) A **Federated Identity Credential** setup for the desired Kubernetes Namespace/Service account to give access to the **User Assigned Managed Identity**.
 
 ## Terraform Templates
 
@@ -48,40 +35,29 @@ By default, running the templates will deploy the following infrastructure:
 
 - **XTDB Resource Group and User Assigned Managed Identity**
 - **Azure Storage Account** (with a container for object storage)
-    - Configured with associated resources using the
-    [**Azure/avm-res-storage-storageaccount**](https://registry.terraform.io/modules/Azure/avm-res-storage-storageaccount/azurerm/latest)
-    Terraform module.
-
+    - Configured with associated resources using the [**Azure/avm-res-storage-storageaccount**](https://registry.terraform.io/modules/Azure/avm-res-storage-storageaccount/azurerm/latest) Terraform module.
     - Adds required permissions to the User Assigned Managed Identity.
 - **AKS Cluster**
-    - Configured with associated resources using the
-    [**Azure/aks**](https://registry.terraform.io/modules/Azure/aks/azurerm/latest)
-    Terraform module.
+    - Configured with associated resources using the [**Azure/aks**](https://registry.terraform.io/modules/Azure/aks/azurerm/latest) Terraform module.
 
 ### Configuration
 
-In order to customize the deployment, we provide a number of pre-defined
-variables within the `terraform.tfvars` file. These variables can be
-modified to tailor the infrastructure to your specific needs.
+In order to customize the deployment, we provide a number of pre-defined variables within the `terraform.tfvars` file.
+These variables can be modified to tailor the infrastructure to your specific needs.
 
 The following variables are **required** to be set:
 
-- `storage_account_name`: The (globally unique) name of the Azure
-    storage account used by XTDB.
+- `storage_account_name`: The (globally unique) name of the Azure storage account used by XTDB.
 
 For more advanced usage, the Terraform templates themselves can be modified to suit your specific requirements.
 
 ## `xtdb-azure` Helm Charts
 
-For setting up a production-ready XTDB cluster on Azure, we provide a
-**Helm** chart built specifically for Azure environments.
+For setting up a production-ready XTDB cluster on Azure, we provide a **Helm** chart built specifically for Azure environments.
 
 ### Pre-requisites
 
-To enable XTDB nodes to access an Azure storage account securely, a
-Kubernetes Service Account (KSA) must be set up and linked to a User
-Assigned Managed Identity using [**Workload Identity
-Federation**](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation).
+To enable XTDB nodes to access an Azure storage account securely, a Kubernetes Service Account (KSA) must be set up and linked to a User Assigned Managed Identity using [**Workload Identity Federation**](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation).
 
 #### Setting Up the Kubernetes Service Account:
 
@@ -93,18 +69,16 @@ kubectl create serviceaccount xtdb-service-account --namespace xtdb-deployment
 
 #### Binding the IAM Service Account
 
-Fetch the name of the User Assigned Managed Identity
-(`user_assigned_managed_identity_name`) and the OIDC issuer URL of the
-AKS cluster (`oidc_issuer_url`). Create the federated identity using the
-`az` CLI:
+Fetch the name of the User Assigned Managed Identity (`user_assigned_managed_identity_name`) and the OIDC issuer URL of the AKS cluster (`oidc_issuer_url`).
+Create the federated identity using the `az` CLI:
 
 ``` bash
-az identity federated-credential create 
-  --name "xtdb-federated-identity" 
-  --resource-group "xtdb-resource-group" 
-  --subject "system:serviceaccount:xtdb-deployment:xtdb-service-account" 
-  --audience "api://AzureADTokenExchange" 
-  --identity-name "<user_assigned_managed_identity_name>" 
+az identity federated-credential create
+  --name "xtdb-federated-identity"
+  --resource-group "xtdb-resource-group"
+  --subject "system:serviceaccount:xtdb-deployment:xtdb-service-account"
+  --audience "api://AzureADTokenExchange"
+  --identity-name "<user_assigned_managed_identity_name>"
   --issuer "<oidc_issuer_url>"
 ```
 
@@ -112,42 +86,35 @@ The subject name must include the namespace and Kubernetes ServiceAccount name.
 
 #### Annotating the Kubernetes Service Account
 
-Fetch the client ID of the User Assigned Managed Identity
-(`user_assigned_managed_identity_client_id`). Annotate the Kubernetes
-Service Account to establish the link between the KSA and the User
-Assigned Managed Identity:
+Fetch the client ID of the User Assigned Managed Identity (`user_assigned_managed_identity_client_id`).
+Annotate the Kubernetes Service Account to establish the link between the KSA and the User Assigned Managed Identity:
 
 ``` bash
-kubectl annotate serviceaccount xtdb-service-account 
-  --namespace xtdb-deployment 
+kubectl annotate serviceaccount xtdb-service-account
+  --namespace xtdb-deployment
   azure.workload.identity/client-id="<user_assigned_managed_identity_client_id>"
 ```
 
 ### Installation
 
-The Helm chart can be installed directly from the [**Github Container
-Registry**
-releases](https://github.com/xtdb/xtdb/pkgs/container/helm-xtdb-azure).
+The Helm chart can be installed directly from the [**Github Container Registry** releases](https://github.com/xtdb/xtdb/pkgs/container/helm-xtdb-azure).
 
 This will use the default configuration for the deployment, setting any required values as needed:
 
 ``` bash
-helm install xtdb-azure oci://ghcr.io/xtdb/helm-xtdb-azure 
-  --version 2.0.0-snapshot 
-  --namespace xtdb-deployment 
-  --set xtdbConfig.serviceAccount="xtdb-service-account" 
-  --set xtdbConfig.storageContainerName=<storage_account_container> 
-  --set xtdbConfig.storageAccountName=<storage_account_name> 
+helm install xtdb-azure oci://ghcr.io/xtdb/helm-xtdb-azure
+  --version 2.0.0-snapshot
+  --namespace xtdb-deployment
+  --set xtdbConfig.serviceAccount="xtdb-service-account"
+  --set xtdbConfig.storageContainerName=<storage_account_container>
+  --set xtdbConfig.storageAccountName=<storage_account_name>
   --set xtdbConfig.userManagedIdentityClientId=<user_managed_identity_client_id>
 ```
 
-We provide a number of parameters for configuring numerous parts of the
-deployment, see the [`values.yaml`
-file](https://github.com/xtdb/xtdb/tree/main/azure/helm) or call
-`helm show values`:
+We provide a number of parameters for configuring numerous parts of the deployment, see the [`values.yaml` file](https://github.com/xtdb/xtdb/tree/main/azure/helm) or call `helm show values`:
 
 ``` bash
-helm show values oci://ghcr.io/xtdb/helm-xtdb-azure 
+helm show values oci://ghcr.io/xtdb/helm-xtdb-azure
   --version 2.0.0-snapshot
 ```
 
@@ -156,29 +123,22 @@ helm show values oci://ghcr.io/xtdb/helm-xtdb-azure
 By default, the following resources are deployed by the Helm chart:
 
 - A `ConfigMap` containing the XTDB YAML configuration.
-- A `StatefulSet` containing a configurable number of XTDB nodes,
-    using the [**xtdb-azure** docker image](#docker-image)
-
-- A `LoadBalancer` Kubernetes service to expose the XTDB cluster to
-    the internet.
+- A `StatefulSet` containing a configurable number of XTDB nodes, using the [**xtdb-azure** docker image](#docker-image)
+- A `LoadBalancer` Kubernetes service to expose the XTDB cluster to the internet.
 
 ### Pulling the Chart Locally
 
-The chart can also be pulled from the **Github Container Registry**,
-allowing further configuration of the templates within:
+The chart can also be pulled from the **Github Container Registry**, allowing further configuration of the templates within:
 
 ``` bash
-helm pull oci://ghcr.io/xtdb/helm-xtdb-azure 
-  --version 2.0.0-snapshot 
+helm pull oci://ghcr.io/xtdb/helm-xtdb-azure
+  --version 2.0.0-snapshot
   --untar
 ```
 
 ## `xtdb-azure` Docker Image
 
-The
-[**xtdb-azure**](https://github.com/xtdb/xtdb/pkgs/container/xtdb-azure)
-image is optimized for running XTDB in Azure environments, and is
-deployed on every release to XTDB.
+The [**xtdb-azure**](https://github.com/xtdb/xtdb/pkgs/container/xtdb-azure) image is optimized for running XTDB in Azure environments, and is deployed on every release to XTDB.
 
 By default, it will use Azure Blob Storage for object storage and Kafka for the message log, including dependencies for both.
 
@@ -211,16 +171,13 @@ The following environment variables configure the `xtdb-azure` image:
 |                           | Prometheus metrics.                      |
 +---------------------------+------------------------------------------+
 
-You can also [set the XTDB log level](/ops/troubleshooting#loglevel)
-using environment variables.
+You can also [set the XTDB log level](/ops/troubleshooting#loglevel) using environment variables.
 
 ### Using the "private auth" Configuration File
 
 For setups requiring private/authenticated Kafka instances, we provide the "private auth" configuration file.
 
-To switch from the default configuration above to the authenticated
-Kafka configuration, update the `COMMAND` of the docker container as
-follows:
+To switch from the default configuration above to the authenticated Kafka configuration, update the `COMMAND` of the docker container as follows:
 
 ``` bash
 CMD ["-f", "azure_config_private_auth.yaml"]
@@ -248,8 +205,7 @@ In addition to the standard environment variables, the following environment var
 +---------------------------+------------------------------------------+
 
 :::note
-We would **strongly** recommend users mount the `KAFKA_SASL_JAAS_CONFIG`
-env as a secret on the container.
+We would **strongly** recommend users mount the `KAFKA_SASL_JAAS_CONFIG` env as a secret on the container.
 :::
 
 ### Using a Custom Node Configuration
@@ -259,8 +215,7 @@ For advanced usage, XTDB allows the above YAML configuration to be overridden to
 In order to override the default configuration:
 
 1. Mount a custom YAML configuration file to the container.
-2. Override the `COMMAND` of the docker container to use the custom
-    configuration file, ie:
+2. Override the `COMMAND` of the docker container to use the custom configuration file, ie:
 
     ``` bash
     CMD ["-f", "/path/to/custom-config.yaml"]
@@ -268,18 +223,13 @@ In order to override the default configuration:
 
 ## Azure Blob Storage
 
-[**Azure Blob
-Storage**](https://azure.microsoft.com/en-gb/products/storage/blobs) can
-be used as a shared object-store for XTDB's [remote
-storage](config/storage#remote) module.
+[**Azure Blob Storage**](https://azure.microsoft.com/en-gb/products/storage/blobs) can be used as a shared object-store for XTDB's [remote storage](config/storage#remote) module.
 
 ### Infrastructure Requirements
 
 To use Azure Blob Storage as the object store, the following infrastructure is required:
 
-1. An **Azure Storage Account**, containing a **Storage Account
-    Container**.
-
+1. An **Azure Storage Account**, containing a **Storage Account Container**.
 2. Appropriate **permissions** for the storage account:
 
 ``` json
@@ -307,10 +257,9 @@ To use Azure Blob Storage as the object store, the following infrastructure is r
 
 ### Authentication
 
-XTDB uses the Azure SDK for authentication, relying on the
-`DefaultAzureCredential`. This supports multiple authentication methods,
-including Managed Identity. For more details, refer to the [Azure
-Documentation](https://learn.microsoft.com/en-us/java/api/com.azure.identity.defaultazurecredential?view=azure-java-stable).
+XTDB uses the Azure SDK for authentication, relying on the `DefaultAzureCredential`.
+This supports multiple authentication methods, including Managed Identity.
+For more details, refer to the [Azure Documentation](https://learn.microsoft.com/en-us/java/api/com.azure.identity.defaultazurecredential?view=azure-java-stable).
 
 ### Configuration
 
@@ -358,22 +307,11 @@ Azure Blob Storage provides [strong durability guarantees](https://learn.microso
 
 To minimize risk:
 
-- Enable [Blob
-    Versioning](https://learn.microsoft.com/en-us/azure/storage/blobs/versioning-overview)
-    --- allows recovery of deleted or overwritten blobs
-
-- Enable [Soft
-    Delete](https://learn.microsoft.com/en-us/azure/storage/blobs/soft-delete-container-overview)
-    --- allows recovery of deleted blobs or containers for a configured
-    retention period
-
-- Use [Geo- or Zone-Redundant
-    Storage](https://learn.microsoft.com/en-us/azure/storage/common/storage-redundancy)
-    for disaster recovery scenarios
-
+- Enable [Blob Versioning](https://learn.microsoft.com/en-us/azure/storage/blobs/versioning-overview) --- allows recovery of deleted or overwritten blobs
+- Enable [Soft Delete](https://learn.microsoft.com/en-us/azure/storage/blobs/soft-delete-container-overview) --- allows recovery of deleted blobs or containers for a configured retention period
+- Use [Geo- or Zone-Redundant Storage](https://learn.microsoft.com/en-us/azure/storage/common/storage-redundancy) for disaster recovery scenarios
 - Apply lifecycle and retention policies with care
-- Restrict blob/container access using role-based access control
-    (RBAC) and scoped IAM roles
+- Restrict blob/container access using role-based access control (RBAC) and scoped IAM roles
 
 For shared guidance on storage backup strategies, see the [Backup Overview](/ops/backup-and-restore/overview).
 
@@ -384,11 +322,8 @@ XTDB storage files in Azure Blob Storage are immutable and ideally suited for sn
 To perform a full backup:
 
 - Back up the entire blob container (or prefix) used by XTDB
-- Ensure all blobs associated with the latest flushed block are
-    present
-
-- Avoid copying in-progress blobs --- only finalized storage blobs are
-    valid for recovery
+- Ensure all blobs associated with the latest flushed block are present
+- Avoid copying in-progress blobs --- only finalized storage blobs are valid for recovery
 
 You can use [Azure Backup](https://learn.microsoft.com/en-us/azure/backup/backup-overview) for scheduled, versioning-aware backups of storage containers.
 
