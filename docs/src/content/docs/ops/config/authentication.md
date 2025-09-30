@@ -35,12 +35,10 @@ authn: !UserTable
 ### User Management
 
 **Default User**
-
 : The `pg_user` table contains a default user "xtdb" with password
     "xtdb".
 
 **Creating Users**
-
 :
 
 ``` sql
@@ -48,7 +46,6 @@ CREATE USER alan WITH PASSWORD 'TURING'
 ```
 
 **Modifying Users**
-
 :
 
 ``` sql
@@ -56,7 +53,6 @@ ALTER USER ada WITH PASSWORD 'LOVELACE'
 ```
 
 **Password Validation**
-
 : When `PASSWORD` method is specified, credentials are validated
     against the `pg_user` table entries.
 
@@ -90,14 +86,12 @@ Authentication rules are evaluated in order until the first match.
 If no rules match, the connection is rejected.
 
 **Rule Parameters**
-
 : - `user` (optional): Match specific username
 
     - `remoteAddress` (optional): Match IP address or CIDR block (IPv4 or IPv6)
     - `method` (required): Authentication method to use
 
 **Available Methods**
-
 : - `TRUST`: No authentication required
 
     - `PASSWORD`: Require username/password validation
@@ -105,7 +99,6 @@ If no rules match, the connection is rejected.
     - `DEVICE_AUTH`: OAuth device authorization flow (OIDC only)
 
 **Example Rule**
-
 :
 
 ``` yaml

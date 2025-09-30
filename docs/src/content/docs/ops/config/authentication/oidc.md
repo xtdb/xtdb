@@ -8,7 +8,6 @@ OIDC authentication supports multiple OAuth 2.0 flows for different client types
 ## Identity Provider Requirements
 
 **Required Capabilities**
-
 : - OpenID Connect Discovery (/.well-known/openid_configuration)
 
     - At least one of the following OAuth 2.0 grant types:
@@ -66,18 +65,15 @@ authn: !OpenIdConnect
 The username provided in database connections serves different purposes depending on the authentication method:
 
 **PASSWORD Method**
-
 : The username is used both for rule matching AND for actual OIDC
     authentication with your identity provider.
 
 **CLIENT_CREDENTIALS and DEVICE_AUTH Methods**
-
 : The username is used ONLY for rule matching to determine which
     authentication method to apply. The actual username value is ignored
     during authentication.
 
 **Rule Filtering**
-
 : - If using only CLIENT_CREDENTIALS or only DEVICE_AUTH, you don't
     need user-specific rules - you can use a catch-all rule with
     just `method: CLIENT_CREDENTIALS` or `method: DEVICE_AUTH`
@@ -97,7 +93,6 @@ Check your provider's documentation for supported grant types.
 Uses OAuth Client Credentials flow for service accounts and automated processes.
 
 **Connection Details**
-
 : - **Username**: Must match the `user` value in your
     CLIENT_CREDENTIALS rule (e.g., `oidc-client` in the example
     above)
@@ -105,7 +100,6 @@ Uses OAuth Client Credentials flow for service accounts and automated processes.
     - **Password**: `client-id:client-secret` (colon-delimited)
 
 **Client Usage Example**
-
 :
 
 ``` bash
@@ -118,7 +112,6 @@ PGPASSWORD="your-client-id:your-client-secret" psql -h localhost -p 5432 -U oidc
 Uses OAuth Resource Owner Password Credentials flow for interactive users.
 
 **Client Usage**
-
 :
 
 ``` bash
@@ -131,12 +124,10 @@ psql -h localhost -p 5432 -U username -d xtdb
 Uses OAuth Device Authorization flow for applications that cannot securely store secrets.
 
 **Connection Details**
-
 : - **Username**: Must match the `user` value in your DEVICE_AUTH
     rule (e.g., `oidc-device` in the example above)
 
 **Flow Process**
-
 : 1.
 Client requests device code from XTDB
 
@@ -145,7 +136,6 @@ Client requests device code from XTDB
     4. Access token issued upon successful authentication
 
 **Client Usage Example**
-
 :
 
 ``` bash
@@ -157,13 +147,11 @@ psql -h localhost -p 5432 -U oidc-device -d xtdb
 ## Token Management
 
 **Validation**
-
 : Tokens are validated before query and data operations.
 Connections
     terminate if validation fails.
 
 **Refresh**
-
 : - PASSWORD/DEVICE_AUTH: Automatic refresh using refresh tokens
 
     - CLIENT_CREDENTIALS: New tokens requested using client credentials
@@ -171,9 +159,7 @@ Connections
 ## Troubleshooting
 
 **Authentication Failed**
-
 : Verify client ID/secret configuration and issuer URL accessibility.
 
 **Token Expired**
-
 : Check access token lifespan settings in identity provider.

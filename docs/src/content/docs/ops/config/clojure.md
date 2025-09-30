@@ -3,7 +3,6 @@ title: Clojure Configuration Cookbook
 ---
 
 v2.1: multi-database support
-
 : Prior to 2.1, the `:disk-cache` and `:memory-cache` keys were nested
     under the local/remote storage:
 

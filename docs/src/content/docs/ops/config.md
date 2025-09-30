@@ -3,7 +3,6 @@ title: Configuration
 ---
 
 v2.1: multi-database support
-
 : The log and storage configurations were changed as part of 2.1's
     multi-db support. For more details on those changes, see the
     [Transaction Logs](config/log) and [Object Storage](config/storage)
@@ -97,7 +96,6 @@ compactor:
 ## CLI tools/flags
 
 v2.1: top-level commands
-
 : In v2.1, we changed the CLI to use top-level commands (not
     dissimilar to Git, for example).
 
@@ -110,26 +108,22 @@ v2.1: top-level commands
 You can run various tools by passing arguments - either directly to the CLI or via Docker's arguments:
 
 `node` (default, can be omitted)
-
 : - `-f <file>`, `--file <file>`: specifies the configuration file
     to use.
 
 `playground`
-
 : Starts a playground - an in-memory server that will accept any
     database name, creating it if required.
 
     - `-p <port>`, `--port <port>` (default 5432): specifies the port to run the playground server on.
 
 `compactor`
-
 : Starts a compactor-only node - useful for giving the compaction
     process more compute resources.
 
     - `-f <file>`, `--file <file>`: specifies the configuration file to use.
 
 `reset-compactor`
-
 : Resets the compaction back to L0, deleting any L1+ files - use this
     if you've encountered a compaction bug and need to reset its state.
 
@@ -147,11 +141,9 @@ You can run various tools by passing arguments - either directly to the CLI or v
     finer-grained reset will be added in a later release.
 
 `read-arrow-file <file>`
-
 : reads an Arrow file and emits it as EDN
 
 `read-arrow-stream-file <file>`
-
 : reads an Arrow 'stream IPC format' file and emits it as EDN
 
 e.g.

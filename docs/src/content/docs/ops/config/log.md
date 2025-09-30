@@ -3,7 +3,6 @@ title: Log
 ---
 
 v2.1: multi-database support
-
 : As part of the multi-database support, the Kafka log-clusters were
     extracted - see the [Kafka log documentation](log/kafka) for more
     details.

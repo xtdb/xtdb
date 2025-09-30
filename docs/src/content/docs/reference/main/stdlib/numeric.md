@@ -22,43 +22,33 @@ The standard arithmetic functions are available:
 ## Other numeric functions
 
 `ABS(x)`
-
 : absolute value of `x`
 
 `CEIL(x)` | `CEILING(x)`
-
 : nearest integer greater than or equal to `x`
 
 `EXP(x)`
-
 : ℯ (base of natural logarithms) raised to the power of `x`
 
 `FLOOR(x)`
-
 : nearest integer less than or equal to `x`
 
 `LN(x)`
-
 : natural logarithm
 
 `LOG(x, y)`
-
 : logarithm of `x`, base `y`
 
 `LOG10(x)`
-
 : logarithm of `x`, base 10
 
 `MOD(x, y)`
-
 : modulus of `x`, base `y`
 
 `POWER(x, y)`
-
 : `x` raised to the \`y\`th power
 
 `SQRT(x)`
-
 : square root
 
 ## Trigonometric functions

@@ -3,7 +3,6 @@ title: Kafka
 ---
 
 v2.1: multi-database support
-
 : As part of multi-database support, `logClusters` were extracted in
     v2.1.
 

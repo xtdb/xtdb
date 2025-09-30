@@ -3,7 +3,6 @@ title: Storage
 ---
 
 v2.1: multi-database support
-
 : As part of the multi-database support, the `memoryCache` and
     `diskCache` keys were extracted from the local/remote storage.
 
@@ -104,7 +103,6 @@ We achieve this inter-node messaging using a [**remote log**](log#Remote) implem
 
 ``` yaml
 storage: !Remote
-:::
   # -- required
 
   # Configuration of the Object Store to use for remote storage

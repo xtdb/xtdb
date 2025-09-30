@@ -685,7 +685,6 @@ Instead, we want to preserve them, albeit without values for the columns in the 
 XTQL query options are an optional map of the following keys:
 
 `await-token`
-
 : requires that the node has indexed *at least* as far as the
     specified await-token.
 
@@ -699,7 +698,6 @@ XTQL query options are an optional map of the following keys:
         ```
 
 `snapshot-token`
-
 : a token that specifies the exact transactions that'll be visible to
     the query.
 
@@ -707,7 +705,6 @@ XTQL query options are an optional map of the following keys:
     - If not provided, this will default to the latest available transaction on the node.
 
 `current-time`
-
 : overrides the wall-clock time used in any
     [functions](../stdlib/temporal#_current_time) that require it.
 
@@ -715,23 +712,19 @@ XTQL query options are an optional map of the following keys:
     - In addition, when reading from tables, unless specified explicitly for an individual table, XTDB will also use this time as the valid-time to read the table at.
 
 `default-tz`
-
 : (defaults to JVM timezone on the executing node): the default
     timezone to use in [functions](../stdlib/temporal) that require it.
 
 `explain?`
-
 : rather than returning results, setting this flag to `true` returns
     the query plan for the query (default `false`).
 
 `key-fn`
-
 : specifies how keys are returned in query results.
 
     - `:kebab-case-keyword` (default): kebab-case, dot-namespaced keywords (e.g. `:foo.bar/baz-quux`)
 
 `tx-timeout`
-
 : duration to wait for the requested transaction (`await-token`) to be
     indexed before timing out (default unlimited).
 
