@@ -804,6 +804,10 @@
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(+ ~@%))})
 
+(defmethod codegen-call [:+ :duration :duration] [{:keys [arg-types]}]
+  {:return-type (types/least-upper-bound arg-types)
+   :->call-code #(do `(+ ~@%))})
+
 (defmethod codegen-call [:- :int :int] [{:keys [arg-types]}]
   (let [return-type (types/least-upper-bound arg-types)]
     {:return-type return-type
@@ -918,6 +922,14 @@
                      (if (zero? r#)
                        (throw-div-0)
                        (/ l# r#))))})
+
+(defmethod codegen-call [:/ :duration :num] [{[dur-type _num-type] :arg-types}]
+  {:return-type dur-type
+   :->call-code (fn [[dur num]]
+                  `(let [dur# ~dur, num# ~num]
+                     (if (zero? num#)
+                       (throw-div-0)
+                       (long (/ dur# num#)))))})
 
 ;; TODO extend min/max to variable width
 (defmethod codegen-call [:greatest :num :num] [{:keys [arg-types]}]

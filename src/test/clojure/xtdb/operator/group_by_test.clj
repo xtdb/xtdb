@@ -517,3 +517,57 @@
                                     (aggregate id {:a (sum a)}))
                               data]))
           "default provided with `if` (which mentions `absent` values)")))
+
+(t/deftest test-sum-duration-types
+  (t/testing "SUM on duration types"
+    (t/is (= [{:sum-dur #xt/duration "PT25S"}]
+             (tu/query-ra '[:group-by [{sum-dur (sum dur)}]
+                            [:table [{:dur #xt/duration "PT10S"}
+                                     {:dur #xt/duration "PT15S"}]]]))
+          "sum of durations")
+
+    (t/is (= [{:a 1, :sum-dur #xt/duration "PT25S"}
+              {:a 2, :sum-dur #xt/duration "PT30S"}]
+             (tu/query-ra '[:group-by [a {sum-dur (sum dur)}]
+                            [:table [{:a 1, :dur #xt/duration "PT10S"}
+                                     {:a 1, :dur #xt/duration "PT15S"}
+                                     {:a 2, :dur #xt/duration "PT20S"}
+                                     {:a 2, :dur #xt/duration "PT10S"}]]]))
+          "sum of durations grouped")
+
+    (t/is (= [{}]
+             (tu/query-ra '[:group-by [{sum-dur (sum dur)}]
+                            [:table [{:dur nil}]]]))
+          "sum of null durations")
+
+    (t/is (= [{}]
+             (tu/query-ra '[:group-by [{sum-dur (sum dur)}]
+                            [:table []]]))
+          "sum of empty duration set")))
+
+(t/deftest test-avg-duration-types
+  (t/testing "AVG on duration types"
+    (t/is (= [{:avg-dur #xt/duration "PT12S"}]
+             (tu/query-ra '[:group-by [{avg-dur (avg dur)}]
+                            [:table [{:dur #xt/duration "PT10S"}
+                                     {:dur #xt/duration "PT14S"}]]]))
+          "avg of durations")
+
+    (t/is (= [{:a 1, :avg-dur #xt/duration "PT12S"}
+              {:a 2, :avg-dur #xt/duration "PT15S"}]
+             (tu/query-ra '[:group-by [a {avg-dur (avg dur)}]
+                            [:table [{:a 1, :dur #xt/duration "PT10S"}
+                                     {:a 1, :dur #xt/duration "PT14S"}
+                                     {:a 2, :dur #xt/duration "PT20S"}
+                                     {:a 2, :dur #xt/duration "PT10S"}]]]))
+          "avg of durations grouped")
+
+    (t/is (= [{}]
+             (tu/query-ra '[:group-by [{avg-dur (avg dur)}]
+                            [:table [{:dur nil}]]]))
+          "avg of null durations")
+
+    (t/is (= [{}]
+             (tu/query-ra '[:group-by [{avg-dur (avg dur)}]
+                            [:table []]]))
+          "avg of empty duration set")))
