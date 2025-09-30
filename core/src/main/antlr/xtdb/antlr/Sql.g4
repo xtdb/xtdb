@@ -325,6 +325,7 @@ exprPrimary
     | (identifier '.')? 'CURRENT_USER' # CurrentUserFunction
     | (identifier '.')? 'CURRENT_SCHEMA' ('(' ')')? # CurrentSchemaFunction
     | (identifier '.')? 'CURRENT_SCHEMAS' '(' expr ')' # CurrentSchemasFunction
+    | (identifier '.')? 'CURRENT_CATALOG' ('(' ')')? # CurrentCatalogFunction
     | (identifier '.')? 'CURRENT_DATABASE' ('(' ')')? # CurrentDatabaseFunction
     | (identifier '.')? 'PG_GET_EXPR' ('(' expr ',' expr (',' expr)? ')')? # PgGetExprFunction
     | (identifier '.')? '_PG_EXPANDARRAY' ('(' expr ')')? # PgExpandArrayFunction

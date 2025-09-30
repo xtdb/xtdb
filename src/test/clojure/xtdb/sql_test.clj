@@ -619,6 +619,13 @@
   (t/is (= [{:xt/id 2, :a "public"} {:xt/id 1, :a "pg_catalog"}]
            (xt/q tu/*node* "SELECT * FROM foo WHERE a = ANY(CURRENT_SCHEMAS(true))"))))
 
+(t/deftest test-current-catalog
+  (t/is (= [{:cat "xtdb"}]
+           (xt/q tu/*node* "SELECT CURRENT_CATALOG cat")))
+
+  (t/is (= [{:cat "xtdb"}]
+           (xt/q tu/*node* "SELECT CURRENT_CATALOG() cat"))))
+
 (t/deftest test-in-subquery
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 1 :foo "Hello"}]
                            [:put-docs :docs {:xt/id 2 :x 2 :y 1}]])
