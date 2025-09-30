@@ -520,7 +520,7 @@
                                "preparedStatementCacheMiB" 0})]
     ;; the Driver now creates a couple of statements.
     ;; we do close this, but the PG driver appears to retain it
-    (t/is (= #{"", "S_1" "S_2"} (set (keys (:prepared-statements @(:conn-state (get-last-conn)))))))
+    (t/is (= #{"S_1" "S_2"} (set (keys (:prepared-statements @(:conn-state (get-last-conn)))))))
 
     (dotimes [i 3]
       (with-open [stmt (.prepareStatement conn (format "SELECT a.a FROM (VALUES (%s)) a (a)" i))]
@@ -532,7 +532,7 @@
     (t/testing "the last statement should still exist as they last the duration of the session and are only closed by
                 an explicit close message, which the pg driver sends between execs"
       ;; S_5 because initial qs, then i == 3
-      (t/is (= #{"", "S_1" "S_2" "S_5"} (set (keys (:prepared-statements @(:conn-state (get-last-conn))))))))))
+      (t/is (= #{"S_1" "S_2" "S_5"} (set (keys (:prepared-statements @(:conn-state (get-last-conn))))))))))
 
 (defn psql-available?
   "Returns true if psql is available in $PATH"
