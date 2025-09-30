@@ -1,7 +1,7 @@
 [:project
  [{y x.1/y} {z y.4/z}]
  [:mega-join
-  [(= y.4/z x.1/y)]
+  [{x.1/y y.4/z}]
   [[:rename x.1 [:scan {:table #xt/table x} [y]]]
    [:rename
     y.4

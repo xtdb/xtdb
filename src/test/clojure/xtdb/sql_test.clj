@@ -3031,3 +3031,18 @@ UNION ALL
                              1 2 3 4 5 6 7 8 9]])
   (t/is (= [{:xt/id "id", :c1 1, :c2 2, :c3 3, :c4 4, :c5 5, :c6 6, :c7 7, :c8 8, :c9 9}]
            (xt/q tu/*node* "FROM docs"))))
+
+
+(t/deftest subquery-in-exists-incorrect-table-name-4697
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :col1 "bar" :col2 "baz"} {:xt/id 2 :col1 "foo" :col2 "bar"}]])
+
+  (t/is (= [{:e false} {:e true}]
+           (xt/q tu/*node* "FROM docs AS docs_outer
+                            SELECT
+                              EXISTS(
+                                FROM (
+                                  FROM docs AS docs_inner
+                                  WHERE docs_outer.col1 = docs_inner.col2
+                                ) AS d
+                                SELECT 1
+                              ) AS e"))))

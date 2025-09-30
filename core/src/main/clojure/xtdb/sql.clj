@@ -49,15 +49,7 @@
 (defn accept-visitor [visitor ^ParserRuleContext ctx]
   (.accept ctx visitor))
 
-(defn ->col-sym
-  ([n]
-   (cond
-     (string? n) (recur (symbol n))
-     (symbol? n) (-> n (vary-meta assoc :column? true))))
-
-  ([ns n]
-   (-> (symbol (str ns) (str n))
-       (vary-meta assoc :column? true))))
+(def ->col-sym lp/->col-sym)
 
 (defn identifier-sym [^ParserRuleContext ctx]
   (some-> ctx

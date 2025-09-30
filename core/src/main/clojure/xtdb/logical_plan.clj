@@ -11,6 +11,16 @@
            java.time.temporal.Temporal
            java.util.Date))
 
+(defn ->col-sym
+  ([n]
+   (cond
+     (string? n) (recur (symbol n))
+     (symbol? n) (-> n (vary-meta assoc :column? true))))
+
+  ([ns n]
+   (-> (symbol (str ns) (str n))
+       (vary-meta assoc :column? true))))
+
 ;; See also:
 ;; https://dbis-uibk.github.io/relax/help#relalg-reference
 ;; https://calcite.apache.org/javadocAggregate/org/apache/calcite/tools/RelBuilder.html
@@ -852,7 +862,7 @@
                            (map? prefix-or-columns) (set/map-invert prefix-or-columns)
                            (symbol? prefix-or-columns) (let [prefix (str prefix-or-columns)]
                                                          (->> (for [c (relation-columns relation)]
-                                                                [c (symbol prefix (name c))])
+                                                                [c (->col-sym prefix (name c)) ])
                                                               (into {}))))]
         [:select (w/postwalk-replace columns predicate)
          [:rename prefix-or-columns
