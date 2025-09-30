@@ -76,14 +76,14 @@ class KafkaClusterTest {
 
                             log.appendMessage(Message.AttachDatabase("foo", databaseConfig))
 
-                            while (msgs.flatten().size < 4) delay(100)
+                            while (synchronized(msgs) { msgs.flatten().size } < 4) delay(100)
                         }
                     }
             }
 
-        assertEquals(4, msgs.flatten().size)
+        val allMsgs = synchronized(msgs) { msgs.flatten() }
 
-        val allMsgs = msgs.flatten()
+        assertEquals(4, allMsgs.size)
 
         allMsgs[0].message.let {
             check(it is Message.Tx)
