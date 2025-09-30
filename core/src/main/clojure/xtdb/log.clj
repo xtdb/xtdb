@@ -5,6 +5,7 @@
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
+            [xtdb.serde.types :as serde.types]
             [xtdb.sql :as sql]
             [xtdb.table :as table]
             [xtdb.time :as time]
@@ -30,10 +31,10 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
-  (Schema. [#xt/field ["tx-ops" :list ["$data$" :union]]
-            #xt/field ["system-time" :temporal :?]
-            #xt/field ["default-tz" :utf8]
-            #xt/field ["user" :utf8 :?]]))
+  (Schema. [(serde.types/->field ["tx-ops" :list ["$data$" :union]])
+            (serde.types/->field ["system-time" :temporal :?])
+            (serde.types/->field ["default-tz" :utf8])
+            (serde.types/->field ["user" :utf8 :?])]))
 
 (def ^:private forbidden-schemas #{"xt" "information_schema" "pg_catalog"})
 
