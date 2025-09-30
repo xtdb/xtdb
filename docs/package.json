@@ -44,5 +44,8 @@
     "vega-embed": "^6.25.0",
     "vega-lite": "^5.18.0",
     "xtplay-components": "file:shared/xtplay-components"
+  },
+  "dependencies": {
+    "unist-util-visit": "^5.0.0"
   }
 }

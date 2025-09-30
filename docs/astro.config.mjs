@@ -3,6 +3,7 @@ import starlight from '@astrojs/starlight';
 import tailwind from '@astrojs/tailwind';
 import yaml from '@rollup/plugin-yaml';
 import swup from '@swup/astro';
+import { railroadPlugin } from './src/railroad-plugin.js';
 
 // https://astro.build/config
 export default defineConfig({
@@ -243,6 +244,10 @@ export default defineConfig({
 
     build: {
         format: "file"
+    },
+
+    markdown: {
+        remarkPlugins: [railroadPlugin],
     },
 
     vite: {

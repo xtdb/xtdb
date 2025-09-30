@@ -28,211 +28,239 @@ At the top-level, XTDB SQL queries augment the SQL standard in the following way
 
 <!-- -->
 
-    const asOf = rr.Sequence("AS", "OF", "<timestamp>")
-    const fromTo = rr.Sequence("FROM", "<timestamp>", "TO", "<timestamp>")
-    const between = rr.Sequence("BETWEEN", "<timestamp>", "AND", "<timestamp>")
-    const timePeriodOpts = rr.Choice(0, asOf, fromTo, between, "ALL")
+```railroad
+const asOf = rr.Sequence("AS", "OF", "<timestamp>")
+const fromTo = rr.Sequence("FROM", "<timestamp>", "TO", "<timestamp>")
+const between = rr.Sequence("BETWEEN", "<timestamp>", "AND", "<timestamp>")
+const timePeriodOpts = rr.Choice(0, asOf, fromTo, between, "ALL")
 
-    const defaultTimePeriods = rr.Sequence("DEFAULT", rr.Choice(0, "VALID_TIME", "SYSTEM_TIME"), rr.Optional("TO", "skip"), timePeriodOpts)
-    const basis = rr.Sequence(rr.Choice(0, "SNAPSHOT_TOKEN", "CURRENT_TIME"), rr.Choice(0, "TO", "="), "<timestamp>")
-    const setting = rr.Sequence("SETTING", rr.OneOrMore(rr.Choice(0, defaultTimePeriods, basis), ","))
-    return rr.Diagram(rr.Sequence(rr.Optional(setting, "skip"), "<query>"))
+const defaultTimePeriods = rr.Sequence("DEFAULT", rr.Choice(0, "VALID_TIME", "SYSTEM_TIME"), rr.Optional("TO", "skip"), timePeriodOpts)
+const basis = rr.Sequence(rr.Choice(0, "SNAPSHOT_TOKEN", "CURRENT_TIME"), rr.Choice(0, "TO", "="), "<timestamp>")
+const setting = rr.Sequence("SETTING", rr.OneOrMore(rr.Choice(0, defaultTimePeriods, basis), ","))
+return rr.Diagram(rr.Sequence(rr.Optional(setting, "skip"), "<query>"))
+```
 
 ### <query>
 
-    const orderByDirection = rr.Choice(0, rr.Skip(), "ASC", "DESC")
-    const orderByNulls = rr.Optional(rr.Sequence("NULLS", rr.Choice(0, "FIRST", "LAST")), "skip")
-    const orderByClause = rr.Optional(rr.Sequence("ORDER", "BY", rr.OneOrMore(rr.Sequence("<value>", orderByDirection, orderByNulls), ",")), "skip")
+```railroad
+const orderByDirection = rr.Choice(0, rr.Skip(), "ASC", "DESC")
+const orderByNulls = rr.Optional(rr.Sequence("NULLS", rr.Choice(0, "FIRST", "LAST")), "skip")
+const orderByClause = rr.Optional(rr.Sequence("ORDER", "BY", rr.OneOrMore(rr.Sequence("<value>", orderByDirection, orderByNulls), ",")), "skip")
 
-    const limitClause = rr.Sequence("LIMIT", "<limit>")
-    const offsetClause = rr.Sequence("OFFSET", "<offset>")
-    const offsetAndLimit = rr.Optional(rr.Choice(0, rr.Sequence(limitClause, rr.Optional(offsetClause, "skip")), rr.Sequence(offsetClause, rr.Optional(limitClause, "skip"))), "skip")
-    return rr.Diagram(rr.Stack(rr.Sequence(rr.Optional("<with clause>", "skip"), "<query term>"), orderByClause, offsetAndLimit))
+const limitClause = rr.Sequence("LIMIT", "<limit>")
+const offsetClause = rr.Sequence("OFFSET", "<offset>")
+const offsetAndLimit = rr.Optional(rr.Choice(0, rr.Sequence(limitClause, rr.Optional(offsetClause, "skip")), rr.Sequence(offsetClause, rr.Optional(limitClause, "skip"))), "skip")
+return rr.Diagram(rr.Stack(rr.Sequence(rr.Optional("<with clause>", "skip"), "<query term>"), orderByClause, offsetAndLimit))
+```
 
 ### <with clause>
 
-    const withClause = rr.Sequence(rr.Optional("MATERIALIZED", "skip"), "<query name>", rr.Optional("AS", "skip"), "(", "<query>", ")")
-    return rr.Diagram(rr.Sequence("WITH", rr.OneOrMore(withClause, ",")))
+```railroad
+const withClause = rr.Sequence(rr.Optional("MATERIALIZED", "skip"), "<query name>", rr.Optional("AS", "skip"), "(", "<query>", ")")
+return rr.Diagram(rr.Sequence("WITH", rr.OneOrMore(withClause, ",")))
+```
 
 - `WITH` clauses in XTDB are 'optimization fences' - XTDB will not
-    attempt to optimize an outer query into a `WITH` clause, or across
-    `WITH` clauses.
+attempt to optimize an outer query into a `WITH` clause, or across
+`WITH` clauses.
 
 - Supply `MATERIALIZED` to eagerly materialize a `WITH` clause, so
-    that the results can be re-used multiple times in the same query.
+that the results can be re-used multiple times in the same query.
 
 - `WITH RECURSIVE` is not yet supported in XTDB.
 
 ### <query term>
 
-    const selectClause = "<select clause>"
-    const fromClause = "<from clause>"
-    const predicates = rr.OneOrMore(rr.Optional('<predicate>', 'skip'), ',')
-    const whereClause = rr.Sequence("WHERE", predicates)
-    const groupByClause = rr.Optional(rr.Sequence("GROUP", "BY", rr.OneOrMore("<value>", ",")), "skip")
-    const havingClause = rr.Optional(rr.Sequence("HAVING", predicates), "skip")
-    const selectFirst = rr.Sequence(selectClause, rr.Optional(fromClause), rr.Optional(whereClause, "skip"), groupByClause, havingClause)
-    const fromFirst = rr.Sequence(fromClause, rr.OneOrMore(rr.Choice(0, rr.Skip(), whereClause, rr.Sequence(groupByClause, havingClause, selectClause))))
+```railroad
+const selectClause = "<select clause>"
+const fromClause = "<from clause>"
+const predicates = rr.OneOrMore(rr.Optional('<predicate>', 'skip'), ',')
+const whereClause = rr.Sequence("WHERE", predicates)
+const groupByClause = rr.Optional(rr.Sequence("GROUP", "BY", rr.OneOrMore("<value>", ",")), "skip")
+const havingClause = rr.Optional(rr.Sequence("HAVING", predicates), "skip")
+const selectFirst = rr.Sequence(selectClause, rr.Optional(fromClause), rr.Optional(whereClause, "skip"), groupByClause, havingClause)
+const fromFirst = rr.Sequence(fromClause, rr.OneOrMore(rr.Choice(0, rr.Skip(), whereClause, rr.Sequence(groupByClause, havingClause, selectClause))))
 
-    const colNames = rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")")
-    const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
-    const docs = rr.OneOrMore(doc, ",")
-    const values = rr.Sequence("VALUES", docs)
-    const xtql = rr.Sequence("XTQL", rr.Choice(0, "<XTQL query>", rr.Sequence('(', '<XTQL query>', rr.ZeroOrMore(rr.Sequence(',', '?'), null, 'skip'), ')')))
+const colNames = rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")")
+const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
+const docs = rr.OneOrMore(doc, ",")
+const values = rr.Sequence("VALUES", docs)
+const xtql = rr.Sequence("XTQL", rr.Choice(0, "<XTQL query>", rr.Sequence('(', '<XTQL query>', rr.ZeroOrMore(rr.Sequence(',', '?'), null, 'skip'), ')')))
 
-    const allOrDistinct = rr.Choice(0, rr.Skip(), "ALL", "DISTINCT")
-    const binary = rr.Sequence("<query term>", rr.Choice(0, "UNION", "INTERSECT", "EXCEPT"), allOrDistinct, "<query term>")
-    return rr.Diagram(rr.Choice(0, selectFirst, fromFirst, values, xtql, binary, rr.Sequence("(", "<query term>", ")")));
+const allOrDistinct = rr.Choice(0, rr.Skip(), "ALL", "DISTINCT")
+const binary = rr.Sequence("<query term>", rr.Choice(0, "UNION", "INTERSECT", "EXCEPT"), allOrDistinct, "<query term>")
+return rr.Diagram(rr.Choice(0, selectFirst, fromFirst, values, xtql, binary, rr.Sequence("(", "<query term>", ")")));
+```
 
 NB:
 
 - `SELECT` is optional in XTDB - if not provided, it defaults to
-    `SELECT *`
+`SELECT *`
 
 - `SELECT` may be placed after `GROUP BY` in XTDB, so that the query
-    clauses are written in the order that they're executed in practice.
+clauses are written in the order that they're executed in practice.
 
 - `GROUP BY` is optional in XTDB - if not provided, it defaults to all
-    of the columns used outside of an aggregate function.
+of the columns used outside of an aggregate function.
 
 - If you start your query with `FROM`, you may then include
-    arbitrarily many sets of `WHERE`/`GROUP BY`/`SELECT` clauses, which
-    will be evaluated in order.
+arbitrarily many sets of `WHERE`/`GROUP BY`/`SELECT` clauses, which
+will be evaluated in order.
 
 - Predicates can be comma-separated in XTDB, to aid with SQL
-    generation - these are treated as conjuncts. There may be an
-    arbitrary number of commas at the start, between any two predicate
-    expressions, or at the end.
+generation - these are treated as conjuncts. There may be an
+arbitrary number of commas at the start, between any two predicate
+expressions, or at the end.
 
 - XTQL queries are sent within an SQL string literal - e.g.
-    `'(-> (from ...) ...)'`. Given the possible presence of single
-    quotes within the query, it is recommended to use dollar-delimited
-    strings here: `XTQL $$ <xtql query> $$`
+`'(-> (from ...) ...)'`. Given the possible presence of single
+quotes within the query, it is recommended to use dollar-delimited
+strings here: `XTQL $$ <xtql query> $$`
 
-    Due to implementation details in some drivers (e.g. PGJDBC), it is
-    required to additionally specify the params in standard SQL (`?`)
-    following your XTQL query, so that the driver knows how many
-    arguments to allow.
+Due to implementation details in some drivers (e.g. PGJDBC), it is
+required to additionally specify the params in standard SQL (`?`)
+following your XTQL query, so that the driver knows how many
+arguments to allow.
 
-    For more details on XTQL queries, see the [XTQL
-    documentation](/xtql/tutorials/introducing-xtql).
+For more details on XTQL queries, see the [XTQL
+documentation](/xtql/tutorials/introducing-xtql).
 
 ### <select clause>
 
-    const starOpts = rr.Sequence(rr.Optional('<star exclude>', 'skip'), rr.Optional('<star rename>', 'skip'))
-    const selectCol = rr.Sequence("<value>", rr.Optional(rr.Sequence(rr.Optional("AS", "skip"), "<column name>"), 'skip'))
-    const qualifiedStar = rr.Sequence('<table name>', '.', '*', starOpts)
-    return rr.Diagram("SELECT", rr.Stack(rr.Optional(rr.Sequence('*', starOpts), 'skip'), rr.OneOrMore(rr.Choice(0, rr.Skip(), selectCol, qualifiedStar), ",")))
+```railroad
+const starOpts = rr.Sequence(rr.Optional('<star exclude>', 'skip'), rr.Optional('<star rename>', 'skip'))
+const selectCol = rr.Sequence("<value>", rr.Optional(rr.Sequence(rr.Optional("AS", "skip"), "<column name>"), 'skip'))
+const qualifiedStar = rr.Sequence('<table name>', '.', '*', starOpts)
+return rr.Diagram(rr.Sequence("SELECT", rr.Stack(rr.Optional(rr.Sequence('*', starOpts), 'skip'), rr.OneOrMore(rr.Choice(0, rr.Skip(), selectCol, qualifiedStar), ","))))
+```
 
 #### <star exclude>
 
-    return rr.Diagram(rr.Sequence('EXCLUDE', rr.Choice(0, '<column name>', rr.Sequence('(', rr.OneOrMore('<column name>', ','), ')'))))
+```railroad
+return rr.Diagram(rr.Sequence('EXCLUDE', rr.Choice(0, '<column name>', rr.Sequence('(', rr.OneOrMore('<column name>', ','), ')'))))
+```
 
 #### <star rename>
 
-    const renameCol = rr.Sequence('<column name>', 'AS', '<column name>')
-    return rr.Diagram('RENAME', rr.Choice(0, renameCol, rr.Sequence('(', rr.OneOrMore(renameCol, ','), ')')))
+```railroad
+const renameCol = rr.Sequence('<column name>', 'AS', '<column name>')
+return rr.Diagram('RENAME', rr.Choice(0, renameCol, rr.Sequence('(', rr.OneOrMore(renameCol, ','), ')')))
+```
 
 ## From clause, joins
 
 ### <from clause>
 
-    const tableProjection = rr.Optional(rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")"), "skip")
-    return rr.Diagram("FROM", rr.OneOrMore(rr.Sequence("<relation>", tableProjection), ","))
+```railroad
+const tableProjection = rr.Optional(rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")"), "skip")
+return rr.Diagram("FROM", rr.OneOrMore(rr.Sequence("<relation>", tableProjection), ","))
+```
 
 ### <relation>
 
-    const wrapped = rr.Sequence("(", "<relation>", ")")
-    const tableAlias = "<table alias>"
-    const base = rr.Sequence(rr.Choice(0, "<table name>", "<query name>"), rr.ZeroOrMore("<temporal filter>", null, "skip"), rr.Optional(tableAlias, "skip"))
+```railroad
+const wrapped = rr.Sequence("(", "<relation>", ")")
+const tableAlias = "<table alias>"
+const base = rr.Sequence(rr.Choice(0, "<table name>", "<query name>"), rr.ZeroOrMore("<temporal filter>", null, "skip"), rr.Optional(tableAlias, "skip"))
 
-    const joinType = rr.Choice(0, rr.Skip(), rr.Sequence(rr.Choice(0, "LEFT", "RIGHT"), rr.Optional("OUTER", "skip")), "INNER")
-    const onClause = rr.Sequence("ON", "<predicate>")
-    const usingClause = rr.Sequence("USING", "(", rr.OneOrMore("<column name>", ","), ")")
-    const join = rr.Sequence("<relation>", joinType, "JOIN", "<relation>", rr.Choice(0, onClause, usingClause))
+const joinType = rr.Choice(0, rr.Skip(), rr.Sequence(rr.Choice(0, "LEFT", "RIGHT"), rr.Optional("OUTER", "skip")), "INNER")
+const onClause = rr.Sequence("ON", "<predicate>")
+const usingClause = rr.Sequence("USING", "(", rr.OneOrMore("<column name>", ","), ")")
+const join = rr.Sequence("<relation>", joinType, "JOIN", "<relation>", rr.Choice(0, onClause, usingClause))
 
-    const crossJoin = rr.Sequence("<relation>", "CROSS", "JOIN", "<relation>")
-    const naturalJoin = rr.Sequence("<relation>", "NATURAL", joinType, "JOIN", "<relation>")
+const crossJoin = rr.Sequence("<relation>", "CROSS", "JOIN", "<relation>")
+const naturalJoin = rr.Sequence("<relation>", "NATURAL", joinType, "JOIN", "<relation>")
 
-    const colNames = rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")")
-    const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
-    const docs = rr.OneOrMore(doc, ",")
-    const values = rr.Sequence("VALUES", docs)
+const colNames = rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")")
+const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
+const docs = rr.OneOrMore(doc, ",")
+const values = rr.Sequence("VALUES", docs)
 
-    const xtql = rr.Sequence("XTQL", rr.Choice(0, "<XTQL query>", rr.Sequence('(', '<XTQL query>', rr.ZeroOrMore(rr.Sequence(',', '?'), null, 'skip'), ')')))
-    const subquery = rr.Sequence("(", "<query>", ")")
-    const lateral = rr.Sequence("LATERAL", subquery)
-    const unnest = rr.Sequence("UNNEST", "(", "<value>", ")", rr.Optional(rr.Sequence("WITH", "ORDINALITY"), "skip"))
-    const subqs = rr.Sequence(rr.Choice(0, values, xtql, subquery, lateral, unnest), tableAlias)
+const xtql = rr.Sequence("XTQL", rr.Choice(0, "<XTQL query>", rr.Sequence('(', '<XTQL query>', rr.ZeroOrMore(rr.Sequence(',', '?'), null, 'skip'), ')')))
+const subquery = rr.Sequence("(", "<query>", ")")
+const lateral = rr.Sequence("LATERAL", subquery)
+const unnest = rr.Sequence("UNNEST", "(", "<value>", ")", rr.Optional(rr.Sequence("WITH", "ORDINALITY"), "skip"))
+const subqs = rr.Sequence(rr.Choice(0, values, xtql, subquery, lateral, unnest), tableAlias)
 
-    return rr.Diagram(rr.Choice(0, wrapped, base, join, crossJoin, naturalJoin, subqs))
+return rr.Diagram(rr.Choice(0, wrapped, base, join, crossJoin, naturalJoin, subqs))
+```
 
 - See [<query term>](#query-term) for details on XTQL queries.
 
 ### <temporal filter>
 
-    const asOf = rr.Sequence("AS", "OF", "<timestamp>")
-    const fromTo = rr.Sequence("FROM", "<timestamp>", "TO", "<timestamp>")
-    const between = rr.Sequence("BETWEEN", "<timestamp>", "AND", "<timestamp>")
-    const timePeriodOpts = rr.Choice(0, asOf, fromTo, between, "ALL")
-    const timePeriod = rr.Choice(0, "VALID_TIME", "SYSTEM_TIME")
-    return rr.Diagram(rr.Sequence("FOR", rr.Choice(0, rr.Sequence(timePeriod, timePeriodOpts), rr.Sequence("ALL", timePeriod))))
+```railroad
+const asOf = rr.Sequence("AS", "OF", "<timestamp>")
+const fromTo = rr.Sequence("FROM", "<timestamp>", "TO", "<timestamp>")
+const between = rr.Sequence("BETWEEN", "<timestamp>", "AND", "<timestamp>")
+const timePeriodOpts = rr.Choice(0, asOf, fromTo, between, "ALL")
+const timePeriod = rr.Choice(0, "VALID_TIME", "SYSTEM_TIME")
+return rr.Diagram(rr.Sequence("FOR", rr.Choice(0, rr.Sequence(timePeriod, timePeriodOpts), rr.Sequence("ALL", timePeriod))))
+```
 
 ## Expressions
 
 ### <value>
 
-    const colRef = rr.Choice(0, "<column reference>", rr.Sequence('"', "<column reference>", '"'), rr.Sequence('`', "<column reference>", '`'))
-    const unaryOp = rr.Sequence(rr.HorizontalChoice("+", "-"), "<value>")
-    const binaryOp = rr.Sequence("<value>", rr.HorizontalChoice("+", "-", "*", "/"), "<value>")
+```railroad
+const colRef = rr.Choice(0, "<column reference>", rr.Sequence('"', "<column reference>", '"'), rr.Sequence('`', "<column reference>", '`'))
+const unaryOp = rr.Sequence(rr.HorizontalChoice("+", "-"), "<value>")
+const binaryOp = rr.Sequence("<value>", rr.HorizontalChoice("+", "-", "*", "/"), "<value>")
 
-    const fn = rr.Sequence("<function name>", "(", rr.ZeroOrMore("<value>", ",", "skip"), ")")
+const fn = rr.Sequence("<function name>", "(", rr.ZeroOrMore("<value>", ",", "skip"), ")")
 
-    const wfn = rr.Sequence("ROW_NUMBER", "(", ")", "OVER", "(", "<window>", ")")
+const wfn = rr.Sequence("ROW_NUMBER", "(", ")", "OVER", "(", "<window>", ")")
 
-    const cast = rr.Sequence("CAST", "(", "<value>", "AS", "<data type>", ")")
-    const caseValue = rr.Sequence("<value>", rr.ZeroOrMore(rr.Sequence("WHEN", "<value>", "THEN", "<value>"), ","))
-    const casePreds = rr.ZeroOrMore(rr.Sequence("WHEN", "<predicate>", "THEN", "<value>"), ",")
-    const caseExpr = rr.Sequence("CASE", rr.Choice(0, caseValue, casePreds), rr.Optional(rr.Sequence("ELSE", "<value>"), "skip"), "END")
+const cast = rr.Sequence("CAST", "(", "<value>", "AS", "<data type>", ")")
+const caseValue = rr.Sequence("<value>", rr.ZeroOrMore(rr.Sequence("WHEN", "<value>", "THEN", "<value>"), ","))
+const casePreds = rr.ZeroOrMore(rr.Sequence("WHEN", "<predicate>", "THEN", "<value>"), ",")
+const caseExpr = rr.Sequence("CASE", rr.Choice(0, caseValue, casePreds), rr.Optional(rr.Sequence("ELSE", "<value>"), "skip"), "END")
 
-    const coalesce = rr.Sequence("COALESCE", "(", rr.ZeroOrMore("<value>", ","), ")")
-    const nullIf = rr.Sequence("NULLIF", "(", "<value>", ",", "<value>", ")")
+const coalesce = rr.Sequence("COALESCE", "(", rr.ZeroOrMore("<value>", ","), ")")
+const nullIf = rr.Sequence("NULLIF", "(", "<value>", ",", "<value>", ")")
 
-    const arrayLiteral = rr.Sequence(rr.Optional("ARRAY", "skip"), "[", rr.ZeroOrMore("<value>", ",", "skip"), "]")
-    const arrayByQuery = rr.Sequence("ARRAY", "(", "<query>", ")")
-    const arrayConstructor = rr.Choice(0, arrayLiteral, arrayByQuery)
+const arrayLiteral = rr.Sequence(rr.Optional("ARRAY", "skip"), "[", rr.ZeroOrMore("<value>", ",", "skip"), "]")
+const arrayByQuery = rr.Sequence("ARRAY", "(", "<query>", ")")
+const arrayConstructor = rr.Choice(0, arrayLiteral, arrayByQuery)
 
-    const wrapped = rr.Sequence("(", "<value>", ")")
+const wrapped = rr.Sequence("(", "<value>", ")")
 
-    const subqs = rr.Sequence(rr.Choice(0, rr.Skip(), "NEST_ONE", "NEST_MANY"), "(", "<query>", ")")
+const subqs = rr.Sequence(rr.Choice(0, rr.Skip(), "NEST_ONE", "NEST_MANY"), "(", "<query>", ")")
 
-    return rr.Diagram(rr.Choice(0, "<literal>", colRef, "<param>", unaryOp, binaryOp, fn, wfn, "<predicate>", cast, caseExpr, coalesce, nullIf, arrayConstructor, "<record>", subqs, wrapped))
+return rr.Diagram(rr.Choice(0, "<literal>", colRef, "<param>", unaryOp, binaryOp, fn, wfn, "<predicate>", cast, caseExpr, coalesce, nullIf, arrayConstructor, "<record>", subqs, wrapped))
+```
 
 ### <param>
 
-    return rr.Diagram(rr.Choice(0, "?", "$<param idx>"))
+```railroad
+return rr.Diagram(rr.Choice(0, "?", "$<param idx>"))
+```
 
 ### <record>
 
-    const objectEntries = rr.ZeroOrMore(rr.Sequence("<field name>", ":", "<value>"), ",", "skip")
-    const objectBraceConstructor = rr.Sequence("{", objectEntries, "}")
-    const objectFnConstructor = rr.Sequence(rr.Choice(0, "RECORD", "OBJECT"), "(", objectEntries, ")")
+```railroad
+const objectEntries = rr.ZeroOrMore(rr.Sequence("<field name>", ":", "<value>"), ",", "skip")
+const objectBraceConstructor = rr.Sequence("{", objectEntries, "}")
+const objectFnConstructor = rr.Sequence(rr.Choice(0, "RECORD", "OBJECT"), "(", objectEntries, ")")
 
-    return rr.Diagram(rr.Choice(0, objectBraceConstructor, objectFnConstructor))
+return rr.Diagram(rr.Choice(0, objectBraceConstructor, objectFnConstructor))
+```
 
 ### <literal>
 
-    const stringLiteral = rr.Choice(0, rr.Sequence("'", "<SQL-style string>", "'"), rr.Sequence('$$', '<string>', '$$'), rr.Sequence("E'", "<C-style string>", "'"))
+```railroad
+const stringLiteral = rr.Choice(0, rr.Sequence("'", "<SQL-style string>", "'"), rr.Sequence('$$', '<string>', '$$'), rr.Sequence("E'", "<C-style string>", "'"))
 
-    const dateLiteral = rr.Sequence("DATE", "'", "<ISO8601 date literal>", "'")
-    const timeLiteral = rr.Sequence("TIME", "'", "<ISO8601 time literal>", "'")
-    const isoTimestampLiteral = rr.Sequence("'", "<ISO8601 timestamp literal>", "'")
-    const sqlTimestampLiteral = rr.Sequence(rr.Choice(0, rr.Skip(), rr.Sequence(rr.Choice(0, "WITH", "WITHOUT"), "TIME", "ZONE")), "'", "<SQL timestamp literal>", "'")
-    const timestampLiteral = rr.Sequence("TIMESTAMP", rr.Choice(0, isoTimestampLiteral, sqlTimestampLiteral))
-    const durationLiteral = rr.Sequence("DURATION", "'", "<ISO8601 duration literal>", "'")
-    const dateTimeLiteral = rr.Choice(0, dateLiteral, timeLiteral, timestampLiteral, durationLiteral)
+const dateLiteral = rr.Sequence("DATE", "'", "<ISO8601 date literal>", "'")
+const timeLiteral = rr.Sequence("TIME", "'", "<ISO8601 time literal>", "'")
+const isoTimestampLiteral = rr.Sequence("'", "<ISO8601 timestamp literal>", "'")
+const sqlTimestampLiteral = rr.Sequence(rr.Choice(0, rr.Skip(), rr.Sequence(rr.Choice(0, "WITH", "WITHOUT"), "TIME", "ZONE")), "'", "<SQL timestamp literal>", "'")
+const timestampLiteral = rr.Sequence("TIMESTAMP", rr.Choice(0, isoTimestampLiteral, sqlTimestampLiteral))
+const durationLiteral = rr.Sequence("DURATION", "'", "<ISO8601 duration literal>", "'")
+const dateTimeLiteral = rr.Choice(0, dateLiteral, timeLiteral, timestampLiteral, durationLiteral)
 
-    return rr.Diagram(rr.Choice(0, "NULL", "<numeric literal>", stringLiteral, dateTimeLiteral))
+return rr.Diagram(rr.Choice(0, "NULL", "<numeric literal>", stringLiteral, dateTimeLiteral))
+```
 
 - See [Date/time
     types](/reference/main/data-types.html#datetime-types) for more
@@ -240,31 +268,34 @@ NB:
 
 ### <predicate>
 
-    const maybeNot = rr.Optional("NOT", "skip")
+```railroad
+const maybeNot = rr.Optional("NOT", "skip")
 
-    const booleanLiteral = rr.HorizontalChoice("TRUE", "FALSE")
-    const unaryNot = rr.Sequence("NOT", "<predicate>")
-    const binaryPred = rr.Sequence("<predicate>", rr.HorizontalChoice("AND", "OR"), "<predicate>")
-    const binaryFn = rr.Sequence("<value>", rr.HorizontalChoice("=", "<>", "!=", "<", "<=", ">=", ">"), rr.Choice(0, "<value>", rr.Sequence(rr.Choice(0, "ANY", "ALL"), "(", "<query>", ")")))
-    const predFn = rr.Sequence("<predicate name>", "(", rr.ZeroOrMore("<value", ",", "skip"), ")")
-
-    const isPredicate = rr.Sequence("<value>", "IS", rr.Optional("NOT", "skip"), rr.HorizontalChoice("TRUE", "FALSE", "NULL"))
-    const exists = rr.Sequence(maybeNot, "EXISTS", "(", "<query>", ")")
-    const inPredicate = rr.Sequence("<value>", maybeNot, "IN", rr.Sequence("(", rr.Choice(1, rr.Skip(), rr.OneOrMore("<value>", ","), "<query>"), ")"))
-    const likePredicate = rr.Sequence("<value>", maybeNot, "LIKE", "<value>", rr.Optional(rr.Sequence("ESCAPE", "'", "<escape character>", "'"), "skip"))
-    const likeRegexPredicate = rr.Sequence("<value>", maybeNot, "LIKE_REGEX", "<JVM regex>", rr.Optional(rr.Sequence("FLAG", "'", "<JVM regex flags>", "'"), "skip"))
-    const postgresRegexPredicate = rr.Sequence("<value>", rr.HorizontalChoice("~", "~*", "!~", "!~*"), "<JVM regex>")
-    const betweenPredicate = rr.Sequence("<value>", maybeNot, "BETWEEN", rr.Choice(0, rr.Skip(), "ASYMMETRIC", "SYMMETRIC"), "<value>", "AND", "<value>")
-    return rr.Diagram(rr.Choice(0, booleanLiteral, unaryNot, binaryPred, binaryFn, predFn, isPredicate, exists, inPredicate, likePredicate, likeRegexPredicate, postgresRegexPredicate, betweenPredicate))
+const booleanLiteral = rr.HorizontalChoice("TRUE", "FALSE")
+const unaryNot = rr.Sequence("NOT", "<predicate>")
+const binaryPred = rr.Sequence("<predicate>", rr.HorizontalChoice("AND", "OR"), "<predicate>")
+const binaryFn = rr.Sequence("<value>", rr.HorizontalChoice("=", "<>", "!=", "<", "<=", ">=", ">"), rr.Choice(0, "<value>", rr.Sequence(rr.Choice(0, "ANY", "ALL"), "(", "<query>", ")")))
+const predFn = rr.Sequence("<predicate name>", "(", rr.ZeroOrMore("<value>", ",", "skip"), ")")
+const isPredicate = rr.Sequence("<value>", "IS", rr.Optional("NOT", "skip"), rr.HorizontalChoice("TRUE", "FALSE", "NULL"))
+const exists = rr.Sequence(maybeNot, "EXISTS", "(", "<query>", ")")
+const inPredicate = rr.Sequence("<value>", maybeNot, "IN", rr.Sequence("(", rr.Choice(1, rr.Skip(), rr.OneOrMore("<value>", ","), "<query>"), ")"))
+const likePredicate = rr.Sequence("<value>", maybeNot, "LIKE", "<value>", rr.Optional(rr.Sequence("ESCAPE", "'", "<escape character>", "'"), "skip"))
+const likeRegexPredicate = rr.Sequence("<value>", maybeNot, "LIKE_REGEX", "<JVM regex>", rr.Optional(rr.Sequence("FLAG", "'", "<JVM regex flags>", "'"), "skip"))
+const postgresRegexPredicate = rr.Sequence("<value>", rr.HorizontalChoice("~", "~*", "!~", "!~*"), "<JVM regex>")
+const betweenPredicate = rr.Sequence("<value>", maybeNot, "BETWEEN", rr.Choice(0, rr.Skip(), "ASYMMETRIC", "SYMMETRIC"), "<value>", "AND", "<value>")
+return rr.Diagram(rr.Choice(0, booleanLiteral, unaryNot, binaryPred, binaryFn, predFn, isPredicate, exists, inPredicate, likePredicate, likeRegexPredicate, postgresRegexPredicate, betweenPredicate))
+```
 
 ### <window>
 
-    const wfnPartition = rr.Sequence("PARTITION", "BY", rr.OneOrMore("<value", ","))
-    const wfnOrderDirection = rr.Choice(0, rr.Skip(), "ASC", "DESC")
-    const wfnOrderNulls = rr.Optional(rr.Sequence("NULLS", rr.Choice(0, "FIRST", "LAST")), "skip")
-    const wfnOrder = rr.Sequence("ORDER", "BY", rr.OneOrMore(rr.Sequence("<value>", wfnOrderDirection, wfnOrderNulls), ","))
+```railroad
+const wfnPartition = rr.Sequence("PARTITION", "BY", rr.OneOrMore("<value>", ","))
+const wfnOrderDirection = rr.Choice(0, rr.Skip(), "ASC", "DESC")
+const wfnOrderNulls = rr.Optional(rr.Sequence("NULLS", rr.Choice(0, "FIRST", "LAST")), "skip")
+const wfnOrder = rr.Sequence("ORDER", "BY", rr.OneOrMore(rr.Sequence("<value>", wfnOrderDirection, wfnOrderNulls), ","))
 
-    return rr.Diagram(rr.Optional(wfnPartition), rr.Optional(wfnOrder))
+return rr.Diagram(rr.Optional(wfnPartition), rr.Optional(wfnOrder))
+```
 
 ## Nested sub-queries
 

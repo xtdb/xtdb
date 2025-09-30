@@ -10,15 +10,17 @@ For examples on how to submit SQL transactions in each client library, see the [
 
 Inserts documents into a table.
 
-    const insertIntoTable = rr.Sequence("INSERT", "INTO", "<table name>")
-    const colNames = rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")")
-    const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
-    const docs = rr.OneOrMore(doc, ",")
-    const values = rr.Sequence(colNames, "VALUES", docs)
-    const objs = rr.OneOrMore(rr.Choice(0, "<object>", "<param>"), ",")
-    const records = rr.Sequence(rr.Optional(colNames, "skip"), "RECORDS", objs)
-    const selectQuery = rr.Sequence(rr.Optional(colNames, "skip"), "<select query>")
-    return rr.Diagram(rr.Stack(insertIntoTable, rr.Choice(0, values, records, selectQuery)))
+```railroad
+const insertIntoTable = rr.Sequence("INSERT", "INTO", "<table name>")
+const colNames = rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")")
+const doc = rr.Sequence("(", rr.OneOrMore("<value>", ","), ")")
+const docs = rr.OneOrMore(doc, ",")
+const values = rr.Sequence(colNames, "VALUES", docs)
+const objs = rr.OneOrMore(rr.Choice(0, "<object>", "<param>"), ",")
+const records = rr.Sequence(rr.Optional(colNames, "skip"), "RECORDS", objs)
+const selectQuery = rr.Sequence(rr.Optional(colNames, "skip"), "<select query>")
+return rr.Diagram(rr.Stack(insertIntoTable, rr.Choice(0, values, records, selectQuery)))
+```
 
 - Documents must contain an `_id` column.
 
@@ -34,15 +36,17 @@ Inserts documents into a table.
 
 Updates documents in a table, optionally for a period of valid-time.
 
-    const updateTable = rr.Sequence("UPDATE", "<table name>")
-    const portionOf = rr.Optional(rr.Sequence("PORTION", "OF"), "skip")
-    const forValidTime = rr.Choice(0,
-      rr.Sequence("FOR", portionOf, "VALID_TIME", "FROM", "<timestamp>", rr.Optional(rr.Sequence("TO", "<timestamp>"), 'skip')),
-      rr.Sequence("FOR", "ALL", "VALID_TIME"),
-      rr.Sequence("FOR", "VALID_TIME", "ALL"))
-    const setClause = rr.Sequence("SET", rr.OneOrMore(rr.Sequence("<column>", "=", "<value>"), ","))
-    const predicate = rr.Optional(rr.Sequence("WHERE", "<predicate>"), "skip")
-    return rr.Diagram(rr.Stack(updateTable, rr.Optional(forValidTime, "skip"), rr.Sequence(setClause, predicate)))
+```railroad
+const updateTable = rr.Sequence("UPDATE", "<table name>")
+const portionOf = rr.Optional(rr.Sequence("PORTION", "OF"), "skip")
+const forValidTime = rr.Choice(0,
+  rr.Sequence("FOR", portionOf, "VALID_TIME", "FROM", "<timestamp>", rr.Optional(rr.Sequence("TO", "<timestamp>"), 'skip')),
+  rr.Sequence("FOR", "ALL", "VALID_TIME"),
+  rr.Sequence("FOR", "VALID_TIME", "ALL"))
+const setClause = rr.Sequence("SET", rr.OneOrMore(rr.Sequence("<column>", "=", "<value>"), ","))
+const predicate = rr.Optional(rr.Sequence("WHERE", "<predicate>"), "skip")
+return rr.Diagram(rr.Stack(updateTable, rr.Optional(forValidTime, "skip"), rr.Sequence(setClause, predicate)))
+```
 
 - If the valid-time range is not provided, the effective valid-time
     range of the update will be from now to the end of time. (SQL:2011
@@ -59,13 +63,15 @@ Updates documents in a table, optionally for a period of valid-time.
 
 Patches documents already in a table with the given document - updating those that exist, inserting any that don't (an 'upsert') - optionally for a period of valid-time.
 
-    const patchTable = rr.Sequence("PATCH", "INTO", "<table name>")
-    const portionOf = rr.Optional(rr.Sequence("PORTION", "OF"), "skip")
-    const forValidTime = rr.Optional(
-      rr.Sequence("FOR", portionOf, "VALID_TIME", "FROM", "<timestamp>", rr.Optional(rr.Sequence("TO", "<timestamp>"), 'skip')))
-    const objs = rr.OneOrMore(rr.Choice(0, "<object>", "<param>"), ",")
-    const records = rr.Sequence("RECORDS", objs)
-    return rr.Diagram(rr.Stack(patchTable, rr.Optional(forValidTime, "skip"), records))
+```railroad
+const patchTable = rr.Sequence("PATCH", "INTO", "<table name>")
+const portionOf = rr.Optional(rr.Sequence("PORTION", "OF"), "skip")
+const forValidTime = rr.Optional(
+  rr.Sequence("FOR", portionOf, "VALID_TIME", "FROM", "<timestamp>", rr.Optional(rr.Sequence("TO", "<timestamp>"), 'skip')))
+const objs = rr.OneOrMore(rr.Choice(0, "<object>", "<param>"), ",")
+const records = rr.Sequence("RECORDS", objs)
+return rr.Diagram(rr.Stack(patchTable, rr.Optional(forValidTime, "skip"), records))
+```
 
 - If the valid-time range is not provided, the effective valid-time
     range of the update will be from now to the end of time.
@@ -86,14 +92,16 @@ Patches documents already in a table with the given document - updating those th
 
 Deletes documents from a table, optionally for a period of valid-time.
 
-    const deleteTable = rr.Sequence("DELETE", "FROM", "<table name>")
-    const portionOf = rr.Optional(rr.Sequence("PORTION", "OF"), "skip")
-    const forValidTime = rr.Choice(0,
-      rr.Sequence("FOR", portionOf, "VALID_TIME", "FROM", "<timestamp>", rr.Optional(rr.Sequence("TO", "<timestamp>"), 'skip')),
-      rr.Sequence("FOR", "ALL", "VALID_TIME"),
-      rr.Sequence("FOR", "VALID_TIME", "ALL"))
-    const predicate = rr.Optional(rr.Sequence("WHERE", "<predicate>"), "skip")
-    return rr.Diagram(rr.Stack(deleteTable, rr.Optional(forValidTime, "skip"), predicate))
+```railroad
+const deleteTable = rr.Sequence("DELETE", "FROM", "<table name>")
+const portionOf = rr.Optional(rr.Sequence("PORTION", "OF"), "skip")
+const forValidTime = rr.Choice(0,
+  rr.Sequence("FOR", portionOf, "VALID_TIME", "FROM", "<timestamp>", rr.Optional(rr.Sequence("TO", "<timestamp>"), 'skip')),
+  rr.Sequence("FOR", "ALL", "VALID_TIME"),
+  rr.Sequence("FOR", "VALID_TIME", "ALL"))
+const predicate = rr.Optional(rr.Sequence("WHERE", "<predicate>"), "skip")
+return rr.Diagram(rr.Stack(deleteTable, rr.Optional(forValidTime, "skip"), predicate))
+```
 
 - If the valid-time clause is not provided, the effective valid-time
     range of the delete will be from now to the end of time. (SQL:2011
@@ -107,9 +115,11 @@ Irrevocably erases documents from a table, for all valid-time, for all system-ti
 While XTDB is immutable, in some cases it is legally necessary to irretrievably delete data (e.g. for a GDPR request).
 This operation removes data such that even queries as of a previous system-time no longer return the erased data.
 
-    const eraseTable = rr.Sequence("ERASE", "FROM", "<table name>")
-    const predicate = rr.Optional(rr.Sequence("WHERE", "<predicate>"), "skip")
-    return rr.Diagram(rr.Stack(eraseTable, predicate))
+```railroad
+const eraseTable = rr.Sequence("ERASE", "FROM", "<table name>")
+const predicate = rr.Optional(rr.Sequence("WHERE", "<predicate>"), "skip")
+return rr.Diagram(rr.Stack(eraseTable, predicate))
+```
 
 ### `ASSERT`
 
@@ -117,7 +127,9 @@ Rolls back the transaction if the provided predicate is false.
 
 This is used to enforce constraints on the data in a concurrent environment, such as ensuring that a document with a given ID does not already exist.
 
-    return rr.Diagram("ASSERT", "<predicate>", rr.Optional("<message>"))
+```railroad
+return rr.Diagram(rr.Sequence("ASSERT", "<predicate>", rr.Optional("<message>")))
+```
 
 If the optional message string is provided, it replaces the default error message text "Assert failed", should the predicate fail.
 
@@ -151,12 +163,14 @@ If the optional message string is provided, it replaces the default error messag
 Copies data directly into an XTDB table - usually significantly more
 efficiently than the equivalent \`INSERT\`s.
 
-    const formatOpt = rr.Sequence("FORMAT", rr.Optional('=', 'skip'), rr.Choice(0, "'transit-json'", "'transit-msgpack'"))
+```railroad
+const formatOpt = rr.Sequence("FORMAT", rr.Optional('=', 'skip'), rr.Choice(0, "'transit-json'", "'transit-msgpack'"))
 
-    return rr.Diagram(rr.Stack(
-      rr.Sequence("COPY", "<table name>", "FROM", "STDIN"),
-      rr.Sequence("WITH", "(", rr.ZeroOrMore(rr.Choice(0, formatOpt), ',', 'skip'), ")")
-    ))
+return rr.Diagram(rr.Stack(
+  rr.Sequence("COPY", "<table name>", "FROM", "STDIN"),
+  rr.Sequence("WITH", "(", rr.ZeroOrMore(rr.Choice(0, formatOpt), ',', 'skip'), ")")
+))
+```
 
 - A single `COPY` will atomically insert all of its documents within
     one transaction - if you're using Kafka, we recommend you split your
