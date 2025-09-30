@@ -1666,6 +1666,10 @@
   {:return-type numeric-type
    :->call-code #(do `(Math/abs ~@%))})
 
+(defmethod expr/codegen-call [:abs :duration] [{[duration-type] :arg-types}]
+  {:return-type duration-type
+   :->call-code #(do `(Math/abs ~@%))})
+
 (defn invalid-period-err [^long from-µs, ^long to-µs]
   (let [from (time/micros->instant from-µs)
         to (time/micros->instant to-µs)]

@@ -201,6 +201,12 @@
       (= expected (plan-expr-with-foo sql)) 
     "ABS(INTERVAL '1' YEAR)" '(abs (single-field-interval "1" "YEAR" 2 6))))
 
+(t/deftest test-duration-abs
+  (t/are [sql expected]
+      (= expected (plan-expr-with-foo sql)) 
+    "ABS(DURATION 'PT1S')" '(abs #xt/duration "PT1S")
+    "ABS(DURATION 'PT-1S')" '(abs #xt/duration "PT-1S")))
+
 (t/deftest test-boolean-predicate-exprs
   (t/are [expr expected]
       (= expected (plan-expr-with-foo expr))
