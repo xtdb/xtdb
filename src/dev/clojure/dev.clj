@@ -183,10 +183,11 @@
   (with-open [al (RootAllocator.)
               r (Relation/openFromArrowStream al (.getPayload (Log$Message/parse ba)))]
     (vec
-      (for [{:keys [query args]} (:tx-ops (first (.getAsMaps r)))]
-        (with-open [r2 (Relation/openFromArrowStream al args)]
-          {:query query
-           :args (.getAsMaps r2)})))))
+      (for [op (-> r .getAsMaps first :tx-ops)]
+        (let [{:keys [query args]} (.getValue op)]
+          (with-open [r2 (Relation/openFromArrowStream al args)]
+            {:query query
+             :args (.getAsMaps r2)}))))))
 
 (comment
   (require '[clojure.data.json :as json])
