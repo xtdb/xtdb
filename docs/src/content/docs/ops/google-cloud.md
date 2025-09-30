@@ -1,0 +1,280 @@
+---
+title: Google Cloud
+---
+
+XTDB provides modular support for Google Cloud environments, including a prebuilt Docker image, integrations with **Google Cloud Storage**, and configuration options for deploying onto Google Cloud infrastructure.
+
+:::note
+For more details on getting started with Google Cloud, see the ["Setting up a cluster on Google Cloud"](guides/starting-with-gcp) guide.
+:::
+
+## Required Infrastructure
+
+In order to run a Google Cloud based XTDB cluster, the following infrastructure is required:
+
+- A **Google Cloud Storage bucket** for remote storage.
+- A **Kafka cluster** for the message log.
+    - For more information on setting up Kafka for usage with XTDB, see the [Kafka configuration](config/log/kafka) docs.
+- A service account with the necessary permissions to access the storage bucket and Kafka cluster.
+- XTDB nodes configured to communicate with the Kafka cluster and Google Cloud Storage.
+
+:::note
+We would recommend running XTDB in a Google Kubernetes Engine (GKE) cluster, which provides a managed Kubernetes environment in Google Cloud.
+:::
+
+## Terraform Templates
+
+To set up a basic version of the required infrastructure, we provide a set of Terraform templates specifically designed for Google Cloud.
+
+These can be fetched from the XTDB repository using the following command:
+
+``` bash
+terraform init -from-module github.com/xtdb/xtdb.git//google-cloud/terraform
+```
+
+### Required APIs
+
+To deploy the required infrastructure, we need to ensure the following APIs are enabled on the Google Cloud project:
+
+- Cloud Storage API
+- IAM API
+- Compute Engine API
+- Kubernetes Engine API
+
+### Required Permissions
+
+In order for the terraform templates to setup the required infrastructure, the following permissions are required for the logged in user:
+
+- `Storage Admin` - Required for creating and managing Google Cloud Storage buckets.
+- `Service Account Admin` - Required for creating and managing service accounts.
+- `Kubernetes Engine Admin` - Required for creating and managing Google Kubernetes Engine clusters and their resources.
+
+### Resources
+
+By default, running the templates will deploy the following infrastructure:
+
+- **IAM Service Account** for accessing required Google Cloud resources.
+- **Google Cloud Storage Bucket** for remote storage.
+    - Configured with associated resources using the [**GoogleCloud/storage-bucket**](https://registry.terraform.io/modules/terraform-google-modules/cloud-storage/google/latest) Terraform module.
+    - Adds required permissions to the Service Account.
+- **Virtual Private Cloud Network** for the XTDB GKE cluster.
+    - Configured with associated resources using the [**GoogleCloud/network**](https://registry.terraform.io/modules/terraform-google-modules/network/google/latest) Terraform module.
+- **Google Kubernetes Engine Cluster** for running the XTDB resources.
+    - Configured with associated resources using the [**GoogleCloud/kubernetes-engine**](https://registry.terraform.io/modules/terraform-google-modules/kubernetes-engine/google/latest) Terraform module.
+
+### Configuration
+
+In order to customize the deployment, we provide a number of pre-defined variables within the `terraform.tfvars` file.
+These variables can be modified to tailor the infrastructure to your specific needs.
+
+The following variables are **required** to be set:
+
+- `project_id`: The Google Cloud project ID to deploy the resources to.
+- `storage_bucket_name`: A globally unique name for your Google Cloud Storage bucket.
+
+For more advanced usage, the Terraform templates themselves can be modified to suit your specific requirements.
+
+## `xtdb-google-cloud` Helm Charts
+
+For setting up a production-ready XTDB cluster on Google Cloud, we provide a **Helm** chart built specifically for Google Cloud environments.
+
+### Pre-requisites
+
+To enable XTDB nodes to access a Google Cloud Storage bucket securely, a Kubernetes Service Account (KSA) must be set up and linked to a Google Cloud IAM service account using [**Workload Identity Federation**](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#using_from_your_code).
+
+#### Setting Up the Kubernetes Service Account:
+
+Create the Kubernetes Service Account in the target namespace:
+
+``` bash
+kubectl create serviceaccount xtdb-service-account --namespace xtdb-deployment
+```
+
+#### Binding the IAM Service Account
+
+Fetch the IAM service account email (in the format `<IAM_SA_NAME>@<PROJECT_ID>.iam.gserviceaccount.com`) and bind the `roles/iam.workloadIdentityUser` role to the Kubernetes Service Account:
+
+``` bash
+gcloud iam service-accounts add-iam-policy-binding <iam_service_account_email>
+  --role roles/iam.workloadIdentityUser
+  --member "serviceAccount:<project_id>.svc.id.goog[xtdb-deployment/xtdb-service-account]"
+```
+
+#### Annotating the Kubernetes Service Account
+
+Annotate the Kubernetes Service Account to establish the link between GKE and Google IAM:
+
+``` bash
+kubectl annotate serviceaccount xtdb-service-account
+  --namespace xtdb-deployment
+  iam.gke.io/gcp-service-account=<iam_service_account_email>
+```
+
+### Installation
+
+The Helm chart can be installed directly from the [**Github Container Registry** releases](https://github.com/xtdb/xtdb/pkgs/container/helm-xtdb-google-cloud).
+
+This will use the default configuration for the deployment, setting any required values as needed:
+
+``` bash
+helm install xtdb-google-cloud oci://ghcr.io/xtdb/helm-xtdb-google-cloud
+  --version 2.0.0-snapshot
+  --namespace xtdb-deployment
+  --set xtdbConfig.serviceAccount=xtdb-service-account
+  --set xtdbConfig.gcpProjectId=<project_id>
+  --set xtdbConfig.gcpBucket=<bucket_name>
+```
+
+We provide a number of parameters for configuring numerous parts of the deployment, see the [`values.yaml` file](https://github.com/xtdb/xtdb/tree/main/google-cloud/helm) or call `helm show values`:
+
+``` bash
+helm show values oci://ghcr.io/xtdb/helm-xtdb-google-cloud
+  --version 2.0.0-snapshot
+```
+
+### Resources
+
+By default, the following resources are deployed by the Helm chart:
+
+- A `ConfigMap` containing the XTDB YAML configuration.
+- A `StatefulSet` containing a configurable number of XTDB nodes, using the [**xtdb-google-cloud** docker image](#docker-image)
+- A `LoadBalancer` Kubernetes service to expose the XTDB cluster to the internet.
+
+### Pulling the Chart Locally
+
+The chart can also be pulled from the **Github Container Registry**, allowing further configuration of the templates within:
+
+``` bash
+helm pull oci://ghcr.io/xtdb/helm-xtdb-google-cloud
+  --version 2.0.0-snapshot
+  --untar
+```
+
+## `xtdb-google-cloud` Docker Image
+
+The [**xtdb-google-cloud**](https://github.com/xtdb/xtdb/pkgs/container/xtdb-google-cloud) image is optimized for running XTDB in Google Cloud environments and is deployed on every release to XTDB.
+
+By default, it will use Google Cloud Storage for storage and Kafka for the message log, including dependencies for both.
+
+### Configuration
+
+The following environment variables are used to configure the `xtdb-google-cloud` image:
+
+| Variable | Description |
+| --- | --- |
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka bootstrap server containing the XTDB topics. |
+| `XTDB_LOG_TOPIC` | Kafka topic to be used as the XTDB log. |
+| `XTDB_GCP_PROJECT_ID` | GCP project ID containing the bucket. |
+| `XTDB_GCP_BUCKET` | Name of the Google Cloud Storage bucket used for remote storage. |
+| `XTDB_GCP_LOCAL_DISK_CACHE_PATH` | Path to the local disk cache. |
+| `XTDB_NODE_ID` | Persistent node id for labelling Prometheus metrics. |
+
+
+You can also [set the XTDB log level](/ops/troubleshooting#loglevel) using environment variables.
+
+### Using a Custom Node Configuration
+
+For advanced usage, XTDB allows the above YAML configuration to be overridden to customize the running node's system/modules.
+
+In order to override the default configuration:
+
+1. Mount a custom YAML configuration file to the container.
+2. Override the `COMMAND` of the docker container to use the custom configuration file, ie:
+
+    ``` bash
+    CMD ["-f", "/path/to/custom-config.yaml"]
+    ```
+
+## Google Cloud Storage
+
+[**Google Cloud Storage**](https://cloud.google.com/storage?hl=en) can be used as a shared object-store for XTDB's [remote storage](config/storage#remote) module.
+
+### Infrastructure Requirements
+
+To use Google Cloud Storage as the object store, the following infrastructure is required:
+
+1. A **Google Cloud Storage bucket**
+2. A **custom role** with the necessary permissions for XTDB to use the bucket:
+
+    ``` yaml
+    type: gcp-types/iam-v1:projects.roles
+    name: custom-role-name
+    properties:
+      parent: projects/project-name
+      roleId: custom-role-name
+      role:
+    title: XTDB Custom Role
+    stage: GA
+    description: Custom role for XTDB - allows usage of containers.
+    includedPermissions:
+          - storage.objects.create
+          - storage.objects.delete
+          - storage.objects.get
+          - storage.objects.list
+          - storage.objects.update
+          - storage.buckets.get
+    ```
+
+### Authentication
+
+XTDB uses Google's "Application Default Credentials" for authentication.
+See the [Google Cloud documentation](https://github.com/googleapis/google-auth-library-java/blob/main/README.md#application-default-credentials) for setup instructions.
+
+### Configuration
+
+To use the Google Cloud module, include the following in your node configuration:
+
+``` yaml
+storage: !Remote
+  objectStore: !GoogleCloud
+    ## -- required
+
+    # The name of the GCP project containing the bucket
+    # (Can be set as an !Env value)
+    projectId: xtdb-project
+
+    # The Cloud Storage bucket to store documents
+    # (Can be set as an !Env value)
+    bucket: xtdb-bucket
+
+    ## -- optional
+    # A file path to prefix all files with
+    # - for example, if "foo" is provided, all XTDB files will be under a "foo" sub-directory
+    # (Can be set as an !Env value)
+    # prefix: my-xtdb-node
+
+## -- required
+## A local disk path where XTDB can cache files from the remote storage
+diskCache:
+  path: /var/cache/xtdb/object-store
+```
+
+## Protecting XTDB Data
+
+Google Cloud Storage provides [strong durability guarantees](https://cloud.google.com/storage/docs/availability-durability) (up to 11 9s), but it does not protect against operator error or access misconfiguration.
+
+To minimize risk:
+
+- Enable [Object Versioning](https://cloud.google.com/storage/docs/object-versioning) --- allows recovery of deleted or overwritten objects
+- Enable [Soft Delete](https://cloud.google.com/storage/docs/soft-delete) --- provides temporary protection against deletion for a configured retention period
+- Use [Multi- or Dual-Region Buckets](https://cloud.google.com/storage/docs/locations#considerations) for cross-region redundancy
+- Apply lifecycle and retention policies with care
+- Restrict access using fine-grained IAM permissions and scoped service accounts
+
+For shared guidance on storage backup strategies, see the [Backup Overview](/ops/backup-and-restore/overview).
+
+## Backing Up XTDB Data
+
+XTDB storage files in Google Cloud Storage are immutable and ideally suited for snapshot-based backup strategies.
+
+To perform a full backup:
+
+- Back up the entire GCS bucket or prefix used by XTDB
+- Ensure all objects associated with the latest flushed block are present
+- Avoid copying in-progress files --- only finalized storage files are valid for recovery
+
+Google Cloud does not currently offer native snapshotting for Cloud Storage.
+Instead, use:
+
+- [Storage Transfer Service](https://cloud.google.com/storage-transfer-service) --- for scheduled or on-demand full/incremental backups across buckets or regions
+- [Cloud Workflows](https://cloud.google.com/workflows) or [Cloud Scheduler](https://cloud.google.com/scheduler) --- to automate transfer or backup logic

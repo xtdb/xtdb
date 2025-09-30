@@ -3,7 +3,8 @@ import starlight from '@astrojs/starlight';
 import tailwind from '@astrojs/tailwind';
 import yaml from '@rollup/plugin-yaml';
 import swup from '@swup/astro';
-import adoc from '/shared/src/adoc';
+import { remarkDefinitionList, defListHastHandlers } from 'remark-definition-list';
+import { railroadPlugin } from './src/railroad-plugin.js';
 
 // https://astro.build/config
 export default defineConfig({
@@ -230,8 +231,6 @@ export default defineConfig({
 
         tailwind({ applyBaseStyles: false }),
 
-        adoc(),
-
         swup({
             theme: false,
             animationClass: false,
@@ -246,6 +245,13 @@ export default defineConfig({
 
     build: {
         format: "file"
+    },
+
+    markdown: {
+        remarkPlugins: [railroadPlugin, remarkDefinitionList],
+        remarkRehype: {
+            handlers: { ...defListHastHandlers }
+        }
     },
 
     vite: {

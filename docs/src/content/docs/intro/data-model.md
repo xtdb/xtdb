@@ -1,0 +1,78 @@
+---
+title: How XTDB Works
+---
+
+XTDB is a database built on top of columnar storage (using [Apache Arrow](https://arrow.apache.org/)) and is designed to handle evolving, semi-structured data via SQL natively, avoiding the need for workarounds like JSONB columns and audit tables.
+
+In XTDB all data, including nested data, is able to be stored in tables without classic constraints or restrictions in the range of types or shapes, and without any upfront schema definitions.
+This is more akin to a document database than a classic SQL database.
+
+Additionally XTDB allows for INSERTs into tables that don't exist until the moment you insert into them.
+
+The only hard requirement in XTDB is that all INSERTs to any table must specify a value for the `_id` column.
+This is a mandatory, user-provided primary key that is unique per table (i.e. the same `_id` can be safely used in isolation across multiple tables).
+
+UUIDv4 values are the default recommendation for `_id` in XTDB databases, due to the HAMT-based design of the primary index.
+
+For details about the exact range of supported data types, see [XTDB Data Types](/reference/main/data-types).
+
+## Transaction model
+
+XTDB automatically records all versions and changes to individual rows across your database.
+This is widely useful for building reliable information systems, and it all starts with a [log](https://engineering.linkedin.com/distributed-systems/log-what-every-software-engineer-should-know-about-real-time-datas-unifying).
+
+### A log of transactions
+
+A key distinction between interacting with a database like Postgres and interacting with XTDB (e.g. using `psql` or otherwise) is that all clients connected to XTDB operate in a 'stateless' manner that forces all writes to be fully serialized into a single, system-wide log of durably-recorded transactions.
+
+You can easily explore the detailed history of prior transactions with a "recent transactions" query against the system-maintained `xt.txs` table: `SELECT * FROM xt.txs ORDER BY _id DESC LIMIT 20`
+
+A key benefit of this log-oriented design is that queries can use the reliable ordering of the log to query the previous state of the database using nothing more than a past timestamp.
+This makes querying across a scaled-out cluster of consistent read replicas very simple.
+
+Another important aspect of the log-oriented design is that it limits transactions to being 'non-interactive', which simply means that you can't perform a 'read' that returns data back to the client within the same transaction as a 'write' *before* the transaction has completed (has been submitted and then either commited or aborted).
+This intentional constraint guarantees a fully auditable, serial transaction ordering.
+
+Under the hood, a transaction in XTDB is an ([ACID](https://en.wikipedia.org/wiki/ACID)) request that gets processed serially and asynchronously, i.e. if you wait a few milliseconds for the processing of a newly submitted transaction to finish, you can generally then read the data from that transaction in your next query (a.k.a. "read your writes").
+However XTDB drivers will, by default, implicitly wait for any recently submitted transactions to be processed before subsequent queries are executed.
+To achieve this, all transactions are uniquely identified with an `_id` maps to a concrete 'offset' in the underlying durable log (e.g. a Kafka offset).
+
+## Temporal columns
+
+In addition to `_id`, which is the only mandatory column, 2 pairs of system-maintained temporal columns exist which track **system time** and **valid time** periods respectively:
+
+| SQL Column Name | XTDB Type |
+| --- | --- |
+| `_system_from` | TIMESTAMP WITH TIMEZONE |
+| `_system_to` | TIMESTAMP WITH TIMEZONE |
+| `_valid_from` | TIMESTAMP WITH TIMEZONE |
+| `_valid_to` | TIMESTAMP WITH TIMEZONE |
+
+
+As implied by the nature of these columns, no rows written into XTDB are ever mutated directly, and only new rows can be inserted.
+The only exceptions to this principle are:
+
+1. the existence of the `ERASE` operation, which can permanently delete entire rows for explicit data retention policies, and,
+2. the need to 'close' the `_system_to` period for the now-superseded row
+
+## How temporal columns are maintained
+
+XTDB tracks both the **system time** when data is inserted (or `UPDATE`-d) into the database, and also the **valid time** periods that define exactly when a given row/record/document is considered **valid**/**effective** in your application.
+This combination of **system** and **valid** time dimensions is called "bitemporality" and in XTDB all data is bitemporal without having to think about storing or updating additional columns.
+
+The **system time** columns are useful for audit purposes for providing a stable, immutable 'basis' for running repeatable queries (i.e. queries that return the same answer today as they did last week).
+These columns cannot be modified.
+The timestamp used is governed by XTDB's single-writer Write-Ahead Log component which is used for serial transaction processing.
+
+The **valid time** columns can be updated and modified at will, but only for *new* versions of a given record (i.e. a new row sharing the same `_id` in the same table).
+By default **valid time** will be derived from the **system time** of the transaction that causes the modification to the database.
+
+**Valid time** is useful for scenarios where it is crucial to be able offer time-travel queries whilst supporting [out of order](https://tidyfirst.substack.com/p/eventual-business-consistency) arrival of information, and including **corrections** to past data while maintaining a general sense of **immutability**.
+
+Queries are assumed to query 'now' unless otherwise specified and timestamps are recorded automatically with intuitive values unless otherwise specified.
+
+Non-valid historical data is filtered out during low-level processing at the heart of the internal design.
+
+This allows developers to focus on their *essential* domain problems without also worrying about their *accidental* bitemporal problems.
+
+XTDB's approach to temporality is inspired by [SQL:2011](https://en.wikipedia.org/wiki/SQL:2011), but makes it ubiquitous, practical and transparent during day-to-day development.
