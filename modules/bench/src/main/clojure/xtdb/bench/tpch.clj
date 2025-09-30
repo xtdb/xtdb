@@ -21,7 +21,8 @@
                    (try
                      (count (tu/query-ra q {:node node, :args args}))
                      (catch Exception e
-                       (.printStackTrace e))))}]}))
+                       (.printStackTrace e)
+                       (throw e))))}]}))
 
 (defn queries-stage [stage-name]
   {:t :do, :stage stage-name
