@@ -5,17 +5,12 @@ title: Key concepts
 ## Relational Querying
 
 SQL was first introduced in 1974 and unlike all other languages of its era it has remained completely dominant as the language for databases.
-SQL is also therefore by far the most well-known façade around the
-relational model. However unlike SQL---which rather understandably
-reflects its true age and evolutionary process through its many design
-flaws---the core of the relational model itself is a timeless
-manifestation of first-order predicate logic that predates SQL by 5 years (1969!).
+SQL is also therefore by far the most well-known façade around the relational model.
+However unlike SQL---which rather understandably reflects its true age and evolutionary process through its many design flaws---the core of the relational model itself is a timeless manifestation of first-order predicate logic that predates SQL by 5 years (1969!).
 SQL's undeniable success is because of the strength of the underlying model rather than (and perhaps in spite of) the façade.
 
 SQL databases and other non-SQL (but 'relational') languages have routinely interpreted the relational model with unique twists and XTDB is no different in having a few opinions of its own (see below).
-XTDB
-2.x is firmly grounded in the relational model and this is not only
-desirable but necessary for supporting SQL as a first-class language (complete with three-valued-logic and bag/multi-set semantics).
+XTDB 2.x is firmly grounded in the relational model and this is not only desirable but necessary for supporting SQL as a first-class language (complete with three-valued-logic and bag/multi-set semantics).
 
 SQL is not the only game in town however.
 Datalog is the alternative query language that has long been supported by XTDB for constructing relational queries.
@@ -39,8 +34,7 @@ XTDB does not possess any notion of column ordering for stored rows.
 Included in the range of first-class types are composite types: sets, structs, maps, vectors.
 Composite types allow you to insert arbitrarily nested structures composed of types determined at runtime.
 
-The striking implication of this design is that rich and deeply nested structures (e.g.
-JSON objects) can be effortlessly represented without normalization.
+The striking implication of this design is that rich and deeply nested structures (e.g. JSON objects) can be effortlessly represented without normalization.
 This is reminiscent of the flexibility afforded by 'document' databases but doesn't sacrifice SQL or relational algebra.
 It is also reminiscent of Postgres' JSONB columns, however this approach maintains complete alignment with the relational query engine without introducing any additional internal or developer-facing complexity.
 
@@ -56,20 +50,12 @@ XTDB is a 'Hybrid Transactional/Analytic Processing' (HTAP) system which postula
 XTDB is designed for making non-destructive updates to your data simple and achieves this by modeling row-level temporal versions of data.
 This works by representing each update as a new row that sits alongside the previous versions of that row in the same table.
 
-However given that XTDB does not account for schema ahead of time, the
-only means of correlating updates to a row is to impose a single
-ubiquitous schema requirement: each row asserted must contain an
-explicit `id` column.
+However given that XTDB does not account for schema ahead of time, the only means of correlating updates to a row is to impose a single ubiquitous schema requirement: each row asserted must contain an explicit `id` column.
 
-The value provided for the `id` column can be any of the supported ID
-types, but must be determined by the user. XTDB does not offer a means
-of generating new IDs automatically although use of surrogate keys (e.g.
-UUIDs) is encouraged.
+The value provided for the `id` column can be any of the supported ID types, but must be determined by the user. XTDB does not offer a means of generating new IDs automatically although use of surrogate keys (e.g. UUIDs) is encouraged.
 
-The ID allows a set of rows to be interpreted as the evolution of a
-single 'record', such that each row corresponds with a particular
-version of a record. The `id` column together with the built-in temporal
-columns forms the default primary key for each table in XTDB.
+The ID allows a set of rows to be interpreted as the evolution of a single 'record', such that each row corresponds with a particular version of a record.
+The `id` column together with the built-in temporal columns forms the default primary key for each table in XTDB.
 
 ## Temporal Columns & Bitemporality
 
@@ -78,11 +64,8 @@ In addition to any user-defined columns asserted for a given row, XTDB maintains
 These columns are:
 
 - `_system_from`
-
 - `_system_to`
-
 - `_valid_from`
-
 - `_valid_to`
 
 The columns are not visible unless explicitly queried.
@@ -90,9 +73,7 @@ The values of these columns are maintained automatically and the respective pair
 
 'System time' represents the audit history of all changes to records and captures the time that information entered the system. 'Valid time' is a user-managed dimension and can be used for a variety of purposes (out of order updates, backfilling data, domain modeling etc.).
 
-`system_time_start` can be specified to allow for importing bitemporal
-records from legacy systems `valid_time_from` and `valid_time_to` can be
-specified to meet the requirements of the application design.
+`system_time_start` can be specified to allow for importing bitemporal records from legacy systems `valid_time_from` and `valid_time_to` can be specified to meet the requirements of the application design.
 
 The combination of these columns is called 'bitemporality' and can be visualized in 2 dimensions.
 For example:
@@ -105,10 +86,7 @@ The bitemporal features defined in the SQL:2011 standard lack significant adopti
 XTDB simplifies those features by making bitemporality ubiquitous and easy.
 For instance, XTDB maintains a built-in 'WITHOUT OVERLAPS' constraint which ensures that the 'rectangles' in this model never overlap, and also maintains a temporal index to accelerate various kinds of temporal queries (including the default 'as of now' query context).
 
-Alongside a specialized temporal index, XTDB offers a set of temporal
-operators based on Allen interval algebra for understanding the
-intersections of bitemporal data (e.g. `OVERLAPS`, `CONTAINS`,
-`PRECEDES`).
+Alongside a specialized temporal index, XTDB offers a set of temporal operators based on Allen interval algebra for understanding the intersections of bitemporal data (e.g. `OVERLAPS`, `CONTAINS`, `PRECEDES`).
 
 The ability to model, reference and audit time-versioned records is useful across many domains.
 Application developers who are familiar with concepts like 'soft deletes', 'event sourcing', and 'windowed joins' will find a lot of relevant ideas and capabilities in the bitemporal design of XTDB.
@@ -122,13 +100,10 @@ XTDB uses a single-writer architecture that ensures ACID consistency of updates 
 The single-writer provides strong consistency guarantees needed for auditing and bitemporal timestamp generation.
 XTDB does not offer a sharded multi-writer architecture, meaning write latencies and availability are geographically sensitive.
 
-Transaction logic is processed fully serially, deterministically and
-atomically on each node. This means each transaction has exclusive
-access to the latest database state. Beyond basic record-oriented
-operations (i.e. via INSERT & DELETE `RECORDS`), many complex
-transactions can be expressed declaratively via SQL transactions. SQL
-transactions are non-interactive and mid-transaction writes are not
-queryable.
+Transaction logic is processed fully serially, deterministically and atomically on each node.
+This means each transaction has exclusive access to the latest database state.
+Beyond basic record-oriented operations (i.e. via INSERT & DELETE `RECORDS`), many complex transactions can be expressed declaratively via SQL transactions.
+SQL transactions are non-interactive and mid-transaction writes are not queryable.
 
 ## Foreign keys? Uniqueness constraints? Views? Indexes? etc.
 

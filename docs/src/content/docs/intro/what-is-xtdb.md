@@ -8,45 +8,26 @@ XTDB is open source and runs on the JVM.
 
 ## Bitemporal versioning made easy
 
-XTDB tracks both the **system time** when data is inserted (or
-`UPDATE`-d) into the database, and also the **valid time** periods that
-define exactly when a given row/record/document is considered
-**valid**/**effective** in your application. This combination of
-**system** and **valid** time dimensions is called "bitemporality" and
-in XTDB all data is bitemporal without having to think about storing or
-updating additional columns. All data is time-versioned automatically.
+XTDB tracks both the **system time** when data is inserted (or `UPDATE`-d) into the database, and also the **valid time** periods that define exactly when a given row/record/document is considered **valid**/**effective** in your application. 
+This combination of **system** and **valid** time dimensions is called "bitemporality" and in XTDB all data is bitemporal without having to think about storing or updating additional columns. 
+All data is time-versioned automatically.
 
-This system-maintained time-versioning allows application queries to
-easily access the correct state of the entire application history
-"as-at" any given moment, *and* to trivially audit all changes to the
-database. In other words, this unlocks the complete history of data for
-rich analysis and allows applications to cope with [out of
-order](https://tidyfirst.substack.com/p/eventual-business-consistency)
-arrival of information, including **corrections** to past data while
-maintaining a general sense of **immutability**.
+This system-maintained time-versioning allows application queries to easily access the correct state of the entire application history "as-at" any given moment, *and* to trivially audit all changes to the database. 
+In other words, this unlocks the complete history of data for rich analysis and allows applications to cope with [out of order](https://tidyfirst.substack.com/p/eventual-business-consistency) arrival of information, including **corrections** to past data while maintaining a general sense of **immutability**.
 
-XTDB's approach to temporality is inspired by
-[SQL:2011](https://en.wikipedia.org/wiki/SQL:2011), but makes it
-ubiquitous, practical and transparent during day-to-day development. All
-tables include 4 temporal columns by default which are maintained
-automatically. However queries are assumed to query 'now' unless
-otherwise specified. Non-valid historical data is filtered out during
-low-level processing at the heart of the internal design.
+XTDB's approach to temporality is inspired by [SQL:2011](https://en.wikipedia.org/wiki/SQL:2011), but makes it ubiquitous, practical and transparent during day-to-day development. 
+All tables include 4 temporal columns by default which are maintained automatically. 
+However queries are assumed to query 'now' unless otherwise specified. 
+Non-valid historical data is filtered out during low-level processing at the heart of the internal design.
 
 ## Transactional columnar architecture
 
-Unlike most transactional database systems, XTDB implements a columnar data architecture that "separates storage and compute" - this modern, Big-Data-inspired architecture is built around [Apache Arrow](https://arrow.apache.org/) and commodity object storage (e.g.
-S3).
+Unlike most transactional database systems, XTDB implements a columnar data architecture that "separates storage and compute" - this modern, Big-Data-inspired architecture is built around [Apache Arrow](https://arrow.apache.org/) and commodity object storage (e.g. S3). 
 Most importantly, this design reduces operational costs when retaining large volumes of historical data.
 
-Transaction processing is strictly serial and strongly consistent
-(ACID), based on deterministic ordering of non-interactive transactions.
-All nodes in an XTDB cluster are replicas reading from a single, shared
-Write-Ahead Log. This design implies a hard upper limit on transaction
-throughput (since all processing must ultimately happen via a single
-thread) but the key advantage of this design is the concrete
-[information guarantees](https://www.youtube.com/watch?v=Cym4TZwTCNU)
-about *exactly when, how & why* data across the database has changed.
+Transaction processing is strictly serial and strongly consistent (ACID), based on deterministic ordering of non-interactive transactions. 
+All nodes in an XTDB cluster are replicas reading from a single, shared Write-Ahead Log. 
+This design implies a hard upper limit on transaction throughput (since all processing must ultimately happen via a single thread) but the key advantage of this design is the concrete [information guarantees](https://www.youtube.com/watch?v=Cym4TZwTCNU) about *exactly when, how & why* data across the database has changed.
 
 ## Dynamic relational engine
 
@@ -58,46 +39,21 @@ Unlike typical SQL tables with row-oriented storage, XTDB's columnar tables are 
 
 ## Both SQL **and** 'XTQL'
 
-XTDB offers two interoperable query languages - one for reach (SQL) and
-one for developer productivity
-([XTQL](/xtql/tutorials/introducing-xtql)). SQL in XTDB is a first-class
-citizen, built to reflect the
-[SQL:2011](https://en.wikipedia.org/wiki/SQL:2011) standard (which first
-introduced bitemporal capabilities to the SQL standard) and conforms to
-a broad suite of [SQLite Logic
-Tests](https://www.sqlite.org/sqllogictest/doc/trunk/about.wiki).
+XTDB offers two interoperable query languages - one for reach (SQL) and one for developer productivity ([XTQL](/xtql/tutorials/introducing-xtql)). 
+SQL in XTDB is a first-class citizen, built to reflect the [SQL:2011](https://en.wikipedia.org/wiki/SQL:2011) standard (which first introduced bitemporal capabilities to the SQL standard) and conforms to a broad suite of [SQLite Logic Tests](https://www.sqlite.org/sqllogictest/doc/trunk/about.wiki).
 
-[XTQL](/xtql/tutorials/introducing-xtql) is a novel relational database
-language that extends the power of SQL and its standard library to a
-more composable format that can be written or generated by client
-libraries using a JSON API.
+[XTQL](/xtql/tutorials/introducing-xtql) is a novel relational database language that extends the power of SQL and its standard library to a more composable format that can be written or generated by client libraries using a JSON API.
 
 The two languages are able to interoperate with 100% parity, meaning application developers can use the APIs as they see fit without sacrificing analytical requirements or compromising on functionality.
 
 ## Feature Highlights
 
-- Supports the full spectrum between normalized relational modeling
-    and dynamic document-like storage without compromising data type
-    fidelity (i.e. unlike JSONB).
-
-- The combination of a native SQL implementation alongside XTQL offers
-    a more productive application development experience without
-    sacrificing rich data analysis (and without ETL to another system).
-
-- Strong data consistency built around linearized, single-writer
-    transaction processing.
-
-- Accurate and immutable temporal record versioning to mitigate the
-    complexities of application logic and handle out-of-order data
-    ingestion.
-
+- Supports the full spectrum between normalized relational modeling and dynamic document-like storage without compromising data type fidelity (i.e. unlike JSONB).
+- The combination of a native SQL implementation alongside XTQL offers a more productive application development experience without sacrificing rich data analysis (and without ETL to another system).
+- Strong data consistency built around linearized, single-writer transaction processing.
+- Accurate and immutable temporal record versioning to mitigate the complexities of application logic and handle out-of-order data ingestion.
 - Apache Arrow unlocks data for external integration.
+- Advanced temporal querying allows you to analyze the evolution of your data.
+- Deploy across your choice of cloud database services or on-premise to meet reliability and redundancy requirements.
 
-- Advanced temporal querying allows you to analyze the evolution of
-    your data.
-
-- Deploy across your choice of cloud database services or on-premise
-    to meet reliability and redundancy requirements.
-
-Through each of these interconnected principles and features XTDB solves
-the [motivating problems](/intro/why-xtdb) in a single, coherent system.
+Through each of these interconnected principles and features XTDB solves the [motivating problems](/intro/why-xtdb) in a single, coherent system.
