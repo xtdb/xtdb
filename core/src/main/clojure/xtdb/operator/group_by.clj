@@ -14,7 +14,7 @@
            (java.util ArrayList LinkedList List Spliterator)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo Field FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType$Duration Field FieldType)
            (xtdb ICursor)
            (xtdb.arrow IntVector ListVector LongVector RelationReader Vector VectorReader VectorWriter)
            (xtdb.expression.map RelationMapBuilder)
@@ -231,9 +231,10 @@
 
 (defmethod ->aggregate-factory :sum [{:keys [from-name from-type] :as agg-opts}]
   (let [to-type (->> (types/flatten-union-types from-type)
-                     ;; TODO handle non-num types, if appropriate? (durations?)
-                     ;; do we want to runtime error, or treat them as nulls?
-                     (filter (comp #(isa? types/col-type-hierarchy % :num) types/col-type-head))
+                     ;; Support both numeric types and duration types
+                     (filter (comp #(or (isa? types/col-type-hierarchy % :num)
+                                        (isa? types/col-type-hierarchy % :duration)) 
+                                   types/col-type-head))
                      (types/least-upper-bound))]
     (reducing-agg-factory (into agg-opts
                                 {:to-type to-type
@@ -250,7 +251,12 @@
                                         :to-name 'cnt, :zero-row? zero-row?})
         input-types {:col-types {'sum (types/field->col-type (.getField sum-agg))
                                  'cnt (types/field->col-type (.getField count-agg))}}
-        projecter (->projector to-name '(/ (double sum) cnt) input-types)]
+        ^Field sum-field (.getField sum-agg)
+
+        avg-formula (if (instance? ArrowType$Duration (.getType sum-field))
+                      '(/ sum cnt) ; integer division for durations
+                      '(/ (double sum) cnt))
+        projecter (->projector to-name avg-formula input-types)]
     (reify IAggregateSpecFactory
       (getField [_] (.getField projecter))
 
