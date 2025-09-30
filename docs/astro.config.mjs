@@ -3,7 +3,6 @@ import starlight from '@astrojs/starlight';
 import tailwind from '@astrojs/tailwind';
 import yaml from '@rollup/plugin-yaml';
 import swup from '@swup/astro';
-import adoc from '/shared/src/adoc';
 
 // https://astro.build/config
 export default defineConfig({
@@ -229,8 +228,6 @@ export default defineConfig({
         }),
 
         tailwind({ applyBaseStyles: false }),
-
-        adoc(),
 
         swup({
             theme: false,
