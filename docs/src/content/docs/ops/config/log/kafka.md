@@ -54,7 +54,6 @@ log.
     the topic with some expected configuration values.
 
 3. The log topic should be configured with the following properties:
-
     - **A single partition** - this ensures that the message log is
     strictly ordered.
 
@@ -96,9 +95,7 @@ log.
     XTDB node has the following permissions on the topic:
 
         - `Describe`
-
         - `Read`
-
         - `Write`
 
 ## Configuration
@@ -157,7 +154,6 @@ The following piece of node configuration demonstrates the following common use 
     module.
 
 - Topic has already been created manually.
-
 - Configuration values are being passed in as environment variables.
 
 ``` yaml
@@ -192,7 +188,6 @@ To minimize the risk of data loss:
     tolerance
 
 - **Enforce quorum writes** - use `min.insync.replicas > 1`
-
 - **Tune retention** - ensure `retention.ms` and/or `retention.bytes`
     keep unindexed messages long enough to allow for safe backup or
     flushing
@@ -215,7 +210,6 @@ Restoring a log without its corresponding flushed storage state may
 result in inconsistency and force an epoch reset.
 
 - Take backups **after** a successful XTDB storage flush.
-
 - Capture **only committed** Kafka messages (exclude in-flight
     transactions).
 
@@ -227,16 +221,13 @@ result in inconsistency and force an epoch reset.
 Use Kafka-native tools to replicate log data between clusters:
 
 - [MirrorMaker](https://kafka.apache.org/documentation/#basic_ops_mirror_maker)
-
 - [Confluent
     Replicator](https://docs.confluent.io/platform/current/multi-dc-deployments/replicator/index.html)
 
 This allows for:
 
 - Geo-redundancy
-
 - Low-RPO disaster recovery
-
 - Hot-standby clusters
 
 Note: Replication **does not** replace backups --- it only increases
@@ -249,7 +240,5 @@ XTDB can rebuild its state from upstream sources (event logs, message queues) us
 Advantages:
 
 - Independent recovery source
-
 - Replay can be filtered, transformed, or validated
-
 - Fills gaps between backup and failure

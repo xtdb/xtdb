@@ -14,8 +14,6 @@ title: Other Functions
     (alias for `OCTET_LENGTH`)
 
     - A **list**: returns the number of elements in the list
-
     - A **set**: returns the number of elements in the set
-
     - A **struct**: returns the number of **non-absent** fields in the
     struct

@@ -17,9 +17,7 @@ JUXT additionally provide [enterprise XTDB support](https://xtdb.com/support) fo
 XTDB has an active open-source community on the [XTDB GitHub repo](https://github.com/xtdb/xtdb), for:
 
 - issues and pull requests
-
 - [discussions](https://github.com/orgs/xtdb/discussions),
-
 - [public roadmap](https://github.com/orgs/xtdb/projects/13/views/16),
 
 as well as the source-code itself.

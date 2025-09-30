@@ -48,9 +48,7 @@ Scale Rules
 :   -   Addition (`+`) → scale = max(s1, s2)
 
     - Subtraction (`-`) → scale = max(s1, s2)
-
     - Multiplication (`*`) → scale = s1 + s2
-
     - Division (`/`) → scale = max(6, s1 + s2 + 1)
 
 Comparison Operations
@@ -79,9 +77,7 @@ Casting
     computation:
 
     - `::DECIMAL(p, s)` → Precision = `p`, Scale = `s`
-
     - `::DECIMAL(p)` → Precision = `p`, Scale = `0`
-
     - `::DECIMAL` (unspecified) → Defaults to `DECIMAL(64, 9)`
 
 Cast Behaviour
@@ -97,7 +93,6 @@ Examples
 :   -   `CAST(123.45 AS DECIMAL(5,2))` → `DECIMAL(5,2)`
 
     - `CAST(123 AS DECIMAL(5))` → `DECIMAL(5,0)`
-
     - `CAST(123.456 AS DECIMAL)` → `DECIMAL(64,9)` (unless already
     `DECIMAL`)
 
@@ -132,7 +127,6 @@ Edge Case Limitation
     midnight
 
     - ISO8601: `TIMESTAMP [WITHOUT TIMEZONE] '2020-01-01T00:00:00'`
-
         - without seconds:
     `TIMESTAMP [WITHOUT TIMEZONE] '2020-01-01T18:00'`
 
@@ -144,13 +138,9 @@ Edge Case Limitation
     `TIMESTAMP WITH TIMEZONE '2020-01-01 18:00:00+00:00'`
 
     - ISO8601 (`WITH TIMEZONE` optional):
-
         - `TIMESTAMP [WITH TIMEZONE] '2020-01-01T18:00:00Z'`
-
         - `TIMESTAMP [WITH TIMEZONE] '2020-01-01T18:00:00+00:00'`
-
         - `TIMESTAMP [WITH TIMEZONE] '2020-08-01T18:00:00+01:00[Europe/London]'`
-
         - without time-part:
     `TIMESTAMP [WITH TIMEZONE] '2020-01-01Z'` - defaults to
     midnight
@@ -192,7 +182,6 @@ Edge Case Limitation
     start and exclusive end ('closed-open').
 
     - `PERIOD(DATE '1998-01-05', DATE '1998-01-12')`
-
     - `PERIOD(TIMESTAMP '1998-01-05T12:00:00Z', TIMESTAMP '1998-01-12T15:00:00Z')`
 
 ### Conversions between temporal types
@@ -200,7 +189,6 @@ Edge Case Limitation
 There are a number of considerations when casting between temporal types:
 
 - Casting from `DATE` to `TIMESTAMP` assumes the start of the day.
-
 - Casting to `TIMESTAMP WITH TIME ZONE` will use the system default
     time zone.
 
@@ -240,7 +228,6 @@ Casting to an interval qualifier will:
 When casting to/from intervals from other types, the following rules apply:
 
 - Casting from `VARCHAR` to an interval:
-
     - **Without** specifying an interval qualifier: will parse the
     string as an ISO8601 interval, and will return a day-time
     interval.
@@ -252,16 +239,12 @@ When casting to/from intervals from other types, the following rules apply:
     an ISO8601 string.
 
 - Casting from an `INTERVAL` to `DURATION`:
-
     - Will only work if the interval is a day-time interval.
-
     - Will return the entire interval as its ISO 8601 duration - any
     days will be converted to 24 hours.
 
 - Casting from a `DURATION` to `INTERVAL`:
-
     - Always returns a day-time interval.
-
     - **Without** specifying an interval qualifier: always returns
     with zero days and put the whole duration into the time part of
     the interval.
@@ -290,16 +273,12 @@ When casting to/from intervals from other types, the following rules apply:
     e.g.:
 
     - `'hello world!'`
-
     - `E'hellon world!'` - string containing C-style escape
     characters:
 
         - `ooo`: octal
-
         - `xXX`, `uXXXX`, `UXXXXXXXX`: 2, 4 or 8 hex digits
-
         - `r`, `n`, `t`, `\\`, `'`
-
     - `$$dollar quoted string$$`: no need to escape single/double
     quotes etc in here.
 
@@ -325,7 +304,6 @@ XTDB supports arbitrarily nested data in a first-class way, without needing to s
     e.g.
 
     - `ARRAY[1, 2, 3]`
-
     - `[1, 2, 3]`
 
 `OBJECT` | `RECORD`
@@ -335,7 +313,5 @@ XTDB supports arbitrarily nested data in a first-class way, without needing to s
     e.g.
 
     - `OBJECT(name: 'Lucy', age: 38)`
-
     - `RECORD(name: 'Lucy', age: 38)`
-
     - `{name: 'Lucy', age: 38}`

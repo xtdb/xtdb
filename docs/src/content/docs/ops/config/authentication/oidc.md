@@ -12,9 +12,7 @@ OIDC authentication supports multiple OAuth 2.0 flows for different client types
 :   -   OpenID Connect Discovery (/.well-known/openid_configuration)
 
     - At least one of the following OAuth 2.0 grant types:
-
         - Client Credentials flow (widely supported)
-
         - Resource Owner Password Credentials flow (optional,
     provider-dependent)
 
@@ -143,9 +141,7 @@ Uses OAuth Device Authorization flow for applications that cannot securely store
 :   1.  Client requests device code from XTDB
 
     2. User visits verification URL and enters user code
-
     3. XTDB polls identity provider until user completes authentication
-
     4. Access token issued upon successful authentication
 
 **Client Usage Example**

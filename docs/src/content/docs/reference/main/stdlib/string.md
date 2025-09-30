@@ -5,7 +5,6 @@ title: String functions
 Notes:
 
 - String positions are 1-based, in line with the SQL spec.
-
 - If any argument to these functions is null, the function will return
     null.
 
@@ -21,7 +20,6 @@ Notes:
     `like_pattern` can contain:
 
     - `_`: matches any single character
-
     - `%`: matches 0-n characters
 
 `str [NOT] LIKE_REGEX regex [FLAG flags]`
@@ -46,7 +44,6 @@ Notes:
     `replacement`
 
     - `start_pos`: 1-based start position
-
     - `length`: defaults to end-of-string if not provided
 
 `POSITION(search IN str [USING CHARACTERS])`
@@ -54,7 +51,6 @@ Notes:
 :   position of `search` within `str`, in characters
 
     - Return value is 1-based.
-
     - Returns 0 if not found.
 
 `TRIM([trim_char FROM] str)` | `TRIM(BOTH [trim_char] FROM str)`
@@ -92,7 +88,6 @@ Notes:
     `length` characters
 
     - `from_pos`: 1-based start position
-
     - `length`: defaults to end-of-string if not provided
 
 `UPPER(str)`
@@ -108,7 +103,5 @@ syntax.
 Supported flags (string, e.g. `'im'`) are as follows:
 
 - `s`: 'dot' matches any character (including line terminators)
-
 - `i`: case insensitive
-
 - `m`: multi-line

@@ -82,11 +82,9 @@ If you're running a JVM, you can also use XTDB directly, in-process.
 In-process XTDB is particularly useful for testing and interactive development - you can start an in-memory node quickly and with little hassle, which makes it a great tool for unit tests and REPL experimentation.
 
 1. First, ensure you are running JDK 24+ and then add the `xtdb-core` library to your dependency manager.
-
 2. You'll also need to add the following JVM arguments to run Apache Arrow (included in the `:xtdb` deps.edn alias above):
    - `--add-opens=java.base/java.nio=ALL-UNNAMED`
    - `-Dio.netty.tryReflectionSetAccessible=true`
-
 3. Once you have a REPL (started with `clj -A:xtdb` this time), you can create an in-memory XTDB node with:
 
 ``` clojure

@@ -24,9 +24,7 @@ The simplest way to modify XTDB's logging level is through environment variables
     example:
 
 - `XTDB_LOGGING_LEVEL_COMPACTOR`
-
 - `XTDB_LOGGING_LEVEL_INDEXER`
-
 - `XTDB_LOGGING_LEVEL_PGWIRE`
 
 Valid levels are `TRACE`, `DEBUG`, `INFO` (default), `WARN`, and
@@ -86,7 +84,6 @@ choose to roll it back.)
     and identify the errant transaction ID in the logs.
 
 2. Scale down all nodes within the XTDB cluster.
-
 3. Set `XTDB_SKIP_TXS="<txId>,<txId2>…​"` as an environment variable on
     all of the nodes.
 

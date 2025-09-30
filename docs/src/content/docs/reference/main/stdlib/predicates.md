@@ -15,15 +15,10 @@ Notes:
 The standard comparators are available:
 
 - `expr1 < expr2` (less than)
-
 - `expr1 <= expr2` (less than or equal to)
-
 - `expr1 > expr2` (greater than)
-
 - `expr1 >= expr2` (greater than or equal to)
-
 - `expr1 = expr2` (equal to)
-
 - `expr1 <> expr2` | `expr1 != expr2` (not equal to)
 
 ## Greatest / Least

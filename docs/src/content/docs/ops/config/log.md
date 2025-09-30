@@ -15,11 +15,8 @@ One of the key components of an XTDB node is the log - this is a totally ordered
 We offer a number of separate implementations of the log, currently:
 
 - Single-node log implementations, within `xtdb-core`:
-
     - [In memory](#in-memory): transient in-memory log.
-
     - [Local disk](#local-disk): log using the local filesystem.
-
 - [Remote](#remote): multi-node log implementations using a remote
     service.
 
@@ -110,9 +107,7 @@ Therefore, it is recommended to only increment the epoch after you are confident
 When applying a new epoch:
 
 - Shut down all XTDB nodes to prevent divergence.
-
 - Update each node's configuration with the new `epoch` value.
-
 - (Optional) Prepare a clean log backend if required (e.g., create a
     new Kafka topic or clear the local log directory).
 

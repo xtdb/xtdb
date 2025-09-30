@@ -73,9 +73,7 @@ table. By default, this shows the table at the current time, but it can
 be overridden:
 
 - to view the table at another point in time
-
 - to view the changes to the table within a given range
-
 - to view the entire history of the table
 
 ``` clojure

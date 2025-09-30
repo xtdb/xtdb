@@ -17,14 +17,11 @@ For more information on setting up an XTDB cluster on AWS, see the
 In order to run an AWS based XTDB cluster, the following infrastructure is required:
 
 - An **S3 bucket** for remote storage.
-
 - A **Kafka cluster** for the message log.
-
     - For more information on setting up Kafka for usage with XTDB,
     see the [Kafka configuration](config/log/kafka) docs.
 
 - IAM policies which grant XTDB permission to the S3 bucket
-
 - XTDB nodes configured to communicate with the Kafka cluster and S3
     bucket.
 
@@ -43,7 +40,6 @@ terraform init -from-module github.com/xtdb/xtdb.git//aws/terraform
 By default, running the templates will deploy the following infrastructure:
 
 - Amazon S3 Storage Bucket for remote storage.
-
     - Configured with associated resources using the
     [**terraform-aws-modules/s3-bucket**](https://registry.terraform.io/modules/terraform-aws-modules/s3-bucket/aws/latest)
     Terraform module.
@@ -52,7 +48,6 @@ By default, running the templates will deploy the following infrastructure:
     permissions for XTDB.
 
 - IAM Policy for granting access to the S3 storage bucket.
-
     - Configured with associated resources using the
     [**terraform-aws-modules/iam-policy**](https://registry.terraform.io/modules/terraform-aws-modules/iam/aws/latest/submodules/iam-policy)
     Terraform module.
@@ -61,7 +56,6 @@ By default, running the templates will deploy the following infrastructure:
     within the specified S3 bucket.
 
 - Virtual Private Cloud (VPC) for the XTDB EKS cluster.
-
     - Configured with associated resources using the
     [**terraform-aws-modules/vpc**](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest)
     Terraform module.
@@ -225,7 +219,6 @@ helm show values oci://ghcr.io/xtdb/helm-xtdb-aws
 By default, the following resources are deployed by the Helm chart:
 
 - A `ConfigMap` containing the XTDB YAML configuration.
-
 - A `StatefulSet` containing a configurable number of XTDB nodes,
     using the [**xtdb-aws** docker image](#docker-image)
 
@@ -282,7 +275,6 @@ For advanced usage, XTDB allows the above YAML configuration to be overridden to
 In order to override the default configuration:
 
 1. Mount a custom YAML configuration file to the container.
-
 2. Override the `COMMAND` of the docker container to use the custom
     configuration file, ie:
 
@@ -300,7 +292,6 @@ object-store for XTDB's [remote storage](config/storage#remote) module.
 To use S3 as the object store, the following infrastructure is required:
 
 1. An **S3 bucket**.
-
 2. **IAM policies** which grant XTDB permission to the S3 bucket:
 
     ``` yaml
@@ -380,13 +371,11 @@ To minimize risk:
     --- allows recovery of deleted or overwritten objects
 
     - Will use delete markers or retention policies for soft delete
-
 - Use [Cross-Region
     Replication](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication.html)
     for disaster recovery scenarios
 
 - Apply S3 bucket lifecycle and retention policies with care
-
 - Lock down IAM access to prevent destructive operations from
     untrusted sources
 
@@ -399,7 +388,6 @@ XTDB storage files in S3 are immutable and ideally suited for snapshot-based bac
 To perform a full backup:
 
 - Back up the entire S3 prefix (or bucket) used by XTDB
-
 - Ensure all files associated with the latest flushed block are
     present
 

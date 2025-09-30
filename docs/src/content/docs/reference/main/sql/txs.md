@@ -23,7 +23,6 @@ return rr.Diagram(rr.Stack(insertIntoTable, rr.Choice(0, values, records, select
 ```
 
 - Documents must contain an `_id` column.
-
 - By default, the document will be inserted for valid-time between now
     and end-of-time. This can be overridden by including `_valid_from`
     and/or `_valid_to` columns in the document.

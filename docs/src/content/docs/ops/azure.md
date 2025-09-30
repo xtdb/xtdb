@@ -22,7 +22,6 @@ In order to run an Azure based XTDB cluster, the following infrastructure is req
     services.
 
 - A **Kafka cluster** for the message log.
-
     - For more information on setting up Kafka for usage with XTDB,
     see the [Kafka configuration](config/log/kafka) docs.
 
@@ -48,17 +47,13 @@ terraform init -from-module github.com/xtdb/xtdb.git//azure/terraform
 By default, running the templates will deploy the following infrastructure:
 
 - **XTDB Resource Group and User Assigned Managed Identity**
-
 - **Azure Storage Account** (with a container for object storage)
-
     - Configured with associated resources using the
     [**Azure/avm-res-storage-storageaccount**](https://registry.terraform.io/modules/Azure/avm-res-storage-storageaccount/azurerm/latest)
     Terraform module.
 
     - Adds required permissions to the User Assigned Managed Identity.
-
 - **AKS Cluster**
-
     - Configured with associated resources using the
     [**Azure/aks**](https://registry.terraform.io/modules/Azure/aks/azurerm/latest)
     Terraform module.
@@ -161,7 +156,6 @@ helm show values oci://ghcr.io/xtdb/helm-xtdb-azure
 By default, the following resources are deployed by the Helm chart:
 
 - A `ConfigMap` containing the XTDB YAML configuration.
-
 - A `StatefulSet` containing a configurable number of XTDB nodes,
     using the [**xtdb-azure** docker image](#docker-image)
 
@@ -265,7 +259,6 @@ For advanced usage, XTDB allows the above YAML configuration to be overridden to
 In order to override the default configuration:
 
 1. Mount a custom YAML configuration file to the container.
-
 2. Override the `COMMAND` of the docker container to use the custom
     configuration file, ie:
 
@@ -379,7 +372,6 @@ To minimize risk:
     for disaster recovery scenarios
 
 - Apply lifecycle and retention policies with care
-
 - Restrict blob/container access using role-based access control
     (RBAC) and scoped IAM roles
 
@@ -392,7 +384,6 @@ XTDB storage files in Azure Blob Storage are immutable and ideally suited for sn
 To perform a full backup:
 
 - Back up the entire blob container (or prefix) used by XTDB
-
 - Ensure all blobs associated with the latest flushed block are
     present
 

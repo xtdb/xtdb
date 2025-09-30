@@ -18,17 +18,13 @@ information.
 You will need:
 
 - A running Grafana instance
-
 - Prometheus configured to scrape metrics from XTDB nodes
-
 - Prometheus configured as a data source in Grafana
 
 Refer to the official documentation for setup instructions:
 
 - [Grafana](https://grafana.com/docs/grafana/latest/installation/)
-
 - [Prometheus](https://prometheus.io/docs/prometheus/latest/getting_started/)
-
 - [Adding Prometheus as a Grafana
     datasource](https://prometheus.io/docs/visualization/grafana/#using)
 
@@ -37,9 +33,7 @@ Refer to the official documentation for setup instructions:
 To import XTDB's pre-built dashboards:
 
 1. In Grafana, navigate to `Dashboards → New → Import dashboard`.
-
 2. Upload the dashboard JSON file from the XTDB repository.
-
 3. Select the Prometheus data source and click `Import`.
 
 The following dashboards are available:

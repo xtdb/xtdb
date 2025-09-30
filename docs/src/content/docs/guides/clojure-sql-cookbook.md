@@ -8,9 +8,7 @@ SQL queries are submitted through `xtdb.api/q`:
     vector of maps.
 
     - `opts`: map of query options
-
         - `:args`: vector of query arguments
-
         - `:snapshot-token`, `:current-time`, `:tx-timeout` : see
     [XTQL](/reference/main/xtql/queries#basis)
 
@@ -33,9 +31,7 @@ SQL transactions are submitted through `xtdb.api/execute-tx` and
     key of the submitted transaction.
 
     - `tx-ops`: vector of [transaction operations](#tx-ops).
-
     - `opts` (map):
-
         - `:default-tz` (`java.time.ZoneRegion`): time zone to be used
     by default in functions where no explicit override is
     provided. Defaults to the current TZ of the server JVM.

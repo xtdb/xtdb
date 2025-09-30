@@ -5,7 +5,6 @@ title: Numeric functions
 Notes:
 
 - If any input expression is null, the result will also be null.
-
 - If all arguments are integers, the result will also be an integer;
     otherwise, all arguments will be cast to floating-point values
     before applying the function. Particularly, the division function
@@ -21,11 +20,8 @@ Notes:
 The standard arithmetic functions are available:
 
 - `expr1 + expr2` (addition)
-
 - `expr1 - expr2` (subtraction)
-
 - `expr1 * expr2` (multiplication)
-
 - `expr1 / expr2` (division)
 
 ## Other numeric functions
@@ -73,21 +69,13 @@ The standard arithmetic functions are available:
 ## Trigonometric functions
 
 - `ACOS(x)` (inverse cosine)
-
 - `ASIN(x)` (inverse sine)
-
 - `ATAN(x)` (inverse tangent)
-
 - `COS(x)` (cosine)
-
 - `COSH(x)` (hyperbolic cosine)
-
 - `SIN(x)` (sine)
-
 - `SINH(x)` (hyperbolic sine)
-
 - `TAN(x)` (tangent)
-
 - `TANH(x)` (hyperbolic tangent)
 
 Notes:

@@ -67,7 +67,6 @@ the following endpoint on the **Healthz Server**:
 XTDB nodes can be configured to report metrics to the following cloud-based monitoring services:
 
 - [Azure Application Insights](../azure#monitoring)
-
 - [AWS CloudWatch](../aws#monitoring)
 
 ## Grafana Dashboards

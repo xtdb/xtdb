@@ -17,9 +17,7 @@ guide.
 In order to run a Google Cloud based XTDB cluster, the following infrastructure is required:
 
 - A **Google Cloud Storage bucket** for remote storage.
-
 - A **Kafka cluster** for the message log.
-
     - For more information on setting up Kafka for usage with XTDB,
     see the [Kafka configuration](config/log/kafka) docs.
 
@@ -48,11 +46,8 @@ terraform init -from-module github.com/xtdb/xtdb.git//google-cloud/terraform
 To deploy the required infrastructure, we need to ensure the following APIs are enabled on the Google Cloud project:
 
 - Cloud Storage API
-
 - IAM API
-
 - Compute Engine API
-
 - Kubernetes Engine API
 
 ### Required Permissions
@@ -76,21 +71,17 @@ By default, running the templates will deploy the following infrastructure:
     resources.
 
 - **Google Cloud Storage Bucket** for remote storage.
-
     - Configured with associated resources using the
     [**GoogleCloud/storage-bucket**](https://registry.terraform.io/modules/terraform-google-modules/cloud-storage/google/latest)
     Terraform module.
 
     - Adds required permissions to the Service Account.
-
 - **Virtual Private Cloud Network** for the XTDB GKE cluster.
-
     - Configured with associated resources using the
     [**GoogleCloud/network**](https://registry.terraform.io/modules/terraform-google-modules/network/google/latest)
     Terraform module.
 
 - **Google Kubernetes Engine Cluster** for running the XTDB resources.
-
     - Configured with associated resources using the
     [**GoogleCloud/kubernetes-engine**](https://registry.terraform.io/modules/terraform-google-modules/kubernetes-engine/google/latest)
     Terraform module.
@@ -186,7 +177,6 @@ helm show values oci://ghcr.io/xtdb/helm-xtdb-google-cloud
 By default, the following resources are deployed by the Helm chart:
 
 - A `ConfigMap` containing the XTDB YAML configuration.
-
 - A `StatefulSet` containing a configurable number of XTDB nodes,
     using the [**xtdb-google-cloud** docker image](#docker-image)
 
@@ -248,7 +238,6 @@ For advanced usage, XTDB allows the above YAML configuration to be overridden to
 In order to override the default configuration:
 
 1. Mount a custom YAML configuration file to the container.
-
 2. Override the `COMMAND` of the docker container to use the custom
     configuration file, ie:
 
@@ -267,7 +256,6 @@ storage](config/storage#remote) module.
 To use Google Cloud Storage as the object store, the following infrastructure is required:
 
 1. A **Google Cloud Storage bucket**
-
 2. A **custom role** with the necessary permissions for XTDB to use the
     bucket:
 
@@ -344,7 +332,6 @@ To minimize risk:
     for cross-region redundancy
 
 - Apply lifecycle and retention policies with care
-
 - Restrict access using fine-grained IAM permissions and scoped
     service accounts
 
@@ -357,7 +344,6 @@ XTDB storage files in Google Cloud Storage are immutable and ideally suited for 
 To perform a full backup:
 
 - Back up the entire GCS bucket or prefix used by XTDB
-
 - Ensure all objects associated with the latest flushed block are
     present
 

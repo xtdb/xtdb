@@ -10,7 +10,6 @@ For examples on how to run SQL queries in each client library, see the
 At the top-level, XTDB SQL queries augment the SQL standard in the following ways:
 
 - `SELECT` is optional - if not provided, it defaults to `SELECT *`
-
 - `FROM` is optional - if not provided, it defaults to a 0-column,
     1-row table.
 

@@ -6,9 +6,7 @@ This guide will walk you through the process of configuring and running an XTDB 
 This setup includes:
 
 - Using **Azure Blob Storage** as the remote storage implementation.
-
 - Utilizing **Apache Kafka** as the shared message log implementation.
-
 - Exposing the cluster to the internet via a Postgres wire-compatible
     server.
 
@@ -51,7 +49,6 @@ article**](https://learn.microsoft.com/en-us/azure/azure-resource-manager/manage
 for more information. This guide requires the following providers:
 
 - `Microsoft.ContainerService` - for the AKS resources.
-
 - `Microsoft.ManagedIdentity` - for the user assigned managed identity
     resources.
 
@@ -105,17 +102,13 @@ The sample Terraform directory sets up a few distinct parts of the infrastructur
 If using the default configuration, the following will be created:
 
 - **XTDB Resource Group and User Assigned Managed Identity**
-
 - **Azure Storage Account** (with a container for object storage)
-
     - Configured with associated resources using the
     [**Azure/avm-res-storage-storageaccount**](https://registry.terraform.io/modules/Azure/avm-res-storage-storageaccount/azurerm/latest)
     Terraform module.
 
     - Adds required permissions to the User Assigned Managed Identity.
-
 - **AKS Cluster**
-
     - Configured with associated resources using the
     [**Azure/aks**](https://registry.terraform.io/modules/Azure/aks/azurerm/latest)
     Terraform module.
@@ -174,9 +167,7 @@ terraform output
 This will return the following outputs:
 
 - `storage_account_container`
-
 - `storage_account_name`
-
 - `user_managed_identity_client_id`
 
 ## Deploying on Kubernetes
@@ -233,9 +224,7 @@ topic creation and configuration itself.
 For production environments, consider the following:
 
 - Use a more robust Kafka deployment.
-
 - Pre-create the required Kafka topics.
-
 - Configure XTDB appropriately to interact with the production Kafka
     setup.
 
@@ -337,9 +326,7 @@ helm install xtdb-azure oci://ghcr.io/xtdb/helm-xtdb-azure
 The following are created by the templates:
 
 - A `ConfigMap` containing the XTDB YAML configuration.
-
 - A `StatefulSet` containing the XTDB nodes.
-
 - A `LoadBalancer` Kubernetes service to expose the XTDB cluster to
     the internet.
 
@@ -385,7 +372,6 @@ kubectl port-forward service/xtdb-service --namespace xtdb-deployment 8080:8080
 You can do the same for the following components:
 
 - Postgres Wire Server (on port `5432`)
-
 - Healthz Server (on port `8080`)
 
 To check the status of the XTDB cluster using the forwarded port, run:

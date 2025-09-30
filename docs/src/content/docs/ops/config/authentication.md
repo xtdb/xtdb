@@ -107,9 +107,7 @@ If no rules match, the connection is rejected.
 :   -   `TRUST`: No authentication required
 
     - `PASSWORD`: Require username/password validation
-
     - `CLIENT_CREDENTIALS`: OAuth client credentials flow (OIDC only)
-
     - `DEVICE_AUTH`: OAuth device authorization flow (OIDC only)
 
 **Example Rule**

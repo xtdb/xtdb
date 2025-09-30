@@ -84,7 +84,6 @@ Non-valid historical data is filtered out during low-level processing using a de
     ingestion.
 
 - Apache Arrow unlocks data for external integration.
-
 - Advanced temporal querying allows you to analyze the evolution of
     your data.
 

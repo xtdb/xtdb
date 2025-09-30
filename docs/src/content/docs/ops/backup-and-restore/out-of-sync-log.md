@@ -80,7 +80,6 @@ For full details about epochs, see [Epochs](/ops/config/log#epochs).
     understand the potential consequences.
 
 - Always take a backup of storage before making epoch changes.
-
 - The new epoch marks a clean slate for the log but does **not**
     delete any existing storage files.
 

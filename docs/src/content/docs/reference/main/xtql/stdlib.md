@@ -8,7 +8,6 @@ SQL, written in s-expression form.
 The following notes and exceptions apply:
 
 - [Predicates](/reference/main/stdlib/predicates):
-
     - XTQL predicates are variadic, with evaluation rules as per
     Clojure.
 
@@ -16,25 +15,18 @@ The following notes and exceptions apply:
     `(<> exprs...)` and `(!= exprs...)`)
 
     - `expr IS TRUE` → `(true? expr)`
-
     - `expr IS FALSE` → `(false? expr)`
-
     - `expr IS NULL` → `(nil? expr)`
-
 - [String functions](/reference/main/stdlib/string):
-
     - `like-regex` accepts Clojure regex reader syntax (e.g.
     `#".foo."`)
 
     - `str LIKE pattern` → `(like str pattern)`
-
     - `str LIKE_REGEX pattern [FLAG flags]` →
     `(like-regex str regex <flags>)`
 
     - `OVERLAY` → `(overlay str1 replacement start <length>)`
-
     - `TRIM(BOTH <trim_char> FROM str)` → `(trim str <trim-char>)`
-
     - `TRIM(LEADING <trim_char> FROM str)` →
     `(trim-leading str <trim-char>)`
 
@@ -42,13 +34,9 @@ The following notes and exceptions apply:
     `(trim-trailing str <trim-char>)`
 
 - [Temporal functions](/reference/main/stdlib/temporal):
-
     - Function names are in kebab-case, e.g.:
-
         - `p1 CONTAINS p2` → `(contains? p1 p2)`
-
         - `p1 STRICTLY CONTAINS p2` → \`(strictly-contains? p1 p2)
-
     - `DATE_TRUNC('UNIT', date_time)` →
     `(date-trunc "UNIT" date-time)`
 

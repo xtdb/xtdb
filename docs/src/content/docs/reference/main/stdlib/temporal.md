@@ -17,13 +17,9 @@ addition
 :   -   `date_time + duration` → date-time
 
     - `duration + date_time` → date-time
-
     - `date_time + interval` → date-time
-
     - `interval + date_time` → date-time
-
     - `duration + duration` → duration
-
     - `interval + interval` → interval
 
 subtraction
@@ -31,11 +27,8 @@ subtraction
 :   -   `date_time - duration` → date-time
 
     - `date_time - interval` → date-time
-
     - `duration - duration` → duration
-
     - `interval - interval` → interval
-
     - `date - date` → integer (number of days elapsed)
 
 multiplication
@@ -43,9 +36,7 @@ multiplication
 :   -   `duration * num` → duration
 
     - `num * duration` → duration
-
     - `interval * num` → interval
-
     - `num * interval` → interval
 
 division
@@ -153,7 +144,6 @@ These functions will return null if any of their arguments are null.
     ends.
 
     - `CONTAINS`: `p1-start <= p2-start`, `p1-end >= p2-end`
-
     - `STRICTLY CONTAINS`: `p1-start < p2-start`, `p1-end > p2-end`
 
 `p1 EQUALS p2`
@@ -168,9 +158,7 @@ These functions will return null if any of their arguments are null.
     ends.
 
     - `LAGS`: `p1-start >= p2-start`, `p1-end > p2-end`
-
     - `STRICTLY LAGS`: `p1-start > p2-start`, `p1-end > p2-end`
-
     - `IMMEDIATELY LAGS`: `p1-start = p2-start`, `p1-end > p2-end`
 
 `p1 [STRICTLY|IMMEDIATELY] LEADS p2`
@@ -179,9 +167,7 @@ These functions will return null if any of their arguments are null.
     ends.
 
     - `LEADS`: `p1-start < p2-start`, `p1-end <= p2-end`
-
     - `STRICTLY LEADS`: `p1-start < p2-start`, `p1-end < p2-end`
-
     - `IMMEDIATELY LEADS`: `p1-start < p2-start`, `p1-end = p2-end`
 
 `p1 [STRICTLY] OVERLAPS p2`
@@ -190,7 +176,6 @@ These functions will return null if any of their arguments are null.
     starts
 
     - `OVERLAPS`: `p1-start < p2-end`, `p1-end > p2-start`
-
     - `STRICTLY OVERLAPS`: `p1-start > p2-start`, `p1-end < p2-end`
 
 `p1 [STRICTLY|IMMEDIATELY] PRECEDES p2`
@@ -198,9 +183,7 @@ These functions will return null if any of their arguments are null.
 :   returns true iff `p1` ends before `p2` starts
 
     - `PRECEDES`: `p1-end <= p2-start`
-
     - `STRICTLY PRECEDES`: `p1-end < p2-start`
-
     - `IMMEDIATELY PRECEDES`: `p1-end = p2-start`
 
 `p1 [STRICTLY|IMMEDIATELY] SUCCEEDS p2`
@@ -208,9 +191,7 @@ These functions will return null if any of their arguments are null.
 :   returns true iff `p1` starts after `p2` ends
 
     - `SUCCEEDS`: `p1-start >= p2-end`
-
     - `STRICTLY SUCCEEDS`: `p1-start > p2-end`
-
     - `IMMEDIATELY SUCCEEDS`: `p1-start = p2-end`
 
 The below functions operate on periods:

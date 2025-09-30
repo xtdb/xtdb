@@ -142,7 +142,6 @@ You can run various tools by passing arguments - either directly to the CLI or v
     if you've encountered a compaction bug and need to reset its state.
 
     1. Spin down all of your XT nodes
-
     2. Using your container orchestration tool (e.g. Kubernetes), run a
     one-shot task with an overriden command: `["reset-compactor"]`.
     Optionally, specify `--dry-run` to list all of the files to be
@@ -167,11 +166,8 @@ You can run various tools by passing arguments - either directly to the CLI or v
 e.g.
 
 - Dockerfile: `CMD ["playground", "--port", "5439"]`
-
 - docker-compose: `command: ["playground", "--port", "5439"]`
-
 - Java uberjar: `java -jar xtdb.jar playground --port 5439`
-
 - Clojure (with `xtdb-core` in your `deps.edn`):
     `clj -M xtdb.main playground --port 5439`
 

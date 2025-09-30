@@ -6,9 +6,7 @@ This guide will walk you through the process of configuring and running an XTDB 
 This setup includes:
 
 - Using **AWS S3** as the remote storage implementation.
-
 - Utilizing **Apache Kafka** as the shared message log implementation.
-
 - Exposing the cluster to the internet via a Postgres wire-compatible
     server.
 
@@ -88,7 +86,6 @@ The sample Terraform directory sets up a few key components of the infrastructur
 If using the default configuration, the following resources will be created:
 
 - Amazon S3 Storage Bucket for remote storage.
-
     - Configured with associated resources using the
     [**terraform-aws-modules/s3-bucket**](https://registry.terraform.io/modules/terraform-aws-modules/s3-bucket/aws/latest)
     Terraform module.
@@ -97,7 +94,6 @@ If using the default configuration, the following resources will be created:
     permissions for XTDB.
 
 - IAM Policy for granting access to the S3 storage bucket.
-
     - Configured with associated resources using the
     [**terraform-aws-modules/iam-policy**](https://registry.terraform.io/modules/terraform-aws-modules/iam/aws/latest/submodules/iam-policy)
     Terraform module.
@@ -106,7 +102,6 @@ If using the default configuration, the following resources will be created:
     within the specified S3 bucket.
 
 - Virtual Private Cloud (VPC) for the XTDB EKS cluster.
-
     - Configured with associated resources using the
     [**terraform-aws-modules/vpc**](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest)
     Terraform module.
@@ -181,7 +176,6 @@ terraform output
 This will return the following outputs:
 
 - `aws_region` - The AWS region in which the resources were created.
-
 - `eks_cluster_name` - The name of the EKS cluster created for the
     XTDB deployment.
 
@@ -241,7 +235,6 @@ This command will create:
     infrastructure and persistent storage.
 
     - Using gp2 backed storage for the Persistent Volume Claims.
-
 - A Kubernetes service to expose the Kafka instance to the XTDB
     cluster.
 
@@ -255,9 +248,7 @@ topic creation and configuration itself.
 For production environments, consider the following:
 
 - Use a more robust Kafka deployment.
-
 - Pre-create the required Kafka topics.
-
 - Configure XTDB appropriately to interact with the production Kafka
     setup.
 
@@ -382,9 +373,7 @@ helm install xtdb-aws oci://ghcr.io/xtdb/helm-xtdb-aws
 The following are created by the templates:
 
 - A `ConfigMap` containing the XTDB YAML configuration.
-
 - A `StatefulSet` containing the XTDB nodes.
-
 - A `LoadBalancer` Kubernetes service to expose the XTDB cluster to
     the internet.
 
@@ -430,7 +419,6 @@ kubectl port-forward service/xtdb-service --namespace xtdb-deployment 8080:8080
 You can do the same for the following components:
 
 - Postgres Wire Server (on port `5432`)
-
 - Healthz Server (on port `8080`)
 
 To check the status of the XTDB cluster using the forwarded port, run:

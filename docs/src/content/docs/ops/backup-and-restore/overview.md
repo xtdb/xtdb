@@ -32,7 +32,6 @@ log, see the [Log](/ops/config/log) docs.
 The storage module contains the database's state: tables, indexes, and supporting metadata.
 
 - Storage consists of immutable, append-only files.
-
 - Each file represents a snapshot of the database's state at a
     specific point in the transaction log.
 
@@ -95,15 +94,12 @@ While cloud object stores such as **S3**, **Azure Blob Storage**, and
 against:
 
 - Accidental or malicious deletion
-
 - Misconfigured lifecycle policies or IAM roles
-
 - Loss of access due to control-plane issues
 
 To mitigate these risks:
 
 - **Enable versioning** --- to recover deleted or overwritten files
-
 - **Enable soft delete / retention policies** --- to guard against
     accidental loss
 
@@ -113,9 +109,7 @@ To mitigate these risks:
 For provider-specific recommendations, see:
 
 - [Protecting XTDB Data (AWS)](/ops/aws#protecting-data)
-
 - [Protecting XTDB Data (Azure)](/ops/azure#protecting-data)
-
 - [Protecting XTDB Data (GCP)](/ops/google-cloud#protecting-data)
 
 ### Taking Full Backups
@@ -126,7 +120,6 @@ This makes them ideally suited to snapshot-based backup strategies.
 To perform a full backup:
 
 - Capture the full object store prefix or container used by XTDB
-
 - Ensure all files associated with the latest indexed block are
     included
 
@@ -136,9 +129,7 @@ To perform a full backup:
 For platform-specific guidance, refer to:
 
 - [Backing Up XTDB Data (AWS)](/ops/aws#backup)
-
 - [Backing Up XTDB Data (Azure)](/ops/azure#backup)
-
 - [Backing Up XTDB Data (GCP)](/ops/google-cloud#backup)
 
 ## Backing Up the Log
@@ -167,7 +158,6 @@ log offsets.
 Flush behavior is controlled by:
 
 - A threshold number of transactions.
-
 - A maximum time interval between flushes (this defaults to 4 hours)
 
 These settings define your effective **Recovery Point Objective (RPO)**

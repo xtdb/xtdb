@@ -55,7 +55,6 @@ One of the key components of an XTDB node is the storage module - used to store 
 We offer the following implementations of the storage module:
 
 - [In memory](#in-memory): transient in-memory storage.
-
 - [Local disk](#local-disk): storage persisted to the local
     filesystem.
 
@@ -99,7 +98,6 @@ memoryCache:
 A persistent storage implementation that:
 
 - Persists data remotely to a provided, cloud based object store.
-
 - Maintains an local-disk cache and in-memory cache of the working
     set.
 
@@ -147,7 +145,5 @@ memoryCache:
 Each Object Store implementation is configured separately - see the individual cloud platform documentation for more information:
 
 - [AWS](../aws#storage)
-
 - [Azure](../azure#storage)
-
 - [Google Cloud](../google-cloud#storage)

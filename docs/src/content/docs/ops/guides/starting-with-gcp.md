@@ -6,9 +6,7 @@ This guide will walk you through the process of configuring and running an XTDB 
 This setup includes:
 
 - Using **Google Cloud Storage** as the remote storage implementation.
-
 - Utilizing **Apache Kafka** as the shared message log implementation.
-
 - Exposing the cluster to the internet via a Postgres wire-compatible
     server.
 
@@ -46,11 +44,8 @@ Before starting, ensure you have the following installed:
 Within Google Cloud, ensure that you have an existing Google Cloud project you can deploy into, and ensure the following APIs are enabled on the project:
 
 - Cloud Storage API
-
 - IAM API
-
 - Compute Engine API
-
 - Kubernetes Engine API
 
 Additionally, ensure that the following permissions are granted to the logged-in user (at a minimum):
@@ -101,21 +96,17 @@ If using the default configuration, the following will be created:
     resources.
 
 - **Google Cloud Storage Bucket** for remote storage.
-
     - Configured with associated resources using the
     [**GoogleCloud/storage-bucket**](https://registry.terraform.io/modules/terraform-google-modules/cloud-storage/google/latest)
     Terraform module.
 
     - Adds required permissions to the Service Account.
-
 - **Virtual Private Cloud Network** for the XTDB GKE cluster.
-
     - Configured with associated resources using the
     [**GoogleCloud/network**](https://registry.terraform.io/modules/terraform-google-modules/network/google/latest)
     Terraform module.
 
 - **Google Kubernetes Engine Cluster** for running the XTDB resources.
-
     - Configured with associated resources using the
     [**GoogleCloud/kubernetes-engine**](https://registry.terraform.io/modules/terraform-google-modules/kubernetes-engine/google/latest)
     Terraform module.
@@ -128,9 +119,7 @@ The VM sizes and resource tiers can & should be adjusted to suit your specific r
 By default, our terraform templates will create the GKE Cluster with:
 
 - A single node default node pool
-
 - A three node application node pool spread across three zones.
-
 - All nodes using the `n2-highmem-2` machine type (`node_machine_type`
     in `terraform.tfvars`).
 
@@ -186,9 +175,7 @@ terraform output
 This will return the following outputs:
 
 - `project_id` - The Google Cloud project ID.
-
 - `bucket_name` - The name of the Google Cloud Storage bucket.
-
 - `iam_service_account_email` - The email address of the IAM service
     account.
 
@@ -253,9 +240,7 @@ topic creation and configuration itself.
 For production environments, consider the following:
 
 - Use a more robust Kafka deployment.
-
 - Pre-create the required Kafka topics.
-
 - Configure XTDB appropriately to interact with the production Kafka
     setup.
 
@@ -348,9 +333,7 @@ helm install xtdb-google-cloud oci://ghcr.io/xtdb/helm-xtdb-google-cloud
 The following are created by the templates:
 
 - A `ConfigMap` containing the XTDB YAML configuration.
-
 - A `StatefulSet` containing the XTDB nodes.
-
 - A `LoadBalancer` Kubernetes service to expose the XTDB cluster to
     the internet.
 
@@ -396,7 +379,6 @@ kubectl port-forward service/xtdb-service --namespace xtdb-deployment 8080:8080
 You can do the same for the following components:
 
 - Postgres Wire Server (on port `5432`)
-
 - Healthz Server (on port `8080`)
 
 To check the status of the XTDB cluster using the forwarded port, run:
