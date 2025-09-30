@@ -19,13 +19,13 @@
              (xt/q tu/*node* "SELECT * FROM docs ORDER BY _id")))))
 
 (t/deftest nested-null-in-live-index-4693
-  #_ ; Upstream issue: https://github.com/apache/arrow-java/issues/830
+  ;; Upstream issue: https://github.com/apache/arrow-java/issues/830
   (binding [c/*ignore-signal-block?* true]
     (xt/execute-tx tu/*node* [[:put-docs :docs {:a {:d nil}, :xt/id 0}]])
 
     (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
 
-    (t/is (= [{:xt/id 0}] (xt/q tu/*node* "SELECT * FROM docs ORDER BY _id")))))
+    (t/is (= [{:xt/id 0, :a {}} {:xt/id 1}] (xt/q tu/*node* "SELECT * FROM docs ORDER BY _id")))))
 
 (t/deftest set-field-mismatch-4690
   (binding [c/*ignore-signal-block?* true]
