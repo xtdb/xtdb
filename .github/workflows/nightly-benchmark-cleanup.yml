@@ -60,7 +60,7 @@ jobs:
           helm status xtdb-benchmark -n cloud-benchmark >/dev/null 2>&1
 
       - name: Capture Benchmark Logs
-        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
+        if: steps.check-deployment.outcome == 'success'
         id: logs
         run: |
           set -euo pipefail
@@ -112,7 +112,7 @@ jobs:
 
       - name: Upload Benchmark Logs
         id: upload-logs
-        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success' && hashFiles('benchmark.log') != ''
+        if: steps.check-deployment.outcome == 'success' && hashFiles('benchmark.log') != ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: benchmark-logs-${{ inputs.benchType }}-${{ steps.timestamp.outputs.value }}-${{ inputs.nodeId }}-${{ inputs.status }}
@@ -121,7 +121,7 @@ jobs:
 
       - name: Compute Grafana Time Range
         id: grafana-time
-        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
+        if: steps.check-deployment.outcome == 'success'
         run: |
           set -euo pipefail
           FROM_PARAM="now-2h"
@@ -154,7 +154,7 @@ jobs:
           echo "to=$TO_PARAM" >> "$GITHUB_OUTPUT"
 
       - name: Port-forward Grafana (background)
-        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
+        if: steps.check-deployment.outcome == 'success'
         run: |
           # Start port-forward in background
           kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80 >/tmp/grafana-pf.log 2>&1 &
@@ -170,7 +170,7 @@ jobs:
           done
 
       - name: Render Cluster Monitoring Panels
-        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
+        if: steps.check-deployment.outcome == 'success'
         run: |
           set -euo pipefail
           mkdir -p grafana-panels
@@ -206,7 +206,7 @@ jobs:
           done
 
       - name: Render Node Debugging Panels
-        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success'
+        if: steps.check-deployment.outcome == 'success'
         run: |
           set -euo pipefail
           # Determine the XTDB node id (pod name) to use for var-xtdbnode
@@ -255,7 +255,7 @@ jobs:
           done
 
       - name: Upload Grafana Panels
-        if: steps.check-deployment.outcome == 'success' && inputs.status == 'success' && hashFiles('grafana-panels/*.png') != ''
+        if: steps.check-deployment.outcome == 'success' && hashFiles('grafana-panels/*.png') != ''
         id: upload-grafana
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
