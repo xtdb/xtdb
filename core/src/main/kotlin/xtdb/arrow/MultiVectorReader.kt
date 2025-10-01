@@ -169,7 +169,7 @@ class MultiVectorReader(
         return object : ValueReader {
             private fun valueReader() = valueReaders[readerIndirection[pos.position]]!!
 
-            override val leg: String? get() = valueReader().leg
+            override val leg: String? get() = getLeg(pos.position)
 
             override val isNull: Boolean get() = valueReader().isNull
 

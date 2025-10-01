@@ -93,3 +93,22 @@
                 {:t #xt/zdt "2020-01-01T00:00Z[UTC]"}]
                (xt/q conn query
                      {:default-tz "America/New_York"}))))))
+
+(t/deftest get-leg-unsupported-4838
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
+  (tu/flush-block! tu/*node*)
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id "1"}]])
+  (t/is (= [{:xt/id 1}]
+           (xt/q tu/*node* "FROM docs WHERE _id = 1")))
+
+  (t/is (= [{:xt/id 1} {:xt/id "1"}]
+           (xt/q tu/*node* "FROM docs")))
+
+  (t/testing "regular col"
+    (xt/execute-tx tu/*node* [[:put-docs :docs2 {:xt/id 1 :a 1}]])
+    (tu/flush-block! tu/*node*)
+    (xt/execute-tx tu/*node* [[:put-docs :docs2 {:xt/id 2 :a "1"}]])
+    (t/is (= [{:xt/id 1, :a 1}]
+             (xt/q tu/*node* "FROM docs2 WHERE a = 1")))
+    (t/is (= [{:xt/id 1, :a 1} {:xt/id 2, :a "1"}]
+           (xt/q tu/*node* "FROM docs2 ORDER BY _id")))))
