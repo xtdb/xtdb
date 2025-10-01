@@ -2926,19 +2926,26 @@
       (->QueryExpr [:table [(into {} arg-row)]]
                    (vec (keys arg-row))))))
 
+(def ^:private ^Cache xform-table-info-cache
+  (-> (Caffeine/newBuilder)
+      (.maximumSize 4096)
+      (.build)))
+
 (defn xform-table-info [table-info default-db]
   ;; this fn turned up in a profiler the last time I checked, particularly for low-latency queries.
   ;; plenty happening here that can be cached.
-  (into {}
-        (for [[table cns] (concat (info-schema/table-info default-db) table-info)]
-          [table (->> cns
-                      (map ->col-sym)
-                      (sort-by identity (fn [s1 s2]
-                                          (cond
-                                            (= '_id s1) -1
-                                            (= '_id s2) 1
-                                            :else (compare s1 s2))))
-                      ->insertion-ordered-set)])))
+  (.get xform-table-info-cache [table-info default-db]
+        (fn [[table-info default-db]]
+          (into {}
+                (for [[table cns] (concat (info-schema/table-info default-db) table-info)]
+                  [table (->> cns
+                              (map ->col-sym)
+                              (sort-by identity (fn [s1 s2]
+                                                  (cond
+                                                    (= '_id s1) -1
+                                                    (= '_id s2) 1
+                                                    :else (compare s1 s2))))
+                              ->insertion-ordered-set)])))))
 
 (def ^:private ^Cache table-chains-cache
   (-> (Caffeine/newBuilder)
