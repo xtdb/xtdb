@@ -60,27 +60,15 @@ For more advanced usage, the Terraform templates themselves can be modified to s
 
 The Terraform templates will return several outputs:
 
-+---------------------------+------------------------------------------+
-| Output                    | Description                              |
-+===========================+==========================================+
-| `aws_region`              | The AWS region in which the resources    |
-|                           | were created.                            |
-+---------------------------+------------------------------------------+
-| `eks_cluster_name`        | The name of the EKS cluster created for  |
-|                           | the XTDB deployment.                     |
-+---------------------------+------------------------------------------+
-| `s3_bucket_name`          | The name of the S3 bucket created for    |
-|                           | the XTDB cluster.                        |
-+---------------------------+------------------------------------------+
-| `s3_access_policy_arn`    | The ARN of the S3 bucket created for the |
-|                           | XTDB cluster.                            |
-+---------------------------+------------------------------------------+
-| `oidc_provider`           | OpenID Connect identity provider for the |
-|                           | EKS cluster.                             |
-+---------------------------+------------------------------------------+
-| `oidc_provider_arn`       | The ARN of the OpenID Connect identity   |
-|                           | provider for the EKS cluster.            |
-+---------------------------+------------------------------------------+
+| Output | Description |
+| --- | --- |
+| `aws_region` | The AWS region in which the resources were created. |
+| `eks_cluster_name` | The name of the EKS cluster created for the XTDB deployment. |
+| `s3_bucket_name` | The name of the S3 bucket created for the XTDB cluster. |
+| `s3_access_policy_arn` | The ARN of the S3 bucket created for the XTDB cluster. |
+| `oidc_provider` | OpenID Connect identity provider for the EKS cluster. |
+| `oidc_provider_arn` | The ARN of the OpenID Connect identity provider for the EKS cluster. |
+
 
 ## `xtdb-aws` Helm Charts
 
@@ -200,20 +188,13 @@ By default, it will use **S3** for storage and **Kafka** for the message log, in
 
 The following environment variables are used to configure the `xtdb-aws` image:
 
-+---------------------------+------------------------------------------+
-| Variable                  | Description                              |
-+===========================+==========================================+
-| `KAFKA_BOOTSTRAP_SERVERS` | Kafka bootstrap server containing the    |
-|                           | XTDB topics.                             |
-+---------------------------+------------------------------------------+
-| `XTDB_LOG_TOPIC`          | Kafka topic to be used as the XTDB log.  |
-+---------------------------+------------------------------------------+
-| `XTDB_S3_BUCKET`          | Name of the S3 bucket used for remote    |
-|                           | storage.                                 |
-+---------------------------+------------------------------------------+
-| `XTDB_NODE_ID`            | Persistent node id for labelling         |
-|                           | Prometheus metrics.                      |
-+---------------------------+------------------------------------------+
+| Variable | Description |
+| --- | --- |
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka bootstrap server containing the XTDB topics. |
+| `XTDB_LOG_TOPIC` | Kafka topic to be used as the XTDB log. |
+| `XTDB_S3_BUCKET` | Name of the S3 bucket used for remote storage. |
+| `XTDB_NODE_ID` | Persistent node id for labelling Prometheus metrics. |
+
 
 You can also [set the XTDB log level](/ops/troubleshooting#loglevel) using environment variables.
 

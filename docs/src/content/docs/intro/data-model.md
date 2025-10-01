@@ -41,17 +41,13 @@ To achieve this, all transactions are uniquely identified with an `_id` maps to 
 
 In addition to `_id`, which is the only mandatory column, 2 pairs of system-maintained temporal columns exist which track **system time** and **valid time** periods respectively:
 
-+-----------------------------------+-----------------------------------+
-| SQL Column Name                   | XTDB Type                         |
-+===================================+===================================+
-| `_system_from`                    | TIMESTAMP WITH TIMEZONE           |
-+-----------------------------------+-----------------------------------+
-| `_system_to`                      | TIMESTAMP WITH TIMEZONE           |
-+-----------------------------------+-----------------------------------+
-| `_valid_from`                     | TIMESTAMP WITH TIMEZONE           |
-+-----------------------------------+-----------------------------------+
-| `_valid_to`                       | TIMESTAMP WITH TIMEZONE           |
-+-----------------------------------+-----------------------------------+
+| SQL Column Name | XTDB Type |
+| --- | --- |
+| `_system_from` | TIMESTAMP WITH TIMEZONE |
+| `_system_to` | TIMESTAMP WITH TIMEZONE |
+| `_valid_from` | TIMESTAMP WITH TIMEZONE |
+| `_valid_to` | TIMESTAMP WITH TIMEZONE |
+
 
 As implied by the nature of these columns, no rows written into XTDB are ever mutated directly, and only new rows can be inserted.
 The only exceptions to this principle are:

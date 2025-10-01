@@ -34,20 +34,12 @@ For more information on available storage backends and configuration, see the [S
 
 ## What Data Is at Risk?
 
-+-----------------+-----------------------------------------------------+
-| Component       | Risk if Lost                                        |
-+=================+=====================================================+
-| Log             | All transactions on the log since the last indexed  |
-|                 | offset would be lost.                               |
-+-----------------+-----------------------------------------------------+
-| Storage Module  | Without a backup or infinite retention on the log,  |
-|                 | all indexed data would be lost.                     |
-+-----------------+-----------------------------------------------------+
-| XTDB compute    | Only transient, in-memory cache state would be      |
-| nodes           | lost. All critical data is durably recorded in the  |
-|                 | log and storage module. Compute nodes can be        |
-|                 | restarted or replaced without risking data loss.    |
-+-----------------+-----------------------------------------------------+
+| Component | Risk if Lost |
+| --- | --- |
+| Log | All transactions on the log since the last indexed offset would be lost. |
+| Storage Module | Without a backup or infinite retention on the log, all indexed data would be lost. |
+| XTDB compute nodes | Only transient, in-memory cache state would be lost. All critical data is durably recorded in the log and storage module. Compute nodes can be restarted or replaced without risking data loss. |
+
 
 ## Backup Goals
 

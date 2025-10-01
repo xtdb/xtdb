@@ -37,48 +37,27 @@ Pipelines are optional - queries with just a source operator (i.e. no tails) can
 
 ### Source operators
 
-+------------------+---------------------------------------------------+
-| Operator         | Purpose                                           |
-+==================+===================================================+
-| [From](#from)   | Sources data from a table in XTDB                 |
-+------------------+---------------------------------------------------+
-| [Rel             | Sources data from the user-specified relation     |
-|                 |                                                   |
-| [ation\]](#rel) |                                                   |
-+------------------+---------------------------------------------------+
-| [Unify](#unify) | Combines multiple input sources using             |
-|                  | Datalog-style unification                         |
-+------------------+---------------------------------------------------+
+| Operator | Purpose |
+| --- | --- |
+| [From](#from) | Sources data from a table in XTDB |
+| [Relation](#relation) | Sources data from the user-specified relation |
+| [Unify](#unify) | Combines multiple input sources using Datalog-style unification |
+
 
 ### Tail operators
 
-+------------------+---------------------------------------------------+
-| Operator         | Purpose                                           |
-+==================+===================================================+
-| [Aggrega         | Groups the relation rows by the given             |
-| te](#aggregate) | aggregate-specs                                   |
-+------------------+---------------------------------------------------+
-| [Limit](#limit) | Only returns the top N rows of the relation       |
-+------------------+---------------------------------------------------+
-| [O               | Skips the first N rows of the relation            |
-| ffset](#offset) |                                                   |
-+------------------+---------------------------------------------------+
-| [Order           | Orders the relation by the given columns          |
-| by](#order-by)  |                                                   |
-+------------------+---------------------------------------------------+
-| [R               | Restricts the output to the given columns         |
-| eturn](#return) |                                                   |
-+------------------+---------------------------------------------------+
-| [Where](#where) | Filters the relation using the given predicates   |
-+------------------+---------------------------------------------------+
-| [With](#with)   | Adds columns to the relation                      |
-+------------------+---------------------------------------------------+
-| [Wit             | Removes columns from the relation                 |
-| hout](#without) |                                                   |
-+------------------+---------------------------------------------------+
-| [U               | Flattens an array within a column into individual |
-| nnest](#unnest) | rows                                              |
-+------------------+---------------------------------------------------+
+| Operator | Purpose |
+| --- | --- |
+| [Aggregate](#aggregate) | Groups the relation rows by the given aggregate-specs |
+| [Limit](#limit) | Only returns the top N rows of the relation |
+| [Offset](#offset) | Skips the first N rows of the relation |
+| [Order by](#order-by) | Orders the relation by the given columns |
+| [Return](#return) | Restricts the output to the given columns |
+| [Where](#where) | Filters the relation using the given predicates |
+| [With](#with) | Adds columns to the relation |
+| [Without](#without) | Removes columns from the relation |
+| [Unnest](#unnest) | Flattens an array within a column into individual rows |
+
 
 ### Unify clauses
 
@@ -88,28 +67,16 @@ This allows for very declarative yet terse method of specifying join conditions;
 'Unify clauses' are inputs to the unify operator.
 They are a selection of [source](#source-operators) and [tail](#tail-operators) operators with a few extra operators that are only valid in unification.
 
-+------------------+---------------------------------------------------+
-| Clause           | Purpose                                           |
-+==================+===================================================+
-| [From](#from)   | Sources data from a table in XTDB                 |
-+------------------+---------------------------------------------------+
-| [Join](#joins)  | Further constrains the unification using the      |
-|                  | given query                                       |
-+------------------+---------------------------------------------------+
-| [Left            | Optionally joins the unification against the      |
-| Join](#joins)   | given query                                       |
-+------------------+---------------------------------------------------+
-| [Rel             | Sources data from the user-specified relation     |
-|                 |                                                   |
-| [ation\]](#rel) |                                                   |
-+------------------+---------------------------------------------------+
-| [U               | Flattens an array within a column into individual |
-| nnest](#unnest) | rows                                              |
-+------------------+---------------------------------------------------+
-| [Where](#where) | Filters the rows using the given predicates       |
-+------------------+---------------------------------------------------+
-| [With](#with)   | Defines new logical variables in the unification  |
-+------------------+---------------------------------------------------+
+| Clause | Purpose |
+| --- | --- |
+| [From](#from) | Sources data from a table in XTDB |
+| [Join](#joins) | Further constrains the unification using the given query |
+| [Left Join](#joins) | Optionally joins the unification against the given query |
+| [Rel](#rel) | Sources data from the user-specified relation |
+| [Unnest](#unnest) | Flattens an array within a column into individual rows |
+| [Where](#where) | Filters the rows using the given predicates |
+| [With](#with) | Defines new logical variables in the unification |
+
 
 ### Aggregate
 

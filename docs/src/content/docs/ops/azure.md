@@ -146,30 +146,16 @@ By default, it will use Azure Blob Storage for object storage and Kafka for the 
 
 The following environment variables configure the `xtdb-azure` image:
 
-+---------------------------+------------------------------------------+
-| Variable                  | Description                              |
-+===========================+==========================================+
-| `KAFKA_BOOTSTRAP_SERVERS` | Kafka bootstrap server containing the    |
-|                           | XTDB topics.                             |
-+---------------------------+------------------------------------------+
-| `XTDB_LOG_TOPIC`          | Kafka topic to be used as the XTDB log.  |
-+---------------------------+------------------------------------------+
-| `XT                       | Name of the Azure Storage Account.       |
-| DB_AZURE_STORAGE_ACCOUNT` |                                          |
-+---------------------------+------------------------------------------+
-| `XTDB                     | Name of the Azure Storage Container.     |
-| _AZURE_STORAGE_CONTAINER` |                                          |
-+---------------------------+------------------------------------------+
-| `XTDB_AZURE_USER_MA       | Azure Client ID for the User Assigned    |
-| NAGED_IDENTITY_CLIENT_ID` | Managed Identity used for                |
-|                           | authentication.                          |
-+---------------------------+------------------------------------------+
-| `XTDB_LOCAL_DISK_CACHE`   | Path to the local disk cache for object  |
-|                           | storage.                                 |
-+---------------------------+------------------------------------------+
-| `XTDB_NODE_ID`            | Persistent node id for labelling         |
-|                           | Prometheus metrics.                      |
-+---------------------------+------------------------------------------+
+| Variable | Description |
+| --- | --- |
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka bootstrap server containing the XTDB topics. |
+| `XTDB_LOG_TOPIC` | Kafka topic to be used as the XTDB log. |
+| `XTDB_AZURE_STORAGE_ACCOUNT` | Name of the Azure Storage Account. |
+| `XTDB_AZURE_STORAGE_CONTAINER` | Name of the Azure Storage Container. |
+| `XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID` | Azure Client ID for the User Assigned Managed Identity used for authentication. |
+| `XTDB_LOCAL_DISK_CACHE` | Path to the local disk cache for object storage. |
+| `XTDB_NODE_ID` | Persistent node id for labelling Prometheus metrics. |
+
 
 You can also [set the XTDB log level](/ops/troubleshooting#loglevel) using environment variables.
 
@@ -185,24 +171,13 @@ CMD ["-f", "azure_config_private_auth.yaml"]
 
 In addition to the standard environment variables, the following environment variables are required for private/authenticated Kafka.
 
-+---------------------------+------------------------------------------+
-| Variable                  | Description                              |
-+===========================+==========================================+
-| `KAFKA_SASL_MECHANISM`    | SASL mechanism to use for Kafka          |
-|                           | authentication (e.g., `PLAIN`).          |
-+---------------------------+------------------------------------------+
-| `KAFKA_SECURITY_PROTOCOL` | Security protocol for Kafka (e.g.,       |
-|                           | `SASL_SSL`).                             |
-+---------------------------+------------------------------------------+
-| `KAFKA_SASL_JAAS_CONFIG`  | JAAS configuration for Kafka SASL        |
-|                           | authentication, (e.g.                    |
-|                           | `org.apache.kafka.common.                |
-|                           | security.plain.PlainLoginModule required |
-|                           |  username="user" password="password";`). |
-+---------------------------+------------------------------------------+
-| `XTDB_AZURE_              | The full endpoint of the storage account |
-| STORAGE_ACCOUNT_ENDPOINT` | which has the storage container.         |
-+---------------------------+------------------------------------------+
+| Variable | Description |
+| --- | --- |
+| `KAFKA_SASL_MECHANISM` | SASL mechanism to use for Kafka authentication (e.g., `PLAIN`). |
+| `KAFKA_SECURITY_PROTOCOL` | Security protocol for Kafka (e.g., `SASL_SSL`). |
+| `KAFKA_SASL_JAAS_CONFIG` | JAAS configuration for Kafka SASL authentication, (e.g. `org.apache.kafka.common.security.plain.PlainLoginModule required username="user" password="password";`). |
+| `XTDB_AZURE_STORAGE_ACCOUNT_ENDPOINT` | The full endpoint of the storage account which has the storage container. |
+
 
 :::note
 We would **strongly** recommend users mount the `KAFKA_SASL_JAAS_CONFIG` env as a secret on the container.
