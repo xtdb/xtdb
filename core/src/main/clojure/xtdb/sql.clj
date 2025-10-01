@@ -2947,30 +2947,37 @@
                                                     :else (compare s1 s2))))
                               ->insertion-ordered-set)])))))
 
-(def ^:private ^Cache table-chains-cache
+(def ^:private ^Cache table-chains-entry-cache
   (-> (Caffeine/newBuilder)
       (.maximumSize 4096)
       (.build)))
 
+(def ^:private ^Cache table-chains-cache
+  (-> (Caffeine/newBuilder)
+      (.maximumSize 1024)
+      (.build)))
+
 (defn- ->table-chains [table-refs default-db]
   ;; I suspect this'll light up a profiler too?
-  (-> (into (info-schema/table-chains default-db)
-            (mapcat (fn [table]
-                      (.get table-chains-cache [table default-db]
-                            (fn [[^TableRef table default-db]]
-                              (let [db-name (.getDbName table)
-                                    default-db? (= default-db db-name)
-                                    db-name (symbol db-name)
-                                    schema-name (symbol (.getSchemaName table))
-                                    search-path-schema? (= 'public schema-name)
-                                    table-name (symbol (.getTableName table))]
-                                (cond-> [[[db-name schema-name table-name] table]]
-                                  default-db? (conj [[schema-name table-name] table])
-                                  search-path-schema? (conj [[db-name table-name] table])
-                                  (and default-db? search-path-schema?) (conj [[table-name] table])))))))
-            table-refs)
-      (->> (group-by first))
-      (update-vals #(into #{} (map second) %))))
+  (.get table-chains-cache [(set table-refs) default-db]
+        (fn [[table-refs default-db]]
+          (-> (into (info-schema/table-chains default-db)
+                    (mapcat (fn [table]
+                              (.get table-chains-entry-cache [table default-db]
+                                    (fn [[^TableRef table default-db]]
+                                      (let [db-name (.getDbName table)
+                                            default-db? (= default-db db-name)
+                                            db-name (symbol db-name)
+                                            schema-name (symbol (.getSchemaName table))
+                                            search-path-schema? (= 'public schema-name)
+                                            table-name (symbol (.getTableName table))]
+                                        (cond-> [[[db-name schema-name table-name] table]]
+                                          default-db? (conj [[schema-name table-name] table])
+                                          search-path-schema? (conj [[db-name table-name] table])
+                                          (and default-db? search-path-schema?) (conj [[table-name] table])))))))
+                    table-refs)
+              (->> (group-by first))
+              (update-vals #(into #{} (map second) %))))))
 
 (defn log-warnings [!warnings]
   (doseq [warning @!warnings]
