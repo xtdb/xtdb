@@ -1,0 +1,56 @@
+---
+title: Scenario - Out of Sync Log & Intact Storage
+---
+
+If the transaction log is unexpectedly out of sync --- for example, due to topic deletion, rotation, or truncation --- but the indexed storage still exists, XTDB will refuse to start.
+This is a safety mechanism designed to prevent divergence between the transaction log and the object store.
+
+You may encounter an error such as:
+
+> "**Node failed to start due to an invalid transaction log state
+> (epoch=0, offset=200) that does not correspond with the latest indexed
+> transaction (epoch=0 and offset=289).**"
+
+or:
+
+> "**Node failed to start due to an invalid transaction log state (the
+> log is empty) that does not correspond with the latest indexed
+> transaction (epoch=0 and offset=289).**"
+
+## What Is Preserved
+
+If storage remains intact, all previously indexed data is still available:
+
+- Full queryable state up to the last successfully indexed transaction
+
+## What Is Lost
+
+Any recently submitted transactions that were not indexed --- whether due to being lost, truncated, or deleted from the log --- are **unrecoverable** unless they were separately backed up.
+
+## Recovery Strategy: Using Epochs
+
+XTDB provides a mechanism called an `epoch` to reset the transaction log tracking and allow recovery.
+
+For full details about epochs, see [Epochs](/ops/config/log#epochs).
+
+### Recovery Steps
+
+1. **Shut down all XTDB nodes** Before making any changes, ensure all cluster nodes are stopped to avoid inconsistencies.
+2. **Determine the current epoch value** Refer to the startup error message for the current epoch --- typically `0` for a fresh installation.
+3. **Choose a new `epoch` value** Select an integer greater than the previous epoch --- usually `epoch + 1`.
+4. **(Optional) Prepare a clean log state** If the log backend is not already empty, you need to create a new topic / directory for the log.
+  Ensure the log backend (e.g., Kafka, local disk) is writable and correctly initialized before restarting.
+5. **Update the node configuration** Set the new `epoch` value in your node's log configuration.
+  See [Epoch Configuration](/ops/config/log#epoch-configuration).
+6. **Restart all nodes together** Once all configurations are updated, restart the cluster nodes at the same time.
+  XTDB will skip offset validation and begin writing to the log under the new epoch.
+7. **(Optional) Re-submit any lost transactions** If you are aware of any missing transactions, manually reissue them or restore them via your application's recovery layer.
+
+## Notes & Warnings
+
+- Beginning a new epoch will make the recovery of unindexed transactions from any previous epoch nearly impossible.
+    - Therefore, it is recommended to *only* increment the epoch after you are confident that the original log is irrecoverable and you understand the potential consequences.
+- Always take a backup of storage before making epoch changes.
+- The new epoch marks a clean slate for the log but does **not** delete any existing storage files.
+- All nodes must use the same epoch value.
+  Mismatched epochs will cause startup failures.

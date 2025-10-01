@@ -1,8 +1,0 @@
----
-title: XTDB reference guide
----
-
-In the query-language reference guide, you can find:
-
-* Specifications for SQL link:/reference/main/sql/txs[transactions] and link:/reference/main/sql/queries[queries].
-* Details of the XTDB link:/reference/main/stdlib[standard library] of functions.
