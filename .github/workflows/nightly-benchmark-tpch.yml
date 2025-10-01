@@ -6,7 +6,7 @@ on:
       scale_factor:
         description: 'TPC-H Scale Factor'
         required: false
-        default: '0.5'
+        default: '1.0'
         type: string
   schedule:
     - cron: '0 0 * * *'  # Run daily at midnight UTC
@@ -27,7 +27,7 @@ jobs:
     if: ${{ github.event_name != 'schedule' || github.repository == 'xtdb/xtdb' }}
     timeout-minutes: 90
     env:
-      SCALE_FACTOR: ${{ inputs.scale_factor || '0.5' }}
+      SCALE_FACTOR: ${{ inputs.scale_factor || '1.0' }}
       GRAFANA_ADMIN_PASSWORD: ${{ secrets.BENCHMARK_GRAFANA_ADMIN_PASSWORD }}
 
     steps:
