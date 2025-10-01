@@ -182,3 +182,23 @@
                             (let [res (xt/q node "SELECT * FROM docs ORDER BY _id")
                                   expected-ids (into #{} (map :xt/id (concat records1 records2)))]
                               (= expected-ids (into #{} (map :xt/id res)))))))))))
+
+(t/deftest ^:property mixed-ops-across-boundaries
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (let [id-gen (gen/one-of [(gen/return 1) (gen/return "1")])]
+     (prop/for-all [ops (gen/vector (gen/one-of [(gen/fmap (fn [id] [:erase id]) id-gen)
+                                                 (gen/return [:compact])
+                                                 (gen/return [:flush])
+                                                 (gen/fmap (fn [value] [:put value])
+                                                           (tg/generate-record {:potential-doc-ids #{1 "1"}}))])
+                                    1 20)]
+       (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
+                                         :compactor {:threads 0}})]
+         (doseq [[op value] ops]
+           (case op
+             :put     (xt/execute-tx node [[:put-docs :docs value]])
+             :erase   (xt/execute-tx node [[:erase-docs :docs value]])
+             :compact (c/compact-all! node #xt/duration "PT1S")
+             :flush   (tu/flush-block! node)))
+         (xt/q node "FROM docs WHERE _id = 1"))))))
