@@ -41,3 +41,11 @@
                  (latest-completed-txs)))
 
         (t/is (= {:_id "xtdb"} (jdbc/execute-one! xt-db-conn ["SELECT * FROM foo"])))))))
+
+(t/deftest ingestion-stopped-assert-4837
+  (util/with-open [conn (pgw-test/jdbc-conn {:dbname "osm"})]
+    (jdbc/execute! conn ["BEGIN READ WRITE"])
+    (jdbc/execute! conn ["ASSERT EXISTS (SELECT 1 FROM system WHERE _id=?), 'not_found'" "id"])
+    (t/is (anomalous? [:conflict :xtdb/assert-failed "not_found"]
+                      (throw (:detail (pgw-test/reading-ex
+                                        (jdbc/execute! conn ["COMMIT"]))))))))

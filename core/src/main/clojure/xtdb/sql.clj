@@ -607,7 +607,7 @@
 
 (defrecord TableRefVisitor [env scope left-scope]
   SqlVisitor
-  (visitBaseTable [{{:keys [!id-count table-chains table-info ctes] :as env} :env} ctx]
+  (visitBaseTable [{{:keys [!id-count table-chains table-info ctes default-db] :as env} :env} ctx]
     (let [table-chain (mapv identifier-sym (.identifier (.fromTableRef ctx)))
           table-alias (or (identifier-sym (.tableAlias ctx)) (peek table-chain))
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
@@ -640,7 +640,7 @@
                         :else (add-err! env (->MultipleTimePeriodSpecifications))))]
 
               ;; HACK we scan `xt.not_found` until a not-found table can be an error, #4467
-              (->BaseTable env (or table #xt/table xt/not_found)
+              (->BaseTable env (or table (table/->ref default-db "xt" "not_found"))
                            (<-table-time-period-specification (.queryValidTimePeriodSpecification ctx))
                            (<-table-time-period-specification (.querySystemTimePeriodSpecification ctx))
                            table-alias unique-table-alias
