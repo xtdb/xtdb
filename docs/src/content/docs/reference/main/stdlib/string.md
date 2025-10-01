@@ -2,10 +2,10 @@
 title: String functions
 ---
 
-Notes:
-
+:::note
 - String positions are 1-based, in line with the SQL spec.
 - If any argument to these functions is null, the function will return null.
+:::
 
 `CHARACTER_LENGTH(s)` | `CHAR_LENGTH(s)`
 : length of string, in UTF8 characters
@@ -22,52 +22,48 @@ Notes:
 `str [NOT] LIKE_REGEX regex [FLAG flags]`
 : Returns true iff the `str` matches (/ doesn't match) the `regex`.
 
-    See [Regular expressions in XTDB](#regexes) for more details.
+  See [Regular expressions in XTDB](#regexes) for more details.
 
 `REGEXP_REPLACE(s, pattern, replacement [, flags])`
 : Replace all occurrences of `pattern` in `s` with `replacement`.
 
-    See [Regular expressions in XTDB](#regexes) for more details.
+  See [Regular expressions in XTDB](#regexes) for more details.
 
 `LOWER(str)`
 : lower-case
 
 `OVERLAY(str PLACING replacement FROM start_pos [FOR length])`
-: replace `length` characters of `str` starting at `start_pos` with
-    `replacement`
+: replace `length` characters of `str` starting at `start_pos` with `replacement`
 
-    - `start_pos`: 1-based start position
-    - `length`: defaults to end-of-string if not provided
+  - `start_pos`: 1-based start position
+  - `length`: defaults to end-of-string if not provided
 
 `POSITION(search IN str [USING CHARACTERS])`
 : position of `search` within `str`, in characters
 
-    - Return value is 1-based.
-    - Returns 0 if not found.
+  - Return value is 1-based.
+  - Returns 0 if not found.
 
 `TRIM([trim_char FROM] str)` | `TRIM(BOTH [trim_char] FROM str)`
-: remove any occurrences of `trim_char` from the start and end of
-    `str`
-
-    - `trim_char`: single character (defaults to 'space').
+: remove any occurrences of `trim_char` from the start and end of `str`
+  - `trim_char`: single character (defaults to 'space').
 
 `TRIM(LEADING [trim_char] FROM str)`
 : remove any occurrences of `trim_char` from the start of `str`
-
-    - `trim_char`: single character (defaults to 'space').
+  - `trim_char`: single character (defaults to 'space').
 
 `TRIM(TRAILING [trim_char] FROM str)`
 : remove any occurrences of `trim_char` from the end of \`str
-
-    - `trim_char`: single character (defaults to 'space').
+  - `trim_char`: single character (defaults to 'space').
 
 `OCTET_LENGTH(s)`
 : length of string, in octets
 
 `POSITION(search IN str USING OCTETS)`
+
 : position of `search` within `str`, in octets
 
-    Returns 0 if not found.
+  Returns 0 if not found.
 
 `SUBSTRING(str FROM from_pos)` | `SUBSTRING(str FROM from_pos FOR length)`
 : Returns the sub-string of the given `str` from `from_pos` for

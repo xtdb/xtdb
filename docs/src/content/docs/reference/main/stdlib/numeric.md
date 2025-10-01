@@ -2,13 +2,13 @@
 title: Numeric functions
 ---
 
-Notes:
-
+:::note
 - If any input expression is null, the result will also be null.
 - If all arguments are integers, the result will also be an integer; otherwise, all arguments will be cast to floating-point values before applying the function.
   Particularly, the division function performs integer division if it's only given integer values.
 - If the result would under-/overflow the widest type of the input arguments, a runtime exception will be thrown.
 - Trying to divide by zero will result in a runtime exception.
+:::
 
 ## Basic arithmetic functions
 
@@ -63,6 +63,6 @@ The standard arithmetic functions are available:
 - `TAN(x)` (tangent)
 - `TANH(x)` (hyperbolic tangent)
 
-Notes:
-
+:::note
 - Arguments and results in radians
+:::

@@ -13,9 +13,7 @@ The following notes and exceptions apply:
     - `expr IS FALSE` → `(false? expr)`
     - `expr IS NULL` → `(nil? expr)`
 - [String functions](/reference/main/stdlib/string):
-    - `like-regex` accepts Clojure regex reader syntax (e.g.
-    `#".foo."`)
-
+    - `like-regex` accepts Clojure regex reader syntax (e.g. `#".foo."`)
     - `str LIKE pattern` → `(like str pattern)`
     - `str LIKE_REGEX pattern [FLAG flags]` → `(like-regex str regex <flags>)`
     - `OVERLAY` → `(overlay str1 replacement start <length>)`

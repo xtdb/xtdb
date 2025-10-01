@@ -19,8 +19,6 @@ At the top-level, XTDB SQL queries augment the SQL standard in the following way
 
     e.g. for `SELECT a, SUM(b) FROM foo`, XT will infer `GROUP BY a`
 
-<!-- -->
-
 ```railroad
 const asOf = rr.Sequence("AS", "OF", "<timestamp>")
 const fromTo = rr.Sequence("FROM", "<timestamp>", "TO", "<timestamp>")
@@ -33,7 +31,7 @@ const setting = rr.Sequence("SETTING", rr.OneOrMore(rr.Choice(0, defaultTimePeri
 return rr.Diagram(rr.Sequence(rr.Optional(setting, "skip"), "<query>"))
 ```
 
-### <query>
+### query
 
 ```railroad
 const orderByDirection = rr.Choice(0, rr.Skip(), "ASC", "DESC")
@@ -46,7 +44,7 @@ const offsetAndLimit = rr.Optional(rr.Choice(0, rr.Sequence(limitClause, rr.Opti
 return rr.Diagram(rr.Stack(rr.Sequence(rr.Optional("<with clause>", "skip"), "<query term>"), orderByClause, offsetAndLimit))
 ```
 
-### <with clause>
+### with clause
 
 ```railroad
 const withClause = rr.Sequence(rr.Optional("MATERIALIZED", "skip"), "<query name>", rr.Optional("AS", "skip"), "(", "<query>", ")")
@@ -57,7 +55,7 @@ return rr.Diagram(rr.Sequence("WITH", rr.OneOrMore(withClause, ",")))
 - Supply `MATERIALIZED` to eagerly materialize a `WITH` clause, so that the results can be re-used multiple times in the same query.
 - `WITH RECURSIVE` is not yet supported in XTDB.
 
-### <query term>
+### query term
 
 ```railroad
 const selectClause = "<select clause>"
@@ -96,7 +94,7 @@ Due to implementation details in some drivers (e.g. PGJDBC), it is required to a
 
 For more details on XTQL queries, see the [XTQL documentation](/xtql/tutorials/introducing-xtql).
 
-### <select clause>
+### select clause
 
 ```railroad
 const starOpts = rr.Sequence(rr.Optional('<star exclude>', 'skip'), rr.Optional('<star rename>', 'skip'))
@@ -105,13 +103,13 @@ const qualifiedStar = rr.Sequence('<table name>', '.', '*', starOpts)
 return rr.Diagram(rr.Sequence("SELECT", rr.Stack(rr.Optional(rr.Sequence('*', starOpts), 'skip'), rr.OneOrMore(rr.Choice(0, rr.Skip(), selectCol, qualifiedStar), ","))))
 ```
 
-#### <star exclude>
+#### star exclude
 
 ```railroad
 return rr.Diagram(rr.Sequence('EXCLUDE', rr.Choice(0, '<column name>', rr.Sequence('(', rr.OneOrMore('<column name>', ','), ')'))))
 ```
 
-#### <star rename>
+#### star rename
 
 ```railroad
 const renameCol = rr.Sequence('<column name>', 'AS', '<column name>')
@@ -120,14 +118,14 @@ return rr.Diagram('RENAME', rr.Choice(0, renameCol, rr.Sequence('(', rr.OneOrMor
 
 ## From clause, joins
 
-### <from clause>
+### from clause
 
 ```railroad
 const tableProjection = rr.Optional(rr.Sequence("(", rr.OneOrMore("<column name>", ","), ")"), "skip")
 return rr.Diagram("FROM", rr.OneOrMore(rr.Sequence("<relation>", tableProjection), ","))
 ```
 
-### <relation>
+### relation
 
 ```railroad
 const wrapped = rr.Sequence("(", "<relation>", ")")
@@ -156,9 +154,9 @@ const subqs = rr.Sequence(rr.Choice(0, values, xtql, subquery, lateral, unnest),
 return rr.Diagram(rr.Choice(0, wrapped, base, join, crossJoin, naturalJoin, subqs))
 ```
 
-- See [<query term>](#query-term) for details on XTQL queries.
+- See [query term](#query-term) for details on XTQL queries.
 
-### <temporal filter>
+### temporal filter
 
 ```railroad
 const asOf = rr.Sequence("AS", "OF", "<timestamp>")
@@ -171,7 +169,7 @@ return rr.Diagram(rr.Sequence("FOR", rr.Choice(0, rr.Sequence(timePeriod, timePe
 
 ## Expressions
 
-### <value>
+### value
 
 ```railroad
 const colRef = rr.Choice(0, "<column reference>", rr.Sequence('"', "<column reference>", '"'), rr.Sequence('`', "<column reference>", '`'))
@@ -201,13 +199,13 @@ const subqs = rr.Sequence(rr.Choice(0, rr.Skip(), "NEST_ONE", "NEST_MANY"), "(",
 return rr.Diagram(rr.Choice(0, "<literal>", colRef, "<param>", unaryOp, binaryOp, fn, wfn, "<predicate>", cast, caseExpr, coalesce, nullIf, arrayConstructor, "<record>", subqs, wrapped))
 ```
 
-### <param>
+### param
 
 ```railroad
 return rr.Diagram(rr.Choice(0, "?", "$<param idx>"))
 ```
 
-### <record>
+### record
 
 ```railroad
 const objectEntries = rr.ZeroOrMore(rr.Sequence("<field name>", ":", "<value>"), ",", "skip")
@@ -217,7 +215,7 @@ const objectFnConstructor = rr.Sequence(rr.Choice(0, "RECORD", "OBJECT"), "(", o
 return rr.Diagram(rr.Choice(0, objectBraceConstructor, objectFnConstructor))
 ```
 
-### <literal>
+### literal
 
 ```railroad
 const stringLiteral = rr.Choice(0, rr.Sequence("'", "<SQL-style string>", "'"), rr.Sequence('$$', '<string>', '$$'), rr.Sequence("E'", "<C-style string>", "'"))
@@ -235,7 +233,7 @@ return rr.Diagram(rr.Choice(0, "NULL", "<numeric literal>", stringLiteral, dateT
 
 - See [Date/time types](/reference/main/data-types.html#datetime-types) for more details on XTDB's timestamp literals.
 
-### <predicate>
+### predicate
 
 ```railroad
 const maybeNot = rr.Optional("NOT", "skip")
@@ -255,7 +253,7 @@ const betweenPredicate = rr.Sequence("<value>", maybeNot, "BETWEEN", rr.Choice(0
 return rr.Diagram(rr.Choice(0, booleanLiteral, unaryNot, binaryPred, binaryFn, predFn, isPredicate, exists, inPredicate, likePredicate, likeRegexPredicate, postgresRegexPredicate, betweenPredicate))
 ```
 
-### <window>
+### window
 
 ```railroad
 const wfnPartition = rr.Sequence("PARTITION", "BY", rr.OneOrMore("<value>", ","))
@@ -274,11 +272,11 @@ Nested sub-queries allow you to easily create tree-shaped results, using `NEST_M
 
     ``` sql
     SELECT c._id AS customer_id, c.name,
-    NEST_MANY(SELECT o._id AS order_id, o.value
-    FROM orders o
-    WHERE o.customer_id = c._id
-    ORDER BY o._id)
-    AS orders
+           NEST_MANY(SELECT o._id AS order_id, o.value
+                     FROM orders o
+                     WHERE o.customer_id = c._id
+                     ORDER BY o._id)
+             AS orders
     FROM customers c
     ```
 
@@ -287,47 +285,47 @@ Nested sub-queries allow you to easily create tree-shaped results, using `NEST_M
     ``` json
     [
       {
-    "customerId": 0,
-    "name": "bob",
-    "orders": [ { "orderId": 0, "value": 26.20 }, { "orderId": 1, "value": 8.99 } ]
+        "customerId": 0,
+        "name": "bob",
+        "orders": [ { "orderId": 0, "value": 26.20 }, { "orderId": 1, "value": 8.99 } ]
       },
       {
-    "customerId": 1,
-    "name": "alice",
-    "orders": [ { "orderId": 2, "value": 12.34 } ]
+        "customerId": 1,
+        "name": "alice",
+        "orders": [ { "orderId": 2, "value": 12.34 } ]
       }
     ]
     ```
 
 - In the other direction (many-to-one) - for each order, additionally return details about the customer - use `NEST_ONE` to get a single nested object:
 
-    ``` sql
-    SELECT o._id AS order_id, o.value,
-    NEST_ONE(SELECT c.name FROM customers c
-    WHERE c._id = o.customer_id)
-    AS customer
-    FROM orders o
-    ORDER BY o._id
-    ```
+  ``` sql
+  SELECT o._id AS order_id, o.value,
+         NEST_ONE(SELECT c.name FROM customers c
+                  WHERE c._id = o.customer_id)
+           AS customer
+  FROM orders o
+  ORDER BY o._id
+  ```
 
-    ⇒
+  ⇒
 
-    ``` json
-    [
-      {
-    "orderId": 0,
-    "value": 26.20,
-    "customer": { "name": "bob" }
-      },
-      {
-    "order-id": 1,
-    "value": 8.99,
-    "customer": { "name": "bob" }
-      },
-      {
-    "order-id": 2,
-    "value": 12.34,
-    "customer": { "name": "alice" }
-      }
-    ]
-    ```
+  ``` json
+  [
+    {
+      "orderId": 0,
+      "value": 26.20,
+      "customer": { "name": "bob" }
+    },
+    {
+      "order-id": 1,
+      "value": 8.99,
+      "customer": { "name": "bob" }
+    },
+    {
+      "order-id": 2,
+      "value": 12.34,
+      "customer": { "name": "alice" }
+    }
+  ]
+  ```
