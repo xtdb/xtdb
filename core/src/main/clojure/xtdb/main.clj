@@ -31,7 +31,7 @@
   (println " * `node` (default, can be omitted): starts an XT node")
   (println " * `compactor`: runs a compactor-only node")
   (println " * `playground`: starts a 'playground', an in-memory node which accepts any database name, creating it if required")
-  (println " * `reset-compactor <db-name>`: resets the compacted files on the given node.")
+  (println " * `reset-compactor <db-name> [table-names...]`: resets the compacted files on the given node, optionally for specific tables only.")
   (newline)
   (println "For more information about any command, run `<command> --help`, e.g. `playground --help`"))
 
@@ -158,14 +158,14 @@
    ["-h" "--help"]])
 
 (defn- reset-compactor! [args]
-  (let [{{:keys [dry-run? file]} :options, [db-name] :arguments} (-> (parse-args args reset-compactor-cli-spec)
+  (let [{{:keys [dry-run? file]} :options, [db-name & table-names] :arguments} (-> (parse-args args reset-compactor-cli-spec)
                                                                      (handling-arg-errors-or-help))]
     (when (nil? db-name)
       (binding [*out* *err*]
-        (println "Missing db-name: `reset-compactor <db-name> [opts]`")
+        (println "Missing db-name: `reset-compactor <db-name> [table-names...]`")
         (System/exit 2)))
 
-    ((requiring-resolve 'xtdb.compactor.reset/reset-compactor!) (file->node-opts file) db-name {:dry-run? dry-run?})))
+    ((requiring-resolve 'xtdb.compactor.reset/reset-compactor!) (file->node-opts file) db-name {:dry-run? dry-run?, :table-names table-names})))
 
 (def read-arrow-file-cli-spec
   [["-h" "--help"]])
