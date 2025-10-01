@@ -99,14 +99,14 @@ Create a file `eks_policy_document.json` for the trust policy, replacing values 
     {
       "Effect": "Allow",
       "Principal": {
-    "Federated": "<oidc_provider_arn>"
+        "Federated": "<oidc_provider_arn>"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
-    "StringEquals": {
-    "<oidc_provider>:aud": "sts.amazonaws.com",
-    "<oidc_provider>:sub": "system:serviceaccount:xtdb-deployment:xtdb-service-account"
-    }
+        "StringEquals": {
+          "<oidc_provider>:aud": "sts.amazonaws.com",
+          "<oidc_provider>:sub": "system:serviceaccount:xtdb-deployment:xtdb-service-account"
+        }
       }
     }
   ]

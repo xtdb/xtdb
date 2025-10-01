@@ -305,9 +305,5 @@ You can:
 We're very much in **listening mode** right now - as a keen early adopter, we'd love to hear your first impressions, thoughts and opinions on where we're headed with XTQL.
 Please do get in touch via the [usual channels](/intro/community.html#oss-community)!
 
-[^1]: rows ...​ which themselves are otherwise known as 'maps',
-    'structs', 'records' or 'dictionaries' depending on your
-    persuasion 😄
-
-[^2]: although XTQL's `->` isn't technically macro-expanded - it's just
-    data.
+[^1]: rows ...​ which themselves are otherwise known as 'maps', 'structs', 'records' or 'dictionaries' depending on your persuasion 😄
+[^2]: although XTQL's `->` isn't technically macro-expanded - it's just data.

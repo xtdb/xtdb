@@ -98,6 +98,7 @@ Before creating the Terraform resources, review and update the `terraform.tfvars
 :::note
 In this guide, we use AWS Named Profiles to authenticate with AWS, and need to pass the profile to use our Terraform commands.
 Though we do this via the CLI, you can also add it directly to the terraform `provider` config or authenticate using other methods - see the [**AWS Provider Documentation**](https://registry.terraform.io/providers/hashicorp/aws/latest/docs#authentication-and-configuration) for more information.
+:::
 
 To get a full list of the resources that will be deployed by the templates, run:
 
@@ -112,7 +113,6 @@ AWS_PROFILE=<profile_name> terraform apply
 ```
 
 This will create the necessary infrastructure on the AWS account.
-:::
 
 ### Fetching the Terraform Outputs
 
@@ -229,14 +229,14 @@ Create a file `eks_policy_document.json` for the trust policy, replacing values 
     {
       "Effect": "Allow",
       "Principal": {
-    "Federated": "<oidc_provider_arn>"
+        "Federated": "<oidc_provider_arn>"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
-    "StringEquals": {
-    "<oidc_provider>:aud": "sts.amazonaws.com",
-    "<oidc_provider>:sub": "system:serviceaccount:xtdb-deployment:xtdb-service-account"
-    }
+        "StringEquals": {
+          "<oidc_provider>:aud": "sts.amazonaws.com",
+          "<oidc_provider>:sub": "system:serviceaccount:xtdb-deployment:xtdb-service-account"
+        }
       }
     }
   ]
@@ -318,6 +318,7 @@ As it will take some time for the XTDB nodes to be marked as ready (as they need
 
 :::note
 The xtdb service is only available via ClusterIP by default so as to not expose the service publicly
+:::
 
 Once the XTDB cluster is up and running, you can access it via the ClusterIP service that was created.
 
@@ -336,7 +337,6 @@ To check the status of the XTDB cluster using the forwarded port, run:
 
 ``` bash
 curl http://localhost:8080/healthz/alive
-:::
 
 ## alternatively `/healthz/started`, `/healthz/ready`
 ```

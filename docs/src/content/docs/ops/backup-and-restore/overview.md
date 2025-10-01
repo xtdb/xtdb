@@ -148,10 +148,11 @@ In this case, XTDB will require a reset of the `epoch`, effectively discarding t
 
 Additionally, ensure the delay between the storage and log backups does **not** exceed the retention period of your log implementation.
 If log messages are expired before the backup runs, they will be lost and cannot be restored.
+:::
 
 For implementation-specific instructions, refer to:
 
-- [Strategies for Kafka Log Backup](/ops/config/log/kafka#backup) :::
+- [Strategies for Kafka Log Backup](/ops/config/log/kafka#backup) 
 
 ## Failure and Recovery Scenarios
 

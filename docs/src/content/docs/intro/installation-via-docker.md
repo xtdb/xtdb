@@ -39,27 +39,22 @@ By default your data will only be stored temporarily using a local directory wit
 
 You can attach a host volume to preserve your data across container restarts, e.g. by adding `-v /tmp/xtdb-data-dir:/var/lib/xtdb`, however because the XTDB container runs as a non-root user by default (UID 20000), you must ensure the container can write to it:
 
-:::note
-This currently applies only to nightly and edge releases.
-Tagged release images (e.g. 2.0.0) still run as root by default.
+- For Docker, before running the container:
+  
+  ``` bash
+  sudo chown -R 20000:20000 /tmp/xtdb-data-dir
+  ```
 
-For Docker, before running the container:
+- For Podman, ensure the directory is owned by your user and use `--userns=keep-id`, e.g.:
 
-``` bash
-sudo chown -R 20000:20000 /tmp/xtdb-data-dir
-```
-
-For Podman, ensure the directory is owned by your user and use `--userns=keep-id`, e.g.:
-
-``` bash
-podman run -it --pull=always
-  --userns=keep-id
-  -p 5432:5432
-  -p 8080:8080
-  -v /tmp/xtdb-data-dir:/var/lib/xtdb
-  ghcr.io/xtdb/xtdb
-```
-:::
+  ``` bash
+  podman run -it --pull=always
+    --userns=keep-id
+    -p 5432:5432
+    -p 8080:8080
+    -v /tmp/xtdb-data-dir:/var/lib/xtdb
+    ghcr.io/xtdb/xtdb
+  ```
 
 ## Wait for XTDB to start
 

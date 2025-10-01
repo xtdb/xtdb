@@ -148,6 +148,7 @@ gcloud container clusters get-credentials xtdb-cluster --region us-central1
 
 :::note
 The above will require `gke-gcloud-auth-plugin` to be installed - see instructions [**here**](https://cloud.google.com/blog/products/containers-kubernetes/kubectl-auth-changes-in-gke).
+:::
 
 Now that `kubectl` is authenticated with the GKE cluster, you can set up the namespace for the XTDB deployment:
 
@@ -156,7 +157,6 @@ kubectl create namespace xtdb-deployment
 ```
 
 The GKE cluster is now ready for deployment,
-:::
 
 ### Deploying an example Kafka
 
@@ -293,6 +293,7 @@ As it will take some time for the XTDB nodes to be marked as ready (as they need
 
 :::note
 The xtdb service is only available via ClusterIP by default so as to not expose the service publicly
+:::
 
 Once the XTDB cluster is up and running, you can access it via the ClusterIP service that was created.
 
@@ -311,7 +312,6 @@ To check the status of the XTDB cluster using the forwarded port, run:
 
 ``` bash
 curl http://localhost:8080/healthz/alive
-:::
 
 ## alternatively `/healthz/started`, `/healthz/ready`
 ```
