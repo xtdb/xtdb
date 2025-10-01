@@ -208,6 +208,7 @@
 
 (defmulti ^String col-type->field-name col-type-head, :default ::default, :hierarchy #'col-type-hierarchy)
 (defmethod col-type->field-name ::default [col-type] (name (col-type-head col-type)))
+(defmethod col-type->field-name :varbinary [_col-type] "binary")
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti col-type->field*

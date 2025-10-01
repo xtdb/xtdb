@@ -12,8 +12,10 @@
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types]
-            [xtdb.util :as util])
-  (:import (java.nio.file Files)
+            [xtdb.util :as util]
+            [xtdb.compactor :as c])
+  (:import (java.nio ByteBuffer)
+           (java.nio.file Files)
            (java.nio.file.attribute FileAttribute)
            (xtdb.types RegClass RegProc)))
 
@@ -3053,3 +3055,9 @@ UNION ALL
                                 ) AS d
                                 SELECT 1
                               ) AS e"))))
+
+(t/deftest use-same-leg-name-for-varbinary-4751
+  (binding [c/*ignore-signal-block?* true]
+    (xt/execute-tx tu/*node* [[:patch-docs :docs {:xt/id 1 :d [(ByteBuffer/allocate 0) false]}]])
+
+    (t/is (not-empty (xt/q tu/*node* "SELECT * FROM docs")))))
