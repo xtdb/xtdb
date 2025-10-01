@@ -2,52 +2,56 @@
 title: Storage
 ---
 
+<details>
+<summary>Changelog (last updated v2.1)</summary>
+
 v2.1: multi-database support
-: As part of the multi-database support, the `memoryCache` and
-    `diskCache` keys were extracted from the local/remote storage.
 
-    Prior to that, the keys related to the `memoryCache` and `diskCache`
-    were nested under the local/remote storage:
+: As part of the multi-database support, the `memoryCache` and `diskCache` keys were extracted from the local/remote storage.
 
-    ``` yaml
-    storage: !Local
-      path: /var/lib/xtdb/storage
-      # maxCacheEntries: 1024
-      # maxCacheBytes: 536870912
+  Prior to that, the keys related to the `memoryCache` and `diskCache` were nested under the local/remote storage:
 
-    # became
+  ``` yaml
+  storage: !Local
+    path: /var/lib/xtdb/storage
+    # maxCacheEntries: 1024
+    # maxCacheBytes: 536870912
 
-    storage: !Local
-      path: /var/lib/xtdb/storage
+  # became
 
-    memoryCache:
-      # maxSizeRatio: 0.5
-      # maxSizeBytes: 536870912
-    ```
+  storage: !Local
+    path: /var/lib/xtdb/storage
 
-    ``` yaml
-    storage: !Remote
-      objectStore: <ObjectStoreImplementation>
-      localDiskCache: /var/lib/xtdb/remote-cache
-      # maxCacheEntries: 1024
-      # maxCacheBytes: 536870912
-      # maxDiskCachePercentage: 75
-      # maxDiskCacheBytes: 107374182400
+  memoryCache:
+    # maxSizeRatio: 0.5
+    # maxSizeBytes: 536870912
+  ```
 
-    # became
+  ``` yaml
+  storage: !Remote
+    objectStore: <ObjectStoreImplementation>
+    localDiskCache: /var/lib/xtdb/remote-cache
+    # maxCacheEntries: 1024
+    # maxCacheBytes: 536870912
+    # maxDiskCachePercentage: 75
+    # maxDiskCacheBytes: 107374182400
 
-    storage: !Remote
-      objectStore: <ObjectStoreImplementation>
+  # became
 
-    diskCache:
-      path: /var/lib/xtdb/remote-cache
-      # maxSizeRatio: 0.75
-      # maxSizeBytes: 107374182400
+  storage: !Remote
+    objectStore: <ObjectStoreImplementation>
 
-    memoryCache:
-      # maxSizeRatio: 0.5
-      # maxSizeBytes: 536870912
-    ```
+  diskCache:
+    path: /var/lib/xtdb/remote-cache
+    # maxSizeRatio: 0.75
+    # maxSizeBytes: 107374182400
+
+  memoryCache:
+    # maxSizeRatio: 0.5
+    # maxSizeBytes: 536870912
+  ```
+    
+</details>
 
 One of the key components of an XTDB node is the storage module - used to store the data and indexes that make up the database.
 

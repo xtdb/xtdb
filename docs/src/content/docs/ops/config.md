@@ -2,11 +2,16 @@
 title: Configuration
 ---
 
+<details>
+<summary>Changelog (last updated v2.1)</summary>
+
 v2.1: multi-database support
-: The log and storage configurations were changed as part of 2.1's
-    multi-db support. For more details on those changes, see the
-    [Transaction Logs](config/log) and [Object Storage](config/storage)
-    documentation.
+
+: The log and storage configurations were changed as part of 2.1's multi-db support. 
+
+  For more details on those changes, see the [Transaction Logs](config/log) and [Object Storage](config/storage) documentation.
+    
+</details>
 
 XTDB nodes are configured using YAML files.
 
@@ -95,15 +100,18 @@ compactor:
 
 ## CLI tools/flags
 
+<details>
+<summary>Changelog (last updated v2.1)</summary>
+
 v2.1: top-level commands
-: In v2.1, we changed the CLI to use top-level commands (not
-    dissimilar to Git, for example).
 
-    Previously, the playground and compact-only nodes were activated
-    using optional flags - `--playground-port` and `--compact-only`
-    respectively.
+: In v2.1, we changed the CLI to use top-level commands (not dissimilar to Git, for example).
 
-    `reset-compactor` was also added in v2.1.
+  Previously, the playground and compact-only nodes were activated using optional flags - `--playground-port` and `--compact-only` respectively.
+
+  `reset-compactor` was also added in v2.1.
+    
+</details>
 
 You can run various tools by passing arguments - either directly to the CLI or via Docker's arguments:
 

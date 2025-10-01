@@ -2,36 +2,40 @@
 title: Kafka
 ---
 
+<details>
+<summary>Changelog (last updated v2.1)</summary>
+
 v2.1: multi-database support
-: As part of multi-database support, `logClusters` were extracted in
-    v2.1.
 
-    Prior to that, the configuration in `logClusters` was within the
-    `log`:
+: As part of multi-database support, `logClusters` were extracted in v2.1.
 
-    ``` yaml
-    log: !Kafka
-      bootstrapServers: "localhost:9092"
-      topic: "xtdb-log"
-      # autoCreateTopic: true
+  Prior to that, the configuration in `logClusters` was within the `log`:
+
+  ``` yaml
+  log: !Kafka
+    bootstrapServers: "localhost:9092"
+    topic: "xtdb-log"
+    # autoCreateTopic: true
+    # pollDuration: "PT1S"
+    # propertiesFile: "kafka.properties"
+    # propertiesMap:
+
+  # became
+
+  logClusters:
+    kafkaCluster: !Kafka
+  bootstrapServers: "localhost:9092"
       # pollDuration: "PT1S"
       # propertiesFile: "kafka.properties"
       # propertiesMap:
 
-    # became
-
-    logClusters:
-      kafkaCluster: !Kafka
-    bootstrapServers: "localhost:9092"
-        # pollDuration: "PT1S"
-        # propertiesFile: "kafka.properties"
-        # propertiesMap:
-
-    log: !Kafka
-      cluster: kafkaCluster
-      topic: "xtdb-log"
-      # autoCreateTopic: true
-    ```
+  log: !Kafka
+    cluster: kafkaCluster
+    topic: "xtdb-log"
+    # autoCreateTopic: true
+  ```
+  
+</details>
 
 [Apache Kafka](https://kafka.apache.org/) can be used as an XTDB message log.
 

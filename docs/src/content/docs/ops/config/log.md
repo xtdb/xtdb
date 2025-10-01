@@ -2,10 +2,14 @@
 title: Log
 ---
 
+<details>
+<summary>Changelog (last updated v2.1)</summary>
+
 v2.1: multi-database support
-: As part of the multi-database support, the Kafka log-clusters were
-    extracted - see the [Kafka log documentation](log/kafka) for more
-    details.
+
+: As part of the multi-database support, the Kafka log-clusters were extracted - see the [Kafka log documentation](log/kafka) for more details.
+
+</details>
 
 One of the key components of an XTDB node is the log - this is a totally ordered log of all operations that have been applied to the database, generally persistent & shared between nodes.
 

@@ -2,34 +2,41 @@
 title: Clojure Configuration Cookbook
 ---
 
+<details>
+<summary>Changelog (last updated v2.1)</summary>
+
 v2.1: multi-database support
-: Prior to 2.1, the `:disk-cache` and `:memory-cache` keys were nested
-    under the local/remote storage:
 
-    ``` clojure
-    {:storage [:local
-    {;; -- required
+: Prior to 2.1, the `:disk-cache` and `:memory-cache` keys were nested under the local/remote storage:
 
-    :path "/var/lib/xtdb/storage"
+  ``` clojure
+  {:storage [:local
+             {;; -- required
 
-    ;; -- optional
+              :path "/var/lib/xtdb/storage"
+ 
+              ;; -- optional
+ 
+              ;; :max-cache-bytes 1024
+              ;; :max-cache-entries 536870912
+             }]}
 
-    ;; :max-cache-bytes 1024
-    ;; :max-cache-entries 536870912
-    }]}
+  {:storage [:remote 
+             {;; --required
 
-    {:storage [:remote {;; --required
-    :object-store [:object-store-implementation {}]
+              :object-store [:object-store-implementation {}]
 
-    :local-disk-cache "/tmp/local-disk-cache"
+              :local-disk-cache "/tmp/local-disk-cache"
 
-    ;; -- optional
-    ;; :max-cache-entries 1024
-    ;; :max-cache-bytes 536870912
-    ;; :max-disk-cache-percentage 75
-    ;; :max-disk-cache-bytes 107374182400
-    }]}
-    ```
+              ;; -- optional
+              ;; :max-cache-entries 1024
+              ;; :max-cache-bytes 536870912
+              ;; :max-disk-cache-percentage 75
+              ;; :max-disk-cache-bytes 107374182400
+  }]}
+  ```
+  
+</details>
 
 This document provides examples for the EDN configuration of XTDB components, to be supplied to `xtdb.node/start-node`.
 
