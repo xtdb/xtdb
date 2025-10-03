@@ -25,7 +25,7 @@ To build the XTDB release artifacts locally and deploy them to Maven Central, ru
 
 Build and deploy release jars:
 
-. `java -version` -> java-24-openjdk
+. `java -version` -> java-21-openjdk
 . `git clean -dXf`
 . `export XTDB_VERSION=2.0.0` (`set -x XTDB_VERSION=2.0.0` for the fish people)
 . `./gradlew clean jreleaserDeploy`
@@ -79,7 +79,7 @@ NOTE: we could do a fair bit of this through JReleaser too, but for now I prefer
 == Building locally and releasing JAR snapshots:
 
 .  (none of the above sections are required)
-.  `java -version` → java-24-openjdk
+.  `java -version` → java-21-openjdk
 .  `git clean -dXf`
 .  `./gradlew clean jreleaserDeploy`
 .  (nothing to be done in Sonatype!)

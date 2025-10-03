@@ -34,8 +34,7 @@ val defaultJvmArgs = listOf(
     "-XX:-OmitStackTraceInFastThrow",
     "-Dlogback.configurationFile=${rootDir.resolve("src/main/resources/logback-test.xml")}",
     "-Dxtdb.rootDir=$rootDir",
-    "-Djunit.jupiter.extensions.autodetection.enabled=true",
-    "--enable-native-access=ALL-UNNAMED", // netty
+    "-Djunit.jupiter.extensions.autodetection.enabled=true"
 )
 
 val sixGBJvmArgs = listOf(
@@ -52,7 +51,7 @@ val twelveGBJvmArgs = listOf(
     "-XX:MaxMetaspaceSize=1g"
 )
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(24))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 application {
     applicationName = "xtdb"

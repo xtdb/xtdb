@@ -1,4 +1,4 @@
-FROM eclipse-temurin:24
+FROM eclipse-temurin:21
 
 WORKDIR /opt/xtdb
 ENTRYPOINT [ \

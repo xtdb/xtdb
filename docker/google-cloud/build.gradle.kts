@@ -15,7 +15,7 @@ dependencies {
     runtimeOnly(libs.slf4j.jpl)
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(24))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 application {
     mainClass.set("clojure.main")

@@ -13,7 +13,7 @@ ext {
     set("labs", true)
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(24))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 dependencies {
     api(project(":xtdb-api"))

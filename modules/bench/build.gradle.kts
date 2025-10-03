@@ -6,7 +6,7 @@ plugins {
     id("com.gradleup.shadow")
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(24))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 dependencies {
     api(project(":"))

@@ -41,7 +41,6 @@ dependencies {
     api(libs.arrow.vector)
     api(libs.arrow.memory.netty)
     api(libs.netty.common)
-    api(libs.netty.buffer)
 
     api(libs.roaring.bitmap)
 
@@ -94,12 +93,14 @@ dependencies {
     testImplementation(project(":modules:xtdb-flight-sql"))
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(24))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 tasks.javadoc.get().enabled = false
 
 kotlin {
     compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_21)
+
         java {
             freeCompilerArgs.add("-Xjvm-default=all")
         }
