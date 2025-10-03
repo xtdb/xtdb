@@ -6,7 +6,7 @@
             [xtdb.util :as util])
   (:import com.carrotsearch.hppc.ByteArrayList
            xtdb.api.CompactorConfig
-           (xtdb.compactor Compactor Compactor$ForDatabase Compactor$Impl Compactor$Job Compactor$JobCalculator)
+           (xtdb.compactor Compactor Compactor$Driver Compactor$Impl Compactor$Job Compactor$JobCalculator)
            (xtdb.trie Trie$Key)))
 
 (def ^:dynamic *ignore-signal-block?* false)
@@ -107,14 +107,15 @@
 (def ^:dynamic *page-size* 1024)
 
 (defn- open-compactor [{:keys [metrics-registry threads]}]
-  (Compactor$Impl. metrics-registry
+  (Compactor$Impl. (Compactor$Driver/real metrics-registry *page-size* *recency-partition*)
+                   metrics-registry
                    (reify Compactor$JobCalculator
                      (availableJobs [_ trie-catalog]
                        (->> (.getTables trie-catalog)
                             (into [] (mapcat (fn [table]
                                                (compaction-jobs table (cat/trie-state trie-catalog table) trie-catalog)))))))
 
-                   *ignore-signal-block?* threads *page-size* *recency-partition*))
+                   *ignore-signal-block?* threads))
 
 (defmethod ig/init-key :xtdb/compactor [_ {:keys [threads] :as opts}]
   (if (pos? threads)
