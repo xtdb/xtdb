@@ -176,12 +176,21 @@ describe("Postgres.js handles cached-query-must-not-change-result-type errors", 
     const conn = await sql.reserve();
 
     try {
+      // prepare query by running it
+      const query = async () => [...await conn`SELECT * FROM foo ORDER BY _id`];
+      assert.deepStrictEqual([], await query());
+
+      // create table with first record
+      await conn`INSERT INTO foo (_id, a) VALUES (1, 1)`;
+      assert.deepStrictEqual([{_id: 1, a: 1}], await query());
+
+      // extend columns
       await conn`INSERT INTO foo (_id, a, b) VALUES (1, 1, 2)`;
-      assert.deepStrictEqual([{_id: 1, a: 1, b: 2}], [...await conn`SELECT * FROM foo ORDER BY _id`]);
+      assert.deepStrictEqual([{_id: 1, a: 1, b: 2}], await query());
 
+      // change column type
       await conn`INSERT INTO foo (_id, a, b) VALUES (2, '1', 2)`;
-
-      assert.deepStrictEqual([{_id: 1, a: 1, b: 2}, {_id: 2, a: '1', b: 2}], [...await conn`SELECT * FROM foo ORDER BY _id`])
+      assert.deepStrictEqual([{_id: 1, a: 1, b: 2}, {_id: 2, a: '1', b: 2}], await query())
     } finally {
       conn.release();
     }

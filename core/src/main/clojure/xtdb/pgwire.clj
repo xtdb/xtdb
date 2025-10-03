@@ -1049,25 +1049,22 @@
         xt-args (xtify-args conn args stmt)]
 
     (letfn [(->cursor ^xtdb.IResultCursor [xt-args] 
-                      (with-auth-check conn
-                        (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
-                          (.openQuery prepared-query (assoc query-opts :args args-rel)))))
+              (with-auth-check conn
+                (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
+                  (.openQuery prepared-query (assoc query-opts :args args-rel)))))
 
             (->pg-cols [prepared-pg-cols ^IResultCursor cursor]
-                       (let [resolved-pg-cols (mapv pg-types/field->pg-col (.getResultFields cursor))]
-                         (-> (map (fn [{prepared-pg-type :pg-type, :as prepared-pg-col} {resolved-pg-type :pg-type}]
-                                    (when-not (or (= prepared-pg-type :default)
+              (let [resolved-pg-cols (mapv pg-types/field->pg-col (.getResultFields cursor))]
+                (when-not (and (= (count prepared-pg-cols) (count resolved-pg-cols))
+                               (->> (map vector prepared-pg-cols resolved-pg-cols)
+                                    (every? (fn [[{prepared-pg-type :pg-type} {resolved-pg-type :pg-type}]]
+                                              (or (= prepared-pg-type :default)
                                                   (= resolved-pg-type :null)
-                                                  (= prepared-pg-type resolved-pg-type))
-                                      (throw (err/conflict :prepared-query-out-of-date "cached plan must not change result type"
-                                                           {:prepared-cols prepared-pg-cols
-                                                            :resolved-cols resolved-pg-cols})))
-                                    prepared-pg-col)
-
-                                  prepared-pg-cols
-                                  resolved-pg-cols)
-
-                             (with-result-formats result-format))))]
+                                                  (= prepared-pg-type resolved-pg-type))))))
+                  (throw (err/conflict :prepared-query-out-of-date "cached plan must not change result type"
+                                       {:prepared-cols prepared-pg-cols
+                                        :resolved-cols resolved-pg-cols}))))
+              (with-result-formats prepared-pg-cols result-format))]
 
       (case statement-type
         :query (util/with-close-on-catch [cursor (->cursor xt-args)]
