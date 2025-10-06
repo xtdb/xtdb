@@ -19,7 +19,7 @@ dependencies {
     api(project(":xtdb-api"))
 
     api(kotlin("stdlib"))
-    implementation("org.apache.kafka:connect-api:4.0.0")
+    implementation("org.apache.kafka:connect-api:4.1.0")
 
     api(libs.clojure.tools.logging)
     api("cheshire", "cheshire", "5.13.0")
