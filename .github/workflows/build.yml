@@ -75,7 +75,7 @@ jobs:
         run: ./gradlew :docker:standalone:shadowJar
 
       - name: XTDB service
-        uses: hoverkraft-tech/compose-action@40041ff1b97dbf152cd2361138c2b03fa29139df # v2
+        uses: hoverkraft-tech/compose-action@b716db5b717cb9b81e391fe638e5aceaa2299e43 # v2
         with:
           services: "xtdb"
           cwd: "lang"
