@@ -53,7 +53,7 @@ jobs:
 
       - name: Cancel workflow (existing deployment)
         if: steps.check-deployment.outcome == 'success'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             core.notice('Existing deployment found. Cancelling this workflow run to avoid overlap.');
