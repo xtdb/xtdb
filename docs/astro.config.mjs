@@ -152,7 +152,7 @@ export default defineConfig({
                                     label: 'Authentication',
                                     items: [
                                         { label: 'Overview', link: '/ops/config/authentication' },
-                                        { label: 'OpenID Connect', link: '/ops/config/authentication/oidc' },
+                                             { label: 'OpenID Connect', link: '/ops/config/authentication/oidc' },
                                     ],
                                 }
                             ]

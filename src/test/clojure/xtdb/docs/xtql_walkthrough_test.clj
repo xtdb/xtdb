@@ -7,12 +7,19 @@
 
 (t/use-fixtures :each tu/with-node)
 
-(def examples
+(def sql-examples
   (-> (slurp (io/resource "docs/xtql_tutorial_examples.yaml"))
       (yaml/parse-string :keywords false)))
 
+(def xtql-examples
+  (-> (slurp (io/resource "docs/xtql_tutorial_examples_xtql.yaml"))
+      (yaml/parse-string :keywords false)))
+
 (defn sql-example [name]
-  (get examples name))
+  (get sql-examples name))
+
+(defn xtql-example [name]
+  (read-string (get xtql-examples name)))
 
 (def users
   [[:put-docs :users {:xt/id "ivan", :first-name "Ivan", :last-name "Ivanov", :age 25}]
@@ -55,33 +62,16 @@
 
   (t/is (= #{{:user-id "ivan", :first-name "Ivan", :last-name "Ivanov"}
              {:user-id "petr", :first-name "Petr", :last-name "Petrov"}}
-           (set
-            (xt/q tu/*node*
-                  ';; tag::bo-xtql-1[]
-                  (from :users [{:xt/id user-id} first-name last-name])
-                  ;; end::bo-xtql-1[]
-                  ,))
+           (set (xt/q tu/*node* (xtql-example "bo-xtql-1")))
            (set (xt/q tu/*node* (sql-example "bo-sql-1")))))
 
   (t/is (= [{:first-name "Ivan", :last-name "Ivanov"}]
-           (xt/q tu/*node*
-                 '
-                 ;; tag::bo-xtql-2[]
-                 (from :users [{:xt/id "ivan"} first-name last-name])
-                 ;; end::bo-xtql-2[]
-                 ,)
+           (xt/q tu/*node* (xtql-example "bo-xtql-2"))
            (xt/q tu/*node* (sql-example "bo-sql-2"))))
 
   (t/is (= [{:user-id "ivan", :first-name "Ivan", :last-name "Ivanov"}
             {:user-id "petr", :first-name "Petr", :last-name "Petrov"}]
-           (xt/q tu/*node*
-                 '
-                 ;; tag::bo-xtql-3[]
-                 (-> (from :users [{:xt/id user-id} first-name last-name])
-                     (order-by last-name first-name)
-                     (limit 10))
-                 ;; end::bo-xtql-3[]
-                 ,)
+           (xt/q tu/*node* (xtql-example "bo-xtql-3"))
            (xt/q tu/*node* (sql-example "bo-sql-3")))))
 
 (deftest joins
@@ -92,54 +82,22 @@
 
   (t/is (= #{{:user-id "ivan", :first-name "Ivan", :last-name "Ivanov", :content "My first blog", :title "First"}
              {:user-id "ivan", :first-name "Ivan", :last-name "Ivanov", :content "My second blog", :title "Second"}}
-           (set
-            (xt/q tu/*node*
-                  '
-                  ;; tag::joins-xtql-1[]
-                  (unify (from :users [{:xt/id user-id} first-name last-name])
-                         (from :articles [{:author-id user-id} title content]))
-                  ;; end::joins-xtql-1[]
-                  ,))
+           (set (xt/q tu/*node* (xtql-example "joins-xtql-1")))
            (set (xt/q tu/*node* (sql-example "joins-sql-1")))))
 
   (t/is (= #{{:age 25, :uid1 "ivan", :uid2 "petr"}
              {:age 25, :uid1 "petr", :uid2 "ivan"}}
-           (set
-            (xt/q tu/*node*
-                  '
-                  ;; tag::joins-xtql-2[]
-                  (unify (from :users [{:xt/id uid1} age])
-                         (from :users [{:xt/id uid2} age])
-                         (where (<> uid1 uid2)))
-                  ;; end::joins-xtql-2[]
-                  ,))
+           (set (xt/q tu/*node* (xtql-example "joins-xtql-2")))
            (set (xt/q tu/*node* (sql-example "joins-sql-2")))))
 
   (t/is (= #{{:cid "ivan", :order-value 150, :currency :gbp}
              {:cid "ivan", :order-value 100, :currency :gbp}
              {:cid "petr"}}
-           (set
-            (xt/q tu/*node*
-                  '
-                  ;; tag::joins-xtql-3[]
-                  (-> (unify (from :customers [{:xt/id cid}])
-                             (left-join (from :orders [{:xt/id oid, :customer-id cid} currency order-value])
-                                        [cid currency order-value]))
-                      (limit 100))
-                  ;; end::joins-xtql-3[]
-                  ,))
+           (set (xt/q tu/*node* (xtql-example "joins-xtql-3")))
            (set (xt/q tu/*node* (sql-example "joins-sql-3")))))
 
   (t/is (= [{:cid "petr"}]
-           (xt/q tu/*node*
-                 '
-                 ;; tag::joins-xtql-4[]
-                 (-> (unify (from :customers [{:xt/id cid}])
-                            (where (not (exists? (fn [cid]
-                                                   (from :orders [{:customer-id cid}]))))))
-                     (limit 100))
-                 ;; end::joins-xtql-4[]
-                 )
+           (xt/q tu/*node* (xtql-example "joins-xtql-4"))
            (xt/q tu/*node* (sql-example "joins-sql-4")))))
 
 (deftest projections
@@ -148,40 +106,17 @@
 
   (t/is (= #{{:first-name "Ivan", :last-name "Ivanov", :full-name "Ivan Ivanov"}
              {:first-name "Petr", :last-name "Petrov", :full-name "Petr Petrov"}}
-           (set
-            (xt/q tu/*node*
-                  '
-                  ;; tag::proj-xtql-1[]
-                  (-> (from :users [first-name last-name])
-                      (with {:full-name (concat first-name " " last-name)}))
-                  ;; end::proj-xtql-1[]
-                  ,))
+           (set (xt/q tu/*node* (xtql-example "proj-xtql-1")))
            (set (xt/q tu/*node* (sql-example "proj-sql-1")))))
 
   (t/is (= #{{:full-name "Ivan Ivanov", :title "First", :content "My first blog"}
              {:full-name "Ivan Ivanov", :title "Second", :content "My second blog"}}
-           (set
-            (xt/q tu/*node*
-                  '
-                  ;; tag::proj-xtql-2[]
-                  (-> (unify (from :users [{:xt/id user-id} first-name last-name])
-                             (from :articles [{:author-id user-id} title content]))
-                      (return {:full-name (concat first-name " " last-name)} title content))
-                  ;; end::proj-xtql-2[]
-                  ,))
+           (set (xt/q tu/*node* (xtql-example "proj-xtql-2")))
            (set (xt/q tu/*node* (sql-example "proj-sql-2")))))
 
   (t/is (= #{{:first-name "Ivan", :last-name "Ivanov", :title "Second", :content "My second blog"}
              {:first-name "Ivan", :last-name "Ivanov", :title "First", :content "My first blog"}}
-           (set
-            (xt/q tu/*node*
-                  '
-                  ;; tag::proj-xtql-3[]
-                  (-> (unify (from :users [{:xt/id user-id} first-name last-name])
-                             (from :articles [{:author-id user-id} title content]))
-                      (without :user-id))
-                  ;; end::proj-xtql-3[]
-                  ,))
+           (set (xt/q tu/*node* (xtql-example "proj-xtql-3")))
            (set (xt/q tu/*node* (sql-example "proj-sql-3"))))))
 
 (deftest aggregations
@@ -192,21 +127,7 @@
 
     (t/is (= #{{:cid "ivan", :currency :gbp, :order-count 2, :total-value 250}
                {:cid "petr", :order-count 0, :total-value 0}}
-             (set
-               (xt/q tu/*node*
-                 '
-                 ;; tag::aggr-xtql-1[]
-                 (-> (unify (from :customers [{:xt/id cid}])
-                            (left-join (from :orders [{:xt/id oid :customer-id cid} currency order-value])
-                                       [oid cid currency order-value]))
-                     (aggregate cid currency
-                                {:order-count (count oid)
-                                 :total-value (sum order-value)})
-                     (with {:total-value (coalesce total-value 0)})
-                     (order-by {:val total-value :dir :desc})
-                     (limit 100))
-                 ;; end::aggr-xtql-1[]
-                 ,))
+             (set (xt/q tu/*node* (xtql-example "aggr-xtql-1")))
              (set (xt/q tu/*node* (sql-example "aggr-sql-1")))))))
 
 
@@ -232,60 +153,23 @@
                 :author-id "ivan",
                 :author {:last-name "Ivanov", :first-name "Ivan"},
                 :comments [{:created-at #xt/zoned-date-time "2022-01-01T00:00Z[UTC]", :comment "1"}],}}
-             (set
-               (xt/q tu/*node*
-                 '
-                 ;; tag::pull-xtql-1[]
-                 (-> (from :articles [{:xt/id article-id} title content author-id])
-
-                     (with {:author (pull (fn [author-id]
-                                            (from :authors [{:xt/id author-id} first-name last-name])))
-
-                            :comments (pull* (fn [article-id]
-                                               (-> (from :comments [{:article-id article-id} created-at comment])
-                                                   (order-by {:val created-at :dir :desc})
-                                                   (limit 10))))}))
-                 ;; end::pull-xtql-1[]
-                 ))
-
+             (set (xt/q tu/*node* (xtql-example "pull-xtql-1")))
              (set (xt/q tu/*node* (sql-example "pull-sql-1")))))))
 
 (deftest bitemporality
   (xt/submit-tx tu/*node* users)
 
   (t/is (= [{:first-name "Petr", :last-name "Petrov"}]
-           (xt/q tu/*node*
-                 '
-                 ;; tag::bitemp-xtql-1[]
-                 (from :users {:for-valid-time (at #inst "2020-01-01")
-                               :bind [first-name last-name]})
-                 ;; end::bitemp-xtql-1[]
-                 ,)
+           (xt/q tu/*node* (xtql-example "bitemp-xtql-1"))
            (xt/q tu/*node* (sql-example "bitemp-sql-1"))))
 
   (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}
              {:first-name "Petr", :last-name "Petrov"}}
-           (set
-            (xt/q tu/*node*
-                  '
-                  ;; tag::bitemp-xtql-2[]
-                  (from :users {:for-valid-time :all-time
-                                :bind [first-name last-name]})
-                  ;; end::bitemp-xtql-2[]
-                  ,))
+           (set (xt/q tu/*node* (xtql-example "bitemp-xtql-2")))
            (set (xt/q tu/*node* (sql-example "bitemp-sql-2")))))
 
   (t/is (= [{:user-id "petr"}]
-           (xt/q tu/*node*
-                 '
-                 ;; tag::bitemp-xtql-3[]
-                 (unify (from :users {:for-valid-time (at #inst "2018")
-                                      :bind [{:xt/id user-id}]})
-
-                        (from :users {:for-valid-time (at #inst "2023")
-                                      :bind [{:xt/id user-id}]}))
-                 ;; end::bitemp-xtql-3[]
-                 ))))
+           (xt/q tu/*node* (xtql-example "bitemp-xtql-3")))))
 
 (deftest DML-Insert-sql
   (xt/submit-tx tu/*node* old-users)

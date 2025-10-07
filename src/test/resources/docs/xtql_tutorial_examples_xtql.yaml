@@ -1,0 +1,87 @@
+bo-xtql-1: |
+  (from :users [{:xt/id user-id} first-name last-name])
+
+bo-xtql-2: |
+  (from :users [{:xt/id "ivan"} first-name last-name])
+
+bo-xtql-3: |
+  (-> (from :users [{:xt/id user-id} first-name last-name])
+      (order-by last-name first-name)
+      (limit 10))
+
+joins-xtql-1: |
+  (unify (from :users [{:xt/id user-id} first-name last-name])
+         (from :articles [{:author-id user-id} title content]))
+
+joins-xtql-2: |
+  ;; 'find me all the users who are the same age'
+  (unify (from :users [{:xt/id uid1} age])
+         (from :users [{:xt/id uid2} age])
+         (where (<> uid1 uid2)))
+
+joins-xtql-3: |
+  (-> (unify (from :customers [{:xt/id cid}])
+             (left-join (from :orders [{:xt/id oid, :customer-id cid} currency order-value])
+                        [cid currency order-value]))
+      (limit 100))
+
+joins-xtql-4: |
+  (-> (unify (from :customers [{:xt/id cid}])
+             (where (not (exists? (fn [cid]
+                                    (from :orders [{:customer-id cid}]))))))
+      (limit 100))
+
+proj-xtql-1: |
+  (-> (from :users [first-name last-name])
+      (with {:full-name (concat first-name " " last-name)}))
+
+proj-xtql-2: |
+  (-> (unify (from :users [{:xt/id user-id} first-name last-name])
+             (from :articles [{:author-id user-id} title content]))
+      (return {:full-name (concat first-name " " last-name)} title content))
+
+proj-xtql-3: |
+  (-> (unify (from :users [{:xt/id user-id} first-name last-name])
+             (from :articles [{:author-id user-id} title content]))
+      (without :user-id))
+
+aggr-xtql-1: |
+  (-> (unify (from :customers [{:xt/id cid}])
+             (left-join (from :orders [{:xt/id oid :customer-id cid} currency order-value])
+                        [oid cid currency order-value]))
+      (aggregate cid currency
+                 {:order-count (count oid)
+                  :total-value (sum order-value)})
+      (with {:total-value (coalesce total-value 0)})
+      (order-by {:val total-value :dir :desc})
+      (limit 100))
+
+pull-xtql-1: |
+  (-> (from :articles [{:xt/id article-id} title content author-id])
+
+      (with {:author (pull (fn [author-id]
+                             (from :authors [{:xt/id author-id} first-name last-name])))
+
+             :comments (pull* (fn [article-id]
+                                (-> (from :comments [{:article-id article-id} created-at comment])
+                                    (order-by {:val created-at :dir :desc})
+                                    (limit 10))))}))
+
+  ;; => [{:title "...", :content "...",
+  ;;      :author {:first-name "...", :last-name "..."}
+  ;;      :comments [{:comment "...", :name "..."}, ...]}]
+
+bitemp-xtql-1: |
+  (from :users {:for-valid-time (at #inst "2020-01-01")
+                :bind [first-name last-name]})
+
+bitemp-xtql-2: |
+  (from :users {:for-valid-time :all-time
+                :bind [first-name last-name]})
+
+bitemp-xtql-3: |
+  (unify (from :users {:for-valid-time (at #inst "2018")
+                       :bind [{:xt/id user-id}]})
+
+         (from :users {:for-valid-time (at #inst "2023")
+                       :bind [{:xt/id user-id}]}))

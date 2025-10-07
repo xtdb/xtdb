@@ -1,0 +1,48 @@
+---
+import fs from 'fs';
+import path from 'path';
+import yaml from 'js-yaml';
+import { Code } from '@astrojs/starlight/components';
+
+const { file, snippet, lang } = Astro.props;
+
+function dedent(text) {
+  const lines = text.split('\n');
+  const indents = lines
+    .filter(line => line.trim().length > 0)
+    .map(line => line.match(/^(\s*)/)[0].length);
+
+  if (indents.length === 0) return text.trim();
+
+  const minIndent = Math.min(...indents);
+  const dedented = lines.map(line => line.slice(minIndent)).join('\n');
+
+  return dedented.trim();
+}
+
+function extractSnippets(yamlContent) {
+  const parsed = yaml.load(yamlContent);
+  const snippets = {};
+
+  for (const [key, value] of Object.entries(parsed)) {
+    snippets[key] = dedent(value);
+  }
+
+  return snippets;
+}
+
+// Resolve file path relative to project root
+const projectRoot = path.resolve(process.cwd(), '..');
+const resolvedPath = path.join(projectRoot, file);
+
+// Read and extract snippets from the YAML file
+const yamlContent = fs.readFileSync(resolvedPath, 'utf8');
+const snippets = extractSnippets(yamlContent);
+const code = snippets[snippet];
+
+if (!code) {
+  throw new Error(`Snippet "${snippet}" not found in ${file}`);
+}
+---
+
+<Code code={code} lang={lang} />
