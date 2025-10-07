@@ -27,7 +27,7 @@ anomaly_schedule_frequency = "Hour"
 anomaly_schedule_interval  = 1
 anomaly_baseline_n         = 20    # previous N runs for baseline
 anomaly_sigma              = 0.01  # 2σ threshold
-anomaly_scale_factor       = 0.5   # The scale factor to select on
+anomaly_scale_factor       = 1.0   # The scale factor to select on
 anomaly_timespan           = "P30D"
 
 missing_alert_evaluation_frequency = "P1D"
