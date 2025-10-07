@@ -99,6 +99,20 @@
 
 (defn- read-utf8 [^bytes barr] (String. barr StandardCharsets/UTF_8))
 
+(defn- escape-pg-array-element
+  "Escapes a string element for PostgreSQL array format.
+  Wraps in quotes if it contains special characters or would otherwise be misparsed."
+  [^String s]
+  (let [needs-quotes? (or (str/blank? s)
+                          (#{"NULL"} s)
+                          (re-find #"[\"\\,\{\}\s]" s))]
+    (if needs-quotes?
+      (format "\"%s\""
+              (-> s
+                  (str/replace "\\" "\\\\")
+                  (str/replace "\"" "\\\"")))
+      s)))
+
 (defn utf8
   "Returns the utf8 byte-array for the given string"
   ^bytes [s]
@@ -850,7 +864,9 @@
                                (let [list (.getObject list-rdr idx)
                                      sb (StringBuilder. "{")]
                                  (doseq [elem list]
-                                   (.append sb (or elem "NULL"))
+                                   (if (nil? elem)
+                                     (.append sb "NULL")
+                                     (.append sb (escape-pg-array-element (str elem))))
                                    (.append sb ","))
                                  (if (seq list)
                                    (.setCharAt sb (dec (.length sb)) \})
