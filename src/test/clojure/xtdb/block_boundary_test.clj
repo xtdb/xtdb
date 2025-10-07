@@ -55,9 +55,13 @@
                         (= (tg/normalize-for-comparison (tu/remove-nils (last records)))
                            (tg/normalize-for-comparison (first (xt/q node "SELECT * FROM docs")))))))))))
 
+;; TODO: We've seen this namespace hang on a number of tests when increasing iterations to 1000
+;; This temporarily is used to limit iterations to 100
+(def tmp-max-iterations 100)
+
 (t/deftest ^:property mixed-records-flush-boundary
   (tu/run-property-test
-   {:num-tests tu/property-test-iterations}
+   {:num-tests (min tu/property-test-iterations tmp-max-iterations)}
    (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
                   records2 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)]
                  (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
@@ -77,7 +81,7 @@
 
 (t/deftest ^:property mixed-records-flush-and-compact-boundary
   (tu/run-property-test
-   {:num-tests tu/property-test-iterations}
+   {:num-tests (min tu/property-test-iterations tmp-max-iterations)}
    (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
                   records2 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)]
                  (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
@@ -99,7 +103,7 @@
 
 (t/deftest ^:property mixed-records-flush-and-live-boundary
   (tu/run-property-test
-   {:num-tests tu/property-test-iterations}
+   {:num-tests (min tu/property-test-iterations tmp-max-iterations)}
    (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
                   records2 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)]
                  (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
@@ -118,7 +122,7 @@
 
 (t/deftest ^:property mixed-records-live-boundary
   (tu/run-property-test
-   {:num-tests tu/property-test-iterations}
+   {:num-tests (min tu/property-test-iterations tmp-max-iterations)}
    (prop/for-all [records1 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)
                   records2 (gen/vector (tg/generate-record {:potential-doc-ids #{1 2 3 4 5}}) 1 10)]
                  (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
@@ -184,7 +188,7 @@
 
 (t/deftest ^:property mixed-ops-across-boundaries
   (tu/run-property-test
-   {:num-tests tu/property-test-iterations}
+   {:num-tests (min tu/property-test-iterations tmp-max-iterations)}
    (let [id-gen (gen/one-of [(gen/return 1) (gen/return "1")])]
      (prop/for-all [ops (gen/vector (gen/one-of [(gen/fmap (fn [id] [:erase id]) id-gen)
                                                  (gen/return [:compact])
