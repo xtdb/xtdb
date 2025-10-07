@@ -275,13 +275,17 @@ jobs:
 
           # Declare panels: [title]=panelId
           declare -A PANELS=(
+            ["# Nodes"]=1
             ["Transaction Lag"]=3
             ["Max Transaction Latency (Over Time)"]=5
             ["Max Query Latency (Over Time)"]=6
             ["Cluster Transactions"]=8
+            ["Cluster Transactions Latencies"]=7
             ["Cluster Transaction Errors"]=22
             ["Cluster Queries"]=9
+            ["Cluster Query Latencies"]=10
             ["Cluster Query Errors"]=20
+            ["Cluster PGWire Active Connections"]=23
           )
 
           # Simple slugify for file names
@@ -324,6 +328,14 @@ jobs:
           declare -A PANELS=(
             ["JVM - Heap Usage (Average)"]=8
             ["JVM - Heap Usage (Max)"]=20
+            ["JVM - Buffer Used"]=9
+            ["JVM - Live Threads"]=10
+            ["Transactions - Count"]=19
+            ["Transactions - Timer (Max)"]=17
+            ["Transactions - Timer (Quantiles)"]=16
+            ["Query - Count"]=18
+            ["Query - Timer (Max)"]=15
+            ["Query - Timer (Quantiles)"]=14
             ["XTDB - Buffer Pool Allocated Memory"]=24
             ["XTDB - Compactor Allocated Memory"]=3
             ["Netty Allocated Memory"]=38
