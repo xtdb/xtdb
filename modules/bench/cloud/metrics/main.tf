@@ -448,7 +448,7 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
                     | where step == "overall" and metric == "duration_ms"
                     | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.anomaly_scale_factor}
                     | where repo == "${var.anomaly_repo}"
-                    | top 20 by TimeGenerated desc
+                    | top ${var.anomaly_baseline_n} by TimeGenerated desc
                     | order by TimeGenerated asc
                     | project TimeGenerated, duration_ms = todouble(value)
                   KQL
