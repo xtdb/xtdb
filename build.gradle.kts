@@ -153,7 +153,7 @@ allprojects {
         }
 
         tasks.register("property-test", Test::class) {
-            jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+            jvmArgs(defaultJvmArgs + twelveGBJvmArgs)
             
             val iterations = project.findProperty("iterations")?.toString() ?: "100"
             systemProperty("xtdb.property-test-iterations", iterations)
