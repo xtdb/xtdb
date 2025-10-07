@@ -180,7 +180,7 @@ resource "azurerm_logic_app_action_http" "bench_alert_post_to_slack" {
         color       = "#D32F2F"
         title       = "@{coalesce(triggerBody()?['data']?['essentials']?['alertRule'], 'Alert')}"
         title_link  = "@{concat('https://portal.azure.com/#blade/Microsoft_Azure_Monitoring/AlertDetailsTemplateBlade/alertId/', uriComponent(triggerBody()?['data']?['essentials']?['alertId']))}"
-        text        = "@{concat('*Severity:* ', coalesce(string(triggerBody()?['data']?['essentials']?['severity']), 'N/A'), '\n', '*Description:* ', coalesce(triggerBody()?['data']?['essentials']?['description'], ''), '\n', '*Target:* ', coalesce(triggerBody()?['data']?['essentials']?['alertTargetIDs'][0], ''))}"
+        text        = "${var.slack_subteam_id != "" ? "<!subteam^${var.slack_subteam_id}|${var.slack_subteam_label}> " : ""}@{concat('*Severity:* ', coalesce(string(triggerBody()?['data']?['essentials']?['severity']), 'N/A'), '\n', '*Description:* ', coalesce(triggerBody()?['data']?['essentials']?['description'], ''), '\n', '*Target:* ', coalesce(triggerBody()?['data']?['essentials']?['alertTargetIDs'][0], ''))}"
         mrkdwn_in   = ["text"]
       }
     ]
@@ -318,7 +318,7 @@ resource "azapi_resource" "bench_anomaly" {
                       {
                         "color" = "#D32F2F"
                         "title" = "@{concat('Benchmark anomaly: TPCH ', if(equals(first(body('QueryLogs')?['tables'][0]?['rows'])[1], true), 'ran slower', 'ran faster'))}"
-                        "text"  = "@{concat('*Scale factor:* ', string(${var.anomaly_scale_factor}), '\n', '*Condition:* ± ', string(${var.anomaly_sigma}), 'σ over last ', '${var.anomaly_baseline_n} runs', '\n', '*Run:* https://github.com/${var.anomaly_repo}/actions/runs/', string(first(body('QueryLogs')?['tables'][0]?['rows'])[0]))}"
+                        "text"  = "${var.slack_subteam_id != "" ? "<!subteam^${var.slack_subteam_id}|${var.slack_subteam_label}> " : ""}@{concat('*Scale factor:* ', string(${var.anomaly_scale_factor}), '\n', '*Condition:* ± ', string(${var.anomaly_sigma}), 'σ over last ', '${var.anomaly_baseline_n} runs', '\n', '*Run:* https://github.com/${var.anomaly_repo}/actions/runs/', string(first(body('QueryLogs')?['tables'][0]?['rows'])[0]))}"
                         "mrkdwn_in" = ["text"]
                       }
                     ]

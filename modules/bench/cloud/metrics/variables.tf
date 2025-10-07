@@ -55,6 +55,19 @@ variable "slack_webhook_url" {
   sensitive   = true
 }
 
+# Optional Slack subteam mention (e.g., <!subteam^S012345|@xtdb-team>)
+variable "slack_subteam_id" {
+  description = "Slack subteam (user group) ID to mention in alert messages (e.g., S012345). Leave empty to disable mention."
+  type        = string
+  default     = ""
+}
+
+variable "slack_subteam_label" {
+  description = "Human-friendly label for the Slack subteam mention (used in fallback text), e.g., @xtdb-team"
+  type        = string
+  default     = "@xtdb-team"
+}
+
 # Logic App anomaly detection
 variable "anomaly_logic_app_name" {
   description = "Logic App name for scheduled anomaly detection"
