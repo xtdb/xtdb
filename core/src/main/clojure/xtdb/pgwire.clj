@@ -33,7 +33,7 @@
            [java.nio.file Path]
            [java.security KeyStore]
            [java.time Clock Duration ZoneId]
-           [java.util.concurrent ExecutorService Executors TimeUnit]
+           [java.util.concurrent CancellationException ExecutionException ExecutorService Executors FutureTask TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.memory BufferAllocator)
@@ -157,7 +157,7 @@
            {::severity :fatal, ::error-code "3D000"}))
 
 (defn- err-invalid-auth-spec [msg] (ex-info msg {::severity :error, ::error-code "28000"}))
-(defn- err-query-cancelled [msg] (ex-info msg {::severity :error, ::error-code "57014"}))
+(defn- err-query-cancelled [msg e] (ex-info msg {::severity :error, ::error-code "57014"} e))
 
 (defn- notice [msg]
   {:severity "NOTICE"
@@ -173,11 +173,11 @@
 
 (defn cmd-cancel
   "Tells the connection to stop doing what its doing and return to idle"
-  [{:keys [cancelled-connections-counter] :as conn}]
-  ;; we might this want to be conditional on a 'working state' to avoid races (if you fire loads of cancels randomly), not sure whether
-  ;; to use status instead
-  ;;TODO need to interrupt the thread belonging to the conn
-  (swap! (:conn-state conn) assoc :cancel true)
+  [{:keys [conn-state cancelled-connections-counter] :as conn}]
+  (let [{:keys [cancel!]} @conn-state]
+    (log/debug "Cancel request received for connection" {:pid (:pid conn), :ongoing-query? (some? cancel!)})
+    (when cancel!
+      (cancel!)))
   (metrics/inc-counter! cancelled-connections-counter)
   nil)
 
@@ -1253,47 +1253,60 @@
                                   :assert "ASSERT"
                                   :create-role "CREATE ROLE")}))
 
+(defn run-cancellable-query! [{:keys [conn-state] :as _conn} f]
+  ; FutureTask used not for the sake of delegating execution to a different thread (we are running it on the
+  ; current thread, see below), but for its built-in cancellation machinery, which prevents leaking an interruption
+  ; that could affect subsequent tasks run by this thread - as it belongs to a thread-pool.
+  (let [task (FutureTask. f)]
+    (swap! conn-state assoc :cancel! (fn cancel! []
+                                       (let [cancelled? (.cancel task true)]
+                                         (log/debug "Query cancelled" {:actually-cancelled? cancelled?}))))
+    (try
+      (.run task)
+      (try
+        (.get task)
+        (catch ExecutionException e
+          (throw (ex-cause e)))
+        (catch CancellationException e
+          (throw (err-query-cancelled "query cancelled during execution" e))))
+      (finally
+        (swap! conn-state dissoc :cancel!)))))
+
 (defn cmd-exec-query [{:keys [conn-state !closing? query-error-counter] :as conn}
                       {:keys [limit query ^IResultCursor cursor pg-cols] :as _portal}]
   (try
-    (let [cancelled-by-client? #(:cancel @conn-state)
-          ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
-
-          n-rows-out (volatile! 0)
-
+    (let [n-rows-out (volatile! 0)
           session (:session @conn-state)
           types-with-default (-> pg-types/pg-types
                                  (assoc :default (->> (get-in session [:parameters "fallback_output_format"] :json)
                                                       (get pg-types/pg-types))))]
+      (run-cancellable-query!
+        conn
+        (fn []
+          (while (and (or (nil? limit) (< @n-rows-out limit))
+                      (.tryAdvance cursor
+                                   (fn [^RelationReader rel]
+                                     (log/trace "advancing cursor with rel count" (.getRowCount rel))
+                                     (cond
+                                       (Thread/interrupted) (throw (InterruptedException.))
 
-      (while (and (or (nil? limit) (< @n-rows-out limit))
-                  (.tryAdvance cursor
-                               (fn [^RelationReader rel]
-                                 (cond
-                                   (cancelled-by-client?)
-                                   (do (log/trace "query cancelled by client")
-                                       (swap! conn-state dissoc :cancel)
-                                       (throw (err-query-cancelled "query cancelled during execution")))
+                                       @!closing? (log/trace "query result stream stopping (conn closing)")
 
-                                   (Thread/interrupted) (throw (InterruptedException.))
-
-                                   @!closing? (log/trace "query result stream stopping (conn closing)")
-
-                                   :else (dotimes [idx (cond-> (.getRowCount rel)
-                                                         limit (min (- limit @n-rows-out)))]
-                                           (let [row (mapv
-                                                      (fn [{:keys [^String col-name pg-type result-format]}]
-                                                        (let [{:keys [write-binary write-text]} (get types-with-default pg-type)
-                                                              rdr (.vectorForOrNull rel col-name)]
-                                                          (when-not (.isNull rdr idx)
-                                                            (if (= :binary result-format)
-                                                              (write-binary session rdr idx)
-                                                              (if write-text
-                                                                (write-text session rdr idx)
-                                                                (pg-types/write-json session rdr idx))))))
-                                                      pg-cols)]
-                                             (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
-                                             (vswap! n-rows-out inc))))))))
+                                       :else (dotimes [idx (cond-> (.getRowCount rel)
+                                                                   limit (min (- limit @n-rows-out)))]
+                                               (let [row (mapv
+                                                           (fn [{:keys [^String col-name pg-type result-format]}]
+                                                             (let [{:keys [write-binary write-text]} (get types-with-default pg-type)
+                                                                   rdr (.vectorForOrNull rel col-name)]
+                                                               (when-not (.isNull rdr idx)
+                                                                 (if (= :binary result-format)
+                                                                   (write-binary session rdr idx)
+                                                                   (if write-text
+                                                                     (write-text session rdr idx)
+                                                                     (pg-types/write-json session rdr idx))))))
+                                                           pg-cols)]
+                                                 (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
+                                                 (vswap! n-rows-out inc))))))))))
 
       (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @n-rows-out)}))
 
@@ -1621,6 +1634,7 @@
                                                                     :session {:access-mode :read-only
                                                                               :clock (:clock @server-state)}})
                                                  !closing? (atom false)]
+                                             (log/debug "New connection starting" {:cid cid})
                                              (try
                                                (-> (map->Connection {:cid cid, :node node, :authn authn, :server server,
                                                                      :frontend (pgio/->socket-frontend conn-socket),
