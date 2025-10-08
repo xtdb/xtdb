@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.buffer-pool-test :as bp-test]
+            [xtdb.compactor :as c]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.db-catalog :as db]
             [xtdb.node :as xtn]
@@ -141,10 +142,9 @@
 (t/deftest ^:s3 tpch-test-node
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
-      (tpch/submit-docs! node 0.1)
-
-      (tu/flush-block! node #xt/duration "PT5M")
-
+      (t/is (nil? (tpch/submit-docs! node 0.05)))
+      (t/is (nil? (tu/flush-block! node #xt/duration "PT5M")))
+      (t/is (nil? (c/compact-all! node #xt/duration "PT5M")))
       ;; Ensure some files written to buffer-pool 
       (let [^RemoteBufferPool buffer-pool (.getBufferPool (db/primary-db node))]
         (t/is (seq (.listAllObjects buffer-pool)))))))
