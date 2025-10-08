@@ -37,13 +37,13 @@ jobs:
           check_name: JUnit Property Test Report
           report_paths: '**/build/test-results/property-test/TEST-*.xml'
 
-      - name: Post Slack Notification (On Fail)
-        if: failure() && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/main'
+      - name: Post Slack Notification (On Fail/Cancel)
+        if: (failure() || cancelled()) && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/main'
         uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2 # v2
         with:
           status: ${{ job.status }}
           notification_title: "*Property Test* has {status_message}:"
           message_format: "{emoji} `property-test` job has {status_message} with ${{ inputs.iteration_count }} iterations"
-          notify_when: "failure"
+          notify_when: "failure,cancelled"
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
