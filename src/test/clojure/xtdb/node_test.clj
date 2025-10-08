@@ -1219,3 +1219,49 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             {:column-name "_valid_to"}
             {:column-name "h"}]
            (xt/q tu/*node* "SELECT column_name FROM information_schema.columns WHERE table_name = 'docs'"))))
+
+(t/deftest test-string-escaping-in-vectors
+  (t/testing "curly braces - #4858"
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :a ["}"]}]])
+    (t/is (= [{:xt/id 1 :a ["}"]}]
+             (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 1"))))
+
+  (t/testing "question mark and curly brace - #4859"
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 2 :a ["?{"]}]])
+    (t/is (= [{:xt/id 2 :a ["?{"]}]
+             (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 2"))))
+
+  (t/testing "commas"
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 3 :a ["," ",hello" "hello,world"]}]])
+    (t/is (= [{:xt/id 3 :a ["," ",hello" "hello,world"]}]
+             (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 3"))))
+
+  (t/testing "spaces"
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 4 :a ["a " "b " " c " "hello world"]}]])
+    (t/is (= [{:xt/id 4 :a ["a " "b " " c " "hello world"]}]
+             (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 4"))))
+
+  (t/testing "quotes"
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 5 :a ["\"quoted\""]}]])
+    (t/is (= [{:xt/id 5 :a ["\"quoted\""]}]
+             (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 5"))))
+
+  (t/testing "backslashes"
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 6 :a ["a\\b\\c"]}]])
+    (t/is (= [{:xt/id 6 :a ["a\\b\\c"]}]
+             (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 6"))))
+
+  (t/testing "empty string"
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 7 :a [""]}]])
+    (t/is (= [{:xt/id 7 :a [""]}]
+             (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 7"))))
+
+  (t/testing "literal NULL string"
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 8 :a ["NULL"]}]])
+    (t/is (= [{:xt/id 8 :a ["NULL"]}]
+             (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 8"))))
+  
+  (t/testing "escape characters"
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 9 :a ["\n" "\t" "\r"]}]])
+    (t/is (= [{:xt/id 9 :a ["\n" "\t" "\r"]}]
+             (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 9")))))

@@ -99,6 +99,12 @@
 
 (defn- read-utf8 [^bytes barr] (String. barr StandardCharsets/UTF_8))
 
+(defn- escape-pg-array-element [^String s]
+  (format "\"%s\""
+          (-> s
+              (str/replace "\\" "\\\\")
+              (str/replace "\"" "\\\""))))
+
 (defn utf8
   "Returns the utf8 byte-array for the given string"
   ^bytes [s]
@@ -850,7 +856,9 @@
                                (let [list (.getObject list-rdr idx)
                                      sb (StringBuilder. "{")]
                                  (doseq [elem list]
-                                   (.append sb (or elem "NULL"))
+                                   (if (nil? elem)
+                                     (.append sb "NULL")
+                                     (.append sb (escape-pg-array-element (str elem))))
                                    (.append sb ","))
                                  (if (seq list)
                                    (.setCharAt sb (dec (.length sb)) \})
