@@ -140,8 +140,17 @@
     (t/is (= [{:xt/id 1, :xt/valid-from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}]
              (xt/q tu/*node* "SELECT *,_valid_from, _valid_to FROM docs")))))
 
-;; TODO: Will fail due to #4751 + #4752
-#_(t/deftest ^:property multiple-patches-on-record
+(t/deftest patching-lists-with-nils-4752
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :a [nil 1 nil]}]])
+  (t/is (= [{:xt/id 1, :a [nil 1 nil]}] (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 1")))
+
+  (xt/execute-tx tu/*node* [[:patch-docs :docs {:xt/id 2, :a [nil 1 nil]}]])
+  (t/is (= [{:xt/id 2, :a [nil 1 nil]}] (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 2")))
+
+  (xt/execute-tx tu/*node* [[:patch-docs :docs {:xt/id 3, :a #{1 nil}}]])
+  (t/is (= [{:xt/id 3, :a #{1 nil}}] (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 3"))))
+
+(t/deftest ^:property multiple-patches-on-record
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
    (prop/for-all [records (gen/vector (tg/generate-record {:potential-doc-ids #{1}}) 1 20)]
