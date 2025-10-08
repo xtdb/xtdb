@@ -55,8 +55,10 @@ indent_block() {
   echo "data:"
   echo "  xtdb-monitoring.json: |"
   cat "${TMP_DIR}/xtdb-monitoring.json" | indent_block
+  echo
   echo "  xtdb-node-debugging.json: |"
   cat "${TMP_DIR}/xtdb-node-debugging.json" | indent_block
+  echo
 } > "${OUT_PATH}"
 
 echo "Generated ${OUT_PATH}"
