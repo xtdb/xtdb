@@ -99,19 +99,11 @@
 
 (defn- read-utf8 [^bytes barr] (String. barr StandardCharsets/UTF_8))
 
-(defn- escape-pg-array-element
-  "Escapes a string element for PostgreSQL array format.
-  Wraps in quotes if it contains special characters or would otherwise be misparsed."
-  [^String s]
-  (let [needs-quotes? (or (str/blank? s)
-                          (#{"NULL"} s)
-                          (re-find #"[\"\\,\{\}\s]" s))]
-    (if needs-quotes?
-      (format "\"%s\""
-              (-> s
-                  (str/replace "\\" "\\\\")
-                  (str/replace "\"" "\\\"")))
-      s)))
+(defn- escape-pg-array-element [^String s]
+  (format "\"%s\""
+          (-> s
+              (str/replace "\\" "\\\\")
+              (str/replace "\"" "\\\""))))
 
 (defn utf8
   "Returns the utf8 byte-array for the given string"
