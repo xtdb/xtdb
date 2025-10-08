@@ -1,10 +1,10 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
-import tailwind from '@astrojs/tailwind';
 import yaml from '@rollup/plugin-yaml';
 import swup from '@swup/astro';
 import { remarkDefinitionList, defListHastHandlers } from 'remark-definition-list';
 import { railroadPlugin } from './src/railroad-plugin.js';
+import tailwindcss from '@tailwindcss/vite';
 
 // https://astro.build/config
 export default defineConfig({
@@ -14,9 +14,9 @@ export default defineConfig({
         starlight({
             title: 'XTDB',
 
-            social: {
-                github: 'https://github.com/xtdb/xtdb',
-            },
+            social: [
+                { icon: 'github', label: 'GitHub', href: 'https://github.com/xtdb/xtdb' },
+            ],
 
             favicon: '/shared/favicon.svg',
 
@@ -229,8 +229,6 @@ export default defineConfig({
             },
         }),
 
-        tailwind({ applyBaseStyles: false }),
-
         swup({
             theme: false,
             animationClass: false,
@@ -255,6 +253,6 @@ export default defineConfig({
     },
 
     vite: {
-        plugins: [yaml()]
+        plugins: [tailwindcss(), yaml()]
     },
 });

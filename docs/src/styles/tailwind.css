@@ -1,11 +1,53 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@layer base, starlight, theme, components, utilities;
+@import '@astrojs/starlight-tailwind';
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
 
-/*
-Add additional Tailwind styles to this file, for example with @layer:
-https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
-*/
+@theme {
+  /* Container */
+  --container-padding: 1rem;
+  --container-padding-md: 2rem;
+  --container-center: true;
+
+  /* Font families */
+  --font-sans: "Atkinson Hyperlegible", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: "Source Code Pro", "Space Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Custom colors */
+  --color-link: #243c5a;
+  --color-complimentary-blue: #1e81f7;
+  --color-juxt-orange: #f7941e;
+  --color-juxt-orange-light: #f8a139;
+  --color-dark-orange: #78350f;
+  --color-light-grey: #cbcbcb;
+  --color-grey: #434343;
+  --color-dark-grey: #333333;
+  --color-background-orange: #fff5ea;
+
+  --color-accent-50: var(--color-orange-50);
+  --color-accent-100: var(--color-orange-100);
+  --color-accent-200: var(--color-orange-200);
+  --color-accent-300: var(--color-orange-300);
+  --color-accent-400: var(--color-orange-400);
+  --color-accent-500: var(--color-orange-500);
+  --color-accent-600: var(--color-orange-600);
+  --color-accent-700: var(--color-orange-700);
+  --color-accent-800: var(--color-orange-800);
+  --color-accent-900: var(--color-orange-900);
+  --color-accent-950: var(--color-orange-950);
+
+  --color-gray-50: var(--color-stone-50);
+  --color-gray-100: var(--color-stone-100);
+  --color-gray-200: var(--color-stone-200);
+  --color-gray-300: var(--color-stone-300);
+  --color-gray-400: var(--color-stone-400);
+  --color-gray-500: var(--color-stone-500);
+  --color-gray-600: var(--color-stone-600);
+  --color-gray-700: var(--color-stone-700);
+  --color-gray-800: var(--color-stone-800);
+  --color-gray-900: var(--color-stone-900);
+  --color-gray-950: var(--color-stone-950);
+}
 
 @font-face {
     font-weight: 400;
@@ -87,18 +129,6 @@ https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layer
     font-display: block;
 }
 
-* {
-    @apply border-gray-500
-}
-
-.sl-markdown-content a {
-    @apply hover:underline text-juxt-orange
-}
-
 :root {
     --sl-content-width: 60rem;
-}
-
-.sl-markdown-content pre {
-    padding: initial
 }
