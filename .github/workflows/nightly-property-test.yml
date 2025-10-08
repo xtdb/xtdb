@@ -15,3 +15,18 @@ jobs:
     permissions:
       contents: read
       checks: write
+
+  notify-success:
+    needs: nightly-property-test
+    runs-on: ubuntu-latest
+    if: success() && github.repository == 'xtdb/xtdb'
+    steps:
+      - name: Post Slack Notification (On Success)
+        uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2 # v2
+        with:
+          status: success
+          notification_title: "*Nightly Property Test* has {status_message}:"
+          message_format: "{emoji} `nightly-property-test` job has {status_message} with 1000 iterations"
+          notify_when: "success"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
