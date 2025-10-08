@@ -154,12 +154,12 @@ To deploy a basic set of Kafka resources within AKS, you can make use of the `bi
 Run the following command:
 
 ``` bash
-helm install kafka oci://registry-1.docker.io/bitnamicharts/kafka
-  --version 31.3.1
-  --namespace xtdb-deployment
-  --set listeners.client.protocol=PLAINTEXT
-  --set listeners.controller.protocol=PLAINTEXT
-  --set controller.resourcesPreset=medium
+helm install kafka oci://registry-1.docker.io/bitnamicharts/kafka \
+  --version 31.3.1 \
+  --namespace xtdb-deployment \
+  --set listeners.client.protocol=PLAINTEXT \
+  --set listeners.controller.protocol=PLAINTEXT \
+  --set controller.resourcesPreset=medium \
   --set controller.nodeSelector.node_pool=xtdbpool
 ```
 
@@ -217,12 +217,12 @@ Fetch the name of the User Assigned Managed Identity (`user_assigned_managed_ide
 To create the federated identity run the `az` CLI command:
 
 ``` bash
-az identity federated-credential create
-  --name "xtdb-federated-identity"
-  --resource-group "xtdb-resource-group"
-  --subject "system:serviceaccount:xtdb-deployment:xtdb-service-account"
-  --audience "api://AzureADTokenExchange"
-  --identity-name "<user_assigned_managed_identity_name>"
+az identity federated-credential create \
+  --name "xtdb-federated-identity" \
+  --resource-group "xtdb-resource-group" \
+  --subject "system:serviceaccount:xtdb-deployment:xtdb-service-account" \
+  --audience "api://AzureADTokenExchange" \
+  --identity-name "<user_assigned_managed_identity_name>" \
   --issuer "<oidc_issuer_url>"
 ```
 
@@ -231,8 +231,8 @@ The subject name must include the namespace and Kubernetes ServiceAccount name.
 Fetch the client ID of the User Assigned Managed Identity (`user_assigned_managed_identity_client_id`), and use it to annotate the Kubernetes Service Account to establish the link between the KSA and the User Assigned Managed Identity:
 
 ``` bash
-kubectl annotate serviceaccount xtdb-service-account
-  --namespace xtdb-deployment
+kubectl annotate serviceaccount xtdb-service-account \
+  --namespace xtdb-deployment \
   azure.workload.identity/client-id="<user_assigned_managed_identity_client_id>"
 ```
 
@@ -248,12 +248,12 @@ With the values from the [Terraform outputs](#terraform-outputs), you can now de
 Run the following command, substituting the values as appropriate:
 
 ``` bash
-helm install xtdb-azure oci://ghcr.io/xtdb/helm-xtdb-azure
-  --version 2.0.0-snapshot
-  --namespace xtdb-deployment
-  --set xtdbConfig.serviceAccount="xtdb-service-account"
-  --set xtdbConfig.storageContainerName=<storage_account_container>
-  --set xtdbConfig.storageAccountName=<storage_account_name>
+helm install xtdb-azure oci://ghcr.io/xtdb/helm-xtdb-azure \
+  --version 2.0.0-snapshot \
+  --namespace xtdb-deployment \
+  --set xtdbConfig.serviceAccount="xtdb-service-account" \
+  --set xtdbConfig.storageContainerName=<storage_account_container> \
+  --set xtdbConfig.storageAccountName=<storage_account_name> \
   --set xtdbConfig.userManagedIdentityClientId=<user_managed_identity_client_id>
 ```
 

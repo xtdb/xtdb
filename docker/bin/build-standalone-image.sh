@@ -11,6 +11,6 @@ set -e
     sha=$(git rev-parse --short HEAD)
 
     echo Building Docker image ...
-    docker build -t xtdb/xtdb --build-arg GIT_SHA="$sha" --build-arg XTDB_VERSION="${XTDB_VERSION:-2-SNAPSHOT}" --output type=docker standalone
+    docker build -t ghcr.io/xtdb/xtdb:dev --build-arg GIT_SHA="$sha" --build-arg XTDB_VERSION="${XTDB_VERSION:-2-SNAPSHOT}" --output type=docker standalone
     echo Done
 )

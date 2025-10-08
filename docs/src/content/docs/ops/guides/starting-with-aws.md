@@ -158,13 +158,13 @@ To deploy a basic set of Kafka resources within GKE, you can make use of the `bi
 Run the following command:
 
 ``` bash
-helm install kafka oci://registry-1.docker.io/bitnamicharts/kafka
-  --version 31.3.1
-  --namespace xtdb-deployment
-  --set listeners.client.protocol=PLAINTEXT
-  --set listeners.controller.protocol=PLAINTEXT
-  --set controller.resourcesPreset=medium
-  --set global.defaultStorageClass=gp2
+helm install kafka oci://registry-1.docker.io/bitnamicharts/kafka \
+  --version 31.3.1 \
+  --namespace xtdb-deployment \
+  --set listeners.client.protocol=PLAINTEXT \
+  --set listeners.controller.protocol=PLAINTEXT \
+  --set controller.resourcesPreset=medium \
+  --set global.defaultStorageClass=gp2 \
   --set controller.nodeSelector.node_pool=xtdbpool
 ```
 
@@ -279,10 +279,10 @@ With the values from the [Terraform outputs](#terraform-outputs), you can now de
 Run the following command, substituting the values as appropriate:
 
 ``` bash
-helm install xtdb-aws oci://ghcr.io/xtdb/helm-xtdb-aws
-  --version 2.0.0-snapshot
-  --namespace xtdb-deployment
-  --set xtdbConfig.serviceAccount="xtdb-service-account"
+helm install xtdb-aws oci://ghcr.io/xtdb/helm-xtdb-aws \
+  --version 2.0.0-snapshot \
+  --namespace xtdb-deployment \
+  --set xtdbConfig.serviceAccount="xtdb-service-account" \
   --set xtdbConfig.s3Bucket=<s3_bucket>
 ```
 

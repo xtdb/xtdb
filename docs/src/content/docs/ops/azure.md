@@ -73,12 +73,12 @@ Fetch the name of the User Assigned Managed Identity (`user_assigned_managed_ide
 Create the federated identity using the `az` CLI:
 
 ``` bash
-az identity federated-credential create
-  --name "xtdb-federated-identity"
-  --resource-group "xtdb-resource-group"
-  --subject "system:serviceaccount:xtdb-deployment:xtdb-service-account"
-  --audience "api://AzureADTokenExchange"
-  --identity-name "<user_assigned_managed_identity_name>"
+az identity federated-credential create \ 
+  --name "xtdb-federated-identity" \ 
+  --resource-group "xtdb-resource-group" \ 
+  --subject "system:serviceaccount:xtdb-deployment:xtdb-service-account" \ 
+  --audience "api://AzureADTokenExchange" \ 
+  --identity-name "<user_assigned_managed_identity_name>" \ 
   --issuer "<oidc_issuer_url>"
 ```
 
@@ -90,8 +90,8 @@ Fetch the client ID of the User Assigned Managed Identity (`user_assigned_manage
 Annotate the Kubernetes Service Account to establish the link between the KSA and the User Assigned Managed Identity:
 
 ``` bash
-kubectl annotate serviceaccount xtdb-service-account
-  --namespace xtdb-deployment
+kubectl annotate serviceaccount xtdb-service-account \ 
+  --namespace xtdb-deployment \ 
   azure.workload.identity/client-id="<user_assigned_managed_identity_client_id>"
 ```
 
@@ -102,19 +102,19 @@ The Helm chart can be installed directly from the [**Github Container Registry**
 This will use the default configuration for the deployment, setting any required values as needed:
 
 ``` bash
-helm install xtdb-azure oci://ghcr.io/xtdb/helm-xtdb-azure
-  --version 2.0.0-snapshot
-  --namespace xtdb-deployment
-  --set xtdbConfig.serviceAccount="xtdb-service-account"
-  --set xtdbConfig.storageContainerName=<storage_account_container>
-  --set xtdbConfig.storageAccountName=<storage_account_name>
+helm install xtdb-azure oci://ghcr.io/xtdb/helm-xtdb-azure \ 
+  --version 2.0.0-snapshot \ 
+  --namespace xtdb-deployment \ 
+  --set xtdbConfig.serviceAccount="xtdb-service-account" \ 
+  --set xtdbConfig.storageContainerName=<storage_account_container> \ 
+  --set xtdbConfig.storageAccountName=<storage_account_name> \ 
   --set xtdbConfig.userManagedIdentityClientId=<user_managed_identity_client_id>
 ```
 
 We provide a number of parameters for configuring numerous parts of the deployment, see the [`values.yaml` file](https://github.com/xtdb/xtdb/tree/main/azure/helm) or call `helm show values`:
 
 ``` bash
-helm show values oci://ghcr.io/xtdb/helm-xtdb-azure
+helm show values oci://ghcr.io/xtdb/helm-xtdb-azure \ 
   --version 2.0.0-snapshot
 ```
 
@@ -131,8 +131,8 @@ By default, the following resources are deployed by the Helm chart:
 The chart can also be pulled from the **Github Container Registry**, allowing further configuration of the templates within:
 
 ``` bash
-helm pull oci://ghcr.io/xtdb/helm-xtdb-azure
-  --version 2.0.0-snapshot
+helm pull oci://ghcr.io/xtdb/helm-xtdb-azure \ 
+  --version 2.0.0-snapshot \ 
   --untar
 ```
 

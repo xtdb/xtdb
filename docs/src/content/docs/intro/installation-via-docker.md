@@ -22,9 +22,9 @@ You can start a 'standalone' (i.e. non-production, non-distributed) XTDB server 
 ## `nightly`: built every night from `main` branch
 ## `edge`: latest nightly plus urgent fixes
 
-docker run -it --pull=always
-  -p 5432:5432
-  -p 8080:8080
+docker run -it --pull=always \
+  -p 5432:5432 \
+  -p 8080:8080 \
   ghcr.io/xtdb/xtdb
 
 ## 5432: Postgres wire-compatible server (primary API)
@@ -48,11 +48,11 @@ You can attach a host volume to preserve your data across container restarts, e.
 - For Podman, ensure the directory is owned by your user and use `--userns=keep-id`, e.g.:
 
   ``` bash
-  podman run -it --pull=always
-    --userns=keep-id
-    -p 5432:5432
-    -p 8080:8080
-    -v /tmp/xtdb-data-dir:/var/lib/xtdb
+  podman run -it --pull=always \
+    --userns=keep-id \
+    -p 5432:5432 \
+    -p 8080:8080 \
+    -v /tmp/xtdb-data-dir:/var/lib/xtdb \
     ghcr.io/xtdb/xtdb
   ```
 

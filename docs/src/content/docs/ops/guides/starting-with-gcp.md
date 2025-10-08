@@ -164,12 +164,12 @@ To deploy a basic set of Kafka resources within GKE, you can make use of the `bi
 Run the following command:
 
 ``` bash
-helm install kafka oci://registry-1.docker.io/bitnamicharts/kafka
-  --version 31.3.1
-  --namespace xtdb-deployment
-  --set listeners.client.protocol=PLAINTEXT
-  --set listeners.controller.protocol=PLAINTEXT
-  --set controller.resourcesPreset=medium
+helm install kafka oci://registry-1.docker.io/bitnamicharts/kafka \
+  --version 31.3.1 \
+  --namespace xtdb-deployment \
+  --set listeners.client.protocol=PLAINTEXT \
+  --set listeners.controller.protocol=PLAINTEXT \
+  --set controller.resourcesPreset=medium \
   --set controller.nodeSelector.node_pool=xtdb-pool
 ```
 
@@ -226,8 +226,8 @@ We fetch the IAM service account email from the Terraform outputs, `iam_service_
 To create an IAM allow policy that gives the Kubernetes ServiceAccount access to impersonate the IAM service account, run the following command:
 
 ``` bash
-gcloud iam service-accounts add-iam-policy-binding <iam_service_account_email>
-  --role roles/iam.workloadIdentityUser
+gcloud iam service-accounts add-iam-policy-binding <iam_service_account_email> \
+  --role roles/iam.workloadIdentityUser \
   --member "serviceAccount:<project_id>.svc.id.goog[xtdb-deployment/xtdb-service-account]"
 ```
 
@@ -236,8 +236,8 @@ The member name must include the namespace and Kubernetes ServiceAccount name.
 Finally, annotate the Kubernetes ServiceAccount so that GKE sees the link between the service accounts:
 
 ``` bash
-kubectl annotate serviceaccount xtdb-service-account
-  --namespace xtdb-deployment
+kubectl annotate serviceaccount xtdb-service-account \
+  --namespace xtdb-deployment \
   iam.gke.io/gcp-service-account=<iam_service_account_email>
 ```
 
@@ -253,11 +253,11 @@ With the values from the [Terraform outputs](#terraform-outputs), you can now de
 Run the following command, substituting the values as appropriate:
 
 ``` bash
-helm install xtdb-google-cloud oci://ghcr.io/xtdb/helm-xtdb-google-cloud
-  --version 2.0.0-snapshot
-  --namespace xtdb-deployment
-  --set xtdbConfig.serviceAccount=xtdb-service-account
-  --set xtdbConfig.gcpProjectId=<project_id>
+helm install xtdb-google-cloud oci://ghcr.io/xtdb/helm-xtdb-google-cloud \
+  --version 2.0.0-snapshot \
+  --namespace xtdb-deployment \
+  --set xtdbConfig.serviceAccount=xtdb-service-account \
+  --set xtdbConfig.gcpProjectId=<project_id> \
   --set xtdbConfig.gcpBucket=<bucket_name>
 ```
 

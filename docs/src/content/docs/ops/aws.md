@@ -146,17 +146,17 @@ The Helm chart can be installed directly from the [**Github Container Registry**
 This will use the default configuration for the deployment, setting any required values as needed:
 
 ``` bash
-helm install xtdb-aws oci://ghcr.io/xtdb/helm-xtdb-aws
-  --version 2.0.0-snapshot
-  --namespace xtdb-deployment
-  --set xtdbConfig.serviceAccount="xtdb-service-account"
+helm install xtdb-aws oci://ghcr.io/xtdb/helm-xtdb-aws \
+  --version 2.0.0-snapshot \
+  --namespace xtdb-deployment \
+  --set xtdbConfig.serviceAccount="xtdb-service-account" \
   --set xtdbConfig.s3Bucket=<s3_bucket>
 ```
 
 We provide a number of parameters for configuring numerous parts of the deployment, see the [`values.yaml` file](https://github.com/xtdb/xtdb/tree/main/aws/helm) or call `helm show values`:
 
 ``` bash
-helm show values oci://ghcr.io/xtdb/helm-xtdb-aws
+helm show values oci://ghcr.io/xtdb/helm-xtdb-aws \
   --version 2.0.0-snapshot
 ```
 
@@ -173,8 +173,8 @@ By default, the following resources are deployed by the Helm chart:
 The chart can also be pulled from the **Github Container Registry**, allowing further configuration of the templates within:
 
 ``` bash
-helm pull oci://ghcr.io/xtdb/helm-xtdb-aws
-  --version 2.0.0-snapshot
+helm pull oci://ghcr.io/xtdb/helm-xtdb-aws \
+  --version 2.0.0-snapshot \
   --untar
 ```
 
