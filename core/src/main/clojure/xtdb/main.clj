@@ -138,6 +138,7 @@
                                       (handling-arg-errors-or-help))]
     (log/info "Starting in playground mode...")
     (util/with-open [_node ((requiring-resolve 'xtdb.pgwire/open-playground) {:port port})]
+      (log/info "Playground started")
       @(shutdown-hook-promise))))
 
 (def node-cli-spec
@@ -148,6 +149,7 @@
   (let [{{:keys [file]} :options} (-> (parse-args args node-cli-spec)
                                       (handling-arg-errors-or-help))]
     (util/with-open [_node ((requiring-resolve 'xtdb.node/start-node) (file->node-opts file))]
+      (log/info "Node started")
       @(shutdown-hook-promise))))
 
 (def reset-compactor-cli-spec
