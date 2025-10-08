@@ -152,16 +152,3 @@ Process crash logs into EDN format:
 
 Example: `./dev/read-crash-log-folder.sh /path/to/my-crash-logs` outputs to `/path/to/my-crash-logs/edn/`
 --
-
-== Arrow Fork
-
-We maintain a fork of https://github.com/apache/arrow-java[Arrow Java] to fix a couple of issues in `DenseUnionVector` and commits that haven't made it into an arrow release yet - see link:https://github.com/apache/arrow-java/compare/main...xtdb:arrow-java:main[this diff] for more details.
-Clone the https://github.com/xtdb/arrow-java[XTDB fork], add the https://github.com/apache/arrow-java[Arrow repo] as remote.
-
-To upgrade Arrow:
-
-* Usual bump in `build.gradle.kts`. You can skip this if you just want to add some tweaked files to xtdb.
-* Rebase `xtdb/main` on the upstream tag (in the arrow fork).
-* In xtdb, `./bin/rebuild-forked-arrow-files.sh`. You might need to update that script if you tweaked new files.
-* Test
-* Push (`--force-with-lease`) to XTDB fork, and commit to xtdb:main.
