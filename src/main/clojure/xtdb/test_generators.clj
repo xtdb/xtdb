@@ -279,3 +279,12 @@
                     (mapv (fn [{:keys [column-name data-type]}]
                             (types/col-type->field column-name (read-string data-type)))))]
     (field->value-generator (apply types/->field "docs" #xt.arrow/type :struct false fields))))
+
+(defn unique-table "Generate a unique table name and keyword for property tests."
+  ([]
+   (unique-table "docs"))
+  ([prefix]
+   (gen/let [table-suffix uuid-gen]
+     (let [table-name (str prefix "_" (str/replace (str table-suffix) #"-" "_"))]
+       {:table-name table-name
+        :table-kw (keyword table-name)}))))
