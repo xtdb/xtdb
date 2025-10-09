@@ -95,6 +95,9 @@ xtdbConfig:
     # (ENV_VAR_NAME: Value)
     XTDB_LOGGING_LEVEL: "info" # See https://docs.xtdb.com/ops/troubleshooting/overview.html
 
+  # Extra EnvFrom sources
+  envFrom: []
+
 startupProbe:
   httpGet:
     path: /healthz/started

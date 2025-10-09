@@ -50,6 +50,10 @@ spec:
               mountPath: "/var/lib/xtdb/buffers/"
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.xtdbConfig.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             - name: JDK_JAVA_OPTIONS
               value: {{ .Values.xtdbConfig.jdkOptions }}
