@@ -152,7 +152,7 @@
 
 (t/deftest ^:property multiple-patches-on-record
   (tu/run-property-test
-   {:num-tests (min tu/property-test-iterations 100)}
+   {:num-tests tu/property-test-iterations}
    (prop/for-all [records (gen/vector (tg/generate-record {:potential-doc-ids #{1}}) 1 20)]
                  (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
                                                    :compactor {:threads 0}})]
