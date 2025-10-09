@@ -11,7 +11,7 @@ import java.net.InetAddress
 @Serializable
 data class HealthzConfig(
     var host: InetAddress? = InetAddress.getLoopbackAddress(),
-    var port: Int = 8080
+    var port: Int = 0
 ) {
     fun host(host: InetAddress?) = apply { this.host = host }
     fun port(port: Int) = apply { this.port = port }
