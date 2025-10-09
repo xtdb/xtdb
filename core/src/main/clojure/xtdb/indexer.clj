@@ -33,7 +33,7 @@
            (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            (xtdb.database Database Database$Catalog)
            (xtdb.error Anomaly$Caller Interrupted)
-           (xtdb.indexer Indexer Indexer$ForDatabase LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
+           (xtdb.indexer Indexer Indexer$ForDatabase Indexer$TxSink LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
            (xtdb.query IQuerySource PreparedQuery)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -619,8 +619,13 @@
              :metrics-registry (ig/ref :xtdb.metrics/registry)}
             opts)})
 
+(defn- commit [tx-key ^LiveIndex$Tx live-idx-tx ^Indexer$TxSink tx-sink]
+  (.commit live-idx-tx)
+  (some-> tx-sink (.onCommit tx-key live-idx-tx)))
+
 (defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
                                ^Database db, ^LiveIndex live-index, table-catalog
+                               tx-sink
                                ^Timer tx-timer
                                ^Counter tx-error-counter]
   Indexer$ForDatabase
@@ -651,7 +656,7 @@
             (when tx-error-counter
               (.increment tx-error-counter))
             (add-tx-row! db-name live-idx-tx tx-key err)
-            (.commit live-idx-tx))
+            (commit tx-key live-idx-tx tx-sink))
 
           (serde/->tx-aborted msg-id default-system-time err))
 
@@ -663,7 +668,7 @@
                 (.abort live-idx-tx)
                 (util/with-open [live-idx-tx (.startTx live-index tx-key)]
                   (add-tx-row! db-name live-idx-tx tx-key skipped-exn)
-                  (.commit live-idx-tx))
+                  (commit tx-key live-idx-tx tx-sink))
 
                 (serde/->tx-aborted msg-id system-time skipped-exn))
 
@@ -720,32 +725,33 @@
                       (when tx-error-counter
                         (.increment tx-error-counter))
                       (add-tx-row! db-name live-idx-tx tx-key e)
-                      (.commit live-idx-tx))
+                      (commit tx-key live-idx-tx tx-sink))
 
                     (serde/->tx-aborted msg-id system-time e))
 
                   (do
                     (add-tx-row! db-name live-idx-tx tx-key nil)
-                    (.commit live-idx-tx)
+                    (commit tx-key live-idx-tx tx-sink)
                     (serde/->tx-committed msg-id system-time))))))))))
 
   (addTxRow [_ tx-key e]
     (util/with-open [live-idx-tx (.startTx live-index tx-key)]
       (add-tx-row! (.getName db) live-idx-tx tx-key e)
-      (.commit live-idx-tx))))
+      (commit tx-key live-idx-tx tx-sink))))
 
 (defmethod ig/init-key :xtdb/indexer [_ {:keys [config, q-src, metrics-registry]}]
   (let [tx-timer (metrics/add-timer metrics-registry "tx.op.timer"
                                     {:description "indicates the timing and number of transactions"})
         tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
     (reify Indexer
-      (openForDatabase [_ db]
+      (openForDatabase [_ db tx-sink]
         (util/with-close-on-catch [allocator (-> (.getAllocator db) (util/->child-allocator (str "indexer/" (.getName db))))]
           ;; TODO add db-name to allocator gauge
           (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
 
           (->IndexerForDatabase allocator (:node-id config) q-src
                                 db (.getLiveIndex db) (.getTableCatalog db)
+                                tx-sink
                                 tx-timer tx-error-counter)))
 
       (close [_]))))
@@ -755,11 +761,12 @@
 
 (defmethod ig/expand-key ::for-db [k {:keys [base]}]
   {k {:base base
-      :query-db (ig/ref :xtdb.db-catalog/for-query)}})
+      :query-db (ig/ref :xtdb.db-catalog/for-query)
+      :tx-sink (ig/ref :xtdb/tx-sink)}})
 
 (defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base,
-                                    :keys [query-db]}]
-  (.openForDatabase indexer query-db))
+                                    :keys [query-db tx-sink]}]
+  (.openForDatabase indexer query-db tx-sink))
 
 (defmethod ig/halt-key! ::for-db [_ indexer-for-db]
   (util/close indexer-for-db))

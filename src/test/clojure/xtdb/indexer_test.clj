@@ -620,7 +620,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
               tx-ops [[:put-docs :public/foo {:xt/id 3, :version 0}]
                       [:put-docs :public/foo {:xt/id 4, :version 0}]]]
 
-          (with-open [db-idxer (.openForDatabase idxer (db/primary-db node))
+          (with-open [db-idxer (.openForDatabase idxer (db/primary-db node) nil)
                       live-idx-tx (.startTx live-idx (serde/->TxKey 1 Instant/EPOCH))
                       live-table-tx (.liveTable live-idx-tx #xt/table foo)
                       query-rel (Relation/openFromRows al [{:foo "bar", :baz 32}, {:foo "baz", :baz 64}])
