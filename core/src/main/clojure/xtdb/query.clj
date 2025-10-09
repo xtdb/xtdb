@@ -427,6 +427,10 @@
     (when-not (.tryClose ref-ctr (Duration/ofMinutes 1))
       (log/warn "Failed to shut down after 60s due to outstanding queries"))
 
+    ;; Clear the plan cache itself
+    (.invalidateAll plan-cache)
+    (.cleanUp plan-cache)
+
     (util/close allocator)))
 
 (defmethod ig/prep-key ::query-source [_ opts]
