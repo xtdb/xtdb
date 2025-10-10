@@ -16,6 +16,7 @@ export default defineConfig({
 
             social: [
                 { icon: 'github', label: 'GitHub', href: 'https://github.com/xtdb/xtdb' },
+                { icon: 'discord', label: 'Discord', href: 'https://discord.gg/xtdb' },
             ],
 
             favicon: '/shared/favicon.svg',
@@ -31,13 +32,12 @@ export default defineConfig({
                 { label: '← 1.x docs', link: 'https://v1-docs.xtdb.com', attrs: { target: '_blank' } },
 
                 {
-                    label: 'Introduction',
+                    label: 'Getting Started',
                     collapsed: true,
                     items: [
                         'index',
                         'quickstart/sql-overview',
                         'intro/installation-via-docker',
-                        { label: 'Community', link: '/intro/community' },
                         {
                             label: 'Industry Use-cases',
                             collapsed: true,
@@ -66,6 +66,15 @@ export default defineConfig({
                             ],
                         },
                     ],
+                },
+
+                {
+                    label: 'About XTDB',
+                    collapsed: true,
+                    items: [
+                        { label: 'Mission', link: '/about/mission' },
+                        { label: 'Community', link: '/intro/community' },
+                    ]
                 },
 
                 {
@@ -205,11 +214,9 @@ export default defineConfig({
                     label: 'Appendices',
                     collapsed: true,
                     items: [
-                        { label: 'Mission', link: '/intro/why-xtdb' },
                         { label: 'XTDB at a glance', link: '/intro/what-is-xtdb' },
                         { label: 'Key Concepts', link: '/concepts/key-concepts' },
                         { label: 'How XTDB works', link: '/intro/data-model' },
-                        // { label: 'Bitemporality', link: '/intro/bitemporality' }
                     ],
                 },
             ],
