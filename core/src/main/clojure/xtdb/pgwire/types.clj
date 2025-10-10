@@ -601,14 +601,22 @@
                :typcategory :user-defined
                :typsend "byteasend"
                :typreceive "bytearecv"
-               :read-text (fn [_env ba] ba)
+               ;; Use PostgreSQL hex format (\x<hex>) for text encoding to avoid escape format issues.
+               ;; See: https://www.postgresql.org/docs/current/datatype-binary.html
+               :read-text (fn [_env ba]
+                            ;; Decode hex format from client parameters
+                            (let [s (read-utf8 ba)]
+                              (if (str/starts-with? s "\\x")
+                                (Hex/decodeHex (.substring s 2))
+                                ba)))
                :read-binary (fn [_env ba] (ByteBuffer/wrap ba)
                               (throw (UnsupportedOperationException.)))
                :write-text (fn [_env ^VectorReader rdr idx]
                              (let [bb (.getBytes rdr idx)
                                    ba ^bytes (byte-array (.remaining bb))]
                                (.get bb ba)
-                               ba))
+                               ;; Encode as hex format for client results
+                               (utf8 (str "\\x" (Hex/encodeHexString ba)))))
                :write-binary (fn [_env ^VectorReader rdr idx]
                                (let [bb (.getBytes rdr idx)
                                      ba ^bytes (byte-array (.remaining bb))]

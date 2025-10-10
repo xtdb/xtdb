@@ -2283,6 +2283,11 @@ ORDER BY t.oid DESC LIMIT 1"
       (t/is (= [{:v "dollar $quoted$ string"}] (q conn ["SELECT $$dollar $quoted$ string$$ AS v"]))
             "dollar quoted string"))))
 
+(deftest test-varbinary-escaped-4793
+  (let [^bytes ba (byte-array [92])]
+    (with-open [conn (jdbc-conn)]
+      (t/is (Arrays/equals ba ^bytes (:v (first (jdbc/execute! conn ["SELECT X('5c') AS v"]))))
+            "reading varbinary result"))))
 
 (t/deftest test-patch
   (with-open [conn (jdbc-conn)]
