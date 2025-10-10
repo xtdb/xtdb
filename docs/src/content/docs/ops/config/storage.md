@@ -104,6 +104,7 @@ A persistent storage implementation that:
 :::note
 When using a remote storage implementation as part of a distributed cluster of XTDB nodes, we **must** ensure that all nodes are able to efficiently communicate the stream of file changes they make to the remote storage.
 We achieve this inter-node messaging using a [**remote log**](log#Remote) implementation.
+:::
 
 ``` yaml
 storage: !Remote
