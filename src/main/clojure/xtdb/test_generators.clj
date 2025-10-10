@@ -61,12 +61,11 @@
 (def duration-gen (gen/return #xt/duration "PT1S"))
 (def interval-gen (gen/return #xt/interval "P1YT1S"))
 
-;; Exclude varbinary generators due to issue #4793
 (def simple-type-gens
   [nil-gen bool-gen
    i8-gen i16-gen i32-gen i64-gen
    f64-gen decimal-gen
-   utf8-gen #_varbinary-gen
+   utf8-gen varbinary-gen
    keyword-gen uuid-gen uri-gen
    instant-gen local-date-gen local-time-gen
    local-datetime-gen offset-datetime-gen zoned-datetime-gen
