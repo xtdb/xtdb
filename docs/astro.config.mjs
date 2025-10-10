@@ -34,27 +34,10 @@ export default defineConfig({
                     label: 'Introduction',
                     collapsed: true,
                     items: [
-                        'index', 'quickstart/sql-overview', 'intro/installation-via-docker',
-
+                        'index',
+                        'quickstart/sql-overview',
+                        'intro/installation-via-docker',
                         { label: 'Community', link: '/intro/community' },
-                    ],
-                },
-
-                {
-                    label: 'Tutorials',
-                    collapsed: true,
-                    items: [
-                        {
-                            label: 'Immutability Walkthrough',
-                            collapsed: true,
-                            items: [
-                                'tutorials/immutability-walkthrough/part-1',
-                                'tutorials/immutability-walkthrough/part-2',
-                                'tutorials/immutability-walkthrough/part-3',
-                                'tutorials/immutability-walkthrough/part-4'
-                            ],
-                        },
-
                         {
                             label: 'Industry Use-cases',
                             collapsed: true,
@@ -72,11 +55,21 @@ export default defineConfig({
                                 },
                             ],
                         },
+                        {
+                            label: 'Immutability Walkthrough',
+                            collapsed: true,
+                            items: [
+                                'tutorials/immutability-walkthrough/part-1',
+                                'tutorials/immutability-walkthrough/part-2',
+                                'tutorials/immutability-walkthrough/part-3',
+                                'tutorials/immutability-walkthrough/part-4'
+                            ],
+                        },
                     ],
                 },
 
                 {
-                    label: 'Drivers',
+                    label: 'Client Drivers',
                     collapsed: true,
                     items: [
                         { label: 'Overview', link: '/drivers' },
@@ -90,16 +83,13 @@ export default defineConfig({
                 },
 
                 {
-                    label: 'Reference',
+                    label: 'SQL Reference',
                     collapsed: true,
                     items: [
                         { label: 'Overview', link: '/reference/main' },
-
                         { label: 'SQL Transactions/DML', link: '/reference/main/sql/txs' },
                         { label: 'SQL Queries', link: '/reference/main/sql/queries' },
-
                         { label: 'Data Types', link: '/reference/main/data-types' },
-
                         {
                             label: 'Standard Library',
                             collapsed: true,
@@ -118,17 +108,34 @@ export default defineConfig({
                 },
 
                 {
-                    label: 'Operations',
+                    label: 'Server Operations',
                     collapsed: true,
                     items: [
                         {
-                            label: 'Guides',
+                            label: 'Cloud Deployment',
                             collapsed: true,
                             items: [
-                                'ops/guides/starting-with-aws',
-                                'ops/guides/starting-with-azure',
-                                'ops/guides/starting-with-gcp',
-                                'ops/guides/monitoring-with-grafana'
+                                {
+                                    label: 'AWS',
+                                    items: [
+                                        { label: 'Setup guide', link: '/ops/guides/starting-with-aws' },
+                                        { label: 'Reference', link: '/ops/aws' },
+                                    ]
+                                },
+                                {
+                                    label: 'Azure',
+                                    items: [
+                                        { label: 'Setup guide', link: '/ops/guides/starting-with-azure' },
+                                        { label: 'Reference', link: '/ops/azure' },
+                                    ]
+                                },
+                                {
+                                    label: 'GCP',
+                                    items: [
+                                        { label: 'Setup guide', link: '/ops/guides/starting-with-gcp' },
+                                        { label: 'Reference', link: '/ops/google-cloud' },
+                                    ]
+                                },
                             ],
                         },
                         {
@@ -136,8 +143,7 @@ export default defineConfig({
                             collapsed: true,
                             items: [
                                 { label: 'Overview', link: '/ops/config' },
-                                'ops/config/clojure',
-
+                                { label: 'Databases', link: '/ops/config/databases' },
                                 {
                                     label: 'Log',
                                     items: [
@@ -145,34 +151,36 @@ export default defineConfig({
                                         { label: 'Kafka', link: '/ops/config/log/kafka' },
                                     ],
                                 },
-
                                 { label: 'Storage', link: '/ops/config/storage' },
-                                { label: 'Monitoring & Observability', link: '/ops/config/monitoring' },
-                                {
-                                    label: 'Authentication',
-                                    items: [
-                                        { label: 'Overview', link: '/ops/config/authentication' },
-                                             { label: 'OpenID Connect', link: '/ops/config/authentication/oidc' },
-                                    ],
-                                }
+                                { label: 'Clojure config cookbook', link: '/ops/config/clojure' },
                             ]
                         },
-                        { label: 'AWS', link: '/ops/aws' },
-                        { label: 'Azure', link: '/ops/azure' },
-                        { label: 'Google Cloud', link: '/ops/google-cloud' },
-                        { 
+                        {
+                            label: 'Authentication',
+                            items: [
+                                { label: 'Overview', link: '/ops/config/authentication' },
+                                { label: 'OpenID Connect', link: '/ops/config/authentication/oidc' },
+                            ],
+                        },
+                        {
                             label: 'Backup and Restore',
                             items: [
                                 { label: 'Overview', link: '/ops/backup-and-restore/overview' },
                                 { label: 'Out of Sync Log & Intact Storage', link: '/ops/backup-and-restore/out-of-sync-log' },
-                                
                             ]
                         },
                         { label: 'Maintenance', link: '/ops/maintenance' },
+                        {
+                            label: 'Monitoring & Observability',
+                            items: [
+                                { label: 'Guide: Monitoring with Grafana', link: '/ops/guides/monitoring-with-grafana' },
+                                { label: 'Reference', link: '/ops/config/monitoring' },
+                            ]
+                        },
                         { label: 'Troubleshooting', link: '/ops/troubleshooting' },
-
                     ]
                 },
+
                 {
                     label: 'XTQL',
                     collapsed: true,
@@ -192,6 +200,7 @@ export default defineConfig({
                         }
                     ]
                 },
+
                 {
                     label: 'Appendices',
                     collapsed: true,
