@@ -72,8 +72,9 @@ export default defineConfig({
                     label: 'About XTDB',
                     collapsed: true,
                     items: [
-                        { label: 'Mission', link: '/about/mission' },
-                        { label: 'Community', link: '/intro/community' },
+                        'about/mission',
+                        'about/time-in-xtdb',
+                        { label: 'Community', link: '/intro/community'}
                     ]
                 },
 
