@@ -56,4 +56,4 @@ The two languages are able to interoperate with 100% parity, meaning application
 - Advanced temporal querying allows you to analyze the evolution of your data.
 - Deploy across your choice of cloud database services or on-premise to meet reliability and redundancy requirements.
 
-Through each of these interconnected principles and features XTDB solves the [motivating problems](/intro/why-xtdb) in a single, coherent system.
+Through each of these interconnected principles and features XTDB solves the [motivating problems](/about/mission) in a single, coherent system.
