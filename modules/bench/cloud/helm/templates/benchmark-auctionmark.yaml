@@ -13,6 +13,7 @@ spec:
   completions: 1
   {{- end }}
   backoffLimit: 1
+  ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished | default 0 }}
   template:
     metadata:
       labels:

@@ -8,6 +8,7 @@ spec:
   parallelism: 1
   completions: 1
   backoffLimit: 1
+  ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished | default 0 }}
   template:
     metadata:
       labels:

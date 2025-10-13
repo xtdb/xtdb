@@ -11,6 +11,12 @@ auctionmark:
 tpch:
   scaleFactor: 0.01
 
+# Kubernetes Job settings
+job:
+  # Time-to-live for Jobs after they finish (in seconds)
+  # Set to 0 to disable cleanup by TTL controller
+  ttlSecondsAfterFinished: 3600
+
 readings:
   devices: 10000
   readings: 10000
