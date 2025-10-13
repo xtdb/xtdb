@@ -154,7 +154,7 @@ export default defineConfig({
                             collapsed: true,
                             items: [
                                 { label: 'Overview', link: '/ops/config' },
-                                { label: 'Databases', link: '/ops/config/databases' },
+                                // { label: 'Databases', link: '/ops/config/databases' },
                                 {
                                     label: 'Log',
                                     items: [
@@ -168,6 +168,7 @@ export default defineConfig({
                         },
                         {
                             label: 'Authentication',
+                            collapsed: true,
                             items: [
                                 { label: 'Overview', link: '/ops/config/authentication' },
                                 { label: 'OpenID Connect', link: '/ops/config/authentication/oidc' },
@@ -175,6 +176,7 @@ export default defineConfig({
                         },
                         {
                             label: 'Backup and Restore',
+                            collapsed: true,
                             items: [
                                 { label: 'Overview', link: '/ops/backup-and-restore/overview' },
                                 { label: 'Out of Sync Log & Intact Storage', link: '/ops/backup-and-restore/out-of-sync-log' },
@@ -183,6 +185,7 @@ export default defineConfig({
                         { label: 'Maintenance', link: '/ops/maintenance' },
                         {
                             label: 'Monitoring & Observability',
+                            collapsed: true,
                             items: [
                                 { label: 'Guide: Monitoring with Grafana', link: '/ops/guides/monitoring-with-grafana' },
                                 { label: 'Reference', link: '/ops/config/monitoring' },
@@ -218,7 +221,6 @@ export default defineConfig({
                     items: [
                         { label: 'XTDB at a glance', link: '/intro/what-is-xtdb' },
                         { label: 'Key Concepts', link: '/concepts/key-concepts' },
-                        { label: 'How XTDB works', link: '/intro/data-model' },
                     ],
                 },
             ],
