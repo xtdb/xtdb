@@ -23,18 +23,18 @@ slack_subteam_label = "@xtdb-team"
 
 # Anomaly detection parameters (used by Logic App)
 anomaly_logic_app_name     = "xtdb-benchmark-anomaly"
-anomaly_alert_enabled      = false
+anomaly_alert_enabled      = true
 anomaly_repo               = "xtdb/xtdb"
-anomaly_schedule_frequency = "Hour"
+anomaly_schedule_frequency = "Day"
 anomaly_schedule_interval  = 1
 anomaly_baseline_n         = 20    # previous N runs for baseline
-anomaly_sigma              = 0.01  # 2σ threshold
+anomaly_sigma              = 2.0   # 2σ threshold
 anomaly_scale_factor       = 1.0   # The scale factor to select on
 anomaly_timespan           = "P30D"
 
 missing_alert_evaluation_frequency = "P1D"
 missing_alert_window_duration      = "P2D"
-missing_alert_enabled              = false
+missing_alert_enabled              = true
 missing_alert_severity             = 2
 
 dashboard_name = "xtdb-benchmark-dashboard"
