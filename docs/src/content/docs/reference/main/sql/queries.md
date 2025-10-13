@@ -384,7 +384,7 @@ return rr.Diagram(rr.Choice(0, begin, 'COMMIT', 'ROLLBACK'))
 * A transaction may be either `READ ONLY` or `READ WRITE`.
   If not specified, it will be inferred from the first statement in the transaction.
 
-  Transactions must not mix read-only and mutable statements.
+  Transactions must not mix query statements and [DML](https://en.wikipedia.org/wiki/Data_manipulation_language) statements.
 * Additionally, for read-only transactions:
   * `SNAPSHOT_TOKEN` and `CLOCK_TIME` behave the same as in [`SETTING`](#setting).
   * `AWAIT_TOKEN` may be provided to wait for a specific transaction to be visible on the queried node before starting the transaction.

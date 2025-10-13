@@ -178,7 +178,7 @@ return rr.Diagram(rr.Choice(0, begin, 'COMMIT', 'ROLLBACK'))
 * A transaction may be either `READ ONLY` or `READ WRITE`.
   If not specified, it will be inferred from the first statement in the transaction.
 
-  Transactions must not mix read-only and mutable statements.
+  Transactions must not mix query statements and [DML](https://en.wikipedia.org/wiki/Data_manipulation_language) statements.
 * Additionally, for read-write transactions:
   * `SYSTEM_TIME` overrides the system-time of the transaction, used for an initial backfill of the database.
     It must not be earlier than any other transaction that has been submitted to the database.

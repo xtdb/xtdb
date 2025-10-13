@@ -6,26 +6,37 @@ This article describes how transactions and consistency work in XTDB.
 
 Being a 'log-centric database', it differs from traditional RDBMSs in a couple of key ways:
 
-1. Transactions are non-interactive - either read-only or mutating.
+1. Transactions that perform writes ("[DML](https://en.wikipedia.org/wiki/Data_manipulation_language) transactions") to the database are non-interactive.
 
-   When you submit a transaction to XTDB, internally, it wraps up the transaction operations and sends them as an atomic message on a shared log.
+   When you submit a transaction containing [DML](https://en.wikipedia.org/wiki/Data_manipulation_language) statements to XTDB, internally, it wraps up the transaction operations and sends them as an atomic message on a shared log.
    
-   Within a transaction, your operations can still read the current state of the database (e.g. `UPDATE table SET version = version + 1 WHERE _id = ?`) - just that you can't mix read queries like `SELECT` which return results and mutations like `UPDATE` or `DELETE` in the same transaction.
+   Within a transaction, your operations can still read the current state of the database (e.g. `UPDATE table SET version = version + 1 WHERE _id = ?`) - but you can't mix query statements (e.g. `SELECT`) which return results and DML statements (e.g. `INSERT`/`UPDATE`/`DELETE`/`ERASE`) in the same transaction.
    
-   (If you do need this behaviour, see [`ASSERT`](/reference/main/sql/txs#assert))
+   (Where you need to check invariants before committing a DML transaction, see [`ASSERT`](/reference/main/sql/txs#assert))
 
-2. All mutable transactions are serialized via a totally-ordered log.
+2. All transactions that perform writes are serialized via a totally-ordered durable log.
 
    This means that XT, internally, has very little locking - this gives us excellent per-thread performance, as well as removing a whole category of bugs/errors.
+   
+   Combined, these two properties provide straightforward [ACID](https://en.wikipedia.org/wiki/ACID) guarantees.
 
-In more detail, XTDB is heavily inspired by the 'Epochal Time Model', coined in Clojure and Datomic author Rich Hickey's talk 'Database as a Value'[^1]:
-[^1]: https://www.infoq.com/presentations/database-value/
+In more detail, XTDB is heavily inspired by the 'Epochal Time Model', as outlined in Clojure and Datomic author Rich Hickey's talk 'The Database as a Value'[^1]:
+[^1]: https://www.infoq.com/presentations/Datomic-Database-Value/
 
 ![Epochal Time Model](/images/docs/epochal-time-model.webp)
 
-## Transaction consistency:
+## Transaction consistency
 
-Mutable transactions in XTDB are serialized via a totally-ordered log - these are then indexed in order, one at a time, on each of the nodes.
+A transaction may be explicitly specified as either `READ ONLY` (a "read-only transaction") or `READ WRITE` (a "DML transaction").
+If not specified, this distinction is inferred from the first statement in the transaction after a `BEGIN`.
+
+A DML transaction may contain only DML statements and ASSERT statements.
+Transactions are not interactive, and they describe changes atomically.
+
+Within a DML transaction, statements are evaluated sequentially, so later statements see the effects of earlier ones.
+Any attempt to (e.g.) SELECT within such a transaction will result in an error.
+
+DML transactions in XTDB are serialized via a totally-ordered log - these are then indexed in order, one at a time, on each of the nodes.
 As a result, they are trivially consistent to the highest isolation level - 'serializable'.
 
 On the read-side, within a connection, queries are guaranteed to at least see the results of every transaction submitted through that connection.
@@ -55,13 +66,20 @@ SET AWAIT_TOKEN = 'CgsKBHh0ZGISAwoBAQ==';
 
 This await-token represents a lower-bound of the transactions that must be available on the queried node before the queries are evaluated.
 
-## Repeatable queries - 'basis':
+## Repeatable queries - 'basis'
 
-Every read-only query in XTDB is evaluated at a 'basis' - both a 'snapshot' of the database, which determines the transactions visible to the query, and a 'clock time'.
+Every query statement in XTDB is evaluated at a 'basis' - both a 'snapshot' of the database, which determines the transactions visible to the query, and a 'clock time'.
+
+A read-only transaction (which may only contain query statements), is cheap to create and can be used to easily execute multiple query statements against a consistent basis.
+
+A read-only transaction is not executed as a stateful transaction in the traditional sense.
+Instead, it simply defines a long-lived, stable basis context that provides a consistent view of the database at a specific snapshot in time.
+
+Crucially, use of read-only transactions does not require locking or risk degrading performance of concurrent reads and writes.
 
 For more details, see the ['basis' reference documentation](/reference/main/sql/queries#basis).
 
-### Snapshots:
+### Snapshots
 
 No matter what else is going on in the database at the time, your query will only see a consistent state of the database as of that precise snapshot.
 This snapshot is fixed at the start of your transaction - all queries within a given transaction use the same snapshot.

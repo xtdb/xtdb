@@ -58,7 +58,7 @@ If a row is considered current 'until further notice', the 'system to' column is
 
 So, the timeline of our above entity would be represented in a unitemporal database table as follows:
 
-- Insert at T1 - adds a new row for version 1 with _system_from of T1 and _system_to of null:
+- Insert at T1 - adds a new row for version 1 with `_system_from` of T1 and `_system_to` of null:
 
   | _id | _system_from | _system_to | version |
   |-|-|-|-|
