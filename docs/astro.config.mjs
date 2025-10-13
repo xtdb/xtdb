@@ -74,6 +74,7 @@ export default defineConfig({
                     items: [
                         'about/mission',
                         'about/time-in-xtdb',
+                        'about/txs-in-xtdb',
                         { label: 'Community', link: '/intro/community'}
                     ]
                 },

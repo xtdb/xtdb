@@ -151,3 +151,42 @@ return rr.Diagram(rr.Stack(
   For more details on the Transit format, see the [available libraries](https://github.com/cognitect/transit-format?tab=readme-ov-file#implementations) for your language.
 - On the JVM, you can use Postgres's [`CopyManager`](https://jdbc.postgresql.org/documentation/publicapi/org/postgresql/copy/CopyManager.html) with an XTDB connection by calling `conn.unwrap(PGConnection.class).getCopyAPI()`.
 - In the Clojure API, `:put-docs` uses `COPY` commands on your behalf.
+
+### BEGIN / COMMIT / ROLLBACK
+
+```railroad
+const eq = rr.Optional('=')
+
+const tz = rr.Sequence(rr.Choice(0, 'TIMEZONE', rr.Sequence('TIME', 'ZONE')), eq, '<timezone>')
+
+const ro = rr.Sequence("READ", "ONLY", '...')
+
+const rwOpts = rr.Choice(0, 
+  rr.Skip(),
+  rr.Sequence('SYSTEM_TIME', eq, '<timestamp>'), 
+  rr.Sequence('ASYNC', eq, '<boolean>'),
+  tz
+)
+
+const rw = rr.Sequence("READ", "WRITE", rr.Optional(rr.Sequence("WITH", "(", rr.OneOrMore(rwOpts, ","), ")"), "skip"))
+
+const begin = rr.Sequence('BEGIN', rr.Optional(rr.Choice(0, ro, rw), 'skip'))
+
+return rr.Diagram(rr.Choice(0, begin, 'COMMIT', 'ROLLBACK'))
+```
+
+* A transaction may be either `READ ONLY` or `READ WRITE`.
+  If not specified, it will be inferred from the first statement in the transaction.
+
+  Transactions must not mix read-only and mutable statements.
+* Additionally, for read-write transactions:
+  * `SYSTEM_TIME` overrides the system-time of the transaction, used for an initial backfill of the database.
+    It must not be earlier than any other transaction that has been submitted to the database.
+    Otherwise, the system-time of the transaction will be defined by the log.
+  * `ASYNC` affects whether the connection will wait for the transaction to be indexed before returning from `COMMIT`.
+    If not provided, it defaults to `false` - i.e. the connection will wait for the transaction to be indexed before returning.
+  * `TIMEZONE` sets the time zone for the duration of the transaction, affecting any time zone-aware date/time literals and functions.
+    If not provided, it defaults to the time-zone of the connection.
+* N.B. `READ WRITE` is a misnomer in XTDB here - this is to align with standard SQL syntax.
+  XTDB doesn't have interactive read-write transactions, so any attempt to (e.g.) `SELECT` in this transaction will error.
+* For read-only transactions, see the [query reference](/reference/main/sql/queries#begin--commit--rollback).

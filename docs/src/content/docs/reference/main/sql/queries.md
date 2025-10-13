@@ -19,18 +19,6 @@ At the top-level, XTDB SQL queries augment the SQL standard in the following way
 
     e.g. for `SELECT a, SUM(b) FROM foo`, XT will infer `GROUP BY a`
 
-```railroad
-const asOf = rr.Sequence("AS", "OF", "<timestamp>")
-const fromTo = rr.Sequence("FROM", "<timestamp>", "TO", "<timestamp>")
-const between = rr.Sequence("BETWEEN", "<timestamp>", "AND", "<timestamp>")
-const timePeriodOpts = rr.Choice(0, asOf, fromTo, between, "ALL")
-
-const defaultTimePeriods = rr.Sequence("DEFAULT", rr.Choice(0, "VALID_TIME", "SYSTEM_TIME"), rr.Optional("TO", "skip"), timePeriodOpts)
-const basis = rr.Sequence(rr.Choice(0, "SNAPSHOT_TOKEN", "CURRENT_TIME"), rr.Choice(0, "TO", "="), "<timestamp>")
-const setting = rr.Sequence("SETTING", rr.OneOrMore(rr.Choice(0, defaultTimePeriods, basis), ","))
-return rr.Diagram(rr.Sequence(rr.Optional(setting, "skip"), "<query>"))
-```
-
 ### query
 
 ```railroad
@@ -166,6 +154,15 @@ const timePeriodOpts = rr.Choice(0, asOf, fromTo, between, "ALL")
 const timePeriod = rr.Choice(0, "VALID_TIME", "SYSTEM_TIME")
 return rr.Diagram(rr.Sequence("FOR", rr.Choice(0, rr.Sequence(timePeriod, timePeriodOpts), rr.Sequence("ALL", timePeriod))))
 ```
+
+The valid-time/system-time filters for a given table take precedence as follows:
+
+1. Any explicit specifications in the `FROM` clause.
+2. Any options passed to the `SETTING` clause of the given query (see ['Basis'](#basis)).
+3. Any options passed to the `BEGIN` clause of the current transaction (see ['Basis'](#basis)).
+4. Then as follows:
+   * System time defaults to 'as best known' - the latest processed transaction on the queried node.
+   * Valid time defaults to 'as of now' - the clock time taken either from `CLOCK_TIME` (if overridden) or the actual clock time on the queried node.
 
 ## Expressions
 
@@ -329,3 +326,70 @@ Nested sub-queries allow you to easily create tree-shaped results, using `NEST_M
     }
   ]
   ```
+
+## Basis
+
+Queries in XTDB run against a 'basis', which consists of:
+
+1. a 'snapshot' - an upper bound on the transactions that are visible to the query.
+2. a 'clock time' - used for any function calls that reference the current time (e.g. `CURRENT_TIMESTAMP`)
+
+These can be set either on a per-query basis, using `SETTING`, or at the start of a transaction, using `BEGIN`:
+
+### SETTING
+
+```railroad
+const asOf = rr.Sequence("AS", "OF", "<timestamp>")
+const fromTo = rr.Sequence("FROM", "<timestamp>", "TO", "<timestamp>")
+const between = rr.Sequence("BETWEEN", "<timestamp>", "AND", "<timestamp>")
+const timePeriodOpts = rr.Choice(0, asOf, fromTo, between, "ALL")
+
+const defaultTimePeriods = rr.Sequence("DEFAULT", rr.Choice(0, "VALID_TIME", "SYSTEM_TIME"), rr.Optional("TO", "skip"), timePeriodOpts)
+const basis = rr.Sequence(rr.Choice(0, "SNAPSHOT_TOKEN", "CLOCK_TIME"), rr.Choice(0, "TO", "="), "<timestamp>")
+const setting = rr.Sequence("SETTING", rr.OneOrMore(rr.Choice(0, defaultTimePeriods, basis), ","))
+return rr.Diagram(rr.Sequence(rr.Optional(setting, "skip"), "<query>"))
+```
+
+* Setting the default valid-time/system-time applies to any `FROM` clause that doesn't have any valid-time/system-time specification explicitly set.
+* Setting the `SNAPSHOT_TOKEN` enforces an upper-bound on the transactions visible to the query - i.e. no matter what the per-table system-time clauses specify, they will not see anything newer than this snapshot-token.
+  If not provided, this defaults to the latest-completed transaction on the queried node.
+* Setting the `CLOCK_TIME` defines a fixed value for any functions that depend on the current time - e.g. `CURRENT_TIMESTAMP`.
+  It also defines the default valid-time selection for any tables in `FROM` clauses that don't otherwise have a valid-time specification.
+  If not provided, it defaults to the clock-time fixed at the start of the transaction.
+  
+### BEGIN / COMMIT / ROLLBACK
+
+```railroad
+const eq = rr.Optional('=')
+
+const tz = rr.Sequence(rr.Choice(0, 'TIMEZONE', rr.Sequence('TIME', 'ZONE')), eq, '<timezone>')
+
+const roOpts = rr.Choice(0, 
+  rr.Skip(),
+  rr.Sequence('SNAPSHOT_TOKEN', eq, '<snapshot token>'), 
+  rr.Sequence('CLOCK_TIME', eq, '<timestamp>'),
+  rr.Sequence('AWAIT_TOKEN', eq, '<await token>'),
+  tz
+)
+
+const ro = rr.Sequence("READ", "ONLY", rr.Optional(rr.Sequence("WITH", "(", rr.OneOrMore(roOpts, ","), ")"), "skip"))
+
+const rw = rr.Sequence("READ", "WRITE", '...')
+
+const begin = rr.Sequence('BEGIN', rr.Optional(rr.Choice(0, ro, rw), 'skip'))
+
+return rr.Diagram(rr.Choice(0, begin, 'COMMIT', 'ROLLBACK'))
+```
+
+* A transaction may be either `READ ONLY` or `READ WRITE`.
+  If not specified, it will be inferred from the first statement in the transaction.
+
+  Transactions must not mix read-only and mutable statements.
+* Additionally, for read-only transactions:
+  * `SNAPSHOT_TOKEN` and `CLOCK_TIME` behave the same as in [`SETTING`](#setting).
+  * `AWAIT_TOKEN` may be provided to wait for a specific transaction to be visible on the queried node before starting the transaction.
+    If not provided, it defaults to waiting for the latest-submitted transaction on the current connection.
+  * `TIMEZONE` sets the time zone for the duration of the transaction, affecting any time zone-aware date/time literals and functions.
+    If not provided, it defaults to the time-zone of the connection.
+* For read-write transactions, see the [transaction reference](/reference/main/sql/txs#begin--commit--rollback).
+* Committing/rolling back a read-only transaction has no effect in XTDB, because readers never block writers nor each other.
