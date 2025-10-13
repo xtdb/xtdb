@@ -28,6 +28,10 @@ Some set a 'deleted' flag on the rows (a 'soft delete').
 
 When they query the database, they have to bear these workarounds in mind - filtering out rows that are no longer valid. Often, they forget!
 
+On the surface, XTDB [behaves like an atemporal database](#bitemporality-in-xtdb). 
+No more "you can't delete this row, you have to set a flag", "if you change this row, make sure you make a copy of the original", "you can't 'just' query this table", though - you're allowed to use `SELECT` `UPDATE`, and `DELETE` again, as they were intended!
+Then, when you really _need_ it, the full temporal history remains available and easily queryable.
+
 ### System time
 
 Let's introduce the first temporal dimension: 'system time'.
@@ -95,8 +99,107 @@ Valid time is the second temporal dimension, making the database **'bitemporal'*
 
 In practice, valid time is often represented with 'valid from' and 'valid to' columns (in addition to 'system from' and 'system to'), which represent the time range during which a particular version of a row is considered valid in the real world.
 
+With system-time, we talked about entities each having a read-only 'timeline' - with valid-time, each entity gains another, _user-editable_ timeline.
+
+#### A worked example
+
+Let's take the case of Mike's address:
+
+- Initially, he lives at 123 London Road:
+
+  ```sql
+  INSERT INTO addresses RECORDS {_id: 'mike', address: '123 London Road'};
+
+  -- using XT's `RECORDS` syntax here - you might otherwise see:
+  INSERT INTO addresses (_id, address) VALUES ('mike', '123 London Road');
+  ```
+  
+- On 13th August, he tells us that 'with effect from 1st September' (that magic phrase!), his address will be 84 Bank Street:
+
+  ```sql
+  UPDATE addresses FOR VALID_TIME FROM TIMESTAMP '2025-09-01Z' 
+  SET address = '84 Bank Street' 
+  WHERE _id = 'mike';
+  ```
+  
+- Then, on 20th August, we send him a letter, so we need to know his address:
+
+  ```sql
+  SELECT address FROM addresses WHERE _id = 'mike';
+  -- => '123 London Road'
+
+  -- Here, we implicitly queried 'for system-time as best known, for valid-time as of now'.
+
+  -- We could have additionally requested `_valid_from` and `_valid_to`:
+  
+  SELECT address, _valid_from, _valid_to FROM addresses WHERE _id = 'mike';
+  -- => '123 London Road', from '2019-11-18', to '2025-09-01'
+  
+  ```
+
+  Obviously, we've still got to hope the letter gets there on time!
+
+- We could also have queried:
+
+  ```sql
+  -- 1. into the future:
+
+  SELECT address, _valid_from, _valid_to 
+  FROM addresses FOR VALID_TIME AS OF TIMESTAMP '2025-12-01Z'
+  WHERE _id = 'mike';
+
+  -- => '84 Bank Street', from '2025-09-01', until corrected (represented as _valid_to = 'null')
+  
+
+  -- 2. for all valid-time:
+
+  SELECT address, _valid_from, _valid_to 
+  FROM addresses FOR ALL VALID_TIME
+  WHERE _id = 'mike';
+
+  -- => '123 London Road', from '2019-11-18', to '2025-09-01'
+  -- => '84 Bank Street',  from '2025-09-01', until corrected
+  ```
+  
+#### Behind the scenes
+  
+Behind the scenes, XTDB is maintaining both the system-time and valid-time timelines for Mike's address.
+
+If you were to ask for _everything_, you'd see something like this:
+
+```sql
+SELECT *, _system_from, _system_to, _valid_from, _valid_to 
+FROM addresses FOR ALL SYSTEM_TIME FOR ALL VALID_TIME 
+WHERE _id = 'mike';
+```
+
+```
+|------|-----------------|--------------|------------|-------------|------------|
+| _id  | address         | _system_from | _system_to | _valid_from | _valid_to  |
+|------|-----------------|--------------|------------|-------------|------------|
+| mike | 123 London Road | 2019-11-18   | 2025-08-13 | 2019-11-18  | ∞          | (1)
+| mike | 123 London Road | 2025-08-13   | ∞          | 2019-11-18  | 2025-09-01 | (2)
+| mike | 84 Bank Street  | 2025-08-13   | ∞          | 2025-09-01  | ∞          | (3)
+|------|-----------------|--------------|------------|-------------|------------|
+```
+
+1. The first row shows that, until 13th August, we believed that Mike's address was going to be 123 London Road until further notice.
+2. From 13th August, we knew that Mike's address was 123 London Road, but we also knew that this was only going to be the case until 1st September.
+3. From 13th August, we also knew that Mike's address would be 84 Bank Street, from 1st September until further notice.
+
+#### In practice
+
+In practice, the vast majority of queries will use the system-time default, 'as best known'. 
+Within those, again, the vast majority will likely use the valid-time default, 'as of now'.
+
+When you are looking to query back in time, consider: 'do I want to see corrections?'.
+
+- Most use cases will want to see those corrections ('as best known') - they don't care that data arrived late and had to be backfilled, or whether there were errors in the initial inserts - they want corrected data.
+  In these cases, use `FOR VALID_TIME ...` to see the curated valid-time timeline.
+- Some use cases (e.g. auditing) will need to see the data 'as we knew it at the time', _without_ subsequent corrections - this is the use case for `FOR SYSTEM_TIME AS OF ...`, to see the immutable system-time timeline.
+
 You might also hear valid-time referred to as 'business time', 'domain time', 'application time', 'event time', or 'effective time'.
-Thank goodness for consistency!
+Hooray for consistency!
 
 ### Bitemporality in XTDB
 
@@ -170,5 +273,3 @@ So, for most of the time, for most of your requirements, you can use XTDB like a
 XTDB makes this simple everyday behaviour _easy_ and _fast_, and a wide range of harder bitemporal queries _possible_.
 
 For a detailed specification of the available bitemporal syntax in XTDB, see the SQL [transaction](/reference/main/sql/txs) and [query](/reference/main/sql/queries) reference documentation.
-
-<!-- TODO Basis -->
