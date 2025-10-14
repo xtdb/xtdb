@@ -183,6 +183,60 @@
                                   expected-ids (into #{} (map :xt/id (concat records1 records2)))]
                               (= expected-ids (into #{} (map :xt/id res)))))))))))
 
+(t/deftest ^:property delete-records-across-flush-boundaries
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [records (gen/vector (tg/generate-record) 1 10)
+                  flush-after-put? tg/bool-gen
+                  flush-after-delete? tg/bool-gen]
+                 (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
+                                                   :compactor {:threads 0}})]
+                   (xt/execute-tx node [(into [:put-docs :docs] records)])
+                   (when flush-after-put? (tu/flush-block! node))
+                   
+                   (xt/execute-tx node [(into [:delete-docs :docs] (mapv :xt/id records))])
+                   (when flush-after-delete? (tu/flush-block! node))
+
+                   (and
+                    (t/testing "two transactions recorded"
+                      (= 2 (count (xt/q node "FROM xt.txs"))))
+                    (t/testing "documents present in past"
+                      (= (count records)
+                         (count (xt/q node "SELECT * FROM docs FOR VALID_TIME AS OF TIMESTAMP '2020-01-01T00:00:00.000Z'"))))
+                    (t/testing "no documents present"
+                      (empty? (xt/q node "SELECT * FROM docs"))))))))
+
+(t/deftest ^:property delete-and-re-add-record-across-flush-boundaries
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [record1 (tg/generate-record {:potential-doc-ids #{1}})
+                  record2 (tg/generate-record {:potential-doc-ids #{1}})
+                  flush-after-put? tg/bool-gen
+                  flush-after-delete? tg/bool-gen
+                  flush-after-readd? tg/bool-gen]
+                 (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
+                                                   :compactor {:threads 0}})]
+                   (xt/execute-tx node [[:put-docs :docs record1]])
+                   (when flush-after-put? (tu/flush-block! node))
+
+                   (xt/execute-tx node [[:delete-docs :docs 1]])
+                   (when flush-after-delete? (tu/flush-block! node))
+
+                   (xt/execute-tx node [[:put-docs :docs record2]])
+                   (when flush-after-readd? (tu/flush-block! node))
+
+                   (and 
+                    (t/testing "three transactions recorded"
+                      (= 3 (count (xt/q node "FROM xt.txs"))))
+                    (t/testing "querying period where document was deleted returns no results"
+                      (empty? (xt/q node "SELECT * FROM docs FOR VALID_TIME AS OF TIMESTAMP '2020-01-02T00:00:00.000Z' WHERE _id = 1")))
+                    (t/testing "document should have 2 elements in history"
+                      (let [res (xt/q node "SELECT *, _valid_from FROM docs FOR VALID_TIME ALL")]
+                        (= 2 (count res))))
+                    (t/testing "last document is present"
+                      (= (tg/normalize-for-comparison (tu/remove-nils record2))
+                         (tg/normalize-for-comparison (first (xt/q node "SELECT * FROM docs"))))))))))
+
 (t/deftest ^:property mixed-ops-across-boundaries
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
