@@ -6,7 +6,7 @@ import clojure.lang.PersistentHashMap
 
 class Unavailable(
     message: String?, data: IPersistentMap = PersistentHashMap.EMPTY, cause: Throwable? = null
-) : Anomaly(message, data, cause) {
+) : Anomaly(message, Anomaly.ensureCategory(data, UNAVAILABLE), cause) {
 
     companion object {
         internal val UNAVAILABLE = Keyword.intern("cognitect.anomalies", "unavailable")

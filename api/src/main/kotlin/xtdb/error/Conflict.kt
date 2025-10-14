@@ -6,7 +6,7 @@ import clojure.lang.PersistentHashMap
 
 class Conflict(
     message: String?, data: IPersistentMap = PersistentHashMap.EMPTY, cause: Throwable? = null
-) : Anomaly.Caller(message, data, cause) {
+) : Anomaly.Caller(message, Anomaly.ensureCategory(data, CONFLICT), cause) {
 
     companion object {
         internal val CONFLICT = Keyword.intern("cognitect.anomalies", "conflict")

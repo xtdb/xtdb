@@ -6,7 +6,7 @@ import clojure.lang.PersistentHashMap
 
 class Busy(
     message: String?, data: IPersistentMap = PersistentHashMap.EMPTY, cause: Throwable? = null
-) : Anomaly(message, data, cause) {
+) : Anomaly(message, Anomaly.ensureCategory(data, BUSY), cause) {
     companion object {
         internal val BUSY = Keyword.intern("cognitect.anomalies", "busy")
     }
