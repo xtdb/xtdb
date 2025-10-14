@@ -6,7 +6,7 @@ import clojure.lang.PersistentHashMap
 
 class Forbidden(
     message: String?, data: IPersistentMap = PersistentHashMap.EMPTY, cause: Throwable? = null
-) : Anomaly.Caller(message, data, cause) {
+) : Anomaly.Caller(message, Anomaly.ensureCategory(data, FORBIDDEN), cause) {
     companion object {
         internal val FORBIDDEN = Keyword.intern("cognitect.anomalies", "forbidden")
     }
