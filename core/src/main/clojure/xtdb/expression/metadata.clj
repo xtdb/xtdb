@@ -43,20 +43,16 @@
     nil))
 
 (defn- minmax-expr [f min-or-max {col :variable} value-expr]
-  (-> {:op :call, :f :or
-       :args (for [value-type (-> (case (:op value-expr)
-                                    :literal (vw/value->col-type (:literal value-expr))
-                                    :param (:param-type value-expr))
-                                  types/flatten-union-types)
-                   :let [flavour-class (MetadataFlavour/getMetadataFlavour (st/->arrow-type value-type))]]
-               (if (.isAssignableFrom MetadataFlavour$Numeric flavour-class)
-                 {:op :test-minmax, :f f, :min-or-max min-or-max, :col col
-                  :flavour-col (MetadataFlavour/getMetaColName flavour-class)
-
-                  :value-expr value-expr
-                  :double-sym (gensym 'meta-double)}
-                 {:op :literal, :literal true}))}
-      simplify-and-or-expr))
+  (let [val-sym (gensym 'val)
+        dbl-sym (gensym 'meta-dbl)]
+    {:op :let, :local val-sym, :expr value-expr
+     :body {:op :let, :local dbl-sym
+            :expr {:op :call, :f :_meta_double
+                   :args [{:op :local, :local val-sym}]}
+            :body {:op :test-minmax
+                   :min-or-max min-or-max, :f f, :col col
+                   :val-sym val-sym
+                   :dbl-sym dbl-sym}}}))
 
 (defn- bloom-expr [{col :variable} value-expr]
   (-> {:op :call, :f :or
@@ -202,24 +198,27 @@
 (defmethod expr/codegen-call [:_meta_double :duration] [{[[_duration ts-unit]] :arg-types}]
   {:return-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
 
-(defmethod expr/codegen-expr :test-minmax [{:keys [f min-or-max col flavour-col value-expr]} opts]
-  (let [col-name (str col)
-        col-sym (gensym 'meta_col)
-        val-sym (gensym 'val)
+(defmethod expr/codegen-call [:_meta_double :any] [_]
+  {:return-type :null, :->call-code (fn [& _args] nil)})
 
-        md-expr (expr/codegen-expr {:op :call, :f :_meta_double, :args [value-expr]} opts)]
-    {:return-type :bool
-     :children [md-expr]
-     :batch-bindings [[(-> col-sym (expr/with-tag VectorReader))
-                       `(some-> (.vectorForOrNull ~col-rdr-sym ~flavour-col)
-                                (.vectorForOrNull ~(name min-or-max)))
-                       val-sym ((:continue md-expr) (fn [_type code] code))]]
-     :continue (fn [cont]
-                 (cont :bool
-                       `(boolean
-                         (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~col-name ~page-idx-sym)]
-                           (when (and ~col-sym (>= ~expr/idx-sym 0) (not (.isNull ~col-sym ~expr/idx-sym)))
-                             (~(symbol f) (.getDouble ~col-sym ~expr/idx-sym) ~val-sym))))))}))
+(defmethod expr/codegen-expr :test-minmax [{:keys [f min-or-max col val-sym dbl-sym]} opts]
+  (case (get-in opts [:local-types dbl-sym])
+    :null {:return-type :bool, :continue (fn [cont] (cont :bool true))}
+
+    :f64 (let [col-name (str col)
+               col-sym (gensym 'meta_col)
+               val-type (get-in opts [:local-types val-sym])
+               flavour-col (MetadataFlavour/getMetaColName (MetadataFlavour/getMetadataFlavour (st/->arrow-type val-type)))]
+           {:return-type :bool,
+            :batch-bindings [[(-> col-sym (expr/with-tag VectorReader))
+                              `(some-> (.vectorForOrNull ~col-rdr-sym ~flavour-col)
+                                       (.vectorForOrNull ~(name min-or-max)))]]
+            :continue (fn [cont]
+                        (cont :bool
+                              `(boolean
+                                (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~col-name ~page-idx-sym)]
+                                  (when (and ~col-sym (>= ~expr/idx-sym 0) (not (.isNull ~col-sym ~expr/idx-sym)))
+                                    (~(symbol f) (.getDouble ~col-sym ~expr/idx-sym) ~dbl-sym))))))})))
 
 (defmethod ewalk/walk-expr :test-minmax [inner outer expr]
   (outer (-> expr (update :value-expr inner))))
