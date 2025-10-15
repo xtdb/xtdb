@@ -97,7 +97,7 @@ interface Compactor : AutoCloseable {
                             try {
                                 LOGGER.debug("compacting '${job.table.sym}' '${job.trieKeys}' -> ${job.outputTrieKey}")
 
-                                job.trieKeys.safeMap { open(bp, mm, job.table, it) }.useAll { segs ->
+                                job.trieKeys.safeMap { open(al, bp, mm, job.table, it) }.useAll { segs ->
 
                                     val recencyPartitioning =
                                         if (job.partitionedByRecency) SegmentMerge.RecencyPartitioning.Partition

@@ -11,10 +11,12 @@ import xtdb.bloom.bloomHashes
 import xtdb.bloom.contains
 import xtdb.operator.SelectionSpec
 import xtdb.segment.MergeTask
+import xtdb.segment.Segment
 import xtdb.time.TEMPORAL_COL_NAMES
 import xtdb.trie.ColumnName
 import xtdb.trie.EventRowPointer
 import xtdb.util.TemporalBounds
+import xtdb.util.closeAll
 import xtdb.util.safeMap
 import xtdb.util.useAll
 import xtdb.vector.MultiVectorRelationFactory
@@ -28,6 +30,7 @@ class ScanCursor(
     private val colNames: Set<ColumnName>, private val colPreds: Map<ColumnName, SelectionSpec>,
     private val temporalBounds: TemporalBounds,
 
+    private val segments: List<Segment<*>>,
     private val mergeTasks: Iterator<MergeTask>,
 
     private val schema: Map<String, Any>, private val args: RelationReader,
@@ -131,5 +134,5 @@ class ScanCursor(
         return false
     }
 
-    override fun close() = Unit
+    override fun close() = segments.closeAll()
 }

@@ -275,34 +275,35 @@
                                                                   (-> (basis/<-time-basis-str snapshot-token)
                                                                       (get-in [(.getName db) 0])))]
 
-                           (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))
-                                            !segments (LinkedList.)]
-                             (doseq [{:keys [^String trie-key]} (-> (cat/trie-state trie-catalog table)
-                                                                    (cat/current-tries)
-                                                                    (cat/filter-tries temporal-bounds))]
-                               (.add !segments
-                                     (BufferPoolSegment/open buffer-pool metadata-mgr table trie-key metadata-pred)))
+                           (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
+                             (util/with-close-on-catch [!segments (LinkedList.)]
+                               
+                               (doseq [{:keys [^String trie-key]} (-> (cat/trie-state trie-catalog table)
+                                                                      (cat/current-tries)
+                                                                      (cat/filter-tries temporal-bounds))]
+                                 (.add !segments
+                                       (BufferPoolSegment/open allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
 
-                             (when live-table-snap
-                               (.add !segments
-                                     (MemorySegment. (.getLiveTrie live-table-snap) (.getLiveRelation live-table-snap))))
+                               (when live-table-snap
+                                 (.add !segments
+                                       (MemorySegment. (.getLiveTrie live-table-snap) (.getLiveRelation live-table-snap))))
 
-                             (when template-table?
-                               (.add !segments
-                                     (let [[memory-rel trie] (info-schema/table-template info-schema table)]
-                                       (MemorySegment. trie memory-rel))))
+                               (when template-table?
+                                 (.add !segments
+                                       (let [[memory-rel trie] (info-schema/table-template info-schema table)]
+                                         (MemorySegment. trie memory-rel))))
 
-                             (let [merge-tasks (->> (MergePlanner/plan !segments (->path-pred iid-arrow-buf))
-                                                    (into [] (keep (fn [^MergeTask mt]
-                                                                     (when-let [pages (trie/filter-pages (.getPages mt) temporal-bounds)]
-                                                                       (MergeTask. pages (.getPath mt)))))))]
-                               (cond-> (ScanCursor. allocator col-names col-preds
-                                                    temporal-bounds
-                                                    (.iterator ^Iterable merge-tasks)
-                                                    schema args
-                                                    (when (and iid-set (> (count iid-set) 1))
-                                                      iid-pushdown-bloom))
-                                 explain-analyze? (ICursor/wrapExplainAnalyze))))))))}))))
+                               (let [merge-tasks (->> (MergePlanner/plan !segments (->path-pred iid-arrow-buf))
+                                                      (into [] (keep (fn [^MergeTask mt]
+                                                                       (when-let [pages (trie/filter-pages (.getPages mt) temporal-bounds)]
+                                                                         (MergeTask. pages (.getPath mt)))))))]
+                                 (cond-> (ScanCursor. allocator col-names col-preds
+                                                      temporal-bounds
+                                                      !segments (.iterator ^Iterable merge-tasks)
+                                                      schema args
+                                                      (when (and iid-set (> (count iid-set) 1))
+                                                        iid-pushdown-bloom))
+                                   explain-analyze? (ICursor/wrapExplainAnalyze)))))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-fields, param-fields]}]
   (assert db-cat)

@@ -20,7 +20,7 @@ import java.nio.file.Path
 import java.util.function.IntPredicate
 
 class BufferPoolSegment private constructor(
-    private val bp: BufferPool, override val pageMetadata: PageMetadata,
+    al: BufferAllocator, private val bp: BufferPool, override val pageMetadata: PageMetadata,
     table: TableRef, trieKey: TrieKey, val pageIdxPredicate: IntPredicate?,
 ) : Segment<ArrowHashTrie.Leaf> {
     val dataFilePath = table.dataFilePath(trieKey)
@@ -29,14 +29,16 @@ class BufferPoolSegment private constructor(
 
     override val schema: Schema = bp.getFooter(dataFilePath).schema
 
-    class Page(
+    private val dataRel = Relation(al, schema)
+    private var currentDataPageIndex: Int = -1
+
+    inner class Page(
         private val bp: BufferPool,
         val dataFilePath: Path, override val schema: Schema,
         val pageIndex: Int,
         val pageIdxPredicate: IntPredicate?,
         override val temporalMetadata: TemporalMetadata,
         private val resolveSameSystemTimeEvents: Boolean
-
     ) : Segment.Page {
 
         private var testMetadata: Boolean? = null
@@ -45,14 +47,14 @@ class BufferPoolSegment private constructor(
             testMetadata ?: (pageIdxPredicate?.test(pageIndex) ?: true).also { testMetadata = it }
 
         override fun openDataPage(al: BufferAllocator): RelationReader =
-            bp.getRecordBatch(dataFilePath, pageIndex).use { rb ->
-                Relation.fromRecordBatch(al, schema, rb)
-                    .let { standardRel ->
-                        if (resolveSameSystemTimeEvents)
-                            resolveSameSystemTimeEvents(al, standardRel)
-                                .also { standardRel.close() }
-                        else standardRel
-                    }
+            if (currentDataPageIndex == pageIndex) dataRel.openSlice(al)
+            else {
+                currentDataPageIndex = pageIndex
+                bp.getRecordBatch(dataFilePath, pageIndex).use { rb ->
+                    dataRel.apply { load(rb) }
+
+                    if (resolveSameSystemTimeEvents) resolveSameSystemTimeEvents(al, dataRel) else dataRel.openSlice(al)
+                }
             }
     }
 
@@ -69,22 +71,22 @@ class BufferPoolSegment private constructor(
             ).also { pages[dataPageIndex] = it }
     }
 
-    override fun close() = pageMetadata.close()
+    override fun close() {
+        dataRel.close()
+        pageMetadata.close()
+    }
 
     companion object {
 
         @JvmStatic
         @JvmOverloads
         fun open(
-            bp: BufferPool, mm: PageMetadata.Factory,
+            al: BufferAllocator, bp: BufferPool, mm: PageMetadata.Factory,
             table: TableRef, trieKey: TrieKey,
             metadataPredicate: MetadataPredicate? = null
         ) =
             mm.openPageMetadata(table.metaFilePath(trieKey)).closeOnCatch { pm ->
-                BufferPoolSegment(
-                    bp, pm, table, trieKey,
-                    metadataPredicate?.build(pm)
-                )
+                BufferPoolSegment(al, bp, pm, table, trieKey, metadataPredicate?.build(pm))
             }
     }
 }
