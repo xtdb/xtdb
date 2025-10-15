@@ -84,6 +84,8 @@ class PageMetadata private constructor(private val rel: Relation, private val pa
 
     val metadataLeafReader: VectorReader = rel["nodes"]["leaf"]
 
+    val pageCount get() = metadataLeafReader.valueCount
+
     private val minReader: VectorReader?
     private val maxReader: VectorReader?
 

@@ -27,10 +27,10 @@ import java.nio.file.Path
 import java.time.LocalDate
 import java.util.*
 import java.util.function.Predicate
-import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
-import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 import kotlin.io.path.deleteExisting
 import kotlin.math.min
+import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
+import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 
 private fun ByteArray.toPathPredicate() =
     Predicate<ByteArray> { pagePath ->
@@ -42,16 +42,13 @@ private fun ByteArray.toPathPredicate() =
  * A function to do bitemporal resolution for events with the same system-time (same transaction). See #4303
  */
 fun resolveSameSystemTimeEvents(
-    al: BufferAllocator,
-    dataReader: RelationReader,
-    path: ByteArray = byteArrayOf()
+    dataReader: RelationReader, relWriter: Relation, path: ByteArray = byteArrayOf()
 ): Relation {
     val isValidPtr = ArrowBufPointer()
     val startIidPtr = ArrowBufPointer()
     val curIidPtr = ArrowBufPointer()
     var curSystemFrom: Long
 
-    val relWriter = Relation(al, dataReader.schema)
     val iidVec = dataReader["_iid"].rowCopier(relWriter["_iid"])
     val sysFromVec = dataReader["_system_from"].rowCopier(relWriter["_system_from"])
     val validFromVec = relWriter["_valid_from"]
@@ -67,10 +64,9 @@ fun resolveSameSystemTimeEvents(
         evPtr.getIidPointer(startIidPtr)
         curSystemFrom = evPtr.systemFrom
 
-        while (evPtr.isValid(
-                isValidPtr,
-                path
-            ) && evPtr.systemFrom == curSystemFrom && startIidPtr == evPtr.getIidPointer(curIidPtr)
+        while (evPtr.isValid(isValidPtr, path)
+            && evPtr.systemFrom == curSystemFrom
+            && startIidPtr == evPtr.getIidPointer(curIidPtr)
         ) {
 
             when (val polygon = polygonCalculator.calculate(evPtr)) {
@@ -152,36 +148,34 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
         val path = path.let { if (pathFilter == null || it.size > pathFilter.size) it else pathFilter }
         val mergeQueue = PriorityQueue(Comparator.comparing(QueueElem::evPtr, EventRowPointer.comparator()))
 
-        pages
-            .safeMap { it.openDataPage(al) }
-            .useAll { rels ->
-                for (rel in rels) {
-                    val evPtr = EventRowPointer(rel, path)
-                    val rowCopier = outWriter.rowCopier(rel)
+        val rels = pages.map { it.loadDataPage(al) }
 
-                    if (evPtr.isValid(isValidPtr, path))
-                        mergeQueue.add(QueueElem(evPtr, rowCopier))
+        for (rel in rels) {
+            val evPtr = EventRowPointer(rel, path)
+            val rowCopier = outWriter.rowCopier(rel)
+
+            if (evPtr.isValid(isValidPtr, path))
+                mergeQueue.add(QueueElem(evPtr, rowCopier))
+        }
+
+        val polygonCalculator = PolygonCalculator()
+
+        while (true) {
+            val elem = mergeQueue.poll() ?: break
+            val (evPtr, rowCopier) = elem
+
+            polygonCalculator.calculate(evPtr)
+                ?.let { polygon ->
+                    rowCopier.copyRow(polygon.recency, evPtr.index)
                 }
 
-                val polygonCalculator = PolygonCalculator()
+            evPtr.nextIndex()
 
-                while (true) {
-                    val elem = mergeQueue.poll() ?: break
-                    val (evPtr, rowCopier) = elem
+            if (evPtr.isValid(isValidPtr, path))
+                mergeQueue.add(elem)
+        }
 
-                    polygonCalculator.calculate(evPtr)
-                        ?.let { polygon ->
-                            rowCopier.copyRow(polygon.recency, evPtr.index)
-                        }
-
-                    evPtr.nextIndex()
-
-                    if (evPtr.isValid(isValidPtr, path))
-                        mergeQueue.add(elem)
-                }
-
-                outWriter.endPage(ByteArrayList.from(*this.path))
-            }
+        outWriter.endPage(ByteArrayList.from(*this.path))
     }
 
     sealed interface RecencyPartitioning {
@@ -247,8 +241,7 @@ private class LocalSegment(
         override fun testMetadata() = true
         override val temporalMetadata get() = UNBOUND_TEMPORAL_METADATA
 
-        override fun openDataPage(al: BufferAllocator) =
-            dataLoader.loadPage(leaf.dataPageIndex, al).openSlice(al)
+        override fun loadDataPage(al: BufferAllocator) = dataLoader.loadPage(leaf.dataPageIndex, al)
     }
 
     override fun close() {

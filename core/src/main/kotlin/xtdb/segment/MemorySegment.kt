@@ -24,9 +24,7 @@ class MemorySegment(override val trie: MemoryHashTrie, val rel: RelationReader) 
 
         override val schema: Schema get() = this@MemorySegment.schema
 
-        private fun loadPage() = rel.select(leaf.mergeSort(trie))
-
-        override fun openDataPage(al: BufferAllocator) = loadPage().openSlice(al)
+        override fun loadDataPage(al: BufferAllocator) = rel.select(leaf.mergeSort(trie))
     }
 
     override fun page(leaf: MemoryHashTrie.Leaf) = Page(leaf)

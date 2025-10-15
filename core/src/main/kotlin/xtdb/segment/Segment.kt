@@ -23,7 +23,7 @@ interface Segment<L> : AutoCloseable {
         fun testMetadata(): Boolean
         val temporalMetadata: TemporalMetadata
 
-        fun openDataPage(al: BufferAllocator): RelationReader
+        fun loadDataPage(al: BufferAllocator): RelationReader
     }
 
     fun page(leaf: L): Page
