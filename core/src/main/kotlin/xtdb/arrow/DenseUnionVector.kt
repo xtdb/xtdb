@@ -107,8 +107,8 @@ class DenseUnionVector private constructor(
         })
 
         override fun openSlice(al: BufferAllocator): VectorReader =
-            typeBuffer.openSlice(al).closeOnCatch {
-                offsetBuffer.openSlice(al).closeOnCatch {
+            typeBuffer.openSlice(al).closeOnCatch { typeBuffer ->
+                offsetBuffer.openSlice(al).closeOnCatch { offsetBuffer ->
                     inner.openSlice(al).closeOnCatch { inner ->
                         LegReader(valueCount, typeBuffer, offsetBuffer, true, typeId, inner, nested)
                     }
