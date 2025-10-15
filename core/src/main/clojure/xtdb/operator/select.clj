@@ -16,11 +16,12 @@
 
 (defmethod lp/emit-expr :select [{:keys [predicate relation]} {:keys [param-fields] :as args}]
   (lp/unary-expr (lp/emit-expr relation args)
-    (fn [{inner-fields :fields, :as inner-rel}]
+    (fn [{inner-fields :fields, inner-stats :stats :as inner-rel}]
       (let [input-types {:col-types (update-vals inner-fields types/field->col-type)
                          :param-types (update-vals param-fields types/field->col-type)}
             selector (expr/->expression-selection-spec (expr/form->expr predicate input-types) input-types)]
         {:op :select
+         :stats inner-stats
          :children [inner-rel]
          :explain  {:predicate (pr-str predicate)}
          :fields inner-fields
