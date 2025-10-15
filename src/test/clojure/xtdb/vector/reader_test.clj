@@ -96,3 +96,13 @@
                                                    (tg/vec-gen->arrow-vec tu/*allocator* vec-gen)
                                                    field-types)]
                    promoted-vec))))
+
+(t/deftest ^:property multiple-open-slice-calls
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [vec-gen tg/vector-vs-gen
+                  open-slice-count (gen/choose 1 10)]
+                 (with-open [^Vector src-vec1 (tg/vec-gen->arrow-vec tu/*allocator* vec-gen)]
+                   (let [slices (repeatedly open-slice-count #(.openSlice src-vec1 tu/*allocator*))] 
+                     (and (every? #(vectors-equal? src-vec1 %) slices)
+                          (every? #(do (.close ^Vector %) true) slices)))))))
