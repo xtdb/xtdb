@@ -294,8 +294,8 @@
 
                              (let [merge-tasks (->> (MergePlanner/plan !segments (->path-pred iid-arrow-buf))
                                                     (into [] (keep (fn [^MergeTask mt]
-                                                                     (when-let [leaves (trie/filter-meta-objects (.getPages mt) temporal-bounds)]
-                                                                       (MergeTask. leaves (.getPath mt)))))))]
+                                                                     (when-let [pages (trie/filter-pages (.getPages mt) temporal-bounds)]
+                                                                       (MergeTask. pages (.getPath mt)))))))]
                                (cond-> (ScanCursor. allocator col-names col-preds
                                                     temporal-bounds
                                                     (.iterator ^Iterable merge-tasks)

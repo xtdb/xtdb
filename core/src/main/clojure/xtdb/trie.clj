@@ -8,7 +8,7 @@
            (java.time LocalDate)
            (java.util ArrayList)
            (xtdb.log.proto TrieDetails TrieMetadata TrieState)
-           (xtdb.operator.scan Metadata)
+           xtdb.segment.Segment$Page
            (xtdb.trie MemoryHashTrie MemoryHashTrie$Node MemoryHashTrie$Branch MemoryHashTrie$Leaf Trie Trie$Key)
            (xtdb.util Temporal TemporalBounds TemporalDimension)))
 
@@ -91,48 +91,48 @@
         (.setPageLimit page-limit))
       (.build)))
 
-(defn filter-meta-objects
-  ([meta-objects] (filter-meta-objects meta-objects (TemporalBounds.)))
-  ([meta-objects ^TemporalBounds query-bounds]
+(defn filter-pages
+  ([pages] (filter-pages pages (TemporalBounds.)))
+  ([pages ^TemporalBounds query-bounds]
    (let [leaves (ArrayList.)]
-     (loop [[^Metadata meta-obj & more-meta-objs] meta-objects
+     (loop [[^Segment$Page page & more-pages] pages
             smallest-valid-from Long/MAX_VALUE
             largest-valid-to Long/MIN_VALUE
             smallest-system-from Long/MAX_VALUE
-            non-taken-meta-objects []]
-       (if meta-obj
-         (let [temporal-metadata (.getTemporalMetadata meta-obj)
+            non-taken-pages []]
+       (if page
+         (let [temporal-metadata (.getTemporalMetadata page)
                take-node? (and (Temporal/intersects temporal-metadata query-bounds)
-                               (.testMetadata meta-obj))]
+                               (.testMetadata page))]
            (if take-node?
              (do
-               (.add leaves meta-obj)
-               (recur more-meta-objs
+               (.add leaves page)
+               (recur more-pages
                       (min smallest-valid-from (.getMinValidFrom temporal-metadata))
                       (max largest-valid-to (.getMaxValidTo temporal-metadata))
                       (min smallest-system-from (.getMinSystemFrom temporal-metadata))
-                      non-taken-meta-objects))
+                      non-taken-pages))
 
-             (recur more-meta-objs
+             (recur more-pages
                     smallest-valid-from
                     largest-valid-to
                     smallest-system-from
-                    (cond-> non-taken-meta-objects
+                    (cond-> non-taken-pages
                       (Temporal/intersectsSystemTime temporal-metadata query-bounds)
-                      (conj meta-obj)))))
+                      (conj page)))))
 
          (when (seq leaves)
            (let [valid-time (TemporalDimension. smallest-valid-from largest-valid-to)]
-             (loop [[^Metadata meta-obj & meta-objects] non-taken-meta-objects]
-               (when meta-obj
-                 (let [temporal-metadata (.getTemporalMetadata meta-obj)
+             (loop [[^Segment$Page page & more-pages] non-taken-pages]
+               (when page
+                 (let [temporal-metadata (.getTemporalMetadata page)
                        obj-largest-system-from (.getMaxSystemFrom temporal-metadata)]
                    (when (and (<= smallest-system-from obj-largest-system-from)
                               (.intersects (TemporalDimension. (.getMinValidFrom temporal-metadata)
                                                                (.getMaxValidTo temporal-metadata))
                                            valid-time))
-                     (.add leaves meta-obj))
-                   (recur meta-objects)))))
+                     (.add leaves page))
+                   (recur more-pages)))))
            (vec leaves)))))))
 
 (defn- <-MemoryHashTrieNode [^MemoryHashTrie$Node node]
