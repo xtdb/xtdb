@@ -46,14 +46,20 @@ class BufferPoolSegment private constructor(
         override fun testMetadata() =
             testMetadata ?: (pageIdxPredicate?.test(pageIndex) ?: true).also { testMetadata = it }
 
-        override fun openDataPage(al: BufferAllocator): RelationReader =
-            if (currentDataPageIndex == pageIndex) dataRel.openSlice(al)
+        override fun loadDataPage(al: BufferAllocator): RelationReader =
+            if (currentDataPageIndex == pageIndex) dataRel
             else {
                 currentDataPageIndex = pageIndex
                 bp.getRecordBatch(dataFilePath, pageIndex).use { rb ->
-                    dataRel.apply { load(rb) }
+                    if (resolveSameSystemTimeEvents) {
+                        dataRel.clear()
 
-                    if (resolveSameSystemTimeEvents) resolveSameSystemTimeEvents(al, dataRel) else dataRel.openSlice(al)
+                        Relation.fromRecordBatch(al, schema, rb).use { inRel ->
+                            resolveSameSystemTimeEvents(inRel, dataRel)
+                        }
+                    } else {
+                        dataRel.apply { load(rb) }
+                    }
                 }
             }
     }

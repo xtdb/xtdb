@@ -61,72 +61,72 @@ class ScanCursor(
 
             Relation(al).use { outRel ->
                 val bitemporalConsumer = BitemporalConsumer(outRel, colNames)
-                task.pages.safeMap { it.openDataPage(al) }.useAll { loadedPages ->
-                    val leafReaders = loadedPages.map { it.maybeSelect(iidPred) }
+                val loadedPages = task.pages.map { it.loadDataPage(al) }
 
-                    val (temporalCols, contentCols) = colNames.groupBy { it in TEMPORAL_COL_NAMES }
-                        .let { it[true] to it[false] }
+                val leafReaders = loadedPages.map { it.maybeSelect(iidPred) }
 
-                    val contentRelFactory = MultiVectorRelationFactory(leafReaders, colNames.toList())
+                val (temporalCols, contentCols) = colNames.groupBy { it in TEMPORAL_COL_NAMES }
+                    .let { it[true] to it[false] }
 
-                    val skipBloomCheck = iidPushdownBloom == null || "_iid" !in colNames
+                val contentRelFactory = MultiVectorRelationFactory(leafReaders, colNames.toList())
 
-                    leafReaders.forEachIndexed { idx, leafReader ->
-                        val evPtr = EventRowPointer(leafReader, taskPath)
-                        if (!evPtr.isValid(isValidPtr, taskPath)) return@forEachIndexed
-                        val passesBloomFilter =
-                            skipBloomCheck || checkBloomFilter(leafReader, evPtr.index, iidPushdownBloom)
-                        if (passesBloomFilter) mergeQueue.add(LeafPointer(evPtr, idx))
-                    }
+                val skipBloomCheck = iidPushdownBloom == null || "_iid" !in colNames
 
-                    while (true) {
-                        val leafPtr = mergeQueue.poll() ?: break
-                        val evPtr = leafPtr.evPtr
+                leafReaders.forEachIndexed { idx, leafReader ->
+                    val evPtr = EventRowPointer(leafReader, taskPath)
+                    if (!evPtr.isValid(isValidPtr, taskPath)) return@forEachIndexed
+                    val passesBloomFilter =
+                        skipBloomCheck || checkBloomFilter(leafReader, evPtr.index, iidPushdownBloom)
+                    if (passesBloomFilter) mergeQueue.add(LeafPointer(evPtr, idx))
+                }
 
-                        polygonCalculator.calculate(evPtr)
-                            ?.takeIf { evPtr.op == "put" }
-                            ?.let { polygon ->
-                                val sysFrom = evPtr.systemFrom
-                                val idx = evPtr.index
+                while (true) {
+                    val leafPtr = mergeQueue.poll() ?: break
+                    val evPtr = leafPtr.evPtr
 
-                                repeat(polygon.validTimeRangeCount) { i ->
-                                    val validFrom = polygon.getValidFrom(i)
-                                    val validTo = polygon.getValidTo(i)
-                                    val sysTo = polygon.getSystemTo(i)
+                    polygonCalculator.calculate(evPtr)
+                        ?.takeIf { evPtr.op == "put" }
+                        ?.let { polygon ->
+                            val sysFrom = evPtr.systemFrom
+                            val idx = evPtr.index
 
-                                    if (
-                                        temporalBounds.intersects(validFrom, validTo, sysFrom, sysTo)
-                                        && validFrom != validTo && sysFrom != sysTo
-                                    ) {
-                                        contentRelFactory.accept(leafPtr.relIdx, idx)
-                                        bitemporalConsumer.accept(validFrom, validTo, sysFrom, sysTo)
-                                        outRel.endRow()
-                                    }
+                            repeat(polygon.validTimeRangeCount) { i ->
+                                val validFrom = polygon.getValidFrom(i)
+                                val validTo = polygon.getValidTo(i)
+                                val sysTo = polygon.getSystemTo(i)
+
+                                if (
+                                    temporalBounds.intersects(validFrom, validTo, sysFrom, sysTo)
+                                    && validFrom != validTo && sysFrom != sysTo
+                                ) {
+                                    contentRelFactory.accept(leafPtr.relIdx, idx)
+                                    bitemporalConsumer.accept(validFrom, validTo, sysFrom, sysTo)
+                                    outRel.endRow()
                                 }
                             }
-
-                        evPtr.nextIndex()
-
-                        if (evPtr.isValid(isValidPtr, taskPath)) mergeQueue.add(leafPtr)
-                    }
-
-                    val rel = contentRelFactory.realize()
-                        .let { rel ->
-                            if (contentCols.isNullOrEmpty() || !temporalCols.isNullOrEmpty())
-                                RelationReader.concatCols(rel, outRel.asReader)
-                            else rel
-                        }
-                        .let { rel ->
-                            colPreds.entries.asSequence()
-                                .filterNot { it.key == "_iid" }
-                                .map { it.value }
-                                .fold(rel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args)) }
                         }
 
-                    if (rel.rowCount > 0) {
-                        c.accept(rel)
-                        return true
+                    evPtr.nextIndex()
+
+                    if (evPtr.isValid(isValidPtr, taskPath)) mergeQueue.add(leafPtr)
+                }
+
+                val rel = contentRelFactory.realize()
+                    .let { rel ->
+                        if (contentCols.isNullOrEmpty() || !temporalCols.isNullOrEmpty())
+                            RelationReader.concatCols(rel, outRel.asReader)
+                        else rel
                     }
+                    .let { rel ->
+                        colPreds.entries.asSequence()
+                            .filterNot { it.key == "_iid" }
+                            .map { it.value }
+                            .fold(rel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args)) }
+                    }
+
+                if (rel.rowCount > 0) {
+                    c.accept(rel)
+                    return true
                 }
             }
         }
