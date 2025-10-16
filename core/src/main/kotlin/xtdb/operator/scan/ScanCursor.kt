@@ -6,9 +6,6 @@ import xtdb.ICursor
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.bitemporal.PolygonCalculator
-import xtdb.bloom.BloomFilter
-import xtdb.bloom.bloomHashes
-import xtdb.bloom.contains
 import xtdb.operator.SelectionSpec
 import xtdb.segment.MergeTask
 import xtdb.segment.Segment
@@ -17,8 +14,6 @@ import xtdb.trie.ColumnName
 import xtdb.trie.EventRowPointer
 import xtdb.util.TemporalBounds
 import xtdb.util.closeAll
-import xtdb.util.safeMap
-import xtdb.util.useAll
 import xtdb.vector.MultiVectorRelationFactory
 import java.util.*
 import java.util.Comparator.comparing
@@ -33,8 +28,7 @@ class ScanCursor(
     private val segments: List<Segment<*>>,
     private val mergeTasks: Iterator<MergeTask>,
 
-    private val schema: Map<String, Any>, private val args: RelationReader,
-    private val iidPushdownBloom: BloomFilter?
+    private val schema: Map<String, Any>, private val args: RelationReader
 ) : ICursor {
 
     override val cursorType get() = "scan"
@@ -44,11 +38,6 @@ class ScanCursor(
 
     private fun RelationReader.maybeSelect(iidPred: SelectionSpec?) =
         if (iidPred != null) select(iidPred.select(al, this, this@ScanCursor.schema, args)) else this
-
-    private fun checkBloomFilter(leafReader: RelationReader, eventIndex: Int, bloomFilter: BloomFilter): Boolean {
-        val iidCol = leafReader.vectorForOrNull("_iid") ?: return true
-        return bloomFilter.contains(bloomHashes(iidCol, eventIndex))
-    }
 
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
         val isValidPtr = ArrowBufPointer()
@@ -70,14 +59,10 @@ class ScanCursor(
 
                 val contentRelFactory = MultiVectorRelationFactory(leafReaders, colNames.toList())
 
-                val skipBloomCheck = iidPushdownBloom == null || "_iid" !in colNames
-
                 leafReaders.forEachIndexed { idx, leafReader ->
                     val evPtr = EventRowPointer(leafReader, taskPath)
                     if (!evPtr.isValid(isValidPtr, taskPath)) return@forEachIndexed
-                    val passesBloomFilter =
-                        skipBloomCheck || checkBloomFilter(leafReader, evPtr.index, iidPushdownBloom)
-                    if (passesBloomFilter) mergeQueue.add(LeafPointer(evPtr, idx))
+                    mergeQueue.add(LeafPointer(evPtr, idx))
                 }
 
                 while (true) {

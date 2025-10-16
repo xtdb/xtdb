@@ -250,8 +250,7 @@
                        (if (and derived-table-schema (not template-table?))
                          (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args)
 
-                         (let [iid-pushdown-bloom (get pushdown-blooms '_iid)
-                               iid-set (get pushdown-iids '_iid)
+                         (let [iid-set (get pushdown-iids '_iid)
                                iid-bb (or (selects->iid-byte-buffer selects args)
                                           (when (and iid-set (= (count iid-set) 1))
                                             (first iid-set)))
@@ -300,9 +299,7 @@
                                  (cond-> (ScanCursor. allocator col-names col-preds
                                                       temporal-bounds
                                                       !segments (.iterator ^Iterable merge-tasks)
-                                                      schema args
-                                                      (when (and iid-set (> (count iid-set) 1))
-                                                        iid-pushdown-bloom))
+                                                      schema args)
                                    explain-analyze? (ICursor/wrapExplainAnalyze)))))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-fields, param-fields]}]

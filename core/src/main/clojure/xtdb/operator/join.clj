@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
+            [clojure.string :as str]
             [clojure.walk :as walk]
             [xtdb.expression :as expr]
             [xtdb.expression.map :as emap]
@@ -169,11 +170,11 @@
     (let [build-rel (.getDataRel build-side)
           build-key-col-names (vec (.getKeyColNames build-side))]
       (dotimes [col-idx (count build-key-col-names)]
-        (let [build-col-name (nth build-key-col-names col-idx)
-              build-col (.vectorForOrNull build-rel (str build-col-name))
+        (let [^String build-col-name (nth build-key-col-names col-idx)
+              build-col (.vectorForOrNull build-rel build-col-name)
               ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
           (dotimes [build-idx (.getRowCount build-rel)]
-            (when (and pushdown-iids (= (name build-col-name) "_iid"))
+            (when (and pushdown-iids (str/ends-with? build-col-name "_iid"))
               (.add pushdown-iids (.getBytes build-col build-idx)))
             (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))
 

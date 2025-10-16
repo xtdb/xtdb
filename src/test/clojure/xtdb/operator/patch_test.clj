@@ -28,6 +28,23 @@
              :xt/valid-from (time/->zdt #inst "2020-01-02")}]
            (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _id, _valid_from"))))
 
+(t/deftest test-multi-entity-patch-sql
+  (xt/execute-tx tu/*node* [[:put-docs :foo
+                             {:xt/id 1, :a 1, :b 2}
+                             {:xt/id 5}]])
+
+  (xt/execute-tx tu/*node* ["PATCH INTO foo RECORDS {_id: 1, c: 3}, {_id: 2, a: 4, b: 5}"])
+
+  (t/is (= [{:xt/id 1, :a 1, :b 2,
+             :xt/valid-from (time/->zdt #inst "2020-01-01"),
+             :xt/valid-to (time/->zdt #inst "2020-01-02")}
+            {:xt/id 1, :a 1, :b 2, :c 3,
+             :xt/valid-from (time/->zdt #inst "2020-01-02")}
+            {:xt/id 2, :a 4, :b 5,
+             :xt/valid-from (time/->zdt #inst "2020-01-02")}
+            {:xt/id 5, :xt/valid-from (time/->zdt #inst "2020-01-01")}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM foo FOR ALL VALID_TIME ORDER BY _id, _valid_from"))))
+
 (t/deftest test-patch-operator
   (letfn [(test [data]
             (->> (tu/query-ra
