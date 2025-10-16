@@ -1,7 +1,6 @@
 (ns xtdb.operator.join
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
-            [clojure.string :as string]
             [clojure.string :as str]
             [clojure.walk :as walk]
             [xtdb.expression :as expr]
@@ -11,7 +10,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
-  (:import (java.util ArrayList HashSet Iterator List Set)
+  (:import (java.util ArrayList Iterator List Set SortedSet TreeSet)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Field Schema)
            (org.roaringbitmap.buffer MutableRoaringBitmap)
@@ -165,17 +164,19 @@
                        (.append build-side build-rel)))
   (.end build-side))
 
-(defn- build-pushdowns [^BuildSide build-side, pushdown-blooms, ^Set pushdown-iids]
+(defn- build-pushdowns [^BuildSide build-side, pushdown-blooms, pushdown-iids]
   (when pushdown-blooms
     (let [build-rel (.getDataRel build-side)
           build-key-col-names (vec (.getKeyColNames build-side))]
       (dotimes [col-idx (count build-key-col-names)]
-        (let [^String build-col-name (nth build-key-col-names col-idx)
-              build-col (.vectorForOrNull build-rel build-col-name)
-              ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
+        (let [build-col-name (nth build-key-col-names col-idx)
+              build-col (.vectorForOrNull build-rel (str build-col-name))
+              ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)
+              ^SortedSet col-pushdown-iids (nth pushdown-iids col-idx)]
           (dotimes [build-idx (.getRowCount build-rel)]
-            (when (and pushdown-iids (str/ends-with? build-col-name "_iid"))
-              (.add pushdown-iids (.getBytes build-col build-idx)))
+            (when col-pushdown-iids
+              (let [v (.getObject build-col build-idx)]
+                (.add col-pushdown-iids (cond-> v (uuid? v) util/uuid->bytes))))
             (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))
 
 (deftype JoinCursor [^BufferAllocator allocator,
@@ -198,8 +199,7 @@
         (util/with-close-on-catch [probe-cursor (->probe-cursor (when (and (not shuffle?) pushdown-blooms)
                                                                   (zipmap (map symbol probe-key-cols) pushdown-blooms))
                                                                 (when (and (not shuffle?) pushdown-iids)
-                                                                  (zipmap (filter #(= (name %) "_iid") probe-key-cols)
-                                                                          (repeat pushdown-iids))))]
+                                                                  (zipmap (map symbol probe-key-cols) pushdown-iids)))]
           (set! (.hash-join-cursor this)
                 (if shuffle?
                   (DiskHashJoin/open allocator build-side probe-cursor
@@ -283,9 +283,6 @@
   (->> projection-specs
        (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
                            #(.getField ^ProjectionSpec %))))))
-
-(defn- ->pushdown-blooms [key-col-names]
-  (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
 
 (def ^:dynamic *disk-join-threshold-rows*
   (or (some-> (System/getenv "XTDB_JOIN_SPILL_THRESHOLD") parse-long)
@@ -394,8 +391,16 @@
                              (->probe-cursor (cond-> opts
                                                our-pushdown-blooms (update :pushdown-blooms (fnil into {}) our-pushdown-blooms)
                                                our-pushdown-iids (update :pushdown-iids (fnil into {}) our-pushdown-iids))))]
-                     (let [pushdown-blooms (when pushdown-blooms? (->pushdown-blooms probe-key-col-names))
-                           pushdown-iids (HashSet.)
+                     (let [pushdown-blooms (when pushdown-blooms?
+                                             (vec (repeatedly (count build-key-col-names) #(MutableRoaringBitmap.))))
+                           pushdown-iids (->> build-key-col-names
+                                              (mapv (fn [col-name]
+                                                      (let [^Field field (get build-fields col-name)
+                                                            build-col-type (.getType field)]
+                                                        (when (or (and (= build-col-type #xt.arrow/type :varbinary)
+                                                                       (str/ends-with? col-name "/_iid"))
+                                                                  (= build-col-type #xt.arrow/type :uuid))
+                                                          (TreeSet. util/bytes-comparator))))))
                            cmp-factory (->cmp-factory {:build-fields build-fields
                                                        :probe-fields probe-fields
                                                        :with-nil-row? with-nil-row?

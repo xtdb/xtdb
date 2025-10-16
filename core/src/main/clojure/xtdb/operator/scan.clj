@@ -18,12 +18,10 @@
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
-           java.nio.ByteBuffer
            java.time.Instant
-           (java.util LinkedList)
+           (java.util LinkedList SortedSet TreeSet)
            (java.util.function IntPredicate Predicate)
-           (org.apache.arrow.memory ArrowBuf BufferAllocator)
-           [org.apache.arrow.memory.util ArrowBufPointer]
+           (org.apache.arrow.memory BufferAllocator)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.arrow.RelationReader
            (xtdb.bloom BloomUtils)
@@ -32,7 +30,7 @@
            xtdb.ICursor
            (xtdb.indexer Snapshot Snapshot$Source)
            (xtdb.metadata MetadataPredicate PageMetadata PageMetadata$Factory)
-           (xtdb.operator.scan IidSelector ScanCursor)
+           (xtdb.operator.scan MultiIidSelector ScanCursor SingleIidSelector)
            (xtdb.segment BufferPoolSegment MemorySegment MergePlanner MergeTask)
            (xtdb.storage BufferPool)
            xtdb.table.TableRef
@@ -159,12 +157,13 @@
                       (MutableRoaringBitmap/intersects pushdown-bloom (BloomUtils/bloomToBitmap bloom-rdr bloom-vec-idx)))))))))))
 
 
-(defn ->path-pred [^ArrowBuf iid-arrow-buf]
-  (when iid-arrow-buf
-    (let [iid-ptr (ArrowBufPointer. iid-arrow-buf 0 (.capacity iid-arrow-buf))]
+(defn ->path-pred [^SortedSet iid-set]
+  (when (and iid-set (= 1 (.size iid-set)))
+    ;; TODO use the whole set
+    (let [^bytes iid-bytes (first iid-set)]
       (reify Predicate
         (test [_ path]
-          (zero? (.compareToPath Bucketer/DEFAULT iid-ptr path)))))))
+          (zero? (.compareToPath Bucketer/DEFAULT iid-bytes ^bytes path)))))))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
@@ -250,21 +249,26 @@
                        (if (and derived-table-schema (not template-table?))
                          (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args)
 
-                         (let [iid-set (get pushdown-iids '_iid)
-                               iid-bb (or (some-> (selects->iid-bytes selects args) ByteBuffer/wrap)
-                                          (when (and iid-set (= (count iid-set) 1))
-                                            (first iid-set)))
+                         (let [iid-set (or (when-let [bytes (selects->iid-bytes selects args)]
+                                             (doto (TreeSet. util/bytes-comparator)
+                                               (.add bytes)))
+                                           (get pushdown-iids '_iid) ; usually patch
+                                           (get pushdown-iids '_id)) ; any other foreign-key join
                                col-preds (cond-> col-preds
-                                           iid-bb (assoc "_iid" (IidSelector. iid-bb)))
+                                           (not (empty? iid-set))
+                                           (assoc "_iid" (if (= 1 (count iid-set))
+                                                           (SingleIidSelector. (first iid-set))
+                                                           (MultiIidSelector. iid-set))))
                                metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) (update-vals fields types/field->col-type) args)
                                metadata-pred (reify MetadataPredicate
                                                (build [_ page-metadata]
-                                                 (reduce (fn [^IntPredicate page-idx-pred col-name]
-                                                           (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred page-metadata pushdown-blooms col-name)]
-                                                             (.and page-idx-pred bloom-page-idx-pred)
-                                                             page-idx-pred))
-                                                         (.build metadata-pred page-metadata)
-                                                         col-names)))
+                                                 (-> (.build metadata-pred page-metadata)
+                                                     (as-> pred (reduce (fn [^IntPredicate page-idx-pred col-name]
+                                                                          (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred page-metadata pushdown-blooms col-name)]
+                                                                            (.and page-idx-pred bloom-page-idx-pred)
+                                                                            page-idx-pred))
+                                                                        pred
+                                                                        col-names)))))
                                scan-opts (-> scan-opts
                                              (update :for-valid-time
                                                      (fn [fvt]
@@ -274,33 +278,32 @@
                                                                   (-> (basis/<-time-basis-str snapshot-token)
                                                                       (get-in [(.getName db) 0])))]
 
-                           (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
-                             (util/with-close-on-catch [!segments (LinkedList.)]
-                               
-                               (doseq [{:keys [^String trie-key]} (-> (cat/trie-state trie-catalog table)
-                                                                      (cat/current-tries)
-                                                                      (cat/filter-tries temporal-bounds))]
-                                 (.add !segments
-                                       (BufferPoolSegment/open allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
+                           (util/with-close-on-catch [!segments (LinkedList.)]
+                             
+                             (doseq [{:keys [^String trie-key]} (-> (cat/trie-state trie-catalog table)
+                                                                    (cat/current-tries)
+                                                                    (cat/filter-tries temporal-bounds))]
+                               (.add !segments
+                                     (BufferPoolSegment/open allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
 
-                               (when live-table-snap
-                                 (.add !segments
-                                       (MemorySegment. (.getLiveTrie live-table-snap) (.getLiveRelation live-table-snap))))
+                             (when live-table-snap
+                               (.add !segments
+                                     (MemorySegment. (.getLiveTrie live-table-snap) (.getLiveRelation live-table-snap))))
 
-                               (when template-table?
-                                 (.add !segments
-                                       (let [[memory-rel trie] (info-schema/table-template info-schema table)]
-                                         (MemorySegment. trie memory-rel))))
+                             (when template-table?
+                               (.add !segments
+                                     (let [[memory-rel trie] (info-schema/table-template info-schema table)]
+                                       (MemorySegment. trie memory-rel))))
 
-                               (let [merge-tasks (->> (MergePlanner/plan !segments (->path-pred iid-arrow-buf))
-                                                      (into [] (keep (fn [^MergeTask mt]
-                                                                       (when-let [pages (trie/filter-pages (.getPages mt) temporal-bounds)]
-                                                                         (MergeTask. pages (.getPath mt)))))))]
-                                 (cond-> (ScanCursor. allocator col-names col-preds
-                                                      temporal-bounds
-                                                      !segments (.iterator ^Iterable merge-tasks)
-                                                      schema args)
-                                   explain-analyze? (ICursor/wrapExplainAnalyze)))))))))}))))
+                             (let [merge-tasks (->> (MergePlanner/plan !segments (->path-pred iid-set))
+                                                    (into [] (keep (fn [^MergeTask mt]
+                                                                     (when-let [pages (trie/filter-pages (.getPages mt) temporal-bounds)]
+                                                                       (MergeTask. pages (.getPath mt)))))))]
+                               (cond-> (ScanCursor. allocator col-names col-preds
+                                                    temporal-bounds
+                                                    !segments (.iterator ^Iterable merge-tasks)
+                                                    schema args)
+                                 explain-analyze? (ICursor/wrapExplainAnalyze))))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-fields, param-fields]}]
   (assert db-cat)

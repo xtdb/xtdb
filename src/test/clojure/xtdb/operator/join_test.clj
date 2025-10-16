@@ -7,7 +7,8 @@
             [xtdb.logical-plan :as lp]
             [xtdb.node :as xtn]
             [xtdb.operator.join :as join]
-            [xtdb.test-util :as tu]))
+            [xtdb.test-util :as tu]
+            [xtdb.util :as util]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -1268,3 +1269,29 @@
             (t/is (false? (contains? foj {:foo 1500, :bar 1500})))
             (t/is (false? (contains? foj {:foo 1500})))
             (t/is (false? (contains? foj {:bar 1500})))))))))
+
+(t/deftest multi-iid-selector-test
+  (util/with-open [node (xtn/start-node)]
+    (let [[id1 id2 id3 id4] [#uuid "863f65e6-4f36-41ca-a4bf-21f4d3b77720"
+                             #uuid "55db83c1-b4f6-4cf1-9e2c-d00dda241059"
+                             #uuid "0eacd26e-6378-49d1-b21f-d9f55ca4e9cd"
+                             #uuid "b55725fc-80e8-4f05-8561-d04df3245783"]]
+      (xt/execute-tx node [[:put-docs :foo
+                            {:xt/id id1, :a 1}
+                            {:xt/id id2, :a 2}
+                            {:xt/id id3, :a 3}]
+                           [:put-docs :bar
+                            {:xt/id id1, :b 1}
+                            {:xt/id id2, :b 2}
+                            {:xt/id id4, :b 4}]])
+
+      (t/is (= [{:foo id1, :bar id1, :a 1, :b 1} {:foo id2, :bar id2, :a 2, :b 2}]
+               (tu/query-ra '[:order-by [[a]]
+                              [:join [{foo bar}]
+                               [:rename {_id foo}
+                                [:scan {:table #xt/table foo}
+                                 [_id a]]]
+                               [:rename {_id bar}
+                                [:scan {:table #xt/table bar}
+                                 [_id b]]]]]
+                            {:node node}))))))

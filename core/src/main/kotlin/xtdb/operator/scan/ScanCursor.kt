@@ -36,8 +36,12 @@ class ScanCursor(
 
     private class LeafPointer(val evPtr: EventRowPointer, val relIdx: Int)
 
-    private fun RelationReader.maybeSelect(iidPred: SelectionSpec?) =
-        if (iidPred != null) select(iidPred.select(al, this, this@ScanCursor.schema, args)) else this
+    private fun RelationReader.maybeSelect(iidPred: SelectionSpec?, path: ByteArray) =
+        when (iidPred) {
+            null -> this
+            is MultiIidSelector -> select(iidPred.select(this, path))
+            else -> select(iidPred.select(al, this, this@ScanCursor.schema, this@ScanCursor.args))
+        }
 
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
         val isValidPtr = ArrowBufPointer()
@@ -52,7 +56,7 @@ class ScanCursor(
                 val bitemporalConsumer = BitemporalConsumer(outRel, colNames)
                 val loadedPages = task.pages.map { it.loadDataPage(al) }
 
-                val leafReaders = loadedPages.map { it.maybeSelect(iidPred) }
+                val leafReaders = loadedPages.map { it.maybeSelect(iidPred, taskPath) }
 
                 val (temporalCols, contentCols) = colNames.groupBy { it in TEMPORAL_COL_NAMES }
                     .let { it[true] to it[false] }

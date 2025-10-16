@@ -15,7 +15,7 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 @OptIn(ExperimentalUuidApi::class)
-class IidSelectorTest {
+class SingleIidSelectorTest {
     private lateinit var al: BufferAllocator
 
     @BeforeEach
@@ -38,7 +38,7 @@ class IidSelectorTest {
         val search = Uuid.parse("80000000-0000-0000-0000-000000000000")
         val after = Uuid.parse("f0000000-0000-0000-0000-000000000000")
 
-        val iidSel = IidSelector(ByteBuffer.wrap(search.toByteArray()))
+        val iidSel = SingleIidSelector(search.toByteArray())
 
         fun testUuids(vararg uuids: Uuid) =
             Relation(al).use { rel ->

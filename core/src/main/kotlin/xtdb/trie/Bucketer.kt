@@ -12,7 +12,7 @@ data class Bucketer(val levelBits: Int = DEFAULT_LEVEL_BITS) {
     val levelMask: Int = levelWidth - 1
 
     init {
-        require(levelBits in setOf(2,4,8), {"levelBits must be one of 2, 4 or 8, got $levelBits"})
+        require(levelBits in setOf(2, 4, 8), { "levelBits must be one of 2, 4 or 8, got $levelBits" })
     }
 
     fun bucketFor(byteArray: ByteArray, level: Int): Byte {
@@ -41,6 +41,49 @@ data class Bucketer(val levelBits: Int = DEFAULT_LEVEL_BITS) {
             if (cmp != 0) return cmp
         }
         return 0
+    }
+
+    fun compareToPath(bytes: ByteArray, path: ByteArray): Int {
+        for (level in path.indices) {
+            val cmp = bucketFor(bytes, level).toInt() compareTo (path[level].toInt())
+            if (cmp != 0) return cmp
+        }
+        return 0
+    }
+
+    fun startIid(path: ByteArray): ByteArray {
+        val iid = ByteArray(16)
+
+        for (level in path.indices) {
+            val bucket = path[level]
+            val bitIdx = level * levelBits
+            val byteIdx = bitIdx / java.lang.Byte.SIZE
+            val bitOffset = bitIdx % java.lang.Byte.SIZE
+
+            iid[byteIdx] =
+                iid[byteIdx].toInt()
+                    .or(bucket.toInt().shl(Byte.SIZE_BITS - levelBits - bitOffset))
+                    .toByte()
+        }
+
+        return iid
+    }
+
+    fun incrementPath(path: ByteArray): ByteArray? {
+        val nextPath = path.copyOf()
+
+        for (i in nextPath.indices.reversed()) {
+            val incremented = (nextPath[i].toInt() and levelMask) + 1
+            if (incremented < levelWidth) {
+                nextPath[i] = incremented.toByte()
+                return nextPath
+            }
+
+            // Carry over: set this level to 0 and continue
+            nextPath[i] = 0
+        }
+
+        return null
     }
 
     companion object {
