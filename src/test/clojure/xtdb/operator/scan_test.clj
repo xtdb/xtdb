@@ -11,7 +11,8 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import java.util.Date
+  (:import java.util.Arrays
+           java.util.Date
            (java.util.function IntPredicate)
            xtdb.arrow.RelationReader
            (xtdb.compactor RecencyPartition)))
@@ -407,25 +408,25 @@
                              [:put-docs :xt-docs {:xt/id after-uuid :version 1}]])
     (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id search-uuid :version 2}]])
 
-    (t/is (nil? (scan/selects->iid-byte-buffer {} vw/empty-args)))
+    (t/is (nil? (scan/selects->iid-bytes {} vw/empty-args)))
 
-    (t/is (= (util/uuid->byte-buffer search-uuid)
-             (scan/selects->iid-byte-buffer {"_id" (list '= '_id search-uuid)} vw/empty-args)))
+    (t/is (Arrays/equals (util/uuid->bytes search-uuid)
+                         (scan/selects->iid-bytes {"_id" (list '= '_id search-uuid)} vw/empty-args)))
 
-    (t/is (nil? (scan/selects->iid-byte-buffer {"_id" (list '< '_id search-uuid)} vw/empty-args)))
+    (t/is (nil? (scan/selects->iid-bytes {"_id" (list '< '_id search-uuid)} vw/empty-args)))
 
     (with-open [^RelationReader args-rel (tu/open-args {:search-uuid #uuid "80000000-0000-0000-0000-000000000000"})]
-      (t/is (= (util/uuid->byte-buffer search-uuid)
-               (scan/selects->iid-byte-buffer '{"_id" (= _id ?search_uuid)}
-                                              args-rel))))
+      (t/is (Arrays/equals (util/uuid->bytes search-uuid)
+                           (scan/selects->iid-bytes '{"_id" (= _id ?search_uuid)}
+                                                    args-rel))))
 
     (with-open [^RelationReader args-rel (tu/open-args {:search-uuid [#uuid "00000000-0000-0000-0000-000000000000"
                                                                       #uuid "80000000-0000-0000-0000-000000000000"]})]
-      (t/is (nil? (scan/selects->iid-byte-buffer '{_id (= _id ?search_uuid)}
+      (t/is (nil? (scan/selects->iid-bytes '{_id (= _id ?search_uuid)}
                                                  args-rel))))
 
-    (let [old-select->iid-byte-buffer scan/selects->iid-byte-buffer]
-      (with-redefs [scan/selects->iid-byte-buffer
+    (let [old-select->iid-byte-buffer scan/selects->iid-bytes]
+      (with-redefs [scan/selects->iid-bytes
                     (fn [& args]
                       (let [iid-pred (apply old-select->iid-byte-buffer args)]
                         (assert iid-pred "iid-pred can't be nil")

@@ -112,7 +112,7 @@
       (tu/finish-block! node)
       (c/compact-all! node #xt/duration "PT1S")
 
-      (let [first-buckets (map (comp first tu/byte-buffer->path util/->iid) (range 20))
+      (let [first-buckets (map (comp first tu/bytes->path util/->iid) (range 20))
             bucket->page-idx (->> (into (sorted-set) first-buckets)
                                   (map-indexed #(MapEntry/create %2 %1))
                                   (into {}))

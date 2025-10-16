@@ -125,9 +125,9 @@
         (= '_id (nth eid-select 2))
         (second eid-select)))
 
-(def ^:private dummy-iid (ByteBuffer/allocateDirect 16))
+(def ^:private dummy-iid (byte-array 16))
 
-(defn selects->iid-byte-buffer ^ByteBuffer [selects ^RelationReader args-rel]
+(defn selects->iid-bytes ^bytes [selects ^RelationReader args-rel]
   (when-let [eid-select (get selects "_id")]
     (when (= '= (first eid-select))
       (when-let [eid (eid-select->eid eid-select)]
@@ -251,7 +251,7 @@
                          (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args)
 
                          (let [iid-set (get pushdown-iids '_iid)
-                               iid-bb (or (selects->iid-byte-buffer selects args)
+                               iid-bb (or (some-> (selects->iid-bytes selects args) ByteBuffer/wrap)
                                           (when (and iid-set (= (count iid-set) 1))
                                             (first iid-set)))
                                col-preds (cond-> col-preds

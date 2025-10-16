@@ -138,21 +138,20 @@
    (fn []
      (MessageDigest/getInstance "SHA-256"))))
 
-(defn ->iid ^ByteBuffer [eid]
+(defn ->iid ^bytes [eid]
   (if (uuid? eid)
-    (uuid->byte-buffer eid)
-    (ByteBuffer/wrap
-     (let [^bytes eid-bytes (cond
-                              (string? eid) (.getBytes (str "s" eid))
-                              (keyword? eid) (.getBytes (str "k" eid))
-                              (integer? eid) (.getBytes (str "i" eid))
-                              :else (let [id-type (some-> (class eid) .getName symbol)]
-                                      (throw (err/incorrect :xtdb/invalid-id
-                                                            (format "Invalid ID type: %s" id-type)
-                                                            {:type id-type, :eid eid}))))]
-       (-> ^MessageDigest (.get !msg-digest)
-           (.digest eid-bytes)
-           (Arrays/copyOfRange 0 16))))))
+    (uuid->bytes eid)
+    (let [^bytes eid-bytes (cond
+                             (string? eid) (.getBytes (str "s" eid))
+                             (keyword? eid) (.getBytes (str "k" eid))
+                             (integer? eid) (.getBytes (str "i" eid))
+                             :else (let [id-type (some-> (class eid) .getName symbol)]
+                                     (throw (err/incorrect :xtdb/invalid-id
+                                                           (format "Invalid ID type: %s" id-type)
+                                                           {:type id-type, :eid eid}))))]
+      (-> ^MessageDigest (.get !msg-digest)
+          (.digest eid-bytes)
+          (Arrays/copyOfRange 0 16)))))
 
 (def valid-iid? (some-fn uuid? string? keyword? integer?))
 

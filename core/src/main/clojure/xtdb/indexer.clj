@@ -196,7 +196,7 @@
                 (.logPut live-table-tx
                          (if iid-rdr
                            (.getBytes iid-rdr (+ iid-start-idx row-idx))
-                           (util/->iid (.getObject id-rdr doc-idx)))
+                           (ByteBuffer/wrap (util/->iid (.getObject id-rdr doc-idx))))
                          valid-from valid-to
                          #(.copyRow doc-copier doc-idx))))))
 
@@ -312,7 +312,7 @@
 
                         ;; FIXME something in the generated SQL generates rows with `(= vf vt)`, which is also unacceptable
                         (when (< valid-from valid-to)
-                          (.logPut live-table-tx (util/->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx)))))))))))))))
+                          (.logPut live-table-tx (ByteBuffer/wrap (util/->iid eid)) valid-from valid-to #(.copyRow live-idx-table-copier idx)))))))))))))))
 
 (defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr, {:keys [indexer tx-key]}]
   (reify RelationIndexer
@@ -524,7 +524,7 @@
         live-table (.liveTable live-idx-tx user-table)
         doc-writer (.getDocWriter live-table)]
 
-    (.logPut live-table (util/->iid user) system-time-µs Long/MAX_VALUE
+    (.logPut live-table (ByteBuffer/wrap (util/->iid user)) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
                (doto (.vectorFor doc-writer "_id" (FieldType/notNullable #xt.arrow/type :utf8))
                  (.writeObject user))
@@ -591,7 +591,7 @@
         live-table (.liveTable live-idx-tx (table/->ref db-name 'xt/txs))
         doc-writer (.getDocWriter live-table)]
 
-    (.logPut live-table (util/->iid tx-id) system-time-µs Long/MAX_VALUE
+    (.logPut live-table (ByteBuffer/wrap (util/->iid tx-id)) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
                (doto (.vectorFor doc-writer "_id" (FieldType/notNullable #xt.arrow/type :i64))
                  (.writeLong tx-id))

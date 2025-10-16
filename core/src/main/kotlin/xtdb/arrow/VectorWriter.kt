@@ -36,6 +36,7 @@ interface VectorWriter : VectorReader, AutoCloseable {
     fun writeFloat(v: Float): Unit = unsupported("writeFloat")
     fun writeDouble(v: Double): Unit = unsupported("writeDouble")
     fun writeBytes(v: ByteBuffer): Unit = unsupported("writeBytes")
+    fun writeBytes(v: ByteArray) = writeBytes(ByteBuffer.wrap(v))
     fun writeObject(obj: Any?)
 
     fun writeValue(v: ValueReader) = if (v.isNull) writeNull() else writeValue0(v)

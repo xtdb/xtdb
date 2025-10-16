@@ -26,10 +26,7 @@
 (defn- ->singleton-rdr [v]
   (reify VectorReader
     (hashCode [_ _ hasher]
-      (let [bb (util/->iid v)
-            ba (byte-array (.remaining bb))]
-        (.get bb ba)
-        (.hash hasher ba)))))
+      (.hash hasher (util/->iid v)))))
 
 (deftest current-tries-on-finish-block
   (let [node-dir (util/->path "target/table-catalog-test/current-tries-on-finish-block")]

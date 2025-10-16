@@ -22,6 +22,7 @@
   (:import (clojure.lang ExceptionInfo)
            [java.io Writer]
            java.net.ServerSocket
+           java.nio.ByteBuffer
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
            (java.time Duration Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
@@ -380,7 +381,7 @@
         (doseq [{eid :xt/id, :as doc} docs
                 :let [{:keys [:xt/valid-from :xt/valid-to],
                        :or {valid-from system-time, valid-to (time/micros->instant Long/MAX_VALUE)}} (meta doc)]]
-          (.logPut live-table-tx (util/->iid eid)
+          (.logPut live-table-tx (ByteBuffer/wrap (util/->iid eid))
                    (time/instant->micros valid-from) (time/instant->micros valid-to)
                    (fn [] (.writeObject doc-wtr doc)))))
       (catch Throwable t
@@ -389,13 +390,13 @@
 
     (.commit live-table-tx)))
 
-(defn byte-buffer->path [^java.nio.ByteBuffer bb]
+(defn bytes->path [^bytes bs]
   (mapcat (fn [b]
             [(bit-and (bit-shift-right b 6) 3)
              (bit-and (bit-shift-right b 4) 3)
              (bit-and (bit-shift-right b 2) 3)
              (bit-and b 3)])
-          (.array bb)))
+          bs))
 
 (defn q-sql
   "Like xtdb.api/q, but also returns the result type."
