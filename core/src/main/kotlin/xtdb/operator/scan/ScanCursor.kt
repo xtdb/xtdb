@@ -39,7 +39,7 @@ class ScanCursor(
     private fun RelationReader.maybeSelect(iidPred: SelectionSpec?, path: ByteArray) =
         when (iidPred) {
             null -> this
-            is MultiIidSelector -> select(iidPred.select(this, path))
+            is MultiIidSelector -> select(iidPred.select(al, this, path))
             else -> select(iidPred.select(al, this, this@ScanCursor.schema, this@ScanCursor.args))
         }
 

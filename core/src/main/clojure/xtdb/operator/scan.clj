@@ -27,7 +27,7 @@
            (xtdb.bloom BloomUtils)
            xtdb.catalog.TableCatalog
            xtdb.database.Database$Catalog
-           xtdb.ICursor
+           (xtdb ICursor Bytes)
            (xtdb.indexer Snapshot Snapshot$Source)
            (xtdb.metadata MetadataPredicate PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan MultiIidSelector ScanCursor SingleIidSelector)
@@ -250,7 +250,7 @@
                          (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args)
 
                          (let [iid-set (or (when-let [bytes (selects->iid-bytes selects args)]
-                                             (doto (TreeSet. util/bytes-comparator)
+                                             (doto (TreeSet. Bytes/COMPARATOR)
                                                (.add bytes)))
                                            (get pushdown-iids '_iid) ; usually patch
                                            (get pushdown-iids '_id)) ; any other foreign-key join

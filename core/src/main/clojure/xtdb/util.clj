@@ -17,7 +17,7 @@
            (java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption)
            java.nio.file.attribute.FileAttribute
            [java.security MessageDigest]
-           (java.util Arrays Collections Comparator LinkedHashMap Map UUID WeakHashMap)
+           (java.util Arrays Collections LinkedHashMap Map UUID WeakHashMap)
            (java.util.concurrent ExecutionException Executors ThreadFactory)
            (org.apache.arrow.memory BufferAllocator ForeignAllocation)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
@@ -132,11 +132,6 @@
     (.get bb ba)
     (.flip bb)
     ba))
-
-(def ^java.util.Comparator bytes-comparator
-  (reify Comparator
-    (compare [_ l r]
-      (Arrays/compareUnsigned ^bytes l ^bytes r))))
 
 (def ^:private ^java.lang.ThreadLocal !msg-digest
   (ThreadLocal/withInitial

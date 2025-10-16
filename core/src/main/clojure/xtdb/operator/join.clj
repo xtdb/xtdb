@@ -14,7 +14,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo Field Schema)
            (org.roaringbitmap.buffer MutableRoaringBitmap)
-           (xtdb ICursor)
+           (xtdb ICursor Bytes)
            (xtdb.arrow BitVector RelationReader)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
@@ -400,7 +400,7 @@
                                                         (when (or (and (= build-col-type #xt.arrow/type :varbinary)
                                                                        (str/ends-with? col-name "/_iid"))
                                                                   (= build-col-type #xt.arrow/type :uuid))
-                                                          (TreeSet. util/bytes-comparator))))))
+                                                          (TreeSet. Bytes/COMPARATOR))))))
                            cmp-factory (->cmp-factory {:build-fields build-fields
                                                        :probe-fields probe-fields
                                                        :with-nil-row? with-nil-row?
