@@ -313,72 +313,72 @@
 (t/deftest ^:integration test-kafka-log-starts-at-correct-point-after-block-cut
   (let [topic (str "xtdb.kafka-test." (random-uuid))]
     (util/with-tmp-dirs #{local-disk-path}
-      ;; Start a node, write a number of transactions to the topic - ensure block is cut
-      (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                          :poll-duration "PT2S"}]}
-                                        :log [:kafka {:cluster :my-kafka, :topic topic}]
-                                        :storage [:local {:path local-disk-path}]
-                                        :indexer {:rows-per-block 20}
-                                        :compactor {:threads 0}})]
+      (t/testing "Start a node, write a number of transactions to the topic - ensure block is cut"
+        (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
+                                                                            :poll-duration "PT2S"}]}
+                                          :log [:kafka {:cluster :my-kafka, :topic topic}]
+                                          :storage [:local {:path local-disk-path}]
+                                          :indexer {:rows-per-block 20}
+                                          :compactor {:threads 0}})]
 
-        (doseq [batch (->> (range 100) (partition-all 10))]
-          (xt/execute-tx node (for [i batch] [:put-docs :docs {:xt/id i}])))
-        (t/is (= 100 (count (xt/q node "SELECT *, _valid_from, _system_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
-        (t/is (= 10 (count (xt/q node "SELECT * FROM xt.txs"))))
-        (t/testing "ensure blocks have been written"
-          (Thread/sleep 1000)
-          (t/is (= ["l00-rc-b00.arrow" "l00-rc-b01.arrow" "l00-rc-b02.arrow" "l00-rc-b03.arrow" "l00-rc-b04.arrow"]
-                   (tu/read-files-from-bp-path node "tables/public$docs/meta/")))))
-
-      ;; Restart the node, ensure it picks up from the correct position in the log
-      (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                          :poll-duration "PT2S"}]}
-                                        :log [:kafka {:cluster :my-kafka, :topic topic}]
-                                        :storage [:local {:path local-disk-path}]
-                                        :indexer {:rows-per-block 20}
-                                        :compactor {:threads 0}})]
-
-        (t/testing "shouldn't reindex any transactions when starting up"
-          (Thread/sleep 1000)
+          (doseq [batch (->> (range 100) (partition-all 10))]
+            (xt/execute-tx node (for [i batch] [:put-docs :docs {:xt/id i}])))
           (t/is (= 100 (count (xt/q node "SELECT *, _valid_from, _system_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
-          (t/is (= 10 (count (xt/q node "SELECT *  FROM xt.txs")))))
+          (t/is (= 10 (count (xt/q node "SELECT * FROM xt.txs"))))
+          (t/testing "ensure blocks have been written"
+            (Thread/sleep 1000)
+            (t/is (= ["l00-rc-b00.arrow" "l00-rc-b01.arrow" "l00-rc-b02.arrow" "l00-rc-b03.arrow" "l00-rc-b04.arrow"]
+                     (tu/read-files-from-bp-path node "tables/public$docs/meta/"))))))
 
-        (t/testing "sending a new transaction shouldnt cut a block yet - still ten blocks off"
-          (xt/execute-tx node (for [i (range 101 111)] [:put-docs :docs {:xt/id i}]))
-          (t/is (= 110 (count (xt/q node "SELECT *, _valid_from, _system_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
-          (t/is (= 11 (count (xt/q node "SELECT *  FROM xt.txs"))))
-          (t/is (= ["l00-rc-b00.arrow" "l00-rc-b01.arrow" "l00-rc-b02.arrow" "l00-rc-b03.arrow" "l00-rc-b04.arrow"]
-                   (tu/read-files-from-bp-path node "tables/public$docs/meta/"))))))))
+      (t/testing "Restart the node, ensure it picks up from the correct position in the log"
+        (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
+                                                                            :poll-duration "PT2S"}]}
+                                          :log [:kafka {:cluster :my-kafka, :topic topic}]
+                                          :storage [:local {:path local-disk-path}]
+                                          :indexer {:rows-per-block 20}
+                                          :compactor {:threads 0}})]
+
+          (t/testing "shouldn't reindex any transactions when starting up"
+            (Thread/sleep 1000)
+            (t/is (= 100 (count (xt/q node "SELECT *, _valid_from, _system_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
+            (t/is (= 10 (count (xt/q node "SELECT *  FROM xt.txs")))))
+
+          (t/testing "sending a new transaction shouldnt cut a block yet - still ten blocks off"
+            (xt/execute-tx node (for [i (range 101 111)] [:put-docs :docs {:xt/id i}]))
+            (t/is (= 110 (count (xt/q node "SELECT *, _valid_from, _system_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
+            (t/is (= 11 (count (xt/q node "SELECT *  FROM xt.txs"))))
+            (t/is (= ["l00-rc-b00.arrow" "l00-rc-b01.arrow" "l00-rc-b02.arrow" "l00-rc-b03.arrow" "l00-rc-b04.arrow"]
+                     (tu/read-files-from-bp-path node "tables/public$docs/meta/")))))))))
 
 (t/deftest ^:integration test-kafka-log-starts-at-correct-point-after-flush-block
   (let [topic (str "xtdb.kafka-test." (random-uuid))]
     (util/with-tmp-dirs #{local-disk-path}
-      ;; Start a node, write a number of transactions to the log - ensure block is cut
-      (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                          :poll-duration "PT2S"}]}
-                                        :log [:kafka {:cluster :my-kafka, :topic topic}]
-                                        :storage [:local {:path local-disk-path}]
-                                        :compactor {:threads 0}})]
+      (t/testing "Start a node, write a number of transactions to the log - ensure block is cut"
+        (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
+                                                                            :poll-duration "PT2S"}]}
+                                          :log [:kafka {:cluster :my-kafka, :topic topic}]
+                                          :storage [:local {:path local-disk-path}]
+                                          :compactor {:threads 0}})]
 
-        (doseq [batch (->> (range 100) (partition-all 10))]
-          (xt/execute-tx node (for [i batch] [:put-docs :docs {:xt/id i}])))
-        (t/is (= 100 (count (xt/q node "SELECT *, _valid_from, _system_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
-        (t/is (= 10 (count (xt/q node "SELECT * FROM xt.txs"))))
-        (tu/finish-block! node)
-        (t/testing "ensure block has been written"
-          (t/is (= ["l00-rc-b00.arrow"] (tu/read-files-from-bp-path node "tables/public$docs/meta/")))))
-
-      ;; Restart the node, ensure it picks up from the correct position in the log
-      (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                                          :poll-duration "PT2S"}]}
-                                        :log [:kafka {:cluster :my-kafka, :topic topic}]
-                                        :storage [:local {:path local-disk-path}]
-                                        :compactor {:threads 0}})]
-
-        (t/testing "shouldn't reindex any transactions when starting up"
-          (Thread/sleep 1000)
+          (doseq [batch (->> (range 100) (partition-all 10))]
+            (xt/execute-tx node (for [i batch] [:put-docs :docs {:xt/id i}])))
           (t/is (= 100 (count (xt/q node "SELECT *, _valid_from, _system_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
-          (t/is (= 10 (count (xt/q node "SELECT *  FROM xt.txs")))))
+          (t/is (= 10 (count (xt/q node "SELECT * FROM xt.txs"))))
+          (tu/finish-block! node)
+          (t/testing "ensure block has been written"
+            (t/is (= ["l00-rc-b00.arrow"] (tu/read-files-from-bp-path node "tables/public$docs/meta/"))))))
 
-        (t/testing "shouldn't have flushed another block / re-read the flush block"
-          (t/is (= ["l00-rc-b00.arrow"] (tu/read-files-from-bp-path node "tables/public$docs/meta/"))))))))
+      (t/testing "Restart the node, ensure it picks up from the correct position in the log"
+        (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
+                                                                            :poll-duration "PT2S"}]}
+                                          :log [:kafka {:cluster :my-kafka, :topic topic}]
+                                          :storage [:local {:path local-disk-path}]
+                                          :compactor {:threads 0}})]
+
+          (t/testing "shouldn't reindex any transactions when starting up"
+            (Thread/sleep 1000)
+            (t/is (= 100 (count (xt/q node "SELECT *, _valid_from, _system_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
+            (t/is (= 10 (count (xt/q node "SELECT *  FROM xt.txs")))))
+
+          (t/testing "shouldn't have flushed another block / re-read the flush block"
+            (t/is (= ["l00-rc-b00.arrow"] (tu/read-files-from-bp-path node "tables/public$docs/meta/")))))))))
