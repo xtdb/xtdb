@@ -7,7 +7,8 @@
             [xtdb.node :as xtn]
             [xtdb.node.impl]
             [xtdb.test-generators :as tg]
-            [xtdb.test-util :as tu]))
+            [xtdb.test-util :as tu]
+            [xtdb.util :as util]))
 
 (t/deftest ^:property multiple-writes-to-doc
   (tu/run-property-test
@@ -201,3 +202,51 @@
              :compact (c/compact-all! node #xt/duration "PT1S")
              :flush   (tu/flush-block! node)))
          (xt/q node "FROM docs WHERE _id = 1"))))))
+
+(t/deftest ^:property local-log-restart-block-boundary
+  (tu/run-property-test
+   {:num-tests 10}
+   (prop/for-all [{:keys [expected-block-count total-doc-count rows-per-block partitioned-records]} (tg/blocks-counts+records)]
+                 (util/with-tmp-dirs #{node-dir}
+                   (let [{:keys [initial-block-count initial-doc-count initial-tx-count]}
+                         (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "log")}]
+                                                           :storage [:local {:path (.resolve node-dir "objects")}]
+                                                           :indexer {:rows-per-block rows-per-block}
+                                                           :compactor {:threads 0}})]
+                           
+                           ;; Write record batches
+                           (doseq [record-batch partitioned-records]
+                             (xt/execute-tx node [(into [:put-docs :docs] record-batch)]))
+                           
+                           ;; Wait for blocks to be written by the live index
+                           (Thread/sleep 1000)
+                           
+                           {:initial-block-count (count (tu/read-files-from-bp-path node "tables/public$docs/meta/"))
+                            :initial-doc-count (count (xt/q node "SELECT * FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))
+                            :initial-tx-count (count (xt/q node "SELECT * FROM xt.txs"))})]
+                 
+                     ;; Restart the node and verify it picks up from the correct position
+                     (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "log")}]
+                                                       :storage [:local {:path (.resolve node-dir "objects")}]
+                                                       :indexer {:rows-per-block rows-per-block}
+                                                       :compactor {:threads 0}})]
+                       ;; Wait a bit to ensure no reindexing happens
+                       (Thread/sleep 1000) 
+
+                       (and (t/testing "should be expected amount of blocks written initially"
+                              (= expected-block-count initial-block-count))
+
+                            (t/testing "all records should have been written initially"
+                              (= total-doc-count initial-doc-count))
+
+                            (t/testing "each record batch should have produced a transaction initially"
+                              (= (count partitioned-records) initial-tx-count))
+
+                            (t/testing "block count unchanged after restart"
+                              (= initial-block-count (count (tu/read-files-from-bp-path node "tables/public$docs/meta/"))))
+
+                            (t/testing "document count preserved after restart"
+                              (= initial-doc-count (count (xt/q node "SELECT * FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
+
+                            (t/testing "transaction count preserved after restart"
+                              (= initial-tx-count (count (xt/q node "SELECT * FROM xt.txs")))))))))))

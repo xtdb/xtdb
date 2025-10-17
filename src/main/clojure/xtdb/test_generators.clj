@@ -278,3 +278,17 @@
                     (mapv (fn [{:keys [column-name data-type]}]
                             (types/col-type->field column-name (read-string data-type)))))]
     (field->value-generator (apply types/->field "docs" #xt.arrow/type :struct false fields))))
+
+(defn blocks-counts+records []
+  (gen/no-shrink
+   (gen/let [blocks-to-generate (gen/choose 2 5)
+             rows-per-block (gen/elements [20 40 60 80 100])
+             record-ids (gen/vector-distinct 
+                         (gen/one-of [i64-gen safe-keyword-gen uuid-gen])
+                         {:num-elements (* blocks-to-generate rows-per-block)
+                          :max-tries 100})
+             records (gen/vector (generate-record) (* blocks-to-generate rows-per-block))]
+     {:expected-block-count blocks-to-generate
+      :total-doc-count (* blocks-to-generate rows-per-block)
+      :rows-per-block rows-per-block
+      :partitioned-records (partition 10 (mapv (fn [record record-id] (assoc record :xt/id record-id)) records record-ids))})))
