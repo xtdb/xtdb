@@ -1,11 +1,10 @@
 (ns xtdb.log-test
-  (:require [clojure.java.io :as io]
-            [clojure.pprint :as pp]
+  (:require [clojure.java.io :as io] 
             [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.arrow-edn-test :as aet]
+            [xtdb.arrow-edn-test :as aet] 
             [xtdb.log :as log]
-            [xtdb.node :as xtn]
+            [xtdb.node :as xtn] 
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -205,7 +204,7 @@
   (util/with-tmp-dirs #{node-dir}
     ;; Node with local storage and local directory log 
     (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "log")}]
-                                       :storage [:local {:path (.resolve node-dir "objects")}]})]
+                                      :storage [:local {:path (.resolve node-dir "objects")}]})]
       ;; Submit a few transactions
       (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
       (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])
@@ -233,7 +232,7 @@
 
     ;; Node with intact storage and empty directory-log with epoch set to 1
     (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")
-                                                     :epoch 1}]
+                                                    :epoch 1}]
                                        :storage [:local {:path (.resolve node-dir "objects")}]})]
       (t/testing "can query previous indexed values, unindexed values will be lost"
         (t/is (= (set [{:xt/id :foo} {:xt/id :bar}])
@@ -249,4 +248,90 @@
                  (set (xt/q node "SELECT _id FROM xt_docs")))))
 
       (t/testing "can finish the block"
+        (t/is (nil? (tu/finish-block! node)))))
+    
+    ;; Restarting the node again with the same new log path and epoch 1
+    (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")
+                                                    :epoch 1}]
+                                      :storage [:local {:path (.resolve node-dir "objects")}]})]
+      (t/testing "can query same transactions + nothing has been re-indexed"
+        (t/is (= (set [{:xt/id :foo}
+                       {:xt/id :bar}
+                       {:xt/id :new}
+                       {:xt/id :new2}])
+                 (set (xt/q node "SELECT _id FROM xt_docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL")))))
+
+      (t/testing "can index/query new transactions"
+        (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :new3}]]))
+        (t/is (= (set [{:xt/id :foo}
+                       {:xt/id :bar}
+                       {:xt/id :new}
+                       {:xt/id :new2}
+                       {:xt/id :new3}])
+                 (set (xt/q node "SELECT _id FROM xt_docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL")))))
+
+      (t/testing "can finish another block"
         (t/is (nil? (tu/finish-block! node)))))))
+
+(t/deftest test-local-log-starts-at-correct-point-after-block-cut
+  (util/with-tmp-dirs #{node-dir}
+    (t/testing "Start a node, write a number of transactions to the log - ensure block is cut"
+      (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "log")}]
+                                        :storage [:local {:path (.resolve node-dir "objects")}]
+                                        :indexer {:rows-per-block 20}
+                                        :compactor {:threads 0}})]
+
+        (doseq [batch (->> (range 100) (partition-all 10))]
+          (xt/execute-tx node (for [i batch] [:put-docs :docs {:xt/id i}])))
+        (t/is (= 100 (count (xt/q node "SELECT *, _valid_from, _system_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
+        (t/is (= 10 (count (xt/q node "SELECT * FROM xt.txs"))))
+        (t/testing "ensure blocks have been written"
+          (Thread/sleep 1000)
+          (t/is (= ["l00-rc-b00.arrow" "l00-rc-b01.arrow" "l00-rc-b02.arrow" "l00-rc-b03.arrow" "l00-rc-b04.arrow"]
+                   (tu/read-files-from-bp-path node "tables/public$docs/meta/"))))))
+
+    (t/testing "Restart the node, ensure it picks up from the correct position in the log"
+      (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "log")}]
+                                        :storage [:local {:path (.resolve node-dir "objects")}]
+                                        :indexer {:rows-per-block 20}
+                                        :compactor {:threads 0}})]
+
+        (t/testing "shouldn't reindex any transactions when starting up"
+          (Thread/sleep 1000)
+          (t/is (= 100 (count (xt/q node "SELECT *, _valid_from, _system_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
+          (t/is (= 10 (count (xt/q node "SELECT *  FROM xt.txs")))))
+
+        (t/testing "sending a new transaction shouldnt cut a block yet - still ten blocks off"
+          (xt/execute-tx node (for [i (range 101 111)] [:put-docs :docs {:xt/id i}]))
+          (t/is (= 110 (count (xt/q node "SELECT *, _valid_from, _system_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
+          (t/is (= 11 (count (xt/q node "SELECT *  FROM xt.txs"))))
+          (t/is (= ["l00-rc-b00.arrow" "l00-rc-b01.arrow" "l00-rc-b02.arrow" "l00-rc-b03.arrow" "l00-rc-b04.arrow"]
+                   (tu/read-files-from-bp-path node "tables/public$docs/meta/"))))))))
+
+(t/deftest test-local-log-starts-at-correct-point-after-flush-block
+  (util/with-tmp-dirs #{node-dir}
+    (t/testing "Start a node, write a number of transactions to the log - ensure block is cut"
+      (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "log")}]
+                                        :storage [:local {:path (.resolve node-dir "objects")}] 
+                                        :compactor {:threads 0}})]
+
+        (doseq [batch (->> (range 100) (partition-all 10))]
+          (xt/execute-tx node (for [i batch] [:put-docs :docs {:xt/id i}])))
+        (t/is (= 100 (count (xt/q node "SELECT *, _valid_from, _system_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
+        (t/is (= 10 (count (xt/q node "SELECT * FROM xt.txs"))))
+        (tu/finish-block! node)
+        (t/testing "ensure block has been written" 
+          (t/is (= ["l00-rc-b00.arrow"] (tu/read-files-from-bp-path node "tables/public$docs/meta/"))))))
+
+    (t/testing "Restart the node, ensure it picks up from the correct position in the log"
+      (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "log")}]
+                                        :storage [:local {:path (.resolve node-dir "objects")}]
+                                        :compactor {:threads 0}})]
+
+        (t/testing "shouldn't reindex any transactions when starting up"
+          (Thread/sleep 1000)
+          (t/is (= 100 (count (xt/q node "SELECT *, _valid_from, _system_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
+          (t/is (= 10 (count (xt/q node "SELECT *  FROM xt.txs")))))
+
+        (t/testing "shouldn't have flushed another block / re-read the flush block"
+          (t/is (= ["l00-rc-b00.arrow"] (tu/read-files-from-bp-path node "tables/public$docs/meta/"))))))))
