@@ -139,10 +139,9 @@
      maps: recency branches"
   [^Path path]
   (with-open [al (RootAllocator.)
-              ch (util/->file-channel path)
-              rdr (ArrowFileReader. ch al)]
-    (.initialize rdr)
-    (.loadNextBatch rdr)
+              ldr (Relation/loader al path)
+              rel (Relation. al (.getSchema ldr))]
+    (.loadNextPage ldr rel)
 
     (letfn [(render-trie [^ArrowHashTrie$Node node]
               (cond
@@ -150,13 +149,12 @@
                 (instance? ArrowHashTrie$IidBranch node) (mapv render-trie (.getHashChildren ^ArrowHashTrie$IidBranch node))
                 :else node))]
 
-      (render-trie (-> (.getVectorSchemaRoot rdr)
-                       (.getVector "nodes")
+      (render-trie (-> (.vectorFor rel "nodes")
                        (ArrowHashTrie.)
                        (.getRootNode))))))
 
 (comment
-  (->> (util/->path "target/compactor/lose-data-on-compaction/objects/v02/tables/docs/meta/log-l01-nr121-rs16.arrow")
+  (->> (util/->path "/tmp/downloads/2025-10-15-data-dump-stg/meta/l00-rc-b31163.arrow")
        (read-meta-file)))
 
 (defn read-table-block-file [store-path table-name block-idx]
