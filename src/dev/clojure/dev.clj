@@ -121,16 +121,23 @@
            (cond
              (reduced? v) (unreduced v)
              (.loadNextPage ldr rel) (recur (f v (tu/->clj (.getAsMaps rel))))
-             :else v)))))))
+             :else v))))))
+
+  ([^Path path, ^long page-idx]
+    (with-open [al (RootAllocator.)
+                ldr (Relation/loader al path)
+                rel (Relation. al (.getSchema ldr))]
+      (.loadPage ldr page-idx rel)
+      (tu/->clj (.getAsMaps rel)))))
 
 (comment
   (write-arrow-file (util/->path "/tmp/test.arrow")
                     [{:a 1 :b 2} {:a 3 :b "foo" :c {:a 1 :b 2}}])
 
   (->> (read-arrow-file
-        (util/->path "/tmp/downloads/2025-10-15-data-dump-stg/data/l00-rc-b31163.arrow"))
-       (into [] (comp (drop 2) (take 1)))
-       first))
+        (util/->path "/tmp/downloads/2025-10-15-data-dump-stg/data/l00-rc-b31163.arrow")
+        2)
+       last))
 
 (defn read-meta-file
   "Reads the meta file and returns the rendered trie.
