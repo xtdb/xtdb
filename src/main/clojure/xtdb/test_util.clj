@@ -273,11 +273,12 @@
 (defn ->local-node ^xtdb.api.Xtdb [{:keys [^Path node-dir ^String buffers-dir
                                            rows-per-block log-limit page-limit instant-src
                                            compactor-threads healthz-port gc? blocks-to-keep garbage-lifetime
-                                           instant-source-for-non-tx-msgs? storage-epoch]
+                                           instant-source-for-non-tx-msgs? storage-epoch default-tz]
                                     :or {buffers-dir "objects"
                                          healthz-port 8080
                                          instant-source-for-non-tx-msgs? false
-                                         storage-epoch 0}}]
+                                         storage-epoch 0
+                                         default-tz #xt/zone "Europe/London"}}]
   (let [instant-src (or instant-src (->mock-clock))
         healthz-port (if (util/port-free? healthz-port) healthz-port (util/free-port))]
     (xtn/start-node (cond-> {:healthz {:port healthz-port}
@@ -288,7 +289,8 @@
                              :indexer (->> {:log-limit log-limit, :page-limit page-limit, :rows-per-block rows-per-block}
                                            (into {} (filter val)))
                              :compactor (->> {:threads compactor-threads}
-                                             (into {} (filter val)))}
+                                             (into {} (filter val)))
+                             :default-tz default-tz}
                       (not (nil? gc?)) (assoc :garbage-collector
                                               (cond-> {:enabled? gc?}
                                                 blocks-to-keep (assoc :blocks-to-keep blocks-to-keep)
