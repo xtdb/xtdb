@@ -232,7 +232,7 @@
 
     ;; Node with intact storage and empty directory-log with epoch set to 1
     (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")
-                                                     :epoch 1}]
+                                                    :epoch 1}]
                                        :storage [:local {:path (.resolve node-dir "objects")}]})]
       (t/testing "can query previous indexed values, unindexed values will be lost"
         (t/is (= (set [{:xt/id :foo} {:xt/id :bar}])
@@ -248,6 +248,29 @@
                  (set (xt/q node "SELECT _id FROM xt_docs")))))
 
       (t/testing "can finish the block"
+        (t/is (nil? (tu/finish-block! node)))))
+    
+    ;; Restarting the node again with the same new log path and epoch 1
+    (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")
+                                                    :epoch 1}]
+                                      :storage [:local {:path (.resolve node-dir "objects")}]})]
+      (t/testing "can query same transactions + nothing has been re-indexed"
+        (t/is (= (set [{:xt/id :foo}
+                       {:xt/id :bar}
+                       {:xt/id :new}
+                       {:xt/id :new2}])
+                 (set (xt/q node "SELECT _id FROM xt_docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL")))))
+
+      (t/testing "can index/query new transactions"
+        (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :new3}]]))
+        (t/is (= (set [{:xt/id :foo}
+                       {:xt/id :bar}
+                       {:xt/id :new}
+                       {:xt/id :new2}
+                       {:xt/id :new3}])
+                 (set (xt/q node "SELECT _id FROM xt_docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL")))))
+
+      (t/testing "can finish another block"
         (t/is (nil? (tu/finish-block! node)))))))
 
 (t/deftest test-local-log-starts-at-correct-point-after-block-cut
