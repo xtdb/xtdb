@@ -145,6 +145,7 @@ class LogProcessor(
 
         records.forEach { record ->
             val msgId = offsetToMsgId(epoch, record.logOffset)
+            var toFinishBlock = false
             LOG.debug("Processing message $msgId, ${record.message.javaClass.simpleName}")
 
             try {
@@ -182,7 +183,7 @@ class LogProcessor(
                         }
 
                         if (liveIndex.isFull())
-                            finishBlock()
+                            toFinishBlock = true
 
                         result
                     }
@@ -190,7 +191,7 @@ class LogProcessor(
                     is Message.FlushBlock -> {
                         val expectedBlockIdx = msg.expectedBlockIdx
                         if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L))
-                            finishBlock()
+                            toFinishBlock = true
 
                         null
                     }
@@ -238,6 +239,9 @@ class LogProcessor(
                     }
                 }
                 latestProcessedMsgId = msgId
+                if (toFinishBlock) {
+                    finishBlock()
+                }
                 watchers.notify(msgId, res)
             } catch (e: ClosedByInterruptException) {
                 watchers.notify(msgId, e)
