@@ -110,26 +110,27 @@
         (.writePage unloader)
         (.end unloader)))))
 
-(defn read-arrow-file [^Path path]
-  (reify clojure.lang.IReduceInit
-    (reduce [_ f init]
-      (with-open [al (RootAllocator.)
-                  ch (util/->file-channel path)
-                  rdr (ArrowFileReader. ch al)]
-        (.initialize rdr)
-        (loop [v init]
-          (cond
-            (reduced? v) (unreduced v)
-            (.loadNextBatch rdr) (recur (f v (.getAsMaps (Relation/fromRoot al (.getVectorSchemaRoot rdr)))))
-            :else v))))))
+(defn read-arrow-file
+  ([^Path path]
+   (reify clojure.lang.IReduceInit
+     (reduce [_ f init]
+       (with-open [al (RootAllocator.)
+                   ldr (Relation/loader al path)
+                   rel (Relation. al (.getSchema ldr))]
+         (loop [v init]
+           (cond
+             (reduced? v) (unreduced v)
+             (.loadNextPage ldr rel) (recur (f v (tu/->clj (.getAsMaps rel))))
+             :else v)))))))
 
 (comment
   (write-arrow-file (util/->path "/tmp/test.arrow")
                     [{:a 1 :b 2} {:a 3 :b "foo" :c {:a 1 :b 2}}])
 
-  (->> (util/->path "/tmp/test.arrow")
-       (read-arrow-file)
-       (into [] cat)))
+  (->> (read-arrow-file
+        (util/->path "/tmp/downloads/2025-10-15-data-dump-stg/data/l00-rc-b31163.arrow"))
+       (into [] (comp (drop 2) (take 1)))
+       first))
 
 (defn read-meta-file
   "Reads the meta file and returns the rendered trie.
@@ -154,8 +155,8 @@
                        (.getRootNode))))))
 
 (comment
-  (->> (util/->path "/tmp/downloads/2025-10-15-data-dump-stg/meta/l00-rc-b31163.arrow")
-       (read-meta-file)))
+  (read-meta-file
+   (util/->path "/tmp/downloads/2025-10-15-data-dump-stg/meta/l00-rc-b31163.arrow")))
 
 (defn read-table-block-file [store-path table-name block-idx]
   (with-open [in (io/input-stream (.toFile (-> (util/->path store-path)
