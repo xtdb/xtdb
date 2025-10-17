@@ -12,6 +12,7 @@
             [xtdb.log :as xt-log]
             [xtdb.logical-plan :as lp]
             [xtdb.node :as xtn]
+            [xtdb.object-store :as os]
             [xtdb.protocols :as xtp]
             [xtdb.query :as q]
             [xtdb.serde :as serde]
@@ -431,3 +432,7 @@
 
 (defn remove-nils [m]
   (into {} (remove (comp nil? val) m)))
+
+(defn read-files-from-bp-path [node ^Path path]
+  (->> (.listAllObjects (.getBufferPool (db/primary-db node)) (util/->path path))
+       (mapv (comp str #(.getFileName ^Path %) :key os/<-StoredObject))))
