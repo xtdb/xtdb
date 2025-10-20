@@ -12,6 +12,8 @@ export default defineConfig({
     site: 'https://docs.xtdb.com',
 
     integrations: [
+        mermaid(),
+
         starlight({
             title: 'XTDB',
 
@@ -259,8 +261,6 @@ export default defineConfig({
             progress: true,
             globalInstance: true,
         }),
-
-        mermaid(),
     ],
 
     trailingSlashes: "never",
