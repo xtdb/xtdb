@@ -279,7 +279,7 @@
                                          healthz-port 8080
                                          instant-source-for-non-tx-msgs? false
                                          storage-epoch 0
-                                         default-tz #xt/zone "Europe/London"}}]
+                                         default-tz (ZoneId/of "Europe/London")}}]
   (let [instant-src (or instant-src (->mock-clock))
         healthz-port (if (util/port-free? healthz-port) healthz-port (util/free-port))]
     (xtn/start-node (cond-> {:healthz {:port healthz-port}
