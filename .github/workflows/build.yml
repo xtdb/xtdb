@@ -79,6 +79,13 @@ jobs:
         with:
           services: "xtdb"
           cwd: "lang"
+          up-flags: "--wait"
+
+      - name: Dump XTDB logs on startup failure
+        if: failure()
+        working-directory: "lang"
+        run: docker compose logs xtdb
+
       - name: JS test
         working-directory: "lang"
         run: |
@@ -93,6 +100,11 @@ jobs:
         working-directory: "lang"
         run: |
           docker compose run elixir
+
+      - name: Dump all logs on test failure
+        if: failure()
+        working-directory: "lang"
+        run: docker compose logs
 
       - name: Post Slack Notification (On Fail)
         if: failure() && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/main'

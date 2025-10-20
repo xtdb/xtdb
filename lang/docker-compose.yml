@@ -3,6 +3,12 @@ services:
     build:
       context: ../docker/standalone
     command: ["playground", "--port", "5439"]
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/5439'"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
 
   js:
     build:
