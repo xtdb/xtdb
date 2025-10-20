@@ -5,6 +5,7 @@ import swup from '@swup/astro';
 import { remarkDefinitionList, defListHastHandlers } from 'remark-definition-list';
 import { railroadPlugin } from './src/railroad-plugin.js';
 import tailwindcss from '@tailwindcss/vite';
+import mermaid from 'astro-mermaid';
 
 // https://astro.build/config
 export default defineConfig({
@@ -73,8 +74,9 @@ export default defineConfig({
                     collapsed: true,
                     items: [
                         'about/mission',
-                        'about/time-in-xtdb',
+                        'about/dbs-in-xtdb',
                         'about/txs-in-xtdb',
+                        'about/time-in-xtdb',
                         { label: 'Community', link: '/intro/community'}
                     ]
                 },
@@ -257,6 +259,8 @@ export default defineConfig({
             progress: true,
             globalInstance: true,
         }),
+
+        mermaid(),
     ],
 
     trailingSlashes: "never",
