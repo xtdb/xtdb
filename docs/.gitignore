@@ -27,3 +27,5 @@ pnpm-debug.log*
 .vscode
 
 /.pnp.*
+
+/public/images/d2

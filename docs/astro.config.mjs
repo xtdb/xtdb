@@ -5,14 +5,21 @@ import swup from '@swup/astro';
 import { remarkDefinitionList, defListHastHandlers } from 'remark-definition-list';
 import { railroadPlugin } from './src/railroad-plugin.js';
 import tailwindcss from '@tailwindcss/vite';
-import mermaid from 'astro-mermaid';
+import d2 from 'astro-d2';
 
 // https://astro.build/config
 export default defineConfig({
     site: 'https://docs.xtdb.com',
 
     integrations: [
-        mermaid(),
+        d2({
+            output: 'images/d2',
+            theme: {
+                default: '103',
+                dark: '200'
+            },
+            sketch: true
+        }),
 
         starlight({
             title: 'XTDB',

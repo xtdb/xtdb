@@ -36,19 +36,8 @@ import Default from '@astrojs/starlight/components/Head.astro';
 <script>
     import { clearRegistry }  from '@components/fiddle/fiddle'
     const setup = () => {
-        window.swup.hooks.on('page:view', async () => {
+        window.swup.hooks.on('page:view', () => {
             document.querySelector("starlight-menu-button").setExpanded(false);
-
-            // Re-run mermaid on page transition if diagrams exist
-            if (document.querySelector('.mermaid')) {
-                if (!window.mermaid) {
-                    const { default: mermaid } = await import('mermaid');
-                    window.mermaid = mermaid;
-                    const theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default';
-                    mermaid.initialize({ startOnLoad: false, theme });
-                }
-                window.mermaid.run();
-            }
         });
         window.swup.hooks.on('content:replace', () => {
             clearRegistry();

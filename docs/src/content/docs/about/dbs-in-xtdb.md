@@ -51,58 +51,67 @@ Given this variance, let's define what this means in XTDB:
 This decoupling of databases (storage) and clusters (compute) enables a **data mesh architecture** - organize your databases around business domains (orders, customers, products), while each application team runs their own compute cluster. 
 Teams can attach secondary databases to access shared domain data, aligning your data model with your organization's structure while keeping compute independent.
 
-```mermaid
-flowchart BT
-    subgraph Apps["End-User Applications"]
-        App1["Webapp 1"]
-        App2["Webapp 2"]
-        App3["Analytics Service"]
-    end
+```d2
+direction: up
 
-    subgraph Compute["Compute - XTDB Clusters"]
-        subgraph Cluster1["XTDB Cluster 1"]
-            Node1A["Node 1A"]
-            Node1B["Node 1B"]
-            Node1C["Node 1C"]
-        end
+Apps: End-User Applications {
+  App1: Webapp 1
+  App2: Webapp 2
+  App3: Analytics Service
+}
 
-        subgraph Cluster2["XTDB Cluster 2"]
-            Node2A["Node 2A"]
-            Node2B["Node 2B"]
-            Node2C["Node 2C"]
-        end
-    end
+Compute: Compute - XTDB Clusters {
+  Cluster1: XTDB Cluster 1 {
+    Node1A: Node 1A
+    Node1B: Node 1B
+    Node1C: Node 1C
+  }
 
-    subgraph Storage["Storage - XTDB Databases"]
-        primary1[("
-          'xtdb'
-          (log + object storage)
-          (cluster 1 primary)
-        ")]
+  Cluster2: XTDB Cluster 2 {
+    Node2A: Node 2A
+    Node2B: Node 2B
+    Node2C: Node 2C
+  }
+}
 
-        inventoryDb[("'user-preferences'
-        (log + object storage)")]
+Storage: Storage - XTDB Databases {
+  primary1: "'xtdb'\n(log + object storage)\n(cluster 1 primary)" {
+    shape: cylinder
+  }
 
-        ordersDb[("'orders'
-        (log + object storage)")]
+  inventoryDb: "'user-preferences'\n(log + object storage)" {
+    shape: cylinder
+  }
 
-        primary2[("
-          'xtdb'
-          (log + object storage)
-          (cluster 2 primary)
-        ")]
-    end
+  ordersDb: "'orders'\n(log + object storage)" {
+    shape: cylinder
+  }
 
-    App1 --> Cluster1
-    App2 --> Cluster1
-    App3 --> Cluster2
+  primary2: "'xtdb'\n(log + object storage)\n(cluster 2 primary)" {
+    shape: cylinder
+  }
+}
 
-    Cluster1 -.primary.-> primary1
-    Cluster1 -.secondary.-> inventoryDb
-    Cluster1 -.secondary.-> ordersDb
+Apps.App1 -> Compute.Cluster1
+Apps.App2 -> Compute.Cluster1
+Apps.App3 -> Compute.Cluster2
 
-    Cluster2 -.primary.-> primary2
-    Cluster2 -.secondary.-> ordersDb
+Compute.Cluster1 -> Storage.primary1: primary {
+  style.stroke-dash: 3
+}
+Compute.Cluster1 -> Storage.inventoryDb: secondary {
+  style.stroke-dash: 3
+}
+Compute.Cluster1 -> Storage.ordersDb: secondary {
+  style.stroke-dash: 3
+}
+
+Compute.Cluster2 -> Storage.primary2: primary {
+  style.stroke-dash: 3
+}
+Compute.Cluster2 -> Storage.ordersDb: secondary {
+  style.stroke-dash: 3
+}
 ```
 
 ## Database architecture
