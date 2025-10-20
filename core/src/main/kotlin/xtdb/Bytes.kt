@@ -11,4 +11,11 @@ class Bytes(bytes: ByteArray) : Comparable<Bytes> {
     override fun toString() = """(Bytes "${bytes.toHexString()}")"""
 
     override operator fun compareTo(other: Bytes) = Arrays.compareUnsigned(bytes, other.bytes)
+
+    companion object {
+        @JvmField
+        val COMPARATOR: java.util.Comparator<ByteArray> = Comparator { l, r ->
+            Arrays.compareUnsigned(l, r)
+        }
+    }
 }
