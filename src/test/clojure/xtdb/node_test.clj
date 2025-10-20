@@ -1265,3 +1265,28 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 9 :a ["\n" "\t" "\r"]}]])
     (t/is (= [{:xt/id 9 :a ["\n" "\t" "\r"]}]
              (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 9")))))
+
+(t/deftest dml-mixed-record-id-types-4876
+  (t/testing "xtql"
+    (xt/execute-tx tu/*node* [[:put-docs :xtqldocs {:xt/id 0} {:xt/id "foo"} {:xt/id :bar} {:xt/id #uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3"}]])
+    (tu/finish-block! tu/*node*)
+    (c/compact-all! tu/*node* #xt/duration "PT1S")
+    (t/is (= (set [{:xt/id 0} {:xt/id "foo"} {:xt/id :bar} {:xt/id #uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3"}])
+             (set (xt/q tu/*node* "SELECT * FROM xtqldocs"))))
+    (xt/execute-tx tu/*node* [[:delete-docs :xtqldocs 0 "foo" :bar #uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3"]])
+    (xt/execute-tx tu/*node* [[:erase-docs :xtqldocs 0 "foo" :bar #uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3"]])
+    (t/is (empty? (xt/q tu/*node* "SELECT * FROM xtqldocs"))))
+  
+  (t/testing "sql"
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO sqldocs (_id) VALUES (?)" [0] ["foo"] [:bar] [#uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3"]]])
+    (tu/finish-block! tu/*node*)
+    (c/compact-all! tu/*node* #xt/duration "PT1S")
+    (xt/execute-tx tu/*node* [[:sql "UPDATE sqldocs SET foo = 'bar' WHERE _id = ?" [0] ["foo"] [:bar] [#uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3"]]])
+    (t/is (= (set [{:xt/id 0 :foo "bar"}
+                   {:xt/id "foo" :foo "bar"}
+                   {:xt/id :bar :foo "bar"}
+                   {:xt/id #uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3" :foo "bar"}])
+             (set (xt/q tu/*node* "SELECT * FROM sqldocs"))))
+    (xt/execute-tx tu/*node* [[:sql "DELETE FROM sqldocs WHERE _id = ?" [0] ["foo"] [:bar] [#uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3"]]])
+    (xt/execute-tx tu/*node* [[:sql "ERASE FROM sqldocs WHERE _id = ?" [0] ["foo"] [:bar] [#uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3"]]])
+    (t/is (empty? (xt/q tu/*node* "SELECT * FROM sqldocs")))))
