@@ -170,7 +170,7 @@
       (util/delete-dir node-dir)
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :storage-epoch 1})]
-        (xt/execute-tx node tx-ops)
+        (xt/execute-tx node tx-ops {:default-tz #xt/zone "Europe/London"})
 
         (tu/flush-block! node)
 
@@ -531,6 +531,7 @@
       (t/is (thrown-with-msg? Exception #"Interrupted"
                               (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo(_id) VALUES (1)"]]))))))
 
+
 (t/deftest test-indexes-sql-insert
   (binding [c/*ignore-signal-block?* true]
     (let [node-dir (util/->path "target/can-index-sql-insert")]
@@ -544,7 +545,8 @@
           (t/is (= (serde/->TxKey 0 (time/->instant #inst "2020-01-01"))
                    (xt/execute-tx node [[:sql "INSERT INTO table (_id, foo, bar, baz) VALUES (?, ?, ?, ?)"
                                          [0, 2, "hello", 12]
-                                         [1, 1, "world", 3.3]]])))
+                                         [1, 1, "world", 3.3]]]
+                                  {:default-tz #xt/zone "Europe/London"})))
 
           (t/is (= {"xtdb" [(serde/->TxKey 0 (time/->instant #inst "2020-01-01"))]}
                    (xtp/latest-completed-txs node)))
@@ -557,6 +559,7 @@
 
             (cpb/check-pbuf (.toPath (io/file expected-dir "pbuf"))
                             (.resolve node-dir "objects"))))))))
+
 
 (t/deftest ingestion-stopped-query-as-tx-op-3265
   (t/is (anomalous? [:incorrect :xtdb/queries-in-read-write-tx
