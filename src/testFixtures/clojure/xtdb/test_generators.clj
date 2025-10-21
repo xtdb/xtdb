@@ -1,6 +1,7 @@
 (ns xtdb.test-generators
   (:require [clojure.string :as str]
             [clojure.test.check.generators :as gen]
+            [honey.sql :as sql]
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.vector.writer :as vw])
@@ -293,3 +294,20 @@
       :total-doc-count (* blocks-to-generate rows-per-block)
       :rows-per-block rows-per-block
       :partitioned-records (partition 10 records)})))
+
+(defn update-statement-gen
+  ([id]
+   (update-statement-gen id {}))
+  ([id {:keys [exclude-gens]}]
+   (gen/let [num-fields (gen/choose 1 5)
+             field-names (gen/vector-distinct
+                          (gen/elements [:a :b :c :d :e :f :g :h :i :j])
+                          {:num-elements num-fields
+                           :max-tries 100})
+             field-values (gen/vector (recursive-value-gen {:exclude-gens exclude-gens}) num-fields)]
+     (let [lifted-vals (mapv (fn [v] [:lift v]) field-values)
+           [sql-string & params] (sql/format {:update :docs
+                                              :set (zipmap field-names lifted-vals)
+                                              :where [:= :_id id]})]
+       {:fields (zipmap field-names field-values)
+        :sql-statement [:sql sql-string (vec params)]}))))
