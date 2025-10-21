@@ -4,6 +4,7 @@
             [clojure.test.check.properties :as prop]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
+            [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.node.impl]
             [xtdb.test-generators :as tg]
@@ -13,11 +14,12 @@
 (t/deftest ^:property multiple-writes-to-doc
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
-   (prop/for-all [records (gen/vector (tg/generate-record {:potential-doc-ids #{1}}) 10)]
+   (prop/for-all [records (gen/vector (tg/generate-record {:potential-doc-ids #{1}}) 10 100)]
                  (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
                                                    :compactor {:threads 0}})]
                    (doseq [record records]
-                     (xt/execute-tx node [[:put-docs :docs record]]))
+                     (xt/submit-tx node [[:put-docs :docs record]]))
+                   (xt-log/sync-node node #xt/duration "PT1M")
 
                    (and
                     (t/testing "multiple transaction recorded"
@@ -270,7 +272,8 @@
                            
                            ;; Write record batches
                            (doseq [record-batch partitioned-records]
-                             (xt/execute-tx node [(into [:put-docs :docs] record-batch)]))
+                             (xt/submit-tx node [(into [:put-docs :docs] record-batch)]))
+                           (xt-log/sync-node node #xt/duration "PT1M")
                            
                            ;; Wait for blocks to be written by the live index
                            (Thread/sleep 1000)
