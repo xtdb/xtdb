@@ -99,13 +99,6 @@
 (defn union-gen [& generators]
   (gen/one-of generators))
 
-(def value-gen
-  (gen/frequency
-   [[8 simple-gen]
-    [2 (list-gen simple-gen)]
-    [2 (struct-gen simple-gen)]
-    [1 (set-gen simple-gen)]
-    [1 (union-gen simple-gen)]]))
 
 (def recursive-value-gen
   (gen/recursive-gen
