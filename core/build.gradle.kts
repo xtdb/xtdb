@@ -85,7 +85,7 @@ dependencies {
     testImplementation(libs.pgjdbc)
     testImplementation(libs.mockk)
     testImplementation(libs.clojure.test.check)
-    testImplementation(project(":"))
+    testImplementation(testFixtures(project(":")))
     testImplementation(project(":modules:xtdb-kafka"))
     testImplementation(project(":modules:xtdb-aws"))
     testImplementation(project(":modules:xtdb-google-cloud"))

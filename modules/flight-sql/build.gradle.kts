@@ -34,7 +34,7 @@ dependencies {
 
     api(kotlin("stdlib"))
 
-    testImplementation(project(":"))
+    testImplementation(testFixtures(project(":")))
 
     // brings in vendored SLF4J (but doesn't change the class names). naughty.
     // https://github.com/apache/arrow/issues/34516

@@ -26,7 +26,7 @@ dependencies {
     api(libs.next.jdbc)
     api(libs.pgjdbc)
 
-    testImplementation(project(":"))
+    testImplementation(testFixtures(project(":")))
     testImplementation(project(":xtdb-core"))
 }
 

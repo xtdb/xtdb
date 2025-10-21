@@ -17,6 +17,7 @@ buildscript {
 
 plugins {
     `java-library`
+    `java-test-fixtures`
     application
     alias(libs.plugins.clojurephant)
     alias(libs.plugins.freefair.javadoc)
@@ -32,7 +33,7 @@ val defaultJvmArgs = listOf(
     "-Djdk.attach.allowAttachSelf",
     "-Darrow.memory.debug.allocator=false",
     "-XX:-OmitStackTraceInFastThrow",
-    "-Dlogback.configurationFile=${rootDir.resolve("src/main/resources/logback-test.xml")}",
+    "-Dlogback.configurationFile=${rootDir.resolve("src/testFixtures/resources/logback-test.xml")}",
     "-Dxtdb.rootDir=$rootDir",
     "-Djunit.jupiter.extensions.autodetection.enabled=true"
 )
@@ -244,6 +245,13 @@ allprojects {
                     jvmArgs = defaultJvmArgs
                 }
             }
+
+            // Ensure test Clojure compilation depends on testFixtures compilation
+            tasks.configureEach {
+                if (name == "compileTestClojure") {
+                    dependsOn(rootProj.tasks.named("compileTestFixturesClojure"))
+                }
+            }
         }
 
         // apply 'maven-publish' in the sub-module to bring in all of this shared config.
@@ -407,6 +415,12 @@ dependencies {
     projectDep(":modules:xtdb-datasets")
     projectDep(":modules:xtdb-flight-sql")
     projectDep(":modules:xtdb-kafka-connect")
+
+    // testFixtures dependencies
+    testFixturesImplementation(project(":xtdb-api"))
+    testFixturesImplementation(project(":xtdb-core"))
+    testFixturesImplementation(libs.junit.jupiter.api)
+    testFixturesImplementation(libs.arrow.vector)
 
     api(libs.slf4j.api)
     api(libs.logback.classic)
