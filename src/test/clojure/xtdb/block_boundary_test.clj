@@ -283,8 +283,8 @@
                       (= 3 (count (xt/q node "FROM xt.txs"))))
                     (t/testing "no document present in period before re-add (erased from all time)"
                       (empty? (xt/q node "SELECT * FROM docs FOR VALID_TIME AS OF TIMESTAMP '2020-01-02T00:00:00.000Z' WHERE _id = 1")))
-                    (t/testing "document should have only 1 element in history (erase removed the first)"
-                      (let [res (xt/q node "SELECT *, _valid_from FROM docs FOR VALID_TIME ALL")]
+                    (t/testing "document should have only 1 element in history (we've erased previous history)"
+                      (let [res (xt/q node "SELECT *, _valid_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL")]
                         (= 1 (count res))))
                     (t/testing "last document is present"
                       (= (tg/normalize-for-comparison (tu/remove-nils record2))
