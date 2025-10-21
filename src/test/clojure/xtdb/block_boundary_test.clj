@@ -186,7 +186,7 @@
 (t/deftest ^:property delete-records-across-flush-boundaries
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
-   (prop/for-all [records (gen/vector (tg/generate-record) 1 10)
+   (prop/for-all [records (tg/generate-unique-id-records 10 100)
                   flush-after-put? tg/bool-gen
                   flush-after-delete? tg/bool-gen]
                  (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
