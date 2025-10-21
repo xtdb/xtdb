@@ -99,28 +99,30 @@
 (defn union-gen [& generators]
   (gen/one-of generators))
 
-
-(def recursive-value-gen
-  (gen/recursive-gen
-   (fn [inner-gen]
-     (gen/frequency
-      [[8 simple-gen]
-       [2 (list-gen inner-gen)]
-       [2 (struct-gen inner-gen)]
-       [1 (set-gen inner-gen)]
-       [1 (union-gen inner-gen simple-gen)]]))
-   simple-gen))
+(defn recursive-value-gen
+  ([] (recursive-value-gen {:exclude-gens #{}}))
+  ([{:keys [exclude-gens]}]
+   (let [filtered-simple-type-gen (remove exclude-gens simple-type-gens)
+         filtered-simple-gen (gen/one-of (vec filtered-simple-type-gen))]
+     (gen/recursive-gen
+      (fn [inner-gen]
+        (gen/frequency
+         [[8 filtered-simple-gen]
+          [2 (list-gen inner-gen)]
+          [2 (struct-gen inner-gen)]
+          [1 (set-gen inner-gen)]
+          [1 (union-gen inner-gen filtered-simple-gen)]]))
+      filtered-simple-gen))))
 
 (def field-type-gen
-  (gen/let [v recursive-value-gen]
+  (gen/let [v (recursive-value-gen)]
     (Types/toFieldType v)))
 
 ;; TODO: Generating simple keys here for now, trying to ensure some overlap between records
 (defn generate-record
   ([]
    (generate-record {}))
-  ([{:keys [potential-doc-ids value-gen]
-     :or {value-gen recursive-value-gen}}]
+  ([{:keys [potential-doc-ids]}]
    (gen/let [id (if potential-doc-ids
                   (gen/elements potential-doc-ids)
                   (gen/one-of [i64-gen safe-keyword-gen uuid-gen]))
@@ -129,7 +131,7 @@
                          (gen/elements [:a :b :c :d :e :f :g :h :i :j])
                          {:num-elements num-fields
                           :max-tries 100})
-             field-values (gen/vector value-gen num-fields)]
+             field-values (gen/vector (recursive-value-gen) num-fields)]
      (-> (zipmap field-keys field-values)
          (assoc :xt/id id)))))
 
@@ -147,7 +149,7 @@
 
 (defn dense-union-vector-vs-gen
   [min-length max-length]
-  (typed-vector-vs-gen recursive-value-gen min-length max-length))
+  (typed-vector-vs-gen (recursive-value-gen) min-length max-length))
 
 (def vector-vs-gen
   (gen/frequency
