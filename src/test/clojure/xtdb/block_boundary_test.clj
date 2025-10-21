@@ -239,6 +239,57 @@
                       (= (tg/normalize-for-comparison (tu/remove-nils record2))
                          (tg/normalize-for-comparison (first (xt/q node "SELECT * FROM docs"))))))))))
 
+(t/deftest ^:property erase-records-across-flush-boundaries
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [records (tg/generate-unique-id-records 10 100)
+                  flush-after-put? tg/bool-gen
+                  flush-after-erase? tg/bool-gen]
+                 (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
+                                                   :compactor {:threads 0}})]
+                   (xt/execute-tx node [(into [:put-docs :docs] records)])
+                   (when flush-after-put? (tu/flush-block! node))
+
+                   (xt/execute-tx node [(into [:erase-docs :docs] (mapv :xt/id records))])
+                   (when flush-after-erase? (tu/flush-block! node))
+
+                   (and
+                    (t/testing "two transactions recorded"
+                      (= 2 (count (xt/q node "FROM xt.txs"))))
+                    (t/testing "no documents present across all time"
+                      (empty? (xt/q node "SELECT * FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))))))
+
+(t/deftest ^:property erase-and-re-add-record-across-flush-boundaries
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [record1 (tg/generate-record {:potential-doc-ids #{1}})
+                  record2 (tg/generate-record {:potential-doc-ids #{1}})
+                  flush-after-put? tg/bool-gen
+                  flush-after-erase? tg/bool-gen
+                  flush-after-readd? tg/bool-gen]
+                 (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
+                                                   :compactor {:threads 0}})]
+                   (xt/execute-tx node [[:put-docs :docs record1]])
+                   (when flush-after-put? (tu/flush-block! node))
+
+                   (xt/execute-tx node [[:erase-docs :docs 1]])
+                   (when flush-after-erase? (tu/flush-block! node))
+
+                   (xt/execute-tx node [[:put-docs :docs record2]])
+                   (when flush-after-readd? (tu/flush-block! node))
+
+                   (and
+                    (t/testing "three transactions recorded"
+                      (= 3 (count (xt/q node "FROM xt.txs"))))
+                    (t/testing "no document present in period before re-add (erased from all time)"
+                      (empty? (xt/q node "SELECT * FROM docs FOR VALID_TIME AS OF TIMESTAMP '2020-01-02T00:00:00.000Z' WHERE _id = 1")))
+                    (t/testing "document should have only 1 element in history (erase removed the first)"
+                      (let [res (xt/q node "SELECT *, _valid_from FROM docs FOR VALID_TIME ALL")]
+                        (= 1 (count res))))
+                    (t/testing "last document is present"
+                      (= (tg/normalize-for-comparison (tu/remove-nils record2))
+                         (tg/normalize-for-comparison (first (xt/q node "SELECT * FROM docs"))))))))))
+
 (t/deftest ^:property mixed-ops-across-boundaries
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
