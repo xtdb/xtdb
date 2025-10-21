@@ -55,3 +55,13 @@
       (catch Exception e
         (throw (err/incorrect ::invalid-basis (str "Invalid basis: " (.getMessage e))
                               {::err/cause e, :basis basis-str}))))))
+
+(defn cap-basis [basis ^Instant inst]
+  (-> basis
+      (update-vals (fn [sys-times]
+                     (mapv (fn [^Instant ts]
+                             (if (and ts (.isBefore ts inst))
+                               ts
+                               inst))
+                           sys-times)))))
+

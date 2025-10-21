@@ -60,9 +60,10 @@
          (when-not was-conn?
            (.close conn)))))))
 
-(defn- begin-ro-sql [{:keys [default-tz await-token snapshot-token current-time]}]
+(defn- begin-ro-sql [{:keys [default-tz await-token snapshot-token snapshot-time current-time]}]
   (let [kvs (->> [["TIMEZONE = ?" (some-> default-tz str)]
                   ["SNAPSHOT_TOKEN = ?" snapshot-token]
+                  ["SNAPSHOT_TIME = ?" snapshot-time]
                   ["CLOCK_TIME = ?" current-time]
                   ["AWAIT_TOKEN = ?" await-token]]
                  (into [] (filter (comp some? second))))]
@@ -131,6 +132,7 @@
   - query: either an XTQL or SQL query.
   - opts:
     - `:snapshot-token`: see 'Transaction Basis'
+    - `:snapshot-time`: see 'Transaction Basis'
     - `:current-time`: override wall-clock time to use in functions that require it
     - `:default-tz`: overrides the default time zone for the query
 
@@ -159,6 +161,9 @@
 
   Alternatively a specific snapshot-token can be supplied,
   in this case the query will be run exactly at that basis, ensuring the repeatability of queries.
+
+  Providing a `:snapshot-time` sets an additional upper bound on the transactions visible to the query -
+  transactions will not be visible if they are after either the snapshot-token or the snapshot-time.
 
   (q conn '(from ...)
      {:snapshot-token \"ChAKBHh0ZGISCAoGCIDCr/AF\"}))"

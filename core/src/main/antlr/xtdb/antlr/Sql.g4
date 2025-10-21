@@ -79,6 +79,7 @@ settingQueryVariable
     : 'DEFAULT' 'VALID_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultValidTime
     | 'DEFAULT' 'SYSTEM_TIME' 'TO'? tableTimePeriodSpecification # SettingDefaultSystemTime
     | SNAPSHOT_TOKEN ('TO' | '=') snapshotToken=expr # SettingSnapshotToken
+    | SNAPSHOT_TIME ('TO' | '=') snapshotTime=expr # SettingSnapshotTime
     | CLOCK_TIME ('TO' | '=') clockTime=expr # SettingClockTime
     ;
 
@@ -807,6 +808,7 @@ txTzOption : ('TIMEZONE' | 'TIME' 'ZONE') '='? tz=expr ;
 
 readOnlyTxOption
     : 'SNAPSHOT_TOKEN' '='? snapshotToken=expr # SnapshotTokenTxOption
+    | 'SNAPSHOT_TIME' '='? snapshotTime=expr # SnapshotTimeTxOption
     | 'CLOCK_TIME' '='? clockTime=expr # ClockTimeTxOption
     | AWAIT_TOKEN '='? awaitToken=expr # AwaitTokenTxOption
     | txTzOption # TxTzOption0

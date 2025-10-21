@@ -114,7 +114,7 @@
 
     (letfn [(q-at [tx]
               (->> (xt/q *node* '(from :docs [{:xt/id id}])
-                         {:snapshot-token (basis/->time-basis-str {"xtdb" [(:system-time tx)]})
+                         {:snapshot-time (:system-time tx)
                           :tx-timeout (Duration/ofSeconds 1)})
                    (into #{} (map :id))))]
 

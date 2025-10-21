@@ -533,6 +533,7 @@
                                            (update :system-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
                                            (update :current-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
                                            (update :snapshot-token #(some-> % (apply-args args)))
+                                           (update :snapshot-time #(some-> % (apply-args args)))
                                            (->> (into {} (filter (comp some? val))))))
                                  (assoc :await-token await-token))))))))))
 
@@ -775,6 +776,9 @@
 
                                         (visitSnapshotTokenTxOption [_ ctx]
                                           {:snapshot-token (sql/plan-expr (.snapshotToken ctx) env)})
+
+                                        (visitSnapshotTimeTxOption [_ ctx]
+                                          {:snapshot-time (sql/plan-expr (.snapshotTime ctx) env)})
 
                                         (visitClockTimeTxOption [_ ctx]
                                           {:current-time (sql/plan-expr (.clockTime ctx) env)})
@@ -1040,6 +1044,7 @@
         await-token (:await-token transaction await-token)
 
         query-opts {:snapshot-token (:snapshot-token stmt (:snapshot-token transaction))
+                    :snapshot-time (:snapshot-time stmt (:snapshot-time transaction))
                     :current-time (or (:current-time stmt)
                                       (:current-time transaction)
                                       (.instant clock))

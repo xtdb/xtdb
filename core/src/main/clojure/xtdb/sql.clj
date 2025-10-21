@@ -2723,6 +2723,9 @@
   (visitSettingSnapshotToken [_ ctx]
     [:snapshot-token (.accept (.snapshotToken ctx) (->ExprPlanVisitor env scope))])
 
+  (visitSettingSnapshotTime [_ ctx]
+    [:snapshot-time (.accept (.snapshotTime ctx) (->ExprPlanVisitor env scope))])
+
   (visitInsertStatement [_ ctx]
     (let [{:keys [col-syms] :as insert-plan} (-> (.insertColumnsAndSource ctx)
                                                  (.accept (->QueryPlanVisitor env scope)))]
@@ -3054,7 +3057,7 @@
             (-> plan
                 (vary-meta (fn [m]
                              (-> (or m {})
-                                 (into (select-keys stmt [:explain? :explain-analyze? :current-time :snapshot-token]))
+                                 (into (select-keys stmt [:explain? :explain-analyze? :current-time :snapshot-token :snapshot-time]))
                                  (assoc :param-count @!param-count
                                         :warnings @!warnings
                                         :ordered-outer-projection col-syms)))))))))))

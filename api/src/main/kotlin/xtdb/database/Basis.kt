@@ -4,10 +4,7 @@ package xtdb.database
 
 import xtdb.api.log.MessageId
 import xtdb.error.Incorrect
-import xtdb.proto.basis.TxBasis
-import xtdb.proto.basis.messageIds
-import xtdb.proto.basis.txBasis
-import kotlin.collections.iterator
+import xtdb.proto.basis.*
 import kotlin.io.encoding.Base64
 import kotlin.math.max
 

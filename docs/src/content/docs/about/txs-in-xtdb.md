@@ -114,6 +114,32 @@ It defaults to including all of the processed transactions on the queried node a
   ```
   
 Snapshots are an *upper-bound* on the transactions visible to your query.
+
+You may also provide `SNAPSHOT_TIME`, a timestamp which further limits the transactions visible to your query.
+If both are provided, transactions will not be visible if they are after either the `SNAPSHOT_TOKEN` or the `SNAPSHOT_TIME`.
+
+```sql
+-- to bound all of the queries within a transaction:
+BEGIN READ ONLY 
+  WITH (SNAPSHOT_TIME = TIMESTAMP '2023-01-01Z');
+  
+SELECT ...;
+
+ROLLBACK; -- or COMMIT, doesn't matter for read-only transactions in XTDB.
+
+-- alternatively, on a per-query basis:
+SETTING SNAPSHOT_TIME = TIMESTAMP '2023-01-01Z'
+SELECT ...;
+```
+
+:::caution
+`SNAPSHOT_TIME` **does not** provide repeatable queries to the same level as `SNAPSHOT_TOKEN` - it is provided only as an approximation for convenience.
+
+For example, if the queried node is behind the `SNAPSHOT_TIME` when you first run a query (i.e. its latest indexed transaction in any database is before that time) and then catches up later, subsequent queries - even with the same `SNAPSHOT_TIME` - may return different results.
+Especially in multiple-database systems, the system may never have been in the state suggested by the returned results.
+
+If you need full query repeatability (for audit purposes, say) you should store and re-use the `SNAPSHOT_TOKEN` of your query, as described above - these are guaranteed to reflect the state of the system at the point in time when the token was retrieved.
+:::
   
 ### Clock time
 

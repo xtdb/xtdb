@@ -146,20 +146,26 @@
     (-> args (.vectorFor (str expr)) (.getObject 0))
     expr))
 
-(defn- validate-snapshot-not-before [snapshot-token snaps]
-  (when snapshot-token
-    (let [basis (basis/<-time-basis-str snapshot-token)]
-      (doseq [[db-name ^Snapshot snap] snaps]
-        (let [snap-tx (.getTxBasis snap)
-              system-time (get-in basis [db-name 0])]
-          (when (and system-time
-                     (or (nil? snap-tx)
-                         (neg? (compare (.getSystemTime snap-tx) system-time))))
-            (throw (err/incorrect :xtdb/unindexed-tx
-                                  (format "system-time (%s) is after the latest completed tx (%s)"
-                                          (str system-time) (pr-str snap-tx))
-                                  {:latest-completed-tx snap-tx
-                                   :system-time system-time}))))))))
+(defn- validate-basis-not-before [basis snaps]
+  (doseq [[db-name ^Snapshot snap] snaps]
+    (let [snap-tx (.getTxBasis snap)
+          system-time (get-in basis [db-name 0])]
+      (when (and system-time
+                 (or (nil? snap-tx)
+                     (neg? (compare (.getSystemTime snap-tx) system-time))))
+        (throw (err/incorrect :xtdb/unindexed-tx
+                              (format "system-time (%s) is after the latest completed tx (%s)"
+                                      (str system-time) (pr-str snap-tx))
+                              {:latest-completed-tx snap-tx
+                               :system-time system-time}))))))
+
+(defn- default-basis [snaps]
+  (->> (for [[db-name ^Snapshot snap] snaps
+             :let [sys-time (some-> (.getTxBasis snap) (.getSystemTime))]
+             :when sys-time]
+         [db-name [sys-time]])
+       (into {})
+       (not-empty)))
 
 (defn- parse-query [query]
   (cond
@@ -285,7 +291,8 @@
 
                   {:keys [ordered-outer-projection warnings param-count], :or {param-count 0}, :as plan-meta} (meta plan)]
 
-              (into (select-keys plan-meta [:current-time :snapshot-token :explain? :explain-analyze?])
+              (into (select-keys plan-meta [:current-time :snapshot-token :snapshot-time
+                                            :explain? :explain-analyze?])
                     {:plan plan,
                      :conformed-plan conformed-plan
                      :scan-cols (->> (lp/child-exprs conformed-plan)
@@ -343,7 +350,7 @@
 
             (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
-            (openQuery [_ {:keys [args current-time snapshot-token default-tz close-args? await-token]
+            (openQuery [_ {:keys [args current-time snapshot-token snapshot-time default-tz close-args? await-token]
                            :or {default-tz default-tz
                                 close-args? true}}]
               (util/with-close-on-catch [^BufferAllocator allocator (if allocator
@@ -373,16 +380,16 @@
                   (try
                     (binding [expr/*clock* (InstantSource/fixed current-time)
                               expr/*default-tz* default-tz
-                              expr/*snapshot-token* (or (some-> (:snapshot-token planned-query snapshot-token) (expr->value {:args args})
-                                                                (doto (validate-snapshot-not-before snaps)))
 
-                                                        (some-> (->> (for [[db-name ^Snapshot snap] snaps
-                                                                           :let [sys-time (some-> (.getTxBasis snap) (.getSystemTime))]
-                                                                           :when sys-time]
-                                                                       [db-name [sys-time]])
-                                                                     (into {})
-                                                                     (not-empty))
-                                                                (basis/->time-basis-str)))
+                              ;; both snapshot-token and snapshot-time form upper bounds - the result is the intersection of the two
+                              expr/*snapshot-token* (some-> (cond-> (or (some-> (:snapshot-token planned-query snapshot-token)
+                                                                                (expr->value {:args args})
+                                                                                (basis/<-time-basis-str)
+                                                                                (doto (validate-basis-not-before snaps)))
+
+                                                                        (default-basis snaps))
+                                                              snapshot-time (basis/cap-basis (time/->instant snapshot-time)))
+                                                            (basis/->time-basis-str))
                               expr/*await-token* await-token]
 
                       (if (:explain? planned-query)

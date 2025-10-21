@@ -2498,6 +2498,48 @@ ORDER BY 1,2;")
           (finally
             (jdbc/execute! conn ["ROLLBACK"])))))))
 
+(t/deftest snapshot-time
+  (with-open [conn (jdbc-conn)]
+    (t/is (= [{:ts nil}] (jdbc/execute! conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2019-01-01Z' SELECT SNAPSHOT_TOKEN ts"]))
+          "before any transactions")
+
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :x 3}]])
+
+    (t/is (= [{:ts (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-01Z[UTC]"]})}]
+             (jdbc/execute! conn ["SETTING SNAPSHOT_TIME = ? SELECT SNAPSHOT_TOKEN ts"
+                                  #xt/zdt "2020-01-04Z"]))
+          "snapshot-token capped by latest-completed-tx")
+
+    (t/is (= [{:ts (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-01Z[UTC]"]})}]
+             (xt/q tu/*node* ["SELECT SNAPSHOT_TOKEN ts"]
+                   {:snapshot-time #xt/zdt "2020-01-04Z"}))
+          "snapshot-token capped by latest-completed-tx")
+
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 2, :x 4}]])
+
+    (t/is (= [{:xt/id 1, :x 3}, {:xt/id 2, :x 4}]
+             (xt/q tu/*node* ["SELECT * FROM docs ORDER BY _id"])))
+
+    (t/is (= [{:xt/id 1, :x 3}]
+             (xt/q tu/*node* ["SELECT * FROM docs"]
+                   {:snapshot-time #xt/zdt "2020-01-01T12:00Z"}))
+          "snapshot-time caps snapshot")
+
+    (t/is (= [{:xt/id 1, :x 3}]
+             (xt/q tu/*node* ["SELECT * FROM docs FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-03Z'"]
+                   {:snapshot-time #xt/zdt "2020-01-01T12:00Z"}))
+          "snapshot-time caps snapshot even with later system-time")
+
+    (t/is (= [{:xt/id 1, :x 3}]
+             (xt/q tu/*node* ["SELECT * FROM docs FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-01Z'"]
+                   {:snapshot-time #xt/zdt "2020-01-05Z"}))
+          "snapshot-time caps snapshot even with later system-time")
+
+    (t/is (= [{:basis (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-01T12:00Z"]})}]
+             (xt/q tu/*node* ["SELECT SNAPSHOT_TOKEN basis"]
+                   {:snapshot-time #xt/zdt "2020-01-01T12:00Z"}))
+          "snapshot-time caps snapshot")))
+
 (t/deftest show-clock-time
   (with-open [conn (jdbc-conn)]
     (t/testing "defaults to now"
