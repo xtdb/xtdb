@@ -6,7 +6,7 @@ import clojure.lang.PersistentHashMap
 
 class Incorrect(
     message: String?, data: IPersistentMap = PersistentHashMap.EMPTY, cause: Throwable? = null
-) : Anomaly.Caller(message, data, cause) {
+) : Anomaly.Caller(message, Anomaly.ensureCategory(data, INCORRECT), cause) {
 
     companion object {
         internal val INCORRECT = Keyword.intern("cognitect.anomalies/incorrect")

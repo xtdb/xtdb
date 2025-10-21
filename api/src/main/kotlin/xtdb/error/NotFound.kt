@@ -6,7 +6,7 @@ import clojure.lang.PersistentHashMap
 
 class NotFound(
     message: String?, data: IPersistentMap = PersistentHashMap.EMPTY, cause: Throwable? = null
-) : Anomaly.Caller(message, data, cause) {
+) : Anomaly.Caller(message, Anomaly.ensureCategory(data, NOT_FOUND), cause) {
     companion object {
         internal val NOT_FOUND = Keyword.intern("cognitect.anomalies", "not-found")
     }

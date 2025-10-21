@@ -6,7 +6,7 @@ import clojure.lang.PersistentHashMap
 
 class Unsupported(
     message: String?, data: IPersistentMap = PersistentHashMap.EMPTY, cause: Throwable? = null
-) : Anomaly.Caller(message, data, cause) {
+) : Anomaly.Caller(message, Anomaly.ensureCategory(data, UNSUPPORTED), cause) {
     companion object {
         internal val UNSUPPORTED = Keyword.intern("cognitect.anomalies", "unsupported")
     }
