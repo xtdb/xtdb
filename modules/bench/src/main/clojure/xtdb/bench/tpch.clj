@@ -8,8 +8,9 @@
             [xtdb.util :as util])
   (:import (java.time Duration)))
 
-(def qs (-> (into #{} (range (count tpch-ra/queries)))
-            (disj 20)))
+(def ^:dynamic *qs*
+  (-> (into #{} (range (count tpch-ra/queries)))
+      (disj 21)))
 
 (defn query-tpch [stage-name i]
   (let [q (nth tpch-ra/queries i)
@@ -27,7 +28,7 @@
 (defn queries-stage [stage-name]
   {:t :do, :stage stage-name
    :tasks (vec (for [i (range (count tpch-ra/queries))
-                     :when (contains? qs i)]
+                     :when (contains? *qs* (inc i))]
                  (query-tpch stage-name i)))})
 
 (defmethod b/cli-flags :tpch [_]
