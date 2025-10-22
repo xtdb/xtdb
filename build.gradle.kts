@@ -427,7 +427,6 @@ dependencies {
     api(libs.clojure.tools.logging)
 
     api(libs.next.jdbc)
-    testImplementation(libs.honeysql)
     api(libs.integrant)
     api(project(":xtdb-core"))
 
@@ -461,6 +460,9 @@ dependencies {
     api(libs.testcontainers.kafka)
     api(libs.testcontainers.keycloak)
     api(libs.testcontainers.minio)
+
+    // honeysql
+    api(libs.honeysql)
 
     // For generating clojure docs
     testImplementation("codox", "codox", "0.10.8")
