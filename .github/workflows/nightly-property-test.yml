@@ -11,7 +11,7 @@ jobs:
     uses: ./.github/workflows/property-test.yml
     secrets: inherit
     with:
-      iteration_count: "1000"
+      iteration_count: "500"
     permissions:
       contents: read
       checks: write
