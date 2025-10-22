@@ -157,13 +157,11 @@ class StructVector private constructor(
         }
 
         return RowCopier { srcIdx ->
-            valueCount.also {
-                if (src.isNull(srcIdx)) {
-                    writeNull()
-                } else {
-                    childCopiers.forEach { it.copyRow(srcIdx) }
-                    endStruct()
-                }
+            if (src.isNull(srcIdx)) {
+                writeNull()
+            } else {
+                childCopiers.forEach { it.copyRow(srcIdx) }
+                endStruct()
             }
         }
     }

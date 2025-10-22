@@ -124,13 +124,11 @@ class FixedSizeListVector private constructor(
         }
 
         return RowCopier { srcIdx ->
-            valueCount.also {
-                if (src.isNull(srcIdx)) writeNull()
-                else {
-                    elCopier.copyRange(src.getListStartIndex(srcIdx), listSize)
+            if (src.isNull(srcIdx)) writeNull()
+            else {
+                elCopier.copyRange(src.getListStartIndex(srcIdx), listSize)
 
-                    endList()
-                }
+                endList()
             }
         }
     }

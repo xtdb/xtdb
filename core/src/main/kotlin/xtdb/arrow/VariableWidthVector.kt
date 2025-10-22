@@ -66,14 +66,12 @@ abstract class VariableWidthVector : Vector() {
         nullable = nullable || src.nullable
 
         return RowCopier { srcIdx ->
-            valueCount.also {
-                if (src.isNull(srcIdx)) writeNull()
-                else {
-                    val start = src.offsetBuffer.getInt(srcIdx).toLong()
-                    val len = src.offsetBuffer.getInt(srcIdx + 1) - start
-                    dataBuffer.writeBytes(src.dataBuffer, start, len)
-                    writeNotNull(len.toInt())
-                }
+            if (src.isNull(srcIdx)) writeNull()
+            else {
+                val start = src.offsetBuffer.getInt(srcIdx).toLong()
+                val len = src.offsetBuffer.getInt(srcIdx + 1) - start
+                dataBuffer.writeBytes(src.dataBuffer, start, len)
+                writeNotNull(len.toInt())
             }
         }
     }

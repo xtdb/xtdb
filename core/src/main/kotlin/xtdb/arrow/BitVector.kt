@@ -83,9 +83,7 @@ class BitVector private constructor(
 
         return RowCopier { srcIdx ->
             if (srcNullable && !nullable) nullable = true
-            valueCount.also {
-                if (src.isNull(srcIdx)) writeNull() else writeBoolean(src.getBoolean(srcIdx))
-            }
+            if (src.isNull(srcIdx)) writeNull() else writeBoolean(src.getBoolean(srcIdx))
         }
     }
 

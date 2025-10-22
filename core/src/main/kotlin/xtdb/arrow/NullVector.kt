@@ -65,10 +65,10 @@ class NullVector(
     override fun rowCopier(dest: VectorWriter) =
         if (dest is DenseUnionVector) dest.rowCopier0(this)
         else {
-            RowCopier { dest.valueCount.also { dest.writeNull() } }
+            RowCopier { dest.writeNull() }
         }
 
-    override fun rowCopier0(src: VectorReader) = RowCopier { valueCount.also { writeNull() } }
+    override fun rowCopier0(src: VectorReader) = RowCopier { writeNull() }
 
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), valueCount.toLong()))

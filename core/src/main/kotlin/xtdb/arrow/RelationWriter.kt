@@ -17,7 +17,7 @@ interface RelationWriter : RelationReader {
     fun vectorFor(name: String, fieldType: FieldType): VectorWriter = unsupported("vectorFor/2")
     override fun get(name: String) = vectorFor(name)
 
-    fun endRow(): Int
+    fun endRow()
 
     fun append(rel: RelationReader) {
         rel.vectors.forEach { vectorFor(it.name, it.fieldType).append(it) }

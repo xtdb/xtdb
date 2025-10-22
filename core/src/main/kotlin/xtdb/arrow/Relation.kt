@@ -57,10 +57,9 @@ class Relation(
                     .also { vec -> repeat(rowCount) { vec.writeNull() } }
         }!!
 
-    override fun endRow(): Int {
-        val pos = rowCount++
+    override fun endRow() {
+        rowCount++
         vectors.forEach { vec -> repeat(rowCount - vec.valueCount) { vec.writeNull() } }
-        return pos
     }
 
     fun loadFromArrow(root: VectorSchemaRoot) {

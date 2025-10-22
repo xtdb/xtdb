@@ -163,10 +163,10 @@ sealed class FixedWidthVector : Vector() {
 
         return RowCopier { srcIdx ->
             if (src.isNull(srcIdx)) {
-                valueCount.also { writeNull() }
+                writeNull()
             } else {
                 dataBuffer.writeBytes(src.dataBuffer, (srcIdx * byteWidth).toLong(), byteWidth.toLong())
-                valueCount.also { writeNotNull() }
+                writeNotNull()
             }
         }
     }

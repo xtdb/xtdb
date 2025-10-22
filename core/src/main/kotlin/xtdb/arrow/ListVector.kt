@@ -135,15 +135,13 @@ class ListVector private constructor(
         }
 
         return RowCopier { srcIdx ->
-            valueCount.also {
-                if (src.isNull(srcIdx)) {
-                    writeNull()
-                } else {
-                    val startIdx = src.getListStartIndex(srcIdx)
-                    elCopier.copyRange(startIdx, src.getListEndIndex(srcIdx) - startIdx)
+            if (src.isNull(srcIdx)) {
+                writeNull()
+            } else {
+                val startIdx = src.getListStartIndex(srcIdx)
+                elCopier.copyRange(startIdx, src.getListEndIndex(srcIdx) - startIdx)
 
-                    endList()
-                }
+                endList()
             }
         }
     }

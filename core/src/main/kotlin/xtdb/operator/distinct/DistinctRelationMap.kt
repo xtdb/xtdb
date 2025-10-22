@@ -6,7 +6,6 @@ import xtdb.arrow.IntVector
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
-import xtdb.expression.map.IndexHasher
 import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.expression.map.RelationMapBuilder
 import xtdb.trie.MutableMemoryHashTrie
@@ -73,11 +72,7 @@ class DistinctRelationMap(
                     { testIdx -> comparator.applyAsInt(testIdx, inIdx) },
                     {
                         hashColumn.writeInt(hashCode)
-                        val outIdx = rowCopier.copyRow(inIdx)
-
-                        assert(outIdx == outIdxHashColumn) {
-                            "Expected outIdx $outIdx to match hashColumn valueCount $outIdxHashColumn"
-                        }
+                        rowCopier.copyRow(inIdx)
                     }
                 )
 

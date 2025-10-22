@@ -73,7 +73,7 @@ internal interface OutWriter : AutoCloseable {
     fun end(): Results
 
     fun interface RecencyRowCopier {
-        fun copyRow(recency: RecencyMicros, sourceIndex: Int): Int
+        fun copyRow(recency: RecencyMicros, sourceIndex: Int)
     }
 
     class OutWriters(private val al: BufferAllocator): AutoCloseable {
@@ -84,7 +84,7 @@ internal interface OutWriter : AutoCloseable {
             fun rowCopier(dataReader: RelationReader) = object : RecencyRowCopier {
                 private val copier = dataReader.rowCopier(dataRel)
 
-                override fun copyRow(recency: RecencyMicros, sourceIndex: Int): Int = copier.copyRow(sourceIndex)
+                override fun copyRow(recency: RecencyMicros, sourceIndex: Int) = copier.copyRow(sourceIndex)
             }
         }
 

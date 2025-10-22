@@ -185,7 +185,7 @@ class DenseUnionVector private constructor(
 
         fun rowCopierFrom(src: VectorReader): RowCopier {
             val innerCopier = src.rowCopier(inner)
-            return RowCopier { srcIdx -> valueCount.also { writeValueThen(); innerCopier.copyRow(srcIdx) } }
+            return RowCopier { srcIdx -> writeValueThen(); innerCopier.copyRow(srcIdx) }
         }
 
         override fun clear() = inner.clear()
@@ -315,7 +315,7 @@ class DenseUnionVector private constructor(
                     val typeId = src.getTypeId(srcIdx).toInt()
 
                     if (typeId < 0)
-                        valueCount.also { writeUndefined() }
+                        writeUndefined()
                     else
                         copierMapping[typeId].copyRow(src.getOffset(srcIdx))
                 }
@@ -335,7 +335,7 @@ class DenseUnionVector private constructor(
                     .let { (i, v) -> LegVector(i.toByte(), v).rowCopier(dest) }
 
                 RowCopier { srcIdx ->
-                    if (isNull(srcIdx)) dest.valueCount.also { dest.writeNull() } else copier.copyRow(srcIdx)
+                    if (isNull(srcIdx)) dest.writeNull() else copier.copyRow(srcIdx)
                 }
             }
 

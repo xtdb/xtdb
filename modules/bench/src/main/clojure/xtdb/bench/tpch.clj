@@ -5,7 +5,8 @@
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.operator.join :as join])
   (:import (java.time Duration)))
 
 (def ^:dynamic *qs*
@@ -64,10 +65,12 @@
            (queries-stage :hot-queries)]})
 
 (t/deftest ^:bench tpch-benchmark
-  (-> (b/->benchmark :tpch
-                     {:scale-factor 1
-                      ;; :no-load? true
-                      :seed 42})
-      (b/run-benchmark {:node-dir (util/->path (str (System/getProperty "user.home") "/tmp/tpch-1"))
-                        ;; :no-load? true
-                        })))
+  (binding [*qs* #{5}
+            join/*disk-join-threshold-rows* Long/MAX_VALUE]
+    (-> (b/->benchmark :tpch
+                       {:scale-factor 1
+                        :no-load? true
+                        :seed 42})
+        (b/run-benchmark {:node-dir (util/->path (str (System/getProperty "user.home") "/tmp/tpch-1"))
+                          :no-load? true
+                          }))))
