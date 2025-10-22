@@ -212,6 +212,30 @@
                     :else v))
                 v))
 
+(defmethod lp/ra-expr :prn [_]
+  (s/cat :op #{:prn}
+         :relation ::lp/ra-expression))
+
+(defmethod lp/emit-expr :prn [{:keys [relation]} _args]
+  (lp/unary-expr (lp/emit-expr relation _args)
+    (fn [{inner-fields :fields, :as inner-rel}]
+      {:op :prn
+       :stats (:stats inner-rel)
+       :children [inner-rel]
+       :fields inner-fields
+       :->cursor (fn [{:keys [explain-analyze?]}, ^ICursor in-cursor]
+                   (cond-> (reify ICursor
+                             (getCursorType [_] "prn")
+                             (getChildCursors [_] [in-cursor])
+
+                             (tryAdvance [_ c]
+                               (.tryAdvance in-cursor
+                                            (fn [^RelationReader rel]
+                                              (println (.getCursorType in-cursor) ":")
+                                              (clojure.pprint/pprint (->clj (.getAsMaps rel)))
+                                              (.accept c rel)))))
+                     explain-analyze? (ICursor/wrapExplainAnalyze)))})))
+
 (defmethod pp/simple-dispatch TaggedValue [^TaggedValue tv]
   (print "#xt/tagged ")
   (pp/write-out [(.getTag tv) (->clj (.getValue tv))]))
