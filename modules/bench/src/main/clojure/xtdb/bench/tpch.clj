@@ -45,20 +45,18 @@
    :->state #(do {:!state (atom {})})
    :tasks [{:t :do
             :stage :ingest
-            :tasks (concat (when-not no-load?
-                             [{:t :call
-                               :stage :submit-docs
-                               :f (fn [{:keys [node]}] (tpch/submit-docs! node scale-factor))}])
+            :tasks (when-not no-load?
+                     [{:t :call, :stage :submit-docs
+                       :f (fn [{:keys [node]}] (tpch/submit-docs! node scale-factor))}
+                      
+                      {:t :call, :stage :sync,
+                       :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofHours 5)))}
 
-                           [{:t :do
-                             :stage :sync
-                             :tasks [{:t :call :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofHours 5)))}]}
-                            {:t :do
-                             :stage :finish-block
-                             :tasks [{:t :call :f (fn [{:keys [node]}] (b/finish-block! node))}]}
-                            {:t :do
-                             :stage :compact
-                             :tasks [{:t :call :f (fn [{:keys [node]}] (b/compact! node))}]}])}
+                      {:t :call, :stage :finish-block
+                       :f (fn [{:keys [node]}] (b/finish-block! node))}
+
+                      {:t :call, :stage :compact
+                       :f (fn [{:keys [node]}] (b/compact! node))}])}
 
            (queries-stage :cold-queries)
 
@@ -66,9 +64,9 @@
 
 (t/deftest ^:bench tpch-benchmark
   (-> (b/->benchmark :tpch
-                     {:scale-factor 0.01
+                     {:scale-factor 1
                       ;; :no-load? true
                       :seed 42})
-      (b/run-benchmark {:node-dir (util/->path (str (System/getProperty "user.home") "/tmp/tpch-0.01"))
+      (b/run-benchmark {:node-dir (util/->path (str (System/getProperty "user.home") "/tmp/tpch-1"))
                         ;; :no-load? true
                         })))
