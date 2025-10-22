@@ -402,7 +402,7 @@
                             (t/testing "transaction count preserved after restart"
                               (= initial-tx-count (count (xt/q node "SELECT * FROM xt.txs")))))))))))
 
-(t/deftest updates-across-flush-boundaries
+(t/deftest ^:property updates-across-flush-boundaries
   ;; TODO: To prevent failures here, we have to remove certain gens from UPDATE statement generation
   (let [exclude-gens #{tg/duration-gen tg/varbinary-gen tg/decimal-gen}]
     (tu/run-property-test
