@@ -69,21 +69,6 @@
 
 (def ^:dynamic ^{:tag 'long} *file-size-target* (* 100 1024 1024))
 
-(defn- map-while
-  "map f until it returns nil, then append the rest of the collection unaltered.
-
-   eagerly realises coll until the function returns nil, to avoid stack-overflow later.
-   see #4377"
-  [f coll]
-
-  (loop [res (transient [])
-         coll coll]
-    (if-let [[x & xs] (seq coll)]
-      (if-let [v (f x)]
-        (recur (conj! res v) xs)
-        (concat (persistent! res) coll))
-      (concat (persistent! res) coll))))
-
 (defn- stale-block-idx? [{:keys [live+nascent garbage] :as _tries} ^long block-idx]
   (when-let [{^long other-block-idx :block-idx} (or (first live+nascent) (first garbage))]
     (>= other-block-idx block-idx)))
@@ -406,4 +391,3 @@
         cat (trie-catalog-init table->table-block)]
     (log/debug "trie catalog started")
     cat))
-
