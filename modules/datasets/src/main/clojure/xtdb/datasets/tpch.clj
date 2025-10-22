@@ -1,16 +1,10 @@
 (ns xtdb.datasets.tpch
-  (:require [clojure.java.io :as io]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [cognitect.transit :as t]
             [next.jdbc :as jdbc]
-            [xtdb.api :as xt]
-            [xtdb.serde :as serde]
-            [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.api :as xt])
   (:import clojure.lang.MapEntry
            (io.airlift.tpch TpchColumn TpchColumnType$Base TpchEntity TpchTable)
-           (java.io File OutputStream)
            java.security.MessageDigest
            (java.time LocalDate)
            (java.util Arrays)))

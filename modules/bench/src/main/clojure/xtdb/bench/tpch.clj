@@ -1,5 +1,6 @@
 (ns xtdb.bench.tpch
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.test :as t]
+            [clojure.tools.logging :as log]
             [xtdb.bench :as b]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
@@ -15,30 +16,19 @@
         stage-name (keyword (str (name stage-name) "-" (:name (meta q))))
         q @q
         {::tpch-ra/keys [args]} (meta q)]
-    {:t :do, :stage stage-name
-     :tasks [{:t :call
-              :f (fn [{:keys [node]}]
-                   (try
-                     (count (tu/query-ra q {:node node, :args args}))
-                     (catch Exception e
-                       (.printStackTrace e)
-                       (throw e))))}]}))
+    {:t :call, :stage stage-name
+     :f (fn [{:keys [node]}]
+          (try
+            (count (tu/query-ra q {:node node, :args args}))
+            (catch Exception e
+              (.printStackTrace e)
+              (throw e))))}))
 
 (defn queries-stage [stage-name]
   {:t :do, :stage stage-name
-   :tasks (vec (concat [{:t :call :f (fn [{:keys [!state]}]
-                                       (swap! !state assoc :bf-stats-start (System/currentTimeMillis)))}]
-
-                       (for [i (range (count tpch-ra/queries))
-                             :when (contains? qs i)]
-                         (query-tpch stage-name i))
-
-                       [{:t :call :f (fn [{:keys [!state] :as worker}]
-                                       (let [report-name (str (name stage-name) " buffer pool stats")
-                                             start-ms (get @!state :bf-stats-start)
-                                             end-ms (System/currentTimeMillis)]
-                                         (b/log-report worker {:stage report-name
-                                                               :time-taken-ms (- end-ms start-ms)})))}]))})
+   :tasks (vec (for [i (range (count tpch-ra/queries))
+                     :when (contains? qs i)]
+                 (query-tpch stage-name i)))})
 
 (defmethod b/cli-flags :tpch [_]
   [["-s" "--scale-factor SCALE_FACTOR" "TPC-H scale factor to use"
@@ -74,10 +64,11 @@
 
            (queries-stage :hot-queries)]})
 
-(comment
+(t/deftest ^:bench tpch-benchmark
   (-> (b/->benchmark :tpch
-                     {:scale-factor 0.5
-                      :no-load? true
+                     {:scale-factor 0.01
+                      ;; :no-load? true
                       :seed 42})
-      (b/run-benchmark {:node-dir (util/->path (str (System/getProperty "user.home") "/tmp/tpch-0.05"))
-                        :no-load? true})))
+      (b/run-benchmark {:node-dir (util/->path (str (System/getProperty "user.home") "/tmp/tpch-0.01"))
+                        ;; :no-load? true
+                        })))
