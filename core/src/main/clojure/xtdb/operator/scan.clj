@@ -299,7 +299,7 @@
                                                     (into [] (keep (fn [^MergeTask mt]
                                                                      (when-let [pages (trie/filter-pages (.getPages mt) temporal-bounds)]
                                                                        (MergeTask. pages (.getPath mt)))))))]
-                               (cond-> (ScanCursor. allocator col-names col-preds
+                               (cond-> (ScanCursor. allocator (vec col-names) col-preds
                                                     temporal-bounds
                                                     !segments (.iterator ^Iterable merge-tasks)
                                                     schema args)
