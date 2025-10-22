@@ -52,9 +52,7 @@ class MultiIidSelector(private val iids: SortedSet<ByteArray>) : SelectionSpec {
     }
 
     fun select(allocator: BufferAllocator, readRelation: RelationReader, path: ByteArray): IntArray {
-        val iids =
-            bucketer.incrementPath(path)?.let { iids.subSet(bucketer.startIid(path), bucketer.startIid(it)) }
-                ?: iids.tailSet(bucketer.startIid(path))
+        val iids = bucketer.filterIidsForPath(this.iids, path)
 
         val res = IntArrayList()
         val iidReader = readRelation["_iid"]
