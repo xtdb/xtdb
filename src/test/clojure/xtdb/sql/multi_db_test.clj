@@ -120,6 +120,7 @@
 (t/deftest attach-database
   (let [node-dir (util/->path "target/multi-db/attach-db")]
     (util/delete-dir node-dir)
+    (util/delete-dir (util/->path "target/multi-db/attach-new-db"))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (jdbc/execute! node ["

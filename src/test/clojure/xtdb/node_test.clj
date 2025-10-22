@@ -1120,7 +1120,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
               :col-types '{_id :i64
                            bar [:union #{:utf8 :null}]
                            foo [:union #{:utf8 :null}]}}
-             (tu/query-ra '[:scan {:table #xt/table device} [_id foo bar]]
+             (tu/query-ra '[:order-by [[_id]]
+                            [:scan {:table #xt/table device} [_id foo bar]]]
                           {:node tu/*node*
                            :with-col-types? true})))
 

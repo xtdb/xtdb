@@ -502,7 +502,7 @@
                                  seg (BufferPoolSegment/open tu/*allocator* bp meta-mgr table-name trie-key)]
                   (doseq [leaf (.getLeaves (.getTrie page-meta))
                           :let [page (.page seg leaf)]]
-                    (with-open [rel (.openDataPage page tu/*allocator*)]
+                    (with-open [rel (.loadDataPage page tu/*allocator*)]
                       (t/is (pos? (.getRowCount rel))))))))))))))
 
 (t/deftest test-l2-compaction-badly-distributed

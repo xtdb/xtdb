@@ -629,10 +629,10 @@
 
           ;; two entries 2024 and 2025
           (t/is (= [{:xt/id 1,
-                     :xt/valid-from #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"}
-                    {:xt/id 1,
                      :xt/valid-from #xt/zoned-date-time "2024-01-01T00:00Z[UTC]",
-                     :xt/valid-to #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
+                     :xt/valid-to #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"}
+                    {:xt/id 1,
+                     :xt/valid-from #xt/zoned-date-time "2025-01-01T00:00Z[UTC]"}]
                    (tu/query-ra '[:scan {:table #xt/table docs, :for-valid-time [:between #inst "2024" #inst "2026"]}
                                   [_id _valid_from _valid_to]]
                                 query-opts)))
@@ -828,10 +828,12 @@
                                "SELECT *, _valid_from, _valid_to, _system_from, _system_to
                                 FROM foo FOR VALID_TIME AS OF ? FOR SYSTEM_TIME ALL WHERE _id = ?"]]
                       (t/testing (format "query: '%s'" q)
-                        (t/is (= (xt/q n1 [q date idx]
-                                       {:default-tz #xt/zone "UTC"})
-                                 (xt/q n2 [q date idx]
-                                       {:default-tz #xt/zone "UTC"})))))))
+                        (t/is (= (frequencies
+                                  (xt/q n1 [q date idx]
+                                        {:default-tz #xt/zone "UTC"}))
+                                 (frequencies
+                                  (xt/q n2 [q date idx]
+                                        {:default-tz #xt/zone "UTC"}))))))))
 
                 (doseq [to-i (range (count dates))
                         from-i (range to-i)
@@ -844,7 +846,9 @@
                            FROM foo FOR VALID_TIME BETWEEN ? AND ? FOR SYSTEM_TIME BETWEEN ? AND ?
                            WHERE _id = ?"]
                     (t/testing (format "query: '%s', from-i %d, to-i %d" q from-i to-i)
-                      (t/is (= (xt/q n1 [q from-date to-date from-date to-date idx]
-                                     {:default-tz #xt/zone "UTC"})
-                               (xt/q n2 [q from-date to-date from-date to-date idx]
-                                     {:default-tz #xt/zone "UTC"}))))))))))))))
+                      (t/is (= (frequencies
+                                (xt/q n1 [q from-date to-date from-date to-date idx]
+                                      {:default-tz #xt/zone "UTC"}))
+                               (frequencies
+                                (xt/q n2 [q from-date to-date from-date to-date idx]
+                                      {:default-tz #xt/zone "UTC"})))))))))))))))
