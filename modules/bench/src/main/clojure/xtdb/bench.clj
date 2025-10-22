@@ -235,7 +235,7 @@
                     ;; Propagate any worker exceptions to the main thread
                     (doseq [f futures]
                       (try
-                        (.get f) ; will throw ExecutionException if the Runnable raised
+                        @f ; will throw ExecutionException if the Runnable raised
                         (catch ExecutionException e
                           (let [cause (.getCause e)]
                             (log/error cause "Benchmark worker failed in :pool" {:task task})
@@ -268,7 +268,7 @@
                             ;; Propagate any worker exceptions to the main thread
                             (doseq [f futures]
                               (try
-                                (.get f) ; will throw ExecutionException if the Runnable raised
+                                @f ; will throw ExecutionException if the Runnable raised
                                 (catch ExecutionException e
                                   (let [cause (.getCause e)]
                                     (log/error cause "Benchmark worker failed in :concurrently" {:task task})
