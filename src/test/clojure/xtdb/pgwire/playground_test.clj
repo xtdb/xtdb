@@ -49,3 +49,18 @@
     (t/is (anomalous? [:conflict :xtdb/assert-failed "not_found"]
                       (throw (:detail (pgw-test/reading-ex
                                         (jdbc/execute! conn ["COMMIT"]))))))))
+
+(t/deftest update-filter-repro-4894
+  (with-open [conn (pgw-test/jdbc-conn {:dbname "foo"})]
+    (xt/execute-tx conn [["INSERT INTO docs RECORDS ?" {:xt/id "doc-1"}]])
+    (t/is (= [{:xt/id "doc-1"}] (xt/q conn ["FROM docs SELECT *"])))
+
+    (t/testing "should update - foo is null"
+      (xt/execute-tx conn [["UPDATE docs SET foo = 'bar' WHERE _id = ? AND foo IS NULL" "doc-1"]])
+      (t/is (= [{:xt/id "doc-1" :foo "bar"}] (xt/q conn ["FROM docs SELECT *"])))
+      (t/is (= [{:doc-count 2}] (xt/q conn ["SELECT COUNT(*) as doc_count FROM docs FOR VALID_TIME ALL WHERE _id = ?" "doc-1"]))))
+
+    (t/testing "should not update -  foo is not null"
+      (xt/execute-tx conn [["UPDATE docs SET foo = 'baz' WHERE _id = ? AND foo IS NULL" "doc-1"]])
+      (t/is (= [{:xt/id "doc-1" :foo "bar"}] (xt/q conn ["FROM docs SELECT *"])))
+      (t/is (= [{:doc-count 2}] (xt/q conn ["SELECT COUNT(*) as doc_count FROM docs FOR VALID_TIME ALL WHERE _id = ?" "doc-1"]))))))

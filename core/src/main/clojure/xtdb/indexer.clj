@@ -677,7 +677,7 @@
 
                     db-cat (Database$Catalog/singleton db)
 
-                    tx-opts {:snapshot-token (basis/->time-basis-str {"xtdb" [system-time]})
+                    tx-opts {:snapshot-token (basis/->time-basis-str {db-name [system-time]})
                              :current-time system-time
                              :default-tz default-tz
                              :tx-key tx-key
