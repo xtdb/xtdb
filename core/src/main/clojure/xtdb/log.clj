@@ -215,13 +215,27 @@
 
       (.getAsArrowStream rel))))
 
+(defmulti ->log-cluster-factory
+  (fn [k _opts]
+    (when-let [ns (namespace k)]
+      (doseq [k [(symbol ns)
+                 (symbol (str ns "." (name k)))]]
+
+        (try
+          (require k)
+          (catch Throwable _))))
+    k)
+  :default ::default)
+
+(defmethod ->log-cluster-factory ::default [k _]
+  (throw (err/incorrect :xtdb/unknown-log-cluster-type (format "Unknown log cluster type: %s" k)
+                        {:log-cluster-type k})))
+
+(defmethod ->log-cluster-factory ::kafka [_ opts] (->log-cluster-factory :xtdb.kafka/cluster opts))
+
 (defmethod xtn/apply-config! ::clusters [^Xtdb$Config config _ clusters]
   (doseq [[cluster-alias [tag opts]] clusters]
-    (xtn/apply-config! config
-                       (case tag
-                         :kafka :xtdb.kafka/cluster
-                         tag)
-                       [cluster-alias opts]))
+    (.logCluster config (str (symbol cluster-alias)) (->log-cluster-factory tag opts)))
   config)
 
 (defmethod ig/init-key ::clusters [_ clusters]
@@ -232,26 +246,39 @@
             (.open factory)))
     (into {} !clusters)))
 
-(defmethod xtn/apply-config! ::in-memory [^Xtdb$Config config _ {:keys [instant-src epoch]}]
-  (.log config
-        (cond-> (Log/getInMemoryLog)
-          instant-src (.instantSource instant-src)
-          epoch (.epoch epoch))))
+(defmulti ->log-factory
+  (fn [k _opts]
+    (when-let [ns (namespace k)]
+      (doseq [k [(symbol ns)
+                 (symbol (str ns "." (name k)))]]
 
-(defmethod xtn/apply-config! ::local [^Xtdb$Config config _ {:keys [path instant-src epoch instant-source-for-non-tx-msgs?]}]
-  (.log config
-        (cond-> (Log/localLog (util/->path path))
-          instant-src (.instantSource instant-src)
-          epoch (.epoch epoch)
-          instant-source-for-non-tx-msgs? (.useInstantSourceForNonTx))))
+        (try
+          (require k)
+          (catch Throwable _))))
+    k)
+  :default ::default)
+
+(defmethod ->log-factory ::default [k _]
+  (throw (err/incorrect :xtdb/unknown-log-type (format "Unknown log type: %s" k)
+                        {:log-type k})))
+
+(defmethod ->log-factory ::in-memory [_ {:keys [instant-src epoch]}]
+  (cond-> (Log/getInMemoryLog)
+    instant-src (.instantSource instant-src)
+    epoch (.epoch epoch)))
+
+(defmethod ->log-factory ::local [_ {:keys [path instant-src epoch instant-source-for-non-tx-msgs?]}]
+  (cond-> (Log/localLog (util/->path path))
+    instant-src (.instantSource instant-src)
+    epoch (.epoch epoch)
+    instant-source-for-non-tx-msgs? (.useInstantSourceForNonTx)))
+
+(defmethod ->log-factory :in-memory [_ opts] (->log-factory ::in-memory opts))
+(defmethod ->log-factory :local [_ opts] (->log-factory ::local opts))
+(defmethod ->log-factory :kafka [_ opts] (->log-factory :xtdb.kafka/kafka opts))
 
 (defmethod xtn/apply-config! :xtdb/log [^Xtdb$Config config _ [tag opts]]
-  (xtn/apply-config! config
-                     (case tag
-                       :in-memory ::in-memory
-                       :local ::local
-                       :kafka :xtdb/kafka)
-                     opts))
+  (.log config (->log-factory tag opts)))
 
 (defmethod ig/prep-key :xtdb/log [_ {:keys [base factory]}]
   {:base base
