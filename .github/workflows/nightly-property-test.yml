@@ -26,7 +26,7 @@ jobs:
         with:
           status: success
           notification_title: "*Nightly Property Test* has {status_message}:"
-          message_format: "{emoji} `nightly-property-test` job has {status_message} with 1000 iterations"
+          message_format: "{emoji} `nightly-property-test` job has {status_message} with 500 iterations"
           notify_when: "success"
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
