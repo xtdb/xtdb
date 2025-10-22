@@ -113,8 +113,8 @@ class FixedSizeListVector private constructor(
         }
 
     override fun rowCopier0(src: VectorReader): RowCopier {
-        require(src is FixedSizeListVector)
-        require(src.listSize == listSize)
+        check(src is FixedSizeListVector)
+        check(src.listSize == listSize)
 
         val elCopier = try {
             src.elVector.rowCopier(elVector)
@@ -124,13 +124,14 @@ class FixedSizeListVector private constructor(
         }
 
         return RowCopier { srcIdx ->
-            val startIdx = src.getListStartIndex(srcIdx)
+            valueCount.also {
+                if (src.isNull(srcIdx)) writeNull()
+                else {
+                    elCopier.copyRange(src.getListStartIndex(srcIdx), listSize)
 
-            (startIdx until startIdx + listSize).forEach { elIdx ->
-                elCopier.copyRow(elIdx)
+                    endList()
+                }
             }
-
-            valueCount.also { endList() }
         }
     }
 

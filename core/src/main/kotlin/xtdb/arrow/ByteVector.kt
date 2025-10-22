@@ -34,10 +34,7 @@ class ByteVector private constructor(
 
     override fun rowCopier0(src: VectorReader): RowCopier {
         check(src is ByteVector)
-        if (src.nullable && !nullable) nullable = true
-        return RowCopier { srcIdx ->
-            valueCount.also { writeByte(src.getByte(srcIdx)) }
-        }
+        return super.rowCopier0(src)
     }
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getByte(idx).toDouble())

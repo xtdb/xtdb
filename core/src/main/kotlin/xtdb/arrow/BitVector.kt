@@ -2,7 +2,6 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.BitVectorHelper
 import org.apache.arrow.vector.BitVectorHelper.getValidityBufferSize
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
@@ -80,9 +79,13 @@ class BitVector private constructor(
 
     override fun rowCopier0(src: VectorReader): RowCopier {
         check(src is BitVector)
+        val srcNullable = src.nullable
+
         return RowCopier { srcIdx ->
-            if (src.nullable && !nullable) nullable = true
-            valueCount.apply { if (src.isNull(srcIdx)) writeNull() else writeBoolean(src.getBoolean(srcIdx)) }
+            if (srcNullable && !nullable) nullable = true
+            valueCount.also {
+                if (src.isNull(srcIdx)) writeNull() else writeBoolean(src.getBoolean(srcIdx))
+            }
         }
     }
 

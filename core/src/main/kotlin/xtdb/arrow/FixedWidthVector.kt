@@ -162,8 +162,12 @@ sealed class FixedWidthVector : Vector() {
         check(src.byteWidth == byteWidth)
 
         return RowCopier { srcIdx ->
-            dataBuffer.writeBytes(src.dataBuffer, (srcIdx * byteWidth).toLong(), byteWidth.toLong())
-            valueCount.also { writeNotNull() }
+            if (src.isNull(srcIdx)) {
+                valueCount.also { writeNull() }
+            } else {
+                dataBuffer.writeBytes(src.dataBuffer, (srcIdx * byteWidth).toLong(), byteWidth.toLong())
+                valueCount.also { writeNotNull() }
+            }
         }
     }
 

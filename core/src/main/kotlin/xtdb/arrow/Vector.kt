@@ -117,12 +117,7 @@ sealed class Vector : VectorReader, VectorWriter {
         check(dest is Vector) { "can only copy to another Vector, got ${dest::class}" }
         if (fieldType.type != dest.type) throw InvalidCopySourceException(fieldType, dest.fieldType)
 
-        val copier = dest.rowCopier0(this)
-        if (!nullable) return copier
-
-        return RowCopier { idx ->
-            if (isNull(idx)) dest.valueCount.also { dest.writeNull() } else copier.copyRow(idx)
-        }
+        return dest.rowCopier0(this)
     }
 
     internal abstract fun rowCopier0(src: VectorReader): RowCopier

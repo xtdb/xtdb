@@ -44,12 +44,12 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
     }
 
     private fun ensureWritable(elWidth: Long): ArrowBuf {
-        while (buf.writableBytes() < elWidth) realloc(buf.writerIndex() + elWidth)
+        if (buf.writableBytes() < elWidth) realloc(buf.writerIndex() + elWidth)
         return buf
     }
 
     fun ensureCapacity(capacity: Long): ArrowBuf {
-        while (buf.capacity() < capacity) realloc(capacity)
+        if (buf.capacity() < capacity) realloc(capacity)
         return buf
     }
 

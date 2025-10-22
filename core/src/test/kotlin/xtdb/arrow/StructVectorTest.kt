@@ -183,10 +183,8 @@ class StructVectorTest {
                     "i32" to IntVector.open(allocator, "i32", false),
                     "utf8" to Utf8Vector(allocator, "utf8", true)
                 )).use { copy ->
-                val copier = nullVector.rowCopier(copy)
-                copier.copyRow(0)
-                copier.copyRow(1)
-                copier.copyRow(2)
+
+                nullVector.rowCopier(copy).copyRange(0, 3)
 
                 assertEquals(3, copy.valueCount)
                 assertNull(copy.getObject(1))

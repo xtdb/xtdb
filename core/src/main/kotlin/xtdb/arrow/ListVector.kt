@@ -40,7 +40,7 @@ class ListVector private constructor(
 
     private var lastOffset: Int = 0
 
-    override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
+    override fun isNull(idx: Int) = nullable && !validityBuffer.getBit(idx)
 
     private fun writeOffset(newOffset: Int) {
         if (valueCount == 0) offsetBuffer.writeInt(0)
@@ -129,17 +129,22 @@ class ListVector private constructor(
 
         val elCopier = try {
             src.elVector.rowCopier(elVector)
-        } catch (e: InvalidCopySourceException) {
+        } catch (_: InvalidCopySourceException) {
             elVector = elVector.maybePromote(al, src.elVector.fieldType)
             src.elVector.rowCopier(elVector)
         }
 
         return RowCopier { srcIdx ->
-            (src.getListStartIndex(srcIdx) until src.getListEndIndex(srcIdx)).forEach { elIdx ->
-                elCopier.copyRow(elIdx)
-            }
+            valueCount.also {
+                if (src.isNull(srcIdx)) {
+                    writeNull()
+                } else {
+                    val startIdx = src.getListStartIndex(srcIdx)
+                    elCopier.copyRange(startIdx, src.getListEndIndex(srcIdx) - startIdx)
 
-            valueCount.also { endList() }
+                    endList()
+                }
+            }
         }
     }
 

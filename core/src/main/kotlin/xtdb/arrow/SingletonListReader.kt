@@ -30,9 +30,7 @@ class SingletonListReader(override val name: String, private val elReader: Vecto
         return RowCopier { idx ->
             check(idx == 0)
 
-            for (i in 0 until valueCount) {
-                elCopier.copyRow(i)
-            }
+            elCopier.copyRange(0, valueCount)
             dest.endList()
             idx
         }

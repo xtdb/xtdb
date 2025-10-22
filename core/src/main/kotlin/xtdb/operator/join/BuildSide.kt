@@ -34,9 +34,7 @@ class BuildSide(
 
     @Suppress("NAME_SHADOWING")
     fun append(inRel: RelationReader) {
-        val rowCopier = inRel.rowCopier(dataRel)
-
-        repeat(inRel.rowCount) { inIdx -> rowCopier.copyRow(inIdx) }
+        dataRel.append(inRel)
 
         if (dataRel.rowCount > inMemoryThreshold)
             (this.spill ?: openSpill()).spill()

@@ -54,10 +54,9 @@ class Shuffle private constructor(
                 outDataRel.clear()
                 hashRel.clear()
 
-                for (selIdx in selection.iterator()) {
-                    dataRowCopier.copyRow(selIdx.value)
-                    hashCopier.copyRow(selIdx.value)
-                }
+                val selArray = selection.toArray()
+                dataRowCopier.copyRows(selArray)
+                hashCopier.copyRows(selArray)
 
                 dataUnloader.writePage()
                 hashUnloader.writePage()

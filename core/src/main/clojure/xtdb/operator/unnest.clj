@@ -72,8 +72,9 @@
                                            (when (and coll-rdr (not (.isNull coll-rdr n)))
                                              (let [len (.getListCount coll-rdr n)
                                                    start-pos (.getListStartIndex coll-rdr n)]
+                                               (.copyRange el-copier start-pos len)
+
                                                (dotimes [el-idx len]
-                                                 (.copyRow el-copier (+ start-pos el-idx))
                                                  (.add idxs n)
                                                  (some-> ordinal-vec (.writeInt (inc el-idx))))))))
 

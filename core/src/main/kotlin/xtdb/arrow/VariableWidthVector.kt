@@ -10,7 +10,7 @@ import java.nio.ByteBuffer
 
 abstract class VariableWidthVector : Vector() {
 
-    override val vectors: Iterable<Vector> = emptyList<Vector>()
+    override val vectors: Iterable<Vector> = emptyList()
 
     internal abstract val validityBuffer: ExtensibleBuffer
     internal abstract val offsetBuffer: ExtensibleBuffer
@@ -18,7 +18,7 @@ abstract class VariableWidthVector : Vector() {
 
     private var lastOffset: Int = 0
 
-    override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
+    override fun isNull(idx: Int) = nullable && !validityBuffer.getBit(idx)
 
     private fun writeOffset(newOffset: Int) {
         if (valueCount == 0) offsetBuffer.writeInt(0)
@@ -61,19 +61,20 @@ abstract class VariableWidthVector : Vector() {
 
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getByteArray(idx))
 
-    override fun valueReader(pos: VectorPosition): ValueReader {
-        return super.valueReader(pos)
-    }
-
     override fun rowCopier0(src: VectorReader): RowCopier {
         check(src is VariableWidthVector)
         nullable = nullable || src.nullable
 
         return RowCopier { srcIdx ->
-            val start = src.offsetBuffer.getInt(srcIdx).toLong()
-            val len = src.offsetBuffer.getInt(srcIdx + 1) - start
-            dataBuffer.writeBytes(src.dataBuffer, start, len)
-            valueCount.also { writeNotNull(len.toInt()) }
+            valueCount.also {
+                if (src.isNull(srcIdx)) writeNull()
+                else {
+                    val start = src.offsetBuffer.getInt(srcIdx).toLong()
+                    val len = src.offsetBuffer.getInt(srcIdx + 1) - start
+                    dataBuffer.writeBytes(src.dataBuffer, start, len)
+                    writeNotNull(len.toInt())
+                }
+            }
         }
     }
 

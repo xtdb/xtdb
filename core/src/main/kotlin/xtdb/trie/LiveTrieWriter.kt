@@ -23,7 +23,7 @@ class LiveTrieWriter(
                                 )
 
                             is MemoryHashTrie.Leaf -> {
-                                data.forEach { idx -> copier.copyRow(idx) }
+                                copier.copyRows(data)
                                 metaFileWriter.writeLeaf().also { dataFileWriter.writePage() }
                             }
                         }

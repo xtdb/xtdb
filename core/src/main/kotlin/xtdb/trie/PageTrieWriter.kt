@@ -79,7 +79,7 @@ class PageTrieWriter(
                                 sel.isEmpty() -> metaFileWriter.writeNull()
 
                                 sel.size <= pageSize || depth >= 64 || sel.soloIid() -> {
-                                    for (idx in sel) rowCopier.copyRow(idx)
+                                    rowCopier.copyRows(sel)
                                     writeLeaf()
                                 }
 
