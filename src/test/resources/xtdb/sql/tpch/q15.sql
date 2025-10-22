@@ -20,7 +20,7 @@ FROM
   supplier AS s,
   revenue AS revenue
 WHERE
-  s.s_suppkey = revenue.supplier_no
+  s._id = revenue.supplier_no
   AND revenue.total_revenue = (
     SELECT max(revenue.total_revenue)
     FROM

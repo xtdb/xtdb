@@ -4,8 +4,8 @@ FROM
   orders AS o,
   nation AS  n
 WHERE
-  s.s_suppkey = l1.l_suppkey
-  AND o.o_orderkey = l1.l_orderkey
+  s._id = l1.l_suppkey
+  AND o._id = l1.l_orderkey
   AND o.o_orderstatus = 'F'
   AND l1.l_receiptdate > l1.l_commitdate
   AND EXISTS(
@@ -21,7 +21,7 @@ WHERE
       AND l3.l_suppkey <> l1.l_suppkey
       AND l3.l_receiptdate > l3.l_commitdate
   )
-  AND s.s_nationkey = n.n_nationkey
+  AND s.s_nationkey = n._id
   AND n.n_name = 'SAUDI ARABIA'
 SELECT s.s_name, COUNT(*) AS numwait
 ORDER BY numwait DESC, s.s_name

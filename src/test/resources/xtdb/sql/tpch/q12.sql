@@ -16,7 +16,7 @@ FROM
   orders AS o,
   lineitem AS l
 WHERE
-  o.o_orderkey = l.l_orderkey
+  o._id = l.l_orderkey
   AND l.l_shipmode IN ('MAIL', 'SHIP')
   AND l.l_commitdate < l.l_receiptdate
   AND l.l_shipdate < l.l_commitdate

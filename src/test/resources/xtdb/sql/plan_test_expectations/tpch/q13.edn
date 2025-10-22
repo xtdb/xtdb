@@ -10,11 +10,12 @@
     [:group-by
      [c.1/c_custkey {_count_out_3 (count o.2/o_orderkey)}]
      [:left-outer-join
-      [{c.1/c_custkey o.2/o_custkey}
-       (not (like o.2/o_comment "%special%requests%"))]
+      []
       [:rename c.1 [:scan {:table #xt/table customer} [c_custkey]]]
       [:rename
        o.2
        [:scan
         {:table #xt/table orders}
-        [o_comment o_orderkey o_custkey]]]]]]]]]
+        [{o_comment (not (like o_comment "%special%requests%"))}
+         o_orderkey
+         {o_custkey (= nil o_custkey)}]]]]]]]]]

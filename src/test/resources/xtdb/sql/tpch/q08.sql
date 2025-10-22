@@ -20,14 +20,14 @@ FROM (
          nation AS n2,
          region AS r
        WHERE
-         p.p_partkey = l.l_partkey
-         AND s.s_suppkey = l.l_suppkey
-         AND l.l_orderkey = o.o_orderkey
-         AND o.o_custkey = c.c_custkey
-         AND c.c_nationkey = n1.n_nationkey
-         AND n1.n_regionkey = r.r_regionkey
+         p._id = l.l_partkey
+         AND s._id = l.l_suppkey
+         AND l.l_orderkey = o._id
+         AND o.o_custkey = c._id
+         AND c.c_nationkey = n1._id
+         AND n1.n_regionkey = r._id
          AND r.r_name = 'AMERICA'
-         AND s.s_nationkey = n2.n_nationkey
+         AND s.s_nationkey = n2._id
          AND o.o_orderdate BETWEEN DATE '1995-01-01' AND DATE '1996-12-31'
          AND p.p_type = 'ECONOMY ANODIZED STEEL'
      ) AS all_nations

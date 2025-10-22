@@ -6,8 +6,8 @@ FROM
   supplier AS s,
   nation AS n
 WHERE
-  ps.ps_suppkey = s.s_suppkey
-  AND s.s_nationkey = n.n_nationkey
+  ps.ps_suppkey = s._id
+  AND s.s_nationkey = n._id
   AND n.n_name = 'GERMANY'
 GROUP BY
   ps.ps_partkey
@@ -19,8 +19,8 @@ HAVING
       supplier AS s,
       nation AS n
     WHERE
-      ps.ps_suppkey = s.s_suppkey
-      AND s.s_nationkey = n.n_nationkey
+      ps.ps_suppkey = s._id
+      AND s.s_nationkey = n._id
       AND n.n_name = 'GERMANY'
   )
 ORDER BY

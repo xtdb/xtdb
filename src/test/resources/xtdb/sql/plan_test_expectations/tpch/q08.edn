@@ -22,27 +22,23 @@
         {volume (* l.3/l_extendedprice (- 1 l.3/l_discount))}
         {nation n2.7/n_name}]
        [:mega-join
-        [{n1.6/n_regionkey r.8/r_regionkey}
-         {s.2/s_nationkey n2.7/n_nationkey}
-         {c.5/c_nationkey n1.6/n_nationkey}
-         {o.4/o_custkey c.5/c_custkey}
-         {l.3/l_orderkey o.4/o_orderkey}
-         {p.1/p_partkey l.3/l_partkey}
-         {s.2/s_suppkey l.3/l_suppkey}]
+        []
         [[:rename
           r.8
           [:scan
            {:table #xt/table region}
-           [r_regionkey {r_name (= r_name "AMERICA")}]]]
-         [:rename
-          n2.7
-          [:scan {:table #xt/table nation} [n_name n_nationkey]]]
+           [{r_name (= r_name "AMERICA")}]]]
+         [:rename n2.7 [:scan {:table #xt/table nation} [n_name]]]
          [:rename
           n1.6
-          [:scan {:table #xt/table nation} [n_regionkey n_nationkey]]]
+          [:scan
+           {:table #xt/table nation}
+           [{n_regionkey (= n_regionkey nil)}]]]
          [:rename
           c.5
-          [:scan {:table #xt/table customer} [c_custkey c_nationkey]]]
+          [:scan
+           {:table #xt/table customer}
+           [{c_nationkey (= c_nationkey nil)}]]]
          [:rename
           o.4
           [:scan
@@ -52,24 +48,23 @@
               o_orderdate
               #xt/date "1995-01-01"
               #xt/date "1996-12-31")}
-            o_orderkey
-            o_custkey]]]
+            {o_custkey (= o_custkey nil)}]]]
          [:rename
           l.3
           [:scan
            {:table #xt/table lineitem}
-           [l_orderkey
+           [{l_orderkey (= l_orderkey nil)}
             l_extendedprice
-            l_suppkey
+            {l_suppkey (= nil l_suppkey)}
             l_discount
-            l_partkey]]]
+            {l_partkey (= nil l_partkey)}]]]
          [:rename
           p.1
           [:scan
            {:table #xt/table part}
-           [p_partkey {p_type (= p_type "ECONOMY ANODIZED STEEL")}]]]
+           [{p_type (= p_type "ECONOMY ANODIZED STEEL")}]]]
          [:rename
           s.2
           [:scan
            {:table #xt/table supplier}
-           [s_suppkey s_nationkey]]]]]]]]]]]]
+           [{s_nationkey (= s_nationkey nil)}]]]]]]]]]]]]

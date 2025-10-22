@@ -44,35 +44,35 @@
  []
 
  ;; Q03
- [{:l_orderkey "orderkey_1637"
+ [{:l_orderkey #uuid "61017a36-ed44-b153-366c-90ebc788c282"
    :revenue 164224.9253
    :o_orderdate #xt/date "1995-02-08"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_5191"
+  {:l_orderkey #uuid "b8844691-d43f-05a1-ced1-2f959604d97d"
    :revenue 49378.309400000006
    :o_orderdate #xt/date "1994-12-11"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_742"
+  {:l_orderkey #uuid "dd71f921-6752-263a-c38f-477a4a0061d9"
    :revenue 43728.048
    :o_orderdate #xt/date "1994-12-23"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_3492"
+  {:l_orderkey #uuid "7f1299a3-7415-3eea-6b24-cc33595430a1"
    :revenue 43716.072400000005,
    :o_orderdate #xt/date "1994-11-24"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_2883"
+  {:l_orderkey #uuid "606b5b29-10af-c676-0626-19e0431e7578"
    :revenue 36666.9612,
    :o_orderdate #xt/date "1995-01-23"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_998"
+  {:l_orderkey #uuid "8fc0c006-a9bb-7267-9374-123e571d1a6a"
    :revenue 11785.548600000002,
    :o_orderdate #xt/date "1994-11-26"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_3430"
+  {:l_orderkey #uuid "7f5c1030-14a9-3d51-78aa-f8aab5a7342a"
    :revenue 4726.6775,
    :o_orderdate #xt/date "1994-12-12"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_4423"
+  {:l_orderkey #uuid "d88ad0a6-e061-81b8-783b-221010b45611"
    :revenue 3055.9365,
    :o_orderdate #xt/date "1995-02-17"
    :o_shippriority 0}]
@@ -163,7 +163,7 @@
 
 
  ;; Q10
- [{:c_custkey "custkey_121"
+ [{:c_custkey #uuid "76c7ca64-8ed3-929d-ae62-f9079d507908"
    :c_name "Customer#000000121"
    :revenue 282635.17189999996
    :c_acctbal 6428.32
@@ -171,7 +171,7 @@
    :n_name "PERU"
    :c_address "tv nCR2YKupGN73mQudO"
    :c_comment "uriously stealthy ideas. carefully final courts use carefully"}
-  {:c_custkey "custkey_124"
+  {:c_custkey #uuid "62bc2df7-154e-fcbe-0e8a-c9ae6d6d6663"
    :c_name "Customer#000000124"
    :revenue 222182.5188
    :c_acctbal 1842.49
@@ -179,7 +179,7 @@
    :n_name "CHINA"
    :c_address "aTbyVAW5tCd,v09O"
    :c_comment "le fluffily even dependencies. quietly s"}
-  {:c_custkey "custkey_106"
+  {:c_custkey #uuid "430f1c4e-9cea-ec50-0963-f5992012f621"
    :c_name "Customer#000000106"
    :revenue 190241.3334
    :c_acctbal 3288.42
@@ -187,7 +187,7 @@
    :n_name "ARGENTINA"
    :c_address "xGCOEAUjUNG"
    :c_comment "lose slyly. ironic accounts along the evenly regular theodolites wake about the special, final gifts. "}
-  {:c_custkey "custkey_16"
+  {:c_custkey #uuid "ca666e61-8404-b121-f658-bd5cfbde55ca"
    :c_name "Customer#000000016"
    :revenue 161422.0461
    :c_acctbal 4681.03
@@ -195,7 +195,7 @@
    :n_name "IRAN"
    :c_address "cYiaeMLZSMAOQ2 d0W,"
    :c_comment "kly silent courts. thinly regular theodolites sleep fluffily after "}
-  {:c_custkey "custkey_44"
+  {:c_custkey #uuid "05462696-4eed-892a-2608-7d28885bdce2"
    :c_name "Customer#000000044"
    :revenue 149364.56519999998
    :c_acctbal 7315.94
@@ -203,7 +203,7 @@
    :n_name "MOZAMBIQUE"
    :c_address "Oi,dOSPwDu4jo4x,,P85E0dmhZGvNtBwi"
    :c_comment "r requests around the unusual, bold a"}
-  {:c_custkey "custkey_71"
+  {:c_custkey #uuid "173eb55f-5a1e-1bc5-ad0d-1dd7c471acbf"
    :c_name "Customer#000000071"
    :revenue 129481.02450000001
    :c_acctbal -611.19
@@ -211,7 +211,7 @@
    :n_name "GERMANY"
    :c_address "TlGalgdXWBmMV,6agLyWYDyIz9MKzcY8gl,w6t1B"
    :c_comment "g courts across the regular, final pinto beans are blithely pending ac"}
-  {:c_custkey "custkey_89"
+  {:c_custkey #uuid "cac1e84e-312f-9650-84bb-6730105b15b3"
    :c_name "Customer#000000089"
    :revenue 121663.1243
    :c_acctbal 1530.76
@@ -219,7 +219,7 @@
    :n_name "KENYA"
    :c_address "dtR, y9JQWUO6FoJExyp8whOU"
    :c_comment "counts are slyly beyond the slyly final accounts. quickly final ideas wake. r"}
-  {:c_custkey "custkey_112"
+  {:c_custkey #uuid "2f94f47b-c21f-8d6b-f81e-d6a454c49a0d"
    :c_name "Customer#000000112"
    :revenue 111137.71409999998
    :c_acctbal 2953.35
@@ -227,7 +227,7 @@
    :n_name "ROMANIA"
    :c_address "RcfgG3bO7QeCnfjqJT1"
    :c_comment "rmanently unusual multipliers. blithely ruthless deposits are furiously along the"}
-  {:c_custkey "custkey_62"
+  {:c_custkey #uuid "0a358b9b-d215-c4ad-755d-d70b81db5b3b"
    :c_name "Customer#000000062"
    :revenue 106368.0153
    :c_acctbal 595.61
@@ -235,7 +235,7 @@
    :n_name "GERMANY"
    :c_address "upJK2Dnw13,"
    :c_comment "kly special dolphins. pinto beans are slyly. quickly regular accounts are furiously a"}
-  {:c_custkey "custkey_146"
+  {:c_custkey #uuid "bc64fa61-6514-3834-2350-f366137bf024"
    :c_name "Customer#000000146"
    :revenue 103265.98879999999
    :c_acctbal 3328.68
@@ -243,7 +243,7 @@
    :n_name "CANADA"
    :c_address "GdxkdXG9u7iyI1,,y5tq4ZyrcEy"
    :c_comment "ffily regular dinos are slyly unusual requests. slyly specia"}
-  {:c_custkey "custkey_19"
+  {:c_custkey #uuid "e10c56f9-f3bc-c26f-e391-60d79d162e9e"
    :c_name "Customer#000000019"
    :revenue 99306.01270000002
    :c_acctbal 8914.71
@@ -251,7 +251,7 @@
    :n_name "CHINA"
    :c_address "uc,3bHIx84H,wdrmLOjVsiqXCq2tr"
    :c_comment " nag. furiously careful packages are slyly at the accounts. furiously regular in"}
-  {:c_custkey "custkey_145"
+  {:c_custkey #uuid "7b5a3eea-d5d9-6a1d-f347-7d28f02254ce"
    :c_name "Customer#000000145"
    :revenue 99256.9018
    :c_acctbal 9748.93
@@ -259,7 +259,7 @@
    :n_name "JORDAN"
    :c_address "kQjHmt2kcec cy3hfMh969u"
    :c_comment "ests? express, express instructions use. blithely fina"}
-  {:c_custkey "custkey_103"
+  {:c_custkey #uuid "b0306cb4-344a-e964-7805-a205404148f5"
    :c_name "Customer#000000103"
    :revenue 97311.77240000002
    :c_acctbal 2757.45
@@ -267,7 +267,7 @@
    :n_name "INDONESIA"
    :c_address "8KIsQX4LJ7QMsj6DrtFtXu0nUEdV,8a"
    :c_comment "furiously pending notornis boost slyly around the blithely ironic ideas? final, even instructions cajole fl"}
-  {:c_custkey "custkey_136"
+  {:c_custkey #uuid "b4d14748-49a3-bda2-0eb2-f38d908ba203"
    :c_name "Customer#000000136"
    :revenue 95855.39799999999
    :c_acctbal -842.39
@@ -275,7 +275,7 @@
    :n_name "GERMANY"
    :c_address "QoLsJ0v5C1IQbh,DS1"
    :c_comment "ackages sleep ironic, final courts. even requests above the blithely bold requests g"}
-  {:c_custkey "custkey_53"
+  {:c_custkey #uuid "0191e7fa-ffe4-adcf-baf4-a3f298c35428"
    :c_name "Customer#000000053"
    :revenue 92568.9124
    :c_acctbal 4113.64
@@ -283,7 +283,7 @@
    :n_name "MOROCCO"
    :c_address "HnaxHzTfFTZs8MuCpJyTbZ47Cm4wFOOgib"
    :c_comment "ar accounts are. even foxes are blithely. fluffily pending deposits boost"}
-  {:c_custkey "custkey_49"
+  {:c_custkey #uuid "b2308d96-618b-2d6e-5cc5-b4c69cb2b19e"
    :c_name "Customer#000000049"
    :revenue 90965.7262
    :c_acctbal 4573.94
@@ -291,7 +291,7 @@
    :n_name "IRAN"
    :c_address "cNgAeX7Fqrdf7HQN9EwjUa4nxT,68L FKAxzl"
    :c_comment "nusual foxes! fluffily pending packages maintain to the regular "}
-  {:c_custkey "custkey_37"
+  {:c_custkey #uuid "fa1e86c6-8e4f-6cca-6774-e2af81a1cef6"
    :c_name "Customer#000000037"
    :revenue 88065.74579999999
    :c_acctbal -917.75
@@ -299,7 +299,7 @@
    :n_name "INDIA"
    :c_address "7EV4Pwh,3SboctTWt"
    :c_comment "ilent packages are carefully among the deposits. furiousl"}
-  {:c_custkey "custkey_82"
+  {:c_custkey #uuid "279c5f32-7370-3170-82c9-57a90b9ac8ab"
    :c_name "Customer#000000082"
    :revenue 86998.9644
    :c_acctbal 9468.34
@@ -307,7 +307,7 @@
    :n_name "CHINA"
    :c_address "zhG3EZbap4c992Gj3bK,3Ne,Xn"
    :c_comment "s wake. bravely regular accounts are furiously. regula"}
-  {:c_custkey "custkey_125"
+  {:c_custkey #uuid "bcadf917-f31f-ca4b-af71-89abf24b9107"
    :c_name "Customer#000000125"
    :revenue 84808.068
    :c_acctbal -234.12
@@ -315,7 +315,7 @@
    :n_name "ROMANIA"
    :c_address ",wSZXdVR xxIIfm9s8ITyLl3kgjT6UC07GY0Y"
    :c_comment "x-ray finally after the packages? regular requests c"}
-  {:c_custkey "custkey_59"
+  {:c_custkey #uuid "2e327836-4c0c-140c-3a52-f95a5c8060d0"
    :c_name "Customer#000000059"
    :revenue 84655.5711
    :c_acctbal 3458.6
@@ -369,7 +369,7 @@
 
  ;; Q15
  [{:total_revenue 797313.3838
-   :s_suppkey "suppkey_10"
+   :s_suppkey #uuid "d3a496df-ac2a-5555-a066-ee1f524d3229"
    :s_name "Supplier#000000010"
    :s_address "Saygah3gYWMp72i PY"
    :s_phone "34-852-489-8585"}]

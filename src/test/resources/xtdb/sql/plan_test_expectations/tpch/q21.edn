@@ -14,24 +14,22 @@
       [:map
        [{_sq_9 true}]
        [:mega-join
-        [{s.1/s_nationkey n.4/n_nationkey}
-         {l1.2/l_orderkey o.3/o_orderkey}
-         {s.1/s_suppkey l1.2/l_suppkey}]
+        []
         [[:rename
           n.4
           [:scan
            {:table #xt/table nation}
-           [{n_name (= n_name "SAUDI ARABIA")} n_nationkey]]]
+           [{n_name (= n_name "SAUDI ARABIA")}]]]
          [:rename
           o.3
           [:scan
            {:table #xt/table orders}
-           [{o_orderstatus (= o_orderstatus "F")} o_orderkey]]]
+           [{o_orderstatus (= o_orderstatus "F")}]]]
          [:rename
           s.1
           [:scan
            {:table #xt/table supplier}
-           [s_name s_suppkey s_nationkey]]]
+           [s_name {s_nationkey (= s_nationkey nil)}]]]
          [:semi-join
           [(<> l_suppkey l1.2/l_suppkey) {l1.2/l_orderkey l_orderkey}]
           [:anti-join
@@ -42,7 +40,10 @@
              (> l_receiptdate l_commitdate)
              [:scan
               {:table #xt/table lineitem}
-              [l_receiptdate l_commitdate l_orderkey l_suppkey]]]]
+              [l_receiptdate
+               l_commitdate
+               {l_orderkey (= nil l_orderkey)}
+               {l_suppkey (= nil l_suppkey)}]]]]
            [:project
             [{l_comment l3.10/l_comment}
              {l_commitdate l3.10/l_commitdate}

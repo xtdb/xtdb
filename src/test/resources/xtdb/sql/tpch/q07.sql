@@ -17,11 +17,11 @@ FROM (
          nation AS n1,
          nation AS n2
        WHERE
-         s.s_suppkey = l.l_suppkey
-         AND o.o_orderkey = l.l_orderkey
-         AND c.c_custkey = o.o_custkey
-         AND s.s_nationkey = n1.n_nationkey
-         AND c.c_nationkey = n2.n_nationkey
+         s._id = l.l_suppkey
+         AND o._id = l.l_orderkey
+         AND c._id = o.o_custkey
+         AND s.s_nationkey = n1._id
+         AND c.c_nationkey = n2._id
          AND (
            (n1.n_name = 'FRANCE' AND n2.n_name = 'GERMANY')
            OR (n1.n_name = 'GERMANY' AND n2.n_name = 'FRANCE')

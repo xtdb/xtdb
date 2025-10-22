@@ -7,6 +7,6 @@ FROM
   lineitem AS l,
   part AS p
 WHERE
-  l.l_partkey = p.p_partkey
+  l.l_partkey = p._id
   AND l.l_shipdate >= DATE '1995-09-01'
   AND l.l_shipdate < DATE '1995-09-01' + INTERVAL '1' MONTH

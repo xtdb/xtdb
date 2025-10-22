@@ -4,12 +4,12 @@ FROM
   lineitem AS l,
   nation AS n
 WHERE
-  c.c_custkey = o.o_custkey
-  AND l.l_orderkey = o.o_orderkey
+  c._id = o.o_custkey
+  AND l.l_orderkey = o._id
   AND o.o_orderdate >= DATE '1993-10-01'
   AND o.o_orderdate < DATE '1993-10-01' + INTERVAL '3' MONTH
   AND l.l_returnflag = 'R'
-  AND c.c_nationkey = n.n_nationkey
+  AND c.c_nationkey = n._id
 SELECT
   c.c_custkey,
   c.c_name,

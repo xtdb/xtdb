@@ -19,8 +19,8 @@ WHERE
     HAVING
       SUM(l.l_quantity) > 300
   )
-  AND c.c_custkey = o.o_custkey
-  AND o.o_orderkey = l.l_orderkey
+  AND c._id = o.o_custkey
+  AND o._id = l.l_orderkey
 GROUP BY
   c.c_name,
   c.c_custkey,

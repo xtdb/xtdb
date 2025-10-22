@@ -2,7 +2,7 @@ SELECT SUM(l.l_extendedprice * (1 - l.l_discount)) AS revenue
 FROM
   lineitem AS l,
   part AS p
-WHERE p.p_partkey = l.l_partkey
+WHERE p._id = l.l_partkey
   AND
   ((
     p.p_brand = 'Brand#12'

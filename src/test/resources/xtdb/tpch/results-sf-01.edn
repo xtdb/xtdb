@@ -44,7 +44,7 @@
  [{:s_acctbal 4186.95
    :s_name "Supplier#000000077"
    :n_name "GERMANY"
-   :p_partkey "partkey_249"
+   :p_partkey #uuid "397888fd-507d-3966-fa0e-cf458702a94b"
    :p_mfgr "Manufacturer#4"
    :s_address "wVtcr0uH3CyrSiWMLsqnB09Syo,UuZxPMeBghlY"
    :s_phone "17-281-345-4863"
@@ -52,7 +52,7 @@
   {:s_acctbal 1883.37
    :s_name "Supplier#000000086"
    :n_name "ROMANIA"
-   :p_partkey "partkey_1015"
+   :p_partkey #uuid "85665f77-4f99-d57d-84f4-706fd51b535a"
    :p_mfgr "Manufacturer#4"
    :s_address "J1fgg5QaqnN"
    :s_phone "29-903-665-7065"
@@ -61,7 +61,7 @@
   {:s_acctbal 1687.81
    :s_name "Supplier#000000017"
    :n_name "ROMANIA"
-   :p_partkey "partkey_1634"
+   :p_partkey #uuid "0e2cfaec-ec58-df5d-b019-98820ff9e4c9"
    :p_mfgr "Manufacturer#2"
    :s_address "c2d,ESHRSkK3WYnxpgw6aOqN0q"
    :s_phone "29-601-884-9219"
@@ -69,50 +69,50 @@
   {:s_acctbal 287.16
    :s_name "Supplier#000000052"
    :n_name "ROMANIA"
-   :p_partkey "partkey_323"
+   :p_partkey #uuid "67a02cc9-bb06-560c-2051-fbec22b72179"
    :p_mfgr "Manufacturer#4"
    :s_address "WCk XCHYzBA1dvJDSol4ZJQQcQN,"
    :s_phone "29-974-934-4713"
    :s_comment "dolites are slyly against the furiously regular packages. ironic, final deposits cajole quickly"}]
 
  ;; Q03
- [{:l_orderkey "orderkey_47714"
+ [{:l_orderkey #uuid "dd5e24ec-dd1d-903a-1b5e-96b9fcbd8de7"
    :revenue 267010.5894
    :o_orderdate #xt/date "1995-03-11"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_22276"
+  {:l_orderkey #uuid "249f8b55-8f9c-1cc6-a56d-6aea84b918b2"
    :revenue 266351.55620000005
    :o_orderdate #xt/date "1995-01-29"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_32965"
+  {:l_orderkey #uuid "3b7429d1-13b5-f42f-a814-38c8ea32fa5b"
    :revenue 263768.3414
    :o_orderdate #xt/date "1995-02-25"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_21956"
+  {:l_orderkey #uuid "7816ee83-7073-5d77-8b8b-bb862d39a9d8"
    :revenue 254541.1285
    :o_orderdate #xt/date "1995-02-02"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_1637"
+  {:l_orderkey #uuid "61017a36-ed44-b153-366c-90ebc788c282"
    :revenue 243512.79809999999
    :o_orderdate #xt/date "1995-02-08"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_10916"
+  {:l_orderkey #uuid "5683c7ab-5342-fa98-7d74-3c32fdb65b9d"
    :revenue 241320.08140000002
    :o_orderdate #xt/date "1995-03-11"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_30497"
+  {:l_orderkey #uuid "8489b842-aef2-d727-a935-5f8377a0e444"
    :revenue 208566.69689999998
    :o_orderdate #xt/date "1995-02-07"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_450"
+  {:l_orderkey #uuid "05addec7-ec07-5ad2-0260-59d2d0624040"
    :revenue 205447.42320000002
    :o_orderdate #xt/date "1995-03-05"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_47204"
+  {:l_orderkey #uuid "943853ce-e70e-a393-ede4-931d0d986441"
    :revenue 204478.5213
    :o_orderdate #xt/date "1995-03-13"
    :o_shippriority 0}
-  {:l_orderkey "orderkey_9696"
+  {:l_orderkey #uuid "9f1b9bad-58e6-6dc4-c895-73504c22c633"
    :revenue 201502.21879999997
    :o_orderdate #xt/date "1995-02-20"
    :o_shippriority 0}]
@@ -337,7 +337,7 @@
   {:nation "VIETNAM" :o_year 1992 :sum_profit 716126.5378}]
 
  ;; Q10
- [{:c_custkey "custkey_679"
+ [{:c_custkey #uuid "112f8720-3cdf-97cd-f37a-20e847f30d45"
    :c_name "Customer#000000679"
    :revenue 378211.32519999996
    :c_acctbal 1394.44
@@ -345,7 +345,7 @@
    :n_name "IRAN"
    :c_address "IJf1FlZL9I9m,rvofcoKy5pRUOjUQV"
    :c_comment "ely pending frays boost carefully"}
-  {:c_custkey "custkey_1201"
+  {:c_custkey #uuid "27f328ae-2dc6-1e8a-b91a-bc97be0d6e8a"
    :c_name "Customer#000001201"
    :revenue 374331.53400000004
    :c_acctbal 5165.39
@@ -353,7 +353,7 @@
    :n_name "IRAN"
    :c_address "LfCSVKWozyWOGDW02g9UX,XgH5YU2o5ql1zBrN"
    :c_comment "lyly pending packages. special requests sleep-- platelets use blithely after the instructions. sometimes even id"}
-  {:c_custkey "custkey_422"
+  {:c_custkey #uuid "16c8ad10-5b4b-c879-7eba-03d36668f15f"
    :c_name "Customer#000000422"
    :revenue 366451.0126
    :c_acctbal -272.14
@@ -361,7 +361,7 @@
    :n_name "INDONESIA"
    :c_address "AyNzZBvmIDo42JtjP9xzaK3pnvkh Qc0o08ssnvq"
    :c_comment "eposits; furiously ironic packages accordi"}
-  {:c_custkey "custkey_334"
+  {:c_custkey #uuid "e3b82e9f-7897-3f86-7133-028aec331639"
    :c_name "Customer#000000334"
    :revenue 360370.755
    :c_acctbal -405.91
@@ -369,7 +369,7 @@
    :n_name "EGYPT"
    :c_address "OPN1N7t4aQ23TnCpc"
    :c_comment "fully busily special ideas. carefully final excuses lose slyly carefully express accounts. even, ironic platelets ar"}
-  {:c_custkey "custkey_805"
+  {:c_custkey #uuid "6159b284-d8c2-b526-e066-9848db70e4f0"
    :c_name "Customer#000000805"
    :revenue 359448.9036
    :c_acctbal 511.69
@@ -377,7 +377,7 @@
    :n_name "IRAN"
    :c_address "wCKx5zcHvwpSffyc9qfi9dvqcm9LT,cLAG"
    :c_comment "busy sentiments. pending packages haggle among the express requests-- slyly regular excuses above the slyl"}
-  {:c_custkey "custkey_932"
+  {:c_custkey #uuid "417ba5ec-4202-cd41-ce1c-3e342d2bae87"
    :c_name "Customer#000000932"
    :revenue 341608.2753
    :c_acctbal 6553.37
@@ -385,7 +385,7 @@
    :n_name "JORDAN"
    :c_address "HN9Ap0NsJG7Mb8O"
    :c_comment "packages boost slyly along the furiously express foxes. ev"}
-  {:c_custkey "custkey_853"
+  {:c_custkey #uuid "49504d06-4cb0-d87c-7d34-a374835a3510"
    :c_name "Customer#000000853"
    :revenue 341236.6245999999
    :c_acctbal -444.73
@@ -393,7 +393,7 @@
    :n_name "BRAZIL"
    :c_address "U0 9PrwAgWK8AE0GHmnCGtH9BTexWWv87k"
    :c_comment "yly special deposits wake alongside of"}
-  {:c_custkey "custkey_872"
+  {:c_custkey #uuid "44f6f22e-3c46-0e0a-6a1c-4fb2ab3bea5d"
    :c_name "Customer#000000872"
    :revenue 338328.7808
    :c_acctbal -858.61
@@ -401,7 +401,7 @@
    :n_name "PERU"
    :c_address "vLP7iNZBK4B,HANFTKabVI3AO Y9O8H"
    :c_comment " detect. packages wake slyly express foxes. even deposits ru"}
-  {:c_custkey "custkey_737"
+  {:c_custkey #uuid "45159de0-da0b-9e5a-7e54-910ea0a81064"
    :c_name "Customer#000000737"
    :revenue 338185.3365
    :c_acctbal 2501.74
@@ -409,7 +409,7 @@
    :n_name "CHINA"
    :c_address "NdjG1k243iCLSoy1lYqMIrpvuH1Uf75"
    :c_comment "ding to the final platelets. regular packages against the carefully final ideas hag"}
-  {:c_custkey "custkey_1118"
+  {:c_custkey #uuid "95961f32-a872-c4a7-af40-65c6f755311c"
    :c_name "Customer#000001118"
    :revenue 319875.728
    :c_acctbal 4130.18
@@ -417,7 +417,7 @@
    :n_name "IRAQ"
    :c_address "QHg,DNvEVXaYoCdrywazjAJ"
    :c_comment "y regular requests above the blithely ironic accounts use slyly bold packages: regular pinto beans eat carefully spe"}
-  {:c_custkey "custkey_223"
+  {:c_custkey #uuid "0e843c70-3167-1e96-71d0-42cd184c2c10"
    :c_name "Customer#000000223"
    :revenue 319564.275
    :c_acctbal 7476.2
@@ -425,7 +425,7 @@
    :n_name "SAUDI ARABIA"
    :c_address "ftau6Pk,brboMyEl,,kFm"
    :c_comment "al, regular requests run furiously blithely silent packages. blithely ironic accounts across the furious"}
-  {:c_custkey "custkey_808"
+  {:c_custkey #uuid "8f3200c0-92de-6153-4c2d-6beb8b044c6b"
    :c_name "Customer#000000808"
    :revenue 314774.6167
    :c_acctbal 5561.93
@@ -433,7 +433,7 @@
    :n_name "ROMANIA"
    :c_address "S2WkSKCGtnbhcFOp6MWcuB3rzFlFemVNrg "
    :c_comment " unusual deposits. furiously even packages against the furiously even ac"}
-  {:c_custkey "custkey_478"
+  {:c_custkey #uuid "977698c5-7a2f-3101-a93b-7cabbe09fa09"
    :c_name "Customer#000000478"
    :revenue 299651.80260000005
    :c_acctbal -210.4
@@ -441,7 +441,7 @@
    :n_name "ARGENTINA"
    :c_address "clyq458DIkXXt4qLyHlbe,n JueoniF"
    :c_comment "o the foxes. ironic requests sleep. c"}
-  {:c_custkey "custkey_1441"
+  {:c_custkey #uuid "23a392e6-589c-b7e0-c488-a67d83f52ba3"
    :c_name "Customer#000001441"
    :revenue 294705.39350000006
    :c_acctbal 9465.15
@@ -449,7 +449,7 @@
    :n_name "UNITED KINGDOM"
    :c_address "u0YYZb46w,pwKo5H9vz d6B9zK4BOHhG jx"
    :c_comment "nts haggle quietly quickly final accounts. slyly regular accounts among the sl"}
-  {:c_custkey "custkey_1478"
+  {:c_custkey #uuid "4d8cd589-8f03-b933-6f94-04b59c228a0f"
    :c_name "Customer#000001478"
    :revenue 294431.91780000005
    :c_acctbal 9701.54
@@ -457,7 +457,7 @@
    :n_name "GERMANY"
    :c_address "x7HDvJDDpR3MqZ5vg2CanfQ1hF0j4"
    :c_comment "ng the furiously bold foxes. even notornis above the unusual "}
-  {:c_custkey "custkey_211"
+  {:c_custkey #uuid "c7ef4895-dcc9-ad4a-1a6c-f55ea3d221e9"
    :c_name "Customer#000000211"
    :revenue 287905.6368
    :c_acctbal 4198.72
@@ -465,7 +465,7 @@
    :n_name "JORDAN"
    :c_address "URhlVPzz4FqXem"
    :c_comment "furiously regular foxes boost fluffily special ideas. carefully regular dependencies are. slyly ironic "}
-  {:c_custkey "custkey_197"
+  {:c_custkey #uuid "43e1a426-ba79-a6de-ec85-f7e8e8a1799e"
    :c_name "Customer#000000197"
    :revenue 283190.48069999996
    :c_acctbal 9860.22
@@ -473,7 +473,7 @@
    :n_name "ARGENTINA"
    :c_address "UeVqssepNuXmtZ38D"
    :c_comment "ickly final accounts cajole. furiously re"}
-  {:c_custkey "custkey_1030"
+  {:c_custkey #uuid "265c3ffb-af31-6f94-d9ba-f65c765a1b64"
    :c_name "Customer#000001030"
    :revenue 282557.3566
    :c_acctbal 6359.27
@@ -481,7 +481,7 @@
    :n_name "INDIA"
    :c_address "Xpt1BiB5h9o"
    :c_comment "ding to the slyly unusual accounts. even requests among the evenly"}
-  {:c_custkey "custkey_1049"
+  {:c_custkey #uuid "83e01a8d-1245-0851-be96-46d25632dbb2"
    :c_name "Customer#000001049"
    :revenue 281134.1117
    :c_acctbal 8747.99
@@ -489,7 +489,7 @@
    :n_name "INDONESIA"
    :c_address "bZ1OcFhHaIZ5gMiH"
    :c_comment "uriously according to the furiously silent packages"}
-  {:c_custkey "custkey_1094"
+  {:c_custkey #uuid "587998be-982e-73bc-537a-6292aa7db6bd"
    :c_name "Customer#000001094"
    :revenue 274877.444
    :c_acctbal 2544.49
@@ -499,365 +499,365 @@
    :c_comment "tes serve blithely quickly pending foxes. express, quick accounts"}]
 
  ;; Q11
- [{:ps_partkey "partkey_1376" :value 1.327124989E7}
-  {:ps_partkey "partkey_788" :value 9498648.06}
-  {:ps_partkey "partkey_1071" :value 9388264.4}
-  {:ps_partkey "partkey_1768" :value 9207199.75}
-  {:ps_partkey "partkey_1168" :value 8881908.959999999}
-  {:ps_partkey "partkey_1084" :value 8709494.16}
-  {:ps_partkey "partkey_1415" :value 8471489.56}
-  {:ps_partkey "partkey_1338" :value 8293841.12}
-  {:ps_partkey "partkey_124" :value 8203209.3}
-  {:ps_partkey "partkey_1232" :value 8111663.34}
-  {:ps_partkey "partkey_1643" :value 7975862.75}
-  {:ps_partkey "partkey_1952" :value 7936947.61}
-  {:ps_partkey "partkey_1944" :value 7880018.6}
-  {:ps_partkey "partkey_1884" :value 7513422.84}
-  {:ps_partkey "partkey_942" :value 7511018.76}
-  {:ps_partkey "partkey_670" :value 7299956.800000001}
-  {:ps_partkey "partkey_1532" :value 7222347.199999999}
-  {:ps_partkey "partkey_1052" :value 7158586.0}
-  {:ps_partkey "partkey_455" :value 7064285.84}
-  {:ps_partkey "partkey_1176" :value 7060670.890000001}
-  {:ps_partkey "partkey_143" :value 7037648.64}
-  {:ps_partkey "partkey_1653" :value 6949533.7}
-  {:ps_partkey "partkey_1140" :value 6929464.08}
-  {:ps_partkey "partkey_1076" :value 6877472.960000001}
-  {:ps_partkey "partkey_2000" :value 6720009.38}
-  {:ps_partkey "partkey_348" :value 6681307.34}
-  {:ps_partkey "partkey_810" :value 6576640.95}
-  {:ps_partkey "partkey_943" :value 6458641.7}
-  {:ps_partkey "partkey_720" :value 6391330.27}
-  {:ps_partkey "partkey_1748" :value 6341530.4}
-  {:ps_partkey "partkey_1241" :value 6304944.66}
-  {:ps_partkey "partkey_1384" :value 6279261.12}
-  {:ps_partkey "partkey_1784" :value 6247863.25}
-  {:ps_partkey "partkey_984" :value 6136927.0}
-  {:ps_partkey "partkey_445" :value 6127784.28}
-  {:ps_partkey "partkey_1976" :value 6079237.08}
-  {:ps_partkey "partkey_1609" :value 6022720.8}
-  {:ps_partkey "partkey_1563" :value 5978195.08}
-  {:ps_partkey "partkey_452" :value 5838052.0}
-  {:ps_partkey "partkey_222" :value 5737162.24}
-  {:ps_partkey "partkey_1629" :value 5703117.12}
-  {:ps_partkey "partkey_1454" :value 5694804.18}
-  {:ps_partkey "partkey_1082" :value 5681981.25}
-  {:ps_partkey "partkey_691" :value 5633589.720000001}
-  {:ps_partkey "partkey_1474" :value 5614673.64}
-  {:ps_partkey "partkey_1900" :value 5591905.359999999}
-  {:ps_partkey "partkey_262" :value 5553285.32}
-  {:ps_partkey "partkey_1876" :value 5517997.59}
-  {:ps_partkey "partkey_1027" :value 5490916.0}
-  {:ps_partkey "partkey_1833" :value 5451495.0}
-  {:ps_partkey "partkey_513" :value 5374426.22}
-  {:ps_partkey "partkey_752" :value 5358919.7}
-  {:ps_partkey "partkey_1367" :value 5352773.25}
-  {:ps_partkey "partkey_543" :value 5189101.68}
-  {:ps_partkey "partkey_1144" :value 5174388.5600000005}
-  {:ps_partkey "partkey_403" :value 5126118.15}
-  {:ps_partkey "partkey_1406" :value 5121886.44}
-  {:ps_partkey "partkey_320" :value 5072099.76}
-  {:ps_partkey "partkey_1940" :value 5069178.399999999}
-  {:ps_partkey "partkey_1503" :value 5050895.5}
-  {:ps_partkey "partkey_1437" :value 5039590.600000001}
-  {:ps_partkey "partkey_743" :value 5039271.42}
-  {:ps_partkey "partkey_82" :value 4995939.0}
-  {:ps_partkey "partkey_916" :value 4994730.1}
-  {:ps_partkey "partkey_732" :value 4932809.82}
-  {:ps_partkey "partkey_356" :value 4879860.09}
-  {:ps_partkey "partkey_1592" :value 4831242.6}
-  {:ps_partkey "partkey_1043" :value 4825921.3100000005}
-  {:ps_partkey "partkey_132" :value 4781984.14}
-  {:ps_partkey "partkey_1006" :value 4733954.64}
-  {:ps_partkey "partkey_497" :value 4711173.600000001}
-  {:ps_partkey "partkey_1008" :value 4565588.85}
-  {:ps_partkey "partkey_1370" :value 4563830.100000001}
-  {:ps_partkey "partkey_216" :value 4561143.8}
-  {:ps_partkey "partkey_34" :value 4501982.71}
-  {:ps_partkey "partkey_1908" :value 4417931.8}
-  {:ps_partkey "partkey_982" :value 4391495.46}
-  {:ps_partkey "partkey_1652" :value 4358793.14}
-  {:ps_partkey "partkey_614" :value 4356657.45}
-  {:ps_partkey "partkey_1552" :value 4355541.7}
-  {:ps_partkey "partkey_359" :value 4353566.87}
-  {:ps_partkey "partkey_1104" :value 4347515.9}
-  {:ps_partkey "partkey_198" :value 4315049.0}
-  {:ps_partkey "partkey_998" :value 4167784.8800000004}
-  {:ps_partkey "partkey_1543" :value 4159568.16}
-  {:ps_partkey "partkey_1308" :value 4153124.95}
-  {:ps_partkey "partkey_474" :value 4123819.2}
-  {:ps_partkey "partkey_1394" :value 4122729.3299999996}
-  {:ps_partkey "partkey_271" :value 4095180.96}
-  {:ps_partkey "partkey_908" :value 4088856.2}
-  {:ps_partkey "partkey_1135" :value 4045014.13}
-  {:ps_partkey "partkey_1632" :value 4010794.9}
-  {:ps_partkey "partkey_1362" :value 3982060.16}
-  {:ps_partkey "partkey_158" :value 3941881.65}
-  {:ps_partkey "partkey_1852" :value 3923035.02}
-  {:ps_partkey "partkey_1556" :value 3896709.54}
-  {:ps_partkey "partkey_584" :value 3843848.3000000003}
-  {:ps_partkey "partkey_885" :value 3826021.1599999997}
-  {:ps_partkey "partkey_376" :value 3781201.96}
-  {:ps_partkey "partkey_712" :value 3749696.8000000003}
-  {:ps_partkey "partkey_2" :value 3743241.43}
-  {:ps_partkey "partkey_676" :value 3735715.1999999997}
-  {:ps_partkey "partkey_1832" :value 3709008.5999999996}
-  {:ps_partkey "partkey_1955" :value 3702794.6999999997}
-  {:ps_partkey "partkey_68" :value 3690702.41}
-  {:ps_partkey "partkey_1435" :value 3659114.1}
-  {:ps_partkey "partkey_1443" :value 3656762.84}
-  {:ps_partkey "partkey_1278" :value 3653100.6599999997}
-  {:ps_partkey "partkey_1920" :value 3647892.54}
-  {:ps_partkey "partkey_423" :value 3602031.8000000003}
-  {:ps_partkey "partkey_818" :value 3589047.6}
-  {:ps_partkey "partkey_779" :value 3559597.5300000003}
-  {:ps_partkey "partkey_485" :value 3558511.4400000004}
-  {:ps_partkey "partkey_552" :value 3555470.1}
-  {:ps_partkey "partkey_1269" :value 3510427.6500000004}
-  {:ps_partkey "partkey_1602" :value 3492117.6999999997}
-  {:ps_partkey "partkey_426" :value 3486888.02}
-  {:ps_partkey "partkey_1452" :value 3480825.5999999996}
-  {:ps_partkey "partkey_756" :value 3469373.7}
-  {:ps_partkey "partkey_832" :value 3447746.46}
-  {:ps_partkey "partkey_1493" :value 3446867.4}
-  {:ps_partkey "partkey_1650" :value 3417752.58}
-  {:ps_partkey "partkey_205" :value 3403046.25}
-  {:ps_partkey "partkey_93" :value 3361425.8899999997}
-  {:ps_partkey "partkey_76" :value 3342081.82}
-  {:ps_partkey "partkey_1759" :value 3303050.4}
-  {:ps_partkey "partkey_886" :value 3302180.6999999997}
-  {:ps_partkey "partkey_1544" :value 3288573.16}
-  {:ps_partkey "partkey_1932" :value 3270900.4000000004}
-  {:ps_partkey "partkey_489" :value 3253368.3}
-  {:ps_partkey "partkey_594" :value 3177408.5700000003}
-  {:ps_partkey "partkey_184" :value 3177162.05}
-  {:ps_partkey "partkey_950" :value 3165213.01}
-  {:ps_partkey "partkey_1124" :value 3143279.36}
-  {:ps_partkey "partkey_106" :value 3099021.98}
-  {:ps_partkey "partkey_1964" :value 3016553.1}
-  {:ps_partkey "partkey_384" :value 2964262.77}
-  {:ps_partkey "partkey_974" :value 2959497.0999999996}
-  {:ps_partkey "partkey_964" :value 2951329.4499999997}
-  {:ps_partkey "partkey_1984" :value 2907345.36}
-  {:ps_partkey "partkey_200" :value 2895688.3200000003}
-  {:ps_partkey "partkey_683" :value 2829476.95}
-  {:ps_partkey "partkey_1564" :value 2816506.56}
-  {:ps_partkey "partkey_546" :value 2788059.64}
-  {:ps_partkey "partkey_502" :value 2780828.64}
-  {:ps_partkey "partkey_396" :value 2778421.39}
-  {:ps_partkey "partkey_203" :value 2761439.88}
-  {:ps_partkey "partkey_866" :value 2753031.1999999997}
-  {:ps_partkey "partkey_1743" :value 2743889.4899999998}
-  {:ps_partkey "partkey_1041" :value 2738083.92}
-  {:ps_partkey "partkey_1432" :value 2713412.16}
-  {:ps_partkey "partkey_43" :value 2587359.58}
-  {:ps_partkey "partkey_941" :value 2587091.52}
-  {:ps_partkey "partkey_1890" :value 2558739.69}
-  {:ps_partkey "partkey_1866" :value 2545838.4}
-  {:ps_partkey "partkey_747" :value 2511745.32}
-  {:ps_partkey "partkey_776" :value 2506489.89}
-  {:ps_partkey "partkey_554" :value 2505417.25}
-  {:ps_partkey "partkey_1210" :value 2490820.92}
-  {:ps_partkey "partkey_1239" :value 2405206.3000000003}
-  {:ps_partkey "partkey_443" :value 2382150.05}
-  {:ps_partkey "partkey_1661" :value 2370574.16}
-  {:ps_partkey "partkey_1079" :value 2363505.11}
-  {:ps_partkey "partkey_1329" :value 2305870.42}
-  {:ps_partkey "partkey_1691" :value 2261159.92}
-  {:ps_partkey "partkey_1247" :value 2239553.2800000003}
-  {:ps_partkey "partkey_1752" :value 2230055.7600000002}
-  {:ps_partkey "partkey_150" :value 2217043.59}
-  {:ps_partkey "partkey_1814" :value 2213635.2}
-  {:ps_partkey "partkey_289" :value 2187160.4499999997}
-  {:ps_partkey "partkey_1400" :value 2139845.1}
-  {:ps_partkey "partkey_1898" :value 2130114.96}
-  {:ps_partkey "partkey_1809" :value 2122758.7199999997}
-  {:ps_partkey "partkey_884" :value 2107479.56}
-  {:ps_partkey "partkey_1038" :value 2096868.97}
-  {:ps_partkey "partkey_1318" :value 2051302.4400000002}
-  {:ps_partkey "partkey_524" :value 2035262.22}
-  {:ps_partkey "partkey_414" :value 2029692.4499999997}
-  {:ps_partkey "partkey_298" :value 2026981.74}
-  {:ps_partkey "partkey_1996" :value 2020953.5399999998}
-  {:ps_partkey "partkey_1742" :value 2019190.7999999998}
-  {:ps_partkey "partkey_1620" :value 2010112.0}
-  {:ps_partkey "partkey_877" :value 1956429.1800000002}
-  {:ps_partkey "partkey_1332" :value 1919029.56}
-  {:ps_partkey "partkey_1536" :value 1859318.1500000001}
-  {:ps_partkey "partkey_1116" :value 1852588.28}
-  {:ps_partkey "partkey_447" :value 1817951.32}
-  {:ps_partkey "partkey_1676" :value 1802306.08}
-  {:ps_partkey "partkey_1911" :value 1779646.44}
-  {:ps_partkey "partkey_1459" :value 1767602.3}
-  {:ps_partkey "partkey_576" :value 1761838.75}
-  {:ps_partkey "partkey_1273" :value 1754235.01}
-  {:ps_partkey "partkey_583" :value 1725649.9200000002}
-  {:ps_partkey "partkey_532" :value 1682311.48}
-  {:ps_partkey "partkey_1732" :value 1652831.2000000002}
-  {:ps_partkey "partkey_1572" :value 1650953.52}
-  {:ps_partkey "partkey_1889" :value 1638443.72}
-  {:ps_partkey "partkey_476" :value 1631154.06}
-  {:ps_partkey "partkey_1221" :value 1629883.46}
-  {:ps_partkey "partkey_1792" :value 1606346.1}
-  {:ps_partkey "partkey_243" :value 1603235.16}
-  {:ps_partkey "partkey_328" :value 1569826.72}
-  {:ps_partkey "partkey_1999" :value 1553706.0}
-  {:ps_partkey "partkey_1611" :value 1529857.01}
-  {:ps_partkey "partkey_643" :value 1512838.8}
-  {:ps_partkey "partkey_1276" :value 1467567.2799999998}
-  {:ps_partkey "partkey_1823" :value 1462292.9999999998}
-  {:ps_partkey "partkey_1" :value 1456050.96}
-  {:ps_partkey "partkey_27" :value 1425832.4}
-  {:ps_partkey "partkey_632" :value 1408087.26}
-  {:ps_partkey "partkey_1184" :value 1406101.78}
-  {:ps_partkey "partkey_252" :value 1379186.35}
-  {:ps_partkey "partkey_392" :value 1354813.18}
-  {:ps_partkey "partkey_1215" :value 1344383.2000000002}
-  {:ps_partkey "partkey_26" :value 1337002.8900000001}
-  {:ps_partkey "partkey_84" :value 1334146.71}
-  {:ps_partkey "partkey_784" :value 1327297.01}
-  {:ps_partkey "partkey_1803" :value 1327045.06}
-  {:ps_partkey "partkey_352" :value 1326102.34}
-  {:ps_partkey "partkey_165" :value 1289075.76}
-  {:ps_partkey "partkey_176" :value 1285866.2}
-  {:ps_partkey "partkey_1314" :value 1244173.26}
-  {:ps_partkey "partkey_1701" :value 1239095.4400000002}
-  {:ps_partkey "partkey_844" :value 1225696.05}
-  {:ps_partkey "partkey_1988" :value 1216798.33}
-  {:ps_partkey "partkey_1847" :value 1202012.13}
-  {:ps_partkey "partkey_1706" :value 1184125.1}
-  {:ps_partkey "partkey_744" :value 1182820.8}
-  {:ps_partkey "partkey_230" :value 1165932.3}
-  {:ps_partkey "partkey_418" :value 1078321.4400000002}
-  {:ps_partkey "partkey_174" :value 1060584.8}
-  {:ps_partkey "partkey_1073" :value 1028449.89}
-  {:ps_partkey "partkey_1726" :value 1018673.04}
-  {:ps_partkey "partkey_1206" :value 1002319.49}
-  {:ps_partkey "partkey_1343" :value 998105.76}
-  {:ps_partkey "partkey_952" :value 997684.24}
-  {:ps_partkey "partkey_484" :value 991530.93}
-  {:ps_partkey "partkey_932" :value 980620.6799999999}
-  {:ps_partkey "partkey_843" :value 978862.9199999999}
-  {:ps_partkey "partkey_1841" :value 962131.8600000001}
-  {:ps_partkey "partkey_494" :value 957575.34}
-  {:ps_partkey "partkey_659" :value 954291.0499999999}
-  {:ps_partkey "partkey_251" :value 939764.7}
-  {:ps_partkey "partkey_1413" :value 936951.94}
-  {:ps_partkey "partkey_572" :value 906111.99}
-  {:ps_partkey "partkey_32" :value 894484.09}
-  {:ps_partkey "partkey_9" :value 893905.9199999999}
-  {:ps_partkey "partkey_1498" :value 890887.85}
-  {:ps_partkey "partkey_1790" :value 878923.64}
-  {:ps_partkey "partkey_1670" :value 854046.43}
-  {:ps_partkey "partkey_876" :value 842245.6699999999}
-  {:ps_partkey "partkey_1758" :value 841275.42}
-  {:ps_partkey "partkey_930" :value 832963.6799999999}
-  {:ps_partkey "partkey_284" :value 826642.6000000001}
-  {:ps_partkey "partkey_1710" :value 811504.38}
-  {:ps_partkey "partkey_1047" :value 791214.45}
-  {:ps_partkey "partkey_653" :value 788974.21}
-  {:ps_partkey "partkey_315" :value 770526.0499999999}
-  {:ps_partkey "partkey_1734" :value 763569.4}
-  {:ps_partkey "partkey_1017" :value 715302.72}
-  {:ps_partkey "partkey_1305" :value 713351.43}
-  {:ps_partkey "partkey_77" :value 688865.82}
-  {:ps_partkey "partkey_1512" :value 682434.15}
-  {:ps_partkey "partkey_276" :value 680239.04}
-  {:ps_partkey "partkey_1284" :value 671225.9400000001}
-  {:ps_partkey "partkey_1356" :value 665716.83}
-  {:ps_partkey "partkey_800" :value 663414.65}
-  {:ps_partkey "partkey_117" :value 639650.88}
-  {:ps_partkey "partkey_652" :value 635629.28}
-  {:ps_partkey "partkey_57" :value 630987.4400000001}
-  {:ps_partkey "partkey_1426" :value 628241.25}
-  {:ps_partkey "partkey_1196" :value 622427.16}
-  {:ps_partkey "partkey_51" :value 622249.54}
-  {:ps_partkey "partkey_1846" :value 621068.7999999999}
-  {:ps_partkey "partkey_601" :value 615942.6}
-  {:ps_partkey "partkey_645" :value 607985.8400000001}
-  {:ps_partkey "partkey_684" :value 571490.7000000001}
-  {:ps_partkey "partkey_465" :value 570337.4}
-  {:ps_partkey "partkey_562" :value 567651.24}
-  {:ps_partkey "partkey_387" :value 556634.76}
-  {:ps_partkey "partkey_1152" :value 555989.28}
-  {:ps_partkey "partkey_1202" :value 553818.1799999999}
-  {:ps_partkey "partkey_1112" :value 552658.6799999999}
-  {:ps_partkey "partkey_304" :value 535868.1599999999}
-  {:ps_partkey "partkey_368" :value 526995.84}
-  {:ps_partkey "partkey_1800" :value 526711.11}
-  {:ps_partkey "partkey_1148" :value 515702.16000000003}
-  {:ps_partkey "partkey_225" :value 513587.57}
-  {:ps_partkey "partkey_324" :value 500954.58}
-  {:ps_partkey "partkey_586" :value 499475.58}
-  {:ps_partkey "partkey_1576" :value 494401.05}
-  {:ps_partkey "partkey_1484" :value 462396.27}
-  {:ps_partkey "partkey_126" :value 461263.74}
-  {:ps_partkey "partkey_1132" :value 455492.24}
-  {:ps_partkey "partkey_622" :value 449685.6}
-  {:ps_partkey "partkey_1160" :value 448183.06}
-  {:ps_partkey "partkey_1352" :value 439967.04000000004}
-  {:ps_partkey "partkey_18" :value 426442.07999999996}
-  {:ps_partkey "partkey_7" :value 414558.2}
-  {:ps_partkey "partkey_833" :value 398540.87}
-  {:ps_partkey "partkey_1694" :value 376443.98}
-  {:ps_partkey "partkey_650" :value 370900.99}
-  {:ps_partkey "partkey_1504" :value 370815.9}
-  {:ps_partkey "partkey_432" :value 370528.51999999996}
-  {:ps_partkey "partkey_612" :value 367894.5}
-  {:ps_partkey "partkey_542" :value 367653.66}
-  {:ps_partkey "partkey_456" :value 360911.32}
-  {:ps_partkey "partkey_52" :value 358792.36}
-  {:ps_partkey "partkey_1346" :value 350637.43}
-  {:ps_partkey "partkey_59" :value 342221.48000000004}
-  {:ps_partkey "partkey_1107" :value 341805.2}
-  {:ps_partkey "partkey_1171" :value 334938.04}
-  {:ps_partkey "partkey_1062" :value 326445.89999999997}
-  {:ps_partkey "partkey_592" :value 313081.75}
-  {:ps_partkey "partkey_1750" :value 312229.33}
-  {:ps_partkey "partkey_1843" :value 309456.95}
-  {:ps_partkey "partkey_180" :value 308539.84}
-  {:ps_partkey "partkey_899" :value 301989.5}
-  {:ps_partkey "partkey_1180" :value 293452.5}
-  {:ps_partkey "partkey_522" :value 291601.75}
-  {:ps_partkey "partkey_249" :value 282520.32}
-  {:ps_partkey "partkey_1584" :value 278559.38}
-  {:ps_partkey "partkey_1404" :value 276057.89999999997}
-  {:ps_partkey "partkey_1265" :value 271079.76}
-  {:ps_partkey "partkey_154" :value 269641.42}
-  {:ps_partkey "partkey_1295" :value 265566.56}
-  {:ps_partkey "partkey_1523" :value 263158.9}
-  {:ps_partkey "partkey_1635" :value 254834.56000000003}
-  {:ps_partkey "partkey_1776" :value 234181.19999999998}
-  {:ps_partkey "partkey_1097" :value 234113.55000000002}
-  {:ps_partkey "partkey_1258" :value 233500.61000000002}
-  {:ps_partkey "partkey_621" :value 233431.30000000002}
-  {:ps_partkey "partkey_152" :value 229781.6}
-  {:ps_partkey "partkey_278" :value 216372.84}
-  {:ps_partkey "partkey_232" :value 211879.92}
-  {:ps_partkey "partkey_1684" :value 201386.22}
-  {:ps_partkey "partkey_1243" :value 199587.53999999998}
-  {:ps_partkey "partkey_976" :value 197432.1}
-  {:ps_partkey "partkey_819" :value 191475.90000000002}
-  {:ps_partkey "partkey_1943" :value 191247.75999999998}
-  {:ps_partkey "partkey_853" :value 189232.64}
-  {:ps_partkey "partkey_400" :value 188941.19999999998}
-  {:ps_partkey "partkey_639" :value 186533.28}
-  {:ps_partkey "partkey_851" :value 184103.16}
-  {:ps_partkey "partkey_909" :value 175099.0}
-  {:ps_partkey "partkey_257" :value 169033.44}
-  {:ps_partkey "partkey_1445" :value 164888.68}
-  {:ps_partkey "partkey_1855" :value 164614.81}
-  {:ps_partkey "partkey_1252" :value 158680.9}
-  {:ps_partkey "partkey_1014" :value 156465.82}
-  {:ps_partkey "partkey_1717" :value 148325.75}
-  {:ps_partkey "partkey_1032" :value 146408.4}
-  {:ps_partkey "partkey_780" :value 136296.26}
-  {:ps_partkey "partkey_918" :value 135268.32}
-  {:ps_partkey "partkey_690" :value 133826.88}
-  {:ps_partkey "partkey_711" :value 113268.84}
-  {:ps_partkey "partkey_332" :value 112181.3}
-  {:ps_partkey "partkey_1596" :value 110565.0}
-  {:ps_partkey "partkey_295" :value 97604.25}]
+ [{:ps_partkey #uuid "2de8ea87-7a8b-b59b-8694-42301381adc0" :value 1.327124989E7}
+  {:ps_partkey #uuid "858e2ba8-971f-67ad-4ee4-053d86ccb6c5" :value 9498648.06}
+  {:ps_partkey #uuid "adbcd1fa-be14-d2e4-2a0e-df3f0b611818" :value 9388264.4}
+  {:ps_partkey #uuid "a04af707-eb44-b534-e156-4abe2ec946f0" :value 9207199.75}
+  {:ps_partkey #uuid "0f103def-a2a1-e5bf-e2ab-5a4d1250af37" :value 8881908.959999999}
+  {:ps_partkey #uuid "4578b42d-6448-b31a-0b3a-cb0320cae665" :value 8709494.16}
+  {:ps_partkey #uuid "6db7ef51-e01e-4722-b162-3f1d6d568611" :value 8471489.56}
+  {:ps_partkey #uuid "465e04c9-0a41-4c03-0d5f-2d8e26e3f926" :value 8293841.12}
+  {:ps_partkey #uuid "514eeb76-f7e0-201d-f745-503ed00665df" :value 8203209.3}
+  {:ps_partkey #uuid "85aa9d8c-2b82-f91d-8d40-de452eac7734" :value 8111663.34}
+  {:ps_partkey #uuid "cd035bd4-6634-a5f8-2ec9-7563332b0231" :value 7975862.75}
+  {:ps_partkey #uuid "6f87b9ed-c35f-64ac-056a-ad020fb68396" :value 7936947.61}
+  {:ps_partkey #uuid "cff954b8-b0a9-1e05-f542-2c47219158a1" :value 7880018.6}
+  {:ps_partkey #uuid "64218843-2416-35e4-919f-e41ecf503c35" :value 7513422.84}
+  {:ps_partkey #uuid "d0cf4ad2-3ae9-1817-23b1-57d9aa09eea0" :value 7511018.76}
+  {:ps_partkey #uuid "67335cf2-0621-8d06-ee15-214a2974bbfb" :value 7299956.800000001}
+  {:ps_partkey #uuid "7087d0e0-69f4-c7a3-0923-840c8027a150" :value 7222347.199999999}
+  {:ps_partkey #uuid "268bedc6-86a5-ee84-1ff1-a33ff688d348" :value 7158586.0}
+  {:ps_partkey #uuid "c6dc9fa7-73fd-f012-3e49-a2e298ce6f21" :value 7064285.84}
+  {:ps_partkey #uuid "2800bada-f493-71ce-3b4c-04edbfd4b477" :value 7060670.890000001}
+  {:ps_partkey #uuid "c4fca77c-a24e-fe22-d059-7a32c49a1b5b" :value 7037648.64}
+  {:ps_partkey #uuid "d0f376b9-7e7e-ff08-e7fe-8ae89c9fe432" :value 6949533.7}
+  {:ps_partkey #uuid "2b555e4f-7c3e-33f4-22f4-03f2c2f8c84d" :value 6929464.08}
+  {:ps_partkey #uuid "4b950777-bd74-972e-9d3e-dbcaef7641fd" :value 6877472.960000001}
+  {:ps_partkey #uuid "e83615a9-dcb9-6101-2fab-007d3403cf39" :value 6720009.38}
+  {:ps_partkey #uuid "3c646504-31be-e431-f6fb-4927936c6dd6" :value 6681307.34}
+  {:ps_partkey #uuid "1bfe9957-beb6-210e-92f5-af06fd23d627" :value 6576640.95}
+  {:ps_partkey #uuid "7e80af83-4840-65c5-9eb0-8e001edcf778" :value 6458641.7}
+  {:ps_partkey #uuid "eb38e381-4136-ff6b-1ed6-5458af833042" :value 6391330.27}
+  {:ps_partkey #uuid "a9f0a70b-afbc-c580-12ce-3ac9b60b9cd8" :value 6341530.4}
+  {:ps_partkey #uuid "4edf9fac-ca9f-bece-64d9-ee59eee2d3a3" :value 6304944.66}
+  {:ps_partkey #uuid "02eac510-dcb3-3d36-e6cd-29cca9cfdc83" :value 6279261.12}
+  {:ps_partkey #uuid "503814cc-ace4-9016-f6ed-9b62ce641600" :value 6247863.25}
+  {:ps_partkey #uuid "a1e567ba-f06c-4103-9eab-db8f762173a7" :value 6136927.0}
+  {:ps_partkey #uuid "9b530e4a-39b9-01cf-244a-a29beff80d8b" :value 6127784.28}
+  {:ps_partkey #uuid "7b08e67a-a3cb-c815-bd74-5e3f2cbc4c75" :value 6079237.08}
+  {:ps_partkey #uuid "ac33de2e-7ff2-bc4f-4abc-4e9fd1a4d794" :value 6022720.8}
+  {:ps_partkey #uuid "d03fde9a-ff58-d1fe-cf72-2f2960599470" :value 5978195.08}
+  {:ps_partkey #uuid "f17eb4f0-2ecb-8494-9ead-5793315d41e4" :value 5838052.0}
+  {:ps_partkey #uuid "22f69b92-51ca-cb51-ed3f-0a9875e15c69" :value 5737162.24}
+  {:ps_partkey #uuid "8b9aa4be-3d5b-0b8e-daba-2236bcf7d0e0" :value 5703117.12}
+  {:ps_partkey #uuid "685648bb-c8ce-437a-9044-7288299bedca" :value 5694804.18}
+  {:ps_partkey #uuid "9a306f69-3693-9e32-e904-5b3e44c80399" :value 5681981.25}
+  {:ps_partkey #uuid "7f14fded-6009-fab1-f3ff-5de6fc283d71" :value 5633589.720000001}
+  {:ps_partkey #uuid "a052d7c0-29c4-509a-6ddd-d225bb3c9dd4" :value 5614673.64}
+  {:ps_partkey #uuid "ab4aeadc-05fc-41d5-7c86-c182da9a181f" :value 5591905.359999999}
+  {:ps_partkey #uuid "320048f9-9acb-cf96-f0d8-ff4c730bc73d" :value 5553285.32}
+  {:ps_partkey #uuid "d9b1bd34-40d0-9481-ecf6-41db270b5116" :value 5517997.59}
+  {:ps_partkey #uuid "865db077-af22-de3e-83a3-aa968c368744" :value 5490916.0}
+  {:ps_partkey #uuid "86980548-e771-951e-897f-c09ed12753ac" :value 5451495.0}
+  {:ps_partkey #uuid "378a74a8-2eeb-2439-8315-8dc1acc67071" :value 5374426.22}
+  {:ps_partkey #uuid "437d0827-f29c-0a68-9f45-a4be524a24dd" :value 5358919.7}
+  {:ps_partkey #uuid "60ed745d-94a9-f32e-c454-a51fc3266ad5" :value 5352773.25}
+  {:ps_partkey #uuid "78e7ba1f-c725-4d5a-2c44-81c5dc2e6968" :value 5189101.68}
+  {:ps_partkey #uuid "2b92a978-2307-a30d-aaa4-53095e3869a1" :value 5174388.5600000005}
+  {:ps_partkey #uuid "6ef96f75-4895-5fd1-3522-fe56614389e1" :value 5126118.15}
+  {:ps_partkey #uuid "d09ea72b-9540-277d-8ac4-b780e12e85d3" :value 5121886.44}
+  {:ps_partkey #uuid "0b6f9ab0-5142-99c1-7cce-1ec465026f7a" :value 5072099.76}
+  {:ps_partkey #uuid "07d7e379-61dc-90b8-8f57-05016aadb9e2" :value 5069178.399999999}
+  {:ps_partkey #uuid "16346e20-2798-3840-d6fe-2516e4a85fbc" :value 5050895.5}
+  {:ps_partkey #uuid "c72c4682-871b-2690-ea7f-042644693185" :value 5039590.600000001}
+  {:ps_partkey #uuid "09fc0f2e-47a6-525d-3181-843966bd700f" :value 5039271.42}
+  {:ps_partkey #uuid "e4c29d81-2cac-68db-5673-a655d60c45e1" :value 4995939.0}
+  {:ps_partkey #uuid "d410487e-ab6e-670e-992c-48c2beae1ef4" :value 4994730.1}
+  {:ps_partkey #uuid "2cad7b8d-40d8-3524-a4c7-4af0a13c632a" :value 4932809.82}
+  {:ps_partkey #uuid "b9bc3119-ee0e-f93f-6213-75e7d385b3c0" :value 4879860.09}
+  {:ps_partkey #uuid "965b114d-4229-cae2-cdbf-14d4ba271d29" :value 4831242.6}
+  {:ps_partkey #uuid "f682d211-a2fa-35d2-5ee6-20ce46d82cbe" :value 4825921.3100000005}
+  {:ps_partkey #uuid "ea7e45a6-0773-5605-ce73-f2c4b295b28b" :value 4781984.14}
+  {:ps_partkey #uuid "3a4da274-833c-3e0b-9218-aab1fd05e478" :value 4733954.64}
+  {:ps_partkey #uuid "11c7764c-396b-12a1-71f5-98284926a692" :value 4711173.600000001}
+  {:ps_partkey #uuid "b7ed7eae-390b-4673-5223-28794b3f9aa7" :value 4565588.85}
+  {:ps_partkey #uuid "46d7c8f1-829c-1e52-1da9-f526876d50f0" :value 4563830.100000001}
+  {:ps_partkey #uuid "c26cc1ea-67bd-2c47-05da-6ba129ccd050" :value 4561143.8}
+  {:ps_partkey #uuid "562bdcaf-d0e1-e5c4-a755-229eddb465ce" :value 4501982.71}
+  {:ps_partkey #uuid "6e1824fa-d055-5378-37d1-433f760380c7" :value 4417931.8}
+  {:ps_partkey #uuid "ed72c2c3-35d3-8be4-6a27-14fedb9049c5" :value 4391495.46}
+  {:ps_partkey #uuid "6fb1bc49-d381-4e66-75d4-363e643e0c24" :value 4358793.14}
+  {:ps_partkey #uuid "2d9c8e63-0d8a-db7c-9903-ecd97a26d150" :value 4356657.45}
+  {:ps_partkey #uuid "32b8f7c8-e5dd-b5d1-49dd-347cd9eda1d4" :value 4355541.7}
+  {:ps_partkey #uuid "04bd9fae-18b1-2065-dbbb-0834767d01e1" :value 4353566.87}
+  {:ps_partkey #uuid "e9822e96-b426-9893-8552-66dd2fd8aa81" :value 4347515.9}
+  {:ps_partkey #uuid "fcbb7c10-7dba-d41c-ec09-fb2a90eed050" :value 4315049.0}
+  {:ps_partkey #uuid "01f2fd9c-5f6c-1955-fced-b22384f3520c" :value 4167784.8800000004}
+  {:ps_partkey #uuid "05ce5fe1-6d7e-6872-30ae-5dfc03b9e15c" :value 4159568.16}
+  {:ps_partkey #uuid "92cb49fc-3af1-336a-007b-75963ae2607b" :value 4153124.95}
+  {:ps_partkey #uuid "f5916366-3d6f-28fe-5e3e-bccffdfcf401" :value 4123819.2}
+  {:ps_partkey #uuid "1a145c0f-5376-4748-9e13-bdf616b87413" :value 4122729.3299999996}
+  {:ps_partkey #uuid "bcd1825f-db67-d01c-1e02-2354ac4f1a70" :value 4095180.96}
+  {:ps_partkey #uuid "0de3d7fd-c4bc-fd1a-b4ba-9d1f3e9db053" :value 4088856.2}
+  {:ps_partkey #uuid "c66c7f6f-75c4-5a54-1d7f-0bd22ed1b03b" :value 4045014.13}
+  {:ps_partkey #uuid "ea7b7253-6bac-4a72-50c4-aaf5a391603e" :value 4010794.9}
+  {:ps_partkey #uuid "8bd5b361-a688-2c3c-5c2f-6e2be7d53cdf" :value 3982060.16}
+  {:ps_partkey #uuid "16f68cea-1f48-f66e-895e-81f4124dc173" :value 3941881.65}
+  {:ps_partkey #uuid "1e8d64ca-db1c-7b2c-3304-84de84410058" :value 3923035.02}
+  {:ps_partkey #uuid "3a988883-5056-61eb-69b1-cbf0e69da7c4" :value 3896709.54}
+  {:ps_partkey #uuid "af123289-e1bc-3e9f-d9f7-bbe819365edc" :value 3843848.3000000003}
+  {:ps_partkey #uuid "d4f4d0f6-8953-4733-ded8-b0ef4028b311" :value 3826021.1599999997}
+  {:ps_partkey #uuid "1c64fa9f-b982-0e55-5904-67762f962336" :value 3781201.96}
+  {:ps_partkey #uuid "aab3bc8e-4922-87e3-2eb2-e80210206834" :value 3749696.8000000003}
+  {:ps_partkey #uuid "25f33644-4e2b-2457-c528-16460539aa64" :value 3743241.43}
+  {:ps_partkey #uuid "cfae737c-2948-58bb-69f7-eb8343f5fe68" :value 3735715.1999999997}
+  {:ps_partkey #uuid "e1c8f1ff-7bcc-1feb-2acb-6a440eb3d622" :value 3709008.5999999996}
+  {:ps_partkey #uuid "7ac8c0c2-00b2-77f8-e7b3-5109415b822b" :value 3702794.6999999997}
+  {:ps_partkey #uuid "783b33b1-a0f4-c480-3f00-d3ab3e079ece" :value 3690702.41}
+  {:ps_partkey #uuid "5b490004-787a-acca-2e5f-f754223f17ed" :value 3659114.1}
+  {:ps_partkey #uuid "3346caa3-6020-41b8-f87c-6b36f70460df" :value 3656762.84}
+  {:ps_partkey #uuid "1a89f3b3-d5ad-5d58-cc27-d0649a956e4a" :value 3653100.6599999997}
+  {:ps_partkey #uuid "570a4119-9329-dfa3-0308-95814ef20563" :value 3647892.54}
+  {:ps_partkey #uuid "afd0026f-a692-29a9-b8a0-432b64c3482d" :value 3602031.8000000003}
+  {:ps_partkey #uuid "16ee561c-a011-2cda-8af3-634e1476c551" :value 3589047.6}
+  {:ps_partkey #uuid "2d1297ac-3809-47e6-6dda-71d3a61ea1dc" :value 3559597.5300000003}
+  {:ps_partkey #uuid "3b63d117-418f-fb7e-bf5c-45f1c32770a2" :value 3558511.4400000004}
+  {:ps_partkey #uuid "c6a265f9-3f74-f537-c0e6-2a371e6a481d" :value 3555470.1}
+  {:ps_partkey #uuid "9cba0b32-adc5-cdfc-3347-4fbfd9d9b95a" :value 3510427.6500000004}
+  {:ps_partkey #uuid "79019add-53a9-44ba-6b60-944e9cfb5a78" :value 3492117.6999999997}
+  {:ps_partkey #uuid "6ac8b4b9-43a3-2ae8-837e-b233cce7d73d" :value 3486888.02}
+  {:ps_partkey #uuid "f7a4cff2-9b1e-576a-8b04-75d54d1171cd" :value 3480825.5999999996}
+  {:ps_partkey #uuid "54c68040-7e77-2aa8-8d0a-017bd252884a" :value 3469373.7}
+  {:ps_partkey #uuid "4ceccb9b-eb1c-f930-ef7c-184b435025a7" :value 3447746.46}
+  {:ps_partkey #uuid "641ace4b-ab37-56a0-24d2-f7fd106e01f4" :value 3446867.4}
+  {:ps_partkey #uuid "5b783a2c-0168-c788-3af5-91fbdb696bec" :value 3417752.58}
+  {:ps_partkey #uuid "ca365e6f-0c0d-b250-0344-cada2bdadaba" :value 3403046.25}
+  {:ps_partkey #uuid "debf3c8c-28cc-38e5-d035-38a23cecf6e7" :value 3361425.8899999997}
+  {:ps_partkey #uuid "628ddf12-c668-d478-1cd8-17c157d6ada4" :value 3342081.82}
+  {:ps_partkey #uuid "d2c105dc-0c59-3d40-dfea-d65f8c28839b" :value 3303050.4}
+  {:ps_partkey #uuid "2eac6300-de52-11a1-1c64-465dbb6e6539" :value 3302180.6999999997}
+  {:ps_partkey #uuid "3c05e09d-02e1-1c66-e70b-1223103503d1" :value 3288573.16}
+  {:ps_partkey #uuid "87bc6dd6-ba83-b900-da44-181aab303dae" :value 3270900.4000000004}
+  {:ps_partkey #uuid "f8caaa7d-1657-e25e-a574-35c79a4750e4" :value 3253368.3}
+  {:ps_partkey #uuid "de7a480f-0303-e380-cdcd-7de223b846ff" :value 3177408.5700000003}
+  {:ps_partkey #uuid "f26b75e1-d329-bf57-a38e-c9491d0edbe2" :value 3177162.05}
+  {:ps_partkey #uuid "c2f76bb7-691a-b67f-8ebc-0737565de81d" :value 3165213.01}
+  {:ps_partkey #uuid "9fc0277c-0941-9ab9-a563-70df63140d18" :value 3143279.36}
+  {:ps_partkey #uuid "8381205e-34ed-f83f-e832-dbbbf092e2f5" :value 3099021.98}
+  {:ps_partkey #uuid "621eef89-ce90-e44f-c936-c26e303237c0" :value 3016553.1}
+  {:ps_partkey #uuid "d2f2537e-2c0b-4d92-8dd4-74873fd48a6f" :value 2964262.77}
+  {:ps_partkey #uuid "75087b4e-93c6-382e-c914-7ae8e38f244a" :value 2959497.0999999996}
+  {:ps_partkey #uuid "890f9d25-a178-7016-bde5-4643725ba073" :value 2951329.4499999997}
+  {:ps_partkey #uuid "fd14da20-ceb7-2016-ee06-47f6582b3547" :value 2907345.36}
+  {:ps_partkey #uuid "76aa5d09-946e-a674-0b7b-cb4f09faa339" :value 2895688.3200000003}
+  {:ps_partkey #uuid "deaf8584-b258-fc9f-bc9e-6d1d04b2d100" :value 2829476.95}
+  {:ps_partkey #uuid "f05b7857-6cbb-4b5d-7baf-2930493ceaa7" :value 2816506.56}
+  {:ps_partkey #uuid "7218229a-2486-2170-a4e9-182663e1c5bc" :value 2788059.64}
+  {:ps_partkey #uuid "562bd3e2-0f93-8517-2199-5a8737559b6e" :value 2780828.64}
+  {:ps_partkey #uuid "b1f01da7-8ea2-b167-8117-bf458c89c543" :value 2778421.39}
+  {:ps_partkey #uuid "71f139a3-84ad-1415-1a02-f1f72fa47a34" :value 2761439.88}
+  {:ps_partkey #uuid "cbad1240-f42d-c3a0-fdae-c46fca61d3ba" :value 2753031.1999999997}
+  {:ps_partkey #uuid "81d4e47c-2f4c-8655-998e-408442ed98ae" :value 2743889.4899999998}
+  {:ps_partkey #uuid "0ec3a082-ef3a-8841-1e1d-5654182a91ad" :value 2738083.92}
+  {:ps_partkey #uuid "3c44d7d8-5f36-ffc6-5457-beb80608613b" :value 2713412.16}
+  {:ps_partkey #uuid "a374af6e-a98a-11a6-faff-ebd9f423cee0" :value 2587359.58}
+  {:ps_partkey #uuid "2bd975fb-df59-30fa-ff98-719724cd8efe" :value 2587091.52}
+  {:ps_partkey #uuid "9a548afc-bffb-91dc-92d4-0b1ce5f0e614" :value 2558739.69}
+  {:ps_partkey #uuid "20a74193-3686-a15c-04e4-0a0522034b42" :value 2545838.4}
+  {:ps_partkey #uuid "cc69a057-cfe2-7ec6-f3d7-485b29c25f13" :value 2511745.32}
+  {:ps_partkey #uuid "428555ce-118d-220b-5c3d-b688e5bab9ae" :value 2506489.89}
+  {:ps_partkey #uuid "f9740124-2c73-7479-2936-e796c503e85e" :value 2505417.25}
+  {:ps_partkey #uuid "0cf8f7df-b64f-3c07-3c32-e49f596c32ea" :value 2490820.92}
+  {:ps_partkey #uuid "0f739a82-3bd3-7664-afc6-f49e8da6da0a" :value 2405206.3000000003}
+  {:ps_partkey #uuid "4578517a-a1bb-ee3f-3c2e-a50269387d7a" :value 2382150.05}
+  {:ps_partkey #uuid "9958a992-702f-db35-e942-3822cb105398" :value 2370574.16}
+  {:ps_partkey #uuid "4eb12505-15e0-2364-a63e-42bb2b3965a9" :value 2363505.11}
+  {:ps_partkey #uuid "fb3b5991-b91c-d5f3-496d-518385d889bb" :value 2305870.42}
+  {:ps_partkey #uuid "474d55b4-0743-a08a-612e-ac3571e80ebb" :value 2261159.92}
+  {:ps_partkey #uuid "09ffe10f-f3c6-389e-c995-42eadcdb1ee9" :value 2239553.2800000003}
+  {:ps_partkey #uuid "0d47b04d-6a03-20a9-14fb-534532ecc374" :value 2230055.7600000002}
+  {:ps_partkey #uuid "8315856d-4359-ed87-3476-6414af72f8fa" :value 2217043.59}
+  {:ps_partkey #uuid "ddfaa468-1138-0115-4b8e-4e992cd59b0b" :value 2213635.2}
+  {:ps_partkey #uuid "fd1327c2-365c-afbd-3a99-3a06d1231a9d" :value 2187160.4499999997}
+  {:ps_partkey #uuid "b731b764-8fff-b2cd-67c4-1cf1c81c24ab" :value 2139845.1}
+  {:ps_partkey #uuid "844413a3-3298-e767-4edb-edd1ed43cdf2" :value 2130114.96}
+  {:ps_partkey #uuid "038627a3-99c1-4228-22d4-24c7eb67674a" :value 2122758.7199999997}
+  {:ps_partkey #uuid "3c72e4bc-0ebe-f962-5ae7-db8fb0769662" :value 2107479.56}
+  {:ps_partkey #uuid "d6bc7ab3-1c25-e729-92db-f55da241ccc4" :value 2096868.97}
+  {:ps_partkey #uuid "bc7223ef-21d4-78f0-0276-ce2c39a87732" :value 2051302.4400000002}
+  {:ps_partkey #uuid "6a737c35-dc2b-0f2b-bc2f-e59d44aa8dbc" :value 2035262.22}
+  {:ps_partkey #uuid "d6091383-5572-18fc-f6e4-efb4829a8b61" :value 2029692.4499999997}
+  {:ps_partkey #uuid "80c926b2-767f-92eb-abe0-d94821bfa580" :value 2026981.74}
+  {:ps_partkey #uuid "f1d62702-4e5d-f32e-a6ac-1a2f23121f18" :value 2020953.5399999998}
+  {:ps_partkey #uuid "68e6509a-38eb-217e-2297-20d078dc1b98" :value 2019190.7999999998}
+  {:ps_partkey #uuid "fa839deb-73ce-4bfb-348f-fa72cddb3de9" :value 2010112.0}
+  {:ps_partkey #uuid "2e479e02-73fc-9304-8173-4687117e17b6" :value 1956429.1800000002}
+  {:ps_partkey #uuid "d760ffd4-97ec-b95d-f898-3ac7c49e57cf" :value 1919029.56}
+  {:ps_partkey #uuid "d69dfda0-8a6f-b356-87a6-678d86797ecd" :value 1859318.1500000001}
+  {:ps_partkey #uuid "1c270b5f-0f1c-f736-6055-e3d9d7419f88" :value 1852588.28}
+  {:ps_partkey #uuid "98ed7b66-dfd9-3937-10ed-208222eb0829" :value 1817951.32}
+  {:ps_partkey #uuid "17cd9bd4-426d-92fb-1d63-8b90133d53fd" :value 1802306.08}
+  {:ps_partkey #uuid "4246abab-c5cd-6c1e-e41f-6c33fe371cc2" :value 1779646.44}
+  {:ps_partkey #uuid "a494883d-716d-77cf-7cc1-1e41667a17c7" :value 1767602.3}
+  {:ps_partkey #uuid "90526ee7-0bdc-3546-c918-6ec88dd3319f" :value 1761838.75}
+  {:ps_partkey #uuid "156e4220-c60b-a154-29c9-e1e27809feaf" :value 1754235.01}
+  {:ps_partkey #uuid "d0043cdc-be26-88c7-e494-db502b7bd02b" :value 1725649.9200000002}
+  {:ps_partkey #uuid "c4767f56-fc0a-688e-2f8f-da854ed7231b" :value 1682311.48}
+  {:ps_partkey #uuid "bab9bdd3-03b4-2442-009e-95cffa9d050e" :value 1652831.2000000002}
+  {:ps_partkey #uuid "0f146e9a-ec40-bab5-ccc0-0b213d158711" :value 1650953.52}
+  {:ps_partkey #uuid "59f019fc-1a07-6362-596b-a4fc4cec7e99" :value 1638443.72}
+  {:ps_partkey #uuid "38dd82cd-494b-bfc2-4adb-8e236a32b238" :value 1631154.06}
+  {:ps_partkey #uuid "35ed386e-34bb-d29f-2482-7f70f1dd8614" :value 1629883.46}
+  {:ps_partkey #uuid "7553695a-11fb-337a-b64a-976483fe7849" :value 1606346.1}
+  {:ps_partkey #uuid "98eb11b9-0411-df8a-b616-08b472ef10e5" :value 1603235.16}
+  {:ps_partkey #uuid "c735d508-e102-601e-0533-c5b836d9fc29" :value 1569826.72}
+  {:ps_partkey #uuid "907f8eb4-b99b-ce71-93ee-1982f1295486" :value 1553706.0}
+  {:ps_partkey #uuid "8b31dcbe-c2ac-f789-3a29-520f92f7e8a9" :value 1529857.01}
+  {:ps_partkey #uuid "980898d1-04e7-30e0-fc18-0c7dab7ba3ed" :value 1512838.8}
+  {:ps_partkey #uuid "30b47ae7-d431-30c3-d20a-8e1398e0d5a6" :value 1467567.2799999998}
+  {:ps_partkey #uuid "f3842124-6522-a936-392d-8e7313122bce" :value 1462292.9999999998}
+  {:ps_partkey #uuid "c55ddc91-ec6b-58ba-f3da-9993a919b79a" :value 1456050.96}
+  {:ps_partkey #uuid "ab379092-dc7d-6c24-cb0b-3f8c10bf1b2f" :value 1425832.4}
+  {:ps_partkey #uuid "d00aef8a-4dbe-cf13-fd9a-ec881bbbfe27" :value 1408087.26}
+  {:ps_partkey #uuid "6230a53f-4bfb-318f-15c7-b84956304e3d" :value 1406101.78}
+  {:ps_partkey #uuid "96e78a71-fec3-a297-bfec-b4a17458ef8d" :value 1379186.35}
+  {:ps_partkey #uuid "503ce661-6859-420b-8ef6-dcba14095852" :value 1354813.18}
+  {:ps_partkey #uuid "60d41713-a503-64e1-9ee5-e8c40f527974" :value 1344383.2000000002}
+  {:ps_partkey #uuid "420c0bc9-cb59-1bbc-1c03-48224ea2b93e" :value 1337002.8900000001}
+  {:ps_partkey #uuid "2e7bfc6c-2e08-7461-3eca-7b49ad465371" :value 1334146.71}
+  {:ps_partkey #uuid "11882018-6123-2369-58e0-86b704dca091" :value 1327297.01}
+  {:ps_partkey #uuid "76cf0742-68d4-9884-3f22-e529e69be260" :value 1327045.06}
+  {:ps_partkey #uuid "82608799-9156-6ecb-7971-f4b871668540" :value 1326102.34}
+  {:ps_partkey #uuid "e8d37caf-a477-6071-52f4-39791ed14700" :value 1289075.76}
+  {:ps_partkey #uuid "83b86c9b-c471-4fa6-1422-525b29ff7330" :value 1285866.2}
+  {:ps_partkey #uuid "e5c47a07-418c-7ccf-2654-584221323a0e" :value 1244173.26}
+  {:ps_partkey #uuid "29913b3d-c97a-ced3-8faf-08a31baa91f2" :value 1239095.4400000002}
+  {:ps_partkey #uuid "1e8b3ee7-a6b9-1896-363d-7ccc5cc7c5ec" :value 1225696.05}
+  {:ps_partkey #uuid "e6297de9-abfb-7ae5-9c6b-b851d4efa950" :value 1216798.33}
+  {:ps_partkey #uuid "0bec6841-4341-04ff-161f-b518a553ec91" :value 1202012.13}
+  {:ps_partkey #uuid "bfa18958-559d-21a1-888b-02c486d0b8fb" :value 1184125.1}
+  {:ps_partkey #uuid "d21a15de-640c-59c2-fff1-8160f7a5879a" :value 1182820.8}
+  {:ps_partkey #uuid "d3873c5d-7173-e7fc-1c6a-b8a8c9211d40" :value 1165932.3}
+  {:ps_partkey #uuid "8c22094a-75a2-47b8-b1cd-17afc0ddb7c5" :value 1078321.4400000002}
+  {:ps_partkey #uuid "b3a2bb82-bc86-da2c-8280-c02a67432847" :value 1060584.8}
+  {:ps_partkey #uuid "a7e607de-be95-e806-7afd-9dbd4ce55d5f" :value 1028449.89}
+  {:ps_partkey #uuid "8afe14f2-643f-1bbf-4e5a-0bbb6d0dc760" :value 1018673.04}
+  {:ps_partkey #uuid "31851517-bd4f-370a-2dbf-d72e3d76330e" :value 1002319.49}
+  {:ps_partkey #uuid "d8da14ec-cb3a-03ff-be8c-8cf3e2dc1029" :value 998105.76}
+  {:ps_partkey #uuid "109a35f7-0e56-d12a-d92a-e95284cfed63" :value 997684.24}
+  {:ps_partkey #uuid "7cc3f142-4633-80eb-c9d2-93bab7906deb" :value 991530.93}
+  {:ps_partkey #uuid "423423f4-03b6-6cce-59bb-b3863eccb685" :value 980620.6799999999}
+  {:ps_partkey #uuid "da48cc6e-0217-0a31-fe94-db76f8fd9ee2" :value 978862.9199999999}
+  {:ps_partkey #uuid "4839bb0a-003f-d43e-8b3a-e0c563e24a56" :value 962131.8600000001}
+  {:ps_partkey #uuid "046def66-d7fc-727a-7fbd-d855a7702821" :value 957575.34}
+  {:ps_partkey #uuid "29ec5f9a-bf5a-063f-3263-bea0a06ed805" :value 954291.0499999999}
+  {:ps_partkey #uuid "2043ac66-eaa6-9440-216a-28e868bbff2b" :value 939764.7}
+  {:ps_partkey #uuid "9849e4e9-7e44-e2b8-ebbd-cbf268c90dcb" :value 936951.94}
+  {:ps_partkey #uuid "427d3cf2-b102-050e-fbe9-b4574c2d74f5" :value 906111.99}
+  {:ps_partkey #uuid "f2150f66-09f8-a76b-25f6-4578c8171c8a" :value 894484.09}
+  {:ps_partkey #uuid "a95c2a44-3ed0-1830-1e14-f7f27d192208" :value 893905.9199999999}
+  {:ps_partkey #uuid "dc187f41-f88f-fb81-9beb-6f100c84c5bb" :value 890887.85}
+  {:ps_partkey #uuid "913a1e0d-2890-ca05-5c89-cec8eb0f1c0e" :value 878923.64}
+  {:ps_partkey #uuid "350f5444-70a5-9a2f-0c54-805597751be6" :value 854046.43}
+  {:ps_partkey #uuid "75d3a0e4-5823-b8c2-30f1-3c0f5e3510cd" :value 842245.6699999999}
+  {:ps_partkey #uuid "fc5e60ef-4220-aefe-9702-129a511022c1" :value 841275.42}
+  {:ps_partkey #uuid "fd47514c-8bbb-a663-a50a-960d91fa5347" :value 832963.6799999999}
+  {:ps_partkey #uuid "7e2e28d5-4c3a-4e90-b003-adef9cd1c21f" :value 826642.6000000001}
+  {:ps_partkey #uuid "befcc0c2-f551-9f34-cdf3-d2e9bff4b237" :value 811504.38}
+  {:ps_partkey #uuid "6ab79f0b-0a3c-eb15-36b7-e9bea1a65372" :value 791214.45}
+  {:ps_partkey #uuid "9976f024-5e31-ef9a-56d4-6254f62290ad" :value 788974.21}
+  {:ps_partkey #uuid "1ab88658-ca38-9277-5530-3441f713aa19" :value 770526.0499999999}
+  {:ps_partkey #uuid "2ddfd21f-a757-b5c9-80d8-047b1d2a1dc2" :value 763569.4}
+  {:ps_partkey #uuid "89d249c0-0259-5206-f024-7b5a85922024" :value 715302.72}
+  {:ps_partkey #uuid "a41c73aa-c3c5-73b7-cf04-78367cda3c0c" :value 713351.43}
+  {:ps_partkey #uuid "554b4d88-2cc0-9f37-afed-7164ec8ce767" :value 688865.82}
+  {:ps_partkey #uuid "d2bfe720-73f5-9d24-f052-e7b2a90ffc91" :value 682434.15}
+  {:ps_partkey #uuid "13141c09-2eb7-7581-d8d7-ff99c8701c34" :value 680239.04}
+  {:ps_partkey #uuid "126f6c1a-8031-ed1d-ecfd-ca69a36c4e99" :value 671225.9400000001}
+  {:ps_partkey #uuid "169b42c6-987c-6a61-44c2-b0774eeef363" :value 665716.83}
+  {:ps_partkey #uuid "7764fd04-2719-ec3f-0da4-74f2e57c2c65" :value 663414.65}
+  {:ps_partkey #uuid "656ccdce-3d0b-3ddb-c211-b913ec4246cb" :value 639650.88}
+  {:ps_partkey #uuid "f3c84ddc-b5f3-426e-5fa4-414d4e54520e" :value 635629.28}
+  {:ps_partkey #uuid "7ff0a22c-9f2d-8c36-2294-434d53456a38" :value 630987.4400000001}
+  {:ps_partkey #uuid "0f4df56e-d8f8-0cba-06cb-9797c2d19310" :value 628241.25}
+  {:ps_partkey #uuid "d1c65bfa-4b36-782e-b588-e03958b30b64" :value 622427.16}
+  {:ps_partkey #uuid "abaeef04-20bc-f8c8-ee3f-beccf59121a5" :value 622249.54}
+  {:ps_partkey #uuid "659e6542-293a-b799-d338-4df87adce2b3" :value 621068.7999999999}
+  {:ps_partkey #uuid "7b2b7b1c-b7c2-73a4-be7b-3fecf4ca6454" :value 615942.6}
+  {:ps_partkey #uuid "b6588561-09a2-89b0-5792-c300525b52af" :value 607985.8400000001}
+  {:ps_partkey #uuid "5ed044a1-688c-e158-1fd8-5079aa88e861" :value 571490.7000000001}
+  {:ps_partkey #uuid "db23f4ec-a262-92db-2825-feebdf4b3ec4" :value 570337.4}
+  {:ps_partkey #uuid "6c01ec2f-91a5-c5d3-9034-d356028e1cf6" :value 567651.24}
+  {:ps_partkey #uuid "d69df85d-eedc-3317-5a01-3f2ca2208020" :value 556634.76}
+  {:ps_partkey #uuid "ed5f79c5-10c4-86d2-f916-ca3aa0b9ceaa" :value 555989.28}
+  {:ps_partkey #uuid "a1096aa5-8956-a961-2b04-012380da08e8" :value 553818.1799999999}
+  {:ps_partkey #uuid "da427769-017b-366f-f6b8-018cf9256db0" :value 552658.6799999999}
+  {:ps_partkey #uuid "1f214d11-650c-e9fa-fae4-fd7d01d0def1" :value 535868.1599999999}
+  {:ps_partkey #uuid "ed498faa-849f-a74d-be2f-f15eb938c526" :value 526995.84}
+  {:ps_partkey #uuid "89644a54-8692-e3a3-7dbb-d45a07738c42" :value 526711.11}
+  {:ps_partkey #uuid "83719fdb-ab49-aaaa-2dc9-dc3ca79bcfce" :value 515702.16000000003}
+  {:ps_partkey #uuid "b16d4166-37a7-74d6-75be-2d4cb49eb1da" :value 513587.57}
+  {:ps_partkey #uuid "43f6686a-6086-8ce8-a0ea-c215ad5bee7a" :value 500954.58}
+  {:ps_partkey #uuid "1d064ec6-ec36-89f3-2632-7ac004181554" :value 499475.58}
+  {:ps_partkey #uuid "9c8ef921-38b3-c812-8846-51adf04f7304" :value 494401.05}
+  {:ps_partkey #uuid "9a498bc3-2d2c-6744-3636-689b097b14bc" :value 462396.27}
+  {:ps_partkey #uuid "cc3c830f-3f3b-01a6-c01f-b72bdae1712e" :value 461263.74}
+  {:ps_partkey #uuid "28bbe4a5-938c-9712-f488-08b0f71a80eb" :value 455492.24}
+  {:ps_partkey #uuid "eba462b0-68d5-055e-57bc-596c33c00c40" :value 449685.6}
+  {:ps_partkey #uuid "aad27a4b-f818-9f11-4088-b6bc375eb6dd" :value 448183.06}
+  {:ps_partkey #uuid "447d0c52-4d5a-aa88-abd8-8854ba15c13e" :value 439967.04000000004}
+  {:ps_partkey #uuid "2a0b9237-87ac-2822-ae15-cee7e9512331" :value 426442.07999999996}
+  {:ps_partkey #uuid "9f1ac252-43d9-7a7c-e4a0-e3d42b5637d5" :value 414558.2}
+  {:ps_partkey #uuid "e96c7181-2d8f-186d-43c5-ab7c30e935f8" :value 398540.87}
+  {:ps_partkey #uuid "75385eb7-39ac-fb0e-14fe-37fd347d40d9" :value 376443.98}
+  {:ps_partkey #uuid "dc405708-4d76-01c9-8a91-241a0794f37f" :value 370900.99}
+  {:ps_partkey #uuid "f3d055ba-e2fd-1dd1-ef6a-120666da8ca8" :value 370815.9}
+  {:ps_partkey #uuid "4bd75299-a911-9d61-9753-dde9b5ad2cd7" :value 370528.51999999996}
+  {:ps_partkey #uuid "db5a31f1-bd48-983d-1778-10eaaf187585" :value 367894.5}
+  {:ps_partkey #uuid "7394c10f-2932-5207-fafc-256b03d193f4" :value 367653.66}
+  {:ps_partkey #uuid "cf58eba6-806d-e3a3-aa3f-f49b5044d05c" :value 360911.32}
+  {:ps_partkey #uuid "74542748-b3c3-7daa-baee-21cf93f3c4ef" :value 358792.36}
+  {:ps_partkey #uuid "92e9cddf-4a37-6ae4-4279-bb41a0107b7e" :value 350637.43}
+  {:ps_partkey #uuid "76707aac-d34c-6ceb-3db6-4511aa5c59fe" :value 342221.48000000004}
+  {:ps_partkey #uuid "bd5c5f2c-ae89-f498-2c5e-37763e0e3aa2" :value 341805.2}
+  {:ps_partkey #uuid "9d14f9e4-4947-eed3-42a6-bac94d9efde4" :value 334938.04}
+  {:ps_partkey #uuid "0c37ed83-60ca-11cf-d9c7-45409f98f8cd" :value 326445.89999999997}
+  {:ps_partkey #uuid "1e429328-d626-b3b8-aacc-80cb37bdbf92" :value 313081.75}
+  {:ps_partkey #uuid "8ce35ab6-fa1e-4486-2fcf-828c07e95401" :value 312229.33}
+  {:ps_partkey #uuid "54fb4e61-e4d8-c37c-486a-5212d1fe9cd6" :value 309456.95}
+  {:ps_partkey #uuid "b9e5b926-61e1-a97e-6620-5f369810cab3" :value 308539.84}
+  {:ps_partkey #uuid "ed90f23f-d1e2-9ad1-5e7e-cd9adb018a7f" :value 301989.5}
+  {:ps_partkey #uuid "16557927-8748-cca0-9631-3782242b8100" :value 293452.5}
+  {:ps_partkey #uuid "31dd85a9-0dff-b218-d887-b60c52e4def1" :value 291601.75}
+  {:ps_partkey #uuid "397888fd-507d-3966-fa0e-cf458702a94b" :value 282520.32}
+  {:ps_partkey #uuid "33cb93a8-0522-47e9-0f88-aa1375dd74d4" :value 278559.38}
+  {:ps_partkey #uuid "d9bfd198-268f-eded-6f84-e27bfa4e122e" :value 276057.89999999997}
+  {:ps_partkey #uuid "61707415-497b-38e4-9afe-6531857f7fef" :value 271079.76}
+  {:ps_partkey #uuid "f263bccb-e105-49b0-4e40-88e5d4466b13" :value 269641.42}
+  {:ps_partkey #uuid "997d2cc6-ed83-e0cd-8ba1-e89574ff9254" :value 265566.56}
+  {:ps_partkey #uuid "31216949-5dcc-1be8-92cd-d4f26c6cf3d0" :value 263158.9}
+  {:ps_partkey #uuid "440319e6-6bc1-a042-9c5a-d01ccc56a433" :value 254834.56000000003}
+  {:ps_partkey #uuid "a0815abe-434b-fd59-76c9-9c08f04f1eaf" :value 234181.19999999998}
+  {:ps_partkey #uuid "5b869a65-03f9-8042-49fe-17820e23dcb8" :value 234113.55000000002}
+  {:ps_partkey #uuid "1b1bd519-9ae0-7911-70f0-aeba7bbfbc7a" :value 233500.61000000002}
+  {:ps_partkey #uuid "f235647e-c9df-63a6-aa7e-0295c55c2933" :value 233431.30000000002}
+  {:ps_partkey #uuid "5b488780-446a-2edb-df10-124e4e3795de" :value 229781.6}
+  {:ps_partkey #uuid "6521fe6b-bbf4-97a5-b835-9f41e437dd29" :value 216372.84}
+  {:ps_partkey #uuid "c2a22461-0d1a-0dd5-b733-95336a12efd9" :value 211879.92}
+  {:ps_partkey #uuid "4b7dba67-0989-a84d-0383-5aa11df8d5c2" :value 201386.22}
+  {:ps_partkey #uuid "cf280896-b62f-8b4d-11db-01b621e8105f" :value 199587.53999999998}
+  {:ps_partkey #uuid "1fa8ae58-c903-be77-bf44-5c0b5aa21f84" :value 197432.1}
+  {:ps_partkey #uuid "ba97a561-9d1d-5242-a68e-0df41202504b" :value 191475.90000000002}
+  {:ps_partkey #uuid "3c01e34c-3dfc-917a-4144-a3f6c3c90fda" :value 191247.75999999998}
+  {:ps_partkey #uuid "d8612a2c-b9fa-80b4-20bb-a819eef0e432" :value 189232.64}
+  {:ps_partkey #uuid "1c168c2a-9c17-3af9-822f-84247ecb4ade" :value 188941.19999999998}
+  {:ps_partkey #uuid "d570af45-8097-2b88-fd15-53c83073f5c4" :value 186533.28}
+  {:ps_partkey #uuid "f4257449-e850-7a91-6611-53fb8c0d0aef" :value 184103.16}
+  {:ps_partkey #uuid "7ebd7f3c-2005-461c-5576-6f220c04acc6" :value 175099.0}
+  {:ps_partkey #uuid "74d86f62-8008-bc96-459e-6b4a55431320" :value 169033.44}
+  {:ps_partkey #uuid "cc1d4403-c73c-c39e-fb40-1c23c71876d4" :value 164888.68}
+  {:ps_partkey #uuid "661a138b-1bbc-6f87-9aa8-6762215a988c" :value 164614.81}
+  {:ps_partkey #uuid "449f7b9a-3dbf-05ad-2705-341fd6535292" :value 158680.9}
+  {:ps_partkey #uuid "2c6583e6-05e6-86bd-e3f1-12eb0aa2890a" :value 156465.82}
+  {:ps_partkey #uuid "43d08ceb-57d7-e35c-db43-f58e4a733340" :value 148325.75}
+  {:ps_partkey #uuid "412ce98c-2bc5-9c7c-ca79-9356fa036cf2" :value 146408.4}
+  {:ps_partkey #uuid "1a84848d-4a82-b4c6-339a-41d499ba4ea8" :value 136296.26}
+  {:ps_partkey #uuid "7a3e3e9c-3b6a-8fb8-a30b-8641f566d99b" :value 135268.32}
+  {:ps_partkey #uuid "68f20687-8723-419f-5de7-7c0f8d461c02" :value 133826.88}
+  {:ps_partkey #uuid "d12af725-2455-bc63-8e09-3af306f696dc" :value 113268.84}
+  {:ps_partkey #uuid "090faaf8-2572-abe9-cd36-6de139eff8d8" :value 112181.3}
+  {:ps_partkey #uuid "e3b0f1e1-35ee-c576-d0b4-7de213dffede" :value 110565.0}
+  {:ps_partkey #uuid "fa5786d2-dd0e-1bf1-1774-c1d9c3fa5253" :value 97604.25}]
 
  ;; Q12
  [{:l_shipmode "MAIL"
@@ -907,7 +907,7 @@
 
  ;; Q15
  [{:total_revenue 1161099.4635999997
-   :s_suppkey "suppkey_21"
+   :s_suppkey #uuid "30439298-6203-27c5-fe3d-9ef573d57075"
    :s_name "Supplier#000000021"
    :s_address "81CavellcrJ0PQ3CPBID0Z0JwyJm0ka5igEs"
    :s_phone "12-253-590-5816"}]
@@ -1217,14 +1217,14 @@
 
  ;; Q18
  [{:c_name "Customer#000000667",
-   :c_custkey "custkey_667",
-   :o_orderkey "orderkey_29158",
+   :c_custkey #uuid "e128dcc7-8f11-361b-402e-81c11fe85b64",
+   :o_orderkey #uuid "80420262-b8aa-c61b-633e-58a1c0853bd9",
    :o_orderdate #xt/date "1995-10-21",
    :o_totalprice 439687.23,
    :sum_qty 305.0}
   {:c_name "Customer#000000178",
-   :c_custkey "custkey_178",
-   :o_orderkey "orderkey_6882",
+   :c_custkey #uuid "e7dccce4-ad06-45f1-c92b-4aeb506e5c4c",
+   :o_orderkey #uuid "3219510c-0b93-4654-44b9-bb3a0d8c0398",
    :o_orderdate #xt/date "1997-04-09"
    :o_totalprice 422359.65,
    :sum_qty 303.0}]

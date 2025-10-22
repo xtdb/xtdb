@@ -2,12 +2,12 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]
-            [xtdb.api :as xt])
+            [xtdb.api :as xt]
+            [xtdb.util :as util])
   (:import clojure.lang.MapEntry
            (io.airlift.tpch TpchColumn TpchColumnType$Base TpchEntity TpchTable)
-           java.security.MessageDigest
-           (java.time LocalDate)
-           (java.util Arrays)))
+           [java.nio ByteBuffer]
+           (java.time LocalDate)))
 
 ;; 0.05 = 7500 customers, 75000 orders, 299814 lineitems, 10000 part, 40000 partsupp, 500 supplier, 25 nation, 5 region
 
@@ -29,7 +29,10 @@
         (condp = (.getBase (.getType col))
           TpchColumnType$Base/IDENTIFIER (let [col-part (str (str/replace (.getColumnName col) #".+_" "") "_")]
                                            (fn [^TpchEntity e]
-                                             (str col-part (.getIdentifier col e))))
+                                             (-> (str col-part (.getIdentifier col e))
+                                                 util/->iid
+                                                 ByteBuffer/wrap
+                                                 util/byte-buffer->uuid)))
           TpchColumnType$Base/INTEGER (fn [^TpchEntity e]
                                         (long (.getInteger col e)))
           TpchColumnType$Base/VARCHAR (fn [^TpchEntity e]
@@ -39,21 +42,19 @@
           TpchColumnType$Base/DATE (fn [^TpchEntity e]
                                      (LocalDate/ofEpochDay (.getDate col e))))))
 
-(def ^:private ^java.security.MessageDigest msg-digest
-  (MessageDigest/getInstance "SHA-256"))
-
-(defn- ->iid ^bytes [^String eid]
-  (-> (.digest msg-digest (.getBytes eid))
-      (Arrays/copyOfRange 0 16)))
+(defn- doc->id [doc pk-cols]
+  (if (= 1 (count pk-cols))
+    (doc (first pk-cols))
+    (let [eid (str/join "___" (map doc pk-cols))]
+      eid)))
 
 (defn- tpch-table->docs [^TpchTable table scale-factor]
   (let [cell-readers (mapv ->cell-reader (.getColumns table))
         table-name (keyword (.getTableName table))
         pk-cols (get table->pkey table-name)]
     (for [^TpchEntity e (.createGenerator table scale-factor 1 1)]
-      (let [doc (into {} (map #(% e)) cell-readers)
-            eid (str/join "___" (map doc pk-cols))]
-        (assoc doc :xt/id eid)))))
+      (let [doc (into {} (map #(% e)) cell-readers)]
+        (assoc doc :xt/id (doc->id doc pk-cols))))))
 
 (defn submit-docs! [node scale-factor]
   (log/info "Transacting TPC-H tables...")
@@ -84,8 +85,7 @@
         pk-cols (get table->pkey (keyword table-name))]
     (for [^TpchEntity e (.createGenerator table scale-factor 1 1)
           :let [doc (map #(% e) cell-readers)]]
-      (cons (->> (mapv (into {} doc) pk-cols)
-                 (str/join "___"))
+      (cons (doc->id (into {} doc) pk-cols)
             (vals doc)))))
 
 (defn submit-dml! [node scale-factor]

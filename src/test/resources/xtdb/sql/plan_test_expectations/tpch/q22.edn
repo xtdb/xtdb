@@ -1,18 +1,18 @@
 [:project
- [{cntrycode custsale.12/cntrycode} numcust totacctbal]
+ [{cntrycode custsale.11/cntrycode} numcust totacctbal]
  [:order-by
-  [[custsale.12/cntrycode
+  [[custsale.11/cntrycode
     {:direction :asc, :null-ordering :nulls-last}]]
   [:project
-   [custsale.12/cntrycode
-    {numcust _row_count_13}
-    {totacctbal _sum_out_14}]
+   [custsale.11/cntrycode
+    {numcust _row_count_12}
+    {totacctbal _sum_out_13}]
    [:group-by
-    [custsale.12/cntrycode
-     {_row_count_13 (row-count)}
-     {_sum_out_14 (sum custsale.12/c_acctbal)}]
+    [custsale.11/cntrycode
+     {_row_count_12 (row-count)}
+     {_sum_out_13 (sum custsale.11/c_acctbal)}]
     [:rename
-     custsale.12
+     custsale.11
      [:project
       [{cntrycode (substring c.1/c_phone 1 2)}
        {c_acctbal c.1/c_acctbal}]
@@ -29,12 +29,10 @@
            [:map
             [{_sq_9 true}]
             [:anti-join
-             [{c.1/c_custkey o_custkey}]
+             [true]
              [:rename
               c.1
-              [:scan
-               {:table #xt/table customer}
-               [c_phone c_acctbal c_custkey]]]
+              [:scan {:table #xt/table customer} [c_phone c_acctbal]]]
              [:project
               [{o_clerk o.10/o_clerk}
                {o_comment o.10/o_comment}
@@ -57,7 +55,7 @@
                  o_comment
                  o_orderkey
                  o_shippriority
-                 o_custkey]]]]]]]
+                 {o_custkey (= o_custkey nil)}]]]]]]]
           [:rename
            xt.values.3
            [:table

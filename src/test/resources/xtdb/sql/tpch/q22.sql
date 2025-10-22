@@ -14,7 +14,7 @@ FROM (
          )
          AND NOT EXISTS(
            FROM orders AS o
-           WHERE o.o_custkey = c.c_custkey
+           WHERE o.o_custkey = c._id
          )
        SELECT
          SUBSTRING(c.c_phone FROM 1 FOR 2) AS cntrycode,
