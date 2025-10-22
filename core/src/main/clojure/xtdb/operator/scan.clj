@@ -158,12 +158,11 @@
 
 
 (defn ->path-pred [^SortedSet iid-set]
-  (when (and iid-set (= 1 (.size iid-set)))
-    ;; TODO use the whole set
-    (let [^bytes iid-bytes (first iid-set)]
+  (when (and iid-set (not (.isEmpty iid-set)))
+    (let [bucketer Bucketer/DEFAULT]
       (reify Predicate
         (test [_ path]
-          (zero? (.compareToPath Bucketer/DEFAULT iid-bytes ^bytes path)))))))
+          (not (.isEmpty (.filterIidsForPath bucketer iid-set path))))))))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
