@@ -15,7 +15,7 @@
      [{_row_number_0 (row-number)}]
      [:map
       [{_sq_2 true}]
-      [:semi-join
+      [:anti-join
        [{customers.1/country country}]
        [:rename
         customers.1

@@ -3061,3 +3061,32 @@ UNION ALL
     (xt/execute-tx tu/*node* [[:patch-docs :docs {:xt/id 1 :d [(ByteBuffer/allocate 0) false]}]])
 
     (t/is (not-empty (xt/q tu/*node* "SELECT * FROM docs")))))
+
+(t/deftest test-all-quantified-comparison
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :col1 8} {:xt/id 2 :col1 9}]])
+
+  (t/is (= [{:result false}]
+           (xt/q tu/*node* "SELECT 8 = ALL(SELECT col1 FROM docs) AS result")))
+
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :col1 8} {:xt/id 2 :col1 8}]])
+  (t/is (= [{:result true}]
+           (xt/q tu/*node* "SELECT 8 = ALL(SELECT col1 FROM docs) AS result")))
+
+  (t/is (= [{:result true}]
+           (xt/q tu/*node* "SELECT 10 <> ALL(SELECT col1 FROM docs) AS result")))
+
+  (t/is (= [{:result false}]
+           (xt/q tu/*node* "SELECT 8 <> ALL(SELECT col1 FROM docs) AS result")))
+
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1 :col1 5} {:xt/id 2 :col1 7}]])
+  (t/is (= [{:result true}]
+           (xt/q tu/*node* "SELECT 10 > ALL(SELECT col1 FROM docs) AS result")))
+
+  (t/is (= [{:result false}]
+           (xt/q tu/*node* "SELECT 6 > ALL(SELECT col1 FROM docs) AS result")))
+
+  (t/is (= [{:result true}]
+           (xt/q tu/*node* "SELECT 5 = ANY(SELECT col1 FROM docs) AS result")))
+
+  (t/is (= [{:result false}]
+           (xt/q tu/*node* "SELECT 10 = ANY(SELECT col1 FROM docs) AS result"))))

@@ -2,7 +2,7 @@
  [{y x.1/y}]
  [:map
   [{_sq_2 true}]
-  [:semi-join
+  [:anti-join
    [(<= x.1/z z)]
    [:rename x.1 [:scan {:table #xt/table x} [y z]]]
    [:project

@@ -1898,7 +1898,8 @@
       (.accept (.quantifiedComparisonPredicatePart3 ctx)
                (assoc this :qc-pt2 {:expr (.accept (.expr ctx) this)
                                     :op (cond-> op
-                                          (= quantifier :all) negate-op)}))))
+                                          (= quantifier :all) negate-op)
+                                    :quantifier quantifier}))))
 
   (visitQuantifiedComparisonPredicatePart2 [{:keys [pt1] :as this} ctx]
     (let [quantifier (case (str/lower-case (.getText (.quantifier ctx)))
@@ -1908,12 +1909,14 @@
       (.accept (.quantifiedComparisonPredicatePart3 ctx)
                (assoc this :qc-pt2 {:expr pt1
                                     :op (cond-> op
-                                          (= quantifier :all) negate-op)}))))
+                                          (= quantifier :all) negate-op)
+                                    :quantifier quantifier}))))
 
   (visitQuantifiedComparisonSubquery [{:keys [!subqs qc-pt2]} ctx]
-    (plan-sq (.subquery ctx) env scope !subqs
-             (into {:sq-type :quantified-comparison, :assert-single-col? true}
-                   qc-pt2)))
+    (cond->> (plan-sq (.subquery ctx) env scope !subqs
+                      (into {:sq-type :quantified-comparison, :assert-single-col? true}
+                            qc-pt2))
+      (= :all (:quantifier qc-pt2)) (list 'not)))
 
   (visitQuantifiedComparisonExpr [{{:keys [!id-count]} :env, :keys [qc-pt2, ^Map !subqs], :as this} ctx]
     (let [sq-sym (-> (->col-sym (str "_sq_" (swap! !id-count inc)))
@@ -1931,7 +1934,8 @@
                                  :query-plan query-plan}
                                 qc-pt2))
 
-      sq-sym))
+      (cond-> sq-sym
+        (= :all (:quantifier qc-pt2)) (-> (list 'not)))))
 
   (visitInPredicate [{:keys [!subqs] :as this} ctx]
     (let [^ParserRuleContext
