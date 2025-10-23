@@ -307,7 +307,8 @@
                                          default-tz (ZoneId/of "Europe/London")}}]
   (let [instant-src (or instant-src (->mock-clock))
         healthz-port (if (util/port-free? healthz-port) healthz-port (util/free-port))]
-    (xtn/start-node (cond-> {:healthz {:port healthz-port}
+    (xtn/start-node (cond-> {:healthz {:port healthz-port
+                                       :host "*"}
                              :log [:local {:path (.resolve node-dir "log"), :instant-src instant-src
                                            :instant-source-for-non-tx-msgs? instant-source-for-non-tx-msgs?}]
                              :storage [:local {:path (.resolve node-dir buffers-dir)
