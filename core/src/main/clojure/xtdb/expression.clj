@@ -1473,6 +1473,39 @@
     {:return-type :f64
      :->call-code #(do `(~math-method ~@%))}))
 
+(defmethod codegen-call [:round :num] [_]
+  {:return-type :f64
+   :->call-code (fn [[value]]
+                  `(let [v# ~value]
+                     (if (>= v# 0)
+                       (Math/floor (+ v# 0.5))
+                       (Math/ceil (- v# 0.5)))))})
+
+(defmethod codegen-call [:round :num :int] [{[num-type _] :arg-types}]
+  {:return-type :f64
+   :->call-code (fn [[value scale]]
+                  `(let [scale# ~scale
+                         multiplier# (Math/pow 10.0 scale#)
+                         scaled# (* ~value multiplier#)
+                         rounded# (if (>= scaled# 0)
+                                    (Math/floor (+ scaled# 0.5))
+                                    (Math/ceil (- scaled# 0.5)))]
+                     (/ rounded# multiplier#)))})
+
+(defmethod codegen-call [:round :decimal] [{[[_ precision scale bit-width]] :arg-types}]
+  {:return-type [:decimal precision 0 bit-width]
+   :->call-code #(do `(.setScale ^BigDecimal ~@% 0 RoundingMode/HALF_UP))})
+
+(defmethod codegen-call [:round :decimal :int] [{[[_ precision _ bit-width] _] :arg-types :keys [args]}]
+  (let [[_ scale-arg] args
+        scale-literal (:literal scale-arg)]
+    (when-not (integer? scale-literal)
+      (throw (err/illegal-arg ::non-literal-scale
+                              {::err/message "ROUND scale parameter must be a compile-time constant (literal integer value)"})))
+    {:return-type [:decimal precision scale-literal bit-width]
+     :->call-code (fn [[value scale-code]]
+                    `(.setScale ^BigDecimal ~value ~scale-code RoundingMode/HALF_UP))}))
+
 (defn buf->str ^String [^ByteBuffer buf]
   (let [bs (byte-array (.remaining buf))
         pos (.position buf)]

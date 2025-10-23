@@ -48,6 +48,12 @@ The standard arithmetic functions are available:
 `POWER(x, y)`
 : `x` raised to the \`y\`th power
 
+`ROUND(x)` | `ROUND(x, s)`
+: rounds `x` to the nearest integer, or to `s` decimal places if specified. When exactly halfway between two values, rounds away from zero (HALF_UP). Supports negative `s` to round to the left of the decimal point.
+  - `ROUND(42.5)` → `43.0`
+  - `ROUND(42.4382, 2)` → `42.44`
+  - `ROUND(1234.56, -1)` → `1230.0`
+
 `SQRT(x)`
 : square root
 
