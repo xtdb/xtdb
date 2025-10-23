@@ -194,7 +194,9 @@
     "FLOOR(foo.a)" '(floor f/a)
     "CEIL(foo.a)" '(ceil f/a)
     "LEAST(foo.a, foo.b)" '(least f/a f/b)
-    "GREATEST(foo.a, foo.b)" '(greatest f/a f/b)))
+    "GREATEST(foo.a, foo.b)" '(greatest f/a f/b)
+    "ROUND(foo.a)" '(round f/a)
+    "ROUND(foo.a, 2)" '(round f/a 2)))
 
 (t/deftest test-interval-abs
   (t/are [sql expected]
@@ -203,9 +205,122 @@
 
 (t/deftest test-duration-abs
   (t/are [sql expected]
-      (= expected (plan-expr-with-foo sql)) 
+      (= expected (plan-expr-with-foo sql))
     "ABS(DURATION 'PT1S')" '(abs #xt/duration "PT1S")
     "ABS(DURATION 'PT-1S')" '(abs #xt/duration "PT-1S")))
+
+(t/deftest test-round-query
+  (t/testing "ROUND with no decimal places (rounds to integer)"
+    (t/is (= [{:result 42.0}] (xt/q tu/*node* "SELECT ROUND(42.4) AS result")))
+    (t/is (= [{:result 43.0}] (xt/q tu/*node* "SELECT ROUND(42.5) AS result")))
+    (t/is (= [{:result 43.0}] (xt/q tu/*node* "SELECT ROUND(42.6) AS result")))
+    (t/is (= [{:result -42.0}] (xt/q tu/*node* "SELECT ROUND(-42.4) AS result")))
+    (t/is (= [{:result -43.0}] (xt/q tu/*node* "SELECT ROUND(-42.5) AS result")))
+    (t/is (= [{:result -43.0}] (xt/q tu/*node* "SELECT ROUND(-42.6) AS result"))))
+
+  (t/testing "ROUND with integer inputs"
+    (t/is (= [{:result 42.0}] (xt/q tu/*node* "SELECT ROUND(42) AS result")))
+    (t/is (= [{:result -100.0}] (xt/q tu/*node* "SELECT ROUND(-100) AS result")))
+    (t/is (= [{:result 0.0}] (xt/q tu/*node* "SELECT ROUND(0) AS result"))))
+
+  (t/testing "ROUND with integer inputs and scale parameter"
+    (t/is (= [{:result 42.0}] (xt/q tu/*node* "SELECT ROUND(42, 0) AS result")))
+    (t/is (= [{:result 42.0}] (xt/q tu/*node* "SELECT ROUND(42, 2) AS result")))
+    (t/is (= [{:result 40.0}] (xt/q tu/*node* "SELECT ROUND(42, -1) AS result")))
+    (t/is (= [{:result 160.0}] (xt/q tu/*node* "SELECT ROUND(157, -1) AS result")))
+    (t/is (= [{:result 160.0}] (xt/q tu/*node* "SELECT ROUND(155, -1) AS result")))
+    (t/is (= [{:result 150.0}] (xt/q tu/*node* "SELECT ROUND(154, -1) AS result"))))
+
+  (t/testing "ROUND with positive decimal places"
+    (t/is (= [{:result 42.44}] (xt/q tu/*node* "SELECT ROUND(42.4382, 2) AS result")))
+    (t/is (= [{:result 42.438}] (xt/q tu/*node* "SELECT ROUND(42.4382, 3) AS result")))
+    (t/is (= [{:result 42.4}] (xt/q tu/*node* "SELECT ROUND(42.4382, 1) AS result")))
+    (t/is (= [{:result 0.5}] (xt/q tu/*node* "SELECT ROUND(0.4567, 1) AS result"))))
+
+  (t/testing "ROUND with negative decimal places (rounds to left of decimal)"
+    (t/is (= [{:result 1230.0}] (xt/q tu/*node* "SELECT ROUND(1234.56, -1) AS result")))
+    (t/is (= [{:result 1200.0}] (xt/q tu/*node* "SELECT ROUND(1234.56, -2) AS result")))
+    (t/is (= [{:result 1000.0}] (xt/q tu/*node* "SELECT ROUND(1234.56, -3) AS result")))
+    (t/is (= [{:result 0.0}] (xt/q tu/*node* "SELECT ROUND(499.0, -3) AS result")))
+    (t/is (= [{:result 1000.0}] (xt/q tu/*node* "SELECT ROUND(500.0, -3) AS result"))))
+
+  (t/testing "ROUND with zero decimal places"
+    (t/is (= [{:result 42.0}] (xt/q tu/*node* "SELECT ROUND(42.4382, 0) AS result")))))
+
+(t/deftest test-round-bigdecimal
+  (t/testing "ROUND BigDecimal with no scale parameter (rounds to integer)"
+    (t/is (= [{:result 42M}] (xt/q tu/*node* "SELECT ROUND(42.4::DECIMAL) AS result")))
+    (t/is (= [{:result 43M}] (xt/q tu/*node* "SELECT ROUND(42.5::DECIMAL) AS result")))
+    (t/is (= [{:result 43M}] (xt/q tu/*node* "SELECT ROUND(42.6::DECIMAL) AS result")))
+    (t/is (= [{:result -42M}] (xt/q tu/*node* "SELECT ROUND(-42.4::DECIMAL) AS result")))
+    (t/is (= [{:result -43M}] (xt/q tu/*node* "SELECT ROUND(-42.5::DECIMAL) AS result")))
+    (t/is (= [{:result -43M}] (xt/q tu/*node* "SELECT ROUND(-42.6::DECIMAL) AS result"))))
+
+  (t/testing "ROUND BigDecimal with exact halfway values"
+    (t/is (= [{:result 1M}] (xt/q tu/*node* "SELECT ROUND(0.5::DECIMAL) AS result")))
+    (t/is (= [{:result -1M}] (xt/q tu/*node* "SELECT ROUND(-0.5::DECIMAL) AS result")))
+    (t/is (= [{:result 3M}] (xt/q tu/*node* "SELECT ROUND(2.5::DECIMAL) AS result")))
+    (t/is (= [{:result -3M}] (xt/q tu/*node* "SELECT ROUND(-2.5::DECIMAL) AS result"))))
+
+  (t/testing "ROUND BigDecimal with positive scale"
+    (t/is (= [{:result 42.44M}] (xt/q tu/*node* "SELECT ROUND(42.4382::DECIMAL, 2) AS result")))
+    (t/is (= [{:result 42.44M}] (xt/q tu/*node* "SELECT ROUND(42.4350::DECIMAL, 2) AS result")))
+    (t/is (= [{:result 42.44M}] (xt/q tu/*node* "SELECT ROUND(42.4351::DECIMAL, 2) AS result")))
+    (t/is (= [{:result 42.438M}] (xt/q tu/*node* "SELECT ROUND(42.4382::DECIMAL, 3) AS result")))
+    (t/is (= [{:result 42.4M}] (xt/q tu/*node* "SELECT ROUND(42.4382::DECIMAL, 1) AS result")))
+    (t/is (= [{:result 0.5M}] (xt/q tu/*node* "SELECT ROUND(0.4567::DECIMAL, 1) AS result"))))
+
+  (t/testing "ROUND BigDecimal with negative scale (rounds to left of decimal)"
+    (t/is (= [{:result 1230M}] (xt/q tu/*node* "SELECT ROUND(1234.56::DECIMAL, -1) AS result")))
+    (t/is (= [{:result 1200M}] (xt/q tu/*node* "SELECT ROUND(1234.56::DECIMAL, -2) AS result")))
+    (t/is (= [{:result 1000M}] (xt/q tu/*node* "SELECT ROUND(1234.56::DECIMAL, -3) AS result")))
+    (t/is (= [{:result 0M}] (xt/q tu/*node* "SELECT ROUND(499.0::DECIMAL, -3) AS result")))
+    (t/is (= [{:result 1000M}] (xt/q tu/*node* "SELECT ROUND(500.0::DECIMAL, -3) AS result"))))
+
+  (t/testing "ROUND BigDecimal with zero scale"
+    (t/is (= [{:result 42M}] (xt/q tu/*node* "SELECT ROUND(42.4382::DECIMAL, 0) AS result")))
+    (t/is (= [{:result 43M}] (xt/q tu/*node* "SELECT ROUND(42.5::DECIMAL, 0) AS result"))))
+
+  (t/testing "ROUND BigDecimal with high precision values"
+    (t/is (= [{:result 123.4568M}] (xt/q tu/*node* "SELECT ROUND(123.456789::DECIMAL, 4) AS result")))
+    (t/is (= [{:result 123.456789M}] (xt/q tu/*node* "SELECT ROUND(123.456789::DECIMAL, 6) AS result"))))
+
+  (t/testing "ROUND BigDecimal edge cases with negative numbers and scale"
+    (t/is (= [{:result -42.44M}] (xt/q tu/*node* "SELECT ROUND(-42.4382::DECIMAL, 2) AS result")))
+    (t/is (= [{:result -42.44M}] (xt/q tu/*node* "SELECT ROUND(-42.4350::DECIMAL, 2) AS result")))
+    (t/is (= [{:result -42.44M}] (xt/q tu/*node* "SELECT ROUND(-42.4351::DECIMAL, 2) AS result")))
+    (t/is (= [{:result -1230M}] (xt/q tu/*node* "SELECT ROUND(-1234.56::DECIMAL, -1) AS result")))
+    (t/is (= [{:result -1200M}] (xt/q tu/*node* "SELECT ROUND(-1234.56::DECIMAL, -2) AS result")))))
+
+(t/deftest test-round-overflow
+  (t/testing "ROUND with literal scale that would cause overflow throws exception"
+    (t/is (thrown-with-msg? Exception #"overflow"
+                            (xt/q tu/*node* "SELECT ROUND(1e308, 200) AS result")))
+    (t/is (thrown-with-msg? Exception #"overflow"
+                            (xt/q tu/*node* "SELECT ROUND(1e200, 200) AS result"))))
+
+  (t/testing "ROUND with non-literal scale that would cause overflow throws exception"
+    (xt/submit-tx tu/*node* [[:put-docs :overflow_test {:xt/id 1, :val 1e308, :scale 200}]])
+    (t/is (thrown-with-msg? Exception #"overflow"
+                            (xt/q tu/*node* "SELECT ROUND(val, scale) AS result FROM overflow_test")))
+    (xt/submit-tx tu/*node* [[:put-docs :overflow_test2 {:xt/id 2, :val 1e200, :scale 200}]])
+    (t/is (thrown-with-msg? Exception #"overflow"
+                            (xt/q tu/*node* "SELECT ROUND(val, scale) AS result FROM overflow_test2")))))
+
+(t/deftest test-round-decimal-non-literal-scale
+  (t/testing "ROUND with DECIMAL and non-literal scale is not supported"
+    (xt/submit-tx tu/*node* [[:put-docs :decimal_round_test {:xt/id 1, :price 123.456M, :scale 2}]])
+    (t/is (thrown-with-msg? Exception #"non-constant scale"
+                            (xt/q tu/*node* "SELECT ROUND(price, scale) AS result FROM decimal_round_test"))))
+
+  (t/testing "ROUND with DECIMAL and literal scale works"
+    (t/is (= [{:result 123.46M}]
+             (xt/q tu/*node* "SELECT ROUND(123.456::DECIMAL, 2) AS result"))))
+
+  (t/testing "Workaround: cast to DOUBLE for non-literal scales"
+    (xt/submit-tx tu/*node* [[:put-docs :decimal_workaround {:xt/id 1, :price 123.456M, :scale 2}]])
+    (t/is (= [{:result 123.46}]
+             (xt/q tu/*node* "SELECT ROUND(price::DOUBLE, scale) AS result FROM decimal_workaround")))))
 
 (t/deftest test-boolean-predicate-exprs
   (t/are [expr expected]

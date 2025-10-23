@@ -1125,6 +1125,7 @@
 (def-sql-fns [log10 ln exp sqrt] 1 1)
 (def-sql-fns [power] 2 2)
 (def-sql-fns [floor ceil ceiling] 1 1)
+(def-sql-fns [round] 1 2)
 (def-sql-fns [least greatest] 1 Long/MAX_VALUE)
 
 (def-sql-fns [sin cos tan sinh cosh tanh asin acos atan] 1 1)
