@@ -33,7 +33,7 @@
            [java.nio.file Path]
            [java.security KeyStore]
            [java.time Clock Duration ZoneId]
-           [java.util.concurrent ExecutorService Executors TimeUnit]
+           [java.util.concurrent CancellationException ExecutionException ExecutorService Executors Future$State FutureTask TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.memory BufferAllocator)
@@ -173,11 +173,11 @@
 
 (defn cmd-cancel
   "Tells the connection to stop doing what its doing and return to idle"
-  [{:keys [cancelled-connections-counter] :as conn}]
-  ;; we might this want to be conditional on a 'working state' to avoid races (if you fire loads of cancels randomly), not sure whether
-  ;; to use status instead
-  ;;TODO need to interrupt the thread belonging to the conn
-  (swap! (:conn-state conn) assoc :cancel true)
+  [{:keys [conn-state cancelled-connections-counter] :as conn}]
+  (let [{:keys [cancel-query-in-progress!]} @conn-state]
+    (log/debug "Cancel request received for connection" {:pid (:pid conn), :ongoing-query? (some? cancel-query-in-progress!)})
+    (when cancel-query-in-progress!
+      (cancel-query-in-progress!)))
   (metrics/inc-counter! cancelled-connections-counter)
   nil)
 
@@ -1258,47 +1258,173 @@
                                   :assert "ASSERT"
                                   :create-role "CREATE ROLE")}))
 
+;; FutureTask.get
+(defn run-cancellable-query! [{:keys [conn-state] :as _conn} f]
+  ; FutureTask used not for the sake of delegating execution to a different thread (we are running it on the
+  ; current thread, see below), but for its built-in cancellation machinery, which prevents leaking an interruption
+  ; that could affect subsequent tasks run by this thread - as it belongs to a thread-pool.
+  (let [task (FutureTask. f)]
+    (swap! conn-state assoc :cancel-query-in-progress!
+           (fn cancel-query-in-progress! []
+             (let [cancelled? (.cancel task true)]
+               (log/debug "Query cancelled" {:actually-cancelled? cancelled?}))))
+    (try
+      (try
+        (.get task)
+        (finally
+          (swap! conn-state dissoc :cancel-query-in-progress!)))
+      (catch ExecutionException e
+        (throw (ex-cause e)))
+      (catch CancellationException e
+        (Thread/interrupted) ; ensure clearing the interruption status of this thread, (unwanted if the server is being coincidentally shutdown)
+        (throw (err-query-cancelled "query cancelled during execution"))))))
+
+;; FutureTask.state
+(defn run-cancellable-query! [{:keys [conn-state] :as _conn} f]
+  ; FutureTask used not for the sake of delegating execution to a different thread (we are running it on the
+  ; current thread, see below), but for its built-in cancellation machinery, which prevents leaking an interruption
+  ; that could affect subsequent tasks run by this thread - as it belongs to a thread-pool.
+  (let [task (FutureTask. f)]
+    (swap! conn-state assoc :cancel-query-in-progress!
+           (fn cancel-query-in-progress! []
+             (let [cancelled? (.cancel task true)]
+               (log/debug "Query cancelled" {:actually-cancelled? cancelled?}))))
+    (try
+      (try
+        (.run task)
+        (finally
+          (swap! conn-state dissoc :cancel-query-in-progress!)))
+      (condp = (.state task)
+        Future$State/CANCELLED
+        (do
+          (Thread/interrupted) ; ensure clearing the interruption status of this thread, (unwanted if the server is being coincidentally shutdown)
+          (throw (err-query-cancelled "query cancelled during execution")))
+
+        Future$State/FAILED
+        (.exceptionNow task)))))
+
+;; Own flag and interrupt
+(defn run-cancellable-query! [{:keys [conn-state] :as _conn} f]
+  (let [cancelled? (atom false)
+        query-thread (Thread/currentThread)]
+    (swap! conn-state assoc :cancel-query-in-progress!
+           (fn cancel-query-in-progress! []
+             (when (compare-and-set! cancelled? false true)
+               (.interrupt query-thread))))
+    (try
+      (try
+        (f)
+        (finally
+          (swap! conn-state dissoc :cancel-query-in-progress!)))
+      ; Make sure we do not leak the interruption in case of cancelling.
+      ; Might also swallow other coincidental interruptions.
+      ; (No harm, a server shutdown will still close this connection) TODO: check!
+      (when @cancelled?
+        (while (not (Thread/interrupted))
+          (Thread/yield))
+        (throw (err-query-cancelled "query cancelled during execution")))
+      ; Should also catch Interrupted anomaly, or make Interrupted anomaly extend from InterruptedException,
+      ; or get rid of the Interrupted anomaly in server code
+      (catch InterruptedException e
+        (throw (if @cancelled?
+                 (err-query-cancelled "query cancelled during execution")
+                 e))))))
+
+;; Interrupt virtual thread, executor. Untested
+(def ^ExecutorService query-pool (Executors/newVirtualThreadPerTaskExecutor)) ; should be part of server
+(defn run-cancellable-query! [{:keys [conn-state] :as _conn} f]
+  (let [cancelled? (atom false)
+        query-thread (Thread/currentThread)
+        fut (.submit query-pool, ^Runnable (fn []
+                                             (swap! conn-state assoc :cancel-query-in-progress!
+                                                    (fn cancel-query-in-progress! []
+                                                      (when (compare-and-set! cancelled? false true)
+                                                        (.interrupt query-thread))))
+                                             (try
+                                               (f)
+                                               (finally
+                                                 (swap! conn-state dissoc :cancel-query-in-progress!)))))]
+    ; For doing this, it's better if we just cancel the future
+    (try
+      (.get fut)
+      (when @cancelled?
+        (err-query-cancelled "query cancelled during execution"))
+      (catch ExecutionException e
+        (throw (ex-cause e))))))
+
+;; Cancel future on virtual thread. Untested
+(def ^ExecutorService query-pool (Executors/newVirtualThreadPerTaskExecutor))
+(defn run-cancellable-query! [{:keys [conn-state] :as _conn} f]
+  (let [task (FutureTask. f)]
+    (swap! conn-state assoc :cancel-query-in-progress!
+           (fn cancel-query-in-progress! []
+             (let [cancelled? (.cancel task true)]
+               (log/debug "Query cancelled" {:actually-cancelled? cancelled?}))))
+    (try
+      (.get task)
+      (catch ExecutionException e
+        (throw (ex-cause e)))
+      (catch CancellationException e
+        (throw (err-query-cancelled "query cancelled during execution")))
+      (finally
+        (swap! conn-state dissoc :cancel-query-in-progress!)))))
+
+;; Interrupt virtual thread, join
+(defn run-cancellable-query! [{:keys [conn-state] :as _conn} f]
+  (let [cancelled? (atom false)
+        exception-thrown (atom nil)
+        query-thread (.start (Thread/ofVirtual) (fn query-thread-fn []
+                                                  (swap! conn-state assoc :cancel-query-in-progress!
+                                                         (fn cancel-query-in-progress! []
+                                                           (when (compare-and-set! cancelled? false true)
+                                                             (.interrupt (Thread/currentThread)))))
+                                                  (try
+                                                    (f)
+                                                    (catch Throwable e
+                                                      (reset! exception-thrown e))
+                                                    (finally
+                                                      (swap! conn-state dissoc :cancel-query-in-progress!)))))]
+    (.join query-thread)
+    ; other interruptions are not propagated
+    (cond
+      @cancelled? (err-query-cancelled "query cancelled during execution")
+      @exception-thrown (throw @exception-thrown))))
+
 (defn cmd-exec-query [{:keys [conn-state !closing? query-error-counter] :as conn}
                       {:keys [limit query ^IResultCursor cursor pg-cols] :as _portal}]
   (try
-    (let [cancelled-by-client? #(:cancel @conn-state)
-          ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
-
-          n-rows-out (volatile! 0)
-
+    (let [n-rows-out (volatile! 0)
           session (:session @conn-state)
           types-with-default (-> pg-types/pg-types
                                  (assoc :default (->> (get-in session [:parameters "fallback_output_format"] :json)
                                                       (get pg-types/pg-types))))]
+      (run-cancellable-query!
+        conn
+        (fn []
+          (while (and (or (nil? limit) (< @n-rows-out limit))
+                      (.tryAdvance cursor
+                                   (fn [^RelationReader rel]
+                                     (log/trace "advancing cursor with rel count" (.getRowCount rel))
+                                     (cond
+                                       (Thread/interrupted) (throw (InterruptedException.))
 
-      (while (and (or (nil? limit) (< @n-rows-out limit))
-                  (.tryAdvance cursor
-                               (fn [^RelationReader rel]
-                                 (cond
-                                   (cancelled-by-client?)
-                                   (do (log/trace "query cancelled by client")
-                                       (swap! conn-state dissoc :cancel)
-                                       (throw (err-query-cancelled "query cancelled during execution")))
+                                       @!closing? (log/trace "query result stream stopping (conn closing)")
 
-                                   (Thread/interrupted) (throw (InterruptedException.))
-
-                                   @!closing? (log/trace "query result stream stopping (conn closing)")
-
-                                   :else (dotimes [idx (cond-> (.getRowCount rel)
-                                                         limit (min (- limit @n-rows-out)))]
-                                           (let [row (mapv
-                                                      (fn [{:keys [^String col-name pg-type result-format]}]
-                                                        (let [{:keys [write-binary write-text]} (get types-with-default pg-type)
-                                                              rdr (.vectorForOrNull rel col-name)]
-                                                          (when-not (.isNull rdr idx)
-                                                            (if (= :binary result-format)
-                                                              (write-binary session rdr idx)
-                                                              (if write-text
-                                                                (write-text session rdr idx)
-                                                                (pg-types/write-json session rdr idx))))))
-                                                      pg-cols)]
-                                             (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
-                                             (vswap! n-rows-out inc))))))))
+                                       :else (dotimes [idx (cond-> (.getRowCount rel)
+                                                                   limit (min (- limit @n-rows-out)))]
+                                               (let [row (mapv
+                                                           (fn [{:keys [^String col-name pg-type result-format]}]
+                                                             (let [{:keys [write-binary write-text]} (get types-with-default pg-type)
+                                                                   rdr (.vectorForOrNull rel col-name)]
+                                                               (when-not (.isNull rdr idx)
+                                                                 (if (= :binary result-format)
+                                                                   (write-binary session rdr idx)
+                                                                   (if write-text
+                                                                     (write-text session rdr idx)
+                                                                     (pg-types/write-json session rdr idx))))))
+                                                           pg-cols)]
+                                                 (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
+                                                 (vswap! n-rows-out inc))))))))))
 
       (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @n-rows-out)}))
 
@@ -1626,6 +1752,7 @@
                                                                     :session {:access-mode :read-only
                                                                               :clock (:clock @server-state)}})
                                                  !closing? (atom false)]
+                                             (log/debug "New connection starting" {:cid cid})
                                              (try
                                                (-> (map->Connection {:cid cid, :node node, :authn authn, :server server,
                                                                      :frontend (pgio/->socket-frontend conn-socket),

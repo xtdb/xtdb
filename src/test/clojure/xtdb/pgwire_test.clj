@@ -4,6 +4,7 @@
             [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing] :as t]
+            [clojure.tools.logging :as log]
             [honey.sql :as hsql]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as result-set]
@@ -25,7 +26,7 @@
            (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
            (java.util Arrays Calendar List TimeZone)
-           (java.util.concurrent CountDownLatch TimeUnit)
+           (java.util.concurrent CountDownLatch FutureTask TimeUnit)
            (org.postgresql.util PGobject PSQLException)
            (xtdb JsonSerde)
            (xtdb.api DataSource$ConnectionBuilder)
@@ -513,6 +514,57 @@
           (check-server-resources-freed server))))))
 
 ;;TODO no current support for cancelling queries
+
+(comment
+  (do
+    (xtdb.logging/set-log-level! 'xtdb.pgwire :all)
+    (xtdb.logging/set-log-level! 'xtdb.pgwire.io :info)
+    (xtdb.logging/set-log-level! 'xtdb.pgwire-test :all)
+    (xtdb.logging/set-log-level! 'org.postgresql :all)))
+
+(deftest FutureTask_leaks_cancellation_interrupt
+  (let [task (FutureTask. (fn []
+                            (log/debug "start count")
+                            #_(dorun (for [_ (range 0 30000000)]
+                                       (Thread/yield)))
+                            (Thread/sleep 6000)
+                            (log/debug "end count")))]
+    (future
+      (Thread/sleep 1000)
+      (log/debug "cancelling")
+      (.cancel task true))
+    (.run task)
+    (try
+      (.get task)
+      (catch Exception e
+        (log/error e))
+      (finally
+        (log/debug "interrupted?" (.isInterrupted (Thread/currentThread)))))))
+
+(deftest cancel_sleep
+  (with-open [conn (doto (jdbc-conn)
+                     (.setAutoCommit false))
+              stmt (doto (jdbc/prepare conn [#_"FROM GENERATE_SERIES(1,2000000) AS system(_id) ORDER BY _id"
+                                             "SELECT pg_sleep(10.0)"])
+                     (.setFetchSize 10))]
+    (let [cancelled (future
+                      (Thread/sleep 3000)
+                      (log/debug "cancelling...")
+                      (.cancel stmt)
+                      (log/debug "cancel called"))]
+      (try
+        (log/debug "executing query...")
+        (.executeQuery stmt)
+        (log/debug "query executed")
+        (deref cancelled)
+        (catch Exception e
+          (def exc e)
+          (clojure.pprint/pprint (-> e bean (dissoc :stackTrace)))))
+
+      (log/debug "checking connection isValid")
+      (t/is (.isValid conn 2000))
+      (Thread/sleep 5000)
+      (log/debug "closing connection"))))
 
 (deftest jdbc-prepared-query-close-test
   (with-open [conn (jdbc-conn {"prepareThreshold" 1
