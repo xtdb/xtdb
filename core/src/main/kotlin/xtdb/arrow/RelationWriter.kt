@@ -49,8 +49,6 @@ interface RelationWriter : RelationReader {
         rows.forEach(::writeRow)
     }
 
-    val asReader: RelationReader get() = this
-
     /**
      * Resets the row count and all vectors, leaving the buffers allocated.
      */

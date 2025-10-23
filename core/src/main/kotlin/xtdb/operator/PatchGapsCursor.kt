@@ -75,7 +75,7 @@ class PatchGapsCursor(
             }
         }
 
-        c.accept(out.asReader)
+        c.accept(out)
     }
 
     override fun close() {
