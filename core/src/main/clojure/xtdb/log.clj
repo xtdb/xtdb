@@ -231,7 +231,7 @@
   (throw (err/incorrect :xtdb/unknown-log-cluster-type (format "Unknown log cluster type: %s" k)
                         {:log-cluster-type k})))
 
-(defmethod ->log-cluster-factory ::kafka [_ opts] (->log-cluster-factory :xtdb.kafka/cluster opts))
+(defmethod ->log-cluster-factory :kafka [_ opts] (->log-cluster-factory :xtdb.kafka/cluster opts))
 
 (defmethod xtn/apply-config! ::clusters [^Xtdb$Config config _ clusters]
   (doseq [[cluster-alias [tag opts]] clusters]
