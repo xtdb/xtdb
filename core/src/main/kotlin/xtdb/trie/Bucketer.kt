@@ -1,6 +1,7 @@
 package xtdb.trie
 
 import org.apache.arrow.memory.util.ArrowBufPointer
+import java.util.SortedSet
 
 
 const val DEFAULT_LEVEL_BITS = 2
@@ -84,6 +85,22 @@ data class Bucketer(val levelBits: Int = DEFAULT_LEVEL_BITS) {
         }
 
         return null
+    }
+
+    /**
+     * Filters a sorted set of IIDs to only those that could exist within the given path.
+     *
+     * Uses the path's bucket boundaries to create a subset of IIDs that fall within
+     * the range [startIid(path), startIid(nextPath)).
+     *
+     * @param iids The sorted set of IIDs to filter
+     * @param path The path to filter by
+     * @return A subset of the input containing only IIDs that could exist in this path
+     */
+    fun filterIidsForPath(iids: SortedSet<ByteArray>, path: ByteArray): SortedSet<ByteArray> {
+        return incrementPath(path)?.let { nextPath ->
+            iids.subSet(startIid(path), startIid(nextPath))
+        } ?: iids.tailSet(startIid(path))
     }
 
     companion object {
