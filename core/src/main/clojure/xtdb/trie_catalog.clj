@@ -344,6 +344,9 @@
               (fn [_table tries]
                 (remove-garbage tries garbage-trie-keys))))
 
+  (listAllTrieKeys [this table]
+    (mapv :trie-key (all-tries (trie-state this table))))
+
   PTrieCatalog
   (trie-state [_ table] (.get !table-cats table))
 
