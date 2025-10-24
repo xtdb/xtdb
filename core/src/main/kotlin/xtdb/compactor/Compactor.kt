@@ -15,7 +15,7 @@ import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.api.storage.Storage
 import xtdb.arrow.Relation
 import xtdb.compactor.PageTree.Companion.asTree
-import xtdb.database.Database
+import xtdb.database.IDatabase
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.TrieMetadata
 import xtdb.segment.BufferPoolSegment.Companion.open
@@ -50,7 +50,7 @@ interface Compactor : AutoCloseable {
         fun compactAll(timeout: Duration? = null)
     }
 
-    fun openForDatabase(db: Database): ForDatabase
+    fun openForDatabase(db: IDatabase): ForDatabase
 
     interface Driver : AutoCloseable {
         suspend fun launchIn(scope: CoroutineScope, f: suspend CoroutineScope.() -> Unit)
@@ -60,14 +60,14 @@ interface Compactor : AutoCloseable {
         fun onWakeup(wakeup: Channel<Unit>): SelectClause1<Unit>
 
         interface Factory {
-            fun create(db: Database): Driver
+            fun create(db: IDatabase): Driver
         }
 
         companion object {
             @JvmStatic
             fun real(meterRegistry: MeterRegistry?, pageSize: Int, recencyPartition: RecencyPartition?) =
                 object : Factory {
-                    override fun create(db: Database) = object : Driver {
+                    override fun create(db: IDatabase) = object : Driver {
                         private val al = db.allocator.openChildAllocator("compactor")
                             .also { meterRegistry?.register(it) }
 
@@ -165,7 +165,7 @@ interface Compactor : AutoCloseable {
                         + SupervisorJob(scope.coroutineContext.job)
             )
 
-        override fun openForDatabase(db: Database) = object : ForDatabase {
+        override fun openForDatabase(db: IDatabase) = object : ForDatabase {
 
             private val trieCatalog = db.trieCatalog
 
@@ -276,7 +276,7 @@ interface Compactor : AutoCloseable {
     companion object {
         @JvmField
         val NOOP = object : Compactor {
-            override fun openForDatabase(db: Database) = object : ForDatabase {
+            override fun openForDatabase(db: IDatabase) = object : ForDatabase {
                 override fun signalBlock() = Unit
                 override fun compactAll(timeout: Duration?) = Unit
                 override fun close() = Unit
