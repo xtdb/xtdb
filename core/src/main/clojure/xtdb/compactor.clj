@@ -106,15 +106,17 @@
 
 (def ^:dynamic *page-size* 1024)
 
+(defrecord JobCalculator []
+  Compactor$JobCalculator
+  (availableJobs [_ trie-catalog]
+    (->> (.getTables trie-catalog)
+         (into [] (mapcat (fn [table]
+                            (compaction-jobs table (cat/trie-state trie-catalog table) trie-catalog)))))))
+
 (defn- open-compactor [{:keys [metrics-registry threads]}]
   (Compactor$Impl. (Compactor$Driver/real metrics-registry *page-size* *recency-partition*)
                    metrics-registry
-                   (reify Compactor$JobCalculator
-                     (availableJobs [_ trie-catalog]
-                       (->> (.getTables trie-catalog)
-                            (into [] (mapcat (fn [table]
-                                               (compaction-jobs table (cat/trie-state trie-catalog table) trie-catalog)))))))
-
+                   (->JobCalculator)
                    *ignore-signal-block?* threads))
 
 (defmethod ig/init-key :xtdb/compactor [_ {:keys [threads] :as opts}]
