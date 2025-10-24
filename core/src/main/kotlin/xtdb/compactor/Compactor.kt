@@ -7,7 +7,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.future.await
-import kotlinx.coroutines.selects.SelectClause1
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.withTimeout
 import xtdb.api.log.Log
@@ -56,8 +55,9 @@ interface Compactor : AutoCloseable {
         suspend fun launchIn(scope: CoroutineScope, f: suspend CoroutineScope.() -> Unit)
         suspend fun executeJob(job: Job): TriesAdded
         suspend fun appendMessage(triesAdded: TriesAdded): Log.MessageMetadata
-        fun onDone(doneCh: Channel<JobKey>): SelectClause1<JobKey>
-        fun onWakeup(wakeup: Channel<Unit>): SelectClause1<Unit>
+        suspend fun awaitSignal(): JobKey?
+        suspend fun jobDone(jobKey: JobKey)
+        fun wakeup()
 
         interface Factory {
             fun create(db: IDatabase): Driver
@@ -77,6 +77,9 @@ interface Compactor : AutoCloseable {
 
                         private val trieWriter = PageTrieWriter(al, bp, calculateBlooms = true)
                         private val segMerge = SegmentMerge(al)
+
+                        private val doneCh = Channel<JobKey>()
+                        private val wakeupCh = Channel<Unit>(1, onBufferOverflow = DROP_OLDEST)
 
                         override suspend fun launchIn(scope: CoroutineScope, f: suspend CoroutineScope.() -> Unit) =
                             scope.launch(block = f).let { }
@@ -140,8 +143,23 @@ interface Compactor : AutoCloseable {
                         override suspend fun appendMessage(triesAdded: TriesAdded): Log.MessageMetadata =
                             log.appendMessage(triesAdded).await()
 
-                        override fun onDone(doneCh: Channel<JobKey>): SelectClause1<JobKey> = doneCh.onReceive
-                        override fun onWakeup(wakeup: Channel<Unit>): SelectClause1<Unit> = wakeup.onReceive
+                        override suspend fun awaitSignal(): JobKey? =
+                            select {
+                                doneCh.onReceive { it }
+
+                                wakeupCh.onReceive {
+                                    LOGGER.trace("wakey wakey")
+                                    null
+                                }
+                            }
+
+                        override suspend fun jobDone(jobKey: JobKey) {
+                            doneCh.send(jobKey)
+                        }
+
+                        override fun wakeup() {
+                            wakeupCh.trySend(Unit)
+                        }
 
                         override fun close() = al.close()
                     }
@@ -170,8 +188,6 @@ interface Compactor : AutoCloseable {
             private val trieCatalog = db.trieCatalog
 
             private val driver = driverFactory.create(db)
-
-            private val wakeup = Channel<Unit>(1, onBufferOverflow = DROP_OLDEST)
             private val idle = Channel<Unit>()
 
             @Volatile
@@ -192,8 +208,6 @@ interface Compactor : AutoCloseable {
                 }
 
                 scope.launch {
-                    val doneCh = Channel<JobKey>()
-
                     while (true) {
                         availableJobs =
                             jobCalculator.availableJobs(trieCatalog)
@@ -224,26 +238,20 @@ interface Compactor : AutoCloseable {
                                         )
                                     }
 
-                                    doneCh.send(jobKey)
+                                    driver.jobDone(jobKey)
                                 }
                             }
                         }
 
-                        select {
-                            driver.onDone(doneCh).invoke<JobKey> {
-                                queuedJobs.remove(it)
-                            }
-
-                            driver.onWakeup(wakeup).invoke<Unit> {
-                                LOGGER.trace("wakey wakey")
-                            }
+                        driver.awaitSignal()?.let { jobKey ->
+                            queuedJobs.remove(jobKey)
                         }
                     }
                 }
             }
 
             override fun signalBlock() {
-                if (!ignoreSignalBlock) wakeup.trySend(Unit)
+                if (!ignoreSignalBlock) driver.wakeup()
             }
 
             override fun compactAll(timeout: Duration?) {
@@ -253,7 +261,7 @@ interface Compactor : AutoCloseable {
                     LOGGER.trace("compactAll: idle")
                 }
 
-                wakeup.trySend(Unit)
+                driver.wakeup()
 
                 runBlocking { job.join() }
             }
