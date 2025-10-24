@@ -1532,6 +1532,74 @@
       (xt/template
        (= (lower ~p1) (coalesce (upper ~p2) xtdb/end-of-time)))))
 
+  (visitPeriodStrictlyPrecedesPredicate [this ctx]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
+      (xt/template
+       (< (coalesce (upper ~p1) xtdb/end-of-time) (lower ~p2)))))
+
+  (visitPeriodStrictlySucceedsPredicate [this ctx]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
+      (xt/template
+       (> (lower ~p1) (coalesce (upper ~p2) xtdb/end-of-time)))))
+
+  (visitPeriodStrictlyContainsPredicate [this ctx]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
+      (xt/template
+       (and (< (lower ~p1) (lower ~p2))
+            (> (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
+
+  (visitPeriodStrictlyOverlapsPredicate [this ctx]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
+      (xt/template
+       (and (> (lower ~p1) (lower ~p2))
+            (< (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
+
+  (visitPeriodLagsPredicate [this ctx]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
+      (xt/template
+       (and (>= (lower ~p1) (lower ~p2))
+            (> (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
+
+  (visitPeriodStrictlyLagsPredicate [this ctx]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
+      (xt/template
+       (and (> (lower ~p1) (lower ~p2))
+            (> (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
+
+  (visitPeriodImmediatelyLagsPredicate [this ctx]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
+      (xt/template
+       (and (= (lower ~p1) (lower ~p2))
+            (> (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
+
+  (visitPeriodLeadsPredicate [this ctx]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
+      (xt/template
+       (and (< (lower ~p1) (lower ~p2))
+            (<= (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
+
+  (visitPeriodStrictlyLeadsPredicate [this ctx]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
+      (xt/template
+       (and (< (lower ~p1) (lower ~p2))
+            (< (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
+
+  (visitPeriodImmediatelyLeadsPredicate [this ctx]
+    (let [p1 (-> (.expr ctx 0) (.accept this))
+          p2 (-> (.expr ctx 1) (.accept this))]
+      (xt/template
+       (and (< (lower ~p1) (lower ~p2))
+            (= (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
+
   (visitTsTzRangeConstructor [this ctx]
     (xt/template
      (period ~(some-> (.expr ctx 0) (.accept this))

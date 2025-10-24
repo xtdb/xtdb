@@ -151,7 +151,7 @@
 
 (t/deftest app-time-multiple-tables
   (let [tx (xt/execute-tx tu/*node* [[:put-docs {:into :foo, :valid-from #inst "2000", :valid-to #inst "2001"}
-                                      {:xt/id :foo-doc, :last-updated "2001" }]
+                                      {:xt/id :foo-doc, :last-updated "2001"}]
 
                                      [:put-docs {:into :bar, :valid-from #inst "2002", :valid-to #inst "2003"}
                                       {:xt/id :bar-doc, :l_updated "2003" :name "test"}]])]
@@ -228,7 +228,6 @@
   (t/is (= [{:committed? true}]
            (xt/q tu/*node* '(from :xt/txs [{:xt/id 4, :committed committed?}])))))
 
-
 (t/deftest test-period-intersection-3493
   (t/is (= [{:intersection
              #xt/tstz-range [#xt/zoned-date-time "2021-01-01T00:00Z"
@@ -289,9 +288,7 @@
              {:xt/id 1, :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]", :xt/valid-to #xt/zdt "2030-01-01T00:00Z[UTC]"}}
            (set (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM users FOR ALL VALID_TIME WHERE _id = 1 "))))
 
-
   (xt/execute-tx tu/*node* [[:sql "PATCH INTO users FOR PORTION OF VALID_TIME FROM NULL TO NULL RECORDS {_id: 1, foo: 3}"]])
-
 
   (t/is (= [{:xt/id 1,
              :foo 3,
@@ -361,7 +358,6 @@
                (with-clock-time "SELECT CURRENT_TIMESTAMP::date AS d"))
             "Casting works because CURRENT_TIMESTAMP is TZ-aware."))))
 
-
 (t/deftest no-portion-of-valid-time-dml-4650
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, _valid_from: ?, _valid_to: ?}" [1 #inst "2010" #inst "2040"]]])
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO users RECORDS {_id: ?, bar: 2, _valid_from: ?, _valid_to: ?}" [1 #inst "2050" #inst "2080"]]])
@@ -382,7 +378,7 @@
              :xt/valid-to #xt/zdt "2080-01-01T00:00Z[UTC]"}]
            (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM users FOR ALL VALID_TIME WHERE _id = 1 ORDER BY _valid_from")))
 
-  (xt/execute-tx tu/*node* [[:sql "DELETE FROM users WHERE _id = 1" ]])
+  (xt/execute-tx tu/*node* [[:sql "DELETE FROM users WHERE _id = 1"]])
 
   (t/is (= [{:xt/id 1,
              :xt/valid-from #xt/zdt "2010-01-01T00:00Z[UTC]",
@@ -390,7 +386,7 @@
             {:xt/id 1,
              :xt/valid-from #xt/zdt "2020-01-03T00:00Z[UTC]"
              :xt/valid-to #xt/zdt "2020-01-04T00:00Z[UTC]"
-             :foo 1,}]
+             :foo 1}]
            (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM users FOR ALL VALID_TIME WHERE _id = 1 ORDER BY _valid_from"))))
 
 (t/deftest patch-gaps-filling-test-4649
@@ -433,3 +429,44 @@
       "SELECT ABS(DURATION 'PT0S') AS result" {:result #xt/duration "PT0S"}
       "SELECT ABS(DURATION 'PT-1H-30M-45S') AS result" {:result #xt/duration "PT1H30M45S"}
       "SELECT ABS(DURATION 'PT-1.123456S') AS result" {:result #xt/duration "PT1.123456S"})))
+
+(t/deftest allen-interval-predicates-test
+  (t/testing "All Allen interval predicates"
+    (let [tx (xt/execute-tx tu/*node*
+                            [[:sql "INSERT INTO x (_id, x) VALUES (1, PERIOD (DATE '2020-01-03', DATE '2020-01-06'))"]
+                             [:sql "INSERT INTO y RECORDS
+                        {_id: 1,
+                         y1: PERIOD (DATE '2020-01-01', DATE '2020-01-02'),
+                         y2: PERIOD (DATE '2020-01-02', DATE '2020-01-03'),
+                         y3: PERIOD (DATE '2020-01-02', DATE '2020-01-04'),
+                         y4: PERIOD (DATE '2020-01-03', DATE '2020-01-05'),
+                         y5: PERIOD (DATE '2020-01-04', DATE '2020-01-06'),
+                         y6: PERIOD (DATE '2020-01-02', DATE '2020-01-07'),
+                         y7: PERIOD (DATE '2020-01-03', DATE '2020-01-06'),
+                         y8: PERIOD (DATE '2020-01-04', DATE '2020-01-05'),
+                         y9: PERIOD (DATE '2020-01-02', DATE '2020-01-06'),
+                         y10: PERIOD (DATE '2020-01-03', DATE '2020-01-07'),
+                         y11: PERIOD (DATE '2020-01-05', DATE '2020-01-07'),
+                         y12: PERIOD (DATE '2020-01-06', DATE '2020-01-07'),
+                         y13: PERIOD (DATE '2020-01-07', DATE '2020-01-08')}"]])]
+
+      (t/is (= [{:all-allen-predicates true}]
+               (query-at
+                "SELECT
+                   x STRICTLY SUCCEEDS y1 AND
+                   x IMMEDIATELY SUCCEEDS y2 AND
+                   x STRICTLY LAGS y3 AND
+                   x IMMEDIATELY LAGS y4 AND
+                   x IMMEDIATELY LEADS y5 AND
+                   x STRICTLY OVERLAPS y6 AND
+                   x EQUALS y7 AND
+                   x STRICTLY CONTAINS y8 AND
+                   NOT (x IMMEDIATELY LEADS y9) AND
+                   NOT (x IMMEDIATELY LAGS y10) AND
+                   x STRICTLY LEADS y11 AND
+                   x IMMEDIATELY PRECEDES y12 AND
+                   x STRICTLY PRECEDES y13
+                   AS all_allen_predicates
+                 FROM y, x"
+                tx))
+            "All Allen interval predicates should evaluate correctly"))))

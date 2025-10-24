@@ -212,12 +212,22 @@ expr
 
     // period predicates
     | expr 'OVERLAPS' expr # PeriodOverlapsPredicate
+    | expr 'STRICTLY' 'OVERLAPS' expr # PeriodStrictlyOverlapsPredicate
     | expr 'EQUALS' expr # PeriodEqualsPredicate
     | expr 'CONTAINS' expr # PeriodContainsPredicate
+    | expr 'STRICTLY' 'CONTAINS' expr # PeriodStrictlyContainsPredicate
     | expr 'PRECEDES' expr # PeriodPrecedesPredicate
-    | expr 'SUCCEEDS' expr # PeriodSucceedsPredicate
+    | expr 'STRICTLY' 'PRECEDES' expr # PeriodStrictlyPrecedesPredicate
     | expr 'IMMEDIATELY' 'PRECEDES' expr # PeriodImmediatelyPrecedesPredicate
+    | expr 'SUCCEEDS' expr # PeriodSucceedsPredicate
+    | expr 'STRICTLY' 'SUCCEEDS' expr # PeriodStrictlySucceedsPredicate
     | expr 'IMMEDIATELY' 'SUCCEEDS' expr # PeriodImmediatelySucceedsPredicate
+    | expr 'LAGS' expr # PeriodLagsPredicate
+    | expr 'STRICTLY' 'LAGS' expr # PeriodStrictlyLagsPredicate
+    | expr 'IMMEDIATELY' 'LAGS' expr # PeriodImmediatelyLagsPredicate
+    | expr 'LEADS' expr # PeriodLeadsPredicate
+    | expr 'STRICTLY' 'LEADS' expr # PeriodStrictlyLeadsPredicate
+    | expr 'IMMEDIATELY' 'LEADS' expr # PeriodImmediatelyLeadsPredicate
 
     | expr compOp quantifier quantifiedComparisonPredicatePart3 # QuantifiedComparisonPredicate
     | 'NOT' expr #UnaryNotExpr

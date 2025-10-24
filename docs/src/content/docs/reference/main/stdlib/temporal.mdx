@@ -2,6 +2,8 @@
 title: Temporal functions
 ---
 
+import { Query, Txs, Xtplay } from 'xtplay-components';
+
 :::note
 - For information on what temporal types we support and how to construct temporal literals, see [**data types**](/reference/main/data-types).
 :::
@@ -91,7 +93,53 @@ They are constructed with the `PERIOD` function:
 `PERIOD(from, to)`
 : Returns a new period from `from` to `to`.
 
-Most of the below period comparators have 'strictly' and 'immediate' variants.
+Periods can be compared using a variation of Allen's Interval algebra derived from the SQL:2011 standard.
+
+Here are the 13 basic Allen predicates:
+
+<Xtplay magicContext="period-predicates">
+  <Txs systemTime="2024-01-01"
+       hidden={true}
+       txs="INSERT INTO x (_id, x) VALUES (1, PERIOD (DATE '2020-01-03', DATE '2020-01-06'));
+INSERT INTO y RECORDS
+  {_id: 1,
+   y1: PERIOD (DATE '2020-01-01', DATE '2020-01-02'),
+   y2: PERIOD (DATE '2020-01-02', DATE '2020-01-03'),
+   y3: PERIOD (DATE '2020-01-02', DATE '2020-01-04'),
+   y4: PERIOD (DATE '2020-01-03', DATE '2020-01-05'),
+   y5: PERIOD (DATE '2020-01-04', DATE '2020-01-06'),
+   y6: PERIOD (DATE '2020-01-02', DATE '2020-01-07'),
+   y7: PERIOD (DATE '2020-01-03', DATE '2020-01-06'),
+   y8: PERIOD (DATE '2020-01-04', DATE '2020-01-05'),
+   y9: PERIOD (DATE '2020-01-02', DATE '2020-01-06'),
+   y10: PERIOD (DATE '2020-01-03', DATE '2020-01-07'),
+   y11: PERIOD (DATE '2020-01-05', DATE '2020-01-07'),
+   y12: PERIOD (DATE '2020-01-06', DATE '2020-01-07'),
+   y13: PERIOD (DATE '2020-01-07', DATE '2020-01-08')};" />
+  <Query q="
+  SELECT                            --          |-----X-----|
+  x STRICTLY SUCCEEDS y1 AND        --  |---|   ·           ·
+  x IMMEDIATELY SUCCEEDS y2 AND     --      |---|           ·
+  x STRICTLY LAGS y3 AND            --      |-------|       ·
+  x IMMEDIATELY LAGS y4 AND         --          |-------|   ·
+  x IMMEDIATELY LEADS y5 AND        --          ·   |-------|
+  x STRICTLY OVERLAPS y6 AND        --      |-------------------|
+  x EQUALS y7 AND                   --          |-----------|
+  x STRICTLY CONTAINS y8 AND        --          ·   |---|   ·
+  NOT (x IMMEDIATELY LEADS y9) AND  --      |---------------|
+  NOT (x IMMEDIATELY LAGS y10) AND  --          |---------------|
+  x STRICTLY LEADS y11 AND          --          ·       |-------|
+  x IMMEDIATELY PRECEDES y12 AND    --          ·           |---|
+  x STRICTLY PRECEDES y13           --          ·           ·   |---|
+  AS all_allen_predicates
+FROM y, x;" />
+</Xtplay>
+
+Each is described in more detail below, and this cheatsheet provides an overview of how these basic predicates relate to the compound predicates defined in SQL:2011 (and also to Allen's original terminology).
+
+![Period predicates cheat sheet](/images/docs/period-predicates-cheat-sheet.png)
+
+Most of the below period predicate comparators have 'strictly' and 'immediate' variants.
 
 - 'strictly' variants check that the two periods don't meet - e.g. `PRECEDES` will return true if the earlier period ends at the same time the second period starts; `STRICTLY PRECEDES` will return false.
 - 'immediately' variants check that the two periods *do* meet.
