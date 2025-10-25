@@ -23,3 +23,7 @@ include("modules:bench", "modules:datasets")
 project(":modules:datasets").name = "xtdb-datasets"
 
 include("monitoring", "monitoring:docker-image")
+
+// Vendored Clojure
+include("vendor:clojure")
+project(":vendor:clojure").projectDir = file("vendor/clojure")
