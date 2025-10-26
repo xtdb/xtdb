@@ -54,3 +54,7 @@ Users:
 
 """
 ```
+
+## Examples
+
+For more examples and tests, see the [XTDB driver-examples repository](https://github.com/xtdb/driver-examples), which contains comprehensive test suites demonstrating various features and use cases.

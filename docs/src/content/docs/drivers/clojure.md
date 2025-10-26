@@ -97,3 +97,11 @@ In-process XTDB is particularly useful for testing and interactive development -
 ```
 
 This node uses exactly the same API as the remote client - so, again, from here, check out the [`xtdb.api` API docs](/drivers/clojure/codox/xtdb.api.html) to submit data and run queries.
+
+## Babashka
+
+[Babashka](https://babashka.org/) is a fast-starting Clojure scripting environment that can also connect to XTDB. See the [driver-examples repository](https://github.com/xtdb/driver-examples) for Babashka-specific examples.
+
+## Examples
+
+For more examples and tests, see the [XTDB driver-examples repository](https://github.com/xtdb/driver-examples), which contains comprehensive test suites demonstrating various features and use cases.

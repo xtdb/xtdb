@@ -95,12 +95,17 @@ export default defineConfig({
                     collapsed: true,
                     items: [
                         { label: 'Overview', link: '/drivers' },
+                        { label: 'C', link: '/drivers/c' },
+                        { label: 'C#', link: '/drivers/csharp' },
                         { label: 'Clojure', link: '/drivers/clojure' },
                         { label: 'Elixir', link: '/drivers/elixir' },
+                        { label: 'Go', link: '/drivers/go' },
                         { label: 'Java', link: '/drivers/java' },
                         { label: 'Kotlin', link: '/drivers/kotlin' },
                         { label: 'Node.js', link: '/drivers/nodejs' },
+                        { label: 'PHP', link: '/drivers/php' },
                         { label: 'Python', link: '/drivers/python' },
+                        { label: 'Ruby', link: '/drivers/ruby' },
                     ]
                 },
 

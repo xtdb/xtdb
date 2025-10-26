@@ -11,12 +11,17 @@ That said, the advantage of embracing wire-protocol compatibility is that many P
 
 For details of how to connect to XTDB from your favourite language, see the following pages:
 
-- [Clojure](/drivers/clojure)
+- [C](/drivers/c)
+- [C#](/drivers/csharp)
+- [Clojure](/drivers/clojure) (also Babashka)
 - [Elixir](/drivers/elixir)
+- [Go](/drivers/go)
 - [Java](/drivers/java)
 - [Kotlin](/drivers/kotlin)
 - [Node.js](/drivers/nodejs)
+- [PHP](/drivers/php)
 - [Python](/drivers/python)
+- [Ruby](/drivers/ruby)
 
 XTDB is also compatible with many different PostgreSQL tools, including:
 
