@@ -12315,8 +12315,8 @@ __metadata:
 
 "xtplay-components@file:shared/xtplay-components::locator=docs%40workspace%3A.":
   version: 0.0.1
-  resolution: "xtplay-components@file:shared/xtplay-components#shared/xtplay-components::hash=ccbf8e&locator=docs%40workspace%3A."
-  checksum: 10c0/2e5c3bd18f47b267b192910272d1d95b942ce3249e25c7f0ffcbfbd8b1d77b4b5d9647dbe16826b4a3b1409916a3d780de349bfefc205528e9b97393af2bc1d2
+  resolution: "xtplay-components@file:shared/xtplay-components#shared/xtplay-components::hash=24dc6b&locator=docs%40workspace%3A."
+  checksum: 10c0/4fb298ea86e5a2788a1d1f00096f4f886a655c91cb9115da1dfc73d9a36f15b08529567c5f09b3fa65ed67a0fa89b5a9b0f8417d8569b09bef7e7aa381419984
   languageName: node
   linkType: hard
 

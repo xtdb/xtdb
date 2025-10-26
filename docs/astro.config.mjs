@@ -267,6 +267,7 @@ export default defineConfig({
             smoothScrolling: false,
             progress: true,
             globalInstance: true,
+            ignore: ['/drivers/clojure/codox/'],
         }),
     ],
 
