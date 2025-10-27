@@ -2066,6 +2066,16 @@
            (project1 '(= #uuid "00000000-0000-0000-0000-000000000000" a)
                      {:a #uuid "00000000-0000-0000-0000-000000000000"}))))
 
+(t/deftest test-cast-uuids
+  (t/is (= #uuid "123e4567-e89b-12d3-a456-426614174000"
+           (project1 '(cast "123e4567-e89b-12d3-a456-426614174000" :uuid) {})))
+
+  (t/is (= "123e4567-e89b-12d3-a456-426614174000"
+           (project1 '(cast #uuid "123e4567-e89b-12d3-a456-426614174000" :utf8) {})))
+
+  (t/is (= #uuid "123e4567-e89b-12d3-a456-426614174000"
+           (project1 '(cast (cast #uuid "123e4567-e89b-12d3-a456-426614174000" :utf8) :uuid) {}))))
+
 (t/deftest test-truthy-if
   (t/is (= :true (project1 '(if 42 :true :false) {})))
   (t/is (= :true (project1 '(if true :true :false) {})))

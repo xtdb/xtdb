@@ -288,8 +288,12 @@
   {:return-type :utf8, :->call-code #(do `(resolve-utf8-buf (str ~@%)))})
 
 (defmethod codegen-cast [:utf8 :uuid] [_]
-  {:return-type :uuid, :->call-code #(do `(util/uuid->byte-buffer
-                                           (UUID/fromString (resolve-string ~@%))))})
+  {:return-type :uuid,
+   :->call-code #(do `(util/uuid->byte-buffer
+                       (UUID/fromString (resolve-string ~@%))))})
+
+(defmethod codegen-cast [:uuid :utf8] [_]
+  {:return-type :utf8, :->call-code #(do `(resolve-utf8-buf (str (util/byte-buffer->uuid (resolve-buf ~@%)))))})
 
 (defmethod codegen-cast [:utf8 :varbinary] [_]
   {:return-type :varbinary , :->call-code #(do `(ByteBuffer/wrap (Hex/decodeHex (resolve-string ~@%))))})
