@@ -15,6 +15,9 @@ readings:
   devices: 10000
   readings: 10000
 
+yakbench:
+  scaleFactor: 0.1
+
 xtdbConfig:
   # Core environment variables
   kafkaBootstrapServers: xtdb-benchmark-kafka.cloud-benchmark.svc.cluster.local:9092
