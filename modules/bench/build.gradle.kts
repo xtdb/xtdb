@@ -28,6 +28,7 @@ dependencies {
 
     // bench
     api("com.github.oshi", "oshi-core", "6.3.0")
+    api("com.taoensso", "tufte", "2.6.3")
     api("pro.juxt.clojars-mirrors.hiccup", "hiccup", "2.0.0-alpha2")
     api("org.testcontainers", "testcontainers", "1.20.1")
 
