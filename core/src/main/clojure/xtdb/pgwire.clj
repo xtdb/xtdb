@@ -1200,7 +1200,9 @@
     (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head q) " " (count rows))})))
 
 (defn cmd-set-session-parameter [conn parameter value]
-  (set-session-parameter conn parameter value)
+  (if (= time-zone-nf-param-name parameter)
+    (set-time-zone conn value)
+    (set-session-parameter conn parameter value))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET"}))
 
 (defn cmd-set-transaction [conn _tx-opts]
