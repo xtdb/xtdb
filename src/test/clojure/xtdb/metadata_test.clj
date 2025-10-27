@@ -244,3 +244,43 @@
   (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo", :foo 4}]])
 
   (t/is (= [{:xt/id "foo", :foo 4}] (xt/q tu/*node* "SELECT * FROM xt_docs"))))
+
+(t/deftest test-is-not-null-metadata
+  (t/testing "IS NOT NULL filters pages with only null values"
+    (binding [c/*page-size* 2]
+      (with-open [node (xtn/start-node (assoc tu/*node-opts* :indexer {:page-limit 2}))]
+        ;; Insert docs to create multiple pages
+        ;; First 2 docs have no status (page 0)
+        ;; Next 2 docs have status (page 1)
+
+        (let [user1 {:xt/id #uuid "00000000-0000-0000-0000-000000000000"}
+              user2 {:xt/id #uuid "40000000-0000-0000-0000-000000000000" :status nil}
+              user3 {:xt/id #uuid "80000000-0000-0000-0000-000000000000", :status "active"}
+              user4 {:xt/id #uuid "c0000000-0000-0000-0000-000000000000", :status "inactive"}]
+
+          (xt/execute-tx node [[:put-docs :xt_docs user1]
+                               [:put-docs :xt_docs user2]
+                               [:put-docs :xt_docs user3]
+                               [:put-docs :xt_docs user4]])
+
+          (tu/finish-block! node)
+
+          (let [metadata-mgr (.getMetadataManager (db/primary-db node))
+                not-null-selector (expr.meta/->metadata-selector tu/*allocator* '(not (nil? status)) '{status :utf8} vw/empty-args)]
+
+            (t/testing "L0 metadata pred"
+              (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))]
+                (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+                  (let [page-idx-pred (.build not-null-selector page-metadata)]
+                    ;; Pages with user1 and user2 (nulls) should be filtered out
+                    (t/is (false? (.test page-idx-pred 0)))
+                    (t/is (false? (.test page-idx-pred 1)))
+                    ;; Pages with user3 and user4 (non-null status) should pass
+                    (t/is (true? (.test page-idx-pred 2)))
+                    (t/is (true? (.test page-idx-pred 3))))))))
+
+          (t/testing "Query returns correct results"
+            (t/is (= [user3 user4]
+                     (sort-by :xt/id (tu/query-ra '[:scan {:table #xt/table xt_docs}
+                                                     [_id {status (not (nil? status))}]]
+                                                   {:node node}))))))))))

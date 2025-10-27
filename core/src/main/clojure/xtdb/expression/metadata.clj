@@ -91,6 +91,16 @@
             :and {:op :call, :f :and, :args (map #(meta-expr % opts) args)}
             :or {:op :call, :f :or, :args (map #(meta-expr % opts) args)}
 
+            ;; Handle (not (nil? col)) for IS NOT NULL
+            :not (when-let [[{inner-f :f, inner-args :args, :as inner-expr}] args]
+                   (when (and (= :call (:op inner-expr))
+                              (= :nil? inner-f)
+                              (= 1 (count inner-args)))
+                     (let [[nil-arg] inner-args]
+                       (when (= :variable (:op nil-arg))
+                         {:op :test-not-null
+                          :col (:variable nil-arg)}))))
+
             (:< :<= :> :>= :=)
             (when-let [[field-val-tag col-expr val-expr] (normalise-bool-args args)]
               (case field-val-tag
@@ -179,6 +189,19 @@
                                 ~presence-vec
                                 (not (.isNull ~presence-vec ~expr/idx-sym))
                                 (.getBoolean ~presence-vec ~expr/idx-sym))))))}))
+
+(defmethod expr/codegen-expr :test-not-null [{:keys [col]} _opts]
+  (let [count-vec (gensym 'count)]
+    {:return-type :bool
+     :batch-bindings [[count-vec `(.vectorForOrNull ~col-rdr-sym "count")]]
+     :continue (fn [cont]
+                 (cont :bool
+                       `(boolean
+                         (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~(str col) ~page-idx-sym)]
+                           (and (not (neg? ~expr/idx-sym))
+                                ~count-vec
+                                (not (.isNull ~count-vec ~expr/idx-sym))
+                                (> (.getLong ~count-vec ~expr/idx-sym) 0))))))}))
 
 (defmethod expr/codegen-call [:_meta_double :num] [_expr]
   {:return-type :f64, :->call-code #(do `(double ~@%))})
