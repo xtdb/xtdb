@@ -864,6 +864,10 @@
           (jdbc/execute! conn ["SET TIME ZONE ?" "Europe/London"])
           (t/is (= "Europe/London" (q-tz conn))))
 
+        (t/testing "SET SESSION config-parameter syntax (used by Metabase)"
+          (jdbc/execute! conn ["SET SESSION TIMEZONE TO 'Australia/Perth'"])
+          (t/is (= "Australia/Perth" (q-tz conn))))
+
         (t/testing "random tz"
           (exec conn "SET TIME ZONE '+07:44'")
           (t/is (= "+07:44" (q-tz conn))))

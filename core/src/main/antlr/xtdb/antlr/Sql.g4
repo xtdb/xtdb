@@ -44,9 +44,9 @@ directlyExecutableStatement
     | ROLLBACK # RollbackStatement
     | SET SESSION CHARACTERISTICS AS sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
     | SET ROLE ( identifier | NONE ) # SetRoleStatement
-    | SET TIME ZONE zone=expr # SetTimeZoneStatement
+    | SET SESSION? TIME ZONE zone=expr # SetTimeZoneStatement
     | SET AWAIT_TOKEN ( TO | '=' ) awaitToken=expr # SetAwaitTokenStatement
-    | SET identifier ( TO | '=' ) literal # SetSessionVariableStatement
+    | SET SESSION? identifier ( TO | '=' ) literal # SetSessionVariableStatement
     | SHOW showVariable # ShowVariableStatement
     | SHOW identifier # ShowSessionVariableStatement
     | SHOW AWAIT_TOKEN # ShowAwaitTokenStatement
