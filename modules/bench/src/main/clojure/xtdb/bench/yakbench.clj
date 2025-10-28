@@ -454,12 +454,15 @@
                              [{:t :call
                                :stage :submit-docs
                                :f (fn [{:keys [node random]}] (load-data! node random scale-factor))}])
-                           [{:t :do
-                             :stage :finish-block
-                             :tasks [{:t :call :f (fn [{:keys [node]}] (b/finish-block! node))}]}
-                            {:t :do
+                           [{:t :call
+                             :stage :await-transactions
+                             :f (fn [{:keys [node]}] (b/sync-node node))}
+                            {:t :call
+                             :stage :flush-block
+                             :f (fn [{:keys [node]}] (tu/flush-block! node))}
+                            {:t :call
                              :stage :compact
-                             :tasks [{:t :call :f (fn [{:keys [node]}] #_ (c/compact-all! node (Duration/ofSeconds 60)) (b/compact! node))}]}])}
+                             :f (fn [{:keys [node]}] (b/compact! node))}])}
            {:t :do
             :stage :get-query-data
             :tasks [{:t :call
@@ -477,22 +480,14 @@
                           (with-open [conn (get-conn node)]
                             (let [biggest-feed (get-biggest-feed conn random)]
                               (swap! !state assoc :biggest-feed biggest-feed))))}]}
-           {:t :do
+           {:t :call
             :stage :profile
-            :tasks [{:t :call
-                     :f (fn [{:keys [node !state]}]
-                          (profile node !state))}
-                    #_
-                    {:t :call
-                     :f (fn [{:keys [node]}]
-                          (let [mean-user (get-mean-user (get-conn node))
-                                new-state (atom {:picked-user mean-user})]
-                            (profile node new-state)))}]}
-           {:t :do
+            :f (fn [{:keys [node !state]}]
+                 (profile node !state))}
+           {:t :call
             :stage :inspect
-            :tasks [{:t :call
-                     :f (fn [{:keys [node !state]}]
-                          (inspect node !state))}]}]})
+            :f (fn [{:keys [node !state]}]
+                 (inspect node !state))}]})
 
 (comment
   (try
@@ -506,25 +501,24 @@
                         (util/delete-dir path)))]
       (with-open [node (tu/->local-node {:node-dir dir})
                   conn (get-conn node)]
+        (println "Clear dir")
         (clear-dir dir)
+        (println "Load data")
         (load-data! node rnd scale)
-        (b/finish-block! node)
+        (println "Flush block")
+        (b/sync-node node)
+        (tu/flush-block! node)
+        (println "Compact")
         (b/compact! node)
+        (println "Get Query Data")
         (swap! !state assoc :picked-user (get-worst-case-user conn))
         (swap! !state assoc :active-user-ids (get-active-users conn rnd scale))
         (swap! !state assoc :biggest-feed (get-biggest-feed conn rnd))
+        (println "Profile")
         (profile node !state)
+        (println "Inspect")
         (inspect node !state)))
-      (catch Exception e
-        (log/error e)))
-
-  (try
-    (with-open [node (tu/->local-node {:node-dir (util/->path "/tmp/yakbench")})]
-      (b/finish-block! node))
     (catch Exception e
       (log/error e)))
-
-
-  (xtdb.logging/set-log-level! 'xtdb.bench :debug)
 
   )
