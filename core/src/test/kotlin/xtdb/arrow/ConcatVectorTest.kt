@@ -4,6 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import xtdb.arrow.Vector.Companion.openVector
 import xtdb.test.AllocatorResolver
 import xtdb.types.Type
 import xtdb.types.Type.Companion.asStructOf
@@ -223,6 +224,39 @@ class ConcatVectorTest {
                 assertEquals(listOf(4, 5, 6), concatRdr[2])
                 assertEquals(listOf(7), concatRdr[3])
                 assertEquals(listOf(listOf(1, 2), listOf(3), listOf(4, 5, 6), listOf(7)), concatRdr.asList)
+            }
+        }
+    }
+
+    @Test
+    fun testRowCopierCopyRange(alloc: BufferAllocator) {
+        // vec1: [0, 1], vec2: [2, 3, 4], vec3: [5, 6]
+        Vector.fromList(alloc, "v1", listOf(0, 1)).use { vec1 ->
+            Vector.fromList(alloc, "v2", listOf(2, 3, 4)).use { vec2 ->
+                Vector.fromList(alloc, "v3", listOf(5, 6)).use { vec3 ->
+                    val concatRdr = ConcatVector.from("my-int", listOf(vec1, vec2, vec3))
+
+                    // Test range entirely within single reader
+                    ("res" ofType Type.I32).openVector(alloc).use { resVec ->
+                        val rowCopier = concatRdr.rowCopier(resVec)
+                        rowCopier.copyRange(2, 3)
+                        assertEquals(listOf(2, 3, 4), resVec.asList)
+                    }
+
+                    // Test range spanning multiple readers
+                    ("res" ofType Type.I32).openVector(alloc).use { resVec ->
+                        val rowCopier = concatRdr.rowCopier(resVec)
+                        rowCopier.copyRange(1, 5)
+                        assertEquals(listOf(1, 2, 3, 4, 5), resVec.asList)
+                    }
+
+                    // Test range spanning all readers
+                    ("res" ofType Type.I32).openVector(alloc).use { resVec ->
+                        val rowCopier = concatRdr.rowCopier(resVec)
+                        rowCopier.copyRange(0, 7)
+                        assertEquals(listOf(0, 1, 2, 3, 4, 5, 6), resVec.asList)
+                    }
+                }
             }
         }
     }

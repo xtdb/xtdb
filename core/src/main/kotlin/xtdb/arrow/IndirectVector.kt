@@ -46,7 +46,19 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
 
     override fun rowCopier(dest: VectorWriter): RowCopier {
         val innerCopier = inner.rowCopier(dest)
-        return RowCopier { srcIdx -> innerCopier.copyRow(sel[srcIdx]) }
+        return object : RowCopier {
+            override fun copyRow(sourceIdx: Int) = innerCopier.copyRow(sel[sourceIdx])
+
+            override fun copyRows(sel: IntArray) {
+                val translatedSel = IntArray(sel.size) { this@IndirectVector.sel[sel[it]] }
+                innerCopier.copyRows(translatedSel)
+            }
+
+            override fun copyRange(startIdx: Int, len: Int) {
+                val translatedSel = IntArray(len) { this@IndirectVector.sel[startIdx + it] }
+                innerCopier.copyRows(translatedSel)
+            }
+        }
     }
 
     override fun valueReader(pos: VectorPosition): ValueReader =

@@ -114,7 +114,32 @@ class ConcatVector private constructor(
 
     override fun rowCopier(dest: VectorWriter): RowCopier {
         val rowCopiers = readers.map { it.rowCopier(dest) }
-        return RowCopier { sourceIdx -> rowCopiers[readerIdx(sourceIdx)].copyRow(sourceIdx) }
+        return object : RowCopier {
+            override fun copyRow(sourceIdx: Int) = rowCopiers[readerIdx(sourceIdx)].copyRow(sourceIdx)
+
+            override fun copyRange(startIdx: Int, len: Int) {
+                val endIdx = startIdx + len - 1
+                val startReaderIdx = readerIdx(startIdx)
+                val endReaderIdx = readerIdx(endIdx)
+
+                if (startReaderIdx == endReaderIdx) {
+                    // Entire range is in one reader - batch copy
+                    rowCopiers[startReaderIdx].copyRange(startIdx, len)
+                } else {
+                    // Range spans multiple readers - copy per reader
+                    var currentIdx = startIdx
+                    var remaining = len
+
+                    for (rIdx in startReaderIdx..endReaderIdx) {
+                        val readerEnd = offsets[rIdx + 1]
+                        val chunkLen = minOf(remaining, readerEnd - currentIdx)
+                        rowCopiers[rIdx].copyRange(currentIdx, chunkLen)
+                        currentIdx += chunkLen
+                        remaining -= chunkLen
+                    }
+                }
+            }
+        }
     }
 
     override fun valueReader(pos: VectorPosition): ValueReader {
