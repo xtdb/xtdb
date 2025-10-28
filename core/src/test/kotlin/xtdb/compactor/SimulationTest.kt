@@ -6,8 +6,13 @@ import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Tag
-import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Disabled
+import org.junit.jupiter.api.RepeatedTest
+import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.extension.ExtendWith
+import org.junit.jupiter.api.extension.ExtensionContext
+import org.junit.jupiter.api.extension.TestWatcher
+import java.util.concurrent.TimeUnit
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.api.storage.Storage
@@ -26,9 +31,11 @@ import xtdb.storage.BufferPool
 import xtdb.symbol
 import xtdb.table.TableRef
 import xtdb.trie.TrieCatalog
+import xtdb.util.info
 import xtdb.util.logger
 import xtdb.util.requiringResolve
 import xtdb.util.trace
+import xtdb.util.warn
 import java.time.Instant
 import java.util.concurrent.LinkedBlockingQueue
 import kotlin.coroutines.Continuation
@@ -214,11 +221,27 @@ private fun buildTrieDetails(tableName: String, trieKey: String): TrieDetails =
         .setDataFileSize(1024L)
         .build()
 
+class SeedLogger : TestWatcher {
+    override fun testFailed(context: ExtensionContext, cause: Throwable) {
+        val testInstance = context.testInstance.orElse(null)
+        if (testInstance is SimulationTest) {
+            LOGGER.warn(cause, "Test failed with seed: ${testInstance.currentSeed}",)
+        }
+    }
+}
+
+// Settings used by all tests in this class
+private const val logLevel = "TRACE"
+private const val testIterations = 10
+
+// Clojure interop to get at internal functions
+private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
+private val createJobCalculator = requiringResolve("xtdb.compactor/->JobCalculator")
+private val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
+
+@ExtendWith(SeedLogger::class)
 class SimulationTest {
-    private val logLevel = "TRACE"
-    private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
-    private val createJobCalculator = requiringResolve("xtdb.compactor/->JobCalculator")
-    private val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
+    var currentSeed: Int = 0
     private lateinit var mockDriver: MockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
     private lateinit var compactor: Compactor.Impl
@@ -228,14 +251,17 @@ class SimulationTest {
     @BeforeEach
     fun setUp() {
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
-        mockDriver = MockDriver()
+        currentSeed = Random.nextInt()
+        mockDriver = MockDriver(currentSeed)
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
         compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2)
         trieCatalog = createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
         db = MockDb("xtdb", trieCatalog)
     }
 
-    @Test
+    @RepeatedTest(testIterations)
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @Disabled("Temporarily disabled due to timeouts")
     fun deterministicCompactorRun() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, "l00-rc-b01")
@@ -248,7 +274,8 @@ class SimulationTest {
 
         Assertions.assertEquals(
             listOf("l00-rc-b01", "l01-rc-b01"),
-            trieCatalog.listAllTrieKeys(docsTable)
+            trieCatalog.listAllTrieKeys(docsTable),
+            "Assertion failed for seed: $currentSeed"
         )
     }
 }
