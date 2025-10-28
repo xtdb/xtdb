@@ -26,7 +26,7 @@
            (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
            (java.util Arrays Calendar List TimeZone)
-           (java.util.concurrent CountDownLatch FutureTask TimeUnit)
+           (java.util.concurrent CountDownLatch TimeUnit)
            (org.postgresql.util PGobject PSQLException)
            (xtdb JsonSerde)
            (xtdb.api DataSource$ConnectionBuilder)
@@ -515,56 +515,45 @@
 
 ;;TODO no current support for cancelling queries
 
-(comment
-  (do
-    (xtdb.logging/set-log-level! 'xtdb.pgwire :all)
-    (xtdb.logging/set-log-level! 'xtdb.pgwire.io :info)
-    (xtdb.logging/set-log-level! 'xtdb.pgwire-test :all)
-    (xtdb.logging/set-log-level! 'org.postgresql :all)))
-
-(deftest FutureTask_leaks_cancellation_interrupt
-  (let [task (FutureTask. (fn []
-                            (log/debug "start count")
-                            #_(dorun (for [_ (range 0 30000000)]
-                                       (Thread/yield)))
-                            (Thread/sleep 6000)
-                            (log/debug "end count")))]
+(defn test-cancel [sql]
+  (with-open [conn (jdbc-conn)
+              stmt (jdbc/prepare conn [sql])]
     (future
-      (Thread/sleep 1000)
-      (log/debug "cancelling")
-      (.cancel task true))
-    (.run task)
-    (try
-      (.get task)
-      (catch Exception e
-        (log/error e))
-      (finally
-        (log/debug "interrupted?" (.isInterrupted (Thread/currentThread)))))))
+      (Thread/sleep 2000)
+      (log/debug "cancelling...")
+      (.cancel stmt))
+    (let [t0 (System/currentTimeMillis)
+          ex (is (thrown? PSQLException (.executeQuery stmt)))
+          exec-time (- (System/currentTimeMillis) t0)]
+      (is (= "57014" (.getSQLState ex)))
+      (is (-> ex .getServerErrorMessage .getMessage (.contains "cancel")))
+      (is (< 1500 exec-time 2500)))
+    (t/is (.isValid conn 3000))))
 
 (deftest cancel_sleep
-  (with-open [conn (doto (jdbc-conn)
-                     (.setAutoCommit false))
-              stmt (doto (jdbc/prepare conn [#_"FROM GENERATE_SERIES(1,2000000) AS system(_id) ORDER BY _id"
-                                             "SELECT pg_sleep(10.0)"])
-                     (.setFetchSize 10))]
-    (let [cancelled (future
-                      (Thread/sleep 3000)
-                      (log/debug "cancelling...")
-                      (.cancel stmt)
-                      (log/debug "cancel called"))]
-      (try
-        (log/debug "executing query...")
-        (.executeQuery stmt)
-        (log/debug "query executed")
-        (deref cancelled)
-        (catch Exception e
-          (def exc e)
-          (clojure.pprint/pprint (-> e bean (dissoc :stackTrace)))))
+  (test-cancel "SELECT pg_sleep(10.0)"))
 
-      (log/debug "checking connection isValid")
-      (t/is (.isValid conn 2000))
-      (Thread/sleep 5000)
-      (log/debug "closing connection"))))
+(deftest cancel_big_GENERATE_SERIES
+  (test-cancel "FROM GENERATE_SERIES(1,10000000) AS system(_id) ORDER BY _id"))
+
+(deftest server_close_interrupts_ongoing_query
+  (with-open [^Server server (serve)]
+    (binding [*server* server, *port* (:port server)]
+      (with-open [client-conn (jdbc-conn)
+                  stmt (jdbc/prepare client-conn ["SELECT pg_sleep(10.0)"])
+                  server-conn (get-last-conn server)]
+        (future
+          (Thread/sleep 2000)
+          (log/debug "closing server...")
+          (.close server))
+        (let [t0 (System/currentTimeMillis)
+              ex (is (thrown? PSQLException (.executeQuery stmt)))
+              exec-time (- (System/currentTimeMillis) t0)]
+          (is (= "08006" (.getSQLState ex)))
+          (is (< 1500 exec-time 2500)))
+        (is (wait-for-close server-conn 500))
+        (check-conn-resources-freed server-conn)
+        (check-server-resources-freed server)))))
 
 (deftest jdbc-prepared-query-close-test
   (with-open [conn (jdbc-conn {"prepareThreshold" 1
