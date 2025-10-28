@@ -9,6 +9,9 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.extension.ExtendWith
+import org.junit.jupiter.api.extension.ExtensionContext
+import org.junit.jupiter.api.extension.TestWatcher
 import java.util.concurrent.TimeUnit
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
@@ -28,9 +31,11 @@ import xtdb.storage.BufferPool
 import xtdb.symbol
 import xtdb.table.TableRef
 import xtdb.trie.TrieCatalog
+import xtdb.util.info
 import xtdb.util.logger
 import xtdb.util.requiringResolve
 import xtdb.util.trace
+import xtdb.util.warn
 import java.time.Instant
 import java.util.concurrent.LinkedBlockingQueue
 import kotlin.coroutines.Continuation
@@ -216,12 +221,24 @@ private fun buildTrieDetails(tableName: String, trieKey: String): TrieDetails =
         .setDataFileSize(1024L)
         .build()
 
+class SeedLogger : TestWatcher {
+    override fun testFailed(context: ExtensionContext, cause: Throwable) {
+        val testInstance = context.testInstance.orElse(null)
+        if (testInstance is SimulationTest) {
+            LOGGER.warn(cause, "Test failed with seed: ${testInstance.currentSeed}",)
+        }
+    }
+}
+
+@ExtendWith(SeedLogger::class)
 class SimulationTest {
     private val logLevel = "TRACE"
     private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
     private val createJobCalculator = requiringResolve("xtdb.compactor/->JobCalculator")
     private val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
+
     var currentSeed: Int = 0
+
     private lateinit var mockDriver: MockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
     private lateinit var compactor: Compactor.Impl
@@ -253,7 +270,8 @@ class SimulationTest {
 
         Assertions.assertEquals(
             listOf("l00-rc-b01", "l01-rc-b01"),
-            trieCatalog.listAllTrieKeys(docsTable)
+            trieCatalog.listAllTrieKeys(docsTable),
+            "Assertion failed for seed: $currentSeed"
         )
     }
 }
