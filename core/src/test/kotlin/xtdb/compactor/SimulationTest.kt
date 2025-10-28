@@ -229,15 +229,18 @@ class SeedLogger : TestWatcher {
     }
 }
 
+// Settings used by all tests in this class
+private const val logLevel = "TRACE"
+private const val testIterations = 10
+
+// Clojure interop to get at internal functions
+private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
+private val createJobCalculator = requiringResolve("xtdb.compactor/->JobCalculator")
+private val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
+
 @ExtendWith(SeedLogger::class)
 class SimulationTest {
-    private val logLevel = "TRACE"
-    private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
-    private val createJobCalculator = requiringResolve("xtdb.compactor/->JobCalculator")
-    private val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
-
     var currentSeed: Int = 0
-
     private lateinit var mockDriver: MockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
     private lateinit var compactor: Compactor.Impl
@@ -255,7 +258,7 @@ class SimulationTest {
         db = MockDb("xtdb", trieCatalog)
     }
 
-    @RepeatedTest(10)
+    @RepeatedTest(testIterations)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun deterministicCompactorRun() {
         val docsTable = TableRef("xtdb", "public", "docs")
