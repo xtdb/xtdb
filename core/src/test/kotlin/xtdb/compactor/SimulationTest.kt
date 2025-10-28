@@ -6,8 +6,7 @@ import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Tag
-import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
@@ -256,7 +255,7 @@ class SimulationTest {
         db = MockDb("xtdb", trieCatalog)
     }
 
-    @Test
+    @RepeatedTest(10)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun deterministicCompactorRun() {
         val docsTable = TableRef("xtdb", "public", "docs")
