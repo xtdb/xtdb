@@ -5,6 +5,7 @@
             [taoensso.tufte :as tufte :refer [p]]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
+            [xtdb.compactor :as c]
             [xtdb.datasets.yakbench :as yakbench]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]))
@@ -448,21 +449,21 @@
 
   {:title "Yakbench", :seed seed
    :->state #(do {:!state (atom {})})
-   :tasks [{:t :do
-            :stage :ingest
-            :tasks (concat (when-not no-load?
-                             [{:t :call
-                               :stage :submit-docs
-                               :f (fn [{:keys [node random]}] (load-data! node random scale-factor))}])
-                           [{:t :call
-                             :stage :await-transactions
-                             :f (fn [{:keys [node]}] (b/sync-node node))}
-                            {:t :call
-                             :stage :flush-block
-                             :f (fn [{:keys [node]}] (tu/flush-block! node))}
-                            {:t :call
-                             :stage :compact
-                             :f (fn [{:keys [node]}] (b/compact! node))}])}
+   :tasks [(when-not no-load?
+             {:t :do
+              :stage :ingest
+              :tasks [{:t :call
+                       :stage :submit-docs
+                       :f (fn [{:keys [node random]}] (load-data! node random scale-factor))}
+                      {:t :call
+                      :stage :await-transactions
+                      :f (fn [{:keys [node]}] (b/sync-node node))}
+                     {:t :call
+                      :stage :flush-block
+                      :f (fn [{:keys [node]}] (tu/flush-block! node))}
+                     {:t :call
+                      :stage :compact
+                      :f (fn [{:keys [node]}] (c/compact-all! node nil))}]})
            {:t :do
             :stage :get-query-data
             :tasks [{:t :call
@@ -484,6 +485,12 @@
             :stage :profile
             :f (fn [{:keys [node !state]}]
                  (profile node !state))}
+           {:t :call
+            :stage :profile-mean
+            :f (fn [{:keys [node]}]
+                 (let [state (atom {:picked-user (get-mean-user (get-conn node))})]
+                   (profile node state)))}
+           #_
            {:t :call
             :stage :inspect
             :f (fn [{:keys [node !state]}]
@@ -509,7 +516,7 @@
         (b/sync-node node)
         (tu/flush-block! node)
         (println "Compact")
-        (b/compact! node)
+        (c/compact-all! node nil)
         (println "Get Query Data")
         (swap! !state assoc :picked-user (get-worst-case-user conn))
         (swap! !state assoc :active-user-ids (get-active-users conn rnd scale))
