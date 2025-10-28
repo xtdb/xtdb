@@ -161,7 +161,10 @@ interface Compactor : AutoCloseable {
                             wakeupCh.trySend(Unit)
                         }
 
-                        override fun close() = al.close()
+                        override fun close() {
+                            segMerge.close()
+                            al.close()
+                        }
                     }
                 }
 
@@ -268,12 +271,12 @@ interface Compactor : AutoCloseable {
             }
 
             override fun close() {
-                driver.close()
-
                 runBlocking {
                     withTimeoutOrNull(10.seconds) { scope.coroutineContext.job.cancelAndJoin() }
                         ?: LOGGER.warn("failed to close compactor cleanly in 10s")
                 }
+
+                driver.close()
 
                 LOGGER.debug("compactor closed")
             }
