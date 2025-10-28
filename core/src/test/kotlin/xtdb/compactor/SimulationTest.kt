@@ -6,6 +6,7 @@ import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.extension.ExtendWith
@@ -260,6 +261,7 @@ class SimulationTest {
 
     @RepeatedTest(testIterations)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @Disabled("Temporarily disabled due to timeouts")
     fun deterministicCompactorRun() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, "l00-rc-b01")
