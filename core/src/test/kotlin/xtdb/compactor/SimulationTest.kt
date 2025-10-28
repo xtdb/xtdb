@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
+import java.util.concurrent.TimeUnit
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.api.storage.Storage
@@ -238,6 +240,7 @@ class SimulationTest {
     }
 
     @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun deterministicCompactorRun() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, "l00-rc-b01")
