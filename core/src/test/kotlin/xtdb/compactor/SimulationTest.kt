@@ -219,6 +219,7 @@ class SimulationTest {
     private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
     private val createJobCalculator = requiringResolve("xtdb.compactor/->JobCalculator")
     private val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
+    var currentSeed: Int = 0
     private lateinit var mockDriver: MockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
     private lateinit var compactor: Compactor.Impl
@@ -228,7 +229,8 @@ class SimulationTest {
     @BeforeEach
     fun setUp() {
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
-        mockDriver = MockDriver()
+        currentSeed = Random.nextInt()
+        mockDriver = MockDriver(currentSeed)
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
         compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2)
         trieCatalog = createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
