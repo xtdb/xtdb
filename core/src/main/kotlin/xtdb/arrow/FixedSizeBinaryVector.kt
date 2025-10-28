@@ -9,13 +9,13 @@ import java.nio.ByteBuffer
 class FixedSizeBinaryVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val byteWidth: Int,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Bytes {
 
     override val type = ArrowType.FixedSizeBinary(byteWidth)
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, byteWidth: Int)
-            : this(name, nullable, 0, byteWidth, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, byteWidth, BitBuffer(al), ExtensibleBuffer(al))
 
     override fun getBytes(idx: Int): ByteBuffer = getBytes0(idx)
 

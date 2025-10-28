@@ -17,11 +17,11 @@ private val SECONDS_PER_DAY = Duration.ofDays(1).toSeconds()
 
 class DateDayVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.DateTime {
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
 
     override val byteWidth = Int.SIZE_BYTES
     override val type = ArrowType.Date(DAY)
@@ -48,11 +48,11 @@ class DateDayVector private constructor(
 
 class DateMilliVector internal constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.DateTime {
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
 
     override val byteWidth = Long.SIZE_BYTES
     override val type = ArrowType.Date(MILLISECOND)

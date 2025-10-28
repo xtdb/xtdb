@@ -23,7 +23,7 @@ internal fun TimeUnit.toDuration(value: Long): Duration = when (this) {
 class DurationVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
     val unit: TimeUnit = MICROSECOND,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Duration {
 
     override val byteWidth = Long.SIZE_BYTES
@@ -31,7 +31,7 @@ class DurationVector private constructor(
 
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit
-    ) : this(name, nullable, 0, unit, ExtensibleBuffer(al), ExtensibleBuffer(al))
+    ) : this(name, nullable, 0, unit, BitBuffer(al), ExtensibleBuffer(al))
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(v: Long) = writeLong0(v)

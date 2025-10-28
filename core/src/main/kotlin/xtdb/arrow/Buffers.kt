@@ -4,7 +4,6 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
-import org.apache.arrow.vector.BitVectorHelper
 import org.apache.arrow.vector.util.DecimalUtility
 import java.math.BigDecimal
 import java.nio.ByteBuffer
@@ -51,16 +50,6 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
     fun ensureCapacity(capacity: Long): ArrowBuf {
         if (buf.capacity() < capacity) realloc(capacity)
         return buf
-    }
-
-    fun getBit(idx: Int) = BitVectorHelper.get(buf, idx) == 1
-    fun setBit(bitIdx: Int, bit: Int) = BitVectorHelper.setValidityBit(buf, bitIdx, bit)
-
-    fun writeBit(bitIdx: Int, bit: Int) {
-        val validityBufferSize = BitVectorHelper.getValidityBufferSize(bitIdx + 1)
-        ensureCapacity(validityBufferSize.toLong())
-        setBit(bitIdx, bit)
-        buf.writerIndex(validityBufferSize.toLong())
     }
 
     fun writeZero(elWidth: Int) {

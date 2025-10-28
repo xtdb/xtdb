@@ -9,14 +9,14 @@ import xtdb.util.Hasher
 
 class ShortVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Number {
 
     override val type: ArrowType = MinorType.SMALLINT.type
     override val byteWidth = Short.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
 
     override fun getShort(idx: Int) = getShort0(idx)
     override fun writeShort(v: Short) = writeShort0(v)

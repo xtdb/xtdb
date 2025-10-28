@@ -30,7 +30,7 @@ internal fun TimeUnit.toLocalTime(value: Long): LocalTime = when (this) {
 
 class Time32Vector private constructor(
     override var name: String, override var nullable: Boolean, val unit: TimeUnit,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer,
+    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer,
     override var valueCount: Int
 ) : FixedWidthVector(), MetadataFlavour.TimeOfDay {
 
@@ -38,7 +38,7 @@ class Time32Vector private constructor(
     override val byteWidth = Int.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit)
-            : this(name, nullable, unit, ExtensibleBuffer(al), ExtensibleBuffer(al), 0)
+            : this(name, nullable, unit, BitBuffer(al), ExtensibleBuffer(al), 0)
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(v: Int) = writeInt0(v)
@@ -65,7 +65,7 @@ class Time32Vector private constructor(
 
 class Time64Vector private constructor(
     override var name: String, override var nullable: Boolean, private val unit: TimeUnit,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer,
+    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer,
     override var valueCount: Int
 ) : FixedWidthVector(), MetadataFlavour.TimeOfDay {
 
@@ -73,7 +73,7 @@ class Time64Vector private constructor(
     override val byteWidth = Long.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit)
-            : this(name, nullable, unit, ExtensibleBuffer(al), ExtensibleBuffer(al), 0)
+            : this(name, nullable, unit, BitBuffer(al), ExtensibleBuffer(al), 0)
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(v: Long) = writeLong0(v)

@@ -17,14 +17,14 @@ import org.apache.arrow.vector.complex.FixedSizeListVector as ArrowFixedSizeList
 class FixedSizeListVector private constructor(
     private val al: BufferAllocator,
     override var name: String, override var nullable: Boolean, private val listSize: Int,
-    private val validityBuffer: ExtensibleBuffer = ExtensibleBuffer(al),
+    private val validityBuffer: BitBuffer = BitBuffer(al),
     private var elVector: Vector,
     override var valueCount: Int = 0
 ) : Vector(), MetadataFlavour.List {
 
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean, listSize: Int, elVector: Vector, valueCount: Int = 0
-    ) : this(al, name, nullable, listSize, ExtensibleBuffer(al), elVector, valueCount)
+    ) : this(al, name, nullable, listSize, BitBuffer(al), elVector, valueCount)
 
     override val type = ArrowType.FixedSizeList(listSize)
 
@@ -141,17 +141,16 @@ class FixedSizeListVector private constructor(
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirst()
-
-        validityBuffer.loadBuffer(buffers.removeFirst())
-        elVector.loadPage(nodes, buffers)
-
         valueCount = node.length
+
+        validityBuffer.loadBuffer(buffers.removeFirst(), valueCount)
+        elVector.loadPage(nodes, buffers)
     }
 
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is ArrowFixedSizeListVector)
 
-        validityBuffer.loadBuffer(vec.validityBuffer)
+        validityBuffer.loadBuffer(vec.validityBuffer, vec.valueCount)
         elVector.loadFromArrow(vec.dataVector)
 
         valueCount = vec.valueCount

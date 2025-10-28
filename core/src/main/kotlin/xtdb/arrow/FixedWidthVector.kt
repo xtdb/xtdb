@@ -23,7 +23,7 @@ sealed class FixedWidthVector : Vector() {
     protected abstract val byteWidth: Int
     override val vectors: Iterable<Vector> = emptyList()
 
-    internal abstract val validityBuffer: ExtensibleBuffer
+    internal abstract val validityBuffer: BitBuffer
     internal abstract val dataBuffer: ExtensibleBuffer
 
     final override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
@@ -66,7 +66,7 @@ sealed class FixedWidthVector : Vector() {
     override fun ensureCapacity(valueCount: Int) {
         if (valueCount > this.valueCount) {
             this.valueCount = valueCount
-            validityBuffer.ensureCapacity(BitVectorHelper.getValidityBufferSize(valueCount).toLong())
+            validityBuffer.ensureCapacity(valueCount)
             dataBuffer.ensureCapacity((valueCount * byteWidth).toLong())
         }
     }
@@ -179,15 +179,15 @@ sealed class FixedWidthVector : Vector() {
 
     final override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirstOrNull() ?: throw IllegalStateException("missing node")
-        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: throw IllegalStateException("missing validity buffer"))
-        dataBuffer.loadBuffer(buffers.removeFirstOrNull() ?: throw IllegalStateException("missing data buffer"))
-
         valueCount = node.length
+
+        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: throw IllegalStateException("missing validity buffer"), valueCount)
+        dataBuffer.loadBuffer(buffers.removeFirstOrNull() ?: throw IllegalStateException("missing data buffer"))
     }
 
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is BaseFixedWidthVector)
-        validityBuffer.loadBuffer(vec.validityBuffer)
+        validityBuffer.loadBuffer(vec.validityBuffer, vec.valueCount)
         dataBuffer.loadBuffer(vec.dataBuffer)
 
         valueCount = vec.valueCount

@@ -27,7 +27,7 @@ internal val STRUCT = ArrowType.Struct.INSTANCE
 class StructVector private constructor(
     private val allocator: BufferAllocator,
     override var name: String, override var nullable: Boolean,
-    private val validityBuffer: ExtensibleBuffer,
+    private val validityBuffer: BitBuffer,
     private val childWriters: SequencedMap<String, Vector> = LinkedHashMap(),
     override var valueCount: Int = 0,
 ) : Vector(), MetadataFlavour.Struct {
@@ -40,7 +40,7 @@ class StructVector private constructor(
         valueCount: Int = 0,
     ) : this(
         allocator, name, nullable,
-        ExtensibleBuffer(allocator), childWriters, valueCount
+        BitBuffer(allocator), childWriters, valueCount
     )
 
     override val type: ArrowType = STRUCT
@@ -175,17 +175,16 @@ class StructVector private constructor(
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirstOrNull() ?: error("missing node")
-
-        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"))
-        childWriters.sequencedValues().forEach { it.loadPage(nodes, buffers) }
-
         valueCount = node.length
+
+        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"), valueCount)
+        childWriters.sequencedValues().forEach { it.loadPage(nodes, buffers) }
     }
 
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is NonNullableStructVector)
         val valCount = vec.valueCount
-        validityBuffer.loadBuffer(vec.validityBuffer, getValidityBufferSize(valCount).toLong())
+        validityBuffer.loadBuffer(vec.validityBuffer, valCount)
         childWriters.sequencedValues().forEach { it.loadFromArrow(vec.getChild(it.name)) }
 
         valueCount = valCount

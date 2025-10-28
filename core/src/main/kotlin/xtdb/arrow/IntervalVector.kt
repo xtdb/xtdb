@@ -26,14 +26,14 @@ private class IntervalValueReader(private val vec: VectorReader, private val pos
 
 class IntervalYearMonthVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Presence {
 
     override val type: ArrowType = MinorType.INTERVALYEAR.type
     override val byteWidth = Int.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(v: Int) = writeInt0(v)
@@ -65,7 +65,7 @@ private const val NANOS_PER_MILLI = NANO_HZ / MILLI_HZ
 
 class IntervalDayTimeVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Presence {
 
     override val type: ArrowType = MinorType.INTERVALDAY.type
@@ -73,7 +73,7 @@ class IntervalDayTimeVector private constructor(
 
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean
-    ) : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
+    ) : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): Interval {
         val buf = getBytes0(idx).duplicate().order(ByteOrder.LITTLE_ENDIAN)
@@ -120,14 +120,14 @@ class IntervalDayTimeVector private constructor(
 
 class IntervalMonthDayNanoVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Presence {
 
     override val type: ArrowType = MinorType.INTERVALMONTHDAYNANO.type
     override val byteWidth = 16
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): Interval {
         val buf = getBytes0(idx).duplicate().order(ByteOrder.LITTLE_ENDIAN)

@@ -16,21 +16,20 @@ internal val BOOL_TYPE: ArrowType = ArrowType.Bool.INSTANCE
 
 class BitVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    private val validityBuffer: ExtensibleBuffer, private val dataBuffer: ExtensibleBuffer
+    private val validityBuffer: BitBuffer, private val dataBuffer: BitBuffer
 ) : Vector(), MetadataFlavour.Presence {
 
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean
-    ) : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
+    ) : this(name, nullable, 0, BitBuffer(al), BitBuffer(al))
 
     override val type: ArrowType = BIT_TYPE
     override val vectors: Iterable<Vector> = emptyList()
 
     override fun ensureCapacity(valueCount: Int) {
         this.valueCount = this.valueCount.coerceAtLeast(valueCount)
-        val capacity = getValidityBufferSize(valueCount).toLong()
-        validityBuffer.ensureCapacity(capacity)
-        dataBuffer.ensureCapacity(capacity)
+        validityBuffer.ensureCapacity(valueCount)
+        dataBuffer.ensureCapacity(valueCount)
     }
 
     override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
@@ -95,16 +94,16 @@ class BitVector private constructor(
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirstOrNull() ?: error("missing node")
-        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"))
-        dataBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing data buffer"))
-
         valueCount = node.length
+
+        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"), valueCount)
+        dataBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing data buffer"), valueCount)
     }
 
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is ArrowBitVector)
-        validityBuffer.loadBuffer(vec.validityBuffer)
-        dataBuffer.loadBuffer(vec.dataBuffer)
+        validityBuffer.loadBuffer(vec.validityBuffer, vec.valueCount)
+        dataBuffer.loadBuffer(vec.dataBuffer, vec.valueCount)
 
         valueCount = vec.valueCount
     }

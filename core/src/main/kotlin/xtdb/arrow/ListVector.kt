@@ -20,7 +20,7 @@ class ListVector private constructor(
     private val al: BufferAllocator,
     override var name: String, override var nullable: Boolean,
     private var elVector: Vector,
-    private val validityBuffer: ExtensibleBuffer,
+    private val validityBuffer: BitBuffer,
     private val offsetBuffer: ExtensibleBuffer,
     override var valueCount: Int = 0
 ) : Vector(), MetadataFlavour.List {
@@ -30,7 +30,7 @@ class ListVector private constructor(
         allocator: BufferAllocator, name: String, nullable: Boolean, elVector: Vector = NullVector("\$data$"),
     ) : this(
         allocator, name, nullable, elVector,
-        ExtensibleBuffer(allocator), ExtensibleBuffer(allocator)
+        BitBuffer(allocator), ExtensibleBuffer(allocator)
     )
 
     override val type: ArrowType = LIST
@@ -155,19 +155,18 @@ class ListVector private constructor(
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirstOrNull() ?: error("missing node")
+        valueCount = node.length
 
-        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"))
+        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"), valueCount)
         offsetBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing offset buffer"))
 
         elVector.loadPage(nodes, buffers)
-
-        valueCount = node.length
     }
 
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is ArrowListVector)
 
-        validityBuffer.loadBuffer(vec.validityBuffer)
+        validityBuffer.loadBuffer(vec.validityBuffer, vec.valueCount)
         offsetBuffer.loadBuffer(vec.offsetBuffer)
         elVector.loadFromArrow(vec.dataVector)
 

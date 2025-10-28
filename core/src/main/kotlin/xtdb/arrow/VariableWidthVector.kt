@@ -12,7 +12,7 @@ abstract class VariableWidthVector : Vector() {
 
     override val vectors: Iterable<Vector> = emptyList()
 
-    internal abstract val validityBuffer: ExtensibleBuffer
+    internal abstract val validityBuffer: BitBuffer
     internal abstract val offsetBuffer: ExtensibleBuffer
     internal abstract val dataBuffer: ExtensibleBuffer
 
@@ -85,18 +85,17 @@ abstract class VariableWidthVector : Vector() {
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirstOrNull() ?: error("missing node")
+        valueCount = node.length
 
-        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"))
+        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"), valueCount)
         offsetBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing offset buffer"))
         dataBuffer.loadBuffer(buffers.removeFirst() ?: error("missing data buffer"))
-
-        valueCount = node.length
     }
 
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is BaseVariableWidthVector)
 
-        validityBuffer.loadBuffer(vec.validityBuffer)
+        validityBuffer.loadBuffer(vec.validityBuffer, vec.valueCount)
         offsetBuffer.loadBuffer(vec.offsetBuffer)
         dataBuffer.loadBuffer(vec.dataBuffer)
 

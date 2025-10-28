@@ -14,7 +14,7 @@ private const val DECIMAL_ERROR_KEY = "xtdb.error/decimal-error"
 
 class DecimalVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer,
+    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer,
     private val decimalType: Decimal
 ) : FixedWidthVector(), MetadataFlavour.Number {
 
@@ -31,7 +31,7 @@ class DecimalVector private constructor(
     }
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, decimalType: Decimal)
-            : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al), decimalType)
+            : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al), decimalType)
 
     override val byteWidth = (bitWidth / 8)
 

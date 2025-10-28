@@ -13,7 +13,7 @@ internal val I32 = MinorType.INT.type
 
 class IntVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Number {
 
     override val type: ArrowType = I32
@@ -21,7 +21,7 @@ class IntVector private constructor(
 
     companion object {
         private fun openValidityBuffer(al: BufferAllocator, valueCount: Int) =
-            ExtensibleBuffer(al, BitVectorHelper.getValidityBufferSize(valueCount).toLong())
+            BitBuffer(al, valueCount)
 
         private fun openDataBuffer(al: BufferAllocator, valueCount: Int) =
             ExtensibleBuffer(al, valueCount.toLong() * Int.SIZE_BYTES)

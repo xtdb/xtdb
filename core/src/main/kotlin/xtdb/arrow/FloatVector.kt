@@ -9,14 +9,14 @@ import xtdb.util.Hasher
 
 class FloatVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: ExtensibleBuffer, override val dataBuffer: ExtensibleBuffer
+    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Number {
 
     override val byteWidth = Float.SIZE_BYTES
     override val type: ArrowType = MinorType.FLOAT4.type
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, 0, ExtensibleBuffer(al), ExtensibleBuffer(al))
+            : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
 
     override fun getFloat(idx: Int) = getFloat0(idx)
     override fun writeFloat(v: Float) = writeFloat0(v)
