@@ -54,28 +54,27 @@
   ([node]
    (submit-ts-devices node {}))
 
-  ([node {:keys [size batch-size device-info-file readings-file],
-                 :or {size :small
-                      batch-size 1000
-                      device-info-file (local-ts-devices-file size :device-info)
-                      readings-file (local-ts-devices-file size :readings)}}]
-   (assert device-info-file "Can't find device-info CSV")
-   (assert readings-file "Can't find readings CSV")
+  ([node opts]
+   (let [size (get opts :size :small)
+         batch-size (get opts :batch-size 1000)
+         device-info-file (get :device-info-file (local-ts-devices-file size :device-info))
+         readings-file (get :readings-file (local-ts-devices-file size :readings))]
+     (assert device-info-file "Can't find device-info CSV")
+     (assert readings-file "Can't find readings CSV")
+     (with-open [device-info-rdr (gz-reader device-info-file)
+                 readings-rdr (gz-reader readings-file)]
+       (let [device-infos (map device-info-csv->doc (csv/read-csv device-info-rdr))
+             readings (map readings-csv->doc (csv/read-csv readings-rdr))
+             [initial-readings rest-readings] (split-at (count device-infos) readings)]
 
-   (with-open [device-info-rdr (gz-reader device-info-file)
-               readings-rdr (gz-reader readings-file)]
-     (let [device-infos (map device-info-csv->doc (csv/read-csv device-info-rdr))
-           readings (map readings-csv->doc (csv/read-csv readings-rdr))
-           [initial-readings rest-readings] (split-at (count device-infos) readings)]
-
-       (->> (for [{:keys [time] :as doc} (concat (interleave device-infos initial-readings) rest-readings)]
-              [:put-docs (cond-> {:into :docs}
-                      time (assoc :valid-from time))
-               doc])
-            (partition-all batch-size)
-            (reduce (fn [_acc tx-ops]
-                      (xt/submit-tx node tx-ops))
-                    nil))))))
+         (->> (for [{:keys [time] :as doc} (concat (interleave device-infos initial-readings) rest-readings)]
+                [:put-docs (cond-> {:into :docs}
+                             time (assoc :valid-from time))
+                 doc])
+              (partition-all batch-size)
+              (reduce (fn [_acc tx-ops]
+                        (xt/submit-tx node tx-ops))
+                      nil)))))))
 
 (def query-recent-battery-temperatures
   ;; SELECT time, device_id, battery_temperature
