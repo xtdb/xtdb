@@ -84,6 +84,7 @@ dependencies {
     api(libs.hato)
     testImplementation(libs.pgjdbc)
     testImplementation(libs.mockk)
+    testImplementation(libs.kotest.props)
     testImplementation(libs.clojure.test.check)
     testImplementation(testFixtures(project(":")))
     testImplementation(project(":modules:xtdb-kafka"))

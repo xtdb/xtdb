@@ -3,12 +3,14 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.BitVectorHelper
+import org.apache.arrow.vector.BitVectorHelper.byteIndex
+import org.apache.arrow.vector.util.DataSizeRoundingUtil.divideBy8Ceil
 import kotlin.math.max
 
 internal class BitBuffer private constructor(
     private val allocator: BufferAllocator,
-    private var buf: ArrowBuf,
-    private var writerBitIndex: Int = 0
+    var buf: ArrowBuf,
+    var writerBitIndex: Int = 0
 ) : AutoCloseable {
 
     companion object {
@@ -32,10 +34,10 @@ internal class BitBuffer private constructor(
         return newCapacity
     }
 
-    private fun realloc(targetCapacity: Long) {
+    private fun realloc(targetCapacityBytes: Long) {
         val currentCapacity = buf.capacity()
 
-        val newBuf = allocator.buffer(newCapacity(currentCapacity, targetCapacity)).apply {
+        val newBuf = allocator.buffer(newCapacity(currentCapacity, targetCapacityBytes)).apply {
             setBytes(0, buf, 0, currentCapacity)
             setZero(currentCapacity, capacity() - currentCapacity)
             readerIndex(buf.readerIndex())
@@ -46,10 +48,13 @@ internal class BitBuffer private constructor(
         buf = newBuf
     }
 
-    fun ensureCapacity(bitCount: Int): ArrowBuf {
+    fun ensureCapacity(bitCount: Int) {
         val capacity = bufferSize(bitCount)
         if (buf.capacity() < capacity) realloc(capacity)
-        return buf
+    }
+
+    fun ensureWritable(bitCount: Int) {
+        ensureCapacity(writerBitIndex + bitCount)
     }
 
     fun getBit(idx: Int) = BitVectorHelper.get(buf, idx) == 1
@@ -57,9 +62,29 @@ internal class BitBuffer private constructor(
     fun setBit(bitIdx: Int, bit: Int) = BitVectorHelper.setValidityBit(buf, bitIdx, bit)
 
     fun writeBit(bitIdx: Int, bit: Int) {
-        ensureCapacity(bitIdx + 1)
+        ensureWritable(1)
         setBit(bitIdx, bit)
         writerBitIndex = bitIdx + 1
+    }
+
+    fun writeBit(bit: Int) {
+        ensureWritable(1)
+        setBit(writerBitIndex++, bit)
+    }
+
+    fun unsafeCopyFrom(src: BitBuffer, idx: Int, len: Int) {
+        // Fast path: both byte-aligned and length is a multiple of 8
+        if (writerBitIndex % 8 == 0 && idx % 8 == 0 && len % 8 == 0) {
+            val idxBytes = byteIndex(idx)
+            val lenBytes = divideBy8Ceil(len)
+            buf.setBytes(byteIndex(writerBitIndex.toLong()), src.buf, idxBytes.toLong(), lenBytes.toLong())
+            writerBitIndex += len
+            return
+        }
+
+        // Slow path: bit-by-bit copy
+        repeat(len) { setBit(writerBitIndex + it, if (src.getBit(idx + it)) 1 else 0) }
+        writerBitIndex += len
     }
 
     internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) {
