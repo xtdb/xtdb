@@ -1,12 +1,11 @@
 package xtdb.compactor
 
-import clojure.lang.Symbol
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import org.apache.arrow.memory.BufferAllocator
-import org.junit.Assert.assertEquals
 import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import xtdb.api.log.Log
@@ -30,7 +29,6 @@ import xtdb.trie.TrieCatalog
 import xtdb.util.logger
 import xtdb.util.requiringResolve
 import xtdb.util.trace
-import java.lang.Thread.sleep
 import java.time.Instant
 import java.util.concurrent.LinkedBlockingQueue
 import kotlin.coroutines.Continuation
@@ -209,35 +207,48 @@ class MockDriver(seed: Int = 0) : Factory {
     }
 }
 
-@Tag("property")
+private fun buildTrieDetails(tableName: String, trieKey: String): TrieDetails =
+    TrieDetails.newBuilder()
+        .setTableName(tableName)
+        .setTrieKey(trieKey)
+        .setDataFileSize(1024L)
+        .build()
+
 class SimulationTest {
+    private val logLevel = "TRACE"
+    private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
+    private val createJobCalculator = requiringResolve("xtdb.compactor/->JobCalculator")
+    private val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
+    private lateinit var mockDriver: MockDriver
+    private lateinit var jobCalculator: Compactor.JobCalculator
+    private lateinit var compactor: Compactor.Impl
+    private lateinit var trieCatalog: TrieCatalog
+    private lateinit var db: MockDb
+
+    @BeforeEach
+    fun setUp() {
+        setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
+        mockDriver = MockDriver()
+        jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
+        compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2)
+        trieCatalog = createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
+        db = MockDb("xtdb", trieCatalog)
+    }
+
     @Test
     fun deterministicCompactorRun() {
-        val mockDriver = MockDriver()
-        val jobCalculator = requiringResolve("xtdb.compactor/->JobCalculator").invoke() as Compactor.JobCalculator
-        val compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2)
-        val trieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog").invoke(
-            mutableMapOf<Any, Any>(),
-            (100 * 1024 * 1024)
-        ) as TrieCatalog
+        val docsTable = TableRef("xtdb", "public", "docs")
+        val l0Trie = buildTrieDetails(docsTable.tableName, "l00-rc-b01")
 
-        val db = MockDb("xtdb", trieCatalog)
+        trieCatalog.addTries(docsTable, listOf(l0Trie), Instant.now())
 
-        val docsTableRef = TableRef("xtdb", "public", "docs")
-
-        val l0Trie = TrieDetails.newBuilder()
-            .setTableName(docsTableRef.tableName)
-            .setTrieKey("l00-rc-b01")
-            .setDataFileSize(1024L)
-            .build()
-
-        trieCatalog.addTries(docsTableRef, listOf(l0Trie), Instant.now())
-
-        compactor.openForDatabase(db).use { compactorForDb ->
-            compactorForDb.compactAll()
-            Assertions.assertEquals(
-                listOf("l00-rc-b01", "l01-rc-b01"),
-                trieCatalog.listAllTrieKeys(docsTableRef))
+        compactor.openForDatabase(db).use {
+            it.compactAll()
         }
+
+        Assertions.assertEquals(
+            listOf("l00-rc-b01", "l01-rc-b01"),
+            trieCatalog.listAllTrieKeys(docsTable)
+        )
     }
 }
