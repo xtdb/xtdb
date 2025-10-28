@@ -155,10 +155,10 @@ allprojects {
 
         tasks.register("property-test", Test::class) {
             jvmArgs(defaultJvmArgs + twelveGBJvmArgs)
-            
+
             val iterations = project.findProperty("iterations")?.toString() ?: "100"
             systemProperty("xtdb.property-test-iterations", iterations)
-            
+
             useJUnitPlatform {
                 includeTags("property")
             }
@@ -455,7 +455,7 @@ dependencies {
     testImplementation("clj-kondo", "clj-kondo", "2023.12.15")
     testImplementation("com.github.igrishaev", "pg2-core", "0.1.33")
     testImplementation(libs.hato)
-    
+
     // test check
     api(libs.clojure.test.check)
 
@@ -606,7 +606,14 @@ fun createBench(benchName: String, properties: Map<String, String>) {
         dependsOn(":modules:bench:assemble")
         classpath = sourceSets.dev.get().runtimeClasspath
         mainClass.set("clojure.main")
-        jvmArgs(defaultJvmArgs + sixGBJvmArgs + listOf("-Darrow.enable_unsafe_memory_access=true"))
+        // Choose JVM sizing for benches via project properties:
+        // -PtwelveGBJvm -> use twelveGBJvmArgs
+        // -PsixGBJvm    -> use sixGBJvmArgs (default)
+        val benchJvmArgs = when {
+            project.hasProperty("twelveGBJvm") -> twelveGBJvmArgs
+            else -> sixGBJvmArgs
+        }
+        jvmArgs(defaultJvmArgs + benchJvmArgs + listOf("-Darrow.enable_unsafe_memory_access=true"))
         val args = mutableListOf("-m", "xtdb.bench", benchName)
 
         val extraProps = properties + mapOf(

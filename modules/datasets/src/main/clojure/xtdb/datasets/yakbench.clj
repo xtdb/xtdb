@@ -133,7 +133,7 @@
   (into #{} (for [d weekdays :when (chance? random 0.5)] d)))
 
 (defn draw-poisson
-  "Knuth's algorithm for small λ; Normal approximation for large λ.
+  "Knuth's algorithm for small lambda, Normal approximation for large lambda.
    Returns a non-negative long."
   ^long [^java.util.Random random ^double lambda]
   (cond
@@ -151,7 +151,7 @@
       (max 0 k))))
 
 (defn lognormal-lambda
-  "Draw λ from LogNormal so E[λ]≈mean. sigma controls tail (1.0–2.0 typical)."
+  "Draw λ from LogNormal so E[λ]≈mean, sigma controls tail."
   ^double [^java.util.Random random ^double mean ^double sigma]
   (let [mu (- (Math/log (max mean 1e-9)) (/ (* sigma sigma) 2.0))]
     (Math/exp (+ mu (* sigma (.nextGaussian random))))))
@@ -248,8 +248,7 @@
                                      (let [raw-id (next-uuid random)
                                            email-sub (when (and (pos? sub-count) (chance? random 0.2))
                                                        (uniform-nth random sub-ids))
-                                           prefix (or feed-id email-sub #uuid "00000000-0000-0000-0000-000000000000")
-                                           id (uuid-with-prefix prefix raw-id)
+                                           id (uuid-with-prefix feed-id raw-id)
                                            categories (vec (repeatedly (next-int random 5) #(uniform-nth random cat-pool)))]
                                        (cond-> {:xt/id id
                                                 :item.feed/feed feed-id
@@ -265,8 +264,8 @@
                                                 :item/categories categories
                                                 :item/ingested-at (next-instant random)
                                                 :item/url (next-string random (+ 10 (next-int random 50)))}
-                                         (chance? random 0.01) (assoc :item/doc-type :item/direct
-                                                                      :item.direct/candidate-status (weighted-nth random [0.9 0.08 0.02] [:approved :failed :ingest-failed]))
+                                         (chance? random 0.001) (assoc :item/doc-type :item/direct
+                                                                       :item.direct/candidate-status (weighted-nth random [0.956 0.035 0.008] [:approved :failed :ingest-failed]))
                                          email-sub (assoc :item.email/sub email-sub))))
                                    (range k))))]
       (->> feeds
