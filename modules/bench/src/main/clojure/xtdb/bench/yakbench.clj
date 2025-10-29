@@ -23,52 +23,8 @@
 (def recent-ad-inst (.toInstant #inst "2025-01-01T00:00:00Z"))
 
 (defn benchmarks-queries
-  [{{:keys [user-id user-email]} :picked-user
-    :keys [active-user-ids biggest-feed]}]
-  (cond-> [{:id :get-user-by-email
-            :f #(xt/q % ["select * from users where user$email = ?" user-email])}
-           {:id :get-user-by-id
-            :f #(xt/q % ["select * from users where _id = ?" user-id])}
-           {:id :get-user-id-by-email
-            :f #(xt/q % ["select _id from users where user$email = ?" user-email])}
-           {:id :get-user-email-by-id
-            :f #(xt/q % ["select user$email from users where _id = ?" user-id])}
-           {:id :get-feeds
-            :f #(xt/q % [(str "select count(sub$feed$feed) from subs "
-                              "where sub$user = ? and sub$feed$feed is not null")
-                         user-id])}
-           {:id :get-items
-            :f #(xt/q % [(str "select count(i._id) "
-                              "from subs s "
-                              "join items i on i.item$feed$feed = s.sub$feed$feed "
-                              "where s.sub$user = ? "
-                              "and s.sub$feed$feed is not null")
-                         user-id])}
-           {:id :read-urls
-            :f #(xt/q % [(str "select distinct i.item$author_url "
-                              "from user_items ui "
-                              "join items i on i._id = ui.user_item$item "
-                              "where ui.user_item$user = ? "
-                              "and coalesce(ui.user_item$viewed_at, ui.user_item$favorited_at, ui.user_item$skipped_at) is not null "
-                              "and i.item$author_url is not null")
-                         user-id])}
-           {:id :email-items
-            :f #(xt/q % [(str "select s._id as sub_id, i._id as item_id "
-                              "from subs s "
-                              "join items i on i.item$email$sub = s._id "
-                              "where s.sub$user = ?")
-                         user-id])}
-           {:id :rss-items
-            :f #(xt/q % [(str "select s._id as sub_id, i._id as item_id "
-                              "from subs s "
-                              "join items i on i.item$feed$feed = s.sub$feed$feed "
-                              "where s.sub$user = ? and s.sub$feed$feed is not null")
-                         user-id])}
-           {:id :user-items
-            :f #(xt/q % [(str "select user_item$item, user_item$viewed_at, user_item$favorited_at, user_item$skipped_at "
-                              "from user_items where user_item$user = ?")
-                         user-id])}
-           {:id :active-users-by-joined-at
+  [{:keys [active-user-ids biggest-feed]}]
+  (cond-> [{:id :active-users-by-joined-at
             :f #(xt/q % ["select _id from users where user$joined_at > ?"
                          active-inst])}
            {:id :active-users-by-viewed-at
@@ -88,47 +44,6 @@
 
            {:id :direct-urls
             :f #(xt/q % ["select item$url from items where item$doc_type = 'item/direct'"])}
-
-           {:id :recent-email-items
-            :f #(xt/q % [(str "select items._id, item$ingested_at "
-                              "from subs "
-                              "join items on subs._id = item$email$sub "
-                              "where sub$user = ? "
-                              "and item$ingested_at > ?")
-                         user-id
-                         recent-inst])}
-
-           {:id :recent-rss-items
-            :f #(xt/q % [(str "select items._id, item$ingested_at "
-                              "from subs "
-                              "join items on item$feed$feed = sub$feed$feed "
-                              "where sub$user = ? "
-                              "and sub$feed$feed is not null "
-                              "and item$ingested_at > ?")
-                         user-id
-                         recent-inst])}
-
-           {:id :recent-bookmarks
-            :f #(xt/q % [(str "select user_item$item, user_item$bookmarked_at "
-                              "from user_items "
-                              "where user_item$user = ? "
-                              "and user_item$bookmarked_at > ?")
-                         user-id
-                         recent-bookmarks-inst])}
-
-           {:id :subscription-status
-            :f #(xt/q % [(str "select _id, sub$email$unsubscribed_at "
-                              "from subs "
-                              "where sub$user = ?")
-                         user-id])}
-
-           {:id :latest-emails-received-at
-            :f #(xt/q % [(str "select subs._id, max(item$ingested_at) "
-                              "from subs "
-                              "join items on item$email$sub = subs._id "
-                              "where sub$user = ? "
-                              "group by subs._id")
-                         user-id])}
 
            {:id :unique-ad-clicks
             :f #(xt/q % [(str "select ad$click$ad, count(distinct ad$click$user) "
@@ -151,13 +66,6 @@
                               "from items "
                               "where item$direct$candidate_status is not null "
                               "group by item$direct$candidate_status")])}
-
-           {:id :feed-sub-urls
-            :f #(xt/q % [(str "select feed$url "
-                              "from feeds "
-                              "join subs on sub$feed$feed = feeds._id "
-                              "where sub$user = ?")
-                         user-id])}
 
            {:id :favorites
             :f #(xt/q % [(str "select user_item$user, user_item$item "
@@ -208,6 +116,93 @@
                                     "and item$title in " (?s (count (:titles biggest-feed))))
                                (:id biggest-feed)]
                               (:titles biggest-feed))))})))
+
+(defn user-specific-benchmarks-queries
+  [{{:keys [user-id user-email]} :picked-user}]
+  [{:id :get-user-by-email
+    :f #(xt/q % ["select * from users where user$email = ?" user-email])}
+   {:id :get-user-by-id
+    :f #(xt/q % ["select * from users where _id = ?" user-id])}
+   {:id :get-user-id-by-email
+    :f #(xt/q % ["select _id from users where user$email = ?" user-email])}
+   {:id :get-user-email-by-id
+    :f #(xt/q % ["select user$email from users where _id = ?" user-id])}
+   {:id :get-feeds
+    :f #(xt/q % [(str "select count(sub$feed$feed) from subs "
+                      "where sub$user = ? and sub$feed$feed is not null")
+                 user-id])}
+   {:id :get-items
+    :f #(xt/q % [(str "select count(i._id) "
+                      "from subs s "
+                      "join items i on i.item$feed$feed = s.sub$feed$feed "
+                      "where s.sub$user = ? "
+                      "and s.sub$feed$feed is not null")
+                 user-id])}
+   {:id :read-urls
+    :f #(xt/q % [(str "select distinct i.item$author_url "
+                      "from user_items ui "
+                      "join items i on i._id = ui.user_item$item "
+                      "where ui.user_item$user = ? "
+                      "and coalesce(ui.user_item$viewed_at, ui.user_item$favorited_at, ui.user_item$skipped_at) is not null "
+                      "and i.item$author_url is not null")
+                 user-id])}
+   {:id :email-items
+    :f #(xt/q % [(str "select s._id as sub_id, i._id as item_id "
+                      "from subs s "
+                      "join items i on i.item$email$sub = s._id "
+                      "where s.sub$user = ?")
+                 user-id])}
+   {:id :rss-items
+    :f #(xt/q % [(str "select s._id as sub_id, i._id as item_id "
+                      "from subs s "
+                      "join items i on i.item$feed$feed = s.sub$feed$feed "
+                      "where s.sub$user = ? and s.sub$feed$feed is not null")
+                 user-id])}
+   {:id :user-items
+    :f #(xt/q % [(str "select user_item$item, user_item$viewed_at, user_item$favorited_at, user_item$skipped_at "
+                      "from user_items where user_item$user = ?")
+                 user-id])}
+
+   {:id :recent-email-items
+    :f #(xt/q % [(str "select items._id, item$ingested_at "
+                      "from subs "
+                      "join items on subs._id = item$email$sub "
+                      "where sub$user = ? "
+                      "and item$ingested_at > ?")
+                 user-id
+                 recent-inst])}
+
+   {:id :recent-rss-items
+    :f #(xt/q % [(str "select items._id, item$ingested_at "
+                      "from subs "
+                      "join items on item$feed$feed = sub$feed$feed "
+                      "where sub$user = ? "
+                      "and sub$feed$feed is not null "
+                      "and item$ingested_at > ?")
+                 user-id
+                 recent-inst])}
+
+   {:id :recent-bookmarks
+    :f #(xt/q % [(str "select user_item$item, user_item$bookmarked_at "
+                      "from user_items "
+                      "where user_item$user = ? "
+                      "and user_item$bookmarked_at > ?")
+                 user-id
+                 recent-bookmarks-inst])}
+
+   {:id :subscription-status
+    :f #(xt/q % [(str "select _id, sub$email$unsubscribed_at "
+                      "from subs "
+                      "where sub$user = ?")
+                 user-id])}
+
+   {:id :latest-emails-received-at
+    :f #(xt/q % [(str "select subs._id, max(item$ingested_at) "
+                      "from subs "
+                      "join items on item$email$sub = subs._id "
+                      "where sub$user = ? "
+                      "group by subs._id")
+                 user-id])}])
 
 (defn get-worst-case-user
   [conn]
@@ -288,10 +283,9 @@
     (sort-by :sum > rows)))
 
 (defn profile
-  [node !state]
+  [node !state suite]
   (with-open [conn (get-conn node)]
     (let [iterations 10
-          suite (benchmarks-queries @!state)
           _throwaway (doseq [{:keys [f]} suite]
                        (f conn))
           [_ pstats] (tufte/profiled
@@ -481,15 +475,20 @@
                           (with-open [conn (get-conn node)]
                             (let [biggest-feed (get-biggest-feed conn random)]
                               (swap! !state assoc :biggest-feed biggest-feed))))}]}
+
            {:t :call
-            :stage :profile
+            :stage :profile-global-queries
             :f (fn [{:keys [node !state]}]
-                 (profile node !state))}
+                 (profile node !state (benchmarks-queries @!state)))}
            {:t :call
-            :stage :profile-mean
+            :stage :profile-max-user
+            :f (fn [{:keys [node !state]}]
+                 (profile node !state (user-specific-benchmarks-queries @!state)))}
+           {:t :call
+            :stage :profile-mean-user
             :f (fn [{:keys [node]}]
                  (let [state (atom {:picked-user (get-mean-user (get-conn node))})]
-                   (profile node state)))}
+                   (profile node state (user-specific-benchmarks-queries state))))}
            #_
            {:t :call
             :stage :inspect
