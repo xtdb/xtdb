@@ -76,7 +76,6 @@ class MockDriver(seed: Int = 0) : Factory {
 
         val channel = Channel<AsyncMessage>(UNLIMITED)
 
-        var started = false
         var awaitSignalMessage: AwaitSignalMessage? = null
 
         var wokenUp: Boolean = false
@@ -91,7 +90,6 @@ class MockDriver(seed: Int = 0) : Factory {
             while (true) {
                 channel.tryReceive()
                     .onSuccess { msg ->
-                        started = true
                         LOGGER.trace("Msg received: $msg")
                         when (msg) {
                             is AppendMessage -> logMessages.add(msg)
@@ -159,9 +157,8 @@ class MockDriver(seed: Int = 0) : Factory {
                             continue
                         }
 
-                        if (started) break else delay(10.milliseconds)
+                        delay(10.milliseconds)
                     }
-                    close(null)
                 } catch (e: Throwable) {
                     close(e)
                     throw e
@@ -261,7 +258,6 @@ class SimulationTest {
 
     @RepeatedTest(testIterations)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    @Disabled("Temporarily disabled due to timeouts")
     fun deterministicCompactorRun() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, "l00-rc-b01")
