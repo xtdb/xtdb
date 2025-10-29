@@ -28,6 +28,7 @@ import xtdb.symbol
 import xtdb.table.TableRef
 import xtdb.trie.TrieCatalog
 import xtdb.util.info
+import xtdb.util.StringUtil.asLexHex
 import xtdb.util.logger
 import xtdb.util.requiringResolve
 import xtdb.util.warn
@@ -171,6 +172,14 @@ class SeedExtension : BeforeEachCallback {
     }
 }
 
+private val L0TrieKeys = sequence {
+    var blockIndex = 0
+    while (true) {
+        yield("l00-rc-b" + blockIndex.asLexHex)
+        blockIndex++
+    }
+}
+
 @ExtendWith(SeedExceptionWrapper::class)
 class SimulationTest {
     var currentSeed: Int = 0
@@ -197,7 +206,7 @@ class SimulationTest {
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun singleL0Compaction() {
         val docsTable = TableRef("xtdb", "public", "docs")
-        val l0Trie = buildTrieDetails(docsTable.tableName, "l00-rc-b01")
+        val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
 
         trieCatalog.addTries(docsTable, listOf(l0Trie), Instant.now())
 
@@ -206,8 +215,8 @@ class SimulationTest {
         }
 
         Assertions.assertEquals(
-            listOf("l00-rc-b01", "l01-rc-b01"),
-            trieCatalog.listAllTrieKeys(docsTable)
+            listOf("l00-rc-b00", "l01-rc-b00"),
+            trieCatalog.listAllTrieKeys(docsTable),
         )
     }
 
