@@ -421,6 +421,9 @@ dependencies {
     testFixturesImplementation(project(":xtdb-core"))
     testFixturesImplementation(libs.junit.jupiter.api)
     testFixturesImplementation(libs.arrow.vector)
+    testFixturesImplementation(libs.clojure.test.check)
+    testFixturesImplementation(libs.testcontainers)
+    testFixturesImplementation(libs.honeysql)
 
     api(libs.slf4j.api)
     api(libs.logback.classic)
