@@ -53,6 +53,7 @@ interface Xtdb : DataSource, AutoCloseable {
         var authn: Authenticator.Factory = UserTable(),
         var garbageCollector: GarbageCollectorConfig = GarbageCollectorConfig(),
         var tracer: TracerConfig = TracerConfig(),
+        var txSink: TxSinkConfig? = null,
         var nodeId: String = System.getenv("XTDB_NODE_ID") ?: randomUUID().toString().takeWhile { it != '-' }
     ) {
         private val modules: MutableList<XtdbModule.Factory> = mutableListOf()
@@ -89,6 +90,8 @@ interface Xtdb : DataSource, AutoCloseable {
         @JvmSynthetic
         fun garbageCollector(configure: GarbageCollectorConfig.() -> Unit) =
             garbageCollector(GarbageCollectorConfig().also(configure))
+
+        fun txSink(txSink: TxSinkConfig) = apply { this.txSink = txSink }
 
         fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
 
