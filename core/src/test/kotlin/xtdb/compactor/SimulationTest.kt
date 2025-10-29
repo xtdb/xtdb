@@ -27,7 +27,6 @@ import xtdb.storage.BufferPool
 import xtdb.symbol
 import xtdb.table.TableRef
 import xtdb.trie.TrieCatalog
-import xtdb.util.info
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.logger
 import xtdb.util.requiringResolve
@@ -120,7 +119,7 @@ class SeedExceptionWrapper : TestExecutionExceptionHandler {
 
 // Settings used by all tests in this class
 private const val logLevel = "DEBUG"
-private const val testIterations = 1
+private const val testIterations = 10
 
 // Clojure interop to get at internal functions
 private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
