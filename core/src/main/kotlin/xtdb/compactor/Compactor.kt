@@ -52,22 +52,18 @@ interface Compactor : AutoCloseable {
     fun openForDatabase(db: IDatabase): ForDatabase
 
     interface Driver : AutoCloseable {
-        suspend fun launchIn(jobsScope: CoroutineScope, f: suspend () -> Unit)
         fun executeJob(job: Job): TriesAdded
         suspend fun appendMessage(triesAdded: TriesAdded): Log.MessageMetadata
-        suspend fun awaitSignal(): JobKey?
-        suspend fun jobDone(jobKey: JobKey)
-        fun wakeup()
 
         interface Factory {
-            fun create(scope: CoroutineScope, db: IDatabase): Driver
+            fun create(db: IDatabase): Driver
         }
 
         companion object {
             @JvmStatic
             fun real(meterRegistry: MeterRegistry?, pageSize: Int, recencyPartition: RecencyPartition?) =
                 object : Factory {
-                    override fun create(scope: CoroutineScope, db: IDatabase) = object : Driver {
+                    override fun create(db: IDatabase) = object : Driver {
                         private val al = db.allocator.openChildAllocator("compactor")
                             .also { meterRegistry?.register(it) }
 
@@ -77,12 +73,6 @@ interface Compactor : AutoCloseable {
 
                         private val trieWriter = PageTrieWriter(al, bp, calculateBlooms = true)
                         private val segMerge = SegmentMerge(al)
-
-                        private val doneCh = Channel<JobKey>()
-                        private val wakeupCh = Channel<Unit>(1, onBufferOverflow = DROP_OLDEST)
-
-                        override suspend fun launchIn(jobsScope: CoroutineScope, f: suspend () -> Unit) =
-                            jobsScope.launch { f() }.let { }
 
                         private fun Job.trieDetails(
                             trieKey: TrieKey,
@@ -98,8 +88,6 @@ interface Compactor : AutoCloseable {
 
                         override fun executeJob(job: Job): TriesAdded =
                             try {
-                                LOGGER.debug("compacting '${job.table.sym}' '${job.trieKeys}' -> ${job.outputTrieKey}")
-
                                 job.trieKeys.safeMap { open(al, bp, mm, job.table, it) }.useAll { segs ->
 
                                     val recencyPartitioning =
@@ -122,8 +110,6 @@ interface Compactor : AutoCloseable {
                                                                     pageSize
                                                                 )
 
-                                                            LOGGER.debug("compacted '${job.table.sym}' -> '${job.outputTrieKey}'")
-
                                                             job.trieDetails(trieKey, dataFileSize, trieMetadata)
                                                         }
                                                     }
@@ -143,24 +129,6 @@ interface Compactor : AutoCloseable {
                         override suspend fun appendMessage(triesAdded: TriesAdded): Log.MessageMetadata =
                             log.appendMessage(triesAdded).await()
 
-                        override suspend fun awaitSignal(): JobKey? =
-                            select {
-                                doneCh.onReceive { it }
-
-                                wakeupCh.onReceive {
-                                    LOGGER.trace("wakey wakey")
-                                    null
-                                }
-                            }
-
-                        override suspend fun jobDone(jobKey: JobKey) {
-                            doneCh.send(jobKey)
-                        }
-
-                        override fun wakeup() {
-                            wakeupCh.trySend(Unit)
-                        }
-
                         override fun close() {
                             segMerge.close()
                             al.close()
@@ -171,28 +139,25 @@ interface Compactor : AutoCloseable {
         }
     }
 
-    class Impl(
+    class Impl @JvmOverloads constructor(
         private val driverFactory: Driver.Factory,
         private val meterRegistry: MeterRegistry?,
         private val jobCalculator: JobCalculator,
         private val ignoreSignalBlock: Boolean,
         threadCount: Int,
+        dispatcher: CoroutineDispatcher = Dispatchers.Default
     ) : Compactor {
 
-        internal val scope = CoroutineScope(Dispatchers.Default)
-
-        internal val jobsScope =
-            CoroutineScope(
-                Dispatchers.Default.limitedParallelism(threadCount, "compactor")
-                        + SupervisorJob(scope.coroutineContext.job)
-            )
+        private val jobsDispatcher = dispatcher.limitedParallelism(threadCount, "compactor")
 
         override fun openForDatabase(db: IDatabase) = object : ForDatabase {
 
+            private val dbJob = Job()
+            private val scope = CoroutineScope(dbJob)
+
             private val trieCatalog = db.trieCatalog
 
-            val driver = driverFactory.create(scope, db)
-            private val idle = Channel<Unit>()
+            val driver = driverFactory.create(db)
 
             @Volatile
             private var availableJobs = emptyMap<JobKey, Job>()
@@ -205,13 +170,21 @@ interface Compactor : AutoCloseable {
                     .register(it)
             }
 
+            private val doneCh = Channel<JobKey>()
+            private val wakeupCh = Channel<Unit>(1, onBufferOverflow = DROP_OLDEST)
+            private var compactAllPromise: CompletableDeferred<Unit>? = null
+
             init {
                 meterRegistry?.let {
                     Gauge.builder("compactor.jobs.available") { jobCalculator.availableJobs(trieCatalog).size.toDouble() }
                         .register(it)
                 }
+            }
 
-                scope.launch {
+            init {
+                val jobsScope = CoroutineScope(SupervisorJob(dbJob) + jobsDispatcher)
+
+                scope.launch(CoroutineName("outer loop")) {
                     while (true) {
                         availableJobs =
                             jobCalculator.availableJobs(trieCatalog)
@@ -219,15 +192,17 @@ interface Compactor : AutoCloseable {
 
                         if (availableJobs.isEmpty() && queuedJobs.isEmpty()) {
                             LOGGER.trace("sending idle")
-                            idle.trySend(Unit)
+                            compactAllPromise?.complete(Unit)
                         }
 
                         availableJobs.keys.forEach { jobKey ->
                             if (queuedJobs.add(jobKey)) {
-                                driver.launchIn(jobsScope) {
+                                jobsScope.launch(CoroutineName("job: ${jobKey.first} / ${jobKey.second}")) {
                                     // check it's still required
                                     val job = availableJobs[jobKey]
                                     if (job != null) {
+                                        LOGGER.debug("compacting '${job.table.sym}' ${job.trieKeys} -> ${job.outputTrieKey}")
+
                                         val timer = meterRegistry?.let { Timer.start(it) }
                                         val triesAdded = driver.executeJob(job)
                                         jobTimer?.let { timer?.stop(it) }
@@ -240,39 +215,55 @@ interface Compactor : AutoCloseable {
                                             triesAdded.tries,
                                             messageMetadata.logTimestamp
                                         )
+
+                                        LOGGER.debug {
+                                            buildString {
+                                                append("compacted '${job.table.sym}'")
+                                                append(" -> ")
+                                                append(
+                                                    triesAdded.tries
+                                                        .joinToString(prefix = "(", postfix = ")") { it.trieKey })
+                                            }
+                                        }
                                     }
 
-                                    driver.jobDone(jobKey)
+                                    doneCh.send(jobKey)
                                 }
                             }
                         }
 
-                        driver.awaitSignal()?.let { jobKey ->
-                            queuedJobs.remove(jobKey)
+                        select {
+                            doneCh.onReceive { queuedJobs.remove(it) }
+
+                            wakeupCh.onReceive {
+                                LOGGER.trace("wakey wakey")
+                            }
                         }
                     }
                 }
             }
 
             override fun signalBlock() {
-                if (!ignoreSignalBlock) driver.wakeup()
+                if (!ignoreSignalBlock) wakeupCh.trySend(Unit)
             }
 
             override fun compactAll(timeout: Duration?) {
-                val job = scope.launch {
-                    LOGGER.trace("compactAll: waiting for idle")
-                    if (timeout == null) idle.receive() else withTimeout(timeout) { idle.receive() }
-                    LOGGER.trace("compactAll: idle")
+                runBlocking {
+                    scope.launch {
+                        val compactAllPromise = CompletableDeferred<Unit>().also { compactAllPromise = it }
+                        wakeupCh.send(Unit)
+
+                        LOGGER.trace("compactAll: waiting for idle")
+                        if (timeout == null) compactAllPromise.await() else withTimeout(timeout) { compactAllPromise.await() }
+                        LOGGER.trace("compactAll: idle")
+                    }.join()
                 }
-
-                driver.wakeup()
-
-                runBlocking { job.join() }
             }
 
             override fun close() {
+
                 runBlocking {
-                    withTimeoutOrNull(10.seconds) { scope.coroutineContext.job.cancelAndJoin() }
+                    withTimeoutOrNull(10.seconds) { dbJob.cancelAndJoin() }
                         ?: LOGGER.warn("failed to close compactor cleanly in 10s")
                 }
 

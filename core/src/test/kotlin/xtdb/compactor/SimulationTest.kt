@@ -1,19 +1,17 @@
 package xtdb.compactor
 
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.*
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.api.extension.TestExecutionExceptionHandler
-import org.junit.jupiter.api.extension.TestWatcher
-import java.util.concurrent.TimeUnit
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.api.storage.Storage
@@ -32,19 +30,13 @@ import xtdb.storage.BufferPool
 import xtdb.symbol
 import xtdb.table.TableRef
 import xtdb.trie.TrieCatalog
-import xtdb.util.info
 import xtdb.util.logger
 import xtdb.util.requiringResolve
-import xtdb.util.trace
 import xtdb.util.warn
 import java.time.Instant
-import java.util.concurrent.LinkedBlockingQueue
-import kotlin.coroutines.Continuation
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
-import kotlin.time.Duration.Companion.milliseconds
 
 class MockDb(override val name: DatabaseName, override val trieCatalog: TrieCatalog) : IDatabase {
     override val allocator: BufferAllocator get() = unsupported("allocator")
@@ -60,115 +52,16 @@ class MockDb(override val name: DatabaseName, override val trieCatalog: TrieCata
 
 private val LOGGER = MockDriver::class.logger
 
-class MockDriver(seed: Int = 0) : Factory {
+class MockDriver() : Factory {
 
     sealed interface AsyncMessage
 
     class AppendMessage(val msg: TriesAdded, val msgTimestamp: Instant) : AsyncMessage
-    class AwaitSignalMessage(val cont: Continuation<JobKey?>) : AsyncMessage
-    class Launch(val f: suspend () -> Unit) : AsyncMessage
 
-    val outerRand = Random(seed)
+    override fun create(db: IDatabase) = ForDatabase()
 
-    override fun create(scope: CoroutineScope, db: IDatabase) = ForDatabase(scope, db)
-
-    inner class ForDatabase(scope: CoroutineScope, private val db: IDatabase) : Driver {
-        val rand = Random(outerRand.nextInt())
-
+    class ForDatabase() : Driver {
         val channel = Channel<AsyncMessage>(UNLIMITED)
-
-        var awaitSignalMessage: AwaitSignalMessage? = null
-
-        var wokenUp: Boolean = false
-
-        val launchedJobs = mutableSetOf<suspend () -> Unit>()
-        val doneJobs = LinkedBlockingQueue<JobKey>()
-
-        val logMessages = LinkedBlockingQueue<AppendMessage>()
-        val trieCat = db.trieCatalog
-
-        private fun consumeAll() {
-            while (true) {
-                channel.tryReceive()
-                    .onSuccess { msg ->
-                        LOGGER.trace("Msg received: $msg")
-                        when (msg) {
-                            is AppendMessage -> logMessages.add(msg)
-
-                            is AwaitSignalMessage -> {
-
-                                check(awaitSignalMessage == null)
-                                awaitSignalMessage = msg
-                            }
-
-                            is Launch -> launchedJobs.add(msg.f)
-                        }
-
-                    }
-                    .onFailure { return } // channel is empty
-                    .onClosed { throw (it ?: CancellationException()) }
-            }
-        }
-
-        private fun handleAwaitSignal(message: AwaitSignalMessage) : Boolean {
-            when {
-                doneJobs.isNotEmpty<JobKey>() && rand.nextDouble() < 0.8 -> {
-                    val doneJob = doneJobs.poll()!!
-
-                    message.cont.resume(doneJob)
-                    awaitSignalMessage = null
-                    return true
-                }
-
-                wokenUp && rand.nextDouble() < 0.8 -> {
-                    message.cont.resume(null)
-                    awaitSignalMessage = null
-                    wokenUp = false
-                    return true
-                }
-            }
-            return false
-        }
-
-        init {
-            scope.launch {
-                try {
-                    while (true) {
-                        yield()
-                        consumeAll()
-
-                        val logs = mutableListOf<AppendMessage>()
-                        logMessages.drainTo(logs)
-
-                        logs.forEach { logMsg ->
-                            logMsg.msg.tries
-                                .groupBy { it.tableName }
-                                .forEach { (tableName, tries) ->
-                                    LOGGER.trace("Adding tries to TrieCatalog for table $tableName: $tries")
-                                    trieCat.addTries(TableRef.parse(db.name, tableName), tries, logMsg.msgTimestamp)
-                                }
-                        }
-
-                        awaitSignalMessage?.let { if(handleAwaitSignal(it)) continue }
-
-                        launchedJobs.randomOrNull(rand)?.let { launchedJob ->
-                            LOGGER.trace("Launching job...")
-                            launchedJobs.remove(launchedJob)
-                            launchedJob()
-                            continue
-                        }
-
-                        delay(10.milliseconds)
-                    }
-                } catch (e: Throwable) {
-                    close(e)
-                    throw e
-                }
-            }
-        }
-
-        override suspend fun launchIn(jobsScope: CoroutineScope, f: suspend () -> Unit) =
-            channel.send(Launch(f))
 
         override fun executeJob(job: Job) =
             TriesAdded(
@@ -190,24 +83,10 @@ class MockDriver(seed: Int = 0) : Factory {
             return Log.MessageMetadata(logOffset++, logTimestamp)
         }
 
-        override suspend fun awaitSignal(): JobKey? = suspendCoroutine { cont ->
-            channel.trySendBlocking(AwaitSignalMessage(cont)).exceptionOrNull()?.let{ cont.resumeWithException(CancellationException()) }
-        }
-
-        override suspend fun jobDone(jobKey: JobKey) {
-            doneJobs.add(jobKey)
-        }
-
-        override fun wakeup() {
-            wokenUp = true
-        }
-
         override fun close() = close(null)
 
         fun close(e: Throwable?) {
             channel.close(e)
-            consumeAll()
-            awaitSignalMessage?.let { msg -> msg.cont.resumeWithException(e ?: CancellationException()); awaitSignalMessage = null }
         }
     }
 }
@@ -225,20 +104,46 @@ class SeedExceptionWrapper : TestExecutionExceptionHandler {
         if (testInstance is SimulationTest) {
             val seed = testInstance.currentSeed
             // Wrap and rethrow with added context
-            LOGGER.warn(throwable, "Test failed with seed: ${testInstance.currentSeed}",)
+            LOGGER.warn(throwable, "Test failed with seed: ${testInstance.currentSeed}")
             throw AssertionError("Test threw an exception (seed=$seed)", throwable)
         }
     }
 }
 
 // Settings used by all tests in this class
-private const val logLevel = "TRACE"
+private const val logLevel = "DEBUG"
 private const val testIterations = 10
 
 // Clojure interop to get at internal functions
 private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
 private val createJobCalculator = requiringResolve("xtdb.compactor/->JobCalculator")
 private val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
+
+class DeterministicDispatcher(seed: Int) : CoroutineDispatcher() {
+
+    private data class DispatchJob(val context: CoroutineContext, val block: Runnable)
+
+    private val rand = Random(seed)
+
+    private val jobs = mutableSetOf<DispatchJob>()
+
+    @Volatile
+    private var running = false
+
+    override fun dispatch(context: CoroutineContext, block: Runnable) {
+        jobs.add(DispatchJob(context, block))
+
+        if (!running) {
+            running = true
+            while (true) {
+                val job = jobs.randomOrNull(rand) ?: break
+                jobs.remove(job)
+                job.block.run()
+            }
+            running = false
+        }
+    }
+}
 
 @ExtendWith(SeedExceptionWrapper::class)
 class SimulationTest {
@@ -253,9 +158,9 @@ class SimulationTest {
     fun setUp() {
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
         currentSeed = Random.nextInt()
-        mockDriver = MockDriver(currentSeed)
+        mockDriver = MockDriver()
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
-        compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2)
+        compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2, DeterministicDispatcher(currentSeed))
         trieCatalog = createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
         db = MockDb("xtdb", trieCatalog)
     }
