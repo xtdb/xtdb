@@ -11,6 +11,7 @@ import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
+import org.junit.jupiter.api.extension.TestExecutionExceptionHandler
 import org.junit.jupiter.api.extension.TestWatcher
 import java.util.concurrent.TimeUnit
 import xtdb.api.log.Log
@@ -218,11 +219,14 @@ private fun buildTrieDetails(tableName: String, trieKey: String): TrieDetails =
         .setDataFileSize(1024L)
         .build()
 
-class SeedLogger : TestWatcher {
-    override fun testFailed(context: ExtensionContext, cause: Throwable) {
+class SeedExceptionWrapper : TestExecutionExceptionHandler {
+    override fun handleTestExecutionException(context: ExtensionContext, throwable: Throwable) {
         val testInstance = context.testInstance.orElse(null)
         if (testInstance is SimulationTest) {
-            LOGGER.warn(cause, "Test failed with seed: ${testInstance.currentSeed}",)
+            val seed = testInstance.currentSeed
+            // Wrap and rethrow with added context
+            LOGGER.warn(throwable, "Test failed with seed: ${testInstance.currentSeed}",)
+            throw AssertionError("Test threw an exception (seed=$seed)", throwable)
         }
     }
 }
@@ -236,7 +240,7 @@ private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
 private val createJobCalculator = requiringResolve("xtdb.compactor/->JobCalculator")
 private val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
 
-@ExtendWith(SeedLogger::class)
+@ExtendWith(SeedExceptionWrapper::class)
 class SimulationTest {
     var currentSeed: Int = 0
     private lateinit var mockDriver: MockDriver
