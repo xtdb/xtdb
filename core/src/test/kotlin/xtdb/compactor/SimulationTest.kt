@@ -30,6 +30,7 @@ import xtdb.storage.BufferPool
 import xtdb.symbol
 import xtdb.table.TableRef
 import xtdb.trie.TrieCatalog
+import xtdb.util.info
 import xtdb.util.logger
 import xtdb.util.requiringResolve
 import xtdb.util.warn
@@ -91,11 +92,11 @@ class MockDriver() : Factory {
     }
 }
 
-private fun buildTrieDetails(tableName: String, trieKey: String): TrieDetails =
+private fun buildTrieDetails(tableName: String, trieKey: String, dataFileSize: Long = 1024L): TrieDetails =
     TrieDetails.newBuilder()
         .setTableName(tableName)
         .setTrieKey(trieKey)
-        .setDataFileSize(1024L)
+        .setDataFileSize(dataFileSize)
         .build()
 
 class SeedExceptionWrapper : TestExecutionExceptionHandler {
@@ -167,7 +168,7 @@ class SimulationTest {
 
     @RepeatedTest(testIterations)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun deterministicCompactorRun() {
+    fun singleL0Compaction() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, "l00-rc-b01")
 
@@ -179,8 +180,58 @@ class SimulationTest {
 
         Assertions.assertEquals(
             listOf("l00-rc-b01", "l01-rc-b01"),
-            trieCatalog.listAllTrieKeys(docsTable),
-            "Assertion failed for seed: $currentSeed"
+            trieCatalog.listAllTrieKeys(docsTable)
         )
+    }
+
+    @RepeatedTest(testIterations)
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    fun multipleL0ToL1Compaction() {
+        val table = TableRef("xtdb", "public", "docs")
+
+        compactor.openForDatabase(db).use {
+            // Round 1: Add 3 L0 tries and compact
+            trieCatalog.addTries(
+                table,
+                listOf(
+                    buildTrieDetails(table.tableName, "l00-rc-b00", 10 * 1024),
+                    buildTrieDetails(table.tableName, "l00-rc-b01", 10 * 1024),
+                    buildTrieDetails(table.tableName, "l00-rc-b02", 10 * 1024)
+                ),
+                Instant.now()
+            )
+
+            it.compactAll()
+
+            Assertions.assertEquals(
+                listOf(
+                    "l00-rc-b00", "l00-rc-b01", "l00-rc-b02",
+                    "l01-rc-b00", "l01-rc-b01", "l01-rc-b02"
+                ),
+                trieCatalog.listAllTrieKeys(table)
+            )
+
+            // Round 2: Add 3 more L0 tries and compact
+            trieCatalog.addTries(
+                table,
+                listOf(
+                    buildTrieDetails(table.tableName, "l00-rc-b03", 10 * 1024),
+                    buildTrieDetails(table.tableName, "l00-rc-b04", 10 * 1024),
+                    buildTrieDetails(table.tableName, "l00-rc-b05", 10 * 1024)
+                ),
+                Instant.now()
+            )
+
+            it.compactAll()
+
+            Assertions.assertEquals(
+                listOf(
+                    "l00-rc-b00", "l00-rc-b01", "l00-rc-b02", "l00-rc-b03", "l00-rc-b04", "l00-rc-b05",
+                    "l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03", "l01-rc-b04", "l01-rc-b05",
+                    "l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03"
+                ),
+                trieCatalog.listAllTrieKeys(table)
+            )
+        }
     }
 }
