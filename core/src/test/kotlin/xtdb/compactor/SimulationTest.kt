@@ -192,7 +192,7 @@ class SimulationTest {
     @BeforeEach
     fun setUp() {
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
-        currentSeed = -194139152 // Random.nextInt()
+        currentSeed = Random.nextInt()
         dispatcher =  DeterministicDispatcher(currentSeed)
         mockDriver = MockDriver(dispatcher)
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
