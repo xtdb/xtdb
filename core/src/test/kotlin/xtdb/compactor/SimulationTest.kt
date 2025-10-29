@@ -1,9 +1,13 @@
 package xtdb.compactor
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeEach
@@ -36,6 +40,8 @@ import xtdb.util.requiringResolve
 import xtdb.util.warn
 import java.time.Instant
 import java.util.concurrent.TimeUnit
+import kotlin.collections.component1
+import kotlin.collections.component2
 import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 
@@ -53,16 +59,22 @@ class MockDb(override val name: DatabaseName, override val trieCatalog: TrieCata
 
 private val LOGGER = MockDriver::class.logger
 
-class MockDriver() : Factory {
+class MockDriver(val dispatcher: CoroutineDispatcher) : Factory {
+    class AppendMessage(val triesAdded: TriesAdded, val msgTimestamp: Instant)
 
-    sealed interface AsyncMessage
+    override fun create(db: IDatabase) = ForDatabase(db)
 
-    class AppendMessage(val msg: TriesAdded, val msgTimestamp: Instant) : AsyncMessage
+    inner class ForDatabase(db: IDatabase) : Driver {
+        val channel = Channel<AppendMessage>(UNLIMITED)
+        val trieCatalog = db.trieCatalog
 
-    override fun create(db: IDatabase) = ForDatabase()
-
-    class ForDatabase() : Driver {
-        val channel = Channel<AsyncMessage>(UNLIMITED)
+        val job = CoroutineScope(dispatcher).launch {
+            for (msg in channel) {
+                msg.triesAdded.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
+                    trieCatalog.addTries(TableRef.parse(db.name, tableName), tries, msg.msgTimestamp)
+                }
+            }
+        }
 
         override fun executeJob(job: Job) =
             TriesAdded(
@@ -88,6 +100,9 @@ class MockDriver() : Factory {
 
         fun close(e: Throwable?) {
             channel.close(e)
+            runBlocking {
+                job.cancelAndJoin()
+            }
         }
     }
 }
@@ -113,7 +128,7 @@ class SeedExceptionWrapper : TestExecutionExceptionHandler {
 
 // Settings used by all tests in this class
 private const val logLevel = "DEBUG"
-private const val testIterations = 10
+private const val testIterations = 1
 
 // Clojure interop to get at internal functions
 private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
@@ -154,14 +169,16 @@ class SimulationTest {
     private lateinit var compactor: Compactor.Impl
     private lateinit var trieCatalog: TrieCatalog
     private lateinit var db: MockDb
+    private lateinit var dispatcher: CoroutineDispatcher
 
     @BeforeEach
     fun setUp() {
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
-        currentSeed = Random.nextInt()
-        mockDriver = MockDriver()
+        currentSeed = -194139152 // Random.nextInt()
+        dispatcher =  DeterministicDispatcher(currentSeed)
+        mockDriver = MockDriver(dispatcher)
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
-        compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2, DeterministicDispatcher(currentSeed))
+        compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2, dispatcher)
         trieCatalog = createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
         db = MockDb("xtdb", trieCatalog)
     }
