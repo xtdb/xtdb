@@ -164,7 +164,7 @@ class SeedExtension : BeforeEachCallback {
         annotation?.let { withSeed ->
             context.requiredTestInstance.let { testInstance ->
                 if (testInstance is SimulationTest) {
-                    testInstance.currentSeed = withSeed.seed
+                    testInstance.explicitSeed = withSeed.seed
                 }
             }
         }
@@ -179,9 +179,10 @@ private val L0TrieKeys = sequence {
     }
 }
 
-@ExtendWith(SeedExceptionWrapper::class)
+@ExtendWith(SeedExceptionWrapper::class, SeedExtension::class)
 class SimulationTest {
     var currentSeed: Int = 0
+    var explicitSeed: Int? = null
     private lateinit var mockDriver: MockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
     private lateinit var compactor: Compactor.Impl
@@ -192,7 +193,8 @@ class SimulationTest {
     @BeforeEach
     fun setUp() {
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
-        currentSeed = Random.nextInt()
+        currentSeed = explicitSeed ?: Random.nextInt()
+        explicitSeed = null
         dispatcher =  DeterministicDispatcher(currentSeed)
         mockDriver = MockDriver(dispatcher)
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
