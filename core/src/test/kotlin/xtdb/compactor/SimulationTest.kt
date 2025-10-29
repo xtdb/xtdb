@@ -1,18 +1,11 @@
 package xtdb.compactor
 
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Runnable
-import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
-import org.junit.jupiter.api.Assertions
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.RepeatedTest
-import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.*
+import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.api.extension.TestExecutionExceptionHandler
@@ -40,8 +33,6 @@ import xtdb.util.requiringResolve
 import xtdb.util.warn
 import java.time.Instant
 import java.util.concurrent.TimeUnit
-import kotlin.collections.component1
-import kotlin.collections.component2
 import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 
@@ -161,6 +152,25 @@ class DeterministicDispatcher(seed: Int) : CoroutineDispatcher() {
     }
 }
 
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
+annotation class WithSeed(val seed: Int)
+
+class SeedExtension : BeforeEachCallback {
+    override fun beforeEach(context: ExtensionContext) {
+        val annotation = context.requiredTestMethod
+            .getAnnotation(WithSeed::class.java)
+
+        annotation?.let { withSeed ->
+            context.requiredTestInstance.let { testInstance ->
+                if (testInstance is SimulationTest) {
+                    testInstance.currentSeed = withSeed.seed
+                }
+            }
+        }
+    }
+}
+
 @ExtendWith(SeedExceptionWrapper::class)
 class SimulationTest {
     var currentSeed: Int = 0
@@ -199,6 +209,12 @@ class SimulationTest {
             listOf("l00-rc-b01", "l01-rc-b01"),
             trieCatalog.listAllTrieKeys(docsTable)
         )
+    }
+
+    @Test
+    @WithSeed(-1748393987)
+    fun singleL0CompactionNotHanging() {
+        singleL0Compaction()
     }
 
     @RepeatedTest(testIterations)
@@ -251,4 +267,5 @@ class SimulationTest {
             )
         }
     }
+
 }
