@@ -246,9 +246,9 @@ allprojects {
                 }
             }
 
-            // Ensure test Clojure compilation depends on testFixtures compilation
+            // Ensure test Clojure/Kotlin compilation depends on testFixtures compilation
             tasks.configureEach {
-                if (name == "compileTestClojure") {
+                if (name == "compileTestClojure" || name == "compileTestKotlin") {
                     dependsOn(rootProj.tasks.named("compileTestFixturesClojure"))
                 }
             }
