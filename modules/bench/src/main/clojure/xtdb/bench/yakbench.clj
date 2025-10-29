@@ -23,102 +23,98 @@
 (def recent-ad-inst (.toInstant #inst "2025-01-01T00:00:00Z"))
 
 (defn benchmarks-queries
-  [{:keys [active-user-ids biggest-feed]}]
-  (cond-> [{:id :active-users-by-joined-at
-            :f #(xt/q % ["select _id from users where user$joined_at > ?"
-                         active-inst])}
-           {:id :active-users-by-viewed-at
-            :f #(xt/q % ["select distinct user_item$user from user_items where user_item$viewed_at > ?"
-                         active-inst])}
-           {:id :active-users-by-ad-updated
-            :f #(xt/q % ["select ad$user from ads where ad$updated_at > ?"
-                         active-inst])}
-           {:id :active-users-by-ad-clicked
-            :f #(xt/q % ["select distinct ad.click$user from ad_clicks where ad.click$created_at > ?"
-                         active-inst])}
-           {:id :favorited-urls
-            :f #(xt/q % [(str "select item$url "
-                              "from items "
-                              "join user_items on user_item$item = items._id "
-                              "where user_item$favorited_at is not null")])}
+  [active-user-ids biggest-feed]
+  [{:id :active-users-by-joined-at
+    :f #(xt/q % ["select _id from users where user$joined_at > ?"
+                 active-inst])}
+   {:id :active-users-by-viewed-at
+    :f #(xt/q % ["select distinct user_item$user from user_items where user_item$viewed_at > ?"
+                 active-inst])}
+   {:id :active-users-by-ad-updated
+    :f #(xt/q % ["select ad$user from ads where ad$updated_at > ?"
+                 active-inst])}
+   {:id :active-users-by-ad-clicked
+    :f #(xt/q % ["select distinct ad.click$user from ad_clicks where ad.click$created_at > ?"
+                 active-inst])}
+   {:id :favorited-urls
+    :f #(xt/q % [(str "select item$url "
+                      "from items "
+                      "join user_items on user_item$item = items._id "
+                      "where user_item$favorited_at is not null")])}
 
-           {:id :direct-urls
-            :f #(xt/q % ["select item$url from items where item$doc_type = 'item/direct'"])}
+   {:id :direct-urls
+    :f #(xt/q % ["select item$url from items where item$doc_type = 'item/direct'"])}
 
-           {:id :unique-ad-clicks
-            :f #(xt/q % [(str "select ad$click$ad, count(distinct ad$click$user) "
-                              "from ad_clicks "
-                              "group by ad$click$ad")])}
+   {:id :unique-ad-clicks
+    :f #(xt/q % [(str "select ad$click$ad, count(distinct ad$click$user) "
+                      "from ad_clicks "
+                      "group by ad$click$ad")])}
 
-           {:id :latest-ad-clicks
-            :f #(xt/q % [(str "select ad$click$ad, max(ad$click$created_at) "
-                              "from ad_clicks "
-                              "group by ad$click$ad")])}
+   {:id :latest-ad-clicks
+    :f #(xt/q % [(str "select ad$click$ad, max(ad$click$created_at) "
+                      "from ad_clicks "
+                      "group by ad$click$ad")])}
 
-           {:id :charge-amounts-by-status
-            :f #(xt/q % [(str "select ad$credit$ad, ad$credit$charge_status, sum(ad$credit$amount) "
-                              "from ad_credits "
-                              "where ad$credit$charge_status is not null "
-                              "group by ad$credit$ad, ad$credit$charge_status")])}
+   {:id :charge-amounts-by-status
+    :f #(xt/q % [(str "select ad$credit$ad, ad$credit$charge_status, sum(ad$credit$amount) "
+                      "from ad_credits "
+                      "where ad$credit$charge_status is not null "
+                      "group by ad$credit$ad, ad$credit$charge_status")])}
 
-           {:id :candidate-statuses
-            :f #(xt/q % [(str "select item$direct$candidate_status, count(_id) "
-                              "from items "
-                              "where item$direct$candidate_status is not null "
-                              "group by item$direct$candidate_status")])}
+   {:id :candidate-statuses
+    :f #(xt/q % [(str "select item$direct$candidate_status, count(_id) "
+                      "from items "
+                      "where item$direct$candidate_status is not null "
+                      "group by item$direct$candidate_status")])}
 
-           {:id :favorites
-            :f #(xt/q % [(str "select user_item$user, user_item$item "
-                              "from user_items "
-                              "where user_item$favorited_at is not null")])}
+   {:id :favorites
+    :f #(xt/q % [(str "select user_item$user, user_item$item "
+                      "from user_items "
+                      "where user_item$favorited_at is not null")])}
 
-           {:id :approved-candidates
-            :f #(xt/q % [(str "select _id, item$url "
-                              "from items "
-                              "where item$direct$candidate_status = 'approved'")])}
+   {:id :approved-candidates
+    :f #(xt/q % [(str "select _id, item$url "
+                      "from items "
+                      "where item$direct$candidate_status = 'approved'")])}
 
-           {:id :ad-recent-cost
-            :f #(xt/q % [(str "select ad$click$ad, sum(ad$click$cost) "
-                              "from ad_clicks "
-                              "where ad$click$created_at > ? "
-                              "group by ad$click$ad")
-                         recent-ad-inst])}
+   {:id :ad-recent-cost
+    :f #(xt/q % [(str "select ad$click$ad, sum(ad$click$cost) "
+                      "from ad_clicks "
+                      "where ad$click$created_at > ? "
+                      "group by ad$click$ad")
+                 recent-ad-inst])}
 
-           {:id :ads-clicked-at
-            :f #(xt/q % [(str "select ad$click$ad, ad$click$user, max(ad$click$created_at) "
-                              "from ad_clicks "
-                              "group by ad$click$ad, ad$click$user")])}
+   {:id :ads-clicked-at
+    :f #(xt/q % [(str "select ad$click$ad, ad$click$user, max(ad$click$created_at) "
+                      "from ad_clicks "
+                      "group by ad$click$ad, ad$click$user")])}
 
-           {:id :all-n-likes
-            :f #(xt/q % [(str "select user_item$item, count(_id) "
-                              "from user_items "
-                              "where user_item$favorited_at is not null "
-                              "group by user_item$item")])}]
-
-    (seq active-user-ids)
-    (conj {:id :feeds-to-sync
-           :f #(xt/q %
-                     (vec (concat [(str "select distinct sub$feed$feed "
-                                        "from subs "
-                                        "join feeds on feeds._id = sub$feed$feed "
-                                        "where sub$user in " (?s (count active-user-ids))
-                                        " and (feed$synced_at is null or feed$synced_at < ?)")]
-                                  active-user-ids
-                                  [feed-sync-inst])))})
-
-    (and biggest-feed (seq (:titles biggest-feed)))
-    (conj {:id :existing-feed-titles
-           :f #(xt/q %
-                     (vec
-                      (concat [(str "select item$title "
-                                    "from items "
-                                    "where item$feed$feed = ? "
-                                    "and item$title in " (?s (count (:titles biggest-feed))))
-                               (:id biggest-feed)]
-                              (:titles biggest-feed))))})))
+   {:id :all-n-likes
+    :f #(xt/q % [(str "select user_item$item, count(_id) "
+                      "from user_items "
+                      "where user_item$favorited_at is not null "
+                      "group by user_item$item")])}
+   {:id :feeds-to-sync
+    :f #(xt/q %
+              (vec (concat [(str "select distinct sub$feed$feed "
+                                 "from subs "
+                                 "join feeds on feeds._id = sub$feed$feed "
+                                 "where sub$user in " (?s (count active-user-ids))
+                                 " and (feed$synced_at is null or feed$synced_at < ?)")]
+                           active-user-ids
+                           [feed-sync-inst])))}
+   {:id :existing-feed-titles
+    :f #(xt/q %
+              (vec
+               (concat [(str "select item$title "
+                             "from items "
+                             "where item$feed$feed = ? "
+                             "and item$title in " (?s (count (:titles biggest-feed))))
+                        (:id biggest-feed)]
+                       (:titles biggest-feed))))}])
 
 (defn user-specific-benchmarks-queries
-  [{{:keys [user-id user-email]} :picked-user}]
+  [{:keys [user-id user-email]}]
   [{:id :get-user-by-email
     :f #(xt/q % ["select * from users where user$email = ?" user-email])}
    {:id :get-user-by-id
@@ -204,7 +200,7 @@
                       "group by subs._id")
                  user-id])}])
 
-(defn get-worst-case-user
+(defn get-max-user
   [conn]
   (let [row (first (xt/q conn [(str
                                 "select u._id, u.user$email, count(ui._id) as cnt "
@@ -283,7 +279,7 @@
     (sort-by :sum > rows)))
 
 (defn profile
-  [node !state suite]
+  [node profile-id suite]
   (with-open [conn (get-conn node)]
     (let [iterations 10
           _throwaway (doseq [{:keys [f]} suite]
@@ -293,9 +289,8 @@
                       (doseq [{:keys [id f]} suite
                               _ (range iterations)]
                         (p id (f conn))))]
-      (prn {:profile (profile-data @pstats)})
-      (println (tufte/format-pstats pstats))
-      (swap! !state assoc :pstats @pstats))))
+      (prn {:profile-id profile-id :profile (profile-data @pstats)})
+      (println (tufte/format-pstats pstats)))))
 
 (defn distribution-stats
   "Compute mean/median/p90/p99/min/max from a seq of numeric counts."
@@ -350,9 +345,8 @@
                   :cnt))
 
 (defn inspect
-  [node !state]
+  [node {{:keys [user-id]} :max-user :keys [active-users]}]
   (with-open [conn (get-conn node)]
-    ;; Data
     (let [tables ["users" "feeds" "subs"
                   "items" "user_items" "ads"
                   "ad_credits" "ad_clicks" "digests"
@@ -362,12 +356,10 @@
                   :count (:xt/column-1 (first (xt/q conn [(str "select count(*) from " t)])))})]
       (println)
       (println "Table counts")
-      (pp/print-table [:table :count] rows))
-      (println)
+      (pp/print-table [:table :count] rows)
+      (println))
 
-    ;; User
-    (let [{{:keys [user-id]} :picked-user} @!state
-          queries [["subs" "select count(*) from subs where sub$user = ?" [user-id]]
+    (let [queries [["subs" "select count(*) from subs where sub$user = ?" [user-id]]
                    ["items" "select count(*) from items where item$feed$feed is not null and item$feed$feed in (select sub$feed$feed from subs where sub$user = ?)" [user-id]]
                    ["user_items" "select count(*) from user_items where user_item$user = ?" [user-id]]
                    ["ad_clicks" "select count(*) from ad_clicks where ad.click$user = ?" [user-id]]
@@ -383,28 +375,24 @@
 
       (println "Picked User" (xt/q conn ["select * from users where _id = ?" user-id]))
       (println)
-      (println "User Counts")
+      (println "Max User Counts")
       (let [rows (for [[label sql args] queries]
                    {:table label
                     :count (:xt/column-1 (first (xt/q conn (into [sql] args))))})]
         (pp/print-table [:table :count] rows))
       (println))
 
-    ;; Active Users
-    (println "Active Users" (count (:active-user-ids @!state)))
+    (println "Active Users" (count active-users))
     (println)
 
-    ;; User items stats
     (println "User items stats")
     (pp/print-table [(get-user-items-stats conn)])
     (println)
 
-    ;; User subs stats
     (println "User subs stats")
     (pp/print-table [(get-user-subs-stats conn)])
     (println)
 
-    ;; Feed items stats
     (println "Feed items stats")
     (pp/print-table [(get-feed-items-stats conn)])
     (println)))
@@ -450,50 +438,44 @@
                        :stage :submit-docs
                        :f (fn [{:keys [node random]}] (load-data! node random scale-factor))}
                       {:t :call
-                      :stage :await-transactions
-                      :f (fn [{:keys [node]}] (b/sync-node node))}
-                     {:t :call
-                      :stage :flush-block
-                      :f (fn [{:keys [node]}] (tu/flush-block! node))}
-                     {:t :call
-                      :stage :compact
-                      :f (fn [{:keys [node]}] (c/compact-all! node nil))}]})
-           {:t :do
+                       :stage :await-transactions
+                       :f (fn [{:keys [node]}] (b/sync-node node))}
+                      {:t :call
+                       :stage :flush-block
+                       :f (fn [{:keys [node]}] (tu/flush-block! node))}]})
+
+           {:t :call
+            :stage :compact
+            :f (fn [{:keys [node]}] (c/compact-all! node nil))}
+
+           {:t :call
             :stage :get-query-data
-            :tasks [{:t :call
-                     :f (fn [{:keys [node !state]}]
-                          (with-open [conn (get-conn node)]
-                            (let [user (get-worst-case-user conn)]
-                              (swap! !state assoc :picked-user user))))}
-                    {:t :call
-                     :f (fn [{:keys [node !state random]}]
-                          (with-open [conn (get-conn node)]
-                            (let [active-users (get-active-users conn random scale-factor)]
-                              (swap! !state assoc :active-user-ids active-users))))}
-                    {:t :call
-                     :f (fn [{:keys [node !state random]}]
-                          (with-open [conn (get-conn node)]
-                            (let [biggest-feed (get-biggest-feed conn random)]
-                              (swap! !state assoc :biggest-feed biggest-feed))))}]}
+            :f (fn [{:keys [node !state random]}]
+                 (with-open [conn (get-conn node)]
+                   (swap! !state merge {:max-user (get-max-user conn)
+                                        :mean-user (get-mean-user conn)
+                                        :active-users (get-active-users conn random scale-factor)
+                                        :biggest-feed (get-biggest-feed conn random)})))}
 
            {:t :call
             :stage :profile-global-queries
             :f (fn [{:keys [node !state]}]
-                 (profile node !state (benchmarks-queries @!state)))}
+                 (let [{:keys [active-users biggest-feed]} @!state]
+                   (profile node :global (benchmarks-queries active-users biggest-feed))))}
            {:t :call
             :stage :profile-max-user
             :f (fn [{:keys [node !state]}]
-                 (profile node !state (user-specific-benchmarks-queries @!state)))}
+                 (let [{:keys [max-user]} @!state]
+                   (profile node :max-user (user-specific-benchmarks-queries max-user))))}
            {:t :call
             :stage :profile-mean-user
-            :f (fn [{:keys [node]}]
-                 (let [state (atom {:picked-user (get-mean-user (get-conn node))})]
-                   (profile node state (user-specific-benchmarks-queries state))))}
-           #_
+            :f (fn [{:keys [node !state]}]
+                 (let [{:keys [mean-user]} @!state]
+                   (profile node :mean-user (user-specific-benchmarks-queries mean-user))))}
            {:t :call
             :stage :inspect
             :f (fn [{:keys [node !state]}]
-                 (inspect node !state))}]})
+                 (inspect node @!state))}]})
 
 (comment
   (try
@@ -505,10 +487,10 @@
                       (when (util/path-exists path)
                         (log/info "Clearing directory" path)
                         (util/delete-dir path)))]
+      (println "Clear dir")
+      (clear-dir dir)
       (with-open [node (tu/->local-node {:node-dir dir})
                   conn (get-conn node)]
-        (println "Clear dir")
-        (clear-dir dir)
         (println "Load data")
         (load-data! node rnd scale)
         (println "Flush block")
@@ -517,14 +499,20 @@
         (println "Compact")
         (c/compact-all! node nil)
         (println "Get Query Data")
-        (swap! !state assoc :picked-user (get-worst-case-user conn))
-        (swap! !state assoc :active-user-ids (get-active-users conn rnd scale))
-        (swap! !state assoc :biggest-feed (get-biggest-feed conn rnd))
-        (println "Profile")
-        (profile node !state)
-        (println "Inspect")
-        (inspect node !state)))
+        (let [max-user (get-max-user conn)
+              mean-user (get-mean-user conn)
+              active-users (get-active-users conn rnd scale)
+              biggest-feed (get-biggest-feed conn rnd)]
+          (println "Profile Global")
+          (profile node :global (benchmarks-queries active-users biggest-feed))
+          (println "Profile Max User")
+          (profile node :max-user (user-specific-benchmarks-queries max-user))
+          (println "Profile Mean User")
+          (profile node :mean-user (user-specific-benchmarks-queries mean-user))
+          (println "Inspect")
+          (inspect node {:max-user max-user
+                         :active-users active-users}))))
     (catch Exception e
       (log/error e)))
 
-  )
+)
