@@ -39,7 +39,8 @@
 
 (defn ->encode-fn [fmt]
   (case fmt
-    :edn #(-> % pr-str (.getBytes "UTF-8"))))
+    :edn #(-> % pr-str (.getBytes "UTF-8"))
+    :json (requiring-resolve 'jsonista.core/write-value-as-bytes)))
 
 (defmethod xtn/apply-config! :tx-sink [^Xtdb$Config config _ {:keys [output-log format]}]
   (.txSink config
