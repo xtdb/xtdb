@@ -47,9 +47,9 @@
                        :remote ::remote)
                      opts))
 
-(defmethod ig/prep-key :xtdb/buffer-pool [_ {:keys [base db-name factory]}]
-  {:base base, :factory factory, :db-name db-name
-   :allocator (ig/ref :xtdb.db-catalog/allocator)})
+(defmethod ig/expand-key :xtdb/buffer-pool [k {:keys [base db-name factory]}]
+  {k {:base base, :factory factory, :db-name db-name
+      :allocator (ig/ref :xtdb.db-catalog/allocator)}})
 
 (defmethod ig/init-key :xtdb/buffer-pool [_ {{:keys [meter-registry mem-cache disk-cache]} :base, :keys [allocator ^Storage$Factory factory, db-name]}]
   (.open factory allocator mem-cache disk-cache db-name meter-registry Storage/VERSION))

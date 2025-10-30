@@ -440,11 +440,11 @@
 
     (util/close allocator)))
 
-(defmethod ig/prep-key ::query-source [_ opts]
-  (merge opts
-         {:allocator (ig/ref :xtdb/allocator)
-          :metrics-registry (ig/ref :xtdb.metrics/registry)
-          :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)}))
+(defmethod ig/expand-key ::query-source [k opts]
+  {k (merge opts
+            {:allocator (ig/ref :xtdb/allocator)
+             :metrics-registry (ig/ref :xtdb.metrics/registry)
+             :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)})})
 
 (defn ->query-source [{:keys [allocator metrics-registry] :as deps}]
   (let [ref-ctr (RefCounter.)

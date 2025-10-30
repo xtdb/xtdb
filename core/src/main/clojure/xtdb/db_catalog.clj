@@ -14,17 +14,17 @@
 (defmethod ig/halt-key! ::allocator [_ allocator]
   (util/close allocator))
 
-(defmethod ig/prep-key ::for-query [_ {:keys [db-name db-config]}]
-  {:db-name db-name
-   :db-config db-config
-   :allocator (ig/ref ::allocator)
-   :block-cat (ig/ref :xtdb/block-catalog)
-   :table-cat (ig/ref :xtdb/table-catalog)
-   :trie-cat (ig/ref :xtdb/trie-catalog)
-   :log (ig/ref :xtdb/log)
-   :buffer-pool (ig/ref :xtdb/buffer-pool)
-   :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)
-   :live-index (ig/ref :xtdb.indexer/live-index)})
+(defmethod ig/expand-key ::for-query [k {:keys [db-name db-config]}]
+  {k {:db-name db-name
+      :db-config db-config
+      :allocator (ig/ref ::allocator)
+      :block-cat (ig/ref :xtdb/block-catalog)
+      :table-cat (ig/ref :xtdb/table-catalog)
+      :trie-cat (ig/ref :xtdb/trie-catalog)
+      :log (ig/ref :xtdb/log)
+      :buffer-pool (ig/ref :xtdb/buffer-pool)
+      :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)
+      :live-index (ig/ref :xtdb.indexer/live-index)}})
 
 (defmethod ig/init-key ::for-query [_ {:keys [allocator db-name db-config block-cat table-cat
                                               trie-cat log buffer-pool metadata-manager
@@ -34,15 +34,15 @@
              live-index ; snap-src
              nil nil))
 
-(defmethod ig/prep-key :xtdb/db-catalog [_ _]
-  {:base {:allocator (ig/ref :xtdb/allocator)
-          :config (ig/ref :xtdb/config)
-          :mem-cache (ig/ref :xtdb.cache/memory)
-          :disk-cache (ig/ref :xtdb.cache/disk)
-          :meter-registry (ig/ref :xtdb.metrics/registry)
-          :log-clusters (ig/ref :xtdb.log/clusters)
-          :indexer (ig/ref :xtdb/indexer)
-          :compactor (ig/ref :xtdb/compactor)}})
+(defmethod ig/expand-key :xtdb/db-catalog [k _]
+  {k {:base {:allocator (ig/ref :xtdb/allocator)
+             :config (ig/ref :xtdb/config)
+             :mem-cache (ig/ref :xtdb.cache/memory)
+             :disk-cache (ig/ref :xtdb.cache/disk)
+             :meter-registry (ig/ref :xtdb.metrics/registry)
+             :log-clusters (ig/ref :xtdb.log/clusters)
+             :indexer (ig/ref :xtdb/indexer)
+             :compactor (ig/ref :xtdb/compactor)}}})
 
 (defn- db-system [db-name base ^Database$Config db-config]
   (let [^Xtdb$Config conf (get-in base [:config :config])
@@ -67,7 +67,7 @@
 (defn- open-db [db-name base db-config]
   (let [sys (try
                (-> (db-system db-name base db-config)
-                   ig/prep
+                   ig/expand
                    ig/init)
                (catch clojure.lang.ExceptionInfo e
                  (try

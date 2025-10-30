@@ -15,12 +15,12 @@
                        garbage-lifetime (.garbageLifetime garbage-lifetime)
                        approx-run-interval (.approxRunInterval approx-run-interval))))
 
-(defmethod ig/prep-key :xtdb/garbage-collector [_ ^GarbageCollectorConfig config]
-  {:db-cat (ig/ref :xtdb/db-catalog)
-   :enabled? (.getEnabled config)
-   :blocks-to-keep (.getBlocksToKeep config)
-   :garbage-lifetime (.getGarbageLifetime config)
-   :approx-run-interval (.getApproxRunInterval config)})
+(defmethod ig/expand-key :xtdb/garbage-collector [k ^GarbageCollectorConfig config]
+  {k {:db-cat (ig/ref :xtdb/db-catalog)
+      :enabled? (.getEnabled config)
+      :blocks-to-keep (.getBlocksToKeep config)
+      :garbage-lifetime (.getGarbageLifetime config)
+      :approx-run-interval (.getApproxRunInterval config)}})
 
 (defmethod ig/init-key :xtdb/garbage-collector [_ {:keys [^Database$Catalog db-cat, enabled? blocks-to-keep garbage-lifetime approx-run-interval]}]
   ;; TODO multi-db

@@ -86,10 +86,10 @@
 (defn ->user-table-authn [^Authenticator$Factory$UserTable cfg, q-src, db-cat]
   (->UserTableAuthn (<-rules-cfg (.getRules cfg)) q-src db-cat))
 
-(defmethod ig/prep-key :xtdb/authn [_ opts]
-  (into {:q-src (ig/ref :xtdb.query/query-source)
-         :db-cat (ig/ref :xtdb/db-catalog)}
-        opts))
+(defmethod ig/expand-key :xtdb/authn [k opts]
+  {k (into {:q-src (ig/ref :xtdb.query/query-source)
+            :db-cat (ig/ref :xtdb/db-catalog)}
+           opts)})
 
 (defn- validate-oidc-config [config discovery-url]
   (let [{:keys [token_endpoint userinfo_endpoint]} config]

@@ -128,9 +128,9 @@
   (getFields [_ table] (get-in table->metadata [table :fields]))
   (getFields [_] (update-vals table->metadata :fields)))
 
-(defmethod ig/prep-key :xtdb/table-catalog [_ _]
-  {:buffer-pool (ig/ref :xtdb/buffer-pool)
-   :block-cat (ig/ref :xtdb/block-catalog)})
+(defmethod ig/expand-key :xtdb/table-catalog [k _]
+  {k {:buffer-pool (ig/ref :xtdb/buffer-pool)
+      :block-cat (ig/ref :xtdb/block-catalog)}})
 
 (defmethod ig/init-key :xtdb/table-catalog [_ {:keys [buffer-pool block-cat]}]
   (let [[block-idx table->table-block] (load-tables-to-metadata buffer-pool block-cat)]

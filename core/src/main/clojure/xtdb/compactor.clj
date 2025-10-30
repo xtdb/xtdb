@@ -100,9 +100,9 @@
           (l2h-compaction-jobs table table-tries opts)
           (tiering-compaction-jobs table table-tries opts)))
 
-(defmethod ig/prep-key :xtdb/compactor [_ ^CompactorConfig config]
-  {:threads (.getThreads config)
-   :metrics-registry (ig/ref :xtdb.metrics/registry)})
+(defmethod ig/expand-key :xtdb/compactor [k ^CompactorConfig config]
+  {k {:threads (.getThreads config)
+      :metrics-registry (ig/ref :xtdb.metrics/registry)}})
 
 (def ^:dynamic *page-size* 1024)
 
@@ -127,9 +127,9 @@
 (defmethod ig/halt-key! :xtdb/compactor [_ compactor]
   (util/close compactor))
 
-(defmethod ig/prep-key ::for-db [_ {:keys [base]}]
-  {:base base
-   :query-db (ig/ref :xtdb.db-catalog/for-query)})
+(defmethod ig/expand-key ::for-db [k {:keys [base]}]
+  {k {:base base
+      :query-db (ig/ref :xtdb.db-catalog/for-query)}})
 
 (defmethod ig/init-key ::for-db [_ {{:keys [^Compactor compactor]} :base, :keys [query-db]}]
   (.openForDatabase compactor query-db))

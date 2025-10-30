@@ -280,10 +280,10 @@
 (defmethod xtn/apply-config! :xtdb/log [^Xtdb$Config config _ [tag opts]]
   (.log config (->log-factory tag opts)))
 
-(defmethod ig/prep-key :xtdb/log [_ {:keys [base factory]}]
-  {:base base
-   :block-cat (ig/ref :xtdb/block-catalog)
-   :factory factory})
+(defmethod ig/expand-key :xtdb/log [k {:keys [base factory]}]
+  {k {:base base
+      :block-cat (ig/ref :xtdb/block-catalog)
+      :factory factory}})
 
 (def out-of-sync-log-message
   "Node failed to start due to an invalid transaction log state (%s) that does not correspond with the latest indexed transaction (epoch=%s and offset=%s).
@@ -340,15 +340,15 @@
                                                                                                              :system-time (some-> system-time time/expect-instant))))))]
         (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset message-meta))))))
 
-(defmethod ig/prep-key :xtdb.log/processor [_ {:keys [base ^IndexerConfig indexer-conf]}]
-  {:base base
-   :allocator (ig/ref :xtdb.db-catalog/allocator)
-   :db (ig/ref :xtdb.db-catalog/for-query)
-   :indexer (ig/ref :xtdb.indexer/for-db)
-   :compactor (ig/ref :xtdb.compactor/for-db)
-   :block-flush-duration (.getFlushDuration indexer-conf)
-   :skip-txs (.getSkipTxs indexer-conf)
-   :enabled? (.getEnabled indexer-conf)})
+(defmethod ig/expand-key :xtdb.log/processor [k {:keys [base ^IndexerConfig indexer-conf]}]
+  {k {:base base
+      :allocator (ig/ref :xtdb.db-catalog/allocator)
+      :db (ig/ref :xtdb.db-catalog/for-query)
+      :indexer (ig/ref :xtdb.indexer/for-db)
+      :compactor (ig/ref :xtdb.compactor/for-db)
+      :block-flush-duration (.getFlushDuration indexer-conf)
+      :skip-txs (.getSkipTxs indexer-conf)
+      :enabled? (.getEnabled indexer-conf)}})
 
 (defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry db-catalog]} :base
                                                :keys [allocator db indexer compactor block-flush-duration skip-txs enabled?]}]
