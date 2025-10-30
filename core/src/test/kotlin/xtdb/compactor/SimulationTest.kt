@@ -18,6 +18,8 @@ import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor.Driver
 import xtdb.compactor.Compactor.Driver.Factory
 import xtdb.compactor.Compactor.Job
+import xtdb.compactor.RecencyPartition.WEEK
+import xtdb.compactor.TemporalSplitting.*
 import xtdb.database.DatabaseName
 import xtdb.database.IDatabase
 import xtdb.indexer.LogProcessor
@@ -26,12 +28,18 @@ import xtdb.metadata.PageMetadata
 import xtdb.storage.BufferPool
 import xtdb.symbol
 import xtdb.table.TableRef
+import xtdb.time.InstantUtil.asMicros
+import xtdb.trie.Trie
 import xtdb.trie.TrieCatalog
+import xtdb.trie.TrieKey
 import xtdb.util.StringUtil.asLexHex
+import xtdb.util.info
 import xtdb.util.logger
 import xtdb.util.requiringResolve
 import xtdb.util.warn
 import java.time.Instant
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
@@ -50,8 +58,29 @@ class MockDb(override val name: DatabaseName, override val trieCatalog: TrieCata
 
 private val LOGGER = MockDriver::class.logger
 
-class MockDriver(val dispatcher: CoroutineDispatcher) : Factory {
+enum class TemporalSplitting {
+    CURRENT,
+    HISTORICAL,
+    BOTH
+}
+
+data class DriverConfig(
+    val temporalSplitting: TemporalSplitting = CURRENT,
+    val baseTime: Instant = Instant.parse("2020-01-01T00:00:00Z"),
+    val blocksPerWeek: Long = 14
+)
+
+class MockDriver(
+    val dispatcher: CoroutineDispatcher,
+    val baseSeed: Int,
+    config: DriverConfig
+) : Factory {
     class AppendMessage(val triesAdded: TriesAdded, val msgTimestamp: Instant)
+
+    private val temporalSplitting = config.temporalSplitting
+    private val baseTime = config.baseTime
+    private val blocksPerWeek = config.blocksPerWeek
+    val trieKeyToFileSize = mutableMapOf<TrieKey, Long>()
 
     override fun create(db: IDatabase) = ForDatabase(db)
 
@@ -67,17 +96,85 @@ class MockDriver(val dispatcher: CoroutineDispatcher) : Factory {
             }
         }
 
-        override fun executeJob(job: Job) =
-            TriesAdded(
-                Storage.VERSION, 0,
-                listOf(
-                    TrieDetails.newBuilder()
-                        .setTableName(job.table.tableName)
-                        .setTrieKey(job.outputTrieKey.toString())
-                        .setDataFileSize(100 * 1024L * 1024L)
-                        .build()
+        private fun Instant.plusWeeks(weeks: Long) =
+            this.plus(weeks * 7, ChronoUnit.DAYS)
+
+        private fun trieKeyRand(trieKey: Trie.Key) =
+            Random(baseSeed xor trieKey.hashCode())
+
+        private fun deterministicRecency(rand: Random, trieKey: Trie.Key): LocalDate {
+            val blockIdx = trieKey.blockIndex
+            val baseWeek = baseTime.plusWeeks(blockIdx / blocksPerWeek)
+
+            val weekOffset = rand.nextLong(0, 2) // up to 2 weeks in the past
+            return baseWeek.minus(weekOffset * 7, ChronoUnit.DAYS).asMicros.toPartition(WEEK)
+        }
+
+        private fun deterministicSizeSplit(rand: Random, size: Long) : Pair<Long, Long> {
+            val part1 = rand.nextLong(100)
+            val part2 = 100 - part1
+            return Pair(size * part1 / 100, size * part2 / 100)
+        }
+
+        override fun executeJob(job: Job): TriesAdded {
+            val trieKey = job.outputTrieKey
+            val trieDetailsBuilder = TrieDetails.newBuilder()
+                .setTableName(job.table.tableName)
+            if (trieKey.level == 1L) {
+                val addedTries = mutableListOf<TrieDetails>()
+                val size = job.trieKeys.sumOf { trieKeyToFileSize[it]!! }
+                val rand = trieKeyRand(trieKey)
+                when(temporalSplitting) {
+                    CURRENT -> {
+                        trieKeyToFileSize[trieKey.toString()] = size
+                        addedTries.add(
+                            trieDetailsBuilder
+                                .setTrieKey(trieKey.toString())
+                                .setDataFileSize(size)
+                                .build()
+                            )
+                    }
+                    HISTORICAL -> {
+                        val historicalTrieKey = Trie.Key(trieKey.level, deterministicRecency(rand, trieKey), trieKey.part, trieKey.blockIndex)
+                        trieKeyToFileSize[historicalTrieKey.toString()] = size
+                        addedTries.add(
+                            trieDetailsBuilder
+                                .setTrieKey(historicalTrieKey.toString())
+                                .setDataFileSize(size)
+                                .build()
+                        )
+                    }
+                    BOTH -> {
+                        val historicalTrieKey = Trie.Key(trieKey.level, deterministicRecency(rand, trieKey), trieKey.part, trieKey.blockIndex)
+                        val (currentSize, historicalSize) = deterministicSizeSplit(rand, size)
+                        trieKeyToFileSize[trieKey.toString()] = currentSize
+                        trieKeyToFileSize[historicalTrieKey.toString()] = historicalSize
+                        addedTries.addAll(listOf(
+                            trieDetailsBuilder
+                                .setTrieKey(trieKey.toString())
+                                .setDataFileSize(currentSize)
+                                .build(),
+                            trieDetailsBuilder
+                                .setTrieKey(historicalTrieKey.toString())
+                                .setDataFileSize(historicalSize)
+                                .build())
+                        )
+                    }
+                }
+                return TriesAdded(Storage.VERSION, 0, addedTries)
+            } else {
+                return TriesAdded(
+                    Storage.VERSION, 0,
+                    listOf(
+                        TrieDetails.newBuilder()
+                            .setTableName(job.table.tableName)
+                            .setTrieKey(job.outputTrieKey.toString())
+                            .setDataFileSize(101L * 1024L * 1024L)
+                            .build()
+                    )
                 )
-            )
+            }
+        }
 
         var logOffset = 0L
 
@@ -171,6 +268,32 @@ class SeedExtension : BeforeEachCallback {
     }
 }
 
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
+annotation class WithDriverConfig(
+    val temporalSplitting: TemporalSplitting = TemporalSplitting.CURRENT,
+    val baseTime: String = "2020-01-01T00:00:00Z",
+    val blocksPerWeek: Long = 14
+)
+
+class DriverConfigExtension : BeforeEachCallback {
+    override fun beforeEach(context: ExtensionContext) {
+        val annotation = context.requiredTestMethod.getAnnotation(WithDriverConfig::class.java)
+            ?: return
+
+        val testInstance = context.requiredTestInstance
+        if (testInstance !is SimulationTest) return
+
+        testInstance.driverConfig = with(annotation) {
+            DriverConfig(
+                temporalSplitting = temporalSplitting,
+                baseTime = Instant.parse(baseTime),
+                blocksPerWeek = blocksPerWeek
+            )
+        }
+    }
+}
+
 private val L0TrieKeys = sequence {
     var blockIndex = 0
     while (true) {
@@ -179,10 +302,11 @@ private val L0TrieKeys = sequence {
     }
 }
 
-@ExtendWith(SeedExceptionWrapper::class, SeedExtension::class)
+@ExtendWith(SeedExceptionWrapper::class, SeedExtension::class, DriverConfigExtension::class)
 class SimulationTest {
     var currentSeed: Int = 0
     var explicitSeed: Int? = null
+    var driverConfig: DriverConfig = DriverConfig()
     private lateinit var mockDriver: MockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
     private lateinit var compactor: Compactor.Impl
@@ -194,14 +318,27 @@ class SimulationTest {
     fun setUp() {
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
         currentSeed = explicitSeed ?: Random.nextInt()
-        explicitSeed = null
-        dispatcher =  DeterministicDispatcher(currentSeed)
-        mockDriver = MockDriver(dispatcher)
+        dispatcher = DeterministicDispatcher(currentSeed)
+        mockDriver = MockDriver(dispatcher, currentSeed, driverConfig)
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
         compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2, dispatcher)
         trieCatalog = createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
         db = MockDb("xtdb", trieCatalog)
     }
+
+    @AfterEach
+    fun tearDown() {
+        driverConfig = DriverConfig()
+        explicitSeed = null
+    }
+
+    private fun addL0s(tableRef: TableRef, l0s: List<TrieDetails>) {
+        l0s.forEach {
+            mockDriver.trieKeyToFileSize[it.trieKey.toString()] = it.dataFileSize
+        }
+        trieCatalog.addTries(tableRef, l0s, Instant.now())
+    }
+
 
     @RepeatedTest(testIterations)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
@@ -209,7 +346,7 @@ class SimulationTest {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
 
-        trieCatalog.addTries(docsTable, listOf(l0Trie), Instant.now())
+        addL0s(docsTable, listOf(l0Trie))
 
         compactor.openForDatabase(db).use {
             it.compactAll()
@@ -232,16 +369,16 @@ class SimulationTest {
     fun multipleL0ToL1Compaction() {
         val table = TableRef("xtdb", "public", "docs")
 
+
         compactor.openForDatabase(db).use {
             // Round 1: Add 3 L0 tries and compact
-            trieCatalog.addTries(
+            addL0s(
                 table,
                 listOf(
                     buildTrieDetails(table.tableName, "l00-rc-b00", 10 * 1024),
                     buildTrieDetails(table.tableName, "l00-rc-b01", 10 * 1024),
                     buildTrieDetails(table.tableName, "l00-rc-b02", 10 * 1024)
-                ),
-                Instant.now()
+                )
             )
 
             it.compactAll()
@@ -255,14 +392,13 @@ class SimulationTest {
             )
 
             // Round 2: Add 3 more L0 tries and compact
-            trieCatalog.addTries(
+           addL0s(
                 table,
                 listOf(
                     buildTrieDetails(table.tableName, "l00-rc-b03", 10 * 1024),
                     buildTrieDetails(table.tableName, "l00-rc-b04", 10 * 1024),
                     buildTrieDetails(table.tableName, "l00-rc-b05", 10 * 1024)
-                ),
-                Instant.now()
+                )
             )
 
             it.compactAll()
@@ -271,11 +407,38 @@ class SimulationTest {
                 listOf(
                     "l00-rc-b00", "l00-rc-b01", "l00-rc-b02", "l00-rc-b03", "l00-rc-b04", "l00-rc-b05",
                     "l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03", "l01-rc-b04", "l01-rc-b05",
-                    "l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03"
                 ),
                 trieCatalog.listAllTrieKeys(table)
             )
         }
     }
 
+    @Test
+    @WithSeed(-1754611144)
+    fun multipleL0ToL1CompactionIssue() {
+        multipleL0ToL1Compaction()
+    }
+
+    @Test
+    @WithDriverConfig(temporalSplitting = CURRENT)
+    fun biggerCompactorRun() {
+        val docsTable = TableRef("xtdb", "public", "docs")
+        val l0tries = L0TrieKeys.take(100).map { buildTrieDetails(docsTable.tableName, it, 10L * 1024L * 1024L) }
+
+        addL0s(docsTable, l0tries.toList())
+
+        var currentTries: List<TrieKey>
+
+        compactor.openForDatabase(db).use {
+            do {
+                currentTries = trieCatalog.listAllTrieKeys(docsTable)
+                it.compactAll()
+            } while( currentTries.size != trieCatalog.listAllTrieKeys(docsTable).size)
+        }
+
+        Assertions.assertEquals(
+            208,
+            trieCatalog.listAllTrieKeys(docsTable).size
+        )
+    }
 }
