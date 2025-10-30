@@ -10,10 +10,13 @@
            (xtdb.indexer Indexer$TxSink LiveIndex$Tx)
            (xtdb.table TableRef)))
 
-(defn read-table-rows [^TableRef table ^LiveIndex$Tx live-idx-tx]
-  (let [table-name (str/join "." [(.getDbName table)
-                                  (.getSchemaName table)
-                                  (.getTableName table)])
+(defn- table-name [^TableRef table-ref]
+  (str/join "." [(.getDbName table-ref)
+                 (.getSchemaName table-ref)
+                 (.getTableName table-ref)]))
+
+(defn read-table-rows [table ^LiveIndex$Tx live-idx-tx]
+  (let [table-name (table-name table)
         live-table (.liveTable live-idx-tx table)
         start-pos (.getStartPos live-table)
         live-relation (.getLiveRelation live-table)
