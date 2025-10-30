@@ -145,7 +145,7 @@ interface Compactor : AutoCloseable {
         private val jobCalculator: JobCalculator,
         private val ignoreSignalBlock: Boolean,
         threadCount: Int,
-        dispatcher: CoroutineDispatcher = Dispatchers.Default
+        private val dispatcher: CoroutineDispatcher = Dispatchers.Default
     ) : Compactor {
 
         private val jobsDispatcher = dispatcher.limitedParallelism(threadCount, "compactor")
@@ -153,7 +153,7 @@ interface Compactor : AutoCloseable {
         override fun openForDatabase(db: IDatabase) = object : ForDatabase {
 
             private val dbJob = Job()
-            private val scope = CoroutineScope(dbJob)
+            private val scope = CoroutineScope(dbJob + dispatcher)
 
             private val trieCatalog = db.trieCatalog
 
