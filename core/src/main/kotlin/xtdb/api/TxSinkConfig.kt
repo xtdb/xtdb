@@ -5,10 +5,13 @@ import xtdb.api.log.Log
 
 @Serializable
 data class TxSinkConfig(
-    var format: String = "json",
+    var format: String = "transit+json",
     var outputLog: Log.Factory = Log.inMemoryLog,
     var tableFilter: TableFilter = TableFilter(),
 ) {
+    // NOTE: Intentionally not serialized to prevent accidental enabling in cluster config
+    var enable: Boolean = false
+
     @Serializable
     data class TableFilter (
         var include: Set<String> = emptySet(),
@@ -18,6 +21,7 @@ data class TxSinkConfig(
             tableName !in exclude && (include.isEmpty() || tableName in include)
     }
 
+    fun enable(enable: Boolean = true) = apply { this.enable = enable }
     fun format(format: String) = apply { this.format = format }
     fun outputLog(log: Log.Factory) = apply { this.outputLog = log }
     fun tableFilter(tableFilter: TableFilter) = apply { this.tableFilter = tableFilter }

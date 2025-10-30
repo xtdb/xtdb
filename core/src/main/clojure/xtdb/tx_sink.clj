@@ -45,13 +45,14 @@
     :edn #(-> % pr-str (.getBytes "UTF-8"))
     :json (requiring-resolve 'jsonista.core/write-value-as-bytes)))
 
-(defmethod xtn/apply-config! :tx-sink [^Xtdb$Config config _ {:keys [output-log format table-filter]}]
+(defmethod xtn/apply-config! :tx-sink [^Xtdb$Config config _ {:keys [output-log format table-filter enable]}]
   (let [table-filter (when-let [{:keys [include exclude]} table-filter]
                        (TxSinkConfig$TableFilter.
                          (if (some? include) (set include) #{})
                          (if (some? exclude) (set exclude) #{})))]
     (.txSink config
              (cond-> (TxSinkConfig.)
+               (some? enable) (.enable enable)
                (some? output-log) (.outputLog (log/->log-factory (first output-log) (second output-log)))
                (some? format) (.format (str (symbol format)))
                (some? table-filter) (.tableFilter table-filter)))))
@@ -62,7 +63,7 @@
 
 (defmethod ig/init-key :xtdb/tx-sink [_ {:keys [^TxSinkConfig tx-sink-conf]
                                          {:keys [log-clusters]} :base}]
-  (when tx-sink-conf
+  (when (and tx-sink-conf (.getEnable tx-sink-conf))
     (let [encode-as-bytes (->encode-fn (keyword (.getFormat tx-sink-conf)))
           log (.openLog (.getOutputLog tx-sink-conf) log-clusters)
           table-filter (.getTableFilter tx-sink-conf)]
