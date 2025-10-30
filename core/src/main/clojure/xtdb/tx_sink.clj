@@ -5,7 +5,7 @@
             [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import (java.lang AutoCloseable)
-           (xtdb.api TxSinkConfig Xtdb$Config)
+           (xtdb.api TxSinkConfig TxSinkConfig$TableFilter Xtdb$Config)
            (xtdb.api.log Log$Message$Tx)
            (xtdb.indexer Indexer$TxSink LiveIndex$Tx)
            (xtdb.table TableRef)))
@@ -45,11 +45,16 @@
     :edn #(-> % pr-str (.getBytes "UTF-8"))
     :json (requiring-resolve 'jsonista.core/write-value-as-bytes)))
 
-(defmethod xtn/apply-config! :tx-sink [^Xtdb$Config config _ {:keys [output-log format]}]
-  (.txSink config
-           (cond-> (TxSinkConfig.)
-             (some? output-log) (.outputLog (log/->log-factory (first output-log) (second output-log)))
-             (some? format) (.format (str (symbol format))))))
+(defmethod xtn/apply-config! :tx-sink [^Xtdb$Config config _ {:keys [output-log format table-filter]}]
+  (let [table-filter (when-let [{:keys [include exclude]} table-filter]
+                       (TxSinkConfig$TableFilter.
+                         (if (some? include) (set include) #{})
+                         (if (some? exclude) (set exclude) #{})))]
+    (.txSink config
+             (cond-> (TxSinkConfig.)
+               (some? output-log) (.outputLog (log/->log-factory (first output-log) (second output-log)))
+               (some? format) (.format (str (symbol format)))
+               (some? table-filter) (.tableFilter table-filter)))))
 
 (defmethod ig/expand-key :xtdb/tx-sink [k {:keys [base tx-sink-conf]}]
   {k {:base base
@@ -59,12 +64,14 @@
                                          {:keys [log-clusters]} :base}]
   (when tx-sink-conf
     (let [encode-as-bytes (->encode-fn (keyword (.getFormat tx-sink-conf)))
-          log (.openLog (.getOutputLog tx-sink-conf) log-clusters)]
+          log (.openLog (.getOutputLog tx-sink-conf) log-clusters)
+          table-filter (.getTableFilter tx-sink-conf)]
       (reify
         Indexer$TxSink
         (onCommit [_ _tx-key live-idx-tx]
           (util/with-open [live-idx-snap (.openSnapshot live-idx-tx)]
-            (doseq [table (.getLiveTables live-idx-snap)]
+            (doseq [^TableRef table (.getLiveTables live-idx-snap)
+                    :when (.test table-filter (table-name table))]
               (doseq [row (read-table-rows table live-idx-tx)]
                 (->> row
                      encode-as-bytes
