@@ -3,7 +3,8 @@
             [integrant.core :as ig]
             [xtdb.log :as log]
             [xtdb.node :as xtn]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            xtdb.serde)
   (:import (java.lang AutoCloseable)
            (xtdb.api TxSinkConfig TxSinkConfig$TableFilter Xtdb$Config)
            (xtdb.api.log Log$Message$Tx)
@@ -42,8 +43,7 @@
 
 (defn ->encode-fn [fmt]
   (case fmt
-    :edn #(-> % pr-str (.getBytes "UTF-8"))
-    :json (requiring-resolve 'jsonista.core/write-value-as-bytes)))
+    :transit+json xtdb.serde/write-transit))
 
 (defmethod xtn/apply-config! :tx-sink [^Xtdb$Config config _ {:keys [output-log format table-filter enable]}]
   (let [table-filter (when-let [{:keys [include exclude]} table-filter]
