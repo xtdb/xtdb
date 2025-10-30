@@ -4,6 +4,7 @@
             [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing] :as t]
+            [clojure.tools.logging :as log]
             [honey.sql :as hsql]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as result-set]
@@ -513,6 +514,46 @@
           (check-server-resources-freed server))))))
 
 ;;TODO no current support for cancelling queries
+
+(defn test-cancel [sql]
+  (with-open [conn (jdbc-conn)
+              stmt (jdbc/prepare conn [sql])]
+    (future
+      (Thread/sleep 2000)
+      (log/debug "cancelling...")
+      (.cancel stmt))
+    (let [t0 (System/currentTimeMillis)
+          ex (is (thrown? PSQLException (.executeQuery stmt)))
+          exec-time (- (System/currentTimeMillis) t0)]
+      (is (= "57014" (.getSQLState ex)))
+      (is (-> ex .getServerErrorMessage .getMessage (.contains "cancel")))
+      (is (< 1500 exec-time 2500)))
+    (t/is (.isValid conn 3000))))
+
+(deftest cancel_sleep
+  (test-cancel "SELECT pg_sleep(10.0)"))
+
+(deftest cancel_big_GENERATE_SERIES
+  (test-cancel "FROM GENERATE_SERIES(1,10000000) AS system(_id) ORDER BY _id"))
+
+(deftest server_close_interrupts_ongoing_query
+  (with-open [^Server server (serve)]
+    (binding [*server* server, *port* (:port server)]
+      (with-open [client-conn (jdbc-conn)
+                  stmt (jdbc/prepare client-conn ["SELECT pg_sleep(10.0)"])
+                  server-conn (get-last-conn server)]
+        (future
+          (Thread/sleep 2000)
+          (log/debug "closing server...")
+          (.close server))
+        (let [t0 (System/currentTimeMillis)
+              ex (is (thrown? PSQLException (.executeQuery stmt)))
+              exec-time (- (System/currentTimeMillis) t0)]
+          (is (= "08006" (.getSQLState ex)))
+          (is (< 1500 exec-time 2500)))
+        (is (wait-for-close server-conn 500))
+        (check-conn-resources-freed server-conn)
+        (check-server-resources-freed server)))))
 
 (deftest jdbc-prepared-query-close-test
   (with-open [conn (jdbc-conn {"prepareThreshold" 1
