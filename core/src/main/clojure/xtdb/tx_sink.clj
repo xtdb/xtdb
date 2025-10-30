@@ -5,9 +5,8 @@
             [xtdb.node :as xtn]
             [xtdb.util :as util]
             xtdb.serde)
-  (:import (java.lang AutoCloseable)
-           (xtdb.api TxSinkConfig TxSinkConfig$TableFilter Xtdb$Config)
-           (xtdb.api.log Log$Message$Tx)
+  (:import (xtdb.api TxSinkConfig TxSinkConfig$TableFilter Xtdb$Config)
+           (xtdb.api.log Log Log$Message$Tx)
            (xtdb.indexer Indexer$TxSink LiveIndex$Tx)
            (xtdb.table TableRef)))
 
@@ -57,18 +56,17 @@
                (some? format) (.format (str (symbol format)))
                (some? table-filter) (.tableFilter table-filter)))))
 
-(defmethod ig/expand-key :xtdb/tx-sink [k {:keys [base tx-sink-conf]}]
-  {k {:base base
-      :tx-sink-conf tx-sink-conf}})
+(defmethod ig/expand-key :xtdb/tx-sink [k {:keys [base ^TxSinkConfig tx-sink-conf]}]
+  {k {:tx-sink-conf tx-sink-conf
+      :output-log (ig/ref ::output-log)}
+   ::output-log {:tx-sink-conf tx-sink-conf
+                 :base base}})
 
-(defmethod ig/init-key :xtdb/tx-sink [_ {:keys [^TxSinkConfig tx-sink-conf]
-                                         {:keys [log-clusters]} :base}]
+(defmethod ig/init-key :xtdb/tx-sink [_ {:keys [^TxSinkConfig tx-sink-conf ^Log output-log]}]
   (when (and tx-sink-conf (.getEnable tx-sink-conf))
     (let [encode-as-bytes (->encode-fn (keyword (.getFormat tx-sink-conf)))
-          log (.openLog (.getOutputLog tx-sink-conf) log-clusters)
           table-filter (.getTableFilter tx-sink-conf)]
-      (reify
-        Indexer$TxSink
+      (reify Indexer$TxSink
         (onCommit [_ _tx-key live-idx-tx]
           (util/with-open [live-idx-snap (.openSnapshot live-idx-tx)]
             (doseq [^TableRef table (.getLiveTables live-idx-snap)
@@ -77,11 +75,12 @@
                 (->> row
                      encode-as-bytes
                      Log$Message$Tx.
-                     (.appendMessage log))))))
+                     (.appendMessage output-log))))))))))
 
-        AutoCloseable
-        (close [_]
-          (util/close log))))))
+(defmethod ig/init-key ::output-log [_ {:keys [^TxSinkConfig tx-sink-conf]
+                                        {:keys [log-clusters]} :base}]
+  (when (and tx-sink-conf (.getEnable tx-sink-conf))
+    (.openLog (.getOutputLog tx-sink-conf) log-clusters)))
 
-(defmethod ig/halt-key! :xtdb/tx-sink [_ ^AutoCloseable tx-sink]
-  (util/close tx-sink))
+(defmethod ig/halt-key! ::output-log [_ output-log]
+  (util/close output-log))
