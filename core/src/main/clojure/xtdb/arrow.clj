@@ -2,7 +2,6 @@
   "Utilities for working with Arrow things"
   (:require xtdb.mirrors.time-literals
             xtdb.serde.types
-            [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
             [xtdb.util :as util])
   (:import (java.nio.file Files)
@@ -32,7 +31,7 @@
      (f {:schema (.getSchema loader)
          :batches (->> (iterator-seq (Spliterators/iterator cursor))
                        (map (fn [^Relation rel]
-                              (tu/->clj (.getAsMaps rel)))))}))))
+                              (util/->clj (.getAsMaps rel)))))}))))
 
 (defn read-arrow-file
   ([al path-ish]

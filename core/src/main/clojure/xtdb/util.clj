@@ -1,15 +1,17 @@
 (ns xtdb.util
   (:refer-clojure :exclude [with-open])
   (:require [clojure.java.io :as io]
+            [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [clojure.walk :as walk]
             [integrant.core :as ig]
             [xtdb.error :as err])
   (:import [clojure.lang Keyword MapEntry Symbol]
            (io.netty.buffer Unpooled)
            io.netty.util.internal.PlatformDependent
-           (java.io File)
+           (java.io File Writer)
            java.lang.AutoCloseable
            (java.net MalformedURLException ServerSocket URI URL)
            java.nio.ByteBuffer
@@ -17,9 +19,10 @@
            (java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption)
            java.nio.file.attribute.FileAttribute
            [java.security MessageDigest]
-           (java.util Arrays Collections LinkedHashMap Map UUID WeakHashMap)
+           (java.util Arrays Collection Collections LinkedHashMap Map Set UUID WeakHashMap)
            (java.util.concurrent ExecutionException Executors ThreadFactory)
            (org.apache.arrow.memory BufferAllocator ForeignAllocation)
+           (xtdb Bytes TaggedValue)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            xtdb.util.NormalForm))
 
@@ -29,6 +32,36 @@
   (if (contains? m k)
     (apply update m k f args)
     m))
+
+(defn ->clj
+  "Recursively converts Java collections to Clojure collections."
+  [v]
+  (walk/prewalk (fn [v]
+                  (cond
+                    (and (instance? Map v) (not (map? v)))
+                    (into {} v)
+
+                    (instance? Set v) (set v)
+
+                    (instance? Collection v) (vec v)
+
+                    (instance? TaggedValue v)
+                    (TaggedValue. (.getTag ^TaggedValue v) (->clj (.getValue ^TaggedValue v)))
+
+                    (bytes? v) (Bytes. v)
+
+                    :else v))
+                v))
+
+(defmethod pp/simple-dispatch TaggedValue [^TaggedValue tv]
+  (print "#xt/tagged ")
+  (pp/write-out [(.getTag tv) (->clj (.getValue tv))]))
+
+(defmethod print-method Bytes [^Bytes b, ^Writer w]
+  (print-method (.getBytes b) w))
+
+(defmethod print-dup Bytes [^Bytes b, ^Writer w]
+  (print-dup (.getBytes b) w))
 
 (defn close [c]
   (letfn [(close-all [closables]

@@ -18,10 +18,10 @@
       ))
 
 (defn read-arrow-edn-file [path-ish]
-  (tu/->clj (read-string (slurp (.toFile (util/->path path-ish))))))
+  (util/->clj (read-string (slurp (.toFile (util/->path path-ish))))))
 
 (defn ->arrow-edn [^Relation rel]
-  {:schema (.getSchema rel), :data (tu/->clj (.getAsMaps rel))})
+  {:schema (.getSchema rel), :data (util/->clj (.getAsMaps rel))})
 
 (defn- write-arrow-edn-file! [^Path path, data]
   (with-open [out (io/writer (.toFile path))]
@@ -75,8 +75,8 @@
                   file-name (str (.getFileName expected-path))]
             :when (.endsWith file-name ".arrow.edn")]
       (f (.relativize expected-dir expected-path)
-         (tu/->clj (read-arrow-edn-file expected-path))
-         (tu/->clj (read-arrow-edn-file actual))))))
+         (util/->clj (read-arrow-edn-file expected-path))
+         (util/->clj (read-arrow-edn-file actual))))))
 
 (defmacro check-arrow-edn-dir
   ([expected-path-ish actual-path-ish]

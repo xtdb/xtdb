@@ -139,7 +139,7 @@
                        (:live-trie-iids live-table-after)
                        uuids))
 
-              (t/is (= (tu/->clj live-table-before) (tu/->clj live-table-after))))))))))
+              (t/is (= (util/->clj live-table-before) (util/->clj live-table-after))))))))))
 
 (deftest test-live-index-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
@@ -185,5 +185,5 @@
                            (:live-trie-iids live-table-after)
                            uuids))
 
-                  (t/is (= (tu/->clj live-table-before)
-                           (tu/->clj live-table-after))))))))))))
+                  (t/is (= (util/->clj live-table-before)
+                           (util/->clj live-table-after))))))))))))

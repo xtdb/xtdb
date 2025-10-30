@@ -120,7 +120,7 @@
          (loop [v init]
            (cond
              (reduced? v) (unreduced v)
-             (.loadNextPage ldr rel) (recur (f v (tu/->clj (.getAsMaps rel))))
+             (.loadNextPage ldr rel) (recur (f v (util/->clj (.getAsMaps rel))))
              :else v))))))
 
   ([^Path path, ^long page-idx]
@@ -128,7 +128,7 @@
                 ldr (Relation/loader al path)
                 rel (Relation. al (.getSchema ldr))]
       (.loadPage ldr page-idx rel)
-      (tu/->clj (.getAsMaps rel)))))
+      (util/->clj (.getAsMaps rel)))))
 
 (comment
   (write-arrow-file (util/->path "/tmp/test.arrow")

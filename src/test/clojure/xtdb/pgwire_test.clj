@@ -2261,8 +2261,8 @@ ORDER BY t.oid DESC LIMIT 1"
         (t/is (Arrays/equals ba ^bytes (:v (first (jdbc/execute! conn ["SELECT '00f0'::bytea AS v"]))))))
 
       (t/testing "nested varbinary"
-        (t/is (= (tu/->clj [{:v {:ba (byte-array [0x00 0xf0])}}])
-                 (tu/->clj (q conn ["SELECT OBJECT(ba: X('00f0')) AS v"])))
+        (t/is (= (util/->clj [{:v {:ba (byte-array [0x00 0xf0])}}])
+                 (util/->clj (q conn ["SELECT OBJECT(ba: X('00f0')) AS v"])))
               "reading nested varbinary result")))
 
     (with-open [conn (jdbc-conn {"options" "-c fallback_output_format=transit"})]

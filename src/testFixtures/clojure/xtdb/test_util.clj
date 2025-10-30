@@ -3,7 +3,6 @@
             [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [clojure.test.check :as tc]
-            [clojure.walk :as walk]
             [cognitect.anomalies :as-alias anom]
             [xtdb.api :as xt]
             [xtdb.db-catalog :as db]
@@ -21,20 +20,19 @@
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang ExceptionInfo)
-           [java.io Writer]
            java.net.ServerSocket
            java.nio.ByteBuffer
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
            (java.time Duration Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
            (java.time.temporal ChronoUnit)
-           (java.util Collection List Map Set)
+           (java.util List)
            (java.util.function IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector.types.pojo Field Schema)
            (org.testcontainers.containers GenericContainer)
-           (xtdb Bytes ICursor PagesCursor TaggedValue)
+           (xtdb ICursor PagesCursor)
            (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector)
@@ -192,25 +190,6 @@
                  (cond-> (->cursor allocator schema pages)
                    explain-analyze? (ICursor/wrapExplainAnalyze)))}))
 
-(defn ->clj
-  "recursively converts Java collections to Clojure"
-  [v]
-  (walk/prewalk (fn [v]
-                  (cond
-                    (and (instance? Map v) (not (map? v)))
-                    (into {} v)
-
-                    (instance? Set v) (set v)
-
-                    (instance? Collection v) (vec v)
-
-                    (instance? TaggedValue v)
-                    (TaggedValue. (.getTag ^TaggedValue v) (->clj (.getValue ^TaggedValue v)))
-
-                    (bytes? v) (Bytes. v)
-
-                    :else v))
-                v))
 
 (defmethod lp/ra-expr :prn [_]
   (s/cat :op #{:prn}
@@ -232,19 +211,9 @@
                                (.tryAdvance in-cursor
                                             (fn [^RelationReader rel]
                                               (println (.getCursorType in-cursor) ":")
-                                              (clojure.pprint/pprint (->clj (.getAsMaps rel)))
+                                              (clojure.pprint/pprint (util/->clj (.getAsMaps rel)))
                                               (.accept c rel)))))
                      explain-analyze? (ICursor/wrapExplainAnalyze)))})))
-
-(defmethod pp/simple-dispatch TaggedValue [^TaggedValue tv]
-  (print "#xt/tagged ")
-  (pp/write-out [(.getTag tv) (->clj (.getValue tv))]))
-
-(defmethod print-method Bytes [^Bytes b, ^Writer w]
-  (print-method (.getBytes b) w))
-
-(defmethod print-dup Bytes [^Bytes b, ^Writer w]
-  (print-dup (.getBytes b) w))
 
 (defn <-cursor
   ([^ICursor cursor] (<-cursor cursor #xt/key-fn :kebab-case-keyword))
