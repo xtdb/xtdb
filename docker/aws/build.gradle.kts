@@ -7,7 +7,7 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":xtdb-core"))
+    implementation(project(":xtdb-main"))
     implementation(project(":modules:xtdb-kafka"))
     implementation(project(":modules:xtdb-aws"))
 

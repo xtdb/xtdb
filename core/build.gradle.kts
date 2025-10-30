@@ -33,7 +33,6 @@ dependencies {
     api(libs.clojure.spec)
     api(libs.clojure.`data`.json)
     api(libs.clojure.`data`.csv)
-    api(libs.clojure.tools.cli)
     api(libs.transit.clj)
 
     api(libs.arrow.algorithm)
@@ -87,6 +86,7 @@ dependencies {
     testImplementation(libs.kotest.props)
     testImplementation(libs.clojure.test.check)
     testImplementation(testFixtures(project(":")))
+    testImplementation(project(":xtdb-main"))
     testImplementation(project(":modules:xtdb-kafka"))
     testImplementation(project(":modules:xtdb-aws"))
     testImplementation(project(":modules:xtdb-google-cloud"))

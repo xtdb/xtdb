@@ -405,6 +405,7 @@ dependencies {
 
     projectDep(":xtdb-api")
     projectDep(":xtdb-core")
+    projectDep(":xtdb-main")
 
     projectDep(":modules:xtdb-kafka")
     projectDep(":modules:xtdb-aws")

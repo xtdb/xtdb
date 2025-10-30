@@ -1,8 +1,9 @@
 rootProject.name = "xtdb"
 
-include("api", "core")
+include("api", "core", "main")
 project(":api").name = "xtdb-api"
 project(":core").name = "xtdb-core"
+project(":main").name = "xtdb-main"
 
 include("lang:test-harness")
 project(":lang:test-harness").name = "test-harness"
