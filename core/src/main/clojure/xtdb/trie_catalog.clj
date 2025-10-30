@@ -356,11 +356,11 @@
                 (fn [_table table-cat]
                   (reset->l0 table-cat))))))
 
-(defmethod ig/prep-key :xtdb/trie-catalog [_ opts]
-  (into {:buffer-pool (ig/ref :xtdb/buffer-pool)
-         :block-cat (ig/ref :xtdb/block-catalog)
-         :table-cat (ig/ref :xtdb/table-catalog)}
-        opts))
+(defmethod ig/expand-key :xtdb/trie-catalog [k opts]
+  {k (into {:buffer-pool (ig/ref :xtdb/buffer-pool)
+            :block-cat (ig/ref :xtdb/block-catalog)
+            :table-cat (ig/ref :xtdb/table-catalog)}
+           opts)})
 
 (defn new-trie-details? [^TrieDetails trie-details]
   (.hasTrieState trie-details))

@@ -10,10 +10,10 @@
     max-cache-bytes (.maxSizeBytes max-cache-bytes)
     max-cache-ratio (.maxSizeRatio max-cache-ratio)))
 
-(defmethod ig/prep-key ::memory [_ factory]
-  {:allocator (ig/ref :xtdb/allocator)
-   :factory factory
-   :metrics-registry (ig/ref :xtdb.metrics/registry)})
+(defmethod ig/expand-key ::memory [k factory]
+  {k {:allocator (ig/ref :xtdb/allocator)
+      :factory factory
+      :metrics-registry (ig/ref :xtdb.metrics/registry)}})
 
 (defmethod ig/init-key ::memory [_ {:keys [allocator ^MemoryCache$Factory factory metrics-registry]}]
   (.open factory allocator metrics-registry))
@@ -27,9 +27,9 @@
                 max-cache-bytes (.maxSizeBytes max-cache-bytes)
                 max-cache-ratio (.maxSizeRatio max-cache-ratio))))
 
-(defmethod ig/prep-key ::disk [_ factory]
-  {:factory factory
-   :metrics-registry (ig/ref :xtdb.metrics/registry)})
+(defmethod ig/expand-key ::disk [k factory]
+  {k {:factory factory
+      :metrics-registry (ig/ref :xtdb.metrics/registry)}})
 
 (defmethod ig/init-key ::disk [_ {:keys [^DiskCache$Factory factory metrics-registry]}]
   (some-> factory (.build metrics-registry)))

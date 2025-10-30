@@ -6,9 +6,9 @@
   (:import (xtdb.block.proto Block TxKey)
            xtdb.catalog.BlockCatalog))
 
-(defmethod ig/prep-key :xtdb/block-catalog [_ {:keys [db-name]}]
-  {:db-name db-name
-   :buffer-pool (ig/ref :xtdb/buffer-pool)})
+(defmethod ig/expand-key :xtdb/block-catalog [k {:keys [db-name]}]
+  {k {:db-name db-name
+      :buffer-pool (ig/ref :xtdb/buffer-pool)}})
 
 (defmethod ig/init-key :xtdb/block-catalog [_ {:keys [db-name buffer-pool]}]
   (BlockCatalog. db-name buffer-pool))

@@ -1818,11 +1818,11 @@
    :ssl-ctx (when-let [ssl (.getSsl config)]
               (->ssl-ctx (.getKeyStore ssl) (.getKeyStorePassword ssl)))})
 
-(defmethod ig/prep-key ::server [_ config]
-  (into {:node (ig/ref :xtdb/node)
-         :allocator (ig/ref :xtdb/allocator)
-         :metrics-registry (ig/ref :xtdb.metrics/registry)}
-        (<-config config)))
+(defmethod ig/expand-key ::server [k config]
+  {k (into {:node (ig/ref :xtdb/node)
+            :allocator (ig/ref :xtdb/allocator)
+            :metrics-registry (ig/ref :xtdb.metrics/registry)}
+           (<-config config))})
 
 (defmethod ig/init-key ::server [_ {:keys [host node allocator port ro-port] :as opts}]
   (let [opts (dissoc opts :port :ro-port)]

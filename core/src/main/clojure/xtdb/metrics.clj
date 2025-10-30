@@ -58,8 +58,8 @@
   (->> (java.lang.management.ManagementFactory/getPlatformMXBeans java.lang.management.BufferPoolMXBean)
        (some #(when (= (.getName ^java.lang.management.BufferPoolMXBean %) "direct") %))))
 
-(defmethod ig/prep-key ::registry [_ _]
-  {:config (ig/ref :xtdb/config)})
+(defmethod ig/expand-key ::registry [k _]
+  {k {:config (ig/ref :xtdb/config)}})
 
 (defmethod ig/init-key ::registry [_ {{:keys [node-id]} :config}]
   (let [reg (PrometheusMeterRegistry. PrometheusConfig/DEFAULT)]

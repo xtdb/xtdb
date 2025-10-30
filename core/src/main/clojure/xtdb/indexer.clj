@@ -613,11 +613,11 @@
 
                (.endStruct doc-writer)))))
 
-(defmethod ig/prep-key :xtdb/indexer [_ opts]
-  (merge {:config (ig/ref :xtdb/config)
-          :q-src (ig/ref ::q/query-source)
-          :metrics-registry (ig/ref :xtdb.metrics/registry)}
-         opts))
+(defmethod ig/expand-key :xtdb/indexer [k opts]
+  {k (merge {:config (ig/ref :xtdb/config)
+             :q-src (ig/ref ::q/query-source)
+             :metrics-registry (ig/ref :xtdb.metrics/registry)}
+            opts)})
 
 (defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
                                ^Database db, ^LiveIndex live-index, table-catalog
@@ -753,9 +753,9 @@
 (defmethod ig/halt-key! :xtdb/indexer [_ indexer]
   (util/close indexer))
 
-(defmethod ig/prep-key ::for-db [_ {:keys [base]}]
-  {:base base
-   :query-db (ig/ref :xtdb.db-catalog/for-query)})
+(defmethod ig/expand-key ::for-db [k {:keys [base]}]
+  {k {:base base
+      :query-db (ig/ref :xtdb.db-catalog/for-query)}})
 
 (defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base,
                                     :keys [query-db]}]

@@ -115,12 +115,12 @@
                                               (InetAddress/getByName host)))
                 (not= ::absent port) (.port port)))))
 
-(defmethod ig/prep-key :xtdb/healthz [_ ^HealthzConfig config]
-  {:host (.getHost config)
-   :port (.getPort config)
-   :meter-registry (ig/ref :xtdb.metrics/registry)
-   :db-cat (ig/ref :xtdb/db-catalog)
-   :node (ig/ref :xtdb/node)})
+(defmethod ig/expand-key :xtdb/healthz [k ^HealthzConfig config]
+  {k {:host (.getHost config)
+      :port (.getPort config)
+      :meter-registry (ig/ref :xtdb.metrics/registry)
+      :db-cat (ig/ref :xtdb/db-catalog)
+      :node (ig/ref :xtdb/node)}})
 
 (defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^InetAddress host, ^long port, meter-registry, ^Database$Catalog db-cat]}]
   (let [db (.getPrimary db-cat)

@@ -4,9 +4,9 @@
   (:import xtdb.storage.BufferPool
            (xtdb.metadata PageMetadata)))
 
-(defmethod ig/prep-key ::metadata-manager [_ _]
-  {:allocator (ig/ref :xtdb.db-catalog/allocator)
-   :buffer-pool (ig/ref :xtdb/buffer-pool)})
+(defmethod ig/expand-key ::metadata-manager [k _]
+  {k {:allocator (ig/ref :xtdb.db-catalog/allocator)
+      :buffer-pool (ig/ref :xtdb/buffer-pool)}})
 
 (defmethod ig/init-key ::metadata-manager [_ {:keys [allocator, ^BufferPool buffer-pool, cache-size], :or {cache-size 128}}]
   (PageMetadata/factory allocator buffer-pool cache-size))

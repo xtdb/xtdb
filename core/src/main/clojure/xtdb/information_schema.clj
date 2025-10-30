@@ -471,10 +471,10 @@
 
   (table-template [info-schema table-ref]))
 
-(defmethod ig/prep-key :xtdb/information-schema [_ opts]
-  (into {:allocator (ig/ref :xtdb/allocator)
-         :metrics-registry (ig/ref :xtdb.metrics/registry)}
-        opts))
+(defmethod ig/expand-key :xtdb/information-schema [k opts]
+  {k (into {:allocator (ig/ref :xtdb/allocator)
+            :metrics-registry (ig/ref :xtdb.metrics/registry)}
+           opts)})
 
 (defmethod ig/init-key :xtdb/information-schema [_ {:keys [allocator metrics-registry]}]
   (let [pg-user (pg-user-template-page+trie allocator)]

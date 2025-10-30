@@ -164,10 +164,10 @@
         (test [_ path]
           (not (.isEmpty (.filterIidsForPath bucketer iid-set path))))))))
 
-(defmethod ig/prep-key ::scan-emitter [_ opts]
-  (merge opts
-         {:allocator (ig/ref :xtdb/allocator)
-          :info-schema (ig/ref :xtdb/information-schema)}))
+(defmethod ig/expand-key ::scan-emitter [k opts]
+  {k (merge opts
+            {:allocator (ig/ref :xtdb/allocator)
+             :info-schema (ig/ref :xtdb/information-schema)})})
 
 (defn scan-fields [^Database$Catalog db-catalog, snaps, scan-cols]
   (letfn [(->field [[^TableRef table col-name]]

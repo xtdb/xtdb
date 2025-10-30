@@ -31,10 +31,10 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defmethod ig/prep-key :xtdb/config [_ ^Xtdb$Config config]
-  {:config config
-   :node-id (.getNodeId config)
-   :default-tz (.getDefaultTz config)})
+(defmethod ig/expand-key :xtdb/config [k ^Xtdb$Config config]
+  {k {:config config
+      :node-id (.getNodeId config)
+      :default-tz (.getDefaultTz config)}})
 
 (defmethod ig/init-key :xtdb/config [_ cfg] cfg)
 
@@ -258,14 +258,14 @@
 (defmethod print-method Node [_node ^Writer w] (.write w "#<XtdbNode>"))
 (defmethod pp/simple-dispatch Node [it] (print-method it *out*))
 
-(defmethod ig/prep-key :xtdb/node [_ opts]
-  (merge {:allocator (ig/ref :xtdb/allocator)
-          :config (ig/ref :xtdb/config)
-          :q-src (ig/ref :xtdb.query/query-source)
-          :db-cat (ig/ref :xtdb/db-catalog)
-          :metrics-registry (ig/ref :xtdb.metrics/registry)
-          :authn (ig/ref :xtdb/authn)}
-         opts))
+(defmethod ig/expand-key :xtdb/node [k opts]
+  {k (merge {:allocator (ig/ref :xtdb/allocator)
+             :config (ig/ref :xtdb/config)
+             :q-src (ig/ref :xtdb.query/query-source)
+             :db-cat (ig/ref :xtdb/db-catalog)
+             :metrics-registry (ig/ref :xtdb.metrics/registry)
+             :authn (ig/ref :xtdb/authn)}
+            opts)})
 
 (defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry config] :as deps}]
   (let [node (map->Node (-> deps
@@ -305,9 +305,9 @@
 (defmethod ig/halt-key! :xtdb/node [_ node]
   (util/try-close node))
 
-(defmethod ig/prep-key :xtdb/modules [_ modules]
-  {:node (ig/ref :xtdb/node)
-   :modules (vec modules)})
+(defmethod ig/expand-key :xtdb/modules [k modules]
+  {k {:node (ig/ref :xtdb/node)
+      :modules (vec modules)}})
 
 (defmethod ig/init-key :xtdb/modules [_ {:keys [node modules]}]
   (util/with-close-on-catch [!started-modules (HashMap. (count modules))]
@@ -347,7 +347,7 @@
   (try
     (let [!closing (atom false)
           system (-> (node-system opts)
-                     ig/prep
+                     ig/expand
                      ig/init)]
 
       (-> (:xtdb/node system)
@@ -371,7 +371,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-compactor ^xtdb.api.Xtdb$CompactorNode [opts]
-  (let [system (-> (node-system opts) ig/prep (ig/init [:xtdb/compactor]))]
+  (let [system (-> (node-system opts) ig/expand (ig/init [:xtdb/compactor]))]
     (try
       (->CompactorNode system (atom false))
       (catch clojure.lang.ExceptionInfo e
