@@ -65,8 +65,7 @@
            (queries-stage :hot-queries)]})
 
 (t/deftest ^:bench tpch-benchmark
-  (binding [*qs* #{5}
-            join/*disk-join-threshold-rows* Long/MAX_VALUE]
+  (binding [*qs* #{5}]
     (-> (b/->benchmark :tpch
                        {:scale-factor 1
                         :no-load? true
