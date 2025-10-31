@@ -604,11 +604,11 @@ class MultiDbSimulationTest {
         explicitSeed = null
     }
 
-    private fun addL0s(db: MockDb, tableRef: TableRef, l0s: List<TrieDetails>) {
+    private fun addL0s(tableRef: TableRef, l0s: List<TrieDetails>) {
         l0s.forEach {
             mockDriver.trieKeyToFileSize[it.trieKey.toString()] = it.dataFileSize
         }
-        db.trieCatalog.addTries(tableRef, l0s, Instant.now())
+        dbs.forEach { db ->  db.trieCatalog.addTries(tableRef, l0s, Instant.now()) }
     }
 
     @Test
@@ -616,13 +616,12 @@ class MultiDbSimulationTest {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
 
-        for (db in dbs)
-            addL0s(db, docsTable, listOf(l0Trie))
+        addL0s(docsTable, listOf(l0Trie))
 
         compactors.zip(dbs).safeMap { (compactor, db) ->
             compactor.openForDatabase(db)
         }.useAll {
-            for (db in it)
+            for (db in it.shuffled(rand))
                 db.compactAll()
         }
 
