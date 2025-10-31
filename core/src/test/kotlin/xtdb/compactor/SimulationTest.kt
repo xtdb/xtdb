@@ -47,6 +47,7 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
+import kotlin.use
 
 class MockDb(override val name: DatabaseName, override val trieCatalog: TrieCatalog) : IDatabase {
     override val allocator: BufferAllocator get() = unsupported("allocator")
@@ -636,4 +637,26 @@ class MultiDbSimulationTest {
             trieKeys.first(),
         )
     }
+
+    @RepeatedTest(testIterations)
+    @WithDriverConfig(temporalSplitting = BOTH)
+    fun biggerMultiCompactorRun() {
+        val docsTable = TableRef("xtdb", "public", "docs")
+        val l0tries = L0TrieKeys.take(1000).map { buildTrieDetails(docsTable.tableName, it, 10L * 1024L * 1024L) }
+
+        addL0s(docsTable, l0tries.toList())
+
+        var currentTries: List<List<TrieKey>>
+
+        compactors.zip(dbs).safeMap { (compactor, db) ->
+            compactor.openForDatabase(db)
+        }.useAll { dbs ->
+
+            do {
+                currentTries = trieCatalogs.map { it.listAllTrieKeys(docsTable) }
+                dbs.random(rand).compactAll()
+            } while (currentTries != trieCatalogs.map { it.listAllTrieKeys(docsTable) } )
+        }
+    }
+
 }
