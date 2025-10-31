@@ -190,6 +190,9 @@ interface Compactor : AutoCloseable {
                             jobCalculator.availableJobs(trieCatalog)
                                 .associateBy { JobKey(it.table, it.outputTrieKey.toString()) }
 
+                        LOGGER.debug("job Calc .... ${jobCalculator.availableJobs(trieCatalog)
+                            .associateBy { JobKey(it.table, it.outputTrieKey.toString()) }}")
+
                         if (availableJobs.isEmpty() && queuedJobs.isEmpty()) {
                             LOGGER.trace("sending idle")
                             compactAllPromise?.complete(Unit)

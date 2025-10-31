@@ -806,3 +806,24 @@
                (xt/q node "SELECT *, _valid_from, _valid_to, _system_from, _system_to
                            FROM docs FOR ALL VALID_TIME FOR ALL SYSTEM_TIME
                            ORDER BY _system_from, _valid_from"))))))
+
+(t/deftest no-jobs-when-l2-already-promoted-to-l3
+  (binding [cat/*file-size-target* 16]
+    (t/testing "L2 files at b0f already exist and have been promoted to L3, no new L2 jobs"
+      (t/is (= #{}
+               (calc-jobs ;; L1 files (16 keys)
+                          ["l01-rc-b00" 16] ["l01-rc-b01" 16] ["l01-rc-b02" 16] ["l01-rc-b03" 16]
+                          ["l01-rc-b04" 16] ["l01-rc-b05" 16] ["l01-rc-b06" 16] ["l01-rc-b07" 16]
+                          ["l01-rc-b08" 16] ["l01-rc-b09" 16] ["l01-rc-b0a" 16] ["l01-rc-b0b" 16]
+                          ["l01-rc-b0c" 16] ["l01-rc-b0d" 16] ["l01-rc-b0e" 16] ["l01-rc-b0f" 16]
+                          ;; L2 files (16 keys across partitions)
+                          ["l02-rc-p3-b03" 20] ["l02-rc-p0-b03" 20] ["l02-rc-p1-b03" 20] ["l02-rc-p2-b03" 20]
+                          ["l02-rc-p3-b07" 20] ["l02-rc-p0-b07" 20] ["l02-rc-p1-b07" 20] ["l02-rc-p2-b07" 20]
+                          ["l02-rc-p3-b0b" 20] ["l02-rc-p0-b0b" 20] ["l02-rc-p1-b0b" 20] ["l02-rc-p2-b0b" 20]
+                          ["l02-rc-p3-b0f" 20] ["l02-rc-p0-b0f" 20] ["l02-rc-p1-b0f" 20] ["l02-rc-p2-b0f" 20]
+                          ;; L3 files (16 keys across partition combinations, all at b0f)
+                          ["l03-rc-p23-b0f" 20] ["l03-rc-p13-b0f" 20] ["l03-rc-p03-b0f" 20] ["l03-rc-p11-b0f" 20]
+                          ["l03-rc-p30-b0f" 20] ["l03-rc-p33-b0f" 20] ["l03-rc-p32-b0f" 20] ["l03-rc-p21-b0f" 20]
+                          ["l03-rc-p12-b0f" 20] ["l03-rc-p22-b0f" 20] ["l03-rc-p31-b0f" 20] ["l03-rc-p02-b0f" 20]
+                          ["l03-rc-p10-b0f" 20] ["l03-rc-p00-b0f" 20] ["l03-rc-p20-b0f" 20] ["l03-rc-p01-b0f" 20]))
+            "All L2 partitions at b0f already exist and have been promoted to L3, no new jobs needed"))))
