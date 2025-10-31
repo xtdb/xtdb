@@ -9,7 +9,6 @@
             [integrant.core :as ig]
             [xtdb.error :as err])
   (:import [clojure.lang Keyword MapEntry Symbol]
-           (io.netty.buffer Unpooled)
            io.netty.util.internal.PlatformDependent
            (java.io File Writer)
            java.lang.AutoCloseable
@@ -21,7 +20,7 @@
            [java.security MessageDigest]
            (java.util Arrays Collection Collections LinkedHashMap Map Set UUID WeakHashMap)
            (java.util.concurrent ExecutionException Executors ThreadFactory)
-           (org.apache.arrow.memory BufferAllocator ForeignAllocation)
+           (org.apache.arrow.memory BufferAllocator)
            (xtdb Bytes TaggedValue)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            xtdb.util.NormalForm))
@@ -338,26 +337,6 @@
 
 ;;; Type
 
-(defn ->arrow-buf-view
-  (^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer]
-   (->arrow-buf-view allocator nio-buffer nil))
-
-  (^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer release-fn]
-   (let [netty-buf (if (and (.isDirect nio-buffer) (zero? (.position nio-buffer)))
-                     (Unpooled/wrappedBuffer nio-buffer)
-                     (let [size (.remaining nio-buffer)
-                           netty-buf (Unpooled/directBuffer size)
-                           bb (.nioBuffer netty-buf 0 size)]
-                       (-> (.put bb (.duplicate nio-buffer))
-                           (.clear))
-                       netty-buf))]
-     (.wrapForeignAllocation allocator
-                             (proxy [ForeignAllocation] [(.capacity netty-buf) (.memoryAddress netty-buf)]
-                               (release0 []
-                                 (.release netty-buf)
-                                 (when release-fn
-                                   (release-fn))))))))
-
 (defn compare-nio-buffers-unsigned ^long [^ByteBuffer x ^ByteBuffer y]
   (let [rem-x (.remaining x)
         rem-y (.remaining y)
@@ -512,21 +491,6 @@
      (fn gensym-seed
        ([] (symbol (str "gensym" suffix (swap! ctr inc))))
        ([prefix] (symbol (str prefix suffix (swap! ctr inc))))))))
-
-;; Copied from
-;; https://github.com/clojure/clojurescript/blob/e74d48d5b0fd8d08c154672349cfa4d8a4166d2d/src/main/clojure/cljs/util.cljc
-(defn distinct-by
-  ([f coll]
-   (let [step (fn step [xs seen]
-                (lazy-seq
-                 ((fn [[x :as xs] seen]
-                    (when-let [s (seq xs)]
-                      (let [v (f x)]
-                        (if (contains? seen v)
-                          (recur (rest s) seen)
-                          (cons x (step (rest s) (conj seen v)))))))
-                  xs seen)))]
-     (step coll #{}))))
 
 (defn max-direct-memory
   "Returns the maximum direct memory supposed to be used by the system.
