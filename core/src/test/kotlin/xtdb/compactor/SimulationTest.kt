@@ -70,7 +70,7 @@ enum class TemporalSplitting {
 data class DriverConfig(
     val temporalSplitting: TemporalSplitting = CURRENT,
     val baseTime: Instant = Instant.parse("2020-01-01T00:00:00Z"),
-    val blocksPerWeek: Long = 14
+    val blocksPerWeek: Long = 140
 )
 
 class MockDriver(
