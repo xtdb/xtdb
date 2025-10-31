@@ -37,6 +37,7 @@ import xtdb.util.info
 import xtdb.util.logger
 import xtdb.util.requiringResolve
 import xtdb.util.warn
+import java.lang.Thread.sleep
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -528,6 +529,39 @@ class SimulationTest {
     }
 
     @RepeatedTest(testIterations)
+    @WithDriverConfig(temporalSplitting = CURRENT)
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    fun multipleL1Compactions() {
+        val docsTable = TableRef("xtdb", "public", "docs")
+        val defaultFileTarget = 100L * 1024L * 1024L
+
+        val tries = mutableListOf<TrieDetails>()
+
+        // Add L1C tries for blocks 0x00-0x0f (16 blocks)
+        // This will trigger multiple L2C compactions
+        for (blockIdx in 0..15) {
+            tries.add(
+                buildTrieDetails(
+                    docsTable.tableName,
+                    "l01-rc-b${blockIdx.toString(16).padStart(2, '0')}",
+                    defaultFileTarget
+                )
+            )
+        }
+
+        compactor.openForDatabase(db).use {
+            addTries(docsTable, tries)
+
+            it.compactAll()
+
+            Assertions.assertEquals(
+                123456789,
+                trieCatalog.listAllTrieKeys(docsTable).size
+            )
+        }
+    }
+
+    @RepeatedTest(testIterations)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     @WithDriverConfig(temporalSplitting = CURRENT)
     fun complexInterleavingL2ToL3() {
@@ -574,9 +608,6 @@ class SimulationTest {
             it.compactAll()
 
             val allTries = trieCatalog.listAllTrieKeys(docsTable)
-
-            LOGGER.info("Total tries after complex interleaving: ${allTries.size}")
-            LOGGER.info("All trie keys: ${allTries.sorted()}")
 
             // Verify L2C partitions are complete (should have b03, b07, b0b, b0f for each partition)
             for (partition in 0..3) {
