@@ -669,7 +669,7 @@ tasks.dokkaHtmlMultiModule {
 tasks.register<JavaExec>("readArrowFile") {
     dependsOn(":xtdb-core:compileClojure", ":xtdb-core:compileKotlin")
 
-    classpath = sourceSets.main.get().runtimeClasspath
+    classpath = sourceSets.dev.get().runtimeClasspath
     mainClass.set("clojure.main")
     jvmArgs(defaultJvmArgs + sixGBJvmArgs)
 
@@ -682,7 +682,7 @@ tasks.register<JavaExec>("readArrowFile") {
 tasks.register<JavaExec>("readArrowStreamFile") {
     dependsOn(":xtdb-core:compileClojure", ":xtdb-core:compileKotlin")
 
-    classpath = sourceSets.main.get().runtimeClasspath
+    classpath = sourceSets.dev.get().runtimeClasspath
     mainClass.set("clojure.main")
     jvmArgs(defaultJvmArgs + sixGBJvmArgs)
     args("-m", "xtdb.main", "read-arrow-stream-file")
@@ -694,7 +694,7 @@ tasks.register<JavaExec>("readArrowStreamFile") {
 tasks.register<JavaExec>("readHashTrieFile") {
     dependsOn(":xtdb-core:compileClojure", ":xtdb-core:compileKotlin")
 
-    classpath = sourceSets.main.get().runtimeClasspath
+    classpath = sourceSets.dev.get().runtimeClasspath
     mainClass.set("clojure.main")
     jvmArgs(defaultJvmArgs + sixGBJvmArgs)
     args("-m", "xtdb.main", "read-hash-trie-file")
