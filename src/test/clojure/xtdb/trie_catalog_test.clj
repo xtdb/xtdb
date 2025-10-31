@@ -527,3 +527,35 @@
              (->> (cat/reset->l0 table-trie-cat)
                   (cat/current-tries)
                   (into #{} (map :trie-key)))))))
+
+(t/deftest test-l2-l3-catalog-state
+  (let [cat (TrieCatalog. (ConcurrentHashMap.) 16) ;file-size-target
+        job-calc (c/->JobCalculator)
+        all-tries [;; L1 files (16 keys)
+                   ["l01-rc-b00" 16] ["l01-rc-b01" 16] ["l01-rc-b02" 16] ["l01-rc-b03" 16]
+                   ["l01-rc-b04" 16] ["l01-rc-b05" 16] ["l01-rc-b06" 16] ["l01-rc-b07" 16]
+                   ["l01-rc-b08" 16] ["l01-rc-b09" 16] ["l01-rc-b0a" 16] ["l01-rc-b0b" 16]
+                   ["l01-rc-b0c" 16] ["l01-rc-b0d" 16] ["l01-rc-b0e" 16] ["l01-rc-b0f" 16]
+                   ;; L2 files (16 keys across partitions)
+                   ["l02-rc-p3-b03" 20] ["l02-rc-p0-b03" 20] ["l02-rc-p1-b03" 20] ["l02-rc-p2-b03" 20]
+                   ["l02-rc-p3-b07" 20] ["l02-rc-p0-b07" 20] ["l02-rc-p1-b07" 20] ["l02-rc-p2-b07" 20]
+                   ["l02-rc-p3-b0b" 20] ["l02-rc-p0-b0b" 20] ["l02-rc-p1-b0b" 20] ["l02-rc-p2-b0b" 20]
+                   ["l02-rc-p3-b0f" 20] ["l02-rc-p0-b0f" 20] ["l02-rc-p1-b0f" 20] ["l02-rc-p2-b0f" 20]
+                   ;; L3 files (16 keys across partition combinations, all at b0f)
+                   ["l03-rc-p23-b0f" 20] ["l03-rc-p13-b0f" 20] ["l03-rc-p03-b0f" 20] ["l03-rc-p11-b0f" 20]
+                   ["l03-rc-p30-b0f" 20] ["l03-rc-p33-b0f" 20] ["l03-rc-p32-b0f" 20] ["l03-rc-p21-b0f" 20]
+                   ["l03-rc-p12-b0f" 20] ["l03-rc-p22-b0f" 20] ["l03-rc-p31-b0f" 20] ["l03-rc-p02-b0f" 20]
+                   ["l03-rc-p10-b0f" 20] ["l03-rc-p00-b0f" 20] ["l03-rc-p20-b0f" 20] ["l03-rc-p01-b0f" 20]]]
+
+    ;; Add each trie individually to the catalog
+    (doseq [[trie-key size] all-tries]
+      (.addTries cat #xt/table docs
+                 [(apply trie/->trie-details #xt/table docs [trie-key size])]
+                 #xt/instant "2000-01-01T00:00:00Z"))
+
+    (t/testing "catalog state with L1, L2, and L3 files"
+      (let [table-trie-cat (cat/trie-state cat #xt/table docs)]
+        (t/is (some? table-trie-cat) "catalog should be created")
+
+        ;; You can add your job calculation tests here
+        (.availableJobs job-calc cat)))))
