@@ -8,6 +8,7 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
+import xtdb.DeterministicDispatcher
 import xtdb.SimulationTestBase
 import xtdb.WithSeed
 import xtdb.api.log.Log
@@ -35,15 +36,14 @@ import xtdb.trie.Trie
 import xtdb.trie.TrieCatalog
 import xtdb.trie.TrieKey
 import xtdb.util.StringUtil.asLexHex
-import xtdb.util.info
 import xtdb.util.logger
 import xtdb.util.requiringResolve
-import xtdb.util.warn
+import xtdb.util.safeMap
+import xtdb.util.useAll
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
-import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 
 class MockDb(override val name: DatabaseName, override val trieCatalog: TrieCatalog) : IDatabase {
@@ -78,17 +78,18 @@ class MockDriver(
     val baseSeed: Int,
     config: DriverConfig
 ) : Factory {
-    class AppendMessage(val triesAdded: TriesAdded, val msgTimestamp: Instant, val dbName: DatabaseName? = null)
+    class AppendMessage(val triesAdded: TriesAdded, val msgTimestamp: Instant, val systemId: Int = 0)
 
     private val temporalSplitting = config.temporalSplitting
     private val baseTime = config.baseTime
     private val blocksPerWeek = config.blocksPerWeek
     val trieKeyToFileSize = mutableMapOf<TrieKey, Long>()
     val channel = Channel<AppendMessage>(UNLIMITED)
+    var nextSystemId = 0
 
-    override fun create(db: IDatabase) = ForDatabase(db)
+    override fun create(db: IDatabase) = ForDatabase(db, nextSystemId++)
 
-    inner class ForDatabase(val db: IDatabase) : Driver {
+    inner class ForDatabase(val db: IDatabase, val systemId: Int) : Driver {
         val trieCatalog = db.trieCatalog
 
         val job = CoroutineScope(dispatcher).launch {
@@ -183,14 +184,11 @@ class MockDriver(
 
         override suspend fun appendMessage(triesAdded: TriesAdded): Log.MessageMetadata {
             val logTimestamp = Instant.now()
-            channel.send(AppendMessage(triesAdded, logTimestamp, db.name))
+            channel.send(AppendMessage(triesAdded, logTimestamp, systemId))
             return Log.MessageMetadata(logOffset++, logTimestamp)
         }
 
-        override fun close() = close(null)
-
-        fun close(e: Throwable?) {
-            channel.close(e)
+        override fun close() {
             runBlocking {
                 job.cancelAndJoin()
             }
@@ -343,7 +341,7 @@ class SimulationTest : SimulationTestBase() {
             )
 
             // Round 2: Add 3 more L0 tries and compact
-           addTries(
+            addTries(
                 table,
                 listOf(
                     buildTrieDetails(table.tableName, "l00-rc-b03", 10 * 1024),
@@ -386,9 +384,8 @@ class SimulationTest : SimulationTestBase() {
             Assertions.assertEquals(100, allTries.prefix("l01-rc-").size)
             Assertions.assertEquals(8, allTries.prefix("l02-rc-").size)
         }
-
-
     }
+
 
     @RepeatedTest(testIterations)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
@@ -529,9 +526,90 @@ class SimulationTest : SimulationTestBase() {
             Assertions.assertEquals(16, docsKeys.prefix("l01-rc-").size)
             Assertions.assertEquals(16, docsKeys.prefix("l02-rc-").size)
             Assertions.assertEquals(16, docsKeys.prefix("l03-rc-").size)
-            Assertions.assertEquals(docsKeys.toSet(), usersKeys.toSet(), "Docs and Users tables should have identical trie keys")
-            Assertions.assertEquals(docsKeys.toSet(), ordersKeys.toSet(), "Docs and Orders tables should have identical trie keys")
-
+            Assertions.assertEquals(
+                docsKeys.toSet(),
+                usersKeys.toSet(),
+                "Docs and Users tables should have identical trie keys"
+            )
+            Assertions.assertEquals(
+                docsKeys.toSet(),
+                ordersKeys.toSet(),
+                "Docs and Orders tables should have identical trie keys"
+            )
         }
+    }
+}
+
+class MultiDbSimulationTest {
+    var currentSeed: Int = 0
+    var explicitSeed: Int? = null
+    var driverConfig: DriverConfig = DriverConfig()
+    var numberOfSystems: Int = 2
+    private lateinit var mockDriver: MockDriver
+    private lateinit var jobCalculator: Compactor.JobCalculator
+    private lateinit var compactors: List<Compactor.Impl>
+    private lateinit var trieCatalogs: List<TrieCatalog>
+    private lateinit var dbs: List<MockDb>
+    private lateinit var dispatcher: CoroutineDispatcher
+
+    @BeforeEach
+    fun setUp() {
+        setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
+        currentSeed = explicitSeed ?: Random.nextInt()
+        dispatcher = DeterministicDispatcher(currentSeed)
+        mockDriver = MockDriver(dispatcher, currentSeed, driverConfig)
+        jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
+
+        compactors = List(numberOfSystems) {
+            Compactor.Impl(mockDriver, null, jobCalculator, false, 2, dispatcher)
+        }
+
+        trieCatalogs = List(numberOfSystems) {
+            createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
+        }
+
+        dbs = List(numberOfSystems) {
+            MockDb("xtdb", trieCatalogs[it] )
+        }
+    }
+
+    @AfterEach
+    fun tearDown() {
+        driverConfig = DriverConfig()
+        explicitSeed = null
+    }
+
+    private fun addL0s(db: MockDb, tableRef: TableRef, l0s: List<TrieDetails>) {
+        l0s.forEach {
+            mockDriver.trieKeyToFileSize[it.trieKey.toString()] = it.dataFileSize
+        }
+        db.trieCatalog.addTries(tableRef, l0s, Instant.now())
+    }
+
+    @Test
+    fun singleL0Compaction() {
+        val docsTable = TableRef("xtdb", "public", "docs")
+        val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
+
+        for (db in dbs)
+            addL0s(db, docsTable, listOf(l0Trie))
+
+        compactors.zip(dbs).safeMap { (compactor, db) ->
+            compactor.openForDatabase(db)
+        }.useAll {
+            for (db in it)
+                db.compactAll()
+        }
+
+        val trieKeys = trieCatalogs.map { it.listAllTrieKeys(docsTable) }.distinct()
+
+        Assertions.assertEquals(
+            1,
+            trieKeys.size,
+        )
+        Assertions.assertEquals(
+            listOf("l00-rc-b00", "l01-rc-b00"),
+            trieKeys.first(),
+        )
     }
 }
