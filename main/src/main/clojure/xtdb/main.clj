@@ -32,6 +32,7 @@
   (println " * `compactor`: runs a compactor-only node")
   (println " * `playground`: starts a 'playground', an in-memory node which accepts any database name, creating it if required")
   (println " * `reset-compactor <db-name>`: resets the compacted files on the given node.")
+  (println " * `export-snapshot <db-name>`: exports a consistent snapshot of object storage for the given database.")
   (newline)
   (println "For more information about any command, run `<command> --help`, e.g. `playground --help`"))
 
@@ -169,6 +170,23 @@
 
     ((requiring-resolve 'xtdb.compactor.reset/reset-compactor!) (file->node-opts file) db-name {:dry-run? dry-run?})))
 
+(def export-snapshot-cli-spec
+  [config-file-opt
+   [nil "--dry-run"
+    "Lists files that would be copied, without actually copying them"
+    :id :dry-run?]
+   ["-h" "--help"]])
+
+(defn- export-snapshot! [args]
+  (let [{{:keys [dry-run? file]} :options, [db-name] :arguments} (-> (parse-args args export-snapshot-cli-spec)
+                                                                     (handling-arg-errors-or-help))]
+    (when (nil? db-name)
+      (binding [*out* *err*]
+        (println "Missing db-name: `export-snapshot <db-name> [opts]`")
+        (System/exit 2)))
+
+    ((requiring-resolve 'xtdb.export/export-snapshot!) (file->node-opts file) db-name {:dry-run? dry-run?})))
+
 (def read-arrow-file-cli-spec
   [["-h" "--help"]])
 
@@ -240,6 +258,10 @@
 
         "reset-compactor" (do
                             (reset-compactor! more-args)
+                            (System/exit 0))
+
+        "export-snapshot" (do
+                            (export-snapshot! more-args)
                             (System/exit 0))
 
         "read-arrow-file" (do

@@ -27,6 +27,10 @@ class BlockCatalog(private val dbName: DatabaseName, private val bp: BufferPool)
 
     companion object {
         private val blocksPath = "blocks".asPath
+
+        @JvmStatic
+        fun blockFilePath(blockIndex: BlockIndex): Path =
+            blocksPath.resolve("b${blockIndex.asLexHex}.binpb")
     }
 
     private val allBlockFiles get() = bp.listAllObjects(blocksPath).filter { it.key.fileName.extension == "binpb" }
@@ -65,7 +69,7 @@ class BlockCatalog(private val dbName: DatabaseName, private val bp: BufferPool)
             secondaryDatabases?.let { this.secondaryDatabases.putAll(it) }
         }
 
-        bp.putObject(blocksPath.resolve("b${blockIndex.asLexHex}.binpb"), ByteBuffer.wrap(newBlock.toByteArray()))
+        bp.putObject(blockFilePath(blockIndex), ByteBuffer.wrap(newBlock.toByteArray()))
 
         this.latestBlock = newBlock
     }
