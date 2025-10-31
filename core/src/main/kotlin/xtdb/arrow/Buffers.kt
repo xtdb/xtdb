@@ -5,6 +5,8 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.util.DecimalUtility
+import xtdb.arrow.ArrowUtil.toByteBuffer
+import java.lang.foreign.MemorySegment
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 import kotlin.math.max
@@ -109,7 +111,7 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
 
     operator fun set(idx: Int, v: Double) = buf.setDouble(idx.toLong() * Double.SIZE_BYTES, v)
 
-    fun getBytes(start: Int, len: Int): ByteBuffer = buf.nioBuffer(start.toLong(), len)
+    fun getBytes(start: Int, len: Int) = buf.toByteBuffer(start.toLong(), len.toLong())
 
     fun writeBytes(bytes: ByteArray) {
         ensureWritable(bytes.size.toLong())

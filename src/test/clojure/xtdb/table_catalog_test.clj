@@ -1,7 +1,6 @@
 (ns xtdb.table-catalog-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
             [xtdb.db-catalog :as db]
             [xtdb.object-store :as os]
             [xtdb.table :as table]

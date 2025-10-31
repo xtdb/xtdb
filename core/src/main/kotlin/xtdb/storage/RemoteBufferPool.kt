@@ -16,6 +16,7 @@ import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.ArrowUtil.openArrowBufView
 import xtdb.arrow.ArrowUtil.readArrowFooter
 import xtdb.arrow.ArrowUtil.toByteArray
+import xtdb.arrow.ArrowUtil.toByteBuffer
 import xtdb.arrow.Relation
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
@@ -86,11 +87,11 @@ internal class RemoteBufferPool(
             val partBuffers = mutableListOf<ByteBuffer>()
 
             for (cut in cuts()) {
-                partBuffers.add(nioBuffer(prevCut, (cut - prevCut).toInt()))
+                partBuffers.add(toByteBuffer(prevCut, cut - prevCut))
                 prevCut = cut
             }
 
-            return partBuffers.also { it.add(nioBuffer(prevCut, (capacity() - prevCut).toInt())) }
+            return partBuffers.also { it.add(toByteBuffer(prevCut, capacity() - prevCut)) }
         }
     }
 

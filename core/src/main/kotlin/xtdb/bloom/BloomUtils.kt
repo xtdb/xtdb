@@ -5,6 +5,7 @@ package xtdb.bloom
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.roaringbitmap.ImmutableBitmapDataProvider
 import org.roaringbitmap.buffer.ImmutableRoaringBitmap
+import xtdb.arrow.ArrowUtil.toByteBuffer
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorWriter
 import xtdb.util.Hasher
@@ -20,7 +21,7 @@ fun bloomToBitmap(bloomRdr: VectorReader, idx: Int): BloomFilter {
     val pointer = ArrowBufPointer().apply {
         bloomRdr.getPointer(idx, this)
     }
-    val nioBuffer = pointer.buf!!.nioBuffer(pointer.offset, pointer.length.toInt()).order(LITTLE_ENDIAN)
+    val nioBuffer = pointer.buf!!.toByteBuffer(pointer.offset, pointer.length).order(LITTLE_ENDIAN)
     return ImmutableRoaringBitmap(nioBuffer)
 }
 

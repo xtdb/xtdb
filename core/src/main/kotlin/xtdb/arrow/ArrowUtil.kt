@@ -15,6 +15,7 @@ import org.apache.arrow.vector.ipc.message.MessageSerializer
 import org.apache.arrow.vector.ipc.message.MessageSerializer.IPC_CONTINUATION_TOKEN
 import org.apache.arrow.vector.ipc.message.MessageSerializer.deserializeRecordBatch
 import xtdb.error.Incorrect
+import java.lang.foreign.MemorySegment
 import java.nio.ByteBuffer
 import java.nio.channels.SeekableByteChannel
 import java.nio.charset.StandardCharsets
@@ -31,7 +32,7 @@ object ArrowUtil {
     ): ArrowRecordBatch {
         val prefixSize = if (getInt(offset) == IPC_CONTINUATION_TOKEN) 8L else 4L
 
-        val metadataBuf = nioBuffer(offset + prefixSize, (metadataLength - prefixSize).toInt())
+        val metadataBuf = toByteBuffer(offset + prefixSize, metadataLength - prefixSize)
 
         val bodyBuf = slice(offset + metadataLength, bodyLength).also { it.referenceManager.retain() }
 
@@ -112,9 +113,9 @@ object ArrowUtil {
     fun ArrowBuf.toArrowRecordBatchView(block: ArrowBlock): ArrowRecordBatch {
         val prefixSize = if (getInt(block.offset) == IPC_CONTINUATION_TOKEN) 8 else 4
 
-        val messageBuffer = nioBuffer(
+        val messageBuffer = toByteBuffer(
             block.offset + prefixSize,
-            block.metadataLength - prefixSize
+            (block.metadataLength - prefixSize).toLong()
         )
 
         val batch = RecordBatch()
@@ -164,8 +165,9 @@ object ArrowUtil {
         }
     }
 
-    fun ArrowBuf.toByteArray(): ByteArray {
-        val bb = nioBuffer(0, capacity().toInt())
-        return ByteArray(bb.remaining()).also { bb.get(it) }
-    }
+    fun ArrowBuf.toByteArray() = ByteArray(capacity().toInt()).also { getBytes(0, it) }
+
+    @Suppress("Since15") // IntelliJ flags this as unavailable, but it's actually available.
+    fun ArrowBuf.toByteBuffer(start: Long = 0, len: Long = capacity()): ByteBuffer =
+        MemorySegment.ofAddress(memoryAddress() + start).reinterpret(len).asByteBuffer()
 }
