@@ -439,4 +439,34 @@ class SimulationTest {
             trieCatalog.listAllTrieKeys(docsTable).size
         )
     }
+
+    @RepeatedTest(testIterations)
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @WithDriverConfig(temporalSplitting = CURRENT)
+    fun l1cToL2cCompaction() {
+        val docsTable = TableRef("xtdb", "public", "docs")
+        val defaultFileTarget = 100L * 1024L * 1024L
+
+        val l1Tries = listOf(
+            buildTrieDetails(docsTable.tableName, "l01-rc-b00", defaultFileTarget),
+            buildTrieDetails(docsTable.tableName, "l01-rc-b01", defaultFileTarget),
+            buildTrieDetails(docsTable.tableName, "l01-rc-b02", defaultFileTarget),
+            buildTrieDetails(docsTable.tableName, "l01-rc-b03", defaultFileTarget)
+        )
+
+        compactor.openForDatabase(db).use {
+            addTries(docsTable, l1Tries)
+
+            it.compactAll()
+
+            Assertions.assertEquals(
+                setOf(
+                    "l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03",
+                    "l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03"
+                ),
+                trieCatalog.listAllTrieKeys(docsTable).toSet()
+            )
+        }
+    }
+
 }
