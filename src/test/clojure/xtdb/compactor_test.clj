@@ -498,12 +498,12 @@
 
               ;; TODO this doseq seems to return nothing, so nothing gets tested?
               (doseq [{:keys [^String trie-key]} (map trie/parse-trie-file-path meta-files)]
-                (util/with-open [page-meta (.openPageMetadata meta-mgr (Trie/metaFilePath table-name trie-key))
-                                 seg (BufferPoolSegment/open tu/*allocator* bp meta-mgr table-name trie-key)]
-                  (doseq [leaf (.getLeaves (.getTrie page-meta))
-                          :let [page (.page seg leaf)]]
-                    (with-open [rel (.loadDataPage page tu/*allocator*)]
-                      (t/is (pos? (.getRowCount rel))))))))))))))
+                (util/with-open [seg (BufferPoolSegment. tu/*allocator* bp meta-mgr table-name trie-key nil)
+                                 seg-meta (.openMetadata seg)]
+                  (doseq [leaf (.getLeaves (.getTrie seg-meta))
+                          :let [page (.page seg-meta leaf)
+                                rel (.loadDataPage (.getPage page) tu/*allocator*)]]
+                    (t/is (pos? (.getRowCount rel)))))))))))))
 
 (t/deftest test-l2-compaction-badly-distributed
   (let [node-dir (util/->path "target/compactor/test-l2-compaction-badly-distributed")]

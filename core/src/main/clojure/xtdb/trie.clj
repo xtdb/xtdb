@@ -8,8 +8,8 @@
            (java.time LocalDate)
            (java.util ArrayList)
            (xtdb.log.proto TrieDetails TrieMetadata TrieState)
-           xtdb.segment.Segment$Page
-           (xtdb.trie MemoryHashTrie MemoryHashTrie$Node MemoryHashTrie$Branch MemoryHashTrie$Leaf Trie Trie$Key)
+           (xtdb.segment Segment$PageMeta)
+           (xtdb.trie MemoryHashTrie MemoryHashTrie$Branch MemoryHashTrie$Leaf MemoryHashTrie$Node Trie Trie$Key)
            (xtdb.util Temporal TemporalBounds TemporalDimension)))
 
 (defn ->trie-details ^TrieDetails
@@ -95,7 +95,7 @@
   ([pages] (filter-pages pages (TemporalBounds.)))
   ([pages ^TemporalBounds query-bounds]
    (let [leaves (ArrayList.)]
-     (loop [[^Segment$Page page & more-pages] pages
+     (loop [[^Segment$PageMeta page & more-pages] pages
             smallest-valid-from Long/MAX_VALUE
             largest-valid-to Long/MIN_VALUE
             smallest-system-from Long/MAX_VALUE
@@ -123,7 +123,7 @@
 
          (when (seq leaves)
            (let [valid-time (TemporalDimension. smallest-valid-from largest-valid-to)]
-             (loop [[^Segment$Page page & more-pages] non-taken-pages]
+             (loop [[^Segment$PageMeta page & more-pages] non-taken-pages]
                (when page
                  (let [temporal-metadata (.getTemporalMetadata page)
                        obj-largest-system-from (.getMaxSystemFrom temporal-metadata)]

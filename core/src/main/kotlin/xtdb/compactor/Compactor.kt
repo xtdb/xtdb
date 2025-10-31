@@ -17,7 +17,7 @@ import xtdb.compactor.PageTree.Companion.asTree
 import xtdb.database.IDatabase
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.TrieMetadata
-import xtdb.segment.BufferPoolSegment.Companion.open
+import xtdb.segment.BufferPoolSegment
 import xtdb.table.TableRef
 import xtdb.trie.*
 import xtdb.util.*
@@ -88,8 +88,7 @@ interface Compactor : AutoCloseable {
 
                         override fun executeJob(job: Job): TriesAdded =
                             try {
-                                job.trieKeys.safeMap { open(al, bp, mm, job.table, it) }.useAll { segs ->
-
+                                job.trieKeys.map { BufferPoolSegment(al, bp, mm, job.table, it) }.useAll { segs ->
                                     val recencyPartitioning =
                                         if (job.partitionedByRecency) SegmentMerge.RecencyPartitioning.Partition
                                         else SegmentMerge.RecencyPartitioning.Preserve(job.outputTrieKey.recency)
@@ -115,7 +114,8 @@ interface Compactor : AutoCloseable {
                                                     }
                                                 }
                                             }
-                                    return TriesAdded(Storage.VERSION, bp.epoch, addedTries)
+
+                                    TriesAdded(Storage.VERSION, bp.epoch, addedTries)
                                 }
                             } catch (e: ClosedByInterruptException) {
                                 throw InterruptedException(e.message)
