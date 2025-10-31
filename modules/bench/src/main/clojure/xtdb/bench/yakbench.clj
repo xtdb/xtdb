@@ -282,10 +282,9 @@
     (sort-by :sum > rows)))
 
 (defn profile
-  [node suite]
+  [node iterations suite]
   (with-open [conn (get-conn node)]
-    (let [iterations 10
-          _throwaway (doseq [{:keys [f]} suite]
+    (let [_throwaway (doseq [{:keys [f]} suite]
                        (f conn))
           [_ pstats] (tufte/profiled
                       {}
@@ -429,7 +428,7 @@
             :stage :profile-global-queries
             :f (fn [{:keys [node !state]}]
                  (let [{:keys [active-users biggest-feed]} @!state
-                       {:keys [profile formatted]} (profile node (benchmarks-queries active-users biggest-feed))]
+                       {:keys [profile formatted]} (profile node 10 (benchmarks-queries active-users biggest-feed))]
                    (swap! !state update :profiles assoc :global profile)
                    (println formatted)))}
 
@@ -437,14 +436,14 @@
             :stage :profile-max-user
             :f (fn [{:keys [node !state]}]
                  (let [{:keys [max-user]} @!state
-                       {:keys [profile formatted]} (profile node (user-specific-benchmarks-queries max-user))]
+                       {:keys [profile formatted]} (profile node 10 (user-specific-benchmarks-queries max-user))]
                    (swap! !state update :profiles assoc :max-user profile)
                    (println formatted)))}
            {:t :call
             :stage :profile-mean-user
             :f (fn [{:keys [node !state]}]
                  (let [{:keys [mean-user]} @!state
-                       {:keys [profile formatted]} (profile node (user-specific-benchmarks-queries mean-user))]
+                       {:keys [profile formatted]} (profile node 50 (user-specific-benchmarks-queries mean-user))]
                    (swap! !state update :profiles assoc :mean-user profile)
                    (println formatted)))}
            {:t :call
@@ -485,11 +484,11 @@
               active-users (get-active-users conn random scale)
               biggest-feed (get-biggest-feed conn random)]
           (println "Profile Global")
-          (println (:formatted (profile node (benchmarks-queries active-users biggest-feed))))
+          (println (:formatted (profile node 10 (benchmarks-queries active-users biggest-feed))))
           (println "Profile Max User")
-          (println (:formatted (profile node (user-specific-benchmarks-queries max-user))))
+          (println (:formatted (profile node 10 (user-specific-benchmarks-queries max-user))))
           (println "Profile Mean User")
-          (println (:formatted (profile node (user-specific-benchmarks-queries mean-user))))
+          (println (:formatted (profile node 50 (user-specific-benchmarks-queries mean-user))))
           (println "Inspect")
           (inspect node {:max-user max-user
                          :active-users active-users}))))
