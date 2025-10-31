@@ -169,7 +169,7 @@ class MockDriver(
                         TrieDetails.newBuilder()
                             .setTableName(job.table.tableName)
                             .setTrieKey(job.outputTrieKey.toString())
-                            .setDataFileSize(101L * 1024L * 1024L)
+                            .setDataFileSize(100L * 1024L * 1024L)
                             .build()
                     )
                 )
@@ -332,11 +332,11 @@ class SimulationTest {
         explicitSeed = null
     }
 
-    private fun addL0s(tableRef: TableRef, l0s: List<TrieDetails>) {
-        l0s.forEach {
+    private fun addTries(tableRef: TableRef, tries: List<TrieDetails>) {
+        tries.forEach {
             mockDriver.trieKeyToFileSize[it.trieKey.toString()] = it.dataFileSize
         }
-        trieCatalog.addTries(tableRef, l0s, Instant.now())
+        trieCatalog.addTries(tableRef, tries, Instant.now())
     }
 
 
@@ -346,9 +346,8 @@ class SimulationTest {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
 
-        addL0s(docsTable, listOf(l0Trie))
-
         compactor.openForDatabase(db).use {
+            addTries(docsTable, listOf(l0Trie))
             it.compactAll()
         }
 
@@ -372,7 +371,7 @@ class SimulationTest {
 
         compactor.openForDatabase(db).use {
             // Round 1: Add 3 L0 tries and compact
-            addL0s(
+            addTries(
                 table,
                 listOf(
                     buildTrieDetails(table.tableName, "l00-rc-b00", 10 * 1024),
@@ -392,7 +391,7 @@ class SimulationTest {
             )
 
             // Round 2: Add 3 more L0 tries and compact
-           addL0s(
+           addTries(
                 table,
                 listOf(
                     buildTrieDetails(table.tableName, "l00-rc-b03", 10 * 1024),
@@ -421,15 +420,14 @@ class SimulationTest {
 
     @Test
     @WithDriverConfig(temporalSplitting = CURRENT)
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun biggerCompactorRun() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0tries = L0TrieKeys.take(100).map { buildTrieDetails(docsTable.tableName, it, 10L * 1024L * 1024L) }
-
-        addL0s(docsTable, l0tries.toList())
-
         var currentTries: List<TrieKey>
 
         compactor.openForDatabase(db).use {
+            addTries(docsTable, l0tries.toList())
             do {
                 currentTries = trieCatalog.listAllTrieKeys(docsTable)
                 it.compactAll()
