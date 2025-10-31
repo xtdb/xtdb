@@ -283,7 +283,7 @@
                                                                     (cat/current-tries)
                                                                     (cat/filter-tries temporal-bounds))]
                                (.add !segments
-                                     (BufferPoolSegment/open allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
+                                     (BufferPoolSegment. allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
 
                              (when live-table-snap
                                (.add !segments
@@ -294,10 +294,7 @@
                                      (let [[memory-rel trie] (info-schema/table-template info-schema table)]
                                        (MemorySegment. trie memory-rel))))
 
-                             (let [merge-tasks (->> (MergePlanner/plan !segments (->path-pred iid-set))
-                                                    (into [] (keep (fn [^MergeTask mt]
-                                                                     (when-let [pages (trie/filter-pages (.getPages mt) temporal-bounds)]
-                                                                       (MergeTask. pages (.getPath mt)))))))]
+                             (let [merge-tasks (MergePlanner/plan !segments (->path-pred iid-set) #(trie/filter-pages % temporal-bounds))]
                                (cond-> (ScanCursor. allocator (vec col-names) col-preds
                                                     temporal-bounds
                                                     !segments (.iterator ^Iterable merge-tasks)

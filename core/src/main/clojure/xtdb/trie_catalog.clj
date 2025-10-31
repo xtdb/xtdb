@@ -11,7 +11,7 @@
            [java.util.concurrent ConcurrentHashMap]
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
            xtdb.catalog.BlockCatalog
-           xtdb.segment.Segment$Page
+           (xtdb.segment Segment$PageMeta)
            (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
            (xtdb.storage BufferPool)
            (xtdb.util TemporalBounds)))
@@ -264,7 +264,7 @@
       (.build)))
 
 (defrecord CatalogEntry [^LocalDate recency ^TrieMetadata trie-metadata ^TemporalBounds query-bounds]
-  Segment$Page
+  Segment$PageMeta
   (testMetadata [_]
     (let [min-query-recency (min (.getLower (.getValidTime query-bounds)) (.getLower (.getSystemTime query-bounds)))]
       (if-let [^long recency (and recency (time/instant->micros (time/->instant recency {:default-tz ZoneOffset/UTC})))]

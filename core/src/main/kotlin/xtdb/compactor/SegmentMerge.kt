@@ -16,7 +16,8 @@ import xtdb.metadata.UNBOUND_TEMPORAL_METADATA
 import xtdb.segment.MergePlanner
 import xtdb.segment.MergeTask
 import xtdb.segment.Segment
-import xtdb.segment.Segment.Page
+import xtdb.segment.Segment.PageMeta
+import xtdb.segment.Segment.PageMeta.Companion.pageMeta
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.EventRowPointer
 import xtdb.trie.Trie.dataRelSchema
@@ -225,27 +226,32 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
  */
 
 private class LocalSegment(
-    private val al: BufferAllocator, dataFile: Path, metaFile: Path
+    private val al: BufferAllocator, dataFile: Path, val metaFile: Path
 ) : Segment<ArrowHashTrie.Leaf>, AutoCloseable {
 
-    override val pageMetadata = PageMetadata.open(al, metaFile)
-    override val trie get() = pageMetadata.trie
+    inner class Metadata : Segment.Metadata<ArrowHashTrie.Leaf> {
+        private val pageMetadata = PageMetadata.open(al, metaFile)
+        override val trie get() = pageMetadata.trie
+
+        // in the utility, we keep the Segments open throughout,
+        // so can be excused for the dataLoader being used 'outside its lifetime'
+        override fun page(leaf: ArrowHashTrie.Leaf) =
+            pageMeta(this@LocalSegment, this, leaf, UNBOUND_TEMPORAL_METADATA)
+
+        override fun testPage(leaf: ArrowHashTrie.Leaf) = true
+
+        override fun close() = pageMetadata.close()
+    }
+
+    override fun openMetadata(): Metadata = Metadata()
+
     private val dataLoader = Relation.loader(al, dataFile)
     override val schema: Schema get() = dataLoader.schema
 
-    // in the utility, we keep the Segments open throughout,
-    // so can be excused for the dataLoader being used 'outside its lifetime'
-    override fun page(leaf: ArrowHashTrie.Leaf) = object : Page {
-        override val schema: Schema get() = this@LocalSegment.schema
-
-        override fun testMetadata() = true
-        override val temporalMetadata get() = UNBOUND_TEMPORAL_METADATA
-
-        override fun loadDataPage(al: BufferAllocator) = dataLoader.loadPage(leaf.dataPageIndex, al)
-    }
+    override fun loadDataPage(al: BufferAllocator, leaf: ArrowHashTrie.Leaf) =
+        dataLoader.loadPage(leaf.dataPageIndex, al)
 
     override fun close() {
-        pageMetadata.close()
         dataLoader.close()
     }
 }

@@ -6,7 +6,7 @@
             [xtdb.util :as util])
   (:import (org.apache.arrow.memory RootAllocator)
            xtdb.arrow.Relation
-           (xtdb.segment MergePlanner MergeTask Segment Segment$Page)
+           (xtdb.segment MergePlanner MergeTask Segment Segment$Metadata Segment$Page Segment$PageMeta)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf)
            (xtdb.util TemporalBounds TemporalDimension)))
 
@@ -16,14 +16,20 @@
   (ArrowHashTrie. (.get meta-rel "nodes")))
 
 (defrecord TestPage [seg page-idx]
-  Segment$Page)
+  Segment$Page
+  Segment$PageMeta
+  (getPage [this] this))
+
+(defrecord TestSegmentMetadata [seg trie]
+  Segment$Metadata
+  (getTrie [_] trie)
+  (page [_ leaf] (->TestPage seg (.getDataPageIndex ^ArrowHashTrie$Leaf leaf)))
+  (close [_]))
 
 (defrecord TestSegment [seg trie]
   Segment
-  (getTrie [_] trie)
-
-  (page [_ leaf]
-    (->TestPage seg (.getDataPageIndex ^ArrowHashTrie$Leaf leaf))))
+  (openMetadata [_]
+    (->TestSegmentMetadata seg trie)))
 
 (defn- <-MergeTask [^MergeTask merge-task]
   {:path (vec (.getPath merge-task))
@@ -78,16 +84,18 @@
                   (sort-by :path))))))
 
 (defrecord MockPage [page metadata-matches? temporal-metadata]
-  Segment$Page
+  Segment$PageMeta
   (testMetadata [_] metadata-matches?)
   (getTemporalMetadata [_] temporal-metadata))
 
 (defn ->mock-page
   ([page] (->mock-page page true))
   ([page metadata-matches?] (->MockPage page metadata-matches? util/unconstraint-temporal-metadata))
+
   ([page min-valid-from max-valid-to] (->mock-page page true min-valid-from max-valid-to))
   ([page metadata-matches? min-valid-from max-valid-to]
    (->MockPage page metadata-matches? (tu/->temporal-metadata min-valid-from max-valid-to)))
+
   ([page metadata-matches? min-vf max-vt min-sf]
    (->mock-page page metadata-matches? min-vf max-vt min-sf Long/MAX_VALUE))
   ([page metadata-matches? min-vf max-vt min-sf max-sf]
