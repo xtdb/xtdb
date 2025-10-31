@@ -469,4 +469,61 @@ class SimulationTest {
         }
     }
 
+    @RepeatedTest(testIterations)
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @WithDriverConfig(temporalSplitting = CURRENT)
+    fun l1cToL2cWithPartialL2() {
+        val docsTable = TableRef("xtdb", "public", "docs")
+        val defaultFileTarget = 100L * 1024L * 1024L
+        val rand = Random(currentSeed)
+
+        // Create 4 full L1C tries
+        val l1Tries = listOf(
+            buildTrieDetails(docsTable.tableName, "l01-rc-b00", defaultFileTarget),
+            buildTrieDetails(docsTable.tableName, "l01-rc-b01", defaultFileTarget),
+            buildTrieDetails(docsTable.tableName, "l01-rc-b02", defaultFileTarget),
+            buildTrieDetails(docsTable.tableName, "l01-rc-b03", defaultFileTarget)
+        )
+
+        // Randomly select which L2 partitions already exist (1-3 partitions)
+        val numExistingPartitions = rand.nextInt(1, 4) // 1, 2, or 3
+        val existingPartitions = (0..3).shuffled(rand).take(numExistingPartitions)
+
+        val existingL2Tries = existingPartitions.map { partition ->
+            buildTrieDetails(docsTable.tableName, "l02-rc-p$partition-b03", defaultFileTarget)
+        }
+
+        val missingPartitions = (0..3).filterNot { it in existingPartitions }
+
+        compactor.openForDatabase(db).use {
+            addTries(docsTable, l1Tries + existingL2Tries)
+
+            it.compactAll()
+
+            val allTries = trieCatalog.listAllTrieKeys(docsTable).toSet()
+
+            // Verify all L1 tries are present
+            Assertions.assertTrue(allTries.containsAll(l1Tries.map { it.trieKey }))
+
+            // Verify existing L2 partitions are still present
+            existingPartitions.forEach { partition ->
+                Assertions.assertTrue(
+                    allTries.contains("l02-rc-p$partition-b03"),
+                    "Existing L2 partition $partition should still be present"
+                )
+            }
+
+            // Verify missing L2 partitions were created
+            missingPartitions.forEach { partition ->
+                Assertions.assertTrue(
+                    allTries.contains("l02-rc-p$partition-b03"),
+                    "Missing L2 partition $partition should be created"
+                )
+            }
+
+            // Verify we have exactly the expected tries: 4 L1s + 4 L2s
+            Assertions.assertEquals(8, allTries.size,
+                "Should have 4 L1C tries and 4 L2C partitions")
+        }
+    }
 }
