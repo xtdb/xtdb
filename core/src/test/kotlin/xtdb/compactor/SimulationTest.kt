@@ -78,17 +78,17 @@ class MockDriver(
     val baseSeed: Int,
     config: DriverConfig
 ) : Factory {
-    class AppendMessage(val triesAdded: TriesAdded, val msgTimestamp: Instant)
+    class AppendMessage(val triesAdded: TriesAdded, val msgTimestamp: Instant, val dbName: DatabaseName? = null)
 
     private val temporalSplitting = config.temporalSplitting
     private val baseTime = config.baseTime
     private val blocksPerWeek = config.blocksPerWeek
     val trieKeyToFileSize = mutableMapOf<TrieKey, Long>()
+    val channel = Channel<AppendMessage>(UNLIMITED)
 
     override fun create(db: IDatabase) = ForDatabase(db)
 
-    inner class ForDatabase(db: IDatabase) : Driver {
-        val channel = Channel<AppendMessage>(UNLIMITED)
+    inner class ForDatabase(val db: IDatabase) : Driver {
         val trieCatalog = db.trieCatalog
 
         val job = CoroutineScope(dispatcher).launch {
@@ -183,7 +183,7 @@ class MockDriver(
 
         override suspend fun appendMessage(triesAdded: TriesAdded): Log.MessageMetadata {
             val logTimestamp = Instant.now()
-            channel.send(AppendMessage(triesAdded, logTimestamp))
+            channel.send(AppendMessage(triesAdded, logTimestamp, db.name))
             return Log.MessageMetadata(logOffset++, logTimestamp)
         }
 
