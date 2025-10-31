@@ -1,30 +1,38 @@
 [:project
- [{avg_yearly (/ _sum_out_6 7.0)}]
+ [{avg_yearly (/ _sum_out_7 7.0)}]
  [:group-by
-  [{_sum_out_6 (sum l.1/l_extendedprice)}]
+  [{_sum_out_7 (sum l.1/l_extendedprice)}]
   [:select
    (< l.1/l_quantity _sq_3)
-   [:single-join
-    []
-    [:mega-join
-     []
-     [[:rename
-       l.1
-       [:scan
-        {:table #xt/table lineitem}
-        [l_extendedprice l_quantity {l_partkey (= nil l_partkey)}]]]
-      [:rename
-       p.2
-       [:scan
-        {:table #xt/table part}
-        [{p_brand (= p_brand "Brand#23")}
-         {p_container (= p_container "MED BOX")}]]]]]
-    [:project
-     [{_sq_3 (* 0.2 _avg_out_5)}]
-     [:group-by
-      [{_avg_out_5 (avg l.4/l_quantity)}]
+   [:map
+    [{_sq_3 (* 0.2 _avg_out_6)}]
+    [:group-by
+     [l.1/l_extendedprice
+      l.1/l_quantity
+      l.1/l_partkey
+      p.2/_id
+      p.2/p_brand
+      p.2/p_container
+      _row_number_0
+      {_avg_out_6 (avg l.4/l_quantity)}]
+     [:left-outer-join
+      [{p.2/_id l.4/l_partkey}]
+      [:map
+       [{_row_number_0 (row-number)}]
+       [:mega-join
+        [{l.1/l_partkey p.2/_id}]
+        [[:rename
+          l.1
+          [:scan
+           {:table #xt/table lineitem}
+           [l_extendedprice l_quantity l_partkey]]]
+         [:rename
+          p.2
+          [:scan
+           {:table #xt/table part}
+           [_id
+            {p_brand (= p_brand "Brand#23")}
+            {p_container (= p_container "MED BOX")}]]]]]]
       [:rename
        l.4
-       [:scan
-        {:table #xt/table lineitem}
-        [l_quantity {l_partkey (= l_partkey nil)}]]]]]]]]]
+       [:scan {:table #xt/table lineitem} [l_quantity l_partkey]]]]]]]]]

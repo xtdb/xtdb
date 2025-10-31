@@ -156,14 +156,14 @@
   (slurp (io/resource (str "xtdb/sql/tpch/" (format "q%02d.sql" query-no)))))
 
 (def tpch-table-info
-  {#xt/table customer #{"c_custkey" "c_name" "c_address" "c_nationkey" "c_phone" "c_acctbal" "c_mktsegment" "c_comment"}
-   #xt/table lineitem #{"l_orderkey" "l_partkey" "l_suppkey" "l_linenumber" "l_quantity" "l_extendedprice" "l_discount" "l_tax" "l_returnflag" "l_linestatus" "l_shipdate" "l_commitdate" "l_receiptdate" "l_shipinstruct" "l_shipmode" "l_comment"}
-   #xt/table nation #{"n_nationkey" "n_name" "n_regionkey" "n_comment"}
-   #xt/table orders #{"o_orderkey" "o_custkey" "o_orderstatus" "o_totalprice" "o_orderdate" "o_orderpriority" "o_clerk" "o_shippriority" "o_comment"}
-   #xt/table part #{"p_partkey" "p_name" "p_mfgr" "p_brand" "p_type" "p_size" "p_container" "p_retailprice" "p_comment"}
-   #xt/table partsupp #{"ps_partkey" "ps_suppkey" "ps_availqty" "ps_supplycost" "ps_comment"}
-   #xt/table region #{"r_regionkey" "r_name" "r_comment"}
-   #xt/table supplier #{"s_suppkey" "s_name" "s_address" "s_nationkey" "s_phone" "s_acctbal" "s_comment"}})
+  {#xt/table customer #{"_id" "c_name" "c_address" "c_nationkey" "c_phone" "c_acctbal" "c_mktsegment" "c_comment"}
+   #xt/table lineitem #{"_id" "l_orderkey" "l_partkey" "l_suppkey" "l_linenumber" "l_quantity" "l_extendedprice" "l_discount" "l_tax" "l_returnflag" "l_linestatus" "l_shipdate" "l_commitdate" "l_receiptdate" "l_shipinstruct" "l_shipmode" "l_comment"}
+   #xt/table nation #{"_id" "n_name" "n_regionkey" "n_comment"}
+   #xt/table orders #{"_id" "o_custkey" "o_orderstatus" "o_totalprice" "o_orderdate" "o_orderpriority" "o_clerk" "o_shippriority" "o_comment"}
+   #xt/table part #{"_id" "p_name" "p_mfgr" "p_brand" "p_type" "p_size" "p_container" "p_retailprice" "p_comment"}
+   #xt/table partsupp #{"_id" "ps_partkey" "ps_suppkey" "ps_availqty" "ps_supplycost" "ps_comment"}
+   #xt/table region #{"_id" "r_name" "r_comment"}
+   #xt/table supplier #{"_id" "s_name" "s_address" "s_nationkey" "s_phone" "s_acctbal" "s_comment"}})
 
 (t/deftest test-sql-plans
   (dotimes [n 22]

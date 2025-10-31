@@ -11,7 +11,7 @@ GROUP BY
   l.l_suppkey)
 
 SELECT
-  s.s_suppkey,
+  s._id AS s_suppkey,
   s.s_name,
   s.s_address,
   s.s_phone,
@@ -27,4 +27,4 @@ WHERE
       revenue AS revenue
   )
 ORDER BY
-  s.s_suppkey
+  s._id

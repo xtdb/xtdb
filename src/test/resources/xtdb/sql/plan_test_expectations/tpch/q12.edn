@@ -28,10 +28,10 @@
      [:map
       [{_sq_3 true}]
       [:mega-join
-       []
+       [{o.1/_id l.2/l_orderkey}]
        [[:rename
          o.1
-         [:scan {:table #xt/table orders} [o_orderpriority]]]
+         [:scan {:table #xt/table orders} [o_orderpriority _id]]]
         [:semi-join
          [{l.2/l_shipmode xt.values.4/_column_1}]
          [:rename
@@ -51,7 +51,7 @@
                  (single-field-interval "1" "YEAR" 2 6)))
                (>= l_receiptdate #xt/date "1994-01-01"))}
              l_commitdate
-             {l_orderkey (= nil l_orderkey)}
+             l_orderkey
              l_shipdate
              l_shipmode]]]]
          [:rename

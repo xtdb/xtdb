@@ -14,22 +14,22 @@
       [:map
        [{_sq_9 true}]
        [:mega-join
-        []
+        [{s.1/s_nationkey n.4/_id}
+         {l1.2/l_orderkey o.3/_id}
+         {s.1/_id l1.2/l_suppkey}]
         [[:rename
           n.4
           [:scan
            {:table #xt/table nation}
-           [{n_name (= n_name "SAUDI ARABIA")}]]]
+           [_id {n_name (= n_name "SAUDI ARABIA")}]]]
          [:rename
           o.3
           [:scan
            {:table #xt/table orders}
-           [{o_orderstatus (= o_orderstatus "F")}]]]
+           [{o_orderstatus (= o_orderstatus "F")} _id]]]
          [:rename
           s.1
-          [:scan
-           {:table #xt/table supplier}
-           [s_name {s_nationkey (= s_nationkey nil)}]]]
+          [:scan {:table #xt/table supplier} [s_name _id s_nationkey]]]
          [:semi-join
           [(<> l_suppkey l1.2/l_suppkey) {l1.2/l_orderkey l_orderkey}]
           [:anti-join
@@ -40,12 +40,10 @@
              (> l_receiptdate l_commitdate)
              [:scan
               {:table #xt/table lineitem}
-              [l_receiptdate
-               l_commitdate
-               {l_orderkey (= nil l_orderkey)}
-               {l_suppkey (= nil l_suppkey)}]]]]
+              [l_receiptdate l_commitdate l_orderkey l_suppkey]]]]
            [:project
-            [{l_comment l3.10/l_comment}
+            [{_id l3.10/_id}
+             {l_comment l3.10/l_comment}
              {l_commitdate l3.10/l_commitdate}
              {l_discount l3.10/l_discount}
              {l_extendedprice l3.10/l_extendedprice}
@@ -74,6 +72,7 @@
                 l_orderkey
                 l_shipdate
                 l_comment
+                _id
                 l_returnflag
                 l_extendedprice
                 l_linenumber
@@ -84,7 +83,8 @@
                 l_discount
                 l_partkey]]]]]]
           [:project
-           [{l_comment l2.6/l_comment}
+           [{_id l2.6/_id}
+            {l_comment l2.6/l_comment}
             {l_commitdate l2.6/l_commitdate}
             {l_discount l2.6/l_discount}
             {l_extendedprice l2.6/l_extendedprice}
@@ -111,6 +111,7 @@
               l_orderkey
               l_shipdate
               l_comment
+              _id
               l_returnflag
               l_extendedprice
               l_linenumber

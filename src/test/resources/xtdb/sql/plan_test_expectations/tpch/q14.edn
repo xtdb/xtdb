@@ -10,7 +10,7 @@
       (* l.1/l_extendedprice (- 1 l.1/l_discount))
       0)}]
    [:mega-join
-    []
+    [{l.1/l_partkey p.2/_id}]
     [[:rename
       l.1
       [:scan
@@ -25,5 +25,5 @@
           (>= l_shipdate #xt/date "1995-09-01"))}
         l_extendedprice
         l_discount
-        {l_partkey (= l_partkey nil)}]]]
-     [:rename p.2 [:scan {:table #xt/table part} [p_type]]]]]]]]
+        l_partkey]]]
+     [:rename p.2 [:scan {:table #xt/table part} [_id p_type]]]]]]]]

@@ -3,18 +3,19 @@
  [:order-by
   [[o.1/o_orderpriority {:direction :asc, :null-ordering :nulls-last}]]
   [:project
-   [o.1/o_orderpriority {order_count _row_count_4}]
+   [o.1/o_orderpriority {order_count _row_count_5}]
    [:group-by
-    [o.1/o_orderpriority {_row_count_4 (row-count)}]
+    [o.1/o_orderpriority {_row_count_5 (row-count)}]
     [:map
      [{_sq_2 true}]
      [:semi-join
-      [true]
+      [{o.1/_id l_orderkey}]
       [:rename
        o.1
        [:scan
         {:table #xt/table orders}
         [o_orderpriority
+         _id
          {o_orderdate
           (and
            (<
@@ -24,7 +25,8 @@
              (single-field-interval "3" "MONTH" 2 6)))
            (>= o_orderdate #xt/date "1993-07-01"))}]]]
       [:project
-       [{l_comment l.3/l_comment}
+       [{_id l.3/_id}
+        {l_comment l.3/l_comment}
         {l_commitdate l.3/l_commitdate}
         {l_discount l.3/l_discount}
         {l_extendedprice l.3/l_extendedprice}
@@ -50,9 +52,10 @@
            l_receiptdate
            l_commitdate
            l_tax
-           {l_orderkey (= l_orderkey nil)}
+           l_orderkey
            l_shipdate
            l_comment
+           _id
            l_returnflag
            l_extendedprice
            l_linenumber

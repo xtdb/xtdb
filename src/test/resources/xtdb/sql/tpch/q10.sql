@@ -11,7 +11,7 @@ WHERE
   AND l.l_returnflag = 'R'
   AND c.c_nationkey = n._id
 SELECT
-  c.c_custkey,
+  c._id AS c_custkey,
   c.c_name,
   SUM(l.l_extendedprice * (1 - l.l_discount)) AS revenue,
   c.c_acctbal,

@@ -4,7 +4,7 @@
   [{s_acctbal s.2/s_acctbal}
    {s_name s.2/s_name}
    {n_name n.4/n_name}
-   {p_partkey p.1/p_partkey}
+   {p_partkey p_partkey}
    {p_mfgr p.1/p_mfgr}
    {s_address s.2/s_address}
    {s_phone s.2/s_phone}
@@ -13,83 +13,103 @@
    [[s.2/s_acctbal {:direction :desc, :null-ordering :nulls-first}]
     [n.4/n_name {:direction :asc, :null-ordering :nulls-last}]
     [s.2/s_name {:direction :asc, :null-ordering :nulls-last}]
-    [_ob12 {:direction :asc, :null-ordering :nulls-last}]]
+    [_ob13 {:direction :asc, :null-ordering :nulls-last}]]
    [:project
     [s.2/s_acctbal
      s.2/s_name
      n.4/n_name
-     p.1/p_partkey
+     {p_partkey p.1/_id}
      p.1/p_mfgr
      s.2/s_address
      s.2/s_phone
      s.2/s_comment
-     {_ob12 nil}]
-    [:select
-     (= ps.3/ps_supplycost _sq_6)
-     [:single-join
-      []
-      [:mega-join
-       []
-       [[:rename
-         r.5
-         [:scan
-          {:table #xt/table region}
-          [{r_name (= r_name "EUROPE")}]]]
-        [:rename
-         n.4
-         [:scan
-          {:table #xt/table nation}
-          [n_name {n_regionkey (= n_regionkey nil)}]]]
-        [:rename
-         ps.3
-         [:scan
-          {:table #xt/table partsupp}
-          [{ps_partkey (= nil ps_partkey)}
-           ps_supplycost
-           {ps_suppkey (= nil ps_suppkey)}]]]
-        [:rename
-         p.1
-         [:scan
-          {:table #xt/table part}
-          [{p_size (= p_size 15)}
-           p_partkey
-           p_mfgr
-           {p_type (like p_type "%BRASS")}]]]
-        [:rename
-         s.2
-         [:scan
-          {:table #xt/table supplier}
-          [s_comment
-           s_name
-           s_address
-           s_phone
-           s_acctbal
-           {s_nationkey (= s_nationkey nil)}]]]]]
-      [:project
-       [{_sq_6 _min_out_11}]
-       [:group-by
-        [{_min_out_11 (min ps.7/ps_supplycost)}]
+     {_ob13 p.1/_id}]
+    [:map
+     [{_sq_6 _min_out_12}]
+     [:select
+      (= ps.3/ps_supplycost _min_out_12)
+      [:group-by
+       [p.1/_id
+        p.1/p_size
+        p.1/p_mfgr
+        p.1/p_type
+        s.2/s_comment
+        s.2/s_name
+        s.2/s_address
+        s.2/s_phone
+        s.2/_id
+        s.2/s_acctbal
+        s.2/s_nationkey
+        ps.3/ps_partkey
+        ps.3/ps_supplycost
+        ps.3/ps_suppkey
+        n.4/_id
+        n.4/n_name
+        n.4/n_regionkey
+        r.5/_id
+        r.5/r_name
+        _row_number_0
+        {_min_out_12 (min ps.7/ps_supplycost)}]
+       [:left-outer-join
+        [{p.1/_id ps.7/ps_partkey}]
+        [:map
+         [{_row_number_0 (row-number)}]
+         [:mega-join
+          [{n.4/n_regionkey r.5/_id}
+           {s.2/s_nationkey n.4/_id}
+           {p.1/_id ps.3/ps_partkey}
+           {s.2/_id ps.3/ps_suppkey}]
+          [[:rename
+            r.5
+            [:scan
+             {:table #xt/table region}
+             [_id {r_name (= r_name "EUROPE")}]]]
+           [:rename
+            n.4
+            [:scan {:table #xt/table nation} [_id n_name n_regionkey]]]
+           [:rename
+            ps.3
+            [:scan
+             {:table #xt/table partsupp}
+             [ps_partkey ps_supplycost ps_suppkey]]]
+           [:rename
+            p.1
+            [:scan
+             {:table #xt/table part}
+             [_id
+              {p_size (= p_size 15)}
+              p_mfgr
+              {p_type (like p_type "%BRASS")}]]]
+           [:rename
+            s.2
+            [:scan
+             {:table #xt/table supplier}
+             [s_comment
+              s_name
+              s_address
+              s_phone
+              _id
+              s_acctbal
+              s_nationkey]]]]]]
         [:mega-join
-         []
+         [{n.9/n_regionkey r.10/_id}
+          {s.8/s_nationkey n.9/_id}
+          {ps.7/ps_suppkey s.8/_id}]
          [[:rename
            r.10
            [:scan
             {:table #xt/table region}
-            [{r_name (= r_name "EUROPE")}]]]
+            [_id {r_name (= r_name "EUROPE")}]]]
           [:rename
            n.9
-           [:scan
-            {:table #xt/table nation}
-            [{n_regionkey (= n_regionkey nil)}]]]
+           [:scan {:table #xt/table nation} [_id n_regionkey]]]
           [:rename
            ps.7
            [:scan
             {:table #xt/table partsupp}
-            [{ps_partkey (= nil ps_partkey)}
-             ps_supplycost
-             {ps_suppkey (= nil ps_suppkey)}]]]
+            [ps_partkey ps_supplycost ps_suppkey]]]
           [:rename
            s.8
            [:scan
             {:table #xt/table supplier}
-            [{s_nationkey (= s_nationkey nil)}]]]]]]]]]]]]]
+            [_id s_nationkey]]]]]]]]]]]]]

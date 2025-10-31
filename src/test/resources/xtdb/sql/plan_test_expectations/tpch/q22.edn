@@ -1,18 +1,18 @@
 [:project
- [{cntrycode custsale.11/cntrycode} numcust totacctbal]
+ [{cntrycode custsale.12/cntrycode} numcust totacctbal]
  [:order-by
-  [[custsale.11/cntrycode
+  [[custsale.12/cntrycode
     {:direction :asc, :null-ordering :nulls-last}]]
   [:project
-   [custsale.11/cntrycode
-    {numcust _row_count_12}
-    {totacctbal _sum_out_13}]
+   [custsale.12/cntrycode
+    {numcust _row_count_13}
+    {totacctbal _sum_out_14}]
    [:group-by
-    [custsale.11/cntrycode
-     {_row_count_12 (row-count)}
-     {_sum_out_13 (sum custsale.11/c_acctbal)}]
+    [custsale.12/cntrycode
+     {_row_count_13 (row-count)}
+     {_sum_out_14 (sum custsale.12/c_acctbal)}]
     [:rename
-     custsale.11
+     custsale.12
      [:project
       [{cntrycode (substring c.1/c_phone 1 2)}
        {c_acctbal c.1/c_acctbal}]
@@ -29,16 +29,18 @@
            [:map
             [{_sq_9 true}]
             [:anti-join
-             [true]
+             [{c.1/_id o_custkey}]
              [:rename
               c.1
-              [:scan {:table #xt/table customer} [c_phone c_acctbal]]]
+              [:scan
+               {:table #xt/table customer}
+               [c_phone c_acctbal _id]]]
              [:project
-              [{o_clerk o.10/o_clerk}
+              [{_id o.10/_id}
+               {o_clerk o.10/o_clerk}
                {o_comment o.10/o_comment}
                {o_custkey o.10/o_custkey}
                {o_orderdate o.10/o_orderdate}
-               {o_orderkey o.10/o_orderkey}
                {o_orderpriority o.10/o_orderpriority}
                {o_orderstatus o.10/o_orderstatus}
                {o_shippriority o.10/o_shippriority}
@@ -51,11 +53,11 @@
                  o_clerk
                  o_orderstatus
                  o_totalprice
+                 _id
                  o_orderdate
                  o_comment
-                 o_orderkey
                  o_shippriority
-                 {o_custkey (= o_custkey nil)}]]]]]]]
+                 o_custkey]]]]]]]
           [:rename
            xt.values.3
            [:table

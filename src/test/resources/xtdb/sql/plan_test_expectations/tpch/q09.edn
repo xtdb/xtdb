@@ -19,10 +19,16 @@
          (* l.3/l_extendedprice (- 1 l.3/l_discount))
          (* ps.4/ps_supplycost l.3/l_quantity))}]
       [:mega-join
-       [{l.3/l_suppkey ps.4/ps_suppkey}
-        {l.3/l_partkey ps.4/ps_partkey}]
-       [[:rename n.6 [:scan {:table #xt/table nation} [n_name]]]
-        [:rename o.5 [:scan {:table #xt/table orders} [o_orderdate]]]
+       [{s.2/s_nationkey n.6/_id}
+        {l.3/l_orderkey o.5/_id}
+        {l.3/l_suppkey ps.4/ps_suppkey}
+        {l.3/l_partkey ps.4/ps_partkey}
+        {s.2/_id l.3/l_suppkey}
+        {p.1/_id l.3/l_partkey}]
+       [[:rename n.6 [:scan {:table #xt/table nation} [_id n_name]]]
+        [:rename
+         o.5
+         [:scan {:table #xt/table orders} [_id o_orderdate]]]
         [:rename
          ps.4
          [:scan
@@ -32,19 +38,17 @@
          l.3
          [:scan
           {:table #xt/table lineitem}
-          [{l_orderkey (= nil l_orderkey)}
+          [l_orderkey
            l_extendedprice
            l_quantity
-           {l_suppkey (= nil l_suppkey)}
+           l_suppkey
            l_discount
-           {l_partkey (= nil l_partkey)}]]]
+           l_partkey]]]
         [:rename
          p.1
          [:scan
           {:table #xt/table part}
-          [{p_name (like p_name "%green%")}]]]
+          [_id {p_name (like p_name "%green%")}]]]
         [:rename
          s.2
-         [:scan
-          {:table #xt/table supplier}
-          [{s_nationkey (= s_nationkey nil)}]]]]]]]]]]]
+         [:scan {:table #xt/table supplier} [_id s_nationkey]]]]]]]]]]]
