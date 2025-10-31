@@ -28,8 +28,9 @@
       (.resolve block-table-metadata-path)))
 
 (defn ->table-block-metadata-obj-key ^java.nio.file.Path [^Path table-path block-idx]
-  (.resolve (.resolve table-path block-table-metadata-path)
-            (format "b%s.binpb" (util/->lex-hex-string block-idx))))
+  (-> table-path
+      (.resolve block-table-metadata-path)
+      (.resolve (format "b%s.binpb" (util/->lex-hex-string block-idx)))))
 
 (defn write-table-block-data ^java.nio.ByteBuffer [^Schema table-schema ^long row-count
                                                    table-tries hlls]

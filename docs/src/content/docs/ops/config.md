@@ -109,31 +109,29 @@ v2.1: top-level commands
 
   Previously, the playground and compact-only nodes were activated using optional flags - `--playground-port` and `--compact-only` respectively.
 
-  `reset-compactor` was also added in v2.1.
+  `reset-compactor` and `export-snapshot` were also added in v2.1.
     
 </details>
 
 You can run various tools by passing arguments - either directly to the CLI or via Docker's arguments:
 
 `node` (default, can be omitted)
-: - `-f <file>`, `--file <file>`: specifies the configuration file
-    to use.
+
+: - `-f <file>`, `--file <file>`: specifies the configuration file to use.
 
 `playground`
-: Starts a playground - an in-memory server that will accept any
-    database name, creating it if required.
 
-    - `-p <port>`, `--port <port>` (default 5432): specifies the port to run the playground server on.
+: Starts a playground - an in-memory server that will accept any database name, creating it if required.
+  - `-p <port>`, `--port <port>` (default 5432): specifies the port to run the playground server on.
 
 `compactor`
-: Starts a compactor-only node - useful for giving the compaction
-    process more compute resources.
 
-    - `-f <file>`, `--file <file>`: specifies the configuration file to use.
+: Starts a compactor-only node - useful for giving the compaction process more compute resources.
+  - `-f <file>`, `--file <file>`: specifies the configuration file to use.
 
-`reset-compactor`
-: Resets the compaction back to L0, deleting any L1+ files - use this
-    if you've encountered a compaction bug and need to reset its state.
+`reset-compactor <db-name>`
+
+: Resets the compaction back to L0, deleting any L1+ files - use this if you've encountered a compaction bug and need to reset its state.
 
     1. Spin down all of your XT nodes
     2. Using your container orchestration tool (e.g.
@@ -147,11 +145,33 @@ You can run various tools by passing arguments - either directly to the CLI or v
 
     At the moment, this can only reset all the way back to L0 -
     finer-grained reset will be added in a later release.
+    
+`export-snapshot <db-name>`
+
+: - `-f <file>`, `--file <file>`: specifies the configuration file to use.
+
+  This exports a snapshot of the object-store into a sibling directory within the object store.
+  e.g. if your storage is at `s3://my-bucket/`, this will export to a directory under `s3://my-bucket/exports/...` - the exact directory will be given in the logs.
+  
+  You can then start another node against this storage directory - you will need to start a new log, and increase the log epoch in your configuration: 
+  
+  ```yaml
+  log: !Kafka
+    ...
+    topic: new-topic
+    epoch: 1
+  storage: !Remote
+    objectStore: !S3
+      bucket: my-bucket
+      prefix: exports/...
+  ```
 
 `read-arrow-file <file>`
+
 : reads an Arrow file and emits it as EDN
 
 `read-arrow-stream-file <file>`
+
 : reads an Arrow 'stream IPC format' file and emits it as EDN
 
 e.g.
