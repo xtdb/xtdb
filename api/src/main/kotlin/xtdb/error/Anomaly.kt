@@ -19,6 +19,10 @@ sealed class Anomaly(
         internal val CATEGORY = Keyword.intern("cognitect.anomalies", "category")
         internal val ERROR_CODE = Keyword.intern("xtdb.error", "code")
 
+        internal fun ensureCategory(data: IPersistentMap, category: Keyword): IPersistentMap {
+            return if (data.containsKey(CATEGORY)) data else data.assoc(CATEGORY, category)
+        }
+
         internal fun dataFromMap(category: Keyword, errorCode: String?, data: Map<String, *>?) =
             PersistentHashMap.create(data.orEmpty().mapKeys { (k, _) -> Keyword.intern(k) })
                 .assoc(CATEGORY, category)
