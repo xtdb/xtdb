@@ -1,3 +1,5 @@
+{{- $monitoringNs := (lookup "v1" "Namespace" "" "monitoring") -}}
+{{- if $monitoringNs }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -16,3 +18,4 @@ spec:
     - port: metrics
       interval: 2s
       scrapeTimeout: 1s
+{{- end }}
