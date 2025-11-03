@@ -105,3 +105,38 @@ variable "aks_application_pool_os_disk_size_gb" {
   type        = number
   default     = 220
 }
+
+variable "create_log_analytics_workspace" {
+  description = "Whether to provision a new Log Analytics workspace for the AKS cluster."
+  type        = bool
+  default     = false
+}
+
+variable "log_analytics_workspace_name" {
+  description = "Override name to use when creating the Log Analytics workspace. Defaults to '<aks_cluster_name>-law'."
+  type        = string
+  default     = null
+}
+
+variable "log_analytics_workspace_retention_days" {
+  description = "Retention period in days when creating a Log Analytics workspace."
+  type        = number
+  default     = 30
+}
+
+variable "log_analytics_workspace_sku" {
+  description = "Billing SKU to use when creating a Log Analytics workspace."
+  type        = string
+  default     = "PerGB2018"
+}
+
+variable "log_analytics_workspace" {
+  description = "Existing Log Analytics workspace details to attach to the AKS cluster. Provide at least an 'id'."
+  type = object({
+    id                  = string
+    name                = optional(string)
+    location            = optional(string)
+    resource_group_name = optional(string)
+  })
+  default = null
+}

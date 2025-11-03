@@ -40,6 +40,9 @@ module "xtdb_azure_bench" {
   # AKS cluster parameters
   aks_cluster_name = "xtdb-bench-cluster"
 
+  create_log_analytics_workspace          = true
+  log_analytics_workspace_retention_days  = 30
+
   ## System Pool Config
   aks_system_pool_vm_size            = "Standard_D2pds_v6"
   aks_system_pool_node_max_count     = 2

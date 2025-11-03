@@ -25,3 +25,7 @@ output "user_assigned_managed_identity_name" {
 output "user_assigned_managed_identity_client_id" {
   value = azurerm_user_assigned_identity.xtdb_infra.client_id
 }
+
+output "log_analytics_workspace_id" {
+  value = var.create_log_analytics_workspace ? azurerm_log_analytics_workspace.aks[0].id : (var.log_analytics_workspace != null ? var.log_analytics_workspace.id : null)
+}

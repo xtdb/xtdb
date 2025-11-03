@@ -9,4 +9,4 @@ For more information on what is being deployed, how to use the templates and how
 We can fetch the contents of this folder using the terraform CLI:
 ```
 terraform init -from-module github.com/xtdb/xtdb.git//azure/terraform
-```  
+```

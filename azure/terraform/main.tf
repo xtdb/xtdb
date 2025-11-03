@@ -107,8 +107,24 @@ module "aks" {
   }
 
   # Application insights
-  log_analytics_workspace_enabled = false
+  log_analytics_workspace_enabled = var.create_log_analytics_workspace || var.log_analytics_workspace != null
+  log_analytics_workspace = var.create_log_analytics_workspace ? {
+    id                  = azurerm_log_analytics_workspace.aks[0].id
+    name                = azurerm_log_analytics_workspace.aks[0].name
+    location            = azurerm_log_analytics_workspace.aks[0].location
+    resource_group_name = azurerm_log_analytics_workspace.aks[0].resource_group_name
+  } : var.log_analytics_workspace
+  oms_agent_enabled = var.create_log_analytics_workspace || var.log_analytics_workspace != null
 
   # Network
   rbac_aad = false
+}
+
+resource "azurerm_log_analytics_workspace" "aks" {
+  count               = var.create_log_analytics_workspace ? 1 : 0
+  name                = coalesce(var.log_analytics_workspace_name, "${var.aks_cluster_name}-law")
+  location            = azurerm_resource_group.xtdb_infra.location
+  resource_group_name = azurerm_resource_group.xtdb_infra.name
+  sku                 = var.log_analytics_workspace_sku
+  retention_in_days   = var.log_analytics_workspace_retention_days
 }
