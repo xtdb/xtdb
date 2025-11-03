@@ -1678,6 +1678,7 @@
       (catch InterruptedException _)
 
       (finally
+        (close-all-portals conn)
         (util/close conn)
 
         ;; can be used to co-ordinate waiting for close
