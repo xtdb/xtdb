@@ -45,6 +45,25 @@
                                   (update :out-trie-key str)
                                   (dissoc :table :partitioned-by-recency?)))))))))
 
+(defn- all-parts-rc-level [level]
+  (if (= level 1)
+    [[]]
+    (for [smaller-part (all-parts-rc-level (dec level))
+          i (range cat/branch-factor)]
+      (conj smaller-part i))))
+
+(defn level-seq
+  "Creates a sequence of files for level up to block n. Currently only supports recency current and supposes every file is always full according to size."
+  ([level n] (level-seq level n 20))
+  ([level n size]
+   (cond
+     (= level 0) (map (fn [i] [(trie/->l0-trie-key i) size]) (range n))
+     (= level 1) (map (fn [i] [(trie/->l1-trie-key nil i) size]) (range n))
+     :else (let [parts (all-parts-rc-level level)]
+             (mapcat (fn [i]
+                       (for [part parts]
+                         [(trie/->trie-key level nil (byte-array part) i) size])) (range 3 n 4))))))
+
 (t/deftest test-l0->l1-compaction-jobs
   (binding [cat/*file-size-target* 16]
     (t/is (= #{} (calc-jobs)))
