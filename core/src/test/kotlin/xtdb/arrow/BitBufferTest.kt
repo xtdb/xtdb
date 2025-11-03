@@ -21,7 +21,7 @@ class BitBufferTest {
     internal fun BitBuffer.writeBoolean(bit: Boolean) = writeBit(if (bit) 1 else 0)
 
     @Test
-    fun testUnsafeCopyFromProps(al: BufferAllocator) = runTest {
+    fun testUnsafeWriteBitsProps(al: BufferAllocator) = runTest {
         data class TestCase(val srcBits: List<Boolean>, val offset: Int, val length: Int, val destBits: List<Boolean>)
 
         checkAll(
@@ -41,7 +41,7 @@ class BitBufferTest {
                 BitBuffer(al, 64).use { dest ->
                     destBits.forEach { dest.writeBoolean(it) }
 
-                    dest.unsafeCopyFrom(srcBuf, offset, len)
+                    dest.unsafeWriteBits(srcBuf, offset, len)
 
                     dest.asBooleans shouldBe (destBits + srcBits.subList(offset, offset + len)).toBooleanArray()
                 }

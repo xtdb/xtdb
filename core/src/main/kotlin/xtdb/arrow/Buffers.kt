@@ -6,7 +6,6 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.util.DecimalUtility
 import xtdb.arrow.ArrowUtil.toByteBuffer
-import java.lang.foreign.MemorySegment
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 import kotlin.math.max
@@ -44,8 +43,8 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
         buf = newBuf
     }
 
-    private fun ensureWritable(elWidth: Long): ArrowBuf {
-        if (buf.writableBytes() < elWidth) realloc(buf.writerIndex() + elWidth)
+    fun ensureWritable(bytes: Long): ArrowBuf {
+        if (buf.writableBytes() < bytes) realloc(buf.writerIndex() + bytes)
         return buf
     }
 
@@ -126,11 +125,15 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
         buf.writeBytes(byteArray)
     }
 
-    fun writeBytes(src: ExtensibleBuffer, start: Long, len: Long) {
-        ensureWritable(len)
+    fun unsafeWriteBytes(src: ExtensibleBuffer, start: Long, len: Long) {
         val writerIndex = buf.writerIndex()
         buf.setBytes(writerIndex, src.buf, start, len)
         buf.writerIndex(writerIndex + len)
+    }
+
+    fun writeBytes(src: ExtensibleBuffer, start: Long, len: Long) {
+        ensureWritable(len)
+        unsafeWriteBytes(src, start, len)
     }
 
     fun writeBigDecimal(value: BigDecimal, byteWidth: Int) {
@@ -139,7 +142,7 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
         buf.writerIndex(buf.writerIndex() + byteWidth)
     }
 
-    fun readBigDecimal(idx: Int, scale: Int, byteWidth: Int) =
+    fun readBigDecimal(idx: Int, scale: Int, byteWidth: Int): BigDecimal =
         DecimalUtility.getBigDecimalFromArrowBuf(buf, idx, scale, byteWidth)
 
     fun getPointer(idx: Int, len: Int, reuse: ArrowBufPointer? = null) =
