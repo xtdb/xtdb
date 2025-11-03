@@ -108,7 +108,7 @@ variable "anomaly_timespan" {
 variable "anomaly_baseline_n" {
   description = "Number of previous runs to average for the baseline"
   type        = number
-  default     = 20
+  default     = 30
 }
 
 variable "anomaly_sigma" {
@@ -120,7 +120,13 @@ variable "anomaly_sigma" {
 variable "anomaly_scale_factor" {
   description = "TPC-H scale factor to scope anomaly detection to (e.g., 0.5)"
   type        = number
-  default     = 0.5
+  default     = 1.0
+}
+
+variable "anomaly_new_normal_relative_threshold" {
+  description = "Relative threshold between the latest and previous run durations below which anomalies are suppressed as a new normal"
+  type        = number
+  default     = 0.05
 }
 
 # Missing ingestion alert configuration

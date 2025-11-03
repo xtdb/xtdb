@@ -260,6 +260,14 @@ resource "azapi_resource" "bench_anomaly" {
                       | where repo == "${var.anomaly_repo}"
                       | summarize arg_max(TimeGenerated, *)
                       | extend current_ms = todouble(value), k = 1;
+                  let previousBenchmark =
+                      ${var.table_name}
+                      | where step == "overall" and metric == "duration_ms"
+                      | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.anomaly_scale_factor}
+                      | where repo == "${var.anomaly_repo}"
+                      | where TimeGenerated < toscalar(latestBenchmark | project TimeGenerated)
+                      | top 1 by TimeGenerated desc
+                      | project prev_ms = todouble(value), k = 1;
                   let prevN =
                       ${var.table_name}
                       | where step == "overall" and metric == "duration_ms"
@@ -272,13 +280,16 @@ resource "azapi_resource" "bench_anomaly" {
                   let baseline = prevN | summarize baseline_mean = avg(value), baseline_std = stdev(value) | extend k = 1;
                   latestBenchmark
                     | join kind=inner baseline on k
+                    | join kind=leftouter previousBenchmark on k
                     | where isnotnull(baseline_std) and baseline_std > 0
                     | extend threshold_value_slow = baseline_mean + (${var.anomaly_sigma} * baseline_std),
                              threshold_value_fast = baseline_mean - (${var.anomaly_sigma} * baseline_std)
                     | extend slow_violation = current_ms > threshold_value_slow,
-                             fast_violation = current_ms < threshold_value_fast
-                    | where slow_violation or fast_violation
-                    | project run_id = tostring(run_id), slow_violation, fast_violation, TimeGenerated, current_ms, baseline_mean, baseline_std
+                             fast_violation = current_ms < threshold_value_fast,
+                             prev_diff_ratio = iif(isnotnull(prev_ms) and prev_ms > 0, abs(current_ms - prev_ms) / prev_ms, real(null))
+                    | extend new_normal_candidate = isnotnull(prev_diff_ratio) and prev_diff_ratio <= ${var.anomaly_new_normal_relative_threshold}
+                    | where (slow_violation or fast_violation) and not(new_normal_candidate)
+                    | project run_id = tostring(run_id), slow_violation, fast_violation, TimeGenerated, current_ms, baseline_mean, baseline_std, prev_ms, prev_diff_ratio
                 KQL
               }
             }
