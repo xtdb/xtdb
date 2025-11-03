@@ -441,7 +441,7 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
                 },
                 {
                   name       = "TimeRange"
-                  value      = "P1D"
+                  value      = "P30D"
                   isOptional = true
                 },
                 {
@@ -460,8 +460,9 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
                     | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.anomaly_scale_factor}
                     | where repo == "${var.anomaly_repo}"
                     | top ${var.anomaly_baseline_n} by TimeGenerated desc
+                    | extend duration_minutes = todouble(value) / 60000
                     | order by TimeGenerated asc
-                    | project TimeGenerated, duration_ms = todouble(value)
+                    | project TimeGenerated, duration_minutes
                   KQL
                   isOptional = true
                 },
@@ -494,7 +495,7 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
                     }
                     yAxis = [
                       {
-                        name = "duration_ms"
+                        name = "duration_minutes"
                         type = "real"
                       }
                     ]
@@ -528,12 +529,9 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
       model = {
         timeRange = {
           value = {
-            relative = {
-              duration = 24
-              timeUnit = 1
-            }
+            relative = "30d"
           }
-          type = "MsPortalFxTimeRange"
+          type = "MsPortalFx.Composition.Configuration.ValueTypes.TimeRange"
         }
         filterLocale = {
           value = "en-us"
@@ -544,11 +542,11 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
               model = {
                 format      = "utc"
                 granularity = "auto"
-                relative    = "24h"
+                relative    = "30d"
               }
               displayCache = {
                 name  = "UTC Time"
-                value = "Past 24 hours"
+                value = "Past 30 days"
               }
               filteredPartIds = [
                 "StartboardPart-LogsDashboardPart-22bc70d2-f7ad-42ba-a586-df4ab8272012"
