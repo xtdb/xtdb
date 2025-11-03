@@ -10,13 +10,14 @@ import xtdb.util.Hasher
 class IndexHasher(private val rel: RelationReader, private val hashCols: List<VectorReader>) {
     private val hasher = Hasher.Xx()
 
-    fun hashCode(index: Int): Int =
-        hashCols.foldRight(0) { col, acc ->
-            MurmurHasher.combineHashCode(
-                acc,
-                col.hashCode(index, hasher)
-            )
-        }
+    fun hashCode(index: Int): Int {
+        var acc = 0
+
+        for (col in hashCols)
+            acc = MurmurHasher.combineHashCode(acc, col.hashCode(index, hasher))
+
+        return acc
+    }
 
     fun writeAllHashes(hashCol: VectorWriter) {
         hashCol.clear()

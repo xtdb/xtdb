@@ -25,7 +25,7 @@ sealed class FixedWidthVector : Vector() {
     internal abstract val validityBuffer: BitBuffer
     internal abstract val dataBuffer: ExtensibleBuffer
 
-    final override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
+    final override fun isNull(idx: Int) = nullable && !validityBuffer.getBit(idx)
 
     final override fun writeUndefined() {
         validityBuffer.writeBit(valueCount++, 0)

@@ -59,7 +59,7 @@ abstract class VariableWidthVector : Vector() {
         return ByteArray(buf.remaining()).also { buf.duplicate().get(it) }
     }
 
-    override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getByteArray(idx))
+    override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getBytes(idx))
 
     override fun rowCopier0(src: VectorReader): RowCopier {
         check(src is VariableWidthVector)
