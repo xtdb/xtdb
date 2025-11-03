@@ -34,7 +34,7 @@ Oh gosh, does our portfolio include any products managed by XY Bank?
   <Query q="SELECT * FROM assets ORDER BY _id" />
 </Xtplay>
 
-Right, we probably should have done that integration work to keep track of what we bought from who owned what...
+Right, we probably should have done that integration work to keep track of what we bought and who owned it...
 
 Not to worry, with a bit of manual effort and research we can add a table of which products are owned by various entities:
 
@@ -59,9 +59,9 @@ SELECT a.*
   ORDER BY a._id`} />
 </Xtplay>
 
-Ok, that's a lot. But we can manage.
+Okay, that's a lot, but we can manage.
 
-The question our own investors are now demanding an answer to though, is: how much did we just lose because of those products compared to if we had sold them _before_ they ended up on XY Bank's balance sheet?
+The question our own investors are now demanding an answer to, though, is how much we just lost because of those products compared with selling them _before_ they ended up on XY Bank's balance sheet.
 We didn't keep track of when that happened!
 
 Let's add that in:
@@ -85,7 +85,7 @@ Let's add that in:
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time DESC LIMIT 1" />
 </Xtplay>
 
-Just to double-check that's not changed our current view of the exposure:
+Just to double-check that hasn't changed our current view of the exposure:
 
 <Xtplay magicContext="my-context">
   <Query q={`
@@ -109,13 +109,13 @@ SELECT name, max(_valid_from)
 `} />
 </Xtplay>
 
-Ok, now we know when we should have ideally sold and we can combine that with our prices to calculate how much we lost because of XY Bank's collapse.
+Okay, now we know when we should have ideally sold and we can combine that with our prices to calculate how much we lost because of XY Bank's collapse.
 
 With our new and improved approach to historical record-keeping we'll also now be in a better position to keep track of when products change ownership, and understand other impacts of corporate actions, so that we can more easily answer key investor questions in the future.
 
 ---
 
-Should a prospective new investor a year from now ask why did we not sell these XY Bank products earlier - and having long since forgotten the details of the situation - we can quickly produce the answer:
+If, a year from now, a prospective investor asks why we did not sell these XY Bank products earlier, we can quickly produce the answer, even if we have long since forgotten the details of the situation.
 
 <Xtplay magicContext="my-context">
   <Query q={`
@@ -124,6 +124,5 @@ SELECT _id, name, owner, _system_from
 `} />
 </Xtplay>
 
-Ah, see there.
-The audit information shows that we only started recording product owner changes recently.
+Ah, see there: the audit information shows that we only started recording product owner changes recently.
 No wonder we didn't sell earlier!

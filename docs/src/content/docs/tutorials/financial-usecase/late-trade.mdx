@@ -10,7 +10,7 @@ A typical trade flow will include the following steps:
 2. At some time later, the trade is entered into a risk system.
   This might even be after the market has closed.
 
-Whenever a trade arrives in our risk system we can set the valid-time (the business curated timeline) to the exact time of the trade. This backfilling of histoical data allows us to understand and report on the risk position of our trade portfolio as-of any point in the past.
+Whenever a trade arrives in our risk system we can set the valid-time (the business curated timeline) to the exact time of the trade. This backfilling of historical data allows us to understand and report on the risk position of our trade portfolio as-of any point in the past.
 
 For example, a set of trades entering our risk system may look something like this:
 
@@ -26,7 +26,7 @@ For example, a set of trades entering our risk system may look something like th
             ORDER BY _id" />
 </Xtplay>
 
-However sometimes a trade is booked right at the end of the day, after the standard End-of-Day reporting window has closed, and therefore isn't available and processed by the system until sometime later.
+However, sometimes a trade is booked right at the end of the day, after the standard End-of-Day reporting window has closed, and therefore isn't available to the system for processing until sometime later.
 
 Let's say this trade was entered after the market close:
 
@@ -62,7 +62,7 @@ We can re-run our final risk reports for yesterday, which includes the late-arri
             ORDER BY _id" />
 </Xtplay>
 
-Now our reports can be made consistent and reproducible whilst accounting for late-arriving data, great!
+Great, now our reports can be made consistent and reproducible whilst accounting for late-arriving data!
 
 How would you achieve this capability without a database that allows you to query across time?
 

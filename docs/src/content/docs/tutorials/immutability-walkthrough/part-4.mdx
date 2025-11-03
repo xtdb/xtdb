@@ -6,7 +6,7 @@ import { Query, Txs, Xtplay } from 'xtplay-components'
 
 In [part 3](/tutorials/immutability-walkthrough/part-3), we learned how to insert historical data into XTDB.
 
-In this part, we will understand how to update past data, but we will also learn how to access the raw, un-changed data also.
+In this part, we will see how to update past data while still being able to access the raw, unchanged data.
 
 First, let's insert three versions of the same product into different points in the past with three different prices:
 
@@ -23,7 +23,7 @@ First, let's insert three versions of the same product into different points in 
   <Query hidden={true} q="SELECT * FROM xt.txs ORDER BY system_time" />
 </Xtplay>
 
-Let's prove to ourselves that querying at various points in the past, gives us the correct data:
+Let's prove to ourselves that querying at various points in the past gives us the correct data:
 
 <Xtplay magicContext="my-context">
   <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2022-01-02'" />
@@ -37,7 +37,7 @@ Let's prove to ourselves that querying at various points in the past, gives us t
   <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2024-01-02'" />
 </Xtplay>
 
-Now let's say we know that the price for **2023** was INCORRECT. This could have been due to a multitude of reasons, a developer bug, a faulty database update, or an incorrect manual data entry.
+Now let's say we know that the price for **2023** was incorrect. This could have been due to a multitude of reasons: a developer bug, a faulty database update, or an incorrect manual data entry.
 
 Let's correct the price for **2023**:
 
@@ -59,13 +59,13 @@ Now when we query in **2023**, we get the updated price back:
 
 ## Immutability
 
-BUT - aren't we mutating an immutable database here?
+But aren't we mutating an immutable database here?
 
-Aren't we blasting over the top of original data, and thus losing that original data?
+Aren't we blasting over the top of the original data, and thus losing it?
 
 The answer is no. We have been updating the `VALID_TIME` line. But our XTDB database has another, completely immutable timeline called SYSTEM_TIME.
 
-Using a query against `SYSTEM_TIME`, we can query the database exactly how it was at a point in database-time.
+Using a query against `SYSTEM_TIME`, we can query the database exactly as it was at a point in database-time.
 
 No updates to this line are possible, we can only add to the end of the timeline. We call this append-only, and it is very useful for auditing all changes made to the database.
 
@@ -82,8 +82,8 @@ For example, querying against SYSTEM_TIME, we should see the original, unmutated
 
 ## Conclusion
 
-We have shown in the above, the ability to update the past and see the updated changes, but also how we can query the raw, unedited past.
+We have shown above the ability to update the past and see the updated changes, but also how we can query the raw, unedited past.
 
 This is the concept of bitemporality: having two timelines.
 
-One timeline that you can update is: `VALID_TIME`, and one you can only ever append to: `SYSTEM_TIME`.
+One timeline that you can update is `VALID_TIME`, and one you can only ever append to is `SYSTEM_TIME`.

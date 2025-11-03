@@ -1,4 +1,4 @@
-= Financial use-cases
+= Financial use cases
 
 == Ideas
 
@@ -9,4 +9,4 @@ Business time is sometimes just milliseconds different from system time, since t
 === Querying from a particular time
 
 Mutable databases don't, by default, offer the capability to query from a historical point in time.
-Therefore, expensive snapshots, tags, exports, extracts and further processing techiques are employed to mitigate this deficiency.
+Therefore, expensive snapshots, tags, exports, extracts and further processing techniques are employed to mitigate this deficiency.
