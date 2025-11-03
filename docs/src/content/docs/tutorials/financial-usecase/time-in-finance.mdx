@@ -4,7 +4,7 @@ title: Time in Finance
 
 import { DateRange, Query, QueryTemplate, OutputTraffic, Range, Txs, Xtplay } from 'xtplay-components'
 
-IT systems of all kinds are plagued by many time-related complexities, from misconfigured Network Time Protocol and unexpected certificate expirations, to changing timezones and software concurrency bugs. However, systems in financial domains are additionally accutely affected by the following common requirements and challenges...
+IT systems of all kinds are plagued by many time-related complexities, from misconfigured Network Time Protocol and unexpected certificate expirations, to changing timezones and software concurrency bugs. However, systems in financial domains are additionally acutely affected by the following common requirements and challenges...
 
 <div class="not-content grid grid-cols-2 md:grid-cols-4 gap-2">
   <a class="border rounded p-2 hover:bg-gray-100 dark:hover:bg-gray-700 content-center text-center" href="#1-audit-and-replay-what-happened">Audit & Replay</a>
@@ -19,7 +19,7 @@ IT systems of all kinds are plagued by many time-related complexities, from misc
 
 ## 1) Audit and Replay: what happened?
 
-SQL databases systems typically lose information whenever UPDATE or DELETE are used. They also don't record or track the any changes to data by default.
+SQL database systems typically lose information whenever UPDATE or DELETE are used. They also don't record or track the any changes to data by default.
 
 <Xtplay>
   <Txs txs="INSERT INTO trades (_id, price) VALUES (1, 100);" />
@@ -67,7 +67,7 @@ To maintain consistency across multiple queries, databases offer ACID transactio
 
 This session-oriented transaction isolation capability is typically stateful and extremely resource-intensive over long durations due to 'locking' of record versions internally within the database, and in turn this degrades the performance of all workloads using the system.
 
-To workaround these limitations of regular transactions, applications that need to run many queries in a consistent manner will often resort to first exporting all the necessary data or using database facilities to create explicit 'snapshots' (i.e. redundant copies).
+To work around these limitations of regular transactions, applications that need to run many queries in a consistent manner will often resort to first exporting all the necessary data or using database facilities to create explicit 'snapshots' (i.e. redundant copies).
 
 In contrast, XTDB allows applications to refer to previous database states without any declarations ahead of time - queries can simply specify the version of the database (using a 'basis' timestamp) and specific tables as needed:
 
@@ -82,13 +82,13 @@ In contrast, XTDB allows applications to refer to previous database states witho
 `} />
 </Xtplay>
 
-No locking, copying, or snapshotting is taking place against within XTDB. Queries against old, stable versions of the data are always consistent and will never contain partial changes or 'tearing' in the results.
+No locking, copying, or snapshotting is taking place within XTDB. Queries against old, stable versions of the data are always consistent and will never contain partial changes or 'tearing' in the results.
 
-## 3) Interleaving Upstream Sources: whose timestamp?
+## 3) Interleaving Upstream Sources: Whose Timestamp?
 
-In many circumstances the system time of the database itself is uninteresting (i.e outside of auditing / debugging), and what is more relevant is the time recorded in an upstrem system. For instance a High-Frequency Trading platform could generate a trade with a timestamp that is anywhere from 0.01-100ms earlier than the time at which the trade database records the trade. In other situations information may even arrive hours or days 'late'.
+In many circumstances the system time of the database itself is uninteresting (i.e outside of auditing / debugging), and what is more relevant is the time recorded in an upstream system. For instance a High-Frequency Trading platform could generate a trade with a timestamp that is anywhere from 0.01-100ms earlier than the time at which the trade database records the trade. In other situations information may even arrive hours or days 'late'.
 
-In cases where the upstream timestamps need to be respected for the AS OF application reporting requirement even moreso than the database timestamps, "valid time versioning" is required (implementing SQL:2011's notion of "application time versioning").
+In cases where the upstream timestamps need to be respected for the AS OF application reporting requirement even more so than the database timestamps, "valid time versioning" is required (implementing SQL:2011's notion of "application time versioning").
 
 Crucially, valid-time is suitable for handling out-of-order timestamp information coming from many upstream systems, whereas system-time is always a monotonically increasing local clock. All rows of data in XTDB keep track of system-time and valid-time timestamps, which allows for precise querying.
 
@@ -156,11 +156,11 @@ All data has a lifecycle, and in a typical application the window of 'live' data
 
 For instance, once a trade has been settled, it no longer needs to be incorporated into new risk calculations.
 
-However, any such 'old' data invariably still needs to be retained beyond any single application's window of interest, so it likely gets migrated of 'archived' as part of a batch processing job into a longer term storage system which has a significantly lower basic operational cost for data retention.
+However, any such 'old' data invariably still needs to be retained beyond any single application's window of interest, so it likely gets migrated or 'archived' as part of a batch processing job into a longer term storage system which has a significantly lower basic operational cost for data retention.
 
 With XTDB's ubiquitous tracking of `system_to` and `valid_to` columns however, manual migration processes become unnecessary. Applications can allow data to be transparently archived into cheaper storage by the database without affecting the performance of working with live data.
 
-Whenever old data is needed to be queried, it can achieved purely via SQL without any out-of-band engineering or processing work.
+Whenever old data needs to be queried, it can be achieved purely via SQL without any out-of-band engineering or processing work.
 
 Applications can set the `valid_to` column explicitly to correspond with data lifecycle archival events like 'settled_at'. Or alternatively they can simple `DELETE` the relevant records (setting `valid_to` to the implicit `CURRENT_TIMESTAMP` at the time of the transaction):
 
@@ -194,7 +194,7 @@ Many finance applications rely on carefully designed 'forward correction' mechan
 
 For example if someone mistypes a trade price, it may be sufficient to just record the revised price "as of now" in order to resolve the situation.
 
-However, if any part of the application or downstream trade processing relies on a consistent understanding of the precise periods of time to when that revision is made, particularly if there is reporting happening against historic timestamps, then the mistake must also be resolved such that queries against historic timestamps will observe the _corrected_ values.
+However, if any part of the application or downstream trade processing relies on a consistent understanding of the precise periods of time when that revision is made, particularly if there is reporting happening against historic timestamps, then the mistake must also be resolved such that queries against historic timestamps will observe the _corrected_ values.
 
 Otherwise, the forward-correcting logic itself must be replicated (without bugs!) in every downstream system in order to ensure that any re-processing or revised calculations happening in those systems incorporate the changes appropriately across the given reporting period.
 
@@ -268,7 +268,7 @@ ORDER BY _valid_from
 
 More generally, almost all software developers will have struggled with deploying changes to applications in their careers. Even in modern environments where automation is common, things can easily go wrong and people must be on standby to assist with fixing or reverting changes.
 
-Since the risks are non-zero, any scheduled maintainance windows for deploying application changes will therefore typically take place during unsociable working hours.
+Since the risks are non-zero, any scheduled maintenance windows for deploying application changes will therefore typically take place during unsociable working hours.
 
 Instead of relying on a scheduled batch process to update an underlying database at a given time with some new set of records or schema changes, XTDB's universal implementation of valid-time can be used as a mechanism to coordinate future changes _within_ the database.
 
