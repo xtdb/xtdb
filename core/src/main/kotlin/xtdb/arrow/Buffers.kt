@@ -78,9 +78,13 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
 
     operator fun set(idx: Int, v: Int) = buf.setInt(idx.toLong() * Int.SIZE_BYTES, v)
 
+    fun unsafeWriteInt(value: Int) {
+        buf.writeInt(value)
+    }
+
     fun writeInt(value: Int) {
         ensureWritable(Int.SIZE_BYTES.toLong())
-        buf.writeInt(value)
+        unsafeWriteInt(value)
     }
 
     fun getLong(idx: Int) = buf.getLong((idx * Long.SIZE_BYTES).toLong())

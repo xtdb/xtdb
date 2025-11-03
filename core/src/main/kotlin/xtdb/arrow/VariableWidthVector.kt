@@ -65,13 +65,67 @@ abstract class VariableWidthVector : Vector() {
         check(src is VariableWidthVector)
         nullable = nullable || src.nullable
 
-        return RowCopier { srcIdx ->
-            if (src.isNull(srcIdx)) writeNull()
-            else {
-                val start = src.offsetBuffer.getInt(srcIdx).toLong()
-                val len = src.offsetBuffer.getInt(srcIdx + 1) - start
-                dataBuffer.writeBytes(src.dataBuffer, start, len)
-                writeNotNull(len.toInt())
+        return object : RowCopier {
+            // duplicated here because accessing in the outer class was non-negligible in the profiler
+            private val srcValidity = src.validityBuffer
+            private val srcOffset = src.offsetBuffer
+            private val srcData = src.dataBuffer
+            private val destValidity = this@VariableWidthVector.validityBuffer
+            private val destOffset = this@VariableWidthVector.offsetBuffer
+            private val destData = this@VariableWidthVector.dataBuffer
+
+            private fun ensureWriteable(len: Int, dataBytes: Int) {
+                destValidity.ensureWritable(len)
+                destOffset.ensureWritable(((len + 1) * Integer.BYTES).toLong())
+                destData.ensureWritable(dataBytes.toLong())
+            }
+
+            private fun unsafeCopyRange(startIdx: Int, len: Int) {
+                destValidity.unsafeWriteBits(srcValidity, startIdx, len)
+
+                val srcStartOffset = srcOffset.getInt(startIdx)
+                val srcEndOffset = srcOffset.getInt(startIdx + len)
+                val dataLen = srcEndOffset - srcStartOffset
+                destData.unsafeWriteBytes(srcData, srcStartOffset.toLong(), dataLen.toLong())
+
+                if (valueCount == 0) destOffset.unsafeWriteInt(0)
+                val offsetDelta = lastOffset - srcStartOffset
+
+                for (i in 0 until len) {
+                    val offset = srcOffset.getInt(startIdx + i + 1) + offsetDelta
+                    destOffset.unsafeWriteInt(offset)
+                }
+
+                lastOffset += dataLen
+                valueCount += len
+            }
+
+            override fun copyRow(srcIdx: Int) {
+                ensureWriteable(1, srcOffset.getInt(srcIdx + 1) - srcOffset.getInt(srcIdx))
+                unsafeCopyRange(srcIdx, 1)
+            }
+
+            override fun copyRows(sel: IntArray) {
+                var totalDataBytes = 0
+                for (srcIdx in sel) {
+                    val startOffset = srcOffset.getInt(srcIdx)
+                    val endOffset = srcOffset.getInt(srcIdx + 1)
+                    totalDataBytes += endOffset - startOffset
+                }
+
+                ensureWriteable(sel.size, totalDataBytes)
+
+                for (srcIdx in sel)
+                    unsafeCopyRange(srcIdx, 1)
+            }
+
+            override fun copyRange(startIdx: Int, len: Int) {
+                if (len <= 0) return
+
+                val totalDataBytes = srcOffset.getInt(startIdx + len) - srcOffset.getInt(startIdx)
+
+                ensureWriteable(len, totalDataBytes)
+                unsafeCopyRange(startIdx, len)
             }
         }
     }
@@ -89,7 +143,7 @@ abstract class VariableWidthVector : Vector() {
 
         validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"), valueCount)
         offsetBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing offset buffer"))
-        dataBuffer.loadBuffer(buffers.removeFirst() ?: error("missing data buffer"))
+        dataBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing data buffer"))
     }
 
     override fun loadFromArrow(vec: ValueVector) {
