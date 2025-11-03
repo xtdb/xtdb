@@ -107,7 +107,7 @@ class DenseUnionVector private constructor(
         })
 
         override fun select(idxs: IntArray): VectorReader =
-            inner.select(IntArray(idxs.size) { selIdx -> getOffset(selIdx) })
+            inner.select(IntArray(idxs.size) { selIdx -> getOffset(idxs[selIdx]) })
 
         override fun select(startIdx: Int, len: Int): VectorReader =
             select(IntArray(len) { startIdx + it })
