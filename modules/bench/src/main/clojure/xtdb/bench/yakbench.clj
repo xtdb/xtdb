@@ -279,7 +279,7 @@
     (sort-by :sum > rows)))
 
 (defn profile
-  [node profile-id suite]
+  [node suite]
   (with-open [conn (get-conn node)]
     (let [iterations 10
           _throwaway (doseq [{:keys [f]} suite]
@@ -289,8 +289,8 @@
                       (doseq [{:keys [id f]} suite
                               _ (range iterations)]
                         (p id (f conn))))]
-      (prn {:profile-id profile-id :profile (profile-data @pstats)})
-      (println (tufte/format-pstats pstats)))))
+      {:profile (profile-data @pstats)
+       :formatted (tufte/format-pstats pstats)})))
 
 (defn distribution-stats
   "Compute mean/median/p90/p99/min/max from a seq of numeric counts."
@@ -320,7 +320,7 @@
          counts (map count-key rows)]
      (distribution-stats counts))))
 
-(defn get-user-items-stats
+(defn user-items-stats
   [conn]
   (stats-from-sql conn
                   (str "select count(*) as cnt "
@@ -328,7 +328,7 @@
                        "group by ui.user_item$user")
                   :cnt))
 
-(defn get-user-subs-stats
+(defn user-subs-stats
   [conn]
   (stats-from-sql conn
                   (str "select count(*) as cnt "
@@ -336,7 +336,7 @@
                        "group by s.sub$user")
                   :cnt))
 
-(defn get-feed-items-stats
+(defn feed-items-stats
   [conn]
   (stats-from-sql conn
                   (str "select count(*) as cnt "
@@ -386,15 +386,15 @@
     (println)
 
     (println "User items stats")
-    (pp/print-table [(get-user-items-stats conn)])
+    (pp/print-table [(user-items-stats conn)])
     (println)
 
     (println "User subs stats")
-    (pp/print-table [(get-user-subs-stats conn)])
+    (pp/print-table [(user-subs-stats conn)])
     (println)
 
     (println "Feed items stats")
-    (pp/print-table [(get-feed-items-stats conn)])
+    (pp/print-table [(feed-items-stats conn)])
     (println)))
 
 (defn load-data!
@@ -429,7 +429,9 @@
                                        :or {scale-factor 0.1, seed 0}}]
   (log/info {:scale-factor scale-factor :seed seed :no-load? no-load?})
 
-  {:title "Yakbench", :seed seed
+  {:title "Yakbench"
+   :seed seed
+   :parameters {:scale-factor scale-factor :seed seed :no-load? no-load?}
    :->state #(do {:!state (atom {})})
    :tasks [(when-not no-load?
              {:t :do
@@ -460,22 +462,34 @@
            {:t :call
             :stage :profile-global-queries
             :f (fn [{:keys [node !state]}]
-                 (let [{:keys [active-users biggest-feed]} @!state]
-                   (profile node :global (benchmarks-queries active-users biggest-feed))))}
+                 (let [{:keys [active-users biggest-feed]} @!state
+                       {:keys [profile formatted]} (profile node (benchmarks-queries active-users biggest-feed))]
+                   (swap! !state update :profiles assoc :global profile)
+                   (println formatted)))}
+
            {:t :call
             :stage :profile-max-user
             :f (fn [{:keys [node !state]}]
-                 (let [{:keys [max-user]} @!state]
-                   (profile node :max-user (user-specific-benchmarks-queries max-user))))}
+                 (let [{:keys [max-user]} @!state
+                       {:keys [profile formatted]} (profile node (user-specific-benchmarks-queries max-user))]
+                   (swap! !state update :profiles assoc :max-user profile)
+                   (println formatted)))}
            {:t :call
             :stage :profile-mean-user
             :f (fn [{:keys [node !state]}]
-                 (let [{:keys [mean-user]} @!state]
-                   (profile node :mean-user (user-specific-benchmarks-queries mean-user))))}
+                 (let [{:keys [mean-user]} @!state
+                       {:keys [profile formatted]} (profile node (user-specific-benchmarks-queries mean-user))]
+                   (swap! !state update :profiles assoc :mean-user profile)
+                   (println formatted)))}
            {:t :call
             :stage :inspect
             :f (fn [{:keys [node !state]}]
-                 (inspect node @!state))}]})
+                 (inspect node @!state))}
+           {:t :call
+            :stage :output-profile-data
+            :f (fn [{:keys [!state] :as worker}]
+                 (let [{:keys [profiles]} @!state]
+                   (b/log-report worker {:profiles profiles})))}]})
 
 (comment
   (try
@@ -503,11 +517,11 @@
               active-users (get-active-users conn rnd scale)
               biggest-feed (get-biggest-feed conn rnd)]
           (println "Profile Global")
-          (profile node :global (benchmarks-queries active-users biggest-feed))
+          (println (:formatted (profile node (benchmarks-queries active-users biggest-feed))))
           (println "Profile Max User")
-          (profile node :max-user (user-specific-benchmarks-queries max-user))
+          (println (:formatted (profile node (user-specific-benchmarks-queries max-user))))
           (println "Profile Mean User")
-          (profile node :mean-user (user-specific-benchmarks-queries mean-user))
+          (println (:formatted (profile node (user-specific-benchmarks-queries mean-user))))
           (println "Inspect")
           (inspect node {:max-user max-user
                          :active-users active-users}))))
