@@ -1,10 +1,11 @@
 name: Nightly Benchmark TPC-H
+run-name: "TPC-H (SF: ${{ inputs.scale_factor || '1.0' }})"
 
 on:
   workflow_dispatch:
     inputs:
       scale_factor:
-        description: 'TPC-H Scale Factor'
+        description: 'Scale Factor'
         required: false
         default: '1.0'
         type: string
@@ -22,7 +23,7 @@ concurrency:
 
 jobs:
   benchmark:
-    name: Run Nightly Benchmark TPC-H
+    name: "TPC-H (SF: ${{ inputs.scale_factor || '1.0' }})"
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'schedule' || github.repository == 'xtdb/xtdb' }}
     timeout-minutes: 90
@@ -66,7 +67,7 @@ jobs:
       - name: Stop job after cancellation
         if: steps.check-deployment.outcome == 'success'
         run: |
-          echo "Workflow cancellation requested due to existing deployment. Stopping job." 
+          echo "Workflow cancellation requested due to existing deployment. Stopping job."
           exit 0
 
       - name: Install Monitoring Stack
