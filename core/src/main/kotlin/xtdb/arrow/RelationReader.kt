@@ -37,11 +37,28 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
     fun select(startIdx: Int, len: Int): RelationReader = from(vectors.map { it.select(startIdx, len) }, len)
 
     fun rowCopier(dest: RelationWriter): RowCopier {
-        val copiers = vectors.map { it.rowCopier(dest.vectorForOrNull(it.name) ?: dest.vectorFor(it.name, it.fieldType)) }
+        val colNames = vectors.mapTo(mutableSetOf()) { it.name } + dest.vectors.map { it.name }
 
-        return RowCopier { srcIdx ->
-            copiers.forEach { it.copyRow(srcIdx) }
-            dest.endRow()
+        val copiers = colNames.map { colName ->
+            val srcVec = vectorForOrNull(colName) ?: NullVector(colName, true, rowCount)
+            srcVec.rowCopier(dest.vectorForOrNull(colName) ?: dest.vectorFor(colName, srcVec.fieldType))
+        }
+
+        return object : RowCopier {
+            override fun copyRow(srcIdx: Int) {
+                copiers.forEach { it.copyRow(srcIdx) }
+                dest.rowCount++
+            }
+
+            override fun copyRows(sel: IntArray) {
+                copiers.forEach { it.copyRows(sel) }
+                dest.rowCount += sel.size
+            }
+
+            override fun copyRange(startIdx: Int, len: Int) {
+                copiers.forEach { it.copyRange(startIdx, len) }
+                dest.rowCount += len
+            }
         }
     }
 

@@ -72,9 +72,9 @@ internal class BitBuffer private constructor(
         setBit(writerBitIndex++, bit)
     }
 
-    fun unsafeCopyFrom(src: BitBuffer, idx: Int, len: Int) {
+    fun unsafeWriteBits(src: BitBuffer, idx: Int, len: Int) {
         // Fast path: both byte-aligned and length is a multiple of 8
-        if (writerBitIndex % 8 == 0 && idx % 8 == 0 && len % 8 == 0) {
+        if (writerBitIndex % 8 == 0 && idx % 8 == 0 && (len % 8 == 0 || writerBitIndex == 0)) {
             val idxBytes = byteIndex(idx)
             val lenBytes = divideBy8Ceil(len)
             buf.setBytes(byteIndex(writerBitIndex.toLong()), src.buf, idxBytes.toLong(), lenBytes.toLong())
@@ -82,9 +82,16 @@ internal class BitBuffer private constructor(
             return
         }
 
+        // TODO medium path: copying bytes at a time. See BitVectorHelper.concatBits for inspiration.
+
         // Slow path: bit-by-bit copy
         repeat(len) { setBit(writerBitIndex + it, if (src.getBit(idx + it)) 1 else 0) }
         writerBitIndex += len
+    }
+
+    fun writeBits(src: BitBuffer, idx: Int, len: Int) {
+        ensureWritable(len)
+        unsafeWriteBits(src, idx, len)
     }
 
     internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) {
@@ -94,8 +101,7 @@ internal class BitBuffer private constructor(
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, bitCount: Int) {
         buf.close()
-        val writerIndex = bufferSize(bitCount)
-        buf = arrowBuf.writerIndex(writerIndex)
+        buf = arrowBuf.writerIndex(bufferSize(bitCount))
             .let { it.referenceManager.transferOwnership(it, allocator).transferredBuffer }
         writerBitIndex = bitCount
     }

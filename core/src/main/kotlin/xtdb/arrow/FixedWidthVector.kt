@@ -3,7 +3,6 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.BaseFixedWidthVector
-import org.apache.arrow.vector.BitVectorHelper
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.TimeUnit
@@ -161,12 +160,40 @@ sealed class FixedWidthVector : Vector() {
         check(src is FixedWidthVector)
         check(src.byteWidth == byteWidth)
 
-        return RowCopier { srcIdx ->
-            if (src.isNull(srcIdx)) {
-                writeNull()
-            } else {
-                dataBuffer.writeBytes(src.dataBuffer, (srcIdx * byteWidth).toLong(), byteWidth.toLong())
-                writeNotNull()
+        return object : RowCopier {
+            // duplicated here because accessing in the outer class was non-negligible in the profiler
+            private val srcValidity = src.validityBuffer
+            private val srcData = src.dataBuffer
+            private val destValidity = this@FixedWidthVector.validityBuffer
+            private val destData = this@FixedWidthVector.dataBuffer
+            private val byteWidth = this@FixedWidthVector.byteWidth
+
+            private fun ensureWriteable(len: Int) {
+                destValidity.ensureWritable(len)
+                destData.ensureWritable((len * byteWidth).toLong())
+            }
+
+            private fun unsafeCopyRange(srcIdx: Int, len: Int) {
+                destValidity.unsafeWriteBits(srcValidity, srcIdx, len)
+                destData.unsafeWriteBytes(srcData, (srcIdx * byteWidth).toLong(), (len * byteWidth).toLong())
+            }
+
+            override fun copyRow(srcIdx: Int) {
+                ensureWriteable(1)
+                unsafeCopyRange(srcIdx, 1)
+                valueCount++
+            }
+
+            override fun copyRows(sel: IntArray) {
+                ensureWriteable(sel.size)
+                for (srcIdx in sel) unsafeCopyRange(srcIdx, 1)
+                valueCount += sel.size
+            }
+
+            override fun copyRange(startIdx: Int, len: Int) {
+                ensureWriteable(len)
+                unsafeCopyRange(startIdx, len)
+                valueCount += len
             }
         }
     }
