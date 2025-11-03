@@ -17,7 +17,7 @@ Let's say instead of backfilling a trade to the previous day, someone adds a tra
             ORDER BY _id" />
 </Xtplay>
 
-Now when the auditors come in, they check for changes since they last were here:
+Now when the auditors come in, they check for changes since they were last here:
 
 <Xtplay magicContext="my-context">
   <Query q="SELECT *
@@ -26,11 +26,11 @@ Now when the auditors come in, they check for changes since they last were here:
             ORDER BY _id" />
 </Xtplay>
 
-They can't find the trade we inserted into last month!
+They can't find the trade we inserted last month!
 
 If we want to allow editing the timeline, how can we detect this?
 
-In XTDB we use system-time (a.k.a. wall-clock time), an **immutable** timeline that gets appended to with every change. This means our fraudulent/malicious/accidental edit from earlier gets caught easily:
+In XTDB, we use system-time (a.k.a. wall-clock time), an **immutable** timeline that gets appended to with every change. This means our fraudulent/malicious/accidental edit from earlier gets caught easily:
 
 <Xtplay magicContext="my-context">
   <Query q="SELECT *
@@ -39,7 +39,7 @@ In XTDB we use system-time (a.k.a. wall-clock time), an **immutable** timeline t
             ORDER BY _id" />
 </Xtplay>
 
-In fact we can even scan the system for suspicious or unusual changes. For example, any retroactive changes to valid-time that go back further than 24 hours:
+In fact, we can even scan the system for suspicious or unusual changes. For example, any retroactive changes to valid-time that go back further than 24 hours:
 
 <Xtplay magicContext="my-context">
   <Query q="SELECT t.*, _system_from, _valid_from
@@ -48,4 +48,4 @@ In fact we can even scan the system for suspicious or unusual changes. For examp
             ORDER BY _id" />
 </Xtplay>
 
-Conclusion: As an immutable database, XTDB keeps you safe from your own changes by making sure to record when they happened. Even when reaching into the past!
+Conclusion: As an immutable database, XTDB keeps you safe from your own changes by making sure to record when they happened, even when you reach into the past!

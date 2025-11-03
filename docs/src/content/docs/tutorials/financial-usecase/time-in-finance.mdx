@@ -19,7 +19,7 @@ IT systems of all kinds are plagued by many time-related complexities, from misc
 
 ## 1) Audit and Replay: what happened?
 
-SQL database systems typically lose information whenever UPDATE or DELETE are used. They also don't record or track the any changes to data by default.
+SQL database systems typically lose information whenever UPDATE or DELETE are used. They also don't record or track any changes to data by default.
 
 <Xtplay>
   <Txs txs="INSERT INTO trades (_id, price) VALUES (1, 100);" />
@@ -31,11 +31,11 @@ SQL database systems typically lose information whenever UPDATE or DELETE are us
 />
 </Xtplay>
 
-In common SQL databases, the original price '100' is lost forever, and no information about when it was last changed is recorded. Perhaps if you're sufficiently desparate and very lucky there _might_ be an old backup of the data available somewhere with a previous value.
+In common SQL databases, the original price '100' is lost forever, and no information about when it was last changed is recorded. Perhaps if you're sufficiently desperate and very lucky there _might_ be an old backup of the data available somewhere with a previous value.
 
-As a consequence, software engineers working in financial domains are forced to routinely confront this fundamental 'mutability' across their database systems to ensure that sufficient records are kept for satisfying auditors and regulators about exactly how have changed over time.
+As a consequence, software engineers working in financial domains are forced to routinely confront this fundamental 'mutability' across their database systems to ensure that sufficient records are kept for satisfying auditors and regulators about exactly how things have changed over time.
 
-In XTDB however, there is no need for custom audit tables or timestamp columns to litter the application schema, because a full audit history is maintained automatically, and the history of the entire database can be 'replayed' with microsecond granularity.
+In XTDB, however, there is no need for custom audit tables or timestamp columns to litter the application schema, because a full audit history is maintained automatically, and the history of the entire database can be 'replayed' with microsecond granularity.
 
 <Xtplay magicContext="audit">
   <Txs txs="INSERT INTO trades (_id, price) VALUES (1, 100);" />
@@ -86,7 +86,7 @@ No locking, copying, or snapshotting is taking place within XTDB. Queries agains
 
 ## 3) Interleaving Upstream Sources: Whose Timestamp?
 
-In many circumstances the system time of the database itself is uninteresting (i.e outside of auditing / debugging), and what is more relevant is the time recorded in an upstream system. For instance a High-Frequency Trading platform could generate a trade with a timestamp that is anywhere from 0.01-100ms earlier than the time at which the trade database records the trade. In other situations information may even arrive hours or days 'late'.
+In many circumstances the system time of the database itself is uninteresting (i.e outside of auditing / debugging), and what is more relevant is the time recorded in an upstream system. For instance, a High-Frequency Trading platform could generate a trade with a timestamp that is anywhere from 0.01-100ms earlier than the time at which the trade database records the trade. In other situations, information may even arrive hours or days 'late'.
 
 In cases where the upstream timestamps need to be respected for the AS OF application reporting requirement even more so than the database timestamps, "valid time versioning" is required (implementing SQL:2011's notion of "application time versioning").
 
@@ -162,7 +162,7 @@ With XTDB's ubiquitous tracking of `system_to` and `valid_to` columns however, m
 
 Whenever old data needs to be queried, it can be achieved purely via SQL without any out-of-band engineering or processing work.
 
-Applications can set the `valid_to` column explicitly to correspond with data lifecycle archival events like 'settled_at'. Or alternatively they can simple `DELETE` the relevant records (setting `valid_to` to the implicit `CURRENT_TIMESTAMP` at the time of the transaction):
+Applications can set the `valid_to` column explicitly to correspond with data lifecycle archival events like 'settled_at'. Alternatively, they can simply `DELETE` the relevant records (setting `valid_to` to the implicit `CURRENT_TIMESTAMP` at the time of the transaction):
 
 <Xtplay>
   <Txs systemTime="2020-01-02"
@@ -192,7 +192,7 @@ Only systems with a comprehensive, fine-grained understanding of the data lifecy
 
 Many finance applications rely on carefully designed 'forward correction' mechanisms that preserve an audit history whilst compensating for mistakes in human-scale business processes and software logic.
 
-For example if someone mistypes a trade price, it may be sufficient to just record the revised price "as of now" in order to resolve the situation.
+For example, if someone mistypes a trade price, it may be sufficient to just record the revised price "as of now" in order to resolve the situation.
 
 However, if any part of the application or downstream trade processing relies on a consistent understanding of the precise periods of time when that revision is made, particularly if there is reporting happening against historic timestamps, then the mistake must also be resolved such that queries against historic timestamps will observe the _corrected_ values.
 
@@ -237,7 +237,7 @@ Combined with the use of system-time, XTDB gives applications the ability to ret
 
 `valid_to` isn't restricted to past or current timestamps, it can also be used to represent _future_ timestamps.
 
-This is useful for reducing or eliminating various batch-update activities that might normally take place. For example if a trade has a known expiration date in the future, an application might periodically remove expired trades from the database.
+This is useful for reducing or eliminating various batch-update activities that might normally take place. For example, if a trade has a known expiration date in the future, an application might periodically remove expired trades from the database.
 
 By using `valid_to`, the process of removing expired trades can happen implicitly as the database clock moves forward, avoiding the need to have a long-running batch job that must execute transactionally.
 
@@ -278,7 +278,7 @@ Whilst an ability to "load data into the future" may not address all aspects of 
 
 Additionally, SQL queries are able to preview the effects of any future valid-time changes.
 
-For example, imagine you want to reliably update some key data ahead of a seaonal 'code freeze':
+For example, imagine you want to reliably update some key data ahead of a seasonal 'code freeze':
 
 <Xtplay autoLoad>
   <Txs systemTime="2020-03-01"

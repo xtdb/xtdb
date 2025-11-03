@@ -63,7 +63,7 @@ the price of every product as of `2024-01-15`.
   <Query q="SELECT * FROM product FOR VALID_TIME AS OF DATE '2024-01-15'" />
 </Xtplay>
 
-Here you can see we have the correct historical price for `2024-01-15`, which is 340
+Here you can see we have the correct historical price for `2024-01-15`, which is 340.
 
 Now let's say our CFO wants to know how the prices have increased over Q1?
 
@@ -76,7 +76,7 @@ FROM product
 ORDER BY _valid_from`} />
 </Xtplay>
 
-When did the bicycle price first exceed $350 ?
+When did the bicycle price first exceed $350?
 
 <Xtplay magicContext="my-context">
   <Query q={`
@@ -89,7 +89,7 @@ ORDER BY _valid_from
 LIMIT 1`} />
 </Xtplay>
 
-Yes, it was the price change of `2024-02-01` where the bicycle's
+Yes, it was the price change on `2024-02-01` when the bicycle's
 price exceeded $350.
 
 ## Conclusion
