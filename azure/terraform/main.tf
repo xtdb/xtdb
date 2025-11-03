@@ -49,9 +49,7 @@ module "xtdb_storage" {
 
   # Public network access for storage account
   public_network_access_enabled = true
-  network_rules = {
-    default_action = "Allow"
-  }
+  network_rules                 = null
 }
 
 # Sets up an AKS cluster to be used by XTDB
@@ -102,6 +100,11 @@ module "aks" {
       enable_auto_scaling = true
       node_labels = {
         "node_pool" = "xtdbpool"
+      }
+      upgrade_settings = {
+        max_surge                     = "10%"
+        drain_timeout_in_minutes      = 0
+        node_soak_duration_in_minutes = 0
       }
     }
   }
