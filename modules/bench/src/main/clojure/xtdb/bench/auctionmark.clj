@@ -442,6 +442,13 @@
     (log/info {:scale-factor scale-factor :no-load? no-load? :only-load? only-load? :duration duration :seed seed})
     {:title "Auction Mark OLTP"
      :seed seed
+     :parameters {:scale-factor scale-factor
+                  :no-load? no-load?
+                  :only-load? only-load?
+                  :duration duration
+                  :seed seed
+                  :threads threads
+                  :sync sync}
      :->state ->initial-state
      :tasks (concat (when-not no-load?
                       [{:t :do

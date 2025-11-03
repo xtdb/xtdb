@@ -301,7 +301,7 @@
 
       (wrap-task task)))
 
-(defn compile-benchmark [{:keys [bench-log-file title seed ->state], :or {seed 0}, :as benchmark}]
+(defn compile-benchmark [{:keys [bench-log-file title seed ->state parameters], :or {seed 0}, :as benchmark}]
   (let [fns (mapv compile-task (:tasks benchmark))]
     (fn run-benchmark [node]
       (util/with-open [bench-log-wrt (when bench-log-file (io/writer bench-log-file))]
@@ -314,6 +314,7 @@
             (f worker))
 
           (log-report worker {:benchmark title
+                              :parameters parameters
                               :system (get-system-info)
                               :time-taken-ms (- (System/currentTimeMillis) start-ms)}))))))
 

@@ -44,13 +44,14 @@
   (log/info {:scale-factor scale-factor :seed seed :no-load? no-load?})
 
   {:title "TPC-H (OLAP)", :seed seed
+   :parameters {:scale-factor scale-factor :seed seed :no-load? no-load?}
    :->state #(do {:!state (atom {})})
    :tasks [{:t :do
             :stage :ingest
             :tasks (when-not no-load?
                      [{:t :call, :stage :submit-docs
                        :f (fn [{:keys [node]}] (tpch/submit-docs! node scale-factor))}
-                      
+
                       {:t :call, :stage :sync,
                        :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofHours 5)))}
 

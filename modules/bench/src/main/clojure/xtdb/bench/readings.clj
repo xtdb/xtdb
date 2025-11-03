@@ -108,6 +108,7 @@
   (log/info {:readings readings :devices devices :seed seed :no-load? no-load?})
   {:title "Readings benchmarks"
    :seed seed
+   :parameters {:readings readings :devices devices :seed seed :no-load? no-load?}
    :->state #(do {:!state (atom {})})
    :tasks (concat (when-not no-load?
                     (->ingestion-stage devices readings))

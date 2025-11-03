@@ -43,6 +43,7 @@
   (log/info {:no-load? no-load? :limit limit})
 
   {:title "Products"
+   :parameters {:no-load? no-load? :limit limit}
    :tasks [{:t :call, :stage :download
             :f (fn [_]
                  (download-dataset))}

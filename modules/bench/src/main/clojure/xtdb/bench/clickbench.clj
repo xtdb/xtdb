@@ -170,6 +170,7 @@
 (defmethod b/->benchmark :clickbench [_ {:keys [no-load? limit size], :or {size :small}}]
   (log/info {:no-load? no-load? :limit limit :size size})
   {:title "Clickbench Hits"
+   :parameters {:no-load? no-load? :limit limit :size size}
    :tasks [{:t :call, :stage :download
             :f (fn [_]
                  (download-dataset size))}
