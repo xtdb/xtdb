@@ -18,7 +18,7 @@ class BitemporalConsumer private constructor(
 ) : AutoCloseable {
 
     class RelBuilder private constructor(
-        private val contentCols: List<VectorReader>,
+        private val rel: RelationReader, private val contentColNames: List<ColumnName>,
         private val validFromVec: VectorWriter?, private val validToVec: VectorWriter?,
         private val systemFromVec: VectorWriter?, private val systemToVec: VectorWriter?
     ) : AutoCloseable {
@@ -29,7 +29,7 @@ class BitemporalConsumer private constructor(
                 if (condition) block() else null
 
             fun open(
-                al: BufferAllocator, contentCols: List<VectorReader>,
+                al: BufferAllocator, rel: RelationReader, contentColNames: List<ColumnName>,
                 hasValidFrom: Boolean, hasValidTo: Boolean,
                 hasSystemFrom: Boolean, hasSystemTo: Boolean,
             ): RelBuilder =
@@ -41,7 +41,7 @@ class BitemporalConsumer private constructor(
                     }
 
                     RelBuilder(
-                        contentCols = contentCols,
+                        rel, contentColNames,
                         validFromVec = unlessNot(hasValidFrom) { openTemporalVec("_valid_from", false) },
                         validToVec = unlessNot(hasValidTo) { openTemporalVec("_valid_to", true) },
                         systemFromVec = unlessNot(hasSystemFrom) { openTemporalVec("_system_from", false) },
@@ -65,9 +65,19 @@ class BitemporalConsumer private constructor(
 
         fun build(): RelationReader {
             val selArray = contentSel.toArray()
-            return RelationReader.from(contentCols
-                .map { it.select(selArray) }
-                .plus(listOfNotNull(validFromVec, validToVec, systemFromVec, systemToVec)))
+
+            val putReader =
+                rel["op"].vectorForOrNull("put")
+                    ?.takeIf { putVec -> putVec.vectorForOrNull("_id") != null }
+                    ?.select(selArray)
+
+            return RelationReader.from(
+                contentColNames
+                    .map {
+                        if (it == "_iid") rel["_iid"].select(selArray)
+                        else putReader?.vectorForOrNull(it) ?: NullVector(it, true, selArray.size)
+                    }
+                    .plus(listOfNotNull(validFromVec, validToVec, systemFromVec, systemToVec)))
         }
 
         override fun close() {
@@ -79,20 +89,6 @@ class BitemporalConsumer private constructor(
     }
 
     companion object {
-        private fun RelationReader.selectContentCols(colNames: List<ColumnName>): List<VectorReader> {
-            val putReader =
-                this["op"].vectorForOrNull("put")?.takeIf { putVec -> putVec.vectorForOrNull("_id") != null }
-
-            return colNames.map { colName ->
-                if (colName == "_iid")
-                    this["_iid"]
-                else
-                    putReader
-                        ?.vectorForOrNull(colName)?.withName(colName)
-                        ?: NullVector(colName, true, rowCount)
-            }
-        }
-
         fun open(al: BufferAllocator, rels: List<RelationReader>, colNames: List<ColumnName>): BitemporalConsumer {
             val hasValidFrom = "_valid_from" in colNames
             val hasValidTo = "_valid_to" in colNames
@@ -103,20 +99,12 @@ class BitemporalConsumer private constructor(
 
             return rels.safeMap { rel ->
                 RelBuilder.open(
-                    al, rel.selectContentCols(contentColNames),
+                    al, rel, contentColNames,
                     hasValidFrom, hasValidTo,
                     hasSystemFrom, hasSystemTo
                 )
             }.closeAllOnCatch {
-                BitemporalConsumer(
-                    it,
-                    contentColNames.plus(listOfNotNull(
-                        "_valid_from".takeIf { hasValidFrom },
-                        "_valid_to".takeIf { hasValidTo },
-                        "_system_from".takeIf { hasSystemFrom },
-                        "_system_to".takeIf { hasSystemTo }
-                    ))
-                )
+                BitemporalConsumer(it, colNames)
             }
         }
     }
