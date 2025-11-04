@@ -17,7 +17,6 @@ import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.io.path.fileSize
 
 /**
@@ -27,12 +26,11 @@ import kotlin.io.path.fileSize
  * This isn't *caching* much now (see #4831) - it's more to keep track of/limit how much we've mmap'd in.
  */
 class MemoryCache @JvmOverloads internal constructor(
-    private val al: BufferAllocator,
+    al: BufferAllocator,
     private val maxSizeBytes: Long,
     private val pathLoader: PathLoader = PathLoader()
 ) : AutoCloseable {
-
-    private val usedBytes = AtomicLong()
+    private val al = al.newChildAllocator("memory-cache", 0, maxSizeBytes)
 
     data class Slice(val offset: Long, val length: Long) {
         companion object {
@@ -52,14 +50,16 @@ class MemoryCache @JvmOverloads internal constructor(
         fun maxSizeBytes(maxSizeBytes: Long?) = apply { this.maxSizeBytes = maxSizeBytes }
         fun maxSizeRatio(maxSizeRatio: Double) = apply { this.maxSizeRatio = maxSizeRatio }
 
-        fun open(al: BufferAllocator, meterRegistry: MeterRegistry? = null) =
-            MemoryCache(al, maxSizeBytes ?: (maxDirectMemory * maxSizeRatio).toLong())
+        fun open(al: BufferAllocator, meterRegistry: MeterRegistry? = null): MemoryCache {
+            val maxSizeBytes = maxSizeBytes ?: (maxDirectMemory * maxSizeRatio).toLong()
+            return MemoryCache(al, maxSizeBytes)
                 .also { meterRegistry?.registerMemoryCache(it) }
+        }
     }
 
     internal data class Stats(val usedBytes: Long, val freeBytes: Long)
 
-    internal val stats0 get() = usedBytes.get().let { used -> Stats(used, maxSizeBytes - used) }
+    internal val stats0 get() = al.let { Stats(it.allocatedMemory, it.limit - it.allocatedMemory) }
 
     interface PathLoader {
         fun load(path: Path, slice: Slice, arena: Arena): MemorySegment
@@ -86,22 +86,10 @@ class MemoryCache @JvmOverloads internal constructor(
         operator fun invoke(k: Path): CompletableFuture<Pair<Path, AutoCloseable?>>
     }
 
-    private fun acquire(reqBytes: Long) {
-        while (true) {
-            val used = usedBytes.get()
-            val free = maxSizeBytes - used
-
-            if (reqBytes > free) throw OutOfMemoryError("out of memory. requested: $reqBytes, free: $free")
-
-            if (usedBytes.compareAndSet(used, used + reqBytes)) break
-        }
-    }
-
     @Suppress("NAME_SHADOWING")
     fun get(key: Path, slice: Slice? = null, fetch: Fetch): ArrowBuf =
         fetch(key).thenApplyAsync { (path, onEvict) ->
             val slice = slice ?: Slice.from(path)
-            acquire(slice.length)
             try {
                 // we open up a fine-grained arena here so that we can release the memory
                 // as soon as we're done with the ArrowBuf.
@@ -112,20 +100,18 @@ class MemoryCache @JvmOverloads internal constructor(
                         object : ForeignAllocation(memSeg.byteSize(), memSeg.address()) {
                             override fun release0() {
                                 arena.close()
-                                usedBytes.addAndGet(-slice.length)
                                 onEvict?.close()
                             }
                         })
                 }
             } catch (t: Throwable) {
-                usedBytes.addAndGet(-slice.length)
                 onEvict?.close()
                 throw t
             }
 
         }.get()!!
 
-    override fun close() = Unit
+    override fun close() = al.close()
 
     companion object {
         @JvmStatic
@@ -137,9 +123,9 @@ class MemoryCache @JvmOverloads internal constructor(
                     .baseUnit("bytes").register(this@registerMemoryCache)
             }
 
-            registerGauge("memory-cache.pinnedBytes") { usedBytes.get() }
+            registerGauge("memory-cache.pinnedBytes") { cache.al.allocatedMemory }
             registerGauge("memory-cache.evictableBytes") { 0 }
-            registerGauge("memory-cache.freeBytes") { maxSizeBytes - usedBytes.get() }
+            registerGauge("memory-cache.freeBytes") { cache.al.let { it.limit - it.allocatedMemory } }
         }
     }
 }

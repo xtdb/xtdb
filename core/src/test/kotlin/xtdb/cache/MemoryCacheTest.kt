@@ -1,6 +1,7 @@
 package xtdb.cache
 
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.OutOfMemoryException
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
@@ -114,7 +115,7 @@ class MemoryCacheTest {
     @Test
     fun `ooms the mem-cache`() {
         MemoryCache(allocator, 100, PathLoader()).use { cache ->
-            assertThrows(OutOfMemoryError::class.java) {
+            assertThrows(OutOfMemoryException::class.java) {
                 unwrapCause {
                     cache.get(Path.of("t1/200"), Slice(0, 200)) { k -> completedFuture(k to null) }.use { }
                 }
@@ -124,7 +125,7 @@ class MemoryCacheTest {
                 "only takes a slice of a bigger file",
                 {
                     cache.get(Path.of("t1/200"), Slice(0, 50)) { k -> completedFuture(k to null) }.use { b1 ->
-                        assertEquals(1, b1.getByte(0))
+                        assertEquals(2, b1.getByte(0))
                     }
                 }
             )
@@ -133,9 +134,9 @@ class MemoryCacheTest {
                 "but too many slices OOMs too",
                 {
                     cache.get(Path.of("t1/200"), Slice(0, 75)) { k -> completedFuture(k to null) }.use { b1 ->
-                        assertEquals(2, b1.getByte(0))
+                        assertEquals(3, b1.getByte(0))
 
-                        assertThrows(OutOfMemoryError::class.java) {
+                        assertThrows(OutOfMemoryException::class.java) {
                             unwrapCause {
                                 cache.get(Path.of("t1/200"), Slice(75, 75)) { k -> completedFuture(k to null) }.use {}
                             }
