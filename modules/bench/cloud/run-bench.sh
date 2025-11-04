@@ -26,7 +26,7 @@ usage() {
 
 validate_inputs() {
   [[ "$CLOUD" =~ ^(aws|azure|google-cloud)$ ]] || error "Invalid cloud: $CLOUD"
-  [[ "$BENCH_TYPE" =~ ^(tpch|readings|auctionmark)$ ]] || error "Invalid bench type: $BENCH_TYPE"
+  [[ "$BENCH_TYPE" =~ ^(tpch|readings|auctionmark|yakbench)$ ]] || error "Invalid bench type: $BENCH_TYPE"
 }
 
 get_cloud_config() {

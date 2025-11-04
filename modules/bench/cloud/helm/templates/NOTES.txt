@@ -11,6 +11,9 @@ tpch:
 {{- else if eq .Values.benchType "auctionmark" }}
 auctionmark:
 {{ toYaml .Values.auctionmark | indent 2 }}
+{{- else if eq .Values.benchType "yakbench" }}
+yakbench:
+{{ toYaml .Values.yakbench | indent 2 }}
 {{- end }}
 
 To view the logs of the node, use:

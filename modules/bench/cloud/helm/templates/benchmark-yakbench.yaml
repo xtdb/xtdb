@@ -1,0 +1,79 @@
+{{- if eq .Values.benchType "yakbench" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: yakbench
+  namespace: {{ .Release.Namespace }}
+spec:
+  parallelism: 1
+  completions: 1
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        {{- $user := .Values.providerConfig.podLabels | default (dict) -}}
+        {{- $base := dict "app.kubernetes.io/name" "xtdb" "app.kubernetes.io/component" "benchmark" -}}
+        {{- $labels := merge (dict) $user $base -}}
+        {{- toYaml $labels | nindent 8 }}
+      annotations:
+        "helm.sh/hook": pre-install,pre-upgrade
+        "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.providerConfig.nodeSelector | nindent 8 }}
+      serviceAccountName: xtdb-service-account
+      restartPolicy: Never
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: xtdb-yaml-config
+          configMap:
+            name: xtdb-yaml-config
+        - name: local-disk-cache
+          emptyDir:
+            sizeLimit: {{ .Values.xtdbConfig.localDiskCache.sizeLimit }}
+      initContainers:
+      - name: wait-for-kafka
+        image: busybox
+        command: ['sh', '-c', 'until nc -z -w 2 {{ include "xtdb.kafka.host" .Values.xtdbConfig.kafkaBootstrapServers }} {{ include "xtdb.kafka.port" .Values.xtdbConfig.kafkaBootstrapServers }}; do echo waiting for kafka; sleep 5; done;']
+        resources:
+          requests:
+            memory: "256Mi"
+          limits:
+            memory: "256Mi"
+      containers:
+        - name: xtdb-node
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - mountPath: /var/lib/xtdb-config/xtdbconfig.yaml
+              name: xtdb-yaml-config
+              subPath: xtdbconfig.yaml
+            - name: local-disk-cache
+              mountPath: /var/lib/xtdb/buffers/
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: xtdb-env-config
+            {{- if .Values.providerConfig.existingSecret }}
+            - secretRef:
+                name: {{ .Values.providerConfig.existingSecret }}
+            {{- end }}
+          env:
+            - name: XTDB_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          args:
+            - yakbench
+            - -f
+            - "/var/lib/xtdb-config/xtdbconfig.yaml"
+            - --scale-factor
+            - {{ .Values.yakbench.scaleFactor | quote }}
+          ports:
+            - name: metrics
+              containerPort: 8080
+{{- end }}
