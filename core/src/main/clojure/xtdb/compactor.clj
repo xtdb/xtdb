@@ -71,7 +71,6 @@
         :when (or (and (nil? recency) (= level 1))
                   (> level 1))
         :let [live-files (-> files
-                             (->> (remove #(= :garbage (:state %))))
                              (cond->> (or (= level 1) (and (= level 2) recency)) (filter #(>= (:data-file-size %) file-size-target))))]
         :when (>= (count live-files) cat/branch-factor)
         :let [live-files (reverse live-files)]
