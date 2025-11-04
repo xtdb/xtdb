@@ -8,6 +8,8 @@ import xtdb.segment.Segment.Page.Companion.page
 import xtdb.trie.HashTrie
 
 interface Segment<L> : AutoCloseable {
+    val part: ByteArray?
+
     val schema: Schema
 
     fun openMetadata(): Metadata<L>

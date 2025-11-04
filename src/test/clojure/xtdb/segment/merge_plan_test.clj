@@ -28,6 +28,7 @@
 
 (defrecord TestSegment [seg trie]
   Segment
+  (getPart [_] nil)
   (openMetadata [_]
     (->TestSegmentMetadata seg trie)))
 

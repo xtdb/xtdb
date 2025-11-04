@@ -1,7 +1,6 @@
 package xtdb.segment
 
 import com.carrotsearch.hppc.ObjectStack
-import xtdb.segment.Segment.Page
 import xtdb.segment.Segment.PageMeta
 import xtdb.trie.DEFAULT_LEVEL_WIDTH
 import xtdb.trie.HashTrie
@@ -38,42 +37,48 @@ object MergePlanner {
         pathPred: Predicate<ByteArray>?,
         filterPages: PagesFilter = PagesFilter { it }
     ): List<MergeTask> {
-        segments.safeMap { it.openMetadata() }.useAll { segMetas ->
-            val result = mutableListOf<MergeTask>()
-
-            val initialSegNodes = segMetas.mapNotNull { it.toSegmentNode() }
-            if (initialSegNodes.isEmpty()) return emptyList()
-
-            val stack = ObjectStack<WorkTask>()
-
-            stack.push(WorkTask(initialSegNodes, ByteArray(0)))
-
-            while (!stack.isEmpty) {
-                val workTask = stack.pop()
-                val segNodes = workTask.segNodes
-                if (pathPred != null && !pathPred.test(workTask.path)) continue
-
-                val nodeChildren = segNodes.map { it to it.children }
-                if (nodeChildren.any { (_, children) -> children != null }) {
-                    // do these in reverse order so that they're on the stack in path-prefix order
-                    for (bucketIdx in (0..<DEFAULT_LEVEL_WIDTH).reversed()) {
-                        val newSegNodes = nodeChildren.mapNotNull { (segNode, children) ->
-                            // children == null iff this is a leaf
-                            // children[bucketIdx] is null iff this is a branch but without any values in this bucket.
-                            if (children != null) children[bucketIdx] else segNode
-                        }
-
-                        if (newSegNodes.isNotEmpty())
-                            stack.push(WorkTask(newSegNodes, conjPath(workTask.path, bucketIdx.toByte())))
-                    }
-                } else {
-                    filterPages.filterPages(segNodes.map { it.page })
-                        ?.takeIf { it.isNotEmpty() }
-                        ?.let { filteredPages -> result += MergeTask(filteredPages.map { it.page }, workTask.path) }
-                }
+        segments
+            .filter {
+                val part = it.part
+                if (part == null || pathPred == null) true
+                else pathPred.test(part)
             }
+            .safeMap { it.openMetadata() }.useAll { segMetas ->
+                val result = mutableListOf<MergeTask>()
 
-            return result
-        }
+                val initialSegNodes = segMetas.mapNotNull { it.toSegmentNode() }
+                if (initialSegNodes.isEmpty()) return emptyList()
+
+                val stack = ObjectStack<WorkTask>()
+
+                stack.push(WorkTask(initialSegNodes, ByteArray(0)))
+
+                while (!stack.isEmpty) {
+                    val workTask = stack.pop()
+                    val segNodes = workTask.segNodes
+                    if (pathPred != null && !pathPred.test(workTask.path)) continue
+
+                    val nodeChildren = segNodes.map { it to it.children }
+                    if (nodeChildren.any { (_, children) -> children != null }) {
+                        // do these in reverse order so that they're on the stack in path-prefix order
+                        for (bucketIdx in (0..<DEFAULT_LEVEL_WIDTH).reversed()) {
+                            val newSegNodes = nodeChildren.mapNotNull { (segNode, children) ->
+                                // children == null iff this is a leaf
+                                // children[bucketIdx] is null iff this is a branch but without any values in this bucket.
+                                if (children != null) children[bucketIdx] else segNode
+                            }
+
+                            if (newSegNodes.isNotEmpty())
+                                stack.push(WorkTask(newSegNodes, conjPath(workTask.path, bucketIdx.toByte())))
+                        }
+                    } else {
+                        filterPages.filterPages(segNodes.map { it.page })
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { filteredPages -> result += MergeTask(filteredPages.map { it.page }, workTask.path) }
+                    }
+                }
+
+                return result
+            }
     }
 }

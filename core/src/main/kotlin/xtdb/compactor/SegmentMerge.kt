@@ -16,11 +16,15 @@ import xtdb.metadata.UNBOUND_TEMPORAL_METADATA
 import xtdb.segment.MergePlanner
 import xtdb.segment.MergeTask
 import xtdb.segment.Segment
-import xtdb.segment.Segment.PageMeta
 import xtdb.segment.Segment.PageMeta.Companion.pageMeta
+import xtdb.table.TableRef
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.EventRowPointer
+import xtdb.trie.Trie
+import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.dataRelSchema
+import xtdb.trie.Trie.metaFilePath
+import xtdb.trie.TrieKey
 import xtdb.types.MergeTypes.Companion.mergeFields
 import xtdb.types.Type.Companion.ofType
 import xtdb.util.*
@@ -226,8 +230,11 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
  */
 
 private class LocalSegment(
-    private val al: BufferAllocator, dataFile: Path, val metaFile: Path
+    private val al: BufferAllocator, table: TableRef, dir: Path, trieKey: TrieKey,
 ) : Segment<ArrowHashTrie.Leaf>, AutoCloseable {
+
+    private val dataFile = dir.resolve(table.dataFilePath(trieKey))
+    private val metaFile = dir.resolve(table.metaFilePath(trieKey))
 
     inner class Metadata : Segment.Metadata<ArrowHashTrie.Leaf> {
         private val pageMetadata = PageMetadata.open(al, metaFile)
@@ -242,6 +249,8 @@ private class LocalSegment(
 
         override fun close() = pageMetadata.close()
     }
+
+    override val part = Trie.parseKey(trieKey).part?.toArray()
 
     override fun openMetadata(): Metadata = Metadata()
 
@@ -258,27 +267,24 @@ private class LocalSegment(
 
 internal fun main() {
     val dir = "/tmp/downloads/compactor-error".asPath
-    val files = listOf("l01-rc-b2c74.arrow", "l00-rc-b2c75.arrow")
+    val table = TableRef.parse("xtdb", "foo")
+    val trieKeys = listOf("l01-rc-b2c74", "l00-rc-b2c75")
 
     try {
         RootAllocator().use { al ->
             SegmentMerge(al).use { segMerge ->
-                files.safeMap { fileName ->
-                    LocalSegment(
-                        al,
-                        dir.resolve("data").resolve(fileName),
-                        dir.resolve("meta").resolve(fileName)
-                    )
-                }.useAll { segments ->
-                    segMerge.mergeSegments(
-                        segments, null, SegmentMerge.RecencyPartitioning.Partition
-                    ).use { results ->
-                        with(segMerge) {
-                            // here's probably where you want to do something other than printing the schema :)
-                            results.forEach { it.openAllAsRelation().use { rel -> println(rel.schema) } }
+                trieKeys
+                    .safeMap { trieKey -> LocalSegment(al, table, dir, trieKey) }
+                    .useAll { segments ->
+                        segMerge.mergeSegments(
+                            segments, null, SegmentMerge.RecencyPartitioning.Partition
+                        ).use { results ->
+                            with(segMerge) {
+                                // here's probably where you want to do something other than printing the schema :)
+                                results.forEach { it.openAllAsRelation().use { rel -> println(rel.schema) } }
+                            }
                         }
                     }
-                }
             }
         }
     } catch (e: Throwable) {
