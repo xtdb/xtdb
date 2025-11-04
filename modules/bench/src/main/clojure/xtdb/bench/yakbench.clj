@@ -1,10 +1,13 @@
 (ns xtdb.bench.yakbench
-  (:require [clojure.string :as str]
+  (:require [clojure.pprint :as pp]
+            [clojure.string :as str]
+            [clojure.test.check.random]
             [clojure.tools.logging :as log]
-            [clojure.pprint :as pp]
             [taoensso.tufte :as tufte :refer [p]]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
+            [xtdb.bench.stats :as stats]
+            [xtdb.bench.random :as random]
             [xtdb.compactor :as c]
             [xtdb.datasets.yakbench :as yakbench]
             [xtdb.test-util :as tu]
@@ -230,7 +233,7 @@
 
 (defn get-active-users
   [conn ^java.util.Random random scale-factor]
-  (let [active-users (yakbench/round-down (* yakbench/active-user-baseline scale-factor))
+  (let [active-users (stats/round-down (* yakbench/active-user-baseline scale-factor))
         joined (xt/q conn ["select u._id as _id from users u where u.user$joined_at > ?" active-inst])
         viewed (xt/q conn ["select distinct ui.user_item$user as _id from user_items ui where ui.user_item$viewed_at > ?" active-inst])
         ad-updated (xt/q conn ["select distinct a.ad$user as _id from ads a where a.ad$updated_at > ?" active-inst])
@@ -256,7 +259,7 @@
                                  "limit 1")]))]
     (when feed
       (let [titles (map :item/title (xt/q conn ["select item$title from items where item$feed$feed = ? limit 10" (:xt/id feed)]))
-            random-titles (repeatedly (count titles) #(yakbench/next-string random (+ 10 (yakbench/next-int random 10))))
+            random-titles (repeatedly (count titles) #(random/next-string random (+ 10 (random/next-int random 10))))
             titles (concat titles random-titles)]
         {:id (:xt/id feed)
          :titles titles}))))
@@ -292,24 +295,6 @@
       {:profile (profile-data @pstats)
        :formatted (tufte/format-pstats pstats)})))
 
-(defn distribution-stats
-  "Compute mean/median/p90/p99/min/max from a seq of numeric counts."
-  [counts]
-  (let [counts (vec (map long counts))
-        n (count counts)
-        sorted (vec (sort counts))
-        mean (if (pos? n) (/ (reduce + 0 sorted) (double n)) 0.0)
-        mn (if (pos? n) (first sorted) 0)
-        mx (if (pos? n) (peek sorted) 0)
-        idx (fn [p]
-              (cond
-                (zero? n) 0
-                :else (-> (Math/floor (* p (dec n))) long (max 0) (min (dec n)))))
-        median (if (pos? n) (sorted (idx 0.5)) 0)
-        p90 (if (pos? n) (sorted (idx 0.90)) 0)
-        p99 (if (pos? n) (sorted (idx 0.99)) 0)]
-    {:mean mean :median median :p90 p90 :p99 p99 :min mn :max mx}))
-
 (defn stats-from-sql
   "Run a SQL that returns rows with a single count column (aliased as `cnt` by default)
    and compute distribution stats over those counts. Provide `count-key` if alias differs."
@@ -318,31 +303,31 @@
   ([conn sql count-key]
    (let [rows (xt/q conn [sql])
          counts (map count-key rows)]
-     (distribution-stats counts))))
+     (stats/distribution-stats counts))))
 
 (defn user-items-stats
   [conn]
   (stats-from-sql conn
-                  (str "select count(*) as cnt "
-                       "from user_items ui "
-                       "group by ui.user_item$user")
-                  :cnt))
+                        (str "select count(*) as cnt "
+                             "from user_items ui "
+                             "group by ui.user_item$user")
+                        :cnt))
 
 (defn user-subs-stats
   [conn]
   (stats-from-sql conn
-                  (str "select count(*) as cnt "
-                       "from subs s "
-                       "group by s.sub$user")
-                  :cnt))
+                        (str "select count(*) as cnt "
+                             "from subs s "
+                             "group by s.sub$user")
+                        :cnt))
 
 (defn feed-items-stats
   [conn]
   (stats-from-sql conn
-                  (str "select count(*) as cnt "
-                       "from items i "
-                       "group by i.item$feed$feed")
-                  :cnt))
+                        (str "select count(*) as cnt "
+                             "from items i "
+                             "group by i.item$feed$feed")
+                        :cnt))
 
 (defn inspect
   [node {{:keys [user-id]} :max-user :keys [active-users]}]
@@ -397,28 +382,6 @@
     (pp/print-table [(feed-items-stats conn)])
     (println)))
 
-(defn load-data!
-  "Load data in chunks if scale factor is greater than 0.1 under the assumption
-  that the whole dataset is roughly the same as an aggregation of chunk sized
-  datasets"
-  [node random scale-factor]
-  (with-open [conn (get-conn node)]
-    (let [scale (Double/parseDouble (str scale-factor))]
-      (when (pos? scale)
-        (let [chunk 0.1
-              n-full (long (Math/floor (/ scale chunk)))
-              rem (- scale (* n-full chunk))
-              sub-scales (cond
-                           (<= scale chunk) [scale]
-                           (pos? rem) (concat (repeat n-full chunk) [rem])
-                           :else (repeat n-full chunk))
-              v-sub-scales (vec sub-scales)
-              total (count v-sub-scales)]
-          (doseq [[idx sub-scale] (map-indexed vector v-sub-scales)]
-            (log/debug (format "Loading chunk %d/%d (scale %.3f)" (inc idx) total sub-scale))
-            (let [docs (yakbench/generate-data random sub-scale)]
-              (yakbench/load-generated! conn docs))))))))
-
 (defmethod b/cli-flags :yakbench [_]
   [["-s" "--scale-factor SCALE_FACTOR" "Yakbench scale factor to use"
     :parse-fn parse-double
@@ -432,13 +395,16 @@
   {:title "Yakbench"
    :seed seed
    :parameters {:scale-factor scale-factor :seed seed :no-load? no-load?}
-   :->state #(do {:!state (atom {})})
+   :->state #(do {:!state (atom {})
+                  :!srandom (clojure.test.check.random/make-random seed)})
    :tasks [(when-not no-load?
              {:t :do
               :stage :ingest
               :tasks [{:t :call
                        :stage :submit-docs
-                       :f (fn [{:keys [node random]}] (load-data! node random scale-factor))}
+                       :f (fn [{:keys [node random !srandom]}]
+                            (with-open [conn (get-conn node)]
+                              (yakbench/load-data! conn !srandom random scale-factor)))}
                       {:t :call
                        :stage :await-transactions
                        :f (fn [{:keys [node]}] (b/sync-node node))}
@@ -493,7 +459,9 @@
 
 (comment
   (try
-    (let [rnd (java.util.Random. 0)
+    (let [seed 0
+          random (java.util.Random. seed)
+          srandom (clojure.test.check.random/make-random seed)
           scale 1.0
           dir (util/->path "/tmp/yakbench")
           clear-dir (fn [^java.nio.file.Path path]
@@ -505,7 +473,7 @@
       (with-open [node (tu/->local-node {:node-dir dir})
                   conn (get-conn node)]
         (println "Load data")
-        (load-data! node rnd scale)
+        (yakbench/load-data! node srandom random scale)
         (println "Flush block")
         (b/sync-node node)
         (tu/flush-block! node)
@@ -514,8 +482,8 @@
         (println "Get Query Data")
         (let [max-user (get-max-user conn)
               mean-user (get-mean-user conn)
-              active-users (get-active-users conn rnd scale)
-              biggest-feed (get-biggest-feed conn rnd)]
+              active-users (get-active-users conn random scale)
+              biggest-feed (get-biggest-feed conn random)]
           (println "Profile Global")
           (println (:formatted (profile node (benchmarks-queries active-users biggest-feed))))
           (println "Profile Max User")

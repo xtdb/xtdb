@@ -31,6 +31,7 @@ dependencies {
     api("com.taoensso", "tufte", "2.6.3")
     api("pro.juxt.clojars-mirrors.hiccup", "hiccup", "2.0.0-alpha2")
     api("org.testcontainers", "testcontainers", "1.20.1")
+    api("kixi", "stats", "0.5.7")
 
     api("software.amazon.awssdk", "s3", "2.25.24")
     api("clj-http", "clj-http", "3.13.1")
