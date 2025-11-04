@@ -72,7 +72,7 @@ They are a selection of [source](#source-operators) and [tail](#tail-operators) 
 | [From](#from) | Sources data from a table in XTDB |
 | [Join](#joins) | Further constrains the unification using the given query |
 | [Left Join](#joins) | Optionally joins the unification against the given query |
-| [Rel](#rel) | Sources data from the user-specified relation |
+| [Rel](#relation) | Sources data from the user-specified relation |
 | [Unnest](#unnest) | Flattens an array within a column into individual rows |
 | [Where](#where) | Filters the rows using the given predicates |
 | [With](#with) | Defines new logical variables in the unification |
@@ -352,7 +352,7 @@ FROM customers c
   JOIN orders o ON (c._id = o.customer_id)
 ```
 
-- In [rel](#rel) and [from](#from) clauses any logic variables specified in its binding specs are unified.
+- In [rel](#relation) and [from](#from) clauses any logic variables specified in its binding specs are unified.
 - [Join](#joins) and [left join](#joins) clauses work in a similar way to [from](#from), except they execute a full sub-query (e.g.
     another pipeline) rather than reading a single table. Any logic variables specified in their binding specs are unified in the same way.
 
@@ -365,7 +365,7 @@ FROM customers c
 The 'unnest' operator extracts values from an array - returning one row for each element.
 The other columns in the query are duplicated for each row.
 
-- To unwrap an array of maps (a relation) rather than an array of values, with a variable bound to each map-key instead, see [rel](#rel).
+- To unwrap an array of maps (a relation) rather than an array of values, with a variable bound to each map-key instead, see [rel](#relation).
 - If the value in question isn't an array, or the array is empty, the row is filtered out.
 
 <!-- -->
