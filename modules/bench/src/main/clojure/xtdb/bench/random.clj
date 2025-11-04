@@ -72,9 +72,10 @@
          start-year (- end-year 10)]
      (next-instant random start-year end-year)))
   ([^java.util.Random random ^long start-year ^long end-year]
-   (let [[start-year end-year] (if (> start-year end-year)
-                                 [end-year start-year]
-                                 [start-year end-year])
+   (let [[^long start-year ^long end-year]
+         (if (> start-year end-year)
+           [end-year start-year]
+           [start-year end-year])
          zone ZoneOffset/UTC
          ^Instant start (-> (LocalDate/of start-year 1 1)
                             (.atStartOfDay zone)
