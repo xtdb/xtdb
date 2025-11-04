@@ -12,6 +12,7 @@ WORKDIR /usr/local/lib/xtdb
 ENTRYPOINT ["java", \
     "-Dclojure.main.report=stderr", \
     "--add-opens=java.base/java.nio=ALL-UNNAMED", \
+    "--enable-native-access=ALL-UNNAMED", \
     "-Dio.netty.tryReflectionSetAccessible=true", \
     "-cp","xtdb-standalone.jar", \
     "clojure.main", "-m", "xtdb.main"]
