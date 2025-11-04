@@ -24,6 +24,9 @@ class BufferPoolSegment(
     val dataFilePath = table.dataFilePath(trieKey)
     private val resolveSameSystemTimeEvents = Trie.parseKey(trieKey).level == 0L
 
+    override val part: ByteArray?
+        get() = Trie.parseKey(trieKey).part?.toArray()
+
     override val schema: Schema = bp.getFooter(dataFilePath).schema
 
     private val dataRel = Relation(al, schema)
