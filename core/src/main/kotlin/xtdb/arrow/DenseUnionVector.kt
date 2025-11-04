@@ -106,6 +106,12 @@ class DenseUnionVector private constructor(
                 }
         })
 
+        override fun select(idxs: IntArray): VectorReader =
+            inner.select(IntArray(idxs.size) { selIdx -> getOffset(idxs[selIdx]) })
+
+        override fun select(startIdx: Int, len: Int): VectorReader =
+            select(IntArray(len) { startIdx + it })
+
         override fun openSlice(al: BufferAllocator): VectorReader =
             typeBuffer.openSlice(al).closeOnCatch { typeBuffer ->
                 offsetBuffer.openSlice(al).closeOnCatch { offsetBuffer ->

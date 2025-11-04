@@ -5,6 +5,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
@@ -43,6 +44,12 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     override fun hashCode(idx: Int, hasher: Hasher) = inner.hashCode(sel[idx], hasher)
 
     override fun openSlice(al: BufferAllocator) = IndirectVector(inner.openSlice(al), sel)
+
+    override fun select(idxs: IntArray): VectorReader =
+        IndirectVector(inner, selection(sel.select(idxs)))
+
+    override fun select(startIdx: Int, len: Int): VectorReader =
+        IndirectVector(inner, selection(sel.select(startIdx, len)))
 
     override fun rowCopier(dest: VectorWriter): RowCopier {
         val innerCopier = inner.rowCopier(dest)

@@ -7,23 +7,19 @@ interface VectorIndirection {
 
     operator fun get(idx: Int): Int = getIndex(idx)
 
+    fun select(idxs: IntArray) = IntArray(idxs.size) { getIndex(idxs[it]) }
+    fun select(startIdx: Int, len: Int) = IntArray(len) { getIndex(startIdx + it) }
+
     companion object {
         @JvmStatic
         fun selection(idxs: IntArray): VectorIndirection = Selection(idxs)
 
         internal data class Selection(val idxs: IntArray) : VectorIndirection {
-            override fun valueCount(): Int {
-                return idxs.size
-            }
+            override fun valueCount(): Int = idxs.size
 
-            override fun getIndex(idx: Int): Int {
-                return idxs[idx]
-            }
+            override fun getIndex(idx: Int): Int = idxs[idx]
 
-            override fun toString(): String {
-                val idxs = idxs.contentToString()
-                return "(Selection {idxs=$idxs})"
-            }
+            override fun toString(): String = "(Selection {idxs=${this.idxs.contentToString()}})"
 
             override fun equals(other: Any?) = when {
                 this === other -> true
@@ -35,16 +31,11 @@ interface VectorIndirection {
         }
 
         @JvmStatic
-        fun slice(startIdx: Int, len: Int) : VectorIndirection = Slice(startIdx, len)
+        fun slice(startIdx: Int, len: Int): VectorIndirection = Slice(startIdx, len)
 
         internal data class Slice(val startIdx: Int, val len: Int) : VectorIndirection {
-            override fun valueCount(): Int {
-                return len
-            }
-
-            override fun getIndex(idx: Int): Int {
-                return startIdx + idx
-            }
+            override fun valueCount(): Int = len
+            override fun getIndex(idx: Int): Int = startIdx + idx
         }
     }
 }
