@@ -28,7 +28,7 @@ xtdbConfig:
   # Core environment variables
   kafkaBootstrapServers: xtdb-benchmark-kafka.cloud-benchmark.svc.cluster.local:9092
   logTopic: xtdb-log
-  jdkOptions: "-Xmx3000m -Xms3000m -XX:MaxDirectMemorySize=3000m -XX:MaxMetaspaceSize=500m --enable-native-access=ALL-UNNAMED"
+  jdkOptions: "-Xmx3000m -Xms3000m -XX:MaxDirectMemorySize=5000m -XX:MaxMetaspaceSize=500m --enable-native-access=ALL-UNNAMED"
   loggingLevel: info
   localDiskCache:
     sizeLimit: "150Gi"
