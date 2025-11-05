@@ -67,7 +67,7 @@ You can run XTDB nodes either in-process, or connect to a remote XTDB server via
 
  ;; JVM options required for in-process node
  :aliases {:xtdb {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
-                             "--enabled-native-memory-access=ALL-UNNAMED"
+                             "--enabled-native-access=ALL-UNNAMED"
                              "-Dio.netty.tryReflectionSetAccessible=true"]}}}
 ```
 
@@ -83,7 +83,7 @@ In-process XTDB is particularly useful for testing and interactive development -
 1. First, ensure you are running JDK 21+ and then add the `xtdb-core` library to your dependency manager.
 2. You'll also need to add the following JVM arguments to run Apache Arrow (included in the `:xtdb` deps.edn alias above):
    - `--add-opens=java.base/java.nio=ALL-UNNAMED`
-   - `--enabled-native-memory-access=ALL-UNNAMED`
+   - `--enabled-native-access=ALL-UNNAMED`
    - `-Dio.netty.tryReflectionSetAccessible=true`
 3. Once you have a REPL (started with `clj -A:xtdb` this time), you can create an in-memory XTDB node with:
 
