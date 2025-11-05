@@ -535,7 +535,26 @@
           (.close tu/*node*)
           (is (> 5000 (- (System/currentTimeMillis) t0))))))))
 
-;;TODO no current support for cancelling queries
+(defn test-cancel [sql]
+  (with-open [conn (jdbc-conn)
+              stmt (jdbc/prepare conn [sql])]
+    (future
+      (Thread/sleep 2000)
+      (log/debug "cancelling...")
+      (.cancel stmt))
+    (let [t0 (System/currentTimeMillis)
+          ex (is (thrown? PSQLException (.executeQuery stmt)))
+          exec-time (- (System/currentTimeMillis) t0)]
+      (is (= "57014" (.getSQLState ex)))
+      (is (-> ex .getServerErrorMessage .getMessage (.contains "cancel")))
+      (is (< 1500 exec-time 2500)))
+    (t/is (.isValid conn 3000))))
+
+(deftest cancel_sleep
+  (test-cancel "SELECT pg_sleep(10.0)"))
+
+(deftest cancel_big_query
+  (test-cancel "FROM GENERATE_SERIES(1,10000000) AS system(_id) ORDER BY _id"))
 
 (deftest jdbc-prepared-query-close-test
   (with-open [conn (jdbc-conn {"prepareThreshold" 1
