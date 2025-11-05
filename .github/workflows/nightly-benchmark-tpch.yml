@@ -52,12 +52,69 @@ jobs:
           # exit 0 if exists, non-zero if not
           helm status xtdb-benchmark -n cloud-benchmark >/dev/null 2>&1
 
-      - name: Cancel workflow (existing deployment)
+      - name: Inspect Existing Deployment
         if: steps.check-deployment.outcome == 'success'
+        id: inspect-deployment
+        run: |
+          set -euo pipefail
+
+          jobs_json=$(kubectl get jobs -n cloud-benchmark -o json 2>/dev/null || echo '{"items":[]}')
+          job_count=$(echo "$jobs_json" | jq '.items | length')
+
+          running_jobs_json=$(echo "$jobs_json" | jq -c '[.items[] | select((.status.active // 0) > 0) | .metadata.name]')
+          failed_jobs_json=$(echo "$jobs_json" | jq -c '[.items[] | select((.status.failed // 0) > 0 or ((.status.conditions // []) | map(select(.type == "Failed" and .status == "True")) | length) > 0) | .metadata.name]')
+          succeeded_jobs_json=$(echo "$jobs_json" | jq -c '[.items[] | select((.status.active // 0) == 0 and ((.status.succeeded // 0) > 0 or ((.status.conditions // []) | map(select(.type == "Complete" and .status == "True")) | length) > 0)) | .metadata.name]')
+          terminal_jobs_json=$(echo "$jobs_json" | jq -c '[.items[] | select((.status.active // 0) == 0 and (((.status.succeeded // 0) > 0) or ((.status.failed // 0) > 0) or ((.status.conditions // []) | map(select((.type == "Complete" and .status == "True") or (.type == "Failed" and .status == "True"))) | length) > 0)) | .metadata.name]')
+          pending_jobs_json=$(echo "$jobs_json" | jq -c '[.items[] | select((.status.active // 0) == 0 and ((.status.succeeded // 0) == 0) and ((.status.failed // 0) == 0) and ((.status.conditions // []) | length) == 0) | .metadata.name]')
+
+          running_count=$(echo "$running_jobs_json" | jq 'length')
+          failed_count=$(echo "$failed_jobs_json" | jq 'length')
+          success_count=$(echo "$succeeded_jobs_json" | jq 'length')
+          terminal_count=$(echo "$terminal_jobs_json" | jq 'length')
+          pending_count=$(echo "$pending_jobs_json" | jq 'length')
+
+
+
+          if [ "$job_count" -eq 0 ]; then
+            DEPLOYMENT_STATUS="completed"
+          elif [ "$running_count" -gt 0 ]; then
+            DEPLOYMENT_STATUS="in_progress"
+          elif [ "$failed_count" -gt 0 ]; then
+            DEPLOYMENT_STATUS="failed"
+          elif [ "$success_count" -gt 0 ] || [ "$terminal_count" -gt 0 ]; then
+            DEPLOYMENT_STATUS="completed"
+          elif [ "$pending_count" -gt 0 ]; then
+            DEPLOYMENT_STATUS="in_progress"
+          else
+            DEPLOYMENT_STATUS="in_progress"
+          fi
+
+          echo "Existing deployment status: ${DEPLOYMENT_STATUS}"
+          echo "Jobs discovered: $(echo "$jobs_json" | jq -r '[.items[].metadata.name] | join(", ")')"
+          echo "Running jobs: $(echo "$running_jobs_json" | jq -r 'join(", ")')"
+          echo "Failed jobs: $(echo "$failed_jobs_json" | jq -r 'join(", ")')"
+          echo "Succeeded jobs: $(echo "$succeeded_jobs_json" | jq -r 'join(", ")')"
+          echo "Terminal jobs: $(echo "$terminal_jobs_json" | jq -r 'join(", ")')"
+
+          echo "deployment_status=${DEPLOYMENT_STATUS}" >> "$GITHUB_OUTPUT"
+          echo "job_names=$(echo "$jobs_json" | jq -c '[.items[].metadata.name]')" >> "$GITHUB_OUTPUT"
+          echo "terminal_job_names=${terminal_jobs_json}" >> "$GITHUB_OUTPUT"
+          echo "failed_job_names=${failed_jobs_json}" >> "$GITHUB_OUTPUT"
+          echo "succeeded_job_names=${succeeded_jobs_json}" >> "$GITHUB_OUTPUT"
+
+      - name: Cleanup Existing Deployment
+        if: steps.inspect-deployment.outputs.deployment_status == 'completed' || steps.inspect-deployment.outputs.deployment_status == 'failed'
+        run: |
+          set -euo pipefail
+          echo "Previous benchmark finished with status: ${{ steps.inspect-deployment.outputs.deployment_status }}. Cleaning up release before proceeding."
+          ./modules/bench/cloud/clear-bench.sh azure
+
+      - name: Cancel workflow (existing deployment)
+        if: steps.check-deployment.outcome == 'success' && steps.inspect-deployment.outputs.deployment_status == 'in_progress'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
-            core.notice('Existing deployment found. Cancelling this workflow run to avoid overlap.');
+            core.notice('Existing deployment found and still in progress. Cancelling this workflow run to avoid overlap.');
             await github.rest.actions.cancelWorkflowRun({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -65,27 +122,31 @@ jobs:
             });
 
       - name: Stop job after cancellation
-        if: steps.check-deployment.outcome == 'success'
+        if: steps.check-deployment.outcome == 'success' && steps.inspect-deployment.outputs.deployment_status == 'in_progress'
         run: |
           echo "Workflow cancellation requested due to existing deployment. Stopping job."
           exit 0
 
       - name: Install Monitoring Stack
-        if: steps.check-deployment.outcome != 'success'
+        if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
         continue-on-error: true
         run: |
           bash ./modules/bench/cloud/monitoring/install-monitoring.sh
 
       - name: Create Bench Secret (GITHUB_PAT)
-        if: steps.check-deployment.outcome != 'success'
+        if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
         run: |
           set -euo pipefail
           kubectl -n cloud-benchmark create secret generic xtdb-bench-secrets \
             --from-literal=GITHUB_PAT="${{ secrets.BENCHMARK_GITHUB_PAT }}" \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Record Deployment Start
+        if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
+        run: echo "DEPLOY_START=$(date -u +%s)" >> "$GITHUB_ENV"
+
       - name: Run Benchmark
-        if: steps.check-deployment.outcome != 'success'
+        if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
         run: |
           helm dependency update ./modules/bench/cloud/helm
           helm upgrade --install "xtdb-benchmark" ./modules/bench/cloud/helm \
@@ -99,7 +160,7 @@ jobs:
             --set "providerConfig.serviceAccountAnnotations.azure\.workload\.identity/client-id=${{ secrets.BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID }}"
 
       - name: Remove Monitoring Stack on Failure
-        if: failure() && steps.check-deployment.outcome != 'success'
+        if: failure() && (steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress')
         run: |
           if helm status monitoring -n monitoring >/dev/null 2>&1; then
             echo "Uninstalling monitoring stack due to benchmark failure..."
@@ -114,7 +175,7 @@ jobs:
         id: compose
         if: always()
         run: |
-          if [ "${{ steps.check-deployment.outcome }}" = "success" ]; then
+          if [ "${{ steps.check-deployment.outcome }}" = "success" ] && [ "${{ steps.inspect-deployment.outputs.deployment_status }}" = "in_progress" ]; then
             echo 'msg=:information_source: TPC-H Benchmark skipped — existing deployment found' >> "$GITHUB_OUTPUT"
           else
             echo 'msg=TPC-H Benchmark (Scale Factor: ${{ env.SCALE_FACTOR }}) started' >> "$GITHUB_OUTPUT"
