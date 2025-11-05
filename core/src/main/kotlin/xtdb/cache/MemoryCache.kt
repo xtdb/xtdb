@@ -4,10 +4,13 @@ package xtdb.cache
 
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.ForeignAllocation
+import xtdb.cache.MemoryCache.PathSlice
 import xtdb.util.closeOnCatch
 import xtdb.util.maxDirectMemory
 import xtdb.util.openReadableChannel
@@ -16,7 +19,11 @@ import java.lang.foreign.MemorySegment
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
 import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import kotlin.io.path.fileSize
+
+private typealias FetchReqs = MutableMap<PathSlice, MutableSet<CompletableDeferred<ArrowBuf>>>
 
 /**
  * NOTE: the allocation count metrics in the provided `allocator` WILL NOT be accurate
@@ -29,12 +36,178 @@ class MemoryCache @JvmOverloads internal constructor(
     maxSizeBytes: Long,
     private val pathLoader: PathLoader = PathLoader()
 ) : AutoCloseable {
-    private val al = al.newChildAllocator("memory-cache", 0, maxSizeBytes)
+    private val cacheAl = al.newChildAllocator("memory-cache", 0, maxSizeBytes)
+
+    private val openSlices = ConcurrentHashMap<PathSlice, ArrowBuf>()
 
     data class Slice(val offset: Long, val length: Long) {
         companion object {
             fun from(path: Path) = Slice(0, path.fileSize())
         }
+    }
+
+    internal data class PathSlice(val path: Path, val slice: Slice? = null) {
+        constructor(path: Path, offset: Long, length: Long) : this(path, Slice(offset, length))
+    }
+
+    @FunctionalInterface
+    fun interface Fetch {
+        /**
+         * @return a pair containing the on-disk path and an optional cleanup action
+         */
+        suspend operator fun invoke(k: Path): Pair<Path, AutoCloseable?>
+    }
+
+    interface PathLoader {
+        fun load(path: Path, slice: Slice, arena: Arena): MemorySegment
+
+        companion object {
+            operator fun invoke() = object : PathLoader {
+                override fun load(path: Path, slice: Slice, arena: Arena): MemorySegment =
+                    try {
+                        path.openReadableChannel().use { ch ->
+                            ch.map(FileChannel.MapMode.READ_ONLY, slice.offset, slice.length, arena)
+                        }
+                    } catch (e: ClosedByInterruptException) {
+                        throw InterruptedException(e.message)
+                    }
+            }
+        }
+    }
+
+    private fun getOpenSlice(pathSlice: PathSlice) =
+        openSlices[pathSlice]?.let { buf ->
+            try {
+                // this isn't fool-proof, but until we have https://github.com/apache/arrow-java/issues/906
+                // it's the best we can do
+                buf.takeIf { it.refCnt() > 0 }?.also { it.referenceManager.retain() }
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+        }
+
+    private val fetchParentJob = Job()
+    private val scope = CoroutineScope(SupervisorJob(fetchParentJob) + Dispatchers.IO)
+
+    private sealed interface FetchChEvent {
+        fun handle(fetchReqs: FetchReqs)
+    }
+
+    private inner class FetchReq(
+        val pathSlice: PathSlice, val fetch: Fetch, val res: CompletableDeferred<ArrowBuf>
+    ) : FetchChEvent {
+        override fun handle(fetchReqs: FetchReqs) {
+            val openSlice = getOpenSlice(pathSlice)
+
+            if (openSlice != null) {
+                res.complete(openSlice)
+            } else {
+                val path = pathSlice.path
+                fetchReqs.compute(pathSlice) { _, awaiters ->
+                    if (awaiters != null) {
+                        awaiters.also { it + res }
+                    } else {
+                        val res = mutableSetOf(res)
+                        scope.launch {
+                            val (localPath, onEvict) = fetch(path)
+                            try {
+                                fetchCh.send(FetchDone(pathSlice, localPath, onEvict))
+                            } catch (t: Throwable) {
+                                onEvict?.close()
+                                throw t
+                            }
+                        }
+                        res
+                    }
+                }
+            }
+        }
+    }
+
+    private inner class FetchDone(
+        val pathSlice: PathSlice, val localPath: Path, val onEvict: AutoCloseable?
+    ) : FetchChEvent {
+        override fun handle(fetchReqs: FetchReqs) {
+            val reqs = fetchReqs.remove(pathSlice)
+
+            try {
+                val buf = try {
+                    // we open up a fine-grained arena here so that we can release the memory
+                    // as soon as we're done with the ArrowBuf.
+                    Arena.ofShared().closeOnCatch { arena ->
+                        val slice = pathSlice.slice ?: Slice.from(localPath)
+                        val memSeg = pathLoader.load(localPath, slice, arena)
+
+                        cacheAl.wrapForeignAllocation(
+                            object : ForeignAllocation(memSeg.byteSize(), memSeg.address()) {
+                                override fun release0() {
+                                    arena.close()
+                                    onEvict?.close()
+                                    openSlices.computeIfPresent(pathSlice) { _, buf ->
+                                        buf.takeIf { it.referenceManager.refCount > 0 }
+                                    }
+                                }
+                            })
+                    }
+                } catch (t: Throwable) {
+                    onEvict?.close()
+                    throw t
+                }
+
+                try {
+                    openSlices[pathSlice] = buf
+                    reqs?.forEach {
+                        buf.referenceManager.retain()
+                        if (!it.complete(buf)) buf.referenceManager.release()
+                    }
+                    buf.referenceManager.release()
+                } catch (t: Throwable) {
+                    buf.close()
+                    throw t
+                }
+            } catch (t: Throwable) {
+                reqs?.forEach { it.completeExceptionally(t) }
+            }
+        }
+    }
+
+    private val fetchCh = Channel<FetchChEvent>()
+
+    init {
+        CoroutineScope(fetchParentJob + Executors.newVirtualThreadPerTaskExecutor().asCoroutineDispatcher()).launch {
+            val fetchReqs: FetchReqs = mutableMapOf()
+
+            try {
+                for (req in fetchCh)
+                    req.handle(fetchReqs)
+            } catch (t: Throwable) {
+                fetchReqs.values.flatMap { it }.forEach { it.cancel() }
+                throw t
+            }
+        }
+    }
+
+    @Suppress("NAME_SHADOWING")
+    suspend fun get(key: Path, slice: Slice? = null, fetch: Fetch): ArrowBuf {
+        val pathSlice = PathSlice(key, slice)
+
+        getOpenSlice(pathSlice)?.let { return it }
+
+        val res = CompletableDeferred<ArrowBuf>()
+        fetchCh.send(FetchReq(pathSlice, fetch, res))
+
+        return try {
+            res.await()
+        } catch (e: Throwable) {
+            res.cancel()
+            throw e
+        }
+    }
+
+    override fun close() {
+        fetchCh.close()
+        runBlocking { fetchParentJob.cancelAndJoin() }
+        cacheAl.close()
     }
 
     /**
@@ -54,58 +227,7 @@ class MemoryCache @JvmOverloads internal constructor(
 
     internal data class Stats(val usedBytes: Long, val freeBytes: Long)
 
-    internal val stats0 get() = al.let { Stats(it.allocatedMemory, it.limit - it.allocatedMemory) }
-
-    interface PathLoader {
-        fun load(path: Path, slice: Slice, arena: Arena): MemorySegment
-
-        companion object {
-            operator fun invoke() = object : PathLoader {
-                override fun load(path: Path, slice: Slice, arena: Arena): MemorySegment =
-                    try {
-                        path.openReadableChannel().use { ch ->
-                            ch.map(FileChannel.MapMode.READ_ONLY, slice.offset, slice.length, arena)
-                        }
-                    } catch (e: ClosedByInterruptException) {
-                        throw InterruptedException(e.message)
-                    }
-            }
-        }
-    }
-
-    @FunctionalInterface
-    fun interface Fetch {
-        /**
-         * @return a pair containing the on-disk path and an optional cleanup action
-         */
-        suspend operator fun invoke(k: Path): Pair<Path, AutoCloseable?>
-    }
-
-    suspend fun get(key: Path, slice: Slice? = null, fetch: Fetch): ArrowBuf {
-        val (path, onEvict) = fetch(key)
-        val slice = slice ?: Slice.from(path)
-
-        return try {
-            // we open up a fine-grained arena here so that we can release the memory
-            // as soon as we're done with the ArrowBuf.
-            Arena.ofShared().closeOnCatch { arena ->
-                val memSeg = pathLoader.load(path, slice, arena)
-
-                al.wrapForeignAllocation(
-                    object : ForeignAllocation(memSeg.byteSize(), memSeg.address()) {
-                        override fun release0() {
-                            arena.close()
-                            onEvict?.close()
-                        }
-                    })
-            }
-        } catch (t: Throwable) {
-            onEvict?.close()
-            throw t
-        }
-    }
-
-    override fun close() = al.close()
+    internal val stats0 get() = cacheAl.let { Stats(it.allocatedMemory, it.limit - it.allocatedMemory) }
 
     companion object {
         @JvmStatic
@@ -117,9 +239,9 @@ class MemoryCache @JvmOverloads internal constructor(
                     .baseUnit("bytes").register(this@registerMemoryCache)
             }
 
-            registerGauge("memory-cache.pinnedBytes") { cache.al.allocatedMemory }
+            registerGauge("memory-cache.pinnedBytes") { cache.cacheAl.allocatedMemory }
             registerGauge("memory-cache.evictableBytes") { 0 }
-            registerGauge("memory-cache.freeBytes") { cache.al.let { it.limit - it.allocatedMemory } }
+            registerGauge("memory-cache.freeBytes") { cache.cacheAl.let { it.limit - it.allocatedMemory } }
         }
     }
 }
