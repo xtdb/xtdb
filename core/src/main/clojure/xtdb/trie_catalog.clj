@@ -238,7 +238,7 @@
       (<= (compare garbage-as-of as-of) 0))))
 
 (defn garbage-tries [{:keys [tries]} as-of]
-  (->> (mapcat (comp  :garbage val) tries)
+  (->> (mapcat (comp :garbage val) tries)
        (filter (garbage-fn as-of))))
 
 (defn remove-garbage [table-cat garbage-trie-keys]
