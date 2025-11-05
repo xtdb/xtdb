@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :as t]
+            [clojure.math :as math]
             [xtdb.api :as xt]
             [xtdb.arrow-edn-test :as aet]
             [xtdb.check-pbuf :as cpb]
@@ -59,10 +60,11 @@
    (cond
      (= level 0) (map (fn [i] [(trie/->l0-trie-key i) size]) (range n))
      (= level 1) (map (fn [i] [(trie/->l1-trie-key nil i) size]) (range n))
-     :else (let [parts (all-parts-rc-level level)]
+     :else (let [increments (math/pow 4 (dec level))
+                 parts (all-parts-rc-level level)]
              (mapcat (fn [i]
                        (for [part parts]
-                         [(trie/->trie-key level nil (byte-array part) i) size])) (range 3 n 4))))))
+                         [(trie/->trie-key level nil (byte-array part) i) size])) (range (dec increments) n increments))))))
 
 (t/deftest test-l0->l1-compaction-jobs
   (binding [cat/*file-size-target* 16]
