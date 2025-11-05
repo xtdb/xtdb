@@ -1,6 +1,6 @@
 name: Nightly Benchmark Cleanup
 run-name: >-
-  Benchmark Cleanup: ${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType }}
+  Benchmark Cleanup: ${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType }}
 
 on:
   workflow_dispatch:
@@ -13,6 +13,7 @@ on:
           - tpch
           - auctionmark
           - readings
+          - yakbench
       status:
         description: 'Status of the benchmark'
         required: true
@@ -92,7 +93,7 @@ jobs:
           if [ "${nonterminal_cnt:-0}" = "0" ] && [ "${failed_cnt:-0}" -gt 0 ]; then
             echo "All benchmark pods are in Failed state; skipping waits."
           else
-          # Wait for the benchmark Job (tpch/auctionmark/readings) to complete if present
+          # Wait for the benchmark Job (tpch/auctionmark/readings/yakbench) to complete if present
           if kubectl get job "$JOB" -n "$NS" >/dev/null 2>&1; then
             echo "Polling job/$JOB until Complete or Failed..."
             # Poll up to ~2h (720 * 10s)
@@ -227,11 +228,11 @@ jobs:
                 total_ms=$((total_ms + pod_ms))
                 count_ms=$((count_ms + 1))
               fi
-              # Capture params EDN once (supports tpch or auctionmark namespaces in loggers)
+              # Capture params EDN once (supports tpch, auctionmark, or yakbench namespaces in loggers)
               if [ -z "${{ steps.logs.outputs.params_edn || '' }}" ]; then
-                params_line=$(grep -m1 -E 'INFO[[:space:]]+xtdb\.bench\.(tpch|auctionmark)[[:space:]]+-[[:space:]]+\{.*\}' "$src_log" || true)
+                params_line=$(grep -m1 -E 'INFO[[:space:]]+xtdb\.bench\.(tpch|auctionmark|yakbench)[[:space:]]+-[[:space:]]+\{.*\}' "$src_log" || true)
                 if [ -n "$params_line" ]; then
-                  params_edn=$(echo "$params_line" | sed -E 's/.*INFO[[:space:]]+xtdb\.bench\.(tpch|auctionmark)[[:space:]]+-[[:space:]]+(\{.*\}).*/\2/')
+                  params_edn=$(echo "$params_line" | sed -E 's/.*INFO[[:space:]]+xtdb\.bench\.(tpch|auctionmark|yakbench)[[:space:]]+-[[:space:]]+(\{.*\}).*/\2/')
                   {
                     echo 'params_edn<<EOF'
                     echo "$params_edn"
@@ -567,6 +568,7 @@ jobs:
             tpch) bench_friendly="TPC-H" ;;
             auctionmark) bench_friendly="AuctionMark" ;;
             readings) bench_friendly="Readings" ;;
+            yakbench) bench_friendly="Yakbench" ;;
             *) bench_friendly="$bench" ;;
           esac
 
@@ -611,6 +613,7 @@ jobs:
           [ "$type" = "tpch" ] && type="TPC-H"
           [ "$type" = "auctionmark" ] && type="AuctionMark"
           [ "$type" = "readings" ] && type="Readings"
+          [ "$type" = "yakbench" ] && type="Yakbench"
 
           if [ -n "${{ steps.logs.outputs.time_taken_iso }}" ]; then
             base="$type Benchmark completed in ${{ steps.logs.outputs.time_taken_iso }}"
@@ -635,7 +638,7 @@ jobs:
         if: steps.check-deployment.outcome == 'success'
         with:
           status: ${{ steps.derive.outputs.bench_status || inputs.status }}
-          notification_title: "*${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType }} Benchmark*"
+          notification_title: "*${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType }} Benchmark*"
           message_format: ${{ steps.compose.outputs.msg }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.BENCHMARK_SLACK_WEBHOOK_URL }}

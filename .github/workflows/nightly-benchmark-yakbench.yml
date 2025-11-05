@@ -1,5 +1,5 @@
-name: Nightly Benchmark TPC-H
-run-name: "TPC-H (SF: ${{ inputs.scale_factor || '1.0' }})"
+name: Nightly Benchmark Yakbench
+run-name: "Yakbench (SF: ${{ inputs.scale_factor || '1.0' }})"
 
 on:
   workflow_dispatch:
@@ -10,10 +10,10 @@ on:
         default: '1.0'
         type: string
   schedule:
-    - cron: '0 0 * * *'  # Run daily at midnight UTC
+    - cron: '0 1 * * *'  # Run daily at 01:00 UTC
 
 concurrency:
-  group: nightly-benchmark-tpch
+  group: nightly-benchmark-yakbench
   cancel-in-progress: false
 
 jobs:
@@ -21,9 +21,9 @@ jobs:
     if: ${{ github.event_name != 'schedule' || github.repository == 'xtdb/xtdb' }}
     uses: ./.github/workflows/run-nightly-benchmark.yml
     with:
-      bench_type: tpch
-      job_display_name: TPC-H
-      slack_label: TPC-H
+      bench_type: yakbench
+      job_display_name: Yakbench
+      slack_label: Yakbench
       scale_factor: ${{ inputs.scale_factor || '1.0' }}
       timeout_minutes: 90
     secrets: inherit
