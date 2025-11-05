@@ -30,7 +30,7 @@ class FixedSizeListVector private constructor(
 
     override val vectors: Iterable<Vector> get() = listOf(elVector)
 
-    override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
+    override fun isNull(idx: Int) = !validityBuffer.getBoolean(idx)
 
     override fun writeUndefined() {
         validityBuffer.writeBit(valueCount++, 0)

@@ -57,7 +57,7 @@ internal class BitBuffer private constructor(
         ensureCapacity(writerBitIndex + bitCount)
     }
 
-    fun getBit(idx: Int) = BitVectorHelper.get(buf, idx) == 1
+    fun getBoolean(idx: Int) = BitVectorHelper.get(buf, idx) == 1
 
     fun setBit(bitIdx: Int, bit: Int) = BitVectorHelper.setValidityBit(buf, bitIdx, bit)
 
@@ -72,6 +72,8 @@ internal class BitBuffer private constructor(
         setBit(writerBitIndex++, bit)
     }
 
+    fun writeBoolean(bool: Boolean) = writeBit(if (bool) 1 else 0)
+
     fun unsafeWriteBits(src: BitBuffer, idx: Int, len: Int) {
         // Fast path: both byte-aligned and length is a multiple of 8
         if (writerBitIndex % 8 == 0 && idx % 8 == 0 && (len % 8 == 0 || writerBitIndex == 0)) {
@@ -85,7 +87,7 @@ internal class BitBuffer private constructor(
         // TODO medium path: copying bytes at a time. See BitVectorHelper.concatBits for inspiration.
 
         // Slow path: bit-by-bit copy
-        repeat(len) { setBit(writerBitIndex + it, if (src.getBit(idx + it)) 1 else 0) }
+        repeat(len) { setBit(writerBitIndex + it, if (src.getBoolean(idx + it)) 1 else 0) }
         writerBitIndex += len
     }
 

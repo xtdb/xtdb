@@ -4,7 +4,6 @@ import clojure.lang.Keyword
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ByteFunctionHelpers
-import org.apache.arrow.vector.BitVectorHelper.getValidityBufferSize
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.NonNullableStructVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
@@ -47,7 +46,7 @@ class StructVector private constructor(
 
     override val vectors: Iterable<Vector> get() = childWriters.sequencedValues()
 
-    override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
+    override fun isNull(idx: Int) = !validityBuffer.getBoolean(idx)
 
     override fun writeUndefined() {
         validityBuffer.writeBit(valueCount++, 0)

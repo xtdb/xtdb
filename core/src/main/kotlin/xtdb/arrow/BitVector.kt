@@ -2,7 +2,6 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.BitVectorHelper.getValidityBufferSize
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
@@ -32,7 +31,7 @@ class BitVector private constructor(
         dataBuffer.ensureCapacity(valueCount)
     }
 
-    override fun isNull(idx: Int) = !validityBuffer.getBit(idx)
+    override fun isNull(idx: Int) = !validityBuffer.getBoolean(idx)
 
     override fun writeUndefined() {
         validityBuffer.writeBit(valueCount, 0)
@@ -50,7 +49,7 @@ class BitVector private constructor(
     }
 
     override fun getBoolean(idx: Int) =
-        if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx") else dataBuffer.getBit(idx)
+        if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx") else dataBuffer.getBoolean(idx)
 
     override fun setBoolean(idx: Int, v: Boolean) {
         ensureCapacity(idx + 1)

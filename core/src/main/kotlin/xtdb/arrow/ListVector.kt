@@ -40,7 +40,7 @@ class ListVector private constructor(
 
     private var lastOffset: Int = 0
 
-    override fun isNull(idx: Int) = nullable && !validityBuffer.getBit(idx)
+    override fun isNull(idx: Int) = nullable && !validityBuffer.getBoolean(idx)
 
     private fun writeOffset(newOffset: Int) {
         if (valueCount == 0) offsetBuffer.writeInt(0)
