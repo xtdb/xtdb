@@ -1,0 +1,24 @@
+{:min-bb-version "1.3.180"
+
+ :paths ["src" "test"]
+
+ :tasks
+ {:requires [[xtdb.bench.cloud.scripts.tasks :as tasks]]
+
+  summarize-log {:doc "Print a summary of a benchmark log"
+                 :task (do
+                         (print (tasks/summarize-log *command-line-args*))
+                         (flush))}
+
+  test {:doc "Run the test suite"
+        :requires [[clojure.test :as t]
+                   [xtdb.bench.cloud.scripts.tasks-test]]
+        :task (let [{:keys [fail error]} (t/run-tests 'xtdb.bench.cloud.scripts.tasks-test)]
+                (when (pos? (+ fail error))
+                  (System/exit 1)))}
+
+  help {:doc "Show the available tasks and their docs"
+        :task (tasks/help)}
+
+  default {:doc "Default task that shows help"
+           :depends [help]}}}

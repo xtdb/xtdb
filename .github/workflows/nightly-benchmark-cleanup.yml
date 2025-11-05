@@ -43,6 +43,15 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
 
+      - name: Install Babashka
+        run: |
+          set -euo pipefail
+          BABASHKA_VERSION=1.12.209
+          curl -sSfL "https://github.com/babashka/babashka/releases/download/v${BABASHKA_VERSION}/babashka-${BABASHKA_VERSION}-linux-amd64.tar.gz" -o /tmp/babashka.tar.gz
+          sudo tar -xzf /tmp/babashka.tar.gz -C /usr/local/bin bb
+          rm -f /tmp/babashka.tar.gz
+          bb --version
+
       - name: Azure CLI Login
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2
         with:
@@ -606,6 +615,11 @@ jobs:
             echo '```' >> "$GITHUB_STEP_SUMMARY"
           fi
 
+          log_path="$(pwd)/benchmark.log"
+          summary="$(cd modules/bench/cloud/scripts && bb summarize-log --format github "${{ inputs.benchType }}" "$log_path")"
+          echo "## Query summary:" >> "$GITHUB_STEP_SUMMARY"
+          echo "$summary" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Compose Slack Message
         id: compose
         run: |
@@ -615,15 +629,20 @@ jobs:
           [ "$type" = "readings" ] && type="Readings"
           [ "$type" = "yakbench" ] && type="Yakbench"
 
-          if [ -n "${{ steps.logs.outputs.time_taken_iso }}" ]; then
-            base="$type Benchmark completed in ${{ steps.logs.outputs.time_taken_iso }}"
+          log_path="$(pwd)/benchmark.log"
+          summary="$(cd modules/bench/cloud/scripts && bb summarize-log --format slack "${{ inputs.benchType }}" "$log_path")"
+
+          if [ -n "$summary" ]; then
+            printf -v base '%s Benchmark completed — {status_message}\n\n%s' "$type" "$summary"
+          elif [ -n "${{ steps.logs.outputs.time_taken_iso }}" ]; then
+            base="$type Benchmark completed in ${{ steps.logs.outputs.time_taken_iso }} — {status_message}"
           else
-            base="$type Benchmark cleanup"
+            base="$type Benchmark cleanup — {status_message}"
           fi
 
           {
             echo "msg<<EOF"
-            echo "$base — {status_message}"
+            echo "$base"
             if [ "${{ steps.upload-logs.outcome }}" = "success" ] || [ "${{ steps.upload-grafana.outcome }}" = "success" ]; then
               echo ":link: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|view artifacts>"
             else
