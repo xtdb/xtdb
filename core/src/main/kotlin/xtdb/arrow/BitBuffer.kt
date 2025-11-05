@@ -99,14 +99,7 @@ internal class BitBuffer private constructor(
         bufferedByte = bufferedByte or (bit shl bufferedBitCount)
         writerBitIndex++
         if (bufferedBitCount == 7) {
-            val byteIdx = byteIndex(lastFlushedBitIndex.toLong()).toInt()
-            val bitOffset = lastFlushedBitIndex % 8
-            val currentByte = buf.getByte(byteIdx.toLong()).toInt()
-            val mask = (1 shl 8) - 1
-            val newByte = (currentByte and mask.inv()) or ((bufferedByte shl bitOffset) and mask)
-            buf.setByte(byteIdx.toLong(), newByte)
-            bufferedByte = 0
-            lastFlushedBitIndex = writerBitIndex
+            flushBufferedBits()
         }
     }
 
