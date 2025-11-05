@@ -17,28 +17,29 @@
            (xtdb.util TemporalBounds)))
 
 ;; table-tries data structure
-;; values is a map of live+nascent and garbage tries
+;; values is a map of live, nascent and garbage tries
 ;; tries :: {:keys [level recency part block-idx state]}
 ;;   sorted by block-idx desc
-;;   this is true of the live+nascent tries, and the garbage tries
+;;   this is true of the live, nascent and garbage tries
 ;;   for correctness it's important that these invariants are maintained when a trie switches state
 ;; part :: [long]
 ;; recency :: LocalDate
 '{;; L0 files
-  [0 nil []] ()
+  [0 nil []] {:live () :nascent () :garbage ()}
 
   ;; L1 current files (L1C)
-  [1 nil []] ()
+  [1 nil []] {:live () :nascent () :garbage ()}
 
   ;; L2C - no recency but we do have a (single-element) part
-  [2 nil part] ()
+  [2 nil part] {:live () :nascent () :garbage ()}
 
   ;; L2H - no part yet but we do now have recency
-  [2 recency []] ()
+  [2 recency []] {:live () :nascent () :garbage ()}
 
   ;; L3+ have both recency (if applicable) and part
   ;; if they have a recency they'll have one fewer part element
-  [3 recency part] ()}
+  [3 recency part] {:live () :nascent () :garbage ()}
+  }
 
 ;; The journey of a row:
 ;; 1. written to L0 by the indexer
@@ -69,9 +70,11 @@
 
 (def ^:dynamic ^{:tag 'long} *file-size-target* (* 100 1024 1024))
 
-(defn- stale-block-idx? [{:keys [live+nascent garbage] :as _tries} ^long block-idx]
-  (when-let [{^long other-block-idx :block-idx} (or (first live+nascent) (first garbage))]
-    (>= other-block-idx block-idx)))
+(defn- stale-block-idx? [{:keys [live nascent garbage] :as _tries} ^long block-idx]
+  ;; TODO need to fix this for GCing - see #4946
+  (let [^long max-block-idx (->> (map #(or (:block-idx (first  %)) -1) [live nascent garbage])
+                                 (apply max))]
+    (>= max-block-idx block-idx)))
 
 (defn stale-msg?
   "messages have a total ordering, within their level/recency/part - so we know if we've received a message out-of-order.
@@ -83,47 +86,44 @@
 (defn- filter-garbage [tries]
   ((juxt filter remove) #(= (:state %) :garbage) tries))
 
-(defn- supersede-partial-tries [{:keys [live+nascent garbage] :as tries}
+(defn- supersede-partial-tries [{:keys [live garbage] :as tries}
                                 {:keys [^long block-idx] :as _trie}
                                 {:keys [^long file-size-target]}
                                 as-of]
-  (let [[new-garbage live+nascent] (->> live+nascent
-                                        (map (fn [{^long other-block-idx :block-idx, ^long other-size :data-file-size, other-state :state, :as other-trie}]
-                                               (cond-> other-trie
-                                                 (and (= other-state :live)
-                                                      (< other-size file-size-target)
-                                                      (<= other-block-idx block-idx))
-                                                 (-> (assoc :state :garbage
-                                                            :garbage-as-of as-of)
-                                                     (dissoc :trie-metadata)))))
-                                        filter-garbage)]
+  (let [[new-garbage live] (->> live
+                                ;; TODO this simple map op does not work, see #4947
+                                (map (fn [{^long other-block-idx :block-idx, ^long other-size :data-file-size :as other-trie}]
+                                       (cond-> other-trie
+                                         (and (< other-size file-size-target)
+                                              (<= other-block-idx block-idx))
+                                         (-> (assoc :state :garbage
+                                                    :garbage-as-of as-of)
+                                             (dissoc :trie-metadata)))))
+                                filter-garbage)]
     (-> tries
-        (assoc :live+nascent (doall live+nascent))
+        (assoc :live (doall live))
         (assoc :garbage (doall (concat new-garbage garbage))))))
-
 
 (defn- conj-trie [tries trie state]
   (let [trie (assoc trie :state state)
-        {:keys [live+nascent garbage] :as tries} (or tries {:live+nascent (), :garbage ()})]
-    (case state
-      (:live :nascent) (assoc tries :live+nascent (conj live+nascent trie))
-      :garbage (assoc tries :garbage (conj garbage trie)))))
+        tries (or tries {:live (), :nascent (), :garbage ()})]
+    (update tries state conj trie)))
 
 (defn- insert-levelled-trie [tries trie trie-cat as-of]
   (-> tries
       (supersede-partial-tries trie trie-cat as-of)
       (conj-trie trie :live)))
 
-(defn- supersede-by-block-idx [{:keys [live+nascent garbage] :as tries}, ^long block-idx as-of]
-  (let [[new-garbage live+nascent] (->> live+nascent
-                                        (map (fn [{^long other-block-idx :block-idx, :as trie}]
-                                               (cond-> trie
-                                                 (<= other-block-idx block-idx) (-> (assoc :state :garbage
-                                                                                           :garbage-as-of as-of)
-                                                                                    (dissoc :trie-metadata)))))
-                                        filter-garbage)]
+(defn- supersede-by-block-idx [{:keys [live garbage] :as tries}, ^long block-idx as-of]
+  (let [[new-garbage live] (->> live
+                                (map (fn [{^long other-block-idx :block-idx, :as trie}]
+                                       (cond-> trie
+                                         (<= other-block-idx block-idx) (-> (assoc :state :garbage
+                                                                                   :garbage-as-of as-of)
+                                                                            (dissoc :trie-metadata)))))
+                                filter-garbage)]
     (-> tries
-        (assoc :live+nascent (doall live+nascent))
+        (assoc :live (doall live))
         (assoc :garbage (doall (concat new-garbage garbage))))))
 
 (defn- sibling-tries [table-tries, {:keys [^long level, recency, part]}]
@@ -133,19 +133,18 @@
 
 (defn- completed-part-group? [table-tries {:keys [^long block-idx] :as trie}]
   (->> (sibling-tries table-tries trie)
-       (every? (fn [{:keys [live+nascent] :as _ln}]
-                 (when-let [{^long ln-block-idx :block-idx, ln-state :state} (first live+nascent)]
-                   (or (> ln-block-idx block-idx)
-                       (= :nascent ln-state)))))))
+       (every? (fn [{:keys [live nascent] :as _ln}]
+                 (let [{^long ln-live-block-idx :block-idx :or {ln-live-block-idx -1}} (first live)
+                       {^long ln-nascent-block-idx :block-idx :or {ln-nascent-block-idx -1}} (first nascent)
+                       ln-block-idx (max ln-live-block-idx ln-nascent-block-idx)]
+                   (>= ln-block-idx block-idx))))))
 
-(defn- mark-block-idx-live [tries ^long block-idx]
-  (update tries :live+nascent
-          #(doall (map (fn [{trie-state :state, trie-block-idx :block-idx, :as trie}]
-                         (cond-> trie
-                           (and (= trie-state :nascent)
-                                (= trie-block-idx block-idx))
-                           (assoc :state :live)))
-                       %))))
+(defn- mark-block-idx-live [{:keys [nascent] :as tries} ^long block-idx]
+  (if-let [trie (first (filter #(= (:block-idx %) block-idx) nascent))]
+    (-> tries
+        (conj-trie trie :live)
+        (update :nascent (fn [nascents] (doall (remove #(= (:block-idx %) block-idx) nascents)))))
+    tries))
 
 (defn- mark-part-group-live [table-tries {:keys [block-idx level recency part]}]
   (->> (let [pop-part (pop part)]
@@ -166,7 +165,7 @@
         ;; L1H files are nascent until we see the corresponding L1C file
         (-> table-cat
             (update-in [:tries [1 recency part]] conj-trie trie
-                       (let [[{^long l1c-block-idx :block-idx, :as l1c}] (get-in table-cat [:tries [1 nil part] :live+nascent])]
+                       (let [[{^long l1c-block-idx :block-idx, :as l1c}] (get-in table-cat [:tries [1 nil part] :live])]
                          (if (and l1c (>= l1c-block-idx block-idx))
                            :live :nascent)))
             (update-in [:l1h-recencies block-idx] (fnil conj #{}) recency))
@@ -224,11 +223,10 @@
 
 (defn current-tries [{:keys [tries]}]
   (->> tries
-       (into [] (comp (mapcat (comp :live+nascent val))
-                      (filter #(= (:state %) :live))))))
+       (into [] (mapcat (comp :live val)))))
 
 (defn all-tries [{:keys [tries]}]
-  (->> (into [] (mapcat (comp (fn [{:keys [live+nascent garbage]}] (concat live+nascent garbage)) val)) tries)
+  (->> (into [] (mapcat (comp (fn [{:keys [live nascent garbage]}] (concat live nascent garbage)) val)) tries)
        ;; the sort is needed as the table blocks need the current tries to be in the total order for restart
        (sort-by (juxt :level :block-idx #(or (:recency %) LocalDate/MAX)))))
 
@@ -303,12 +301,12 @@
 
 (defn reset->l0 [{:keys [tries]}]
   (let [l0-tries (->> (get tries [0 nil []])
-                      ;; combine live+nascent & garbage
+                      ;; combine live & nascent & garbage
                       (into [] (mapcat val)))]
 
-    {:tries {[0 nil []] {:live+nascent (->> l0-tries
-                                            (sort-by :block-idx #(compare %2 %1))
-                                            (map #(assoc % :state :live)))}}
+    {:tries {[0 nil []] {:live (->> l0-tries
+                                    (sort-by :block-idx #(compare %2 %1))
+                                    (map #(assoc % :state :live)))}}
      :l1h-recencies {}}))
 
 (defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]

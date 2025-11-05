@@ -20,17 +20,16 @@
   (getOutputTrieKey [_] out-trie-key)
   (getPartitionedByRecency [_] partitioned-by-recency?))
 
-(defn- l0->l1-compaction-job [table {{l0 :live+nascent} [0 nil []], {l1c :live+nascent} [1 nil []]} {:keys [^long file-size-target]}]
-  (when-let [live-l0 (seq (->> l0
-                               (take-while #(= :live (:state %)))))]
+(defn- l0->l1-compaction-job [table {{l0 :live} [0 nil []], {l1c :live} [1 nil []]} {:keys [^long file-size-target]}]
+  (when-let [live-l0 (seq l0)]
 
     (let [{l0-trie-key :trie-key, :keys [block-idx]} (last live-l0)
           {l1-trie-key :trie-key} (->> l1c
                                        (take-while #(< (:data-file-size %) file-size-target))
                                        first)]
       (->Job table (-> []
-                            (cond-> l1-trie-key (conj l1-trie-key))
-                            (conj l0-trie-key))
+                       (cond-> l1-trie-key (conj l1-trie-key))
+                       (conj l0-trie-key))
              nil ; part
              (Trie$Key. 1 nil nil block-idx)
              true ; partitioned-by-recency?
@@ -41,7 +40,6 @@
   [l2h-tries l1h-tries {:keys [^long file-size-target]}]
 
   (->> l1h-tries
-       (take-while #(= :live (:state %)))
        reverse
 
        (reductions (fn [[acc-tries acc-size] {:keys [^long data-file-size] :as trie}]
@@ -57,9 +55,9 @@
                  tries)))))
 
 (defn- l2h-compaction-jobs [table table-tries opts]
-  (for [[[level recency _part] {l1h-tries :live+nascent}] table-tries
+  (for [[[level recency _part] {l1h-tries :live}] table-tries
         :when (and recency (= level 1))
-        :let [input-tries (l2h-input-files (get-in table-tries [[2 recency []] :live+nascent]) l1h-tries opts)]
+        :let [input-tries (l2h-input-files (get-in table-tries [[2 recency []] :live]) l1h-tries opts)]
         :when input-tries]
     (->Job table (mapv :trie-key input-tries) (byte-array 0)
            (Trie$Key. 2 recency nil (:block-idx (last input-tries)))
@@ -67,7 +65,7 @@
            )))
 
 (defn- tiering-compaction-jobs [table table-tries {:keys [^long file-size-target]}]
-  (for [[[level recency part] {files :live+nascent}] table-tries
+  (for [[[level recency part] {files :live}] table-tries
         :when (or (and (nil? recency) (= level 1))
                   (> level 1))
         :let [live-files (-> files
@@ -78,7 +76,10 @@
         p (range cat/branch-factor)
         :let [out-level (inc level)
               out-part (conj part p)
-              {lnp1-block-idx :block-idx} (first (get-in table-tries [[out-level recency out-part] :live+nascent]))
+              {level-above-live :live level-above-nascent :nascent} (get table-tries [out-level recency out-part])
+              {lnp1-live-block-idx :block-idx} (first level-above-live)
+              {lnp1-nascent-block-idx :block-idx} (first level-above-nascent)
+              lnp1-block-idx (or lnp1-nascent-block-idx lnp1-live-block-idx)
 
               in-files (-> live-files
                            (cond->> lnp1-block-idx (drop-while #(<= (:block-idx %) lnp1-block-idx)))
