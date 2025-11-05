@@ -133,7 +133,7 @@
 
         (t/testing "L0"
           (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))]
-            (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+            (util/with-open [page-metadata (.openPageMetadataSync metadata-mgr meta-file-path)]
               (t/is (= 4 (.rowIndex page-metadata "_id" 0)))
 
               (let [page-idx-pred (.build literal-selector page-metadata)]
@@ -142,7 +142,7 @@
 
         (t/testing "L1"
           (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
-            (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+            (util/with-open [page-metadata (.openPageMetadataSync metadata-mgr meta-file-path)]
               (let [page-idx-pred (.build literal-selector page-metadata)]
                 (doseq [page-idx relevant-pages]
                   (t/is (true? (.test page-idx-pred page-idx))
@@ -156,7 +156,7 @@
 
   (let [metadata-mgr (.getMetadataManager (db/primary-db tu/*node*))
         meta-file-path (Trie/metaFilePath "public$xt_docs" ^String (trie/->l0-trie-key 0))]
-    (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+    (util/with-open [page-metadata (.openPageMetadataSync metadata-mgr meta-file-path)]
       (let [sys-time-micros (time/instant->micros #xt/instant "2020-01-01T00:00:00.000000Z")
             temporal-metadata (tu/->temporal-metadata sys-time-micros Long/MAX_VALUE sys-time-micros sys-time-micros)]
         (t/is (= temporal-metadata (.temporalMetadata page-metadata 0)))))))
@@ -170,7 +170,7 @@
 
     (t/testing "L0"
       (let [meta-file-path (Trie/metaFilePath "public$xt_docs" ^String (trie/->l0-trie-key 0))]
-        (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+        (util/with-open [page-metadata (.openPageMetadataSync metadata-mgr meta-file-path)]
           (let [page-idx-pred (.build true-selector page-metadata)]
             (t/is (= 5 (.rowIndex page-metadata "boolean_or_int" 0)))
 
@@ -180,7 +180,7 @@
 
     (t/testing "L1"
       (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
-        (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+        (util/with-open [page-metadata (.openPageMetadataSync metadata-mgr meta-file-path)]
           (let [page-idx-pred (.build true-selector page-metadata)]
             (t/is (= 5 (.rowIndex page-metadata "boolean_or_int" 0)))
 
@@ -205,12 +205,12 @@
         (let [metadata-mgr (.getMetadataManager (db/primary-db node))]
           (t/testing "L0"
             (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))]
-              (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+              (util/with-open [page-metadata (.openPageMetadataSync metadata-mgr meta-file-path)]
                 (t/is (= 6 (.rowIndex page-metadata "colours" 0))))))
 
           (t/testing "L1"
             (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
-              (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+              (util/with-open [page-metadata (.openPageMetadataSync metadata-mgr meta-file-path)]
                 (t/is (= 6 (.rowIndex page-metadata "colours" 0)))))))))))
 
 (t/deftest test-duration-metadata-4198
@@ -234,7 +234,7 @@
                                  #"l01.*")
 
         (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l1-trie-key nil 0))]
-          (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+          (util/with-open [page-metadata (.openPageMetadataSync metadata-mgr meta-file-path)]
             (t/is (= 5 (.rowIndex page-metadata "duration" 0)))))))))
 
 (t/deftest test-missing-type-metadata-4665
@@ -270,7 +270,7 @@
 
             (t/testing "L0 metadata pred"
               (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))]
-                (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+                (util/with-open [page-metadata (.openPageMetadataSync metadata-mgr meta-file-path)]
                   (let [page-idx-pred (.build not-null-selector page-metadata)]
                     ;; Pages with user1 and user2 (nulls) should be filtered out
                     (t/is (false? (.test page-idx-pred 0)))

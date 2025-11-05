@@ -1,5 +1,6 @@
 package xtdb.storage
 
+import kotlinx.coroutines.test.runTest
 import com.google.protobuf.Any as ProtoAny
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Field
@@ -60,7 +61,7 @@ class RemoteStorageTest : StorageTest() {
 
 
     @Test
-    fun arrowIpcTest(al: BufferAllocator) {
+    fun arrowIpcTest(al: BufferAllocator) = runTest {
         val path = Path.of("aw")
         Relation(al, "a" ofType Type.I32).use { relation ->
             remoteBufferPool.openArrowWriter(path, relation).use { writer ->

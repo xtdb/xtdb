@@ -16,7 +16,6 @@ import java.lang.foreign.MemorySegment
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
 import java.nio.file.Path
-import java.util.concurrent.CompletableFuture
 import kotlin.io.path.fileSize
 
 /**
@@ -27,7 +26,7 @@ import kotlin.io.path.fileSize
  */
 class MemoryCache @JvmOverloads internal constructor(
     al: BufferAllocator,
-    private val maxSizeBytes: Long,
+    maxSizeBytes: Long,
     private val pathLoader: PathLoader = PathLoader()
 ) : AutoCloseable {
     private val al = al.newChildAllocator("memory-cache", 0, maxSizeBytes)
@@ -36,10 +35,6 @@ class MemoryCache @JvmOverloads internal constructor(
         companion object {
             fun from(path: Path) = Slice(0, path.fileSize())
         }
-    }
-
-    internal data class PathSlice(val path: Path, val slice: Slice? = null) {
-        constructor(path: Path, offset: Long, length: Long) : this(path, Slice(offset, length))
     }
 
     /**
@@ -83,33 +78,32 @@ class MemoryCache @JvmOverloads internal constructor(
         /**
          * @return a pair containing the on-disk path and an optional cleanup action
          */
-        operator fun invoke(k: Path): CompletableFuture<Pair<Path, AutoCloseable?>>
+        suspend operator fun invoke(k: Path): Pair<Path, AutoCloseable?>
     }
 
-    @Suppress("NAME_SHADOWING")
-    fun get(key: Path, slice: Slice? = null, fetch: Fetch): ArrowBuf =
-        fetch(key).thenApplyAsync { (path, onEvict) ->
-            val slice = slice ?: Slice.from(path)
-            try {
-                // we open up a fine-grained arena here so that we can release the memory
-                // as soon as we're done with the ArrowBuf.
-                Arena.ofShared().closeOnCatch { arena ->
-                    val memSeg = pathLoader.load(path, slice, arena)
+    suspend fun get(key: Path, slice: Slice? = null, fetch: Fetch): ArrowBuf {
+        val (path, onEvict) = fetch(key)
+        val slice = slice ?: Slice.from(path)
 
-                    al.wrapForeignAllocation(
-                        object : ForeignAllocation(memSeg.byteSize(), memSeg.address()) {
-                            override fun release0() {
-                                arena.close()
-                                onEvict?.close()
-                            }
-                        })
-                }
-            } catch (t: Throwable) {
-                onEvict?.close()
-                throw t
+        return try {
+            // we open up a fine-grained arena here so that we can release the memory
+            // as soon as we're done with the ArrowBuf.
+            Arena.ofShared().closeOnCatch { arena ->
+                val memSeg = pathLoader.load(path, slice, arena)
+
+                al.wrapForeignAllocation(
+                    object : ForeignAllocation(memSeg.byteSize(), memSeg.address()) {
+                        override fun release0() {
+                            arena.close()
+                            onEvict?.close()
+                        }
+                    })
             }
-
-        }.get()!!
+        } catch (t: Throwable) {
+            onEvict?.close()
+            throw t
+        }
+    }
 
     override fun close() = al.close()
 

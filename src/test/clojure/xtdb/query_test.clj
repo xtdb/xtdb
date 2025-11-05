@@ -20,7 +20,7 @@
 
 (defn with-page-metadata [node meta-file-path f]
   (let [metadata-mgr (.getMetadataManager (db/primary-db node))]
-    (util/with-open [page-metadata (.openPageMetadata metadata-mgr meta-file-path)]
+    (util/with-open [page-metadata (.openPageMetadataSync metadata-mgr meta-file-path)]
       (f page-metadata))))
 
 (t/deftest test-find-gt-ivan

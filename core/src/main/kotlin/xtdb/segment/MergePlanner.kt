@@ -1,6 +1,7 @@
 package xtdb.segment
 
 import com.carrotsearch.hppc.ObjectStack
+import kotlinx.coroutines.runBlocking
 import xtdb.segment.Segment.PageMeta
 import xtdb.trie.DEFAULT_LEVEL_WIDTH
 import xtdb.trie.HashTrie
@@ -29,10 +30,15 @@ object MergePlanner {
         fun filterPages(pages: List<PageMeta<*>>): List<PageMeta<*>>?
     }
 
-    // IMPORTANT - Tries (i.e. segments) and nodes need to be returned in system time order
     @JvmStatic
-    @JvmOverloads
-    fun plan(
+    fun planSync(
+        segments: List<Segment<*>>,
+        pathPred: Predicate<ByteArray>?,
+        filterPages: PagesFilter = PagesFilter { it }
+    ) = runBlocking { plan(segments, pathPred, filterPages) }
+
+    // IMPORTANT - Tries (i.e. segments) and nodes need to be returned in system time order
+    suspend fun plan(
         segments: List<Segment<*>>,
         pathPred: Predicate<ByteArray>?,
         filterPages: PagesFilter = PagesFilter { it }

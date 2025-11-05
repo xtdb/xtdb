@@ -1,6 +1,7 @@
 package xtdb.compactor
 
 import com.carrotsearch.hppc.ByteArrayList
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
@@ -147,7 +148,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
 
     private val outWriters = OutWriters(al)
 
-    private fun MergeTask.merge(outWriter: OutWriter, pathFilter: ByteArray?) {
+    private suspend fun MergeTask.merge(outWriter: OutWriter, pathFilter: ByteArray?) {
         val isValidPtr = ArrowBufPointer()
 
         val path = path.let { if (pathFilter == null || it.size > pathFilter.size) it else pathFilter }
@@ -190,7 +191,14 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
     }
 
     @JvmOverloads
-    fun mergeSegments(
+    fun mergeSegmentsSync(
+        segments: List<Segment<*>>,
+        pathFilter: ByteArray?,
+        recencyPartitioning: RecencyPartitioning,
+        recencyPartition: RecencyPartition? = WEEK
+    ) = runBlocking { mergeSegments(segments, pathFilter, recencyPartitioning, recencyPartition) }
+
+    suspend fun mergeSegments(
         segments: List<Segment<*>>,
         pathFilter: ByteArray?,
         recencyPartitioning: RecencyPartitioning,
@@ -252,12 +260,12 @@ private class LocalSegment(
 
     override val part = Trie.parseKey(trieKey).part?.toArray()
 
-    override fun openMetadata(): Metadata = Metadata()
+    override suspend fun openMetadata(): Metadata = Metadata()
 
     private val dataLoader = Relation.loader(al, dataFile)
     override val schema: Schema get() = dataLoader.schema
 
-    override fun loadDataPage(al: BufferAllocator, leaf: ArrowHashTrie.Leaf) =
+    override suspend fun loadDataPage(al: BufferAllocator, leaf: ArrowHashTrie.Leaf) =
         dataLoader.loadPage(leaf.dataPageIndex, al)
 
     override fun close() {
@@ -276,7 +284,7 @@ internal fun main() {
                 trieKeys
                     .safeMap { trieKey -> LocalSegment(al, table, dir, trieKey) }
                     .useAll { segments ->
-                        segMerge.mergeSegments(
+                        segMerge.mergeSegmentsSync(
                             segments, null, SegmentMerge.RecencyPartitioning.Partition
                         ).use { results ->
                             with(segMerge) {

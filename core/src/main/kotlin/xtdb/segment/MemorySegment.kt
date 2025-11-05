@@ -27,9 +27,9 @@ class MemorySegment(val trie: MemoryHashTrie, val rel: RelationReader) : Segment
         override fun close() = Unit
     }
 
-    override fun openMetadata(): Metadata = Metadata()
+    override suspend fun openMetadata(): Metadata = Metadata()
 
-    override fun loadDataPage(al: BufferAllocator, leaf: MemoryHashTrie.Leaf) = rel.select(leaf.mergeSort(trie))
+    override suspend fun loadDataPage(al: BufferAllocator, leaf: MemoryHashTrie.Leaf) = rel.select(leaf.mergeSort(trie))
 
     override fun close() = Unit
 }

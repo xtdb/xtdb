@@ -46,7 +46,7 @@ internal class MemoryStorage(
     override fun getFooter(key: Path): ArrowFooter =
         (memoryStore.lockAndGet(key) ?: throw objectMissingException(key)).readArrowFooter()
 
-    override fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
+    override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
         try {
             val arrowBuf = memoryStore.lockAndGet(key) ?: throw objectMissingException(key)
 

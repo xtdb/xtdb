@@ -4,6 +4,7 @@ import com.carrotsearch.hppc.ObjectIntHashMap
 import com.carrotsearch.hppc.ObjectIntMap
 import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.storage.BufferPool
 import xtdb.arrow.Relation
@@ -133,7 +134,9 @@ class PageMetadata private constructor(private val rel: Relation, private val pa
 
         private val al = al.openChildAllocator("metadata-mgr")
 
-        fun openPageMetadata(metaFilePath: Path): PageMetadata =
+        fun openPageMetadataSync(metaFilePath: Path): PageMetadata = runBlocking { openPageMetadata(metaFilePath) }
+
+        suspend fun openPageMetadata(metaFilePath: Path): PageMetadata =
             bp.getRecordBatch(metaFilePath, 0).use { rb ->
                 val footer = bp.getFooter(metaFilePath)
                 Relation.fromRecordBatch(al, footer.schema, rb).closeOnCatch { rel ->

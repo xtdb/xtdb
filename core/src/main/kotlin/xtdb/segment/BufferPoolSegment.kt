@@ -55,9 +55,9 @@ class BufferPoolSegment(
         override fun close() = pageMetadata.close()
     }
 
-    override fun openMetadata(): Metadata = Metadata(mm.openPageMetadata(table.metaFilePath(trieKey)))
+    override suspend fun openMetadata(): Metadata = Metadata(mm.openPageMetadata(table.metaFilePath(trieKey)))
 
-    override fun loadDataPage(al: BufferAllocator, leaf: ArrowHashTrie.Leaf): RelationReader =
+    override suspend fun loadDataPage(al: BufferAllocator, leaf: ArrowHashTrie.Leaf): RelationReader =
         if (currentDataPageIndex == leaf.dataPageIndex) dataRel
         else {
             currentDataPageIndex = leaf.dataPageIndex

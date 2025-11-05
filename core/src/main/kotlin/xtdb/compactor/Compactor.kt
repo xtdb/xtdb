@@ -52,7 +52,7 @@ interface Compactor : AutoCloseable {
     fun openForDatabase(db: IDatabase): ForDatabase
 
     interface Driver : AutoCloseable {
-        fun executeJob(job: Job): TriesAdded
+        suspend fun executeJob(job: Job): TriesAdded
         suspend fun appendMessage(triesAdded: TriesAdded): Log.MessageMetadata
 
         interface Factory {
@@ -86,7 +86,7 @@ interface Compactor : AutoCloseable {
                                 .setTrieMetadata(trieMetadata)
                                 .build()
 
-                        override fun executeJob(job: Job): TriesAdded =
+                        override suspend fun executeJob(job: Job): TriesAdded =
                             try {
                                 job.trieKeys.map { BufferPoolSegment(al, bp, mm, job.table, it) }.useAll { segs ->
                                     val recencyPartitioning =

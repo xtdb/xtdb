@@ -3,6 +3,7 @@ package xtdb.storage
 import com.github.benmanes.caffeine.cache.Cache
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
@@ -26,7 +27,6 @@ import java.nio.file.Files.newByteChannel
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption.*
-import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.io.path.*
 
 internal class LocalStorage(
@@ -61,14 +61,16 @@ internal class LocalStorage(
     }
 
     override fun getByteArray(key: Path): ByteArray =
-        memoryCache.get(cacheRootPath.resolve(key)) { path ->
-            memCacheMisses?.increment()
-            val bufferCachePath = this@LocalStorage.rootPath
-                .resolve(cacheRootPath.relativize(path))
-                .orThrowIfMissing(key)
+        runBlocking {
+            memoryCache.get(cacheRootPath.resolve(key)) { path ->
+                memCacheMisses?.increment()
+                val bufferCachePath = this@LocalStorage.rootPath
+                    .resolve(cacheRootPath.relativize(path))
+                    .orThrowIfMissing(key)
 
-            completedFuture(Pair(bufferCachePath, null))
-        }.use { it.toByteArray() }
+                Pair(bufferCachePath, null)
+            }.use { it.toByteArray() }
+        }
 
     override fun getFooter(key: Path): ArrowFooter =
         arrowFooterCache.get(key) {
@@ -77,7 +79,7 @@ internal class LocalStorage(
             path.openReadableChannel().readArrowFooter()
         }
 
-    override fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
+    override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
         recordBatchRequests?.increment()
         val path = rootPath.resolve(key).orThrowIfMissing(key)
 
@@ -95,7 +97,7 @@ internal class LocalStorage(
                 rootPath.resolve(cacheRootPath.relativize(path))
                     .takeIf { it.exists() } ?: throw objectMissingException(path)
 
-            completedFuture(Pair(bufferCachePath, null))
+            Pair(bufferCachePath, null)
         }.use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(
                 0,

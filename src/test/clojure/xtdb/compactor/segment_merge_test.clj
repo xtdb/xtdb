@@ -36,7 +36,7 @@
                       (MemorySegment. (.compactLogs (.getLiveTrie lt1)) live-rel1)]]
 
         (t/testing "merge segments"
-          (util/with-open [results (.mergeSegments seg-merge segments nil (SegmentMerge$RecencyPartitioning$Preserve. nil))]
+          (util/with-open [results (.mergeSegmentsSync seg-merge segments nil (SegmentMerge$RecencyPartitioning$Preserve. nil))]
             (t/is (= [[{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
                         :xt/system-from #xt/zdt "2023-01-01Z[UTC]"
                         :xt/valid-from #xt/zdt "2023-01-01Z[UTC]"
@@ -74,7 +74,7 @@
                               (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap))))))))))
 
         (t/testing "merge segments with path predicate"
-          (util/with-open [results (.mergeSegments seg-merge segments (byte-array [2]) (SegmentMerge$RecencyPartitioning$Preserve. nil))]
+          (util/with-open [results (.mergeSegmentsSync seg-merge segments (byte-array [2]) (SegmentMerge$RecencyPartitioning$Preserve. nil))]
             (t/is (= [[{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
                         :xt/system-from (time/->zdt #inst "2023")
                         :xt/valid-from (time/->zdt #inst "2023")
@@ -97,7 +97,7 @@
                               (mapv #(update % :xt/iid (comp util/byte-buffer->uuid ByteBuffer/wrap))))))))))
 
         (t/testing "merge segments partitioning by recency"
-          (util/with-open [results (.mergeSegments seg-merge segments nil SegmentMerge$RecencyPartitioning$Partition/INSTANCE)]
+          (util/with-open [results (.mergeSegmentsSync seg-merge segments nil SegmentMerge$RecencyPartitioning$Partition/INSTANCE)]
             (t/is (= {"r20210104.arrow" [{:xt/iid #uuid "9e3f856e-6899-8313-827f-f18dd4d88e78",
                                           :xt/system-from (time/->zdt #inst "2020")
                                           :xt/valid-from (time/->zdt #inst "2020")

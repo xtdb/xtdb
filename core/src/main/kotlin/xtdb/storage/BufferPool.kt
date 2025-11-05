@@ -1,6 +1,7 @@
 package xtdb.storage
 
 import com.github.benmanes.caffeine.cache.Caffeine
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import xtdb.ArrowWriter
@@ -39,7 +40,9 @@ sealed interface BufferPool : AutoCloseable {
      *
      * Throws if not an arrow file or the record batch is out of bounds.
      */
-    fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch
+    fun getRecordBatchSync(key: Path, idx: Int): ArrowRecordBatch = runBlocking { getRecordBatch(key, idx) }
+
+    suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch
 
     fun putObject(key: Path, buffer: ByteBuffer)
 
@@ -71,7 +74,7 @@ sealed interface BufferPool : AutoCloseable {
             override val epoch: StorageEpoch get() = unsupported("epoch")
             override fun getByteArray(key: Path) = unsupported("getByteArray")
             override fun getFooter(key: Path) = unsupported("getFooter")
-            override fun getRecordBatch(key: Path, idx: Int) = unsupported("getRecordBatch")
+            override suspend fun getRecordBatch(key: Path, idx: Int) = unsupported("getRecordBatch")
             override fun putObject(key: Path, buffer: ByteBuffer) = unsupported("putObject")
             override fun listAllObjects() = unsupported("listAllObjects")
             override fun listAllObjects(dir: Path) = unsupported("listAllObjects")

@@ -525,7 +525,7 @@
               ;; TODO this doseq seems to return nothing, so nothing gets tested?
               (doseq [{:keys [^String trie-key]} (map trie/parse-trie-file-path meta-files)]
                 (util/with-open [seg (BufferPoolSegment. tu/*allocator* bp meta-mgr table-name trie-key nil)
-                                 seg-meta (.openMetadata seg)]
+                                 seg-meta (.openMetadataSync seg)]
                   (doseq [leaf (.getLeaves (.getTrie seg-meta))
                           :let [page (.page seg-meta leaf)
                                 rel (.loadDataPage (.getPage page) tu/*allocator*)]]

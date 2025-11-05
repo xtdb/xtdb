@@ -1,5 +1,6 @@
 package xtdb.segment
 
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.RelationReader
@@ -12,7 +13,8 @@ interface Segment<L> : AutoCloseable {
 
     val schema: Schema
 
-    fun openMetadata(): Metadata<L>
+    fun openMetadataSync(): Metadata<L> = runBlocking { openMetadata() }
+    suspend fun openMetadata(): Metadata<L>
 
     interface Metadata<L> : AutoCloseable {
         val trie: HashTrie<L>
@@ -23,11 +25,11 @@ interface Segment<L> : AutoCloseable {
 
     interface Page<L> {
 
-        fun loadDataPage(al: BufferAllocator): RelationReader
+        suspend fun loadDataPage(al: BufferAllocator): RelationReader
 
         companion object {
             fun <L> page(segment: Segment<L>, leaf: L) = object : Page<L> {
-                override fun loadDataPage(al: BufferAllocator) = segment.loadDataPage(al, leaf)
+                override suspend fun loadDataPage(al: BufferAllocator) = segment.loadDataPage(al, leaf)
             }
         }
     }
@@ -52,5 +54,5 @@ interface Segment<L> : AutoCloseable {
         }
     }
 
-    fun loadDataPage(al: BufferAllocator, leaf: L): RelationReader
+    suspend fun loadDataPage(al: BufferAllocator, leaf: L): RelationReader
 }

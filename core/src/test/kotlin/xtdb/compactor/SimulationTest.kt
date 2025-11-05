@@ -117,7 +117,7 @@ class MockDriver(
             return Pair(size * part1 / 100, size * part2 / 100)
         }
 
-        override fun executeJob(job: Job): TriesAdded {
+        override suspend fun executeJob(job: Job): TriesAdded {
             val trieKey = job.outputTrieKey
             val trieDetailsBuilder = TrieDetails.newBuilder()
                 .setTableName(job.table.tableName)

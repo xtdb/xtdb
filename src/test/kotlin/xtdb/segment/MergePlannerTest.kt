@@ -3,6 +3,7 @@ package xtdb.segment
 import com.carrotsearch.hppc.ByteArrayList
 import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import xtdb.segment.MergePlannerTest.RenderedMergeTask.Companion.page
 import xtdb.segment.MergePlannerTest.RenderedMergeTask.Companion.path
@@ -36,7 +37,7 @@ class MergePlannerTest {
     }
 
     @Test
-    fun `test merge plan with null nodes #2700`() {
+    fun `test merge plan with null nodes #2700`() = runTest {
         withClue("part 1") {
             val t1 = seg("t1", b(b(null, l(0), null, l(1)), l(2), null, l(3)))
             val log = seg("log", l(0))

@@ -652,7 +652,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
 
           (let [live-table-tx-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/live-table-tx.arrow" node-id))
                 footer (.getFooter bp live-table-tx-path)]
-            (with-open [rb (.getRecordBatch bp live-table-tx-path 0)
+            (with-open [rb (.getRecordBatchSync bp live-table-tx-path 0)
                         rel (Relation/fromRecordBatch al (.getSchema footer) rb)]
               (t/is (= [{:xt/system-from (time/->zdt #inst "2020"),
                          :xt/valid-from (time/->zdt #inst "2020"),
@@ -667,7 +667,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
 
           (let [query-rel-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/query-rel.arrow" node-id))
                 footer (.getFooter bp query-rel-path)]
-            (with-open [rb (.getRecordBatch bp query-rel-path 0)
+            (with-open [rb (.getRecordBatchSync bp query-rel-path 0)
                         rel (Relation/fromRecordBatch al (.getSchema footer) rb)]
               (t/is (= [{:foo "bar", :baz 32}, {:foo "baz", :baz 64}]
                        (->> (.getAsMaps rel)
@@ -675,7 +675,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
 
           (let [tx-ops-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/tx-ops.arrow" node-id))
                 footer (.getFooter bp tx-ops-path)]
-            (with-open [rb (.getRecordBatch bp tx-ops-path 0)
+            (with-open [rb (.getRecordBatchSync bp tx-ops-path 0)
                         rel (Relation/fromRecordBatch al (.getSchema footer) rb)]
               (t/is (= [[{"_id" 3, "version" 0}] [{"_id" 4, "version" 0}]]
                        (-> (.vectorFor rel "$data$")

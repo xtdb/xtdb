@@ -1,5 +1,6 @@
 package xtdb.operator.scan
 
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.ICursor
@@ -49,7 +50,8 @@ class ScanCursor(
             val mergeQueue = PriorityQueue<LeafPointer>(comparing({ it.evPtr }, EventRowPointer.comparator()))
             val polygonCalculator = PolygonCalculator(temporalBounds)
 
-            val loadedPages = task.pages.map { it.loadDataPage(al) }
+            // we're not in coroutine land here, so it's a good boundary for runBlocking
+            val loadedPages = runBlocking { task.pages.map { it.loadDataPage(al) } }
 
             val leafReaders = loadedPages.map { it.maybeSelect(iidPred, taskPath) }
 

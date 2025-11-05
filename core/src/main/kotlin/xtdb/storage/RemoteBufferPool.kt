@@ -111,14 +111,15 @@ internal class RemoteBufferPool(
             path
         }
 
-    override fun getByteArray(key: Path): ByteArray =
+    override fun getByteArray(key: Path): ByteArray = runBlocking {
         memoryCache.get(cacheRootPath.resolve(key)) { path ->
             memCacheMisses?.increment()
             diskCache.get(path) { k, tmpFile ->
                 diskCacheMisses?.increment()
                 getObject(cacheRootPath.relativize(k), tmpFile)
-            }.thenApply { entry -> Pair(entry.path, entry) }
+            }.thenApply { entry -> Pair(entry.path, entry) }.await()
         }.use { it.toByteArray() }
+    }
 
     override fun getFooter(key: Path): ArrowFooter = arrowFooterCache.get(key) {
         diskCache
@@ -129,7 +130,7 @@ internal class RemoteBufferPool(
             .use { entry -> entry.path.openReadableChannel().readArrowFooter() }
     }
 
-    override fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
+    override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch {
         recordBatchRequests?.increment()
 
         val footer = getFooter(key)
@@ -144,7 +145,7 @@ internal class RemoteBufferPool(
             diskCache.get(path) { k, tmpFile ->
                 diskCacheMisses?.increment()
                 getObject(cacheRootPath.relativize(k), tmpFile)
-            }.thenApply { entry -> Pair(entry.path, entry) }
+            }.thenApply { entry -> Pair(entry.path, entry) }.await()
         }.use { arrowBuf ->
             arrowBuf.arrowBufToRecordBatch(
                 0, arrowBlock.metadataLength, arrowBlock.bodyLength,
