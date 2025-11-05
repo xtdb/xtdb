@@ -159,6 +159,129 @@ jobs:
             --set "providerConfig.env.AZURE_USER_MANAGED_IDENTITY_CLIENT_ID=${{ secrets.BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID }}" \
             --set "providerConfig.serviceAccountAnnotations.azure\.workload\.identity/client-id=${{ secrets.BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID }}"
 
+      - name: Check for Immediate Benchmark Failure
+        id: immediate-check
+        if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
+        run: |
+          set -euo pipefail
+
+          echo "immediate_failure=false" >> "$GITHUB_OUTPUT"
+          ATTEMPTS=36
+          SLEEP_SECONDS=10
+          REQUIRED_RUNNING_SECONDS=120
+          running_since=""
+          echo "Checking for immediate benchmark pod failures..."
+          for attempt in $(seq 1 "$ATTEMPTS"); do
+            pods_json=$(kubectl get pods -n cloud-benchmark -o json)
+
+            pods=$(echo "$pods_json" | jq '[.items[]
+              | select((.metadata.labels["app.kubernetes.io/component"] // "") == "benchmark")
+            ]')
+            pod_count=$(echo "$pods" | jq 'length')
+            if [ "$pod_count" -eq 0 ]; then
+              echo "Attempt ${attempt}/${ATTEMPTS}: no benchmark pods detected yet."
+              sleep "$SLEEP_SECONDS"
+              continue
+            fi
+
+            failing_pods=$(echo "$pods" | jq '
+              [.[]
+               | select(
+                   (.status.phase == "Failed")
+                   or ((.status.containerStatuses // [])
+                       | any(
+                           ((.state.terminated // null) != null and ((.state.terminated.exitCode // 0) != 0))
+                           or ((.state.waiting // null) != null and ((.state.waiting.reason // "") | test("CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError|RunContainerError|ContainerCannotRun|Error")))
+                         ))
+                   or ((.status.initContainerStatuses // [])
+                       | any(
+                           ((.state.terminated // null) != null and ((.state.terminated.exitCode // 0) != 0))
+                           or ((.state.waiting // null) != null and ((.state.waiting.reason // "") | test("CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError|RunContainerError|ContainerCannotRun|Error")))
+                         ))
+                 )
+               | .metadata.name
+              ]')
+            failing_count=$(echo "$failing_pods" | jq 'length')
+
+            if [ "$failing_count" -gt 0 ]; then
+              echo "error detected: ${failing_count} failing benchmark pod(s) soon after deployment."
+              echo "immediate_failure=true" >> "$GITHUB_OUTPUT"
+              mapfile -t pod_names < <(echo "$failing_pods" | jq -r '.[]')
+              primary_pod="${pod_names[0]:-}"
+              if [ -n "$primary_pod" ]; then
+                echo "immediate_failure_pod=${primary_pod}" >> "$GITHUB_OUTPUT"
+                failure_log_path="$RUNNER_TEMP/immediate-failure-${primary_pod}.log"
+                if kubectl logs "$primary_pod" -n cloud-benchmark --all-containers=true --tail=200 > "$failure_log_path" 2>/dev/null; then
+                  head -n 60 "$failure_log_path" > "${failure_log_path}.preview"
+                  mv "${failure_log_path}.preview" "$failure_log_path"
+                  echo "immediate_failure_log_path=${failure_log_path}" >> "$GITHUB_OUTPUT"
+                fi
+              fi
+              cleanup_triggered=false
+              for pod in "${pod_names[@]}"; do
+                echo "describe ${pod}"
+                kubectl describe pod "${pod}" -n cloud-benchmark || true
+
+                echo "logs ${pod}"
+                pod_log="$(kubectl logs "${pod}" -n cloud-benchmark --all-containers=true 2>/dev/null || true)"
+                echo "$pod_log"
+
+                if printf '%s' "$pod_log" | grep -q "Triggered cleanup workflow"; then
+                  cleanup_triggered=true
+                fi
+              done
+
+              if [ "$cleanup_triggered" != true ]; then
+                echo "No cleanup workflow trigger detected in logs; invoking clear-bench script." >&2
+                ./modules/bench/cloud/clear-bench.sh azure || true
+              fi
+              exit 1
+            fi
+
+            completed_count=$(echo "$pods" | jq '[.[] | select(.status.phase == "Succeeded")] | length')
+            if [ "$completed_count" -gt 0 ]; then
+              echo "Benchmark job already completed successfully."
+              exit 0
+            fi
+
+            running_count=$(echo "$pods" | jq '[.[]
+              | select(
+                  (.status.phase == "Running")
+                  and ((.status.containerStatuses // [])
+                       | any((.state.running // null) != null))
+                  and ((.status.initContainerStatuses // [])
+                       | all(
+                           ((.state.terminated // null) != null)
+                           and ((.state.terminated.exitCode // 0) == 0)
+                         ))
+                )
+            ] | length')
+
+            if [ "$running_count" -gt 0 ]; then
+              if [ -z "$running_since" ]; then
+                running_since=$(date -u +%s)
+                echo "Benchmark pods entered running state; starting stability timer."
+              else
+                now_ts=$(date -u +%s)
+                elapsed=$((now_ts - running_since))
+                echo "Benchmark pods running for ${elapsed}s (target: ${REQUIRED_RUNNING_SECONDS}s)."
+                if [ "$elapsed" -ge "$REQUIRED_RUNNING_SECONDS" ]; then
+                  echo "Benchmark pods have been running for at least ${REQUIRED_RUNNING_SECONDS}s; considering startup successful."
+                  exit 0
+                fi
+              fi
+            else
+              if [ -n "$running_since" ]; then
+                echo "Benchmark pods no longer running; resetting stability timer."
+              fi
+              running_since=""
+            fi
+
+            sleep "$SLEEP_SECONDS"
+          done
+
+          echo "No immediate benchmark pod failures detected in the initial monitoring window."
+
       - name: Remove Monitoring Stack on Failure
         if: failure() && (steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress')
         run: |
@@ -175,8 +298,30 @@ jobs:
         id: compose
         if: always()
         run: |
+          set -euo pipefail
+
           if [ "${{ steps.check-deployment.outcome }}" = "success" ] && [ "${{ steps.inspect-deployment.outputs.deployment_status }}" = "in_progress" ]; then
             echo 'msg=:information_source: TPC-H Benchmark skipped — existing deployment found' >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.immediate-check.outputs.immediate_failure }}" = "true" ]; then
+            POD_NAME='${{ steps.immediate-check.outputs.immediate_failure_pod }}'
+            LOG_PATH='${{ steps.immediate-check.outputs.immediate_failure_log_path }}'
+            MSG_FILE="$RUNNER_TEMP/slack-immediate-failure.txt"
+            : > "$MSG_FILE"
+            {
+              printf ':x: TPC-H Benchmark failed during startup (pod: `%s`).\n' "${POD_NAME:-unknown}"
+              if [ -n "$LOG_PATH" ] && [ -f "$LOG_PATH" ]; then
+                echo >> "$MSG_FILE"
+                echo '```' >> "$MSG_FILE"
+                cat "$LOG_PATH" >> "$MSG_FILE"
+                echo '```' >> "$MSG_FILE"
+              fi
+            } >> "$MSG_FILE"
+
+            {
+              echo 'msg<<EOF_MSG'
+              cat "$MSG_FILE"
+              echo 'EOF_MSG'
+            } >> "$GITHUB_OUTPUT"
           else
             echo 'msg=TPC-H Benchmark (Scale Factor: ${{ env.SCALE_FACTOR }}) started' >> "$GITHUB_OUTPUT"
           fi
