@@ -112,6 +112,35 @@ class MemoryCacheTest {
             throw e.cause ?: e
         }
 
+/*
+    @Test
+    fun `getting same path multiple times doesn't increase usedBytes`() {
+        MemoryCache(allocator, 200, PathLoader()).use { cache ->
+            val path = Path.of("test/100")
+            val slice = Slice(0, 100)
+
+            cache.get(path, slice) { completedFuture(it to null) }.use {
+                assertEquals(100, cache.stats0.usedBytes)
+
+                cache.get(path, slice) { completedFuture(it to null) }.use {
+                    //assertEquals(100, cache.stats0.usedBytes)
+                    // Fails -> comes back as 200 usedBytes, because we don't actually cache anything
+
+                    cache.get(path, slice) { completedFuture(it to null) }.use {
+                        assertEquals(100, cache.stats0.usedBytes)
+                        // Fails -> throws an OOM error!
+                    }
+                }
+            }
+
+            Thread.sleep(100)
+            val stats = cache.stats0
+            assertEquals(0, stats.usedBytes)
+            assertEquals(200, stats.freeBytes)
+        }
+    }
+*/
+
     @Test
     fun `ooms the mem-cache`() {
         MemoryCache(allocator, 100, PathLoader()).use { cache ->

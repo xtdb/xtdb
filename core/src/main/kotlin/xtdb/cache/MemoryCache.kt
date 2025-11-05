@@ -86,29 +86,31 @@ class MemoryCache @JvmOverloads internal constructor(
         operator fun invoke(k: Path): CompletableFuture<Pair<Path, AutoCloseable?>>
     }
 
+    private fun loadSlice(pathSlice: PathSlice, onEvict: AutoCloseable?): ArrowBuf {
+        return try {
+            Arena.ofShared().closeOnCatch { arena ->
+                val memSeg = pathLoader.load(pathSlice.path, pathSlice.slice!!, arena)
+
+                al.wrapForeignAllocation(
+                    object : ForeignAllocation(memSeg.byteSize(), memSeg.address()) {
+                        override fun release0() {
+                            arena.close()
+                            onEvict?.close()
+                        }
+                    })
+            }
+        } catch (t: Throwable) {
+            onEvict?.close()
+            throw t
+        }
+    }
+
+
     @Suppress("NAME_SHADOWING")
     fun get(key: Path, slice: Slice? = null, fetch: Fetch): ArrowBuf =
         fetch(key).thenApplyAsync { (path, onEvict) ->
             val slice = slice ?: Slice.from(path)
-            try {
-                // we open up a fine-grained arena here so that we can release the memory
-                // as soon as we're done with the ArrowBuf.
-                Arena.ofShared().closeOnCatch { arena ->
-                    val memSeg = pathLoader.load(path, slice, arena)
-
-                    al.wrapForeignAllocation(
-                        object : ForeignAllocation(memSeg.byteSize(), memSeg.address()) {
-                            override fun release0() {
-                                arena.close()
-                                onEvict?.close()
-                            }
-                        })
-                }
-            } catch (t: Throwable) {
-                onEvict?.close()
-                throw t
-            }
-
+            loadSlice(PathSlice(path, slice), onEvict)
         }.get()!!
 
     override fun close() = al.close()
