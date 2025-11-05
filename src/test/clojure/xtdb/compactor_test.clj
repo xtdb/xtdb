@@ -55,16 +55,21 @@
 
 (defn level-seq
   "Creates a sequence of files for level up to block n. Currently only supports recency current and supposes every file is always full according to size."
-  ([level n] (level-seq level n 20))
-  ([level n size]
+  ([level n] (level-seq level n nil))
+  ([level n recency] (level-seq level n recency 20))
+  ([level n recency size]
    (cond
      (= level 0) (map (fn [i] [(trie/->l0-trie-key i) size]) (range n))
-     (= level 1) (map (fn [i] [(trie/->l1-trie-key nil i) size]) (range n))
-     :else (let [increments (math/pow 4 (dec level))
-                 parts (all-parts-rc-level level)]
+
+     (= level 1) (map (fn [i] [(trie/->l1-trie-key recency i) size]) (range n))
+
+     :else (let [increments (math/pow 4 (cond-> (dec level)
+                                          recency dec))
+                 parts (all-parts-rc-level (cond-> level
+                                             recency dec))]
              (mapcat (fn [i]
                        (for [part parts]
-                         [(trie/->trie-key level nil (byte-array part) i) size])) (range (dec increments) n increments))))))
+                         [(trie/->trie-key level recency (byte-array part) i) size])) (range (dec increments) n increments))))))
 
 (t/deftest test-l0->l1-compaction-jobs
   (binding [cat/*file-size-target* 16]
