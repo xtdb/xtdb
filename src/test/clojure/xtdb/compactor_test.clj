@@ -71,6 +71,20 @@
                        (for [part parts]
                          [(trie/->trie-key level recency (byte-array part) i) size])) (range (dec increments) n increments))))))
 
+(t/deftest only-use-live-tries-for-available-jobs-4930
+  (binding [cat/*file-size-target* 16]
+    (t/is (= #{{:trie-keys ["l01-rc-b00" "l01-rc-b01" "l01-rc-b02" "l01-rc-b03"],
+                :part [3],
+                :out-trie-key "l02-rc-p3-b03"}
+               {:trie-keys ["l01-rc-b00" "l01-rc-b01" "l01-rc-b02" "l01-rc-b03"],
+                :part [2],
+                :out-trie-key "l02-rc-p2-b03"}
+               {:trie-keys ["l01-rc-b00" "l01-rc-b01" "l01-rc-b02" "l01-rc-b03"],
+                :part [1],
+                :out-trie-key "l02-rc-p1-b03"}}
+             (apply calc-jobs (concat (level-seq 1 16)
+                                      [["l02-rc-p0-b03" 20] ["l02-rc-p0-b07" 20] ["l02-rc-p0-b0b" 20] ["l02-rc-p0-b0f" 20]]))))))
+
 (t/deftest test-l0->l1-compaction-jobs
   (binding [cat/*file-size-target* 16]
     (t/is (= #{} (calc-jobs)))
@@ -242,13 +256,16 @@
 
           "L2H + L1H take us over the limit, compact early")))
 
+(defn- filter-result [required-level part-prefix res]
+  (filter (comp (fn [{:keys [level part]}]
+                  (and (= level required-level) (= part-prefix (take (count part-prefix) (vec part)))))
+                trie/parse-trie-key
+                :out-trie-key)
+          res))
+
 (t/deftest test-l2+-compaction-jobs
   (binding [cat/*file-size-target* 16]
-    (t/is (= #{ ;; L2 [0] is full, compact L3 [0 0] and [0 1]
-               (job "l03-rc-p00-b0f" ["l02-rc-p0-b03" "l02-rc-p0-b07" "l02-rc-p0-b0b" "l02-rc-p0-b0f"] [0 0])
-               (job "l03-rc-p01-b0f" ["l02-rc-p0-b03" "l02-rc-p0-b07" "l02-rc-p0-b0b" "l02-rc-p0-b0f"] [0 1])
-
-               ;; L2 [0] has loads, merge from 0x10 onwards (but only 4)
+    (t/is (= #{ ;; L2 [0] has loads, merge from 0x10 onwards (but only 4)
                (job "l02-rc-p0-b113" ["l01-rc-b110" "l01-rc-b111" "l01-rc-b112" "l01-rc-b113"] [0])
 
                ;; L2 [1] has nothing, choose the first four
@@ -259,12 +276,10 @@
                (job "l02-rc-p3-b0b" ["l01-rc-b08" "l01-rc-b09" "l01-rc-b0a" "l01-rc-b0b"] [3])}
 
              (binding [cat/*file-size-target* 2]
-               (calc-jobs ["l03-rc-p02-b0f"]
-                          ["l03-rc-p03-b0f"]
-                          ["l02-rc-p0-b03"] ["l02-rc-p2-b03"] ["l02-rc-p3-b03"] ; missing [1]
+               (calc-jobs ["l02-rc-p0-b03"] ["l02-rc-p2-b03"] ["l02-rc-p3-b03"] ; missing [1]
                           ["l02-rc-p0-b07"] ["l02-rc-p2-b07"] ["l02-rc-p3-b07"] ; missing [1]
-                          ["l02-rc-p0-b0b"] ["l02-rc-p2-b0b"]                ; missing [1] + [3]
-                          ["l02-rc-p0-b0f"]                               ; missing [1], [2], and [3]
+                          ["l02-rc-p0-b0b"] ["l02-rc-p2-b0b"] ; missing [1] + [3]
+                          ["l02-rc-p0-b0f"] ; missing [1], [2], and [3]
                           ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2] ["l01-rc-b03" 2]
                           ["l01-rc-b04" 2] ["l01-rc-b05" 2] ["l01-rc-b06" 2] ["l01-rc-b07" 2]
                           ["l01-rc-b08" 2] ["l01-rc-b09" 2] ["l01-rc-b0a" 2] ["l01-rc-b0b" 2]
@@ -273,6 +288,28 @@
                           ;; superseded ones
                           ["l01-rc-b00" 1] ["l01-rc-b02" 1] ["l01-rc-b09" 1] ["l01-rc-b0d" 1])))
           "up to L3")
+
+    (t/is (= #{ ;; for part group [0] only 2 are missing
+               (job "l03-rc-p00-b0f" ["l02-rc-p0-b03" "l02-rc-p0-b07" "l02-rc-p0-b0b" "l02-rc-p0-b0f"] [0 0])
+               (job "l03-rc-p01-b0f" ["l02-rc-p0-b03" "l02-rc-p0-b07" "l02-rc-p0-b0b" "l02-rc-p0-b0f"] [0 1])}
+
+             (binding [cat/*file-size-target* 2]
+               (->> (calc-jobs ["l03-rc-p02-b0f"]
+                               ["l03-rc-p03-b0f"]
+                               ;; The L2 part groups need to be full to be live and considered for l03 compaction
+                               ["l02-rc-p0-b03"] ["l02-rc-p1-b03"] ["l02-rc-p2-b03"] ["l02-rc-p3-b03"]
+                               ["l02-rc-p0-b07"] ["l02-rc-p1-b07"] ["l02-rc-p2-b07"] ["l02-rc-p3-b07"]
+                               ["l02-rc-p0-b0b"] ["l02-rc-p1-b0b"] ["l02-rc-p2-b0b"] ["l02-rc-p3-b0b"]
+                               ["l02-rc-p0-b0f"] ["l02-rc-p1-b0f"] ["l02-rc-p2-b0f"] ["l02-rc-p3-b0f"]
+                               ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2] ["l01-rc-b03" 2]
+                               ["l01-rc-b04" 2] ["l01-rc-b05" 2] ["l01-rc-b06" 2] ["l01-rc-b07" 2]
+                               ["l01-rc-b08" 2] ["l01-rc-b09" 2] ["l01-rc-b0a" 2] ["l01-rc-b0b" 2]
+                               ["l01-rc-b0c" 2] ["l01-rc-b0d" 2] ["l01-rc-b0e" 2] ["l01-rc-b0f" 2]
+                               ;; superseded ones
+                               ["l01-rc-b00" 1] ["l01-rc-b02" 1] ["l01-rc-b09" 1] ["l01-rc-b0d" 1])
+                    (filter-result 3 [0])
+                    set)))
+          "L2 -> L3 current recency")
 
     (t/testing "L2H -> L3H"
       (t/is (= #{}
@@ -299,8 +336,9 @@
                    (job "l04-rc-p032-b13f" l3-keys [0 3 2])
                    (job "l04-rc-p033-b13f" l3-keys [0 3 3])}
 
-                 (calc-jobs ["l03-rc-p02-b0f"]
-                            ["l03-rc-p03-b0f"] ["l03-rc-p03-b11f"] ["l03-rc-p03-b12f"] ["l03-rc-p03-b13f"])))))
+                 (->> (apply calc-jobs (level-seq 3 64))
+                      (filter-result 4 [0 3])
+                      set)))))
 
     (t/testing "L3H -> L4H"
       (let [in-keys ["l03-r20200101-p0-b03" "l03-r20200101-p0-b07" "l03-r20200101-p0-b0b" "l03-r20200101-p0-b0f"]]
@@ -308,13 +346,9 @@
                    (job "l04-r20200101-p01-b0f" in-keys [0 1])
                    (job "l04-r20200101-p02-b0f" in-keys [0 2])
                    (job "l04-r20200101-p03-b0f" in-keys [0 3])}
-                 (calc-jobs ["l03-r20200101-p0-b03"] ["l03-r20200101-p0-b07"] ["l03-r20200101-p0-b0b"] ["l03-r20200101-p0-b0f"]
-
-                            ;; only 3 tries
-                            ["l03-r20200101-p1-b03"] ["l03-r20200101-p1-b07"] ["l03-r20200101-p1-b0b"]
-
-                            ;; N.B. different recency in the first one
-                            ["l03-r20200102-p2-b03"] ["l03-r20200101-p2-b07"] ["l03-r20200101-p2-b0b"] ["l03-r20200101-p2-b0f"])))))))
+                 (->> (apply calc-jobs (level-seq 3 16 #xt/date "2020-01-01"))
+                      (filter-result 4 [0])
+                      set)))))))
 
 
 (defn table-path ^java.nio.file.Path [node table]
