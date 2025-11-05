@@ -17,12 +17,14 @@
 
 (t/use-fixtures :once tu/with-allocator)
 
+(def ^:private as-of-time (time/->instant #inst "2000"))
+
 (defn- apply-msgs [& trie-keys]
   (-> trie-keys
       (->> (transduce (map (fn [[trie-key size]]
                              (-> (trie/parse-trie-key trie-key)
                                  (assoc :data-file-size (or size -1)))))
-                      (completing (partial cat/apply-trie-notification {:file-size-target 20}))
+                      (completing #(cat/apply-trie-notification {:file-size-target 20} %1 %2 as-of-time))
                       {}))))
 
 (defn- curr-tries [& trie-keys]
@@ -195,6 +197,18 @@
   ;; L0 TriesAdded message arrives after the L1 compaction
   (t/is (= #{"l01-rc-b00"}
            (curr-tries ["l00-rc-b00" 10] ["l01-rc-b00" 10] ["l00-rc-b00" 00]))))
+
+#_
+(t/deftest keep-latest-live-block-idx-around-4946
+  (let [cat (apply-msgs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10]
+                        ["l01-rc-b00" 20] ["l01-rc-b01" 20] ["l01-rc-b02" 20] ["l01-rc-b03" 20]
+                        ["l02-rc-p0-b03" 20] ["l02-rc-p1-b03" 20] ["l02-rc-p2-b03" 20] ["l02-rc-p3-b03" 20])]
+
+    (t/is (true? (cat/stale-msg? cat (trie/parse-trie-key "l01-rc-b00"))))
+
+    (let [new-cat (cat/remove-garbage cat (map :trie-key (cat/garbage-tries cat as-of-time)))]
+
+      (t/is (true? (cat/stale-msg? new-cat (trie/parse-trie-key "l01-rc-b00")))))))
 
 (t/deftest test-selects-l2-tries
   (t/is (= #{"l01-rc-b00"}
