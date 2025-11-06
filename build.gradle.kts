@@ -29,6 +29,7 @@ plugins {
 
 val defaultJvmArgs = listOf(
     "--add-opens=java.base/java.nio=ALL-UNNAMED",
+    "--enable-native-access=ALL-UNNAMED",
     "-Dio.netty.tryReflectionSetAccessible=true",
     "-Djdk.attach.allowAttachSelf",
     "-Darrow.memory.debug.allocator=false",
