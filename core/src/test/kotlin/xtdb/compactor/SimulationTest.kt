@@ -8,8 +8,8 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
-import org.junit.jupiter.api.extension.TestExecutionExceptionHandler
-import xtdb.DeterministicDispatcher
+import xtdb.SimulationTestBase
+import xtdb.WithSeed
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.api.storage.Storage
@@ -203,18 +203,6 @@ private fun buildTrieDetails(tableName: String, trieKey: String, dataFileSize: L
         .setDataFileSize(dataFileSize)
         .build()
 
-class SeedExceptionWrapper : TestExecutionExceptionHandler {
-    override fun handleTestExecutionException(context: ExtensionContext, throwable: Throwable) {
-        val testInstance = context.testInstance.orElse(null)
-        if (testInstance is SimulationTest) {
-            val seed = testInstance.currentSeed
-            // Wrap and rethrow with added context
-            LOGGER.warn(throwable, "Test failed with seed: ${testInstance.currentSeed}")
-            throw AssertionError("Test threw an exception (seed=$seed)", throwable)
-        }
-    }
-}
-
 // Settings used by all tests in this class
 private const val logLevel = "DEBUG"
 private const val testIterations = 10
@@ -223,25 +211,6 @@ private const val testIterations = 10
 private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
 private val createJobCalculator = requiringResolve("xtdb.compactor/->JobCalculator")
 private val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
-
-@Target(AnnotationTarget.FUNCTION)
-@Retention(AnnotationRetention.RUNTIME)
-annotation class WithSeed(val seed: Int)
-
-class SeedExtension : BeforeEachCallback {
-    override fun beforeEach(context: ExtensionContext) {
-        val annotation = context.requiredTestMethod
-            .getAnnotation(WithSeed::class.java)
-
-        annotation?.let { withSeed ->
-            context.requiredTestInstance.let { testInstance ->
-                if (testInstance is SimulationTest) {
-                    testInstance.explicitSeed = withSeed.seed
-                }
-            }
-        }
-    }
-}
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)
@@ -277,23 +246,19 @@ private val L0TrieKeys = sequence {
     }
 }
 
-@ExtendWith(SeedExceptionWrapper::class, SeedExtension::class, DriverConfigExtension::class)
-class SimulationTest {
-    var currentSeed: Int = 0
-    var explicitSeed: Int? = null
+@ExtendWith(DriverConfigExtension::class)
+class SimulationTest : SimulationTestBase() {
     var driverConfig: DriverConfig = DriverConfig()
     private lateinit var mockDriver: MockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
     private lateinit var compactor: Compactor.Impl
     private lateinit var trieCatalog: TrieCatalog
     private lateinit var db: MockDb
-    private lateinit var dispatcher: CoroutineDispatcher
 
     @BeforeEach
-    fun setUp() {
+    override fun setUpSimulation() {
+        super.setUpSimulation()
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
-        currentSeed = explicitSeed ?: Random.nextInt()
-        dispatcher = DeterministicDispatcher(currentSeed)
         mockDriver = MockDriver(dispatcher, currentSeed, driverConfig)
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
         compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2, dispatcher)
@@ -302,9 +267,9 @@ class SimulationTest {
     }
 
     @AfterEach
-    fun tearDown() {
+    override fun tearDownSimulation() {
         driverConfig = DriverConfig()
-        explicitSeed = null
+        super.tearDownSimulation()
     }
 
     private fun addTries(tableRef: TableRef, tries: List<TrieDetails>) {
