@@ -12,8 +12,11 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.ForeignAllocation
 import xtdb.cache.MemoryCache.PathSlice
 import xtdb.util.closeOnCatch
+import xtdb.util.debug
+import xtdb.util.logger
 import xtdb.util.maxDirectMemory
 import xtdb.util.openReadableChannel
+import xtdb.util.trace
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.nio.channels.ClosedByInterruptException
@@ -24,7 +27,7 @@ import java.util.concurrent.Executors
 import kotlin.io.path.fileSize
 
 private typealias FetchReqs = MutableMap<PathSlice, MutableSet<CompletableDeferred<ArrowBuf>>>
-
+private val LOGGER = MemoryCache::class.logger
 /**
  * NOTE: the allocation count metrics in the provided `allocator` WILL NOT be accurate
  *   - we allocate a buffer in here for every _usage_, and don't take shared memory into account.
@@ -101,13 +104,16 @@ class MemoryCache @JvmOverloads internal constructor(
             val openSlice = getOpenSlice(pathSlice)
 
             if (openSlice != null) {
+                LOGGER.trace("FetchReq: Fast path cache hit for $pathSlice")
                 res.complete(openSlice)
             } else {
                 val path = pathSlice.path
                 fetchReqs.compute(pathSlice) { _, awaiters ->
                     if (awaiters != null) {
+                        LOGGER.trace("FetchReq: Fetch in progress for $pathSlice - adding to ${awaiters.size} awaiter(s)")
                         awaiters.also { it + res }
                     } else {
+                        LOGGER.trace("FetchReq: Starting new fetch for $pathSlice")
                         val res = mutableSetOf(res)
                         scope.launch {
                             val (localPath, onEvict) = fetch(path)
@@ -130,6 +136,7 @@ class MemoryCache @JvmOverloads internal constructor(
     ) : FetchChEvent {
         override fun handle(fetchReqs: FetchReqs) {
             val reqs = fetchReqs.remove(pathSlice)
+            LOGGER.trace("FetchDone: Completing $pathSlice for ${reqs?.size ?: 0} awaiter(s)")
 
             try {
                 val buf = try {
@@ -190,9 +197,13 @@ class MemoryCache @JvmOverloads internal constructor(
 
     @Suppress("NAME_SHADOWING")
     suspend fun get(key: Path, slice: Slice? = null, fetch: Fetch): ArrowBuf {
+        LOGGER.debug("Sending get for $key / $slice...")
         val pathSlice = PathSlice(key, slice)
 
-        getOpenSlice(pathSlice)?.let { return it }
+        getOpenSlice(pathSlice)?.let {
+            LOGGER.trace("get: Fast path cache hit for $pathSlice")
+            return it
+        }
 
         val res = CompletableDeferred<ArrowBuf>()
         fetchCh.send(FetchReq(pathSlice, fetch, res))
