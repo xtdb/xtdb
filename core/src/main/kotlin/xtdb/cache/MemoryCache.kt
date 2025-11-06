@@ -23,7 +23,6 @@ import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
 import kotlin.io.path.fileSize
 
 private typealias FetchReqs = MutableMap<PathSlice, MutableSet<CompletableDeferred<ArrowBuf>>>
@@ -115,9 +114,10 @@ class MemoryCache @JvmOverloads internal constructor(
                     } else {
                         LOGGER.trace("FetchReq: Starting new fetch for $pathSlice")
                         val res = mutableSetOf(res)
-                        scope.launch {
+                        scope.launch(CoroutineName("MemoryCache-Fetch-$pathSlice")) {
                             val (localPath, onEvict) = fetch(path)
                             try {
+                                LOGGER.trace("FetchReq: Fetched $pathSlice to $localPath, sending FetchDone message...")
                                 fetchCh.send(FetchDone(pathSlice, localPath, onEvict))
                             } catch (t: Throwable) {
                                 onEvict?.close()
@@ -166,6 +166,7 @@ class MemoryCache @JvmOverloads internal constructor(
                     openSlices[pathSlice] = buf
                     reqs?.forEach {
                         buf.referenceManager.retain()
+                        LOGGER.trace("FetchDone: Completing awaiter for $pathSlice")
                         if (!it.complete(buf)) buf.referenceManager.release()
                     }
                     buf.referenceManager.release()
@@ -182,7 +183,7 @@ class MemoryCache @JvmOverloads internal constructor(
     private val fetchCh = Channel<FetchChEvent>()
 
     init {
-        CoroutineScope(fetchParentJob + Executors.newVirtualThreadPerTaskExecutor().asCoroutineDispatcher()).launch {
+        CoroutineScope(fetchParentJob + dispatcher + CoroutineName("MemoryCache FetchLoop")).launch {
             val fetchReqs: FetchReqs = mutableMapOf()
 
             try {
