@@ -16,7 +16,8 @@
    [{:trie-key "l00-rc-b01", :data-file-size 2798, :trie-metadata nil}
     {:trie-key "l00-rc-b00",
      :data-file-size 2798,
-     :trie-metadata nil}]}
+     :trie-metadata nil}],
+   :max-block-idx 1}
   {:level 1,
    :part [],
    :tries
@@ -33,4 +34,5 @@
       :iid-bloom [-2083310006 10]}}
     {:trie-key "l01-rc-b00",
      :data-file-size 2806,
-     :trie-metadata nil}]}]}
+     :trie-metadata nil}],
+   :max-block-idx 1}]}
