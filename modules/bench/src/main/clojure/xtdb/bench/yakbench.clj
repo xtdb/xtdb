@@ -394,16 +394,15 @@
   {:title "Yakbench"
    :seed seed
    :parameters {:scale-factor scale-factor :seed seed :no-load? no-load?}
-   :->state #(do {:!state (atom {})
-                  :!srandom (clojure.test.check.random/make-random seed)})
+   :->state #(do {:!state (atom {})})
    :tasks [(when-not no-load?
              {:t :do
               :stage :ingest
               :tasks [{:t :call
                        :stage :submit-docs
-                       :f (fn [{:keys [node random !srandom]}]
+                       :f (fn [{:keys [node random]}]
                             (with-open [conn (get-conn node)]
-                              (yakbench/load-data! conn !srandom random scale-factor)))}
+                              (yakbench/load-data! conn random scale-factor)))}
                       {:t :call
                        :stage :await-transactions
                        :f (fn [{:keys [node]}] (b/sync-node node))}
@@ -458,9 +457,7 @@
 
 (comment
   (try
-    (let [seed 0
-          random (java.util.Random. seed)
-          srandom (clojure.test.check.random/make-random seed)
+    (let [random (java.util.Random. 0)
           scale 1.0
           dir (util/->path "/tmp/yakbench")
           clear-dir (fn [^java.nio.file.Path path]
@@ -472,7 +469,7 @@
       (with-open [node (tu/->local-node {:node-dir dir})
                   conn (get-conn node)]
         (println "Load data")
-        (yakbench/load-data! node srandom random scale)
+        (yakbench/load-data! node random scale)
         (println "Flush block")
         (b/sync-node node)
         (tu/flush-block! node)

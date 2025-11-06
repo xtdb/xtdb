@@ -8,6 +8,12 @@
   ([^java.util.Random random bound]
    (.nextInt random (min (max 1 bound) Integer/MAX_VALUE))))
 
+(defn next-long
+  ([^java.util.Random random]
+   (next-long random Long/MAX_VALUE))
+  ([^java.util.Random random bound]
+   (.nextLong random (min (max 1 bound) Long/MAX_VALUE))))
+
 (defn uniform-nth
   [^java.util.Random random coll]
   (let [c (count coll)]

@@ -20,3 +20,46 @@
         p90 (if (pos? n) (sorted (idx 0.90)) 0)
         p99 (if (pos? n) (sorted (idx 0.99)) 0)]
     {:mean mean :median median :p90 p90 :p99 p99 :min mn :max mx}))
+
+(defn draw-lognormal
+  "Draw a log-normal random variable using the underlying normal distribution
+  parameters `mu` (mean) and `sigma` (standard deviation)."
+  ^double [^java.util.Random random mu sigma]
+  (Math/exp (+ mu (* sigma (.nextGaussian random)))))
+
+(defn draw-poisson
+  "Knuth's algorithm for small λ; Normal approximation for large λ.
+   Returns a non-negative long."
+  ^long [^java.util.Random random ^double lambda]
+  (cond
+    (<= lambda 0.0) 0
+    (<= lambda 50.0)
+    (let [L (Math/exp (- lambda))]
+      (loop [k 0, p 1.0]
+        (let [p (* p (.nextDouble random))]
+          (if (> p L)
+            (recur (inc k) p)
+            k))))
+    :else
+    (max 0 (long (Math/round (+ lambda (* (Math/sqrt lambda)
+                                          (.nextGaussian random))))))))
+
+(defn draw-lognormal-poisson
+  "Draw a Poisson count whose rate λ is sampled from a log-normal distribution
+  with the given mean and median.
+
+  For a log-normal distribution, median = exp(mu) and mean = exp(mu + σ²/2).
+  Rearranging gives us the standard deviation σ = sqrt(2 * log(mean / median)).
+
+  Takes an optional scale parameter to fit desired distribution"
+  ([random mean median]
+   (draw-lognormal-poisson random mean median 1.0))
+  ([random mean median scale]
+   (when-not (pos? median)
+     (throw (IllegalArgumentException. "median must be positive for log-normal sampling")))
+   (let [;; Calculate sigma from mean and median
+         sigma (Math/sqrt (* 2.0 (Math/log (/ (double mean) (double median)))))
+         ;; Calculate mu for the log-normal distribution s.t. E[λ]≈mean
+         mu (- (Math/log (max mean 1e-9)) (/ (* sigma sigma) 2.0))
+         lambda (draw-lognormal random mu sigma)]
+     (draw-poisson random (* scale lambda)))))

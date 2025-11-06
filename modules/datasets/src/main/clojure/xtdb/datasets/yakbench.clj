@@ -1,7 +1,6 @@
 (ns xtdb.datasets.yakbench
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [kixi.stats.distribution :refer [draw poisson log-normal]]
             [xtdb.api :as xt]
             [xtdb.bench.random :as random]
             [xtdb.bench.stats :as stats])
@@ -58,20 +57,6 @@
 (defn next-recent-instant [^java.util.Random random]
   (random/next-instant random 2020 2025))
 
-(defn draw-lognormal-poisson
-  "Draw a Poisson count whose rate λ is sampled from a log-normal distribution
-  with the given mean and median.
-
-  For a log-normal distribution, median = exp(mu) and mean = exp(mu + σ²/2).
-  Rearranging gives us the standard deviation σ = sqrt(2 * log(mean / median))."
-  [srandom mean median]
-  (let [;; Calculate sigma from mean and median
-        sigma (Math/sqrt (* 2.0 (Math/log (/ (double mean) (double median)))))
-        ;; Calculate mu for the log-normal distribution s.t. E[λ]≈mean
-        mu (- (Math/log (max mean 1e-9)) (/ (* sigma sigma) 2.0))
-        lambda (draw (log-normal {:mu mu :sd sigma}) srandom)]
-    (draw (poisson {:lambda lambda}) srandom)))
-
 (defn uuid-with-prefix
   "Match yakread behavior: take the first group (8 hex chars) from
   uuid-prefix and the remaining groups from uuid-rest."
@@ -85,7 +70,7 @@
 (defn gen-users
   "For users we add an extra :user/k field that is a poisson-distributed long.
   This is used to determine the number of items and subs a user has."
-  [srandom random n]
+  [random n]
   (vec
    (for [_ (range n)
          :let [email (next-email random)]]
@@ -98,7 +83,7 @@
       :user/digest-last-sent (when (random/chance? random 0.8) (next-recent-instant random))
       :user/suppressed-at (when (random/chance? random 0.05) (next-recent-instant random))
       :user/use-original-links (random/chance? random 0.5)
-      :user/k (draw-lognormal-poisson srandom (:mean user-items-stats) (:median user-items-stats))})))
+      :user/k (stats/draw-lognormal-poisson random (:mean user-items-stats) (:median user-items-stats))})))
 
 (defn gen-feeds
   [random n]
@@ -115,10 +100,11 @@
       :feed/failed-syncs (when (random/chance? random 0.1) (random/next-int random 1000))})))
 
 (defn gen-subs
-  [random users feeds]
+  [random users feeds n-subs]
   (let [feed-ids (mapv :xt/id feeds)
         n-feeds (count feed-ids)]
     (->> users
+         cycle
          (mapcat (fn [{user :xt/id
                        user-k :user/k}]
                    (let [k (min (long (* user-k 0.25)) n-feeds)]
@@ -132,44 +118,45 @@
                         :sub.feed/feed f
                         :sub.email/from (when (random/chance? random 0.2) (random/next-string random (+ 5 (random/next-int random 15))))
                         :sub.email/unsubscribed-at (when (random/chance? random 0.05) (random/next-instant random))}))))
+         (take n-subs)
          vec)))
 
 (defn gen-items
-  [srandom random feeds subs n-items]
+  [random feeds subs n-items]
   (let [subs-by-feed (->> subs (group-by :sub.feed/feed))
         langs ["EN" "ES" "DE" "FR" "IT" "PT" "PL" "NL"]
         cat-pool (vec (repeatedly 64 #(random/next-string random (+ 3 (random/next-int random 10)))))
         name-pool (vec (repeatedly 64 #(random/next-string random (+ 6 (random/next-int random 20)))))]
     (letfn [(items-for-feed [{feed-id :xt/id}]
-                            (let [subs* (get subs-by-feed feed-id)
-                                  sub-ids (when (seq subs*) (mapv :xt/id subs*))
-                                  sub-count (count sub-ids)
-                                  k (min (draw-lognormal-poisson srandom (:mean feed-items-stats) (:median feed-items-stats))
-                                         n-items)]
-                              (map (fn [i]
-                                     (let [raw-id (random/next-uuid random)
-                                           email-sub (when (and (pos? sub-count) (random/chance? random 0.2))
-                                                       (random/uniform-nth random sub-ids))
-                                           id (uuid-with-prefix feed-id raw-id)
-                                           categories (vec (repeatedly (random/next-int random 5) #(random/uniform-nth random cat-pool)))]
-                                       (cond-> {:xt/id id
-                                                :item.feed/feed feed-id
-                                                :item/title (str "Item " feed-id "-" i)
-                                                :item/excerpt (random/next-string random (+ 40 (random/next-int random 120)))
-                                                :item/published-at (next-recent-instant random)
-                                                :item/length (+ 100 (random/next-int random 2000))
-                                                :item/content-key (random/next-uuid random)
-                                                :item/lang (random/uniform-nth random langs)
-                                                :item/author-name (random/uniform-nth random name-pool)
-                                                :item/author-email (next-email random)
-                                                :item/author-url (str "https://example.com/author/" i)
-                                                :item/categories categories
-                                                :item/ingested-at (next-recent-instant random)
-                                                :item/url (random/next-string random (+ 10 (random/next-int random 50)))}
-                                         (random/chance? random 0.001) (assoc :item/doc-type :item/direct
-                                                                       :item.direct/candidate-status (random/weighted-nth random [0.956 0.035 0.008] [:approved :failed :ingest-failed]))
-                                         email-sub (assoc :item.email/sub email-sub))))
-                                   (range k))))]
+              (let [subs* (get subs-by-feed feed-id)
+                    sub-ids (when (seq subs*) (mapv :xt/id subs*))
+                    sub-count (count sub-ids)
+                    k (min (stats/draw-lognormal-poisson random (:mean feed-items-stats) (:median feed-items-stats))
+                           n-items)]
+                (map (fn [i]
+                       (let [raw-id (random/next-uuid random)
+                             email-sub (when (and (pos? sub-count) (random/chance? random 0.2))
+                                         (random/uniform-nth random sub-ids))
+                             id (uuid-with-prefix feed-id raw-id)
+                             categories (vec (repeatedly (random/next-int random 5) #(random/uniform-nth random cat-pool)))]
+                         (cond-> {:xt/id id
+                                  :item.feed/feed feed-id
+                                  :item/title (str "Item " feed-id "-" i)
+                                  :item/excerpt (random/next-string random (+ 40 (random/next-int random 120)))
+                                  :item/published-at (next-recent-instant random)
+                                  :item/length (+ 100 (random/next-int random 2000))
+                                  :item/content-key (random/next-uuid random)
+                                  :item/lang (random/uniform-nth random langs)
+                                  :item/author-name (random/uniform-nth random name-pool)
+                                  :item/author-email (next-email random)
+                                  :item/author-url (str "https://example.com/author/" i)
+                                  :item/categories categories
+                                  :item/ingested-at (next-recent-instant random)
+                                  :item/url (random/next-string random (+ 10 (random/next-int random 50)))}
+                           (random/chance? random 0.001) (assoc :item/doc-type :item/direct
+                                                                :item.direct/candidate-status (random/weighted-nth random [0.956 0.035 0.008] [:approved :failed :ingest-failed]))
+                           email-sub (assoc :item.email/sub email-sub))))
+                     (range k))))]
       (->> feeds
            cycle
            (mapcat items-for-feed)
@@ -177,10 +164,11 @@
            vec))))
 
 (defn gen-user-items
-  [random users items]
+  [random users items n-user-items]
   (let [item-ids (mapv :xt/id items)
         n-items (count item-ids)]
     (->> users
+         cycle
          (mapcat (fn [{user :xt/id
                        user-k :user/k}]
                    (let [k (min user-k n-items)
@@ -196,6 +184,7 @@
                          (random/chance? random 0.2) (assoc :user-item/favorited-at (next-recent-instant random))
                          (random/chance? random 0.1) (assoc :user-item/bookmarked-at (next-recent-instant random))
                          (random/chance? random 0.1) (assoc :user-item/skipped-at (next-recent-instant random)))))))
+         (take n-user-items)
          vec)))
 
 (defn gen-ads
@@ -279,19 +268,19 @@
 (defn generate-data
   "Generate synthetic data according to a scale factor and return a map of
    table keyword -> vector of docs"
-  [srandom random scale]
-  (let [{:keys [users feeds items ads ad-credits ad-clicks digests bulk-sends skips]} baseline-counts
-        users* (gen-users srandom random (stats/round-down (* users scale)))
+  [random scale]
+  (let [{:keys [users feeds subs items user-items ads ad-credits ad-clicks digests bulk-sends skips]} baseline-counts
+        users* (gen-users random (stats/round-down (* users scale)))
         feeds* (gen-feeds random (stats/round-down (* feeds scale)))
-        subs* (gen-subs random users* feeds*)
-        items* (gen-items srandom random feeds* subs* (stats/round-down (* items scale)))
+        subs* (gen-subs random users* feeds* (stats/round-down (* subs scale)))
+        items* (gen-items random feeds* subs* (stats/round-down (* items scale)))
         digests* (gen-digests random users* (stats/round-down (* digests scale)))
         ads* (gen-ads random users* (stats/round-down (* ads scale)))]
     {:users users*
      :feeds feeds*
      :subs subs*
      :items items*
-     :user_items (gen-user-items random users* items*)
+     :user_items (gen-user-items random users* items* (stats/round-down (* user-items scale)))
      :ads ads*
      :ad_credits (gen-ad-credits random ads* (stats/round-down (* ad-credits scale)))
      :ad_clicks (gen-ad-clicks random ads* users* (stats/round-down (* ad-clicks scale)))
@@ -315,7 +304,7 @@
   "Load data in chunks if scale factor is greater than 0.1 under the assumption
   that the whole dataset is roughly the same as an aggregation of chunk sized
   datasets"
-  [conn srandom random scale-factor]
+  [conn random scale-factor]
   (let [scale (Double/parseDouble (str scale-factor))]
     (when (pos? scale)
       (let [chunk 0.1
@@ -329,5 +318,5 @@
             total (count v-sub-scales)]
         (doseq [[idx sub-scale] (map-indexed vector v-sub-scales)]
           (log/debug (format "Loading chunk %d/%d (scale %.3f)" (inc idx) total sub-scale))
-          (let [docs (generate-data srandom random sub-scale)]
+          (let [docs (generate-data random sub-scale)]
             (load-generated! conn docs)))))))
