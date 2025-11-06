@@ -89,7 +89,6 @@ class MemoryCacheTest {
                     assertEquals(MemoryCache.Stats(50, 200), cache.stats0)
                 }
 
-                Thread.sleep(100)
                 assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
             }
 
@@ -107,7 +106,6 @@ class MemoryCacheTest {
                     assertEquals(80, stats.freeBytes)
                 }
 
-                Thread.sleep(100)
                 val stats = cache.stats0
                 assertEquals(0, stats.usedBytes)
                 assertEquals(250, stats.freeBytes)
