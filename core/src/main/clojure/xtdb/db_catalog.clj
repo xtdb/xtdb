@@ -1,5 +1,6 @@
 (ns xtdb.db-catalog
-  (:require [integrant.core :as ig]
+  (:require [clojure.tools.logging :as log]
+            [integrant.core :as ig]
             [xtdb.error :as err]
             [xtdb.util :as util])
   (:import [java.lang AutoCloseable]
@@ -70,6 +71,11 @@
                    ig/expand
                    ig/init)
                (catch clojure.lang.ExceptionInfo e
+                 (log/debug "Failed to initialize database system" {:db-name db-name, :exception (class e)})
+                 (when-let [cause (.getCause e)]
+                   (log/debug "Cause:" {:class (class cause), :message (.getMessage cause)}))
+                 (when-let [data (ex-data e)]
+                   (log/debug "Ex-data:" data))
                  (try
                    (ig/halt! (:system (ex-data e)))
                    (catch Throwable t
@@ -82,6 +88,7 @@
                (.withComponents (:xtdb.log/processor sys)
                                 (:xtdb.compactor/for-db sys)))
            (catch Throwable t
+             (log/debug "Failed to initialize database components" {:db-name db-name, :exception (class t), :message (.getMessage t)})
              (ig/halt! sys)
              (throw t)))
      :sys sys}))
@@ -103,6 +110,14 @@
                      (util/with-close-on-catch [db (try
                                                      (open-db db-name base (or db-config (Database$Config.)))
                                                      (catch Throwable t
+                                                       (log/debug "Failed to open database"
+                                                                 {:db-name db-name
+                                                                  :exception (class t)
+                                                                  :message (.getMessage t)})
+                                                       (when-let [cause (.getCause t)]
+                                                         (log/debug "Cause:" {:class (class cause), :message (.getMessage cause)}))
+                                                       (when-let [root-cause (and (.getCause t) (.getCause (.getCause t)))]
+                                                         (log/debug "Root cause:" {:class (class root-cause), :message (.getMessage root-cause)}))
                                                        (throw (err/incorrect ::invalid-db-config "Failed to open database"
                                                                              {::err/cause t}))))]
                        (.put !dbs db-name db)
