@@ -15,11 +15,12 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.Duration
 
-private class IntervalValueReader(private val vec: VectorReader, private val pos: VectorPosition) : ValueReader {
-    override val isNull: Boolean get() = vec.isNull(pos.position)
+private class IntervalValueReader(private val vec: VectorReader) : ValueReader {
+    override var pos = 0
+    override val isNull: Boolean get() = vec.isNull(pos)
 
     override fun readObject(): Any? =
-        vec.getObject(pos.position)
+        vec.getObject(pos)
             ?.let { it as Interval }
             ?.let { PeriodDuration(it.period, it.duration) }
 }
@@ -51,7 +52,7 @@ class IntervalYearMonthVector private constructor(
         }
     }
 
-    override fun valueReader(pos: VectorPosition): ValueReader = IntervalValueReader(this, pos)
+    override fun valueReader(): ValueReader = IntervalValueReader(this)
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
@@ -108,7 +109,7 @@ class IntervalDayTimeVector private constructor(
             else -> throw InvalidWriteObjectException(fieldType, value)
         }
 
-    override fun valueReader(pos: VectorPosition): ValueReader = IntervalValueReader(this, pos)
+    override fun valueReader(): ValueReader = IntervalValueReader(this)
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
@@ -174,7 +175,7 @@ class IntervalMonthDayNanoVector private constructor(
             else -> throw InvalidWriteObjectException(fieldType, value)
         }
 
-    override fun valueReader(pos: VectorPosition): ValueReader = IntervalValueReader(this, pos)
+    override fun valueReader(): ValueReader = IntervalValueReader(this)
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 

@@ -98,13 +98,16 @@ class DenseUnionVector private constructor(
             return RowCopier { srcIdx -> innerCopier.copyRow(getOffset(srcIdx)) }
         }
 
-        override fun valueReader(pos: VectorPosition) = inner.valueReader(object : VectorPosition {
-            override var position: Int
-                get() = getOffset(pos.position)
-                set(_) {
-                    throw UnsupportedOperationException("setPosition not supported on LegVector")
-                }
-        })
+        override fun valueReader(): ValueReader {
+            val inner = inner.valueReader()
+            return object : ValueReader by inner {
+                override var pos: Int = -1
+                    set(value) {
+                        field = value
+                        inner.pos = getOffset(value)
+                    }
+            }
+        }
 
         override fun select(idxs: IntArray): VectorReader =
             inner.select(IntArray(idxs.size) { selIdx -> getOffset(idxs[selIdx]) })
@@ -188,6 +191,7 @@ class DenseUnionVector private constructor(
         override fun getMapValues(fieldType: FieldType) = inner.getMapValues(fieldType)
 
         override fun openSlice(al: BufferAllocator) = reader.openSlice(al)
+        override fun valueReader() = reader.valueReader()
 
         fun rowCopierFrom(src: VectorReader): RowCopier {
             val innerCopier = src.rowCopier(inner)
@@ -282,26 +286,32 @@ class DenseUnionVector private constructor(
 
     private fun legWriter(fieldType: FieldType) = vectorFor(fieldType.type.toLeg(), fieldType)
 
-    override fun valueReader(pos: VectorPosition): ValueReader {
+    override fun valueReader(): ValueReader {
         val legReaders = legVectors
             .mapIndexed { typeId, leg -> LegVector(typeId.toByte(), leg) }
-            .associate { it.name to it.valueReader(pos) }
+            .associate { it.name to it.valueReader() }
 
         return object : ValueReader {
-            override val leg get() = this@DenseUnionVector.getLeg(pos.position)
+            lateinit var legReader: ValueReader
+            override var leg: String? = null
 
-            private val legReader get() = legReaders[leg]
+            override var pos = -1
+                set(value) {
+                    field = value
+                    leg = getLeg(value)
+                    legReader = legReaders[leg]!!.also { it.pos = value }
+                }
 
-            override val isNull: Boolean get() = legReader?.isNull ?: true
-            override fun readBoolean() = legReader!!.readBoolean()
-            override fun readByte() = legReader!!.readByte()
-            override fun readShort() = legReader!!.readShort()
-            override fun readInt() = legReader!!.readInt()
-            override fun readLong() = legReader!!.readLong()
-            override fun readFloat() = legReader!!.readFloat()
-            override fun readDouble() = legReader!!.readDouble()
-            override fun readBytes() = legReader!!.readBytes()
-            override fun readObject() = legReader?.readObject()
+            override val isNull: Boolean get() = legReader.isNull
+            override fun readBoolean() = legReader.readBoolean()
+            override fun readByte() = legReader.readByte()
+            override fun readShort() = legReader.readShort()
+            override fun readInt() = legReader.readInt()
+            override fun readLong() = legReader.readLong()
+            override fun readFloat() = legReader.readFloat()
+            override fun readDouble() = legReader.readDouble()
+            override fun readBytes() = legReader.readBytes()
+            override fun readObject() = legReader.readObject()
         }
     }
 

@@ -22,9 +22,10 @@ class UriVector(override val inner: Utf8Vector) : ExtensionVector(), MetadataFla
 
     override val metadataFlavours get() = listOf(this)
 
-    override fun valueReader(pos: VectorPosition) = object : ValueReader {
-        override val isNull: Boolean get() = this@UriVector.isNull(pos.position)
-        override fun readObject(): Any? = getObject(pos.position)
+    override fun valueReader() = object : ValueReader {
+        override var pos = 0
+        override val isNull: Boolean get() = this@UriVector.isNull(pos)
+        override fun readObject(): Any? = getObject(pos)
     }
 
     override fun openSlice(al: BufferAllocator) = UriVector(inner.openSlice(al))

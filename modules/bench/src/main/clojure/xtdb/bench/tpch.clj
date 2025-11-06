@@ -66,7 +66,7 @@
            (queries-stage :hot-queries)]})
 
 (t/deftest ^:bench tpch-benchmark
-  (binding [*qs* #{5}]
+  (binding [*qs* #{1}]
     (-> (b/->benchmark :tpch
                        {:scale-factor 1
                         :no-load? true

@@ -181,23 +181,22 @@ class ListVector private constructor(
             valueCount
         )
 
-    override fun valueReader(pos: VectorPosition): ValueReader {
-        val elPos = VectorPosition.build()
-        val elValueReader = elVector.valueReader(elPos)
+    override fun valueReader() = object : ValueReader {
+        override var pos = 0
+
+        val elValueReader = elVector.valueReader()
 
         val listValReader = object : ListValueReader {
-            override fun size(): Int = getListCount(pos.position)
+            override fun size(): Int = getListCount(pos)
 
             override fun nth(idx: Int): ValueReader {
-                elPos.position = getListStartIndex(pos.position) + idx
+                elValueReader.pos = getListStartIndex(pos) + idx
                 return elValueReader
             }
         }
 
-        return object : ValueReader {
-            override val isNull get() = this@ListVector.isNull(pos.position)
-            override fun readObject() = listValReader
-        }
+        override val isNull get() = this@ListVector.isNull(pos)
+        override fun readObject() = listValReader
     }
 
     override fun clear() {

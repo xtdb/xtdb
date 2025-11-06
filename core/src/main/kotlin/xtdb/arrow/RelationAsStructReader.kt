@@ -35,8 +35,8 @@ class RelationAsStructReader(
         }
     }
 
-    override fun valueReader(pos: VectorPosition): ValueReader {
-        val rdrs = rel.vectors.associate { it.name to it.valueReader(pos) }
+    override fun valueReader(): ValueReader {
+        val rdrs = rel.vectors.associate { it.name to it.valueReader() }
 
         return object : ValueReader {
             override val isNull get() = false

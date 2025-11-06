@@ -8,7 +8,6 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang IPersistentMap Keyword MapEntry)
            (java.lang NumberFormatException)
@@ -21,7 +20,7 @@
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.arrow ListValueReader Relation RelationReader ValueBox ValueReader Vector VectorPosition VectorReader)
+           (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorReader)
            (xtdb.operator ProjectionSpec SelectionSpec)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
@@ -498,20 +497,18 @@
                                    {:keys [var->col-type extract-vecs-from-rel?]
                                     :or {extract-vecs-from-rel? true}}]
   ;; NOTE we now get the widest var-type in the expr itself, but don't use it here (yet? at all?)
-  (let [vpos-sym (gensym 'vpos)
-        col-type (or (get var->col-type variable)
+  (let [col-type (or (get var->col-type variable)
                      (throw (AssertionError. (str "unknown variable: " variable))))
         var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))]
 
     ;; NOTE: when used from metadata exprs, incoming vectors might not exist
     {:return-type col-type
-     :batch-bindings [[vpos-sym `(VectorPosition/build)]
-                      (if (and extract-vecs-from-rel? extract-vec-from-rel?)
-                        [var-rdr-sym `(.valueReader (.get ~rel ~(str variable)) ~vpos-sym)]
-                        [var-rdr-sym `(some-> ~variable (.valueReader ~vpos-sym))])]
+     :batch-bindings [(if (and extract-vecs-from-rel? extract-vec-from-rel?)
+                        [var-rdr-sym `(.valueReader (.get ~rel ~(str variable)))]
+                        [var-rdr-sym `(some-> ~variable (.valueReader))])]
      :continue (fn [f]
                  `(do
-                    (.setPosition ~vpos-sym ~idx)
+                    (.setPos ~var-rdr-sym ~idx)
                     ~(continue-read f col-type var-rdr-sym)))}))
 
 (defmethod codegen-expr :param [{:keys [param]} {:keys [param-types]}]

@@ -44,21 +44,17 @@ class SingletonListReader(override val name: String, private val elReader: Vecto
         return hash
     }
 
-    override fun valueReader(pos: VectorPosition): ValueReader {
-        val elPos = VectorPosition.build()
-        val elValueReader = elReader.valueReader(elPos)
+    override fun valueReader() = object : ValueReader {
+        val startIdx = getListStartIndex(0)
+        val valueCount = getListCount(0)
+        val elValueReader = elReader.valueReader()
 
-        return object : ValueReader {
-            val startIdx = getListStartIndex(pos.position)
-            val valueCount = getListCount(pos.position)
+        override fun readObject() = object : ListValueReader {
+            override fun size() = valueCount
 
-            override fun readObject() = object : ListValueReader {
-                override fun size() = valueCount
-
-                override fun nth(idx: Int): ValueReader {
-                    elPos.position = startIdx + idx
-                    return elValueReader
-                }
+            override fun nth(idx: Int): ValueReader {
+                elValueReader.pos = startIdx + idx
+                return elValueReader
             }
         }
     }

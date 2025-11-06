@@ -142,26 +142,37 @@ class ConcatVector private constructor(
         }
     }
 
-    override fun valueReader(pos: VectorPosition): ValueReader {
-        val valueReaders = readers.map { it.valueReader(pos) }
+    override fun valueReader(): ValueReader = object : ValueReader {
+        val valueReaders = readers.map { it.valueReader() }
+        lateinit var valueReader: ValueReader
+        var previousStartOffset = -1
+        var previousEndOffset = -1
 
-        return object : ValueReader {
-            private fun valueReader(): ValueReader = valueReaders[readerIdx(pos.position)]
+        override var pos = -1
+            set(value) {
+                field = value
+                if (value !in previousStartOffset..<previousEndOffset) {
+                    val readerIdx = readerIdx(value)
+                    valueReader = valueReaders[readerIdx]
+                    previousStartOffset = offsets[readerIdx]
+                    previousEndOffset = offsets[readerIdx + 1]
+                }
+                valueReader.pos = value
+            }
 
-            override val leg: String? get() = getLeg(pos.position)
+        override val leg: String? get() = getLeg(pos)
 
-            override val isNull: Boolean get() = valueReader().isNull
+        override val isNull: Boolean get() = valueReader.isNull
 
-            override fun readBoolean(): Boolean = valueReader().readBoolean()
-            override fun readByte(): Byte = valueReader().readByte()
-            override fun readShort(): Short = valueReader().readShort()
-            override fun readInt(): Int = valueReader().readInt()
-            override fun readLong(): Long = valueReader().readLong()
-            override fun readFloat(): Float = valueReader().readFloat()
-            override fun readDouble(): Double = valueReader().readDouble()
-            override fun readBytes(): ByteBuffer = valueReader().readBytes()
-            override fun readObject(): Any? = valueReader().readObject()
-        }
+        override fun readBoolean(): Boolean = valueReader.readBoolean()
+        override fun readByte(): Byte = valueReader.readByte()
+        override fun readShort(): Short = valueReader.readShort()
+        override fun readInt(): Int = valueReader.readInt()
+        override fun readLong(): Long = valueReader.readLong()
+        override fun readFloat(): Float = valueReader.readFloat()
+        override fun readDouble(): Double = valueReader.readDouble()
+        override fun readBytes(): ByteBuffer = valueReader.readBytes()
+        override fun readObject(): Any? = valueReader.readObject()
     }
 
     override fun openSlice(al: BufferAllocator): VectorReader =

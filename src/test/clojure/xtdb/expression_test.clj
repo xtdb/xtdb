@@ -1164,7 +1164,6 @@
           :when (not (and a b c d))]
     (t/is (nil? (project1 '(overlay a b c d) {:a (some-> a byte-array), :b (some-> b byte-array), :c c, :d d})))))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec binary-overlay-is-equiv-to-str-overlay-on-ascii-prop
   (tcp/for-all [[s1 s2 i len] (overlay-args-gen tcg/string-ascii)]
     (= (project1 '(overlay a b c d) {:a s1, :b s2, :c i, :d len})
@@ -1174,13 +1173,11 @@
                                                                   :d len}))
                 "ascii"))))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec overlay-len-default-is-len-of-placing-prop
   (tcp/for-all [[s1 s2 i] (overlay-args-gen tcg/string)]
     (= (project1 '(overlay a b c d) {:a s1, :b s2, :c i, :d (project1 '(character-length a) {:a s2})})
        (project1 '(overlay a b c (default-overlay-length b)) {:a s1, :b s2, :c i}))))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec binary-overlay-len-default-is-len-of-placing-prop
   (tcp/for-all [[s1 s2 i] (overlay-args-gen tcg/bytes)]
     (= (util/->clj (project1 '(overlay a b c d) {:a s1, :b s2, :c i, :d (project1 '(octet-length a) {:a s2})}))

@@ -127,14 +127,18 @@ class StructVector private constructor(
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
-    override fun valueReader(pos: VectorPosition): ValueReader {
-        val readers = childWriters.mapValues { it.value.valueReader(pos) }
+    override fun valueReader() = object : ValueReader {
+        val readers = childWriters.mapValues { it.value.valueReader() }
 
-        return object : ValueReader {
-            override val isNull get() = this@StructVector.isNull(pos.position)
+        override var pos = 0
+            set(value) {
+                field = value
+                readers.forEach { it.value.pos = value }
+            }
 
-            override fun readObject() = if (isNull) null else readers
-        }
+        override val isNull get() = this@StructVector.isNull(pos)
+
+        override fun readObject() = if (isNull) null else readers
     }
 
     override fun hashCode0(idx: Int, hasher: Hasher) =

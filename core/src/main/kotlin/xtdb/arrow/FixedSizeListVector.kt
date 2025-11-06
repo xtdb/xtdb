@@ -86,23 +86,22 @@ class FixedSizeListVector private constructor(
         writeNotNull()
     }
 
-    override fun valueReader(pos: VectorPosition): ValueReader {
-        val elPos = VectorPosition.build()
-        val elValueReader = elVector.valueReader(elPos)
+    override fun valueReader(): ValueReader = object : ValueReader {
+        override var pos = 0
+
+        val elValueReader = elVector.valueReader()
 
         val listValReader = object : ListValueReader {
             override fun size(): Int = listSize
 
             override fun nth(idx: Int): ValueReader {
-                elPos.position = getListStartIndex(pos.position) + idx
+                elValueReader.pos = getListStartIndex(pos) + idx
                 return elValueReader
             }
         }
 
-        return object : ValueReader {
-            override val isNull get() = this@FixedSizeListVector.isNull(pos.position)
-            override fun readObject() = listValReader
-        }
+        override val isNull get() = this@FixedSizeListVector.isNull(pos)
+        override fun readObject() = listValReader
     }
 
     override val metadataFlavours get() = listOf(this)

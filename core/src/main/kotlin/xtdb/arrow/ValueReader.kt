@@ -7,6 +7,10 @@ interface ValueReader {
 
     val isNull: Boolean get() = unsupported("isNull")
 
+    var pos: Int
+        get() = unsupported("getPosition")
+        set(_) = unsupported("setPosition")
+
     fun readBoolean(): Boolean = unsupported("readBoolean")
     fun readByte(): Byte = unsupported("readByte")
     fun readShort(): Short = unsupported("readShort")

@@ -10,7 +10,6 @@ import xtdb.types.Type
 import xtdb.types.Type.Companion.asStructOf
 import xtdb.types.Type.Companion.asUnionOf
 import xtdb.types.Type.Companion.ofType
-import kotlin.collections.emptyList
 
 @ExtendWith(AllocatorResolver::class)
 class ConcatVectorTest {
@@ -30,9 +29,13 @@ class ConcatVectorTest {
                 val r = 0..<4
                 assertEquals(r.toList(), r.map { concatRdr.getInt(it) })
 
-                val pos = VectorPosition.build(0)
-                val valueRdr = concatRdr.valueReader(pos)
-                assertEquals(r.toList(), r.map { valueRdr.readInt().also { pos.getPositionAndIncrement() } })
+                val valueRdr = concatRdr.valueReader()
+                assertEquals(
+                    r.toList(),
+                    r.map {
+                        valueRdr.pos = it
+                        valueRdr.readInt()
+                    })
 
                 IntVector.open(alloc, "my-int", false).use { resVec ->
                     val rowCopier = concatRdr.rowCopier(resVec)
@@ -63,9 +66,11 @@ class ConcatVectorTest {
                 val expected = listOf(m1, m1, m2, m2)
                 assertEquals(expected, concatRdr.asList)
 
-                val pos = VectorPosition.build(0)
-                val valueRdr = concatRdr.valueReader(pos)
-                assertEquals(expected, r.map { readMaps(valueRdr).also { pos.getPositionAndIncrement() } })
+                val valueRdr = concatRdr.valueReader()
+                assertEquals(expected, r.map {
+                    valueRdr.pos = it
+                    readMaps(valueRdr)
+                })
 
                 Vector.fromList(alloc, "res".asStructOf(), emptyList<Any?>()).use { resVec ->
                     val rowCopier = concatRdr.rowCopier(resVec)
@@ -87,9 +92,11 @@ class ConcatVectorTest {
                 val expected = listOf(0, 1, "first", "second")
                 assertEquals(expected, concatRdr.asList)
 
-                val pos = VectorPosition.build(0)
-                val valueRdr = concatRdr.valueReader(pos)
-                assertEquals(expected, r.map { valueRdr.readObject().also { pos.getPositionAndIncrement() } })
+                val valueRdr = concatRdr.valueReader()
+                assertEquals(expected, r.map {
+                    valueRdr.pos = it
+                    valueRdr.readObject()
+                })
 
                 Vector.fromList(alloc, "res".asUnionOf(), emptyList<Any?>()).use { resVec ->
                     val rowCopier = concatRdr.rowCopier(resVec)
@@ -112,9 +119,11 @@ class ConcatVectorTest {
                     val expected = listOf(0, 3, "first", "fourth", 2, "fifth")
                     assertEquals(expected, concatRdr.asList)
 
-                    val pos = VectorPosition.build(0)
-                    val valueRdr = concatRdr.valueReader(pos)
-                    assertEquals(expected, r.map { valueRdr.readObject().also { pos.getPositionAndIncrement() } })
+                    val valueRdr = concatRdr.valueReader()
+                    assertEquals(expected, r.map {
+                        valueRdr.pos = it
+                        valueRdr.readObject()
+                    })
 
                     Vector.fromList(alloc, "res".asUnionOf(), emptyList<Any?>()).use { resVec ->
                         val rowCopier = concatRdr.rowCopier(resVec)
@@ -138,11 +147,10 @@ class ConcatVectorTest {
                 val expected = listOf(0, null, "fourth", "first", 3, null)
                 assertEquals(expected, concatRdr.asList)
 
-                val pos = VectorPosition.build(0)
-                val valueRdr = concatRdr.valueReader(pos)
+                val valueRdr = concatRdr.valueReader()
                 assertEquals(expected, r.map {
+                    valueRdr.pos = it
                     val res = valueRdr.readObject()
-                    pos.getPositionAndIncrement()
                     res
                 })
 
@@ -165,11 +173,10 @@ class ConcatVectorTest {
             val expected = listOf(0, 1)
             assertEquals(expected, concatRdr.asList)
 
-            val pos = VectorPosition.build(0)
-            val valueRdr = concatRdr.valueReader(pos)
+            val valueRdr = concatRdr.valueReader()
             assertEquals(expected, r.map {
+                valueRdr.pos = it
                 val res = valueRdr.readInt()
-                pos.getPositionAndIncrement()
                 res
             })
         }

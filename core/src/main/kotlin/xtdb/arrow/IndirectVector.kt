@@ -68,12 +68,20 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
         }
     }
 
-    override fun valueReader(pos: VectorPosition): ValueReader =
-        inner.valueReader(object : VectorPosition {
-            override var position: Int
-                get() = sel.getIndex(pos.position)
-                set(_) = throw UnsupportedOperationException()
-        })
+    override fun valueReader(): ValueReader {
+        val inner = inner.valueReader()
+        return object : ValueReader by inner {
+            val sel = this@IndirectVector.sel
+            val valueCount = sel.valueCount()
+
+            override var pos: Int = 0
+                set(value) {
+                    field = value
+                    if (value in 0..<valueCount)
+                        inner.pos = sel[value]
+                }
+        }
+    }
 
     override fun close() = inner.close()
 }
