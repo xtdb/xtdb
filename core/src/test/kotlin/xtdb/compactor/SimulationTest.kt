@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.api.extension.TestExecutionExceptionHandler
+import xtdb.DeterministicDispatcher
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.api.storage.Storage
@@ -222,32 +223,6 @@ private const val testIterations = 10
 private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
 private val createJobCalculator = requiringResolve("xtdb.compactor/->JobCalculator")
 private val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
-
-class DeterministicDispatcher(seed: Int) : CoroutineDispatcher() {
-
-    private data class DispatchJob(val context: CoroutineContext, val block: Runnable)
-
-    private val rand = Random(seed)
-
-    private val jobs = mutableSetOf<DispatchJob>()
-
-    @Volatile
-    private var running = false
-
-    override fun dispatch(context: CoroutineContext, block: Runnable) {
-        jobs.add(DispatchJob(context, block))
-
-        if (!running) {
-            running = true
-            while (true) {
-                val job = jobs.randomOrNull(rand) ?: break
-                jobs.remove(job)
-                job.block.run()
-            }
-            running = false
-        }
-    }
-}
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)
