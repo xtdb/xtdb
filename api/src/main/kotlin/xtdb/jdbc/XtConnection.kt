@@ -234,4 +234,10 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
     override fun prepareStatement(
         sql: String, resultSetType: Int, resultSetConcurrency: Int, resultSetHoldability: Int
     ) = XtPreparedStatement(conn.prepareStatement(sql, resultSetType, resultSetConcurrency, resultSetHoldability))
+
+    override fun <T : Any?> unwrap(iface: Class<T>): T =
+        if (iface.isInstance(this)) iface.cast(this) else conn.unwrap(iface)
+
+    override fun isWrapperFor(iface: Class<*>): Boolean =
+        iface.isInstance(this) || conn.isWrapperFor(iface)
 }

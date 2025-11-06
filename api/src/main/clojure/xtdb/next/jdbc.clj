@@ -3,7 +3,7 @@
   (:require [clojure.walk :as w]
             [next.jdbc.result-set :as njrs]
             [xtdb.serde :as serde])
-  (:import [java.sql ResultSet ResultSetMetaData]
+  (:import [java.sql Connection ResultSet ResultSetMetaData]
            [java.util List Map Set]
            org.postgresql.PGConnection
            org.postgresql.jdbc.PgArray
@@ -55,6 +55,7 @@
 
       (rs! [_this mrs] (persistent! mrs)))))
 
-(defn copy-in ^org.postgresql.copy.CopyIn [^PGConnection conn, sql]
-  (-> (.getCopyAPI conn)
-      (.copyIn sql)))
+(defn copy-in ^org.postgresql.copy.CopyIn [^Connection conn, sql]
+  (let [^PGConnection pg-conn (.unwrap conn PGConnection)]
+    (-> (.getCopyAPI pg-conn)
+        (.copyIn sql))))

@@ -450,6 +450,7 @@ dependencies {
     devImplementation("com.azure", "azure-identity", "1.9.0")
     devImplementation("com.taoensso", "tufte", "2.6.3")
     devImplementation("clojure.java-time:clojure.java-time:1.4.3")
+    testImplementation("com.zaxxer", "HikariCP", "5.1.0")
     testImplementation("metosin", "jsonista", "0.3.3")
     testImplementation("clj-commons", "clj-yaml", "1.0.27")
     testImplementation("org.xerial", "sqlite-jdbc", "3.39.3.0")

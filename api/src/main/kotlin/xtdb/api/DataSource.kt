@@ -1,10 +1,12 @@
 package xtdb.api
 
+import java.io.PrintWriter
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.SQLFeatureNotSupportedException
 import java.sql.ShardingKey
 import java.util.*
+import java.util.logging.Logger
 
 interface DataSource : javax.sql.DataSource {
     var awaitToken: String
@@ -48,4 +50,13 @@ interface DataSource : javax.sql.DataSource {
     }
 
     override fun createConnectionBuilder(): ConnectionBuilder
+
+    override fun setLoginTimeout(seconds: Int) {}
+    override fun getLoginTimeout() = 0
+
+    override fun setLogWriter(out: PrintWriter?) {}
+    override fun getLogWriter(): PrintWriter? = null
+
+    override fun getParentLogger(): Logger =
+        throw SQLFeatureNotSupportedException("XTDB does not use java.util.logging")
 }
