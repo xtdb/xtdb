@@ -51,11 +51,13 @@
 (defn- local-date->instant [^java.time.LocalDate local-date]
   (.toInstant (.atStartOfDay local-date ZoneOffset/UTC)))
 
-(defn ->partition [{:keys [^int level recency part tries]}]
+(defn ->partition [{:keys [^int level recency part tries max-block-idx]}]
   (let [builder  (doto (Partition/newBuilder)
                    (.setLevel level)
                    (.setPart (ByteString/copyFrom (byte-array part)))
                    (.addAllTries tries))]
+    (when max-block-idx
+      (.setMaxBlockIndex builder max-block-idx))
     (when recency
       (.setRecency builder (-> recency local-date->instant time/instant->micros)))
     (.build builder)))
@@ -67,6 +69,7 @@
   (cond-> {:level (.getLevel partition)
            :part (vec (.getPart partition))
            :tries (.getTriesList partition)}
+    (.hasMaxBlockIndex partition) (assoc :max-block-idx (.getMaxBlockIndex partition))
     (.hasRecency partition) (assoc :recency (-> (.getRecency partition) time/micros->instant instant->local-date))))
 
 (defn old-table-block? [^TableBlock table-block]

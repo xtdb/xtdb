@@ -18,7 +18,8 @@
            (xtdb.util TemporalBounds)))
 
 ;; table-tries data structure
-;; values is a map of live, nascent and garbage tries
+;; values is a map of live, nascent and garbage tries lists
+;; as well as the max-block-idx
 ;; tries :: {:keys [level recency part block-idx state]}
 ;;   sorted by block-idx desc
 ;;   this is true of the live, nascent and garbage tries
@@ -71,11 +72,8 @@
 
 (def ^:dynamic ^{:tag 'long} *file-size-target* (* 100 1024 1024))
 
-(defn- stale-block-idx? [{:keys [live nascent garbage] :as _tries} ^long block-idx]
-  ;; TODO need to fix this for GCing - see #4946
-  (let [^long max-block-idx (->> (map #(or (:block-idx (first  %)) -1) [live nascent garbage])
-                                 (apply max))]
-    (>= max-block-idx block-idx)))
+(defn- stale-block-idx? [{:keys [^long max-block-idx] :or {max-block-idx -1} :as _tries} ^long block-idx]
+  (>= max-block-idx block-idx))
 
 (defn stale-msg?
   "messages have a total ordering, within their level/recency/part - so we know if we've received a message out-of-order.
@@ -105,10 +103,12 @@
         (assoc :live (doall live))
         (assoc :garbage (doall (concat new-garbage garbage))))))
 
-(defn- conj-trie [tries trie state]
+(defn- conj-trie [tries {block-idx :block-idx :as trie} state]
   (let [trie (assoc trie :state state)
         tries (or tries {:live (), :nascent (), :garbage ()})]
-    (update tries state conj trie)))
+    (-> tries
+        (update state conj trie)
+        (update :max-block-idx (fnil max -1) block-idx))))
 
 (defn- insert-levelled-trie [tries trie trie-cat as-of]
   (-> tries
@@ -134,11 +134,8 @@
 
 (defn- completed-part-group? [table-tries {:keys [^long block-idx] :as trie}]
   (->> (sibling-tries table-tries trie)
-       (every? (fn [{:keys [live nascent] :as _ln}]
-                 (let [{^long ln-live-block-idx :block-idx :or {ln-live-block-idx -1}} (first live)
-                       {^long ln-nascent-block-idx :block-idx :or {ln-nascent-block-idx -1}} (first nascent)
-                       ln-block-idx (max ln-live-block-idx ln-nascent-block-idx)]
-                   (>= ln-block-idx block-idx))))))
+       (every? (fn [{:keys [^long max-block-idx] :or {max-block-idx -1} :as _ln}]
+                 (>= max-block-idx block-idx)))))
 
 (defn- mark-block-idx-live [{:keys [nascent] :as tries} ^long block-idx]
   (if-let [trie (first (filter #(= (:block-idx %) block-idx) nascent))]
@@ -232,10 +229,11 @@
        (sort-by (juxt :level :block-idx #(or (:recency %) LocalDate/MAX)))))
 
 (defn partitions [{:keys [tries]}]
-  (map (fn [[[level recency part] {:keys [live nascent garbage]}]]
+  (map (fn [[[level recency part] {:keys [max-block-idx live nascent garbage]}]]
          {:level level
           :recency recency
           :part part
+          :max-block-idx max-block-idx
           :tries (concat live nascent garbage)})
        tries))
 
@@ -304,18 +302,21 @@
 (defn compacted-trie-keys [{:keys [tries]}]
   (for [[k tries] tries
         :when (not= k [0 nil []])
-        [_state tries] tries
+        :let [{:keys [live nascent garbage]} tries
+              tries (concat live nascent garbage)]
         {:keys [trie-key]} tries]
     trie-key))
 
 (defn reset->l0 [{:keys [tries]}]
-  (let [l0-tries (->> (get tries [0 nil []])
-                      ;; combine live & nascent & garbage
-                      (into [] (mapcat val)))]
+  ;; combine live & garbage (there should be no nascent)
+  (let [{:keys [live garbage]} (get tries [0 nil []])
+        l0-tries (concat live garbage)
+        live-tries (->> l0-tries
+                        (sort-by :block-idx #(compare %2 %1))
+                        (map #(assoc % :state :live)))]
 
-    {:tries {[0 nil []] {:live (->> l0-tries
-                                    (sort-by :block-idx #(compare %2 %1))
-                                    (map #(assoc % :state :live)))}}
+    {:tries {[0 nil []] {:max-block-idx (:block-idx (first live-tries))
+                         :live (doall live-tries)}}
      :l1h-recencies {}}))
 
 (defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]
@@ -372,20 +373,41 @@
 (defn new-trie-details? [^TrieDetails trie-details]
   (.hasTrieState trie-details))
 
-(defn partition->entry [{:keys [level recency part tries] :as _partition}]
+(defn partitions->max-block-idx-map [partitions]
+  (let [ps->max-block-idx (into {} (map (fn [{:keys [level recency part tries]}]
+                                          [[level recency part]
+                                           (or (some->> tries (map :block-idx) seq (apply max)) 0)])) partitions)]
+    (loop [res ps->max-block-idx [[[level recency part] max-block-idx] & rest] (seq ps->max-block-idx)]
+      (if-not level
+        (update-vals res #(hash-map :max-block-idx %))
+        (recur
+         (loop [res res level (dec ^long level) part (cond-> part (seq part) pop)]
+           (if (< level 1)
+             res
+             (recur (update res [level recency part] (fnil max 0) max-block-idx)
+                    (dec level)
+                    (cond-> part (seq part) pop))))
+         rest)))))
+
+(defn new-partition? [partition]
+  (contains? partition :max-block-idx))
+
+(defn partition->entry [{:keys [level recency part tries max-block-idx] :as _partition}]
   (MapEntry/create [level recency part]
-                   (let [{:keys [live nascent garbage]} (->> (map trie/<-trie-details tries)
-                                                             (group-by :state))]
-                     (-> {:live live
-                          :nascent nascent
-                          :garbage garbage}
-                         (update-vals (fn [trie-list] (sort-by :block-idx #(compare %2 %1) trie-list)))))))
+                   (let [{:keys [live nascent garbage]} (group-by :state tries)]
+                     (-> {:garbage garbage :live live :nascent nascent}
+                         (update-vals (fn [trie-list] (sort-by :block-idx #(compare %2 %1) trie-list)))
+                         (assoc :max-block-idx max-block-idx)))))
 
 (defn trie-catalog-init [table->table-block]
   (if (->> (vals table->table-block) (map (comp first :tries first :partitions)) (every? new-trie-details?))
     (let [!table-cats (ConcurrentHashMap.)]
       (doseq [[table {:keys [partitions]}] table->table-block
-              :let [tries (into {} (map partition->entry) partitions)]]
+              :let [partitions (update-vals partitions #(update % :tries (partial map trie/<-trie-details)))
+                    tries (into {} (map partition->entry) partitions)
+                    tries (if (new-partition? (first partitions))
+                            tries
+                            (merge-with merge tries (partitions->max-block-idx-map partitions)))]]
         (.put !table-cats table {:tries tries}))
 
       (TrieCatalog. !table-cats *file-size-target*))
@@ -396,6 +418,7 @@
           now (Instant/now)]
       (doseq [[table {:keys [partitions]}] table->table-block
               {:keys [tries]} partitions]
+        ;; As all tries get added afresh, max-block-idx is up to date for all existing partitions
         (.addTries cat table tries now))
       cat)))
 

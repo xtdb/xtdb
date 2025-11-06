@@ -175,15 +175,18 @@
   (t/is (= #{{:level 1,
               :part [],
               :recency #xt/date "2020-01-01",
-              :tries ["l01-r20200101-b01"]}
+              :tries ["l01-r20200101-b01"]
+              :max-block-idx 1}
              {:level 1,
               :part [],
               :recency #xt/date "2020-01-02",
-              :tries ["l01-r20200102-b01"]}
+              :tries ["l01-r20200102-b01"]
+              :max-block-idx 1}
              {:level 0,
               :part [],
               :recency nil,
-              :tries ["l00-rc-b02" "l00-rc-b01" "l00-rc-b00"]}}
+              :tries ["l00-rc-b02" "l00-rc-b01" "l00-rc-b00"]
+              :max-block-idx 2}}
            (partitions ["l00-rc-b00"] ["l00-rc-b01"] ["l00-rc-b02"]
                        ["l01-r20200101-b01"] ["l01-r20200102-b01"]))))
 
@@ -223,8 +226,7 @@
   (t/is (= #{"l01-rc-b00"}
            (curr-tries ["l00-rc-b00" 10] ["l01-rc-b00" 10] ["l00-rc-b00" 00]))))
 
-#_
-(t/deftest keep-latest-live-block-idx-around-4946
+(t/deftest keep-max-block-idx-around-4946
   (let [cat (apply-msgs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10]
                         ["l01-rc-b00" 20] ["l01-rc-b01" 20] ["l01-rc-b02" 20] ["l01-rc-b03" 20]
                         ["l02-rc-p0-b03" 20] ["l02-rc-p1-b03" 20] ["l02-rc-p2-b03" 20] ["l02-rc-p3-b03" 20])]
@@ -405,7 +407,7 @@
                                            #xt/instant "2025-01-01T00:00:00Z")
                         (into (sorted-set) (map :trie-key))))))
 
-    ;; new, with trie-state
+    ;; new, with trie-state, without max-block-idx
     (let [new-table-blocks {:partitions
                             [{:level 0 :recency nil :part []
                               :tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10 :state
@@ -423,7 +425,32 @@
 
       (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat #xt/table foo)
                                            #xt/instant "2025-01-01T00:00:00Z")
-                        (into (sorted-set) (map :trie-key))))))))
+                        (into (sorted-set) (map :trie-key))))))
+
+    ;; new, with trie-state and max-block-idx
+    (let [new-table-blocks {:partitions
+                            [{:level 0 :recency nil :part []
+                              :max-block-idx 1
+                              :tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10 :state
+                                                       :garbage :garbage-as-of #xt/instant "2000-01-01T00:00:00Z"})
+                                      (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})]}
+                             {:level 1 :recency nil :part []
+                              :max-block-idx 0
+                              :tries [(->trie-details {:trie-key "l01-rc-b00" :data-file-size 10 :state :live})]}
+                             {:level 1 :recency #xt/date "2020-01-01" :part []
+                              :max-block-idx 0
+                              :tries [(->trie-details {:trie-key "l01-r20200101-b00" :data-file-size 10 :state :live})]}]}
+          cat (cat/trie-catalog-init {#xt/table foo new-table-blocks})]
+
+      (t/is (= #{"l00-rc-b01" "l01-rc-b00" "l01-r20200101-b00"}
+               (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+                    (into (sorted-set) (map :trie-key)))))
+
+      (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat #xt/table foo)
+                                           #xt/instant "2025-01-01T00:00:00Z")
+                        (into (sorted-set) (map :trie-key))))))
+
+    ))
 
 (t/deftest handles-l1h-l1c-ordering-4301
   ;; L1H and L1C are in different partitions, so (strictly speaking) we should handle these out of order
@@ -600,3 +627,48 @@
                                             :storage [:local {:path (.resolve tmp-dir "objects")}]})]
             (t/is (= [{:cnt 8000}]
                      (xt/q node "SELECT COUNT(*) AS CNT FROM docs FOR VALID_TIME ALL")))))))))
+
+(t/deftest partitions->max-block-idx-test
+  (t/is (= {[0 nil []] {:max-block-idx 0}, [1 nil []] {:max-block-idx 0}}
+           (cat/partitions->max-block-idx-map
+            [{:level 0 :recency nil :part []
+              :tries []}
+             {:level 1 :recency nil :part []
+              :tries []}]))
+        "partitions with no tries yield max-block-idx 0")
+
+  (t/is (= {[0 nil []] {:max-block-idx 2}, [1 nil []] {:max-block-idx 0}}
+           (cat/partitions->max-block-idx-map
+            [{:level 0 :recency nil :part []
+              :tries [{:trie-key "l00-rc-b00" :block-idx 0}
+                      {:trie-key "l00-rc-b01" :block-idx 2}
+                      {:trie-key "l00-rc-b02" :block-idx 1}]}
+             {:level 1 :recency nil :part []
+              :tries [{:trie-key "l01-rc-b00" :block-idx 0}]}])))
+
+
+  (t/is (= {[0 nil []] {:max-block-idx 15},
+            [1 nil []] {:max-block-idx 15},
+            [2 nil [0]] {:max-block-idx 7},
+            [3 nil [0 2]] {:max-block-idx 7}}
+           (cat/partitions->max-block-idx-map
+            [{:level 0 :recency nil :part []
+              :tries [{:trie-key "l00-rc-b0f" :block-idx 15}]}
+             {:level 1 :recency nil :part []
+              :tries [{:trie-key "l01-rc-b0f" :block-idx 15}]}
+             {:level 3 :recency nil :part [0 2]
+              :tries [{:trie-key "l03-rc-p02-b07" :block-idx 7}]}])))
+
+  (t/is (= {[0 nil []] {:max-block-idx 47},
+            [1 #xt/date "2020-01-01" []] {:max-block-idx 31},
+            [2 #xt/date "2020-01-01" []] {:max-block-idx 31},
+            [3 #xt/date "2020-01-01" [0]] {:max-block-idx 7}}
+           (cat/partitions->max-block-idx-map
+            [{:level 0 :recency nil :part []
+              :tries [{:trie-key "l00-rc-b2f" :block-idx 47}]}
+             {:level 1 :recency #xt/date "2020-01-01" :part []
+              :tries [{:trie-key "l01-r20200101-b0f" :block-idx 15}]}
+             {:level 2 :recency #xt/date "2020-01-01" :part []
+              :tries [{:trie-key "l02-r20200101-b11f" :block-idx 31}]}
+             {:level 3 :recency #xt/date "2020-01-01" :part [0]
+              :tries [{:trie-key "l03-r20200101-p0-b07" :block-idx 7}]}]))))
