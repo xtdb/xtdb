@@ -1,15 +1,18 @@
 (ns xtdb.trie-catalog-test
-  (:require [clojure.test :as t]
+  (:require [clojure.java.io :as io]
+            [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
             [xtdb.garbage-collector :as gc]
+            [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.util :as util])
-  (:import (java.time Duration Instant)
+  (:import [java.nio.file Path]
+           (java.time Duration Instant)
            (java.util.concurrent ConcurrentHashMap)
            (xtdb.api.storage ObjectStore$StoredObject)
            (xtdb.log.proto TemporalMetadata TrieMetadata)
@@ -31,6 +34,12 @@
   (-> (apply apply-msgs trie-keys)
       (cat/current-tries)
       (->> (into #{} (map :trie-key)))))
+
+(defn- partitions [& trie-keys]
+  (->> (apply apply-msgs trie-keys)
+       cat/partitions
+       (map #(update % :tries (partial map :trie-key)))
+       set))
 
 (t/deftest test-stale-msg
   (letfn [(stale? [tries trie-key]
@@ -161,6 +170,22 @@
                                 ["l0-current-block-02" nil [20220101 Long/MAX_VALUE 20190101]]]
                                query-bounds))
               "recency doesn't filter, temporal metadata does filter, if valid-time bounding files come earlier in system time they don't need to get taken")))))
+
+(t/deftest test-partitions
+  (t/is (= #{{:level 1,
+              :part [],
+              :recency #xt/date "2020-01-01",
+              :tries ["l01-r20200101-b01"]}
+             {:level 1,
+              :part [],
+              :recency #xt/date "2020-01-02",
+              :tries ["l01-r20200102-b01"]}
+             {:level 0,
+              :part [],
+              :recency nil,
+              :tries ["l00-rc-b02" "l00-rc-b01" "l00-rc-b00"]}}
+           (partitions ["l00-rc-b00"] ["l00-rc-b01"] ["l00-rc-b02"]
+                       ["l01-r20200101-b01"] ["l01-r20200102-b01"]))))
 
 (t/deftest test-l0-l1-tries
   (t/is (= #{} (curr-tries)))
@@ -336,13 +361,20 @@
 
 (t/deftest test-trie-catalog-init-old-and-new-block-files-mixed-4664
   (let [->trie-details (partial trie/->trie-details #xt/table foo)
-        old-table-blocks {:tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10})
-                                  (->trie-details {:trie-key "l01-rc-b00" :data-file-size 10})
-                                  (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10})]}
-        new-table-blocks {:tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10 :state
-                                                   :garbage :garbage-as-of #xt/instant "2000-01-01T00:00:00Z"})
-                                  (->trie-details {:trie-key "l01-rc-b00" :data-file-size 10 :state :live})
-                                  (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})]}
+        old-table-blocks {:partitions
+                          [{:level 0 :recency nil :part []
+                            :tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10})
+                                    (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10})]}
+                           {:level 1 :recency nil :part []
+                            :tries [(->trie-details {:trie-key "l01-rc-b00" :data-file-size 10})]}]}
+
+        new-table-blocks {:partitions
+                          [{:level 0 :recency nil :part []
+                            :tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10 :state
+                                                     :garbage :garbage-as-of #xt/instant "2000-01-01T00:00:00Z"})
+                                    (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})]}
+                           {:level 1 :recency nil :part []
+                            :tries [(->trie-details {:trie-key "l01-rc-b00" :data-file-size 10 :state :live})]}]}
 
         cat (cat/trie-catalog-init {#xt/table bar new-table-blocks
                                     #xt/table foo old-table-blocks})]
@@ -354,28 +386,40 @@
 
 (t/deftest test-trie-catalog-init
   (let [->trie-details (partial trie/->trie-details #xt/table foo)]
-    ;; old
-    (let [old-table-blocks {:tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10})
-                                    (->trie-details {:trie-key "l01-rc-b00" :data-file-size 10})
-                                    (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10})]}
+    ;; old, no trie-state
+    (let [old-table-blocks {:partitions
+                            [{:level 0 :recency nil :part []
+                              :tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10})
+                                      (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 })]}
+                             {:level 1 :recency nil :part []
+                              :tries [(->trie-details {:trie-key "l01-rc-b00" :data-file-size 10})]}
+                             {:level 1 :recency #xt/date "2020-01-01" :part []
+                              :tries [(->trie-details {:trie-key "l01-r20200101-b00" :data-file-size 10 })]}]}
+
           cat (cat/trie-catalog-init {#xt/table foo old-table-blocks})]
 
-      (t/is (= #{"l00-rc-b01" "l01-rc-b00"} (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
-                                                 (into (sorted-set) (map :trie-key)))))
+      (t/is (= #{"l00-rc-b01" "l01-rc-b00" "l01-r20200101-b00"} (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+                                                                     (into (sorted-set) (map :trie-key)))))
 
       (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat #xt/table foo)
                                            #xt/instant "2025-01-01T00:00:00Z")
                         (into (sorted-set) (map :trie-key))))))
 
-    ;; new
-    (let [new-table-blocks {:tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10 :state
-                                                     :garbage :garbage-as-of #xt/instant "2000-01-01T00:00:00Z"})
-                                    (->trie-details {:trie-key "l01-rc-b00" :data-file-size 10 :state :live})
-                                    (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})]}
+    ;; new, with trie-state
+    (let [new-table-blocks {:partitions
+                            [{:level 0 :recency nil :part []
+                              :tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10 :state
+                                                       :garbage :garbage-as-of #xt/instant "2000-01-01T00:00:00Z"})
+                                      (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})]}
+                             {:level 1 :recency nil :part []
+                              :tries [(->trie-details {:trie-key "l01-rc-b00" :data-file-size 10 :state :live})]}
+                             {:level 1 :recency #xt/date "2020-01-01" :part []
+                              :tries [(->trie-details {:trie-key "l01-r20200101-b00" :data-file-size 10 :state :live})]}]}
           cat (cat/trie-catalog-init {#xt/table foo new-table-blocks})]
 
-      (t/is (= #{"l00-rc-b01" "l01-rc-b00"} (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
-                                                 (into (sorted-set) (map :trie-key)))))
+      (t/is (= #{"l00-rc-b01" "l01-rc-b00" "l01-r20200101-b00"}
+               (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+                    (into (sorted-set) (map :trie-key)))))
 
       (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat #xt/table foo)
                                            #xt/instant "2025-01-01T00:00:00Z")
@@ -541,3 +585,18 @@
              (->> (cat/reset->l0 table-trie-cat)
                   (cat/current-tries)
                   (into #{} (map :trie-key)))))))
+
+(t/deftest test-protobuf-additions
+  ;; There have been (so far) two changes in the protobuffers that are relevant for the trie-catalog since 2.0.0
+  ;; GCing - and hence trie states in the TrieDetails message
+  ;; Addition of the Partition message - TrieDetails got moved from TableBlock into Partition
+  (binding [cat/*file-size-target* 1024]
+    (letfn [(resource->path [p] (util/->path (io/as-file (io/resource p))))]
+      (doseq [^Path node-root (map resource->path ["xtdb/trie-catalog-test/node-2.0.0"
+                                                   "xtdb/trie-catalog-test/node-fcb7714ea"])]
+        (let [tmp-dir (util/tmp-dir "test-protobuf-addtions")]
+          (util/copy-dir node-root tmp-dir)
+          (with-open [node (xtn/start-node {:log [:local {:path (.resolve tmp-dir "log")}]
+                                            :storage [:local {:path (.resolve tmp-dir "objects")}]})]
+            (t/is (= [{:cnt 8000}]
+                     (xt/q node "SELECT COUNT(*) AS CNT FROM docs FOR VALID_TIME ALL")))))))))

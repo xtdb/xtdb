@@ -4,20 +4,23 @@
   "system_time" #xt/field ["system_time" [:timestamp-tz :micro "UTC"]],
   "committed" #xt/field ["committed" :bool],
   "error" #xt/field ["error" :transit :?]},
- :tries
- [{:trie-key "l00-rc-b00",
-   :data-file-size 3102,
-   :trie-metadata
-   {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
-    :max-valid-from #xt/instant "2020-01-03T00:00:00Z",
-    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
-    :max-system-from #xt/instant "2020-01-03T00:00:00Z",
-    :row-count 3,
-    :iid-bloom [1421692163 15]}}],
  :hlls
  {"_id" [-1903792610 3.004403133222472],
   "system_time" [-1544051178 3.004403133222472],
   "committed" [1743138479 1.0004885993744506],
-  "error" [-2042553016 2.001955671862574]}}
+  "error" [-2042553016 2.001955671862574]},
+ :partitions
+ [{:level 0,
+   :part [],
+   :tries
+   [{:trie-key "l00-rc-b00",
+     :data-file-size 3102,
+     :trie-metadata
+     {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
+      :max-valid-from #xt/instant "2020-01-03T00:00:00Z",
+      :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+      :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+      :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+      :max-system-from #xt/instant "2020-01-03T00:00:00Z",
+      :row-count 3,
+      :iid-bloom [1421692163 15]}}]}]}

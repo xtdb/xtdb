@@ -88,7 +88,7 @@
           last-tx-key (serde/->TxKey magic-last-tx-id (time/->instant #inst "2020-01-02"))]
       (util/delete-dir node-dir)
 
-      (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 0})]
         (let [db (db/primary-db node)
               block-cat (.getBlockCatalog db)]
           (t/is (nil? (.getCurrentBlockIndex block-cat)))
@@ -169,7 +169,7 @@
                                        :struct {:a true, :c "c"}}]]]
       (util/delete-dir node-dir)
 
-      (util/with-open [node (tu/->local-node {:node-dir node-dir, :storage-epoch 1})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :storage-epoch 1 :compactor-threads 0})]
         (xt/execute-tx node tx-ops {:default-tz #xt/zone "Europe/London"})
 
         (tu/flush-block! node)
@@ -187,7 +187,7 @@
           node-dir (util/->path "target/compacted-trie-details")]
       (util/delete-dir node-dir)
 
-      (util/with-open [node (tu/->local-node {:node-dir node-dir})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 0})]
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1, :a "hello"} {:xt/id 2, :a "world"}]]
                        {:default-tz #xt/zone "Europe/London"})
         (tu/flush-block! node)
@@ -218,7 +218,7 @@
                                     :struct {:a true, :b {:c "c", :d "d"}}}]]]
       (util/delete-dir node-dir)
 
-      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-page 3})]
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-page 3 :compactor-threads 0})]
         (xt/execute-tx node tx0 {:default-tz #xt/zone "Europe/London"})
 
         (xt/execute-tx node tx1 {:default-tz #xt/zone "Europe/London"})
@@ -538,7 +538,8 @@
       (util/delete-dir node-dir)
 
       (with-open [node (tu/->local-node {:node-dir node-dir
-                                         :instant-src (tu/->mock-clock)})]
+                                         :instant-src (tu/->mock-clock)
+                                         :compactor-threads 0})]
         (let [block-cat (.getBlockCatalog (db/primary-db node))]
           (t/is (nil? (.getCurrentBlockIndex block-cat)))
 

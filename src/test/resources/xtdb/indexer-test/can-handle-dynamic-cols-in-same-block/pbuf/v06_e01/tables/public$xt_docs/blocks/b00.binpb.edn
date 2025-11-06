@@ -6,19 +6,22 @@
   #xt/field ["list" :list :? ["$data$" :union ["f64" :f64] ["utf8" :utf8] ["timestamp-tz-micro-utc" [:timestamp-tz :micro "UTC"]] ["bool" :bool]]],
   "struct"
   #xt/field ["struct" :struct :? ["a" :union ["i64" :i64] ["bool" :bool]] ["b" :utf8 :?] ["c" :utf8 :?]]},
- :tries
- [{:trie-key "l00-rc-b00",
-   :data-file-size 5254,
-   :trie-metadata
-   {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
-    :max-valid-from #xt/instant "2020-01-01T00:00:00Z",
-    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
-    :max-system-from #xt/instant "2020-01-01T00:00:00Z",
-    :row-count 6,
-    :iid-bloom [-484615358 30]}}],
  :hlls
  {"_id" [-1707429676 6.01764709272061],
   "list" [-791736731 3.004403133222472],
-  "struct" [-564282680 3.004403133222472]}}
+  "struct" [-564282680 3.004403133222472]},
+ :partitions
+ [{:level 0,
+   :part [],
+   :tries
+   [{:trie-key "l00-rc-b00",
+     :data-file-size 5254,
+     :trie-metadata
+     {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
+      :max-valid-from #xt/instant "2020-01-01T00:00:00Z",
+      :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+      :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+      :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+      :max-system-from #xt/instant "2020-01-01T00:00:00Z",
+      :row-count 6,
+      :iid-bloom [-484615358 30]}}]}]}

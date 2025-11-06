@@ -8,11 +8,20 @@ import "xtdb/database/proto/db.proto";
 
 option java_multiple_files = true;
 
+message Partition {
+  int32 level = 1;
+  int64 recency = 2;
+  bytes part = 3;
+  repeated xtdb.log.proto.TrieDetails tries = 4;
+}
+
 message TableBlock {
     bytes arrow_schema = 1;
     int64 row_count = 2;
+    // deprecated, use partitions. See #4960
     repeated xtdb.log.proto.TrieDetails tries = 3;
     map<string, bytes> column_name_to_hll = 4;
+    repeated Partition partitions = 5;
 }
 
 message TxKey {

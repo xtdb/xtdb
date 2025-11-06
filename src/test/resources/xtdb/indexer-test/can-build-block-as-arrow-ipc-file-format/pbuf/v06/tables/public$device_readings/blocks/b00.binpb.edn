@@ -14,18 +14,6 @@
   "cpu_avg_5min" #xt/field ["cpu_avg_5min" :f64],
   "battery_temperature" #xt/field ["battery_temperature" :f64],
   "bssid" #xt/field ["bssid" :utf8]},
- :tries
- [{:trie-key "l00-rc-b00",
-   :data-file-size 4750,
-   :trie-metadata
-   {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
-    :max-valid-from #xt/instant "2020-01-02T00:00:00Z",
-    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
-    :max-system-from #xt/instant "2020-01-02T00:00:00Z",
-    :row-count 2,
-    :iid-bloom [769566549 10]}}],
  :hlls
  {"cpu_avg_1min" [803666780 2.001955671862574],
   "cpu_avg_15min" [-30122115 2.001955671862574],
@@ -40,4 +28,19 @@
   "_id" [-1753543811 2.001955671862574],
   "cpu_avg_5min" [349704317 2.001955671862574],
   "battery_temperature" [23817279 2.001955671862574],
-  "bssid" [1421329178 2.001955671862574]}}
+  "bssid" [1421329178 2.001955671862574]},
+ :partitions
+ [{:level 0,
+   :part [],
+   :tries
+   [{:trie-key "l00-rc-b00",
+     :data-file-size 4750,
+     :trie-metadata
+     {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
+      :max-valid-from #xt/instant "2020-01-02T00:00:00Z",
+      :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+      :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+      :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+      :max-system-from #xt/instant "2020-01-02T00:00:00Z",
+      :row-count 2,
+      :iid-bloom [769566549 10]}}]}]}
