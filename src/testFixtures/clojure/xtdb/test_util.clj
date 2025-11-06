@@ -329,45 +329,6 @@
      (.setMaxSystemFrom builder sf-max)
      (.build builder))))
 
-(defn open-arrow-hash-trie-rel ^xtdb.arrow.Relation [^BufferAllocator al, paths]
-  (util/with-close-on-catch [meta-rel (Relation. al MetadataFileWriter/metaRelSchema)]
-    (let [nodes-wtr (.vectorFor meta-rel "nodes")
-          nil-wtr (.vectorFor nodes-wtr "nil")
-          iid-branch-wtr (.vectorFor nodes-wtr "branch-iid")
-          iid-branch-el-wtr (.getListElements iid-branch-wtr)
-
-          data-wtr (.vectorFor nodes-wtr "leaf")
-          data-page-idx-wtr (.vectorFor data-wtr "data-page-idx")
-          metadata-wtr (.vectorFor data-wtr "columns")]
-      (letfn [(write-paths [paths]
-                (cond
-                  (nil? paths) (.writeNull nil-wtr)
-
-                  (number? paths) (do
-                                    (.writeInt data-page-idx-wtr paths)
-                                    (.endList metadata-wtr)
-                                    (.endStruct data-wtr))
-
-                  (vector? paths) (let [!page-idxs (IntStream/builder)]
-                                    (doseq [child paths]
-                                      (.add !page-idxs (if child
-                                                         (do
-                                                           (write-paths child)
-                                                           (dec (.getRowCount meta-rel)))
-                                                         -1)))
-                                    (.forEach (.build !page-idxs)
-                                              (reify IntConsumer
-                                                (accept [_ idx]
-                                                  (if (= idx -1)
-                                                    (.writeNull iid-branch-el-wtr)
-                                                    (.writeInt iid-branch-el-wtr idx)))))
-                                    (.endList iid-branch-wtr)))
-
-                (.endRow meta-rel))]
-        (write-paths paths)))
-
-    meta-rel))
-
 (defn open-live-table ^xtdb.indexer.LiveTable [table]
   (LiveTable. *allocator* BufferPool/UNUSED table (RowCounter.)))
 

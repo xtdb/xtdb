@@ -4,6 +4,7 @@ arrow = "18.3.0"
 arrow-adbc = "0.20.0"
 clojure = "1.12.0"
 exposed = "0.61.0"
+kotest = "6.0.4"
 kotlin = "2.2.0"
 kotlin-coroutines = "1.10.2"
 dokka = "1.9.10"
@@ -70,7 +71,8 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.8.1" }
 mockk = { group = "io.mockk", name = "mockk", version = "1.14.5" }
 kaml = { group = "com.charleskorn.kaml", name = "kaml", version = "0.56.0" }
-kotest-props = { group = "io.kotest", name = "kotest-property", version = "6.0.4" }
+kotest = { group = "io.kotest", name = "kotest-assertions-core", version.ref = "kotest" }
+kotest-props = { group = "io.kotest", name = "kotest-property", version.ref = "kotest" }
 
 protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobuf" }
 

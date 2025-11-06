@@ -4,85 +4,10 @@
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.util :as util])
-  (:import (org.apache.arrow.memory RootAllocator)
-           xtdb.arrow.Relation
-           (xtdb.segment MergePlanner MergeTask Segment Segment$Metadata Segment$Page Segment$PageMeta)
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf)
+  (:import (xtdb.segment Segment$PageMeta)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (t/use-fixtures :each tu/with-allocator)
-
-(defn- ->arrow-hash-trie [^Relation meta-rel]
-  (ArrowHashTrie. (.get meta-rel "nodes")))
-
-(defrecord TestPage [seg page-idx]
-  Segment$Page
-  Segment$PageMeta
-  (getPage [this] this))
-
-(defrecord TestSegmentMetadata [seg trie]
-  Segment$Metadata
-  (getTrie [_] trie)
-  (page [_ leaf] (->TestPage seg (.getDataPageIndex ^ArrowHashTrie$Leaf leaf)))
-  (close [_]))
-
-(defrecord TestSegment [seg trie]
-  Segment
-  (getPart [_] nil)
-  (openMetadata [_]
-    (->TestSegmentMetadata seg trie)))
-
-(defn- <-MergeTask [^MergeTask merge-task]
-  {:path (vec (.getPath merge-task))
-   :pages (mapv (partial into {})
-                (.getPages merge-task))})
-
-(deftest test-merge-plan-with-nil-nodes-2700
-  (with-open [al (RootAllocator.)
-              t1-rel (tu/open-arrow-hash-trie-rel al [[nil 0 nil 1] 2 nil 3])
-              log-rel (tu/open-arrow-hash-trie-rel al 0)
-              log2-rel (tu/open-arrow-hash-trie-rel al [nil nil 0 1])]
-
-    (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2} {:seg :log, :page-idx 0}]}
-              {:path [2], :pages [{:seg :log, :page-idx 0} {:seg :log2, :page-idx 0}]}
-              {:path [3], :pages [{:page-idx 3, :seg :t1} {:page-idx 0, :seg :log} {:page-idx 1, :seg :log2}]}
-              {:path [0 0], :pages [{:seg :log, :page-idx 0}]}
-              {:path [0 1], :pages [{:seg :t1, :page-idx 0} {:seg :log, :page-idx 0}]}
-              {:path [0 2], :pages [{:seg :log, :page-idx 0}]}
-              {:path [0 3], :pages [{:seg :t1, :page-idx 1} {:seg :log, :page-idx 0}]}]
-             (->> (MergePlanner/plan [(->TestSegment :t1 (->arrow-hash-trie t1-rel))
-                                      (->TestSegment :log (->arrow-hash-trie log-rel))
-                                      (->TestSegment :log2 (->arrow-hash-trie log2-rel))]
-                                     nil)
-                  (mapv <-MergeTask)
-                  (sort-by :path)))))
-
-  (with-open [al (RootAllocator.)
-              t1-rel (tu/open-arrow-hash-trie-rel al [[nil 0 nil 1] 2 nil 3])
-              t2-rel (tu/open-arrow-hash-trie-rel al [[0 1 nil [nil 2 nil 3]] nil nil [nil 4 nil 5]])]
-
-    (t/is (= [{:path [1], :pages [{:seg :t1, :page-idx 2}]}
-              {:path [0 0], :pages [{:seg :t2, :page-idx 0}]}
-              {:path [0 1],
-               :pages [{:seg :t1, :page-idx 0} {:seg :t2, :page-idx 1}]}
-              {:path [3 0], :pages [{:seg :t1, :page-idx 3}]}
-              {:path [3 1],
-               :pages [{:seg :t1, :page-idx 3} {:seg :t2, :page-idx 4}]}
-              {:path [3 2], :pages [{:seg :t1, :page-idx 3}]}
-              {:path [3 3],
-               :pages [{:seg :t1, :page-idx 3} {:seg :t2, :page-idx 5}]}
-              {:path [0 3 0], :pages [{:seg :t1, :page-idx 1}]}
-              {:path [0 3 1],
-               :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 2}]}
-              {:path [0 3 2], :pages [{:seg :t1, :page-idx 1}]}
-              {:path [0 3 3],
-               :pages [{:seg :t1, :page-idx 1} {:seg :t2, :page-idx 3}]}]
-
-             (->> (MergePlanner/plan [(->TestSegment :t1 (->arrow-hash-trie t1-rel))
-                                      (->TestSegment :t2 (->arrow-hash-trie t2-rel))]
-                                     nil)
-                  (mapv <-MergeTask)
-                  (sort-by :path))))))
 
 (defrecord MockPage [page metadata-matches? temporal-metadata]
   Segment$PageMeta

@@ -476,6 +476,8 @@ dependencies {
     implementation(kotlin("stdlib"))
     testImplementation(kotlin("test"))
     testImplementation(kotlin("test-junit5"))
+    testImplementation(libs.kotest)
+    testImplementation(libs.kotest.props)
 
     // For Healthz Test
     testImplementation("clj-http", "clj-http","3.12.3")
