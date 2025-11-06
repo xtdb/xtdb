@@ -1,29 +1,31 @@
 {:row-count 4,
  :fields {"a" #xt/field ["a" :utf8], "_id" #xt/field ["_id" :i64]},
- :tries
- [{:trie-key "l00-rc-b00", :data-file-size 2214, :trie-metadata nil}
-  {:trie-key "l00-rc-b01",
-   :data-file-size 2206,
-   :trie-metadata
-   {:min-valid-from #xt/instant "2020-01-02T00:00:00Z",
-    :max-valid-from #xt/instant "2020-01-02T00:00:00Z",
-    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :min-system-from #xt/instant "2020-01-02T00:00:00Z",
-    :max-system-from #xt/instant "2020-01-02T00:00:00Z",
-    :row-count 2,
-    :iid-bloom [-250283280 10]}}
-  {:trie-key "l01-rc-b00",
-   :data-file-size 2214,
-   :trie-metadata
-   {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
-    :max-valid-from #xt/instant "2020-01-01T00:00:00Z",
-    :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
-    :min-system-from #xt/instant "2020-01-01T00:00:00Z",
-    :max-system-from #xt/instant "2020-01-01T00:00:00Z",
-    :row-count 2,
-    :iid-bloom [1320799995 10]}}],
  :hlls
  {"_id" [1375436314 4.007832904843586],
-  "a" [2130024660 4.007832904843586]}}
+  "a" [2130024660 4.007832904843586]},
+ :partitions
+ [{:level 0,
+   :part [],
+   :tries
+   [{:trie-key "l00-rc-b01",
+     :data-file-size 2206,
+     :trie-metadata
+     {:min-valid-from #xt/instant "2020-01-02T00:00:00Z",
+      :max-valid-from #xt/instant "2020-01-02T00:00:00Z",
+      :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+      :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+      :min-system-from #xt/instant "2020-01-02T00:00:00Z",
+      :max-system-from #xt/instant "2020-01-02T00:00:00Z",
+      :row-count 2,
+      :iid-bloom [-250283280 10]}}
+    {:trie-key "l00-rc-b00",
+     :data-file-size 2214,
+     :trie-metadata
+     {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
+      :max-valid-from #xt/instant "2020-01-01T00:00:00Z",
+      :min-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+      :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
+      :min-system-from #xt/instant "2020-01-01T00:00:00Z",
+      :max-system-from #xt/instant "2020-01-01T00:00:00Z",
+      :row-count 2,
+      :iid-bloom [1320799995 10]}}]}]}

@@ -5,14 +5,15 @@
             [xtdb.time :as time]
             [xtdb.trie :as trie]
             [xtdb.util :as util])
-  (:import [java.nio ByteBuffer]
+  (:import [clojure.lang MapEntry]
+           [java.nio ByteBuffer]
            [java.time Instant LocalDate ZoneOffset]
            [java.util Map]
            [java.util.concurrent ConcurrentHashMap]
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
            xtdb.catalog.BlockCatalog
-           (xtdb.segment Segment$PageMeta)
            (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
+           (xtdb.segment Segment$PageMeta)
            (xtdb.storage BufferPool)
            (xtdb.util TemporalBounds)))
 
@@ -230,6 +231,14 @@
        ;; the sort is needed as the table blocks need the current tries to be in the total order for restart
        (sort-by (juxt :level :block-idx #(or (:recency %) LocalDate/MAX)))))
 
+(defn partitions [{:keys [tries]}]
+  (map (fn [[[level recency part] {:keys [live nascent garbage]}]]
+         {:level level
+          :recency recency
+          :part part
+          :tries (concat live nascent garbage)})
+       tries))
+
 (defn garbage-fn [as-of]
   (fn [{:keys [level garbage-as-of]}]
     (when (not= level 0)
@@ -363,17 +372,20 @@
 (defn new-trie-details? [^TrieDetails trie-details]
   (.hasTrieState trie-details))
 
+(defn partition->entry [{:keys [level recency part tries] :as _partition}]
+  (MapEntry/create [level recency part]
+                   (let [{:keys [live nascent garbage]} (->> (map trie/<-trie-details tries)
+                                                             (group-by :state))]
+                     (-> {:live live
+                          :nascent nascent
+                          :garbage garbage}
+                         (update-vals (fn [trie-list] (sort-by :block-idx #(compare %2 %1) trie-list)))))))
+
 (defn trie-catalog-init [table->table-block]
-  (if (->> (vals table->table-block) (map (comp first :tries)) (every? new-trie-details?))
+  (if (->> (vals table->table-block) (map (comp first :tries first :partitions)) (every? new-trie-details?))
     (let [!table-cats (ConcurrentHashMap.)]
-      (doseq [[table {:keys [tries]}] table->table-block
-              :let [tries (-> (reduce (fn [table-cat ^TrieDetails added-trie]
-                                        (let [{:keys [level recency part state] :as trie} (trie/<-trie-details added-trie)]
-                                          (update table-cat [level recency part] conj-trie trie state)))
-                                      {}
-                                      tries)
-                              (update-vals (fn [tries]
-                                             (update-vals tries #(sort-by :block-idx (fn [a b] (compare b a)) %)))))]]
+      (doseq [[table {:keys [partitions]}] table->table-block
+              :let [tries (into {} (map partition->entry) partitions)]]
         (.put !table-cats table {:tries tries}))
 
       (TrieCatalog. !table-cats *file-size-target*))
@@ -382,7 +394,8 @@
     ;; see #4526
     (let [cat (TrieCatalog. (ConcurrentHashMap.) *file-size-target*)
           now (Instant/now)]
-      (doseq [[table {:keys [tries]}] table->table-block]
+      (doseq [[table {:keys [partitions]}] table->table-block
+              {:keys [tries]} partitions]
         (.addTries cat table tries now))
       cat)))
 

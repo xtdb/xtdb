@@ -166,12 +166,12 @@
               (.addTries trie-cat (table/->ref db-name (.getTableName added-trie)) [added-trie] (.getSystemTime latest-completed-tx))))
 
           (let [all-tables (set (concat (keys table-metadata) (.getAllTables block-cat)))
-                table->all-tries (->> all-tables
-                                      (map (fn [table]
-                                             (MapEntry/create table (->> (trie-cat/trie-state trie-cat table)
-                                                                         trie-cat/all-tries))))
-                                      (into {}))]
-            (table-cat/finish-block! table-cat block-idx table-metadata table->all-tries))))))
+                table->partitions (->> all-tables
+                                       (map (fn [table]
+                                              (MapEntry/create table (->> (trie-cat/trie-state trie-cat table)
+                                                                          trie-cat/partitions))))
+                                       (into {}))]
+            (table-cat/finish-block! table-cat block-idx table-metadata table->partitions))))))
 
   (nextBlock [this]
     (.nextBlock row-counter)
@@ -242,4 +242,3 @@
 
 (defmethod ig/halt-key! :xtdb.indexer/live-index [_ live-idx]
   (util/close live-idx))
-

@@ -720,7 +720,8 @@
         (let [tries (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))
                          TableBlock/parseFrom
                          table-cat/<-table-block
-                         :tries
+                         :partitions
+                         (mapcat :tries)
                          (into #{} (map table-test/trie-details->edn)))]
           (t/is (= #{"l00-rc-b00" "l01-r20110103-b00" "l01-rc-b00" "l00-rc-b01" "l01-r20160104-b01" "l01-rc-b01"}
                    (into #{} (map :trie-key) tries)))

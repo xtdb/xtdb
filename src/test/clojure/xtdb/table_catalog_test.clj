@@ -7,12 +7,19 @@
             [xtdb.table-catalog :as table-cat]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
+            [xtdb.trie :as trie]
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
-  (:import [java.time Instant]
+  (:import (com.google.protobuf ByteString)
+           [java.nio ByteBuffer]
+           [java.time Instant]
+           [java.util Map]
+           (org.apache.arrow.vector.types.pojo Schema)
            [xtdb.arrow VectorReader]
+           (xtdb.block.proto TableBlock)
            [xtdb.block.proto TableBlock]
            [xtdb.bloom BloomUtils]
+           (xtdb.log.proto TrieDetails)
            [xtdb.log.proto TrieDetails]
            (xtdb.util HyperLogLog)))
 
@@ -41,8 +48,8 @@
         (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
         (tu/finish-block! node)
 
-        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4418)
-                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4572)]
+        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4425)
+                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4579)]
                  (.listAllObjects bp (table-cat/->table-block-dir #xt/table foo))))
 
         (let [{hlls1 :hlls :as _table-block1} (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b00.binpb"))
@@ -53,8 +60,11 @@
                                                   table-cat/<-table-block)
 
               current-tries (->> table-block2
-                                 :tries
-                                 (mapv trie-details->edn))
+                                 :partitions
+                                 (mapcat :tries)
+                                 (map trie-details->edn)
+                                 ;; they are sorted by block index descending
+                                 reverse)
               trie-metas (map :trie-metadata current-tries)
               [trie1-bloom _trie2-bloom] (map :iid-bloom trie-metas)]
           (t/is (= [{:table #xt/table foo,
@@ -97,14 +107,16 @@
 
           (tu/finish-block! node)
 
-          (t/is (= ["l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03"
-                    "l01-rc-b00" "l01-rc-b01" "l01-rc-b02"
-                    "l02-rc-p0-b01" "l02-rc-p1-b01" "l02-rc-p2-b01" "l02-rc-p3-b01"]
+          (t/is (= #{"l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03"
+                     "l01-rc-b00" "l01-rc-b01" "l01-rc-b02"
+                     "l02-rc-p0-b01" "l02-rc-p1-b01" "l02-rc-p2-b01" "l02-rc-p3-b01"}
                    (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))
                         TableBlock/parseFrom
                         table-cat/<-table-block
-                        :tries
-                        (mapv (comp :trie-key trie-details->edn))))))))))
+                        :partitions
+                        (mapcat :tries)
+                        (mapv (comp :trie-key trie-details->edn))
+                        set))))))))
 
 
 (t/deftest trie-file-order-in-table-block-files
@@ -128,21 +140,90 @@
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [bp (.getBufferPool (db/primary-db node))]
-        (t/is (= ["l00-rc-b00"
-                  "l00-rc-b01"
-                  "l00-rc-b02"
-                  "l00-rc-b03"
-                  "l01-r20200101-b00"
-                  "l01-rc-b00"
-                  "l01-r20200102-b01"
-                  "l01-rc-b01"
-                  "l01-r20200101-b02"
-                  "l01-r20200102-b02"
-                  "l01-rc-b02"
-                  "l02-rc-p0-b01"
-                  "l02-rc-p2-b01"]
+        (t/is (= #{"l00-rc-b00"
+                   "l00-rc-b01"
+                   "l00-rc-b02"
+                   "l00-rc-b03"
+                   "l01-r20200101-b00"
+                   "l01-rc-b00"
+                   "l01-r20200102-b01"
+                   "l01-rc-b01"
+                   "l01-r20200101-b02"
+                   "l01-r20200102-b02"
+                   "l01-rc-b02"
+                   "l02-rc-p0-b01"
+                   "l02-rc-p2-b01"}
                  (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b00.binpb"))
                       TableBlock/parseFrom
                       table-cat/<-table-block
-                      :tries
-                      (mapv (comp :trie-key trie-details->edn)))))))))
+                      :partitions
+                      (mapcat :tries)
+                      (map(comp :trie-key trie-details->edn))
+                      set)))))))
+
+(defn ->table-block [{:keys [^Schema table-schema hlls tries row-count partitions] :as _table-block}]
+  (let [builder (doto (TableBlock/newBuilder)
+                  (.setArrowSchema (ByteString/copyFrom (.serializeAsMessage table-schema)))
+                  (.setRowCount row-count)
+                  (.putAllColumnNameToHll ^Map (update-vals hlls #(ByteString/copyFrom ^ByteBuffer %))))]
+    (when (seq tries)
+      (.addAllTries builder tries))
+    (when (seq partitions)
+      (.addAllPartitions builder partitions))
+    (.build builder)))
+
+(defn ->old-trie-details [trie-details]
+  (dissoc trie-details :state :garbage-as-of))
+
+(defn- ->old-table-block [{:keys [partitions] :as table-block}]
+  (let [trie-details (mapcat :tries partitions)]
+    (-> table-block
+        (dissoc :partitions)
+        (assoc :tries trie-details))))
+
+(deftest test-differnt-table-block-formats
+  (let [trie-details [{:trie-key "l00-rc-b00" :data-file-size 10 :state
+                       :garbage :garbage-as-of #xt/instant "2000-01-01T00:00:00Z"}
+                      {:trie-key "l00-rc-b01" :data-file-size 10 :state :live}
+                      {:trie-key "l01-rc-b00" :data-file-size 10 :state :live}
+                      {:trie-key "l01-r20200101-b00" :data-file-size 10 :state :live}]
+        create-table-block (fn [trie-details]
+                             {:table-schema (Schema. [])
+                              :hlls {"_id" (ByteBuffer/wrap (byte-array 10))}
+                              :row-count 2
+                              :partitions [{:level 0
+                                            :recency nil
+                                            :part []
+                                            :tries [(first trie-details) (second trie-details)]}
+                                           {:level 1
+                                            :recency nil
+                                            :part []
+                                            :tries [(nth trie-details 2)]}
+                                           {:level 1
+                                            :recency #xt/local-date "2020-01-01"
+                                            :part []
+                                            :tries [(last trie-details)]}]})]
+    (doseq [trie-details-transform [->old-trie-details identity]]
+      (doseq [table-block-transform [->old-table-block identity]]
+        (t/is (= {:fields {},
+                  :partitions
+                  [{:level 0, :part [], :tries ["l00-rc-b00" "l00-rc-b01"]}
+                   {:level 1, :part [], :tries ["l01-rc-b00"]}
+                   {:level 1,
+                    :part [],
+                    :recency #xt/date "2020-01-01",
+                    :tries ["l01-r20200101-b00"]},]
+                  :row-count 2}
+                 (-> (map (comp (partial trie/->trie-details #xt/table "docs") trie-details-transform) trie-details)
+                     create-table-block
+                     table-block-transform
+                     (update :partitions (partial map table-cat/->partition))
+                     ->table-block
+                     table-cat/<-table-block
+                     (dissoc :hlls)
+                     (update :partitions
+                             (fn [partitions]
+                               (map (fn [partition]
+                                      (update partition
+                                              :tries (partial map (comp :trie-key trie/<-trie-details))))
+                                    partitions))))))))))
