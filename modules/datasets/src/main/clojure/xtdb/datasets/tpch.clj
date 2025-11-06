@@ -104,18 +104,26 @@
                    last-tx))
                nil)))
 
-(defn submit-dml-jdbc! [conn scale-factor]
-  (log/info "Transacting TPC-H tables...")
-  (doseq [^TpchTable table (TpchTable/getTables)]
-    (let [dml (tpch-table->dml table)
-          doc-count (->> (tpch-table->dml-params table scale-factor)
-                         (partition-all 1000)
-                         (transduce (map (fn [param-batch]
-                                           (jdbc/with-transaction [tx conn]
-                                             (jdbc/execute-batch! tx dml param-batch {}))
-                                           (count param-batch)))
-                                    + 0))]
-      (log/debug "Transacted" doc-count (.getTableName table)))))
+(defn submit-dml-jdbc!
+  ([conn scale-factor]
+   (submit-dml-jdbc! conn scale-factor nil))
+  ([conn scale-factor table-names]
+   (log/info "Transacting TPC-H tables...")
+   (let [all-tables (TpchTable/getTables)
+         table-name-set (when table-names (set table-names))
+         tables-to-load (if table-name-set
+                          (filter #(table-name-set (.getTableName ^TpchTable %)) all-tables)
+                          all-tables)]
+     (doseq [^TpchTable table tables-to-load]
+       (let [dml (tpch-table->dml table)
+             doc-count (->> (tpch-table->dml-params table scale-factor)
+                            (partition-all 1000)
+                            (transduce (map (fn [param-batch]
+                                              (jdbc/with-transaction [tx conn]
+                                                (jdbc/execute-batch! tx dml param-batch {}))
+                                              (count param-batch)))
+                                       + 0))]
+         (log/debug "Transacted" doc-count (.getTableName table)))))))
 
 (comment
   (with-open [conn (jdbc/get-connection {:dbname "xtdb"
