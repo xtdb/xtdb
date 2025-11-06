@@ -8,7 +8,8 @@
    [{:trie-key "l00-rc-b01", :data-file-size 1966, :trie-metadata nil}
     {:trie-key "l00-rc-b00",
      :data-file-size 1966,
-     :trie-metadata nil}]}
+     :trie-metadata nil}],
+   :max-block-idx 1}
   {:level 1,
    :part [],
    :tries
@@ -23,6 +24,7 @@
       :max-system-from #xt/instant "2020-01-01T00:00:00Z",
       :row-count 1,
       :iid-bloom [-2050569905 5]}}],
+   :max-block-idx 0,
    :recency #xt/date "2011-01-03"}
   {:level 1,
    :part [],
@@ -30,7 +32,8 @@
    [{:trie-key "l01-rc-b01", :data-file-size 1382, :trie-metadata nil}
     {:trie-key "l01-rc-b00",
      :data-file-size 1382,
-     :trie-metadata nil}]}
+     :trie-metadata nil}],
+   :max-block-idx 1}
   {:level 1,
    :part [],
    :tries
@@ -45,4 +48,5 @@
       :max-system-from #xt/instant "2020-01-02T00:00:00Z",
       :row-count 1,
       :iid-bloom [314116840 5]}}],
+   :max-block-idx 1,
    :recency #xt/date "2016-01-04"}]}
