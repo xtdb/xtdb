@@ -111,7 +111,7 @@ class MemoryCache @JvmOverloads internal constructor(
                 fetchReqs.compute(pathSlice) { _, awaiters ->
                     if (awaiters != null) {
                         LOGGER.trace("FetchReq: Fetch in progress for $pathSlice - adding to ${awaiters.size} awaiter(s)")
-                        awaiters.also { it + res }
+                        awaiters.also { it.add(res) }
                     } else {
                         LOGGER.trace("FetchReq: Starting new fetch for $pathSlice")
                         val res = mutableSetOf(res)
