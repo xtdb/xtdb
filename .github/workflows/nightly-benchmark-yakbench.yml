@@ -12,6 +12,11 @@ on:
   schedule:
     - cron: '0 1 * * *'  # Run daily at 01:00 UTC
 
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
 concurrency:
   group: nightly-benchmark-yakbench
   cancel-in-progress: false

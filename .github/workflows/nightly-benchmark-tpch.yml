@@ -12,6 +12,11 @@ on:
   schedule:
     - cron: '0 0 * * *'  # Run daily at midnight UTC
 
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
 concurrency:
   group: nightly-benchmark-tpch
   cancel-in-progress: false
