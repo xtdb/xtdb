@@ -46,7 +46,7 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     override fun openSlice(al: BufferAllocator) = IndirectVector(inner.openSlice(al), sel)
 
     override fun select(idxs: IntArray): VectorReader =
-        IndirectVector(inner, selection(sel.select(idxs)))
+        inner.select(sel.select(idxs))
 
     override fun select(startIdx: Int, len: Int): VectorReader =
         IndirectVector(inner, selection(sel.select(startIdx, len)))
