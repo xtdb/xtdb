@@ -88,14 +88,14 @@
                                                       (str/join "_")))))))))
 
 (defn hits-file ^java.io.File [size]
-  (io/file (format "datasets/clickbench/hits-%s.transit.json.gz" (name size))))
+  (io/file (format "modules/bench/dataset-downloads/clickbench/hits-%s.transit.json.gz" (name size))))
 
 (comment ; to generate the transit file from the TSV file
   (def !transform
     (future
       (doseq [size [:tiny :small :medium #_:full]]
         (log/info "transforming" size)
-        (with-tsv-rows (io/file "datasets/clickbench/hits.tsv.gz")
+        (with-tsv-rows (io/file "modules/bench/dataset-downloads/clickbench/hits.tsv.gz")
           (fn [rows]
             (with-open [out (GZIPOutputStream. (io/output-stream (doto (hits-file size) io/make-parents)))]
               (let [writer (transit/writer out :json {:handlers serde/transit-write-handler-map})]

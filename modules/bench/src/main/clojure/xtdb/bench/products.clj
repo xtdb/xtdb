@@ -12,7 +12,7 @@
            [software.amazon.awssdk.services.s3.model GetObjectRequest]))
 
 (def ^File products-file
-  (io/file "datasets/products.transit.msgpack.gz"))
+  (io/file "modules/bench/dataset-downloads/products.transit.msgpack.gz"))
 
 (defn download-dataset []
   (when-not (.exists products-file)
