@@ -195,9 +195,10 @@ class MemoryCache @JvmOverloads internal constructor(
             try {
                 for (req in fetchCh)
                     req.handle(fetchReqs)
-            } catch (t: Throwable) {
-                fetchReqs.values.flatMap { it }.forEach { it.cancel() }
-                throw t
+            } finally {
+                // Cancel all pending fetch requests on close/cancellation
+                val exception = CancellationException("MemoryCache is closing")
+                fetchReqs.values.flatMap { it }.forEach { it.completeExceptionally(exception) }
             }
         }
     }

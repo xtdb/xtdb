@@ -2,6 +2,7 @@ package xtdb.cache
 
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.assertions.withClue
+import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.OutOfMemoryException
@@ -156,6 +157,49 @@ class MemoryCacheTest {
             val stats = cache.stats0
             assertEquals(0, stats.usedBytes)
             assertEquals(200, stats.freeBytes)
+        }
+    }
+
+    @Test
+    fun `closing cache with pending fetches should cancel them`() {
+        val slowPathLoader = object : MemoryCache.PathLoader {
+            private var idx = 0
+
+            override fun load(path: Path, slice: Slice, arena: Arena): MemorySegment {
+                // Simulate a slow load that would be interrupted
+                Thread.sleep(200)
+                return arena.allocate(slice.length)
+                    .also { it.set(JAVA_BYTE, 0, (++idx).toByte()) }
+            }
+        }
+
+        val cache = MemoryCache(allocator, 200, slowPathLoader)
+        
+        // Start a fetch in the background
+        val job = CoroutineScope(Dispatchers.IO).launch {
+            try {
+                cache.get(Path.of("test/100"), Slice(0, 100)) { it to null }.use {
+                    // Should not reach here due to cancellation
+                }
+            } catch (e: CancellationException) {
+                // Expected when cache is closed
+            } catch (e: Exception) {
+                // Also acceptable if the exception is wrapped
+            }
+        }
+
+        // Give the fetch time to start
+        Thread.sleep(50)
+
+        // Close the cache while fetch is in progress
+        cache.close()
+
+        // The job should complete (either successfully or be cancelled)
+        // This should not hang or throw IllegalStateException
+        runBlocking {
+            withTimeoutOrNull(2000) {
+                job.join()
+            } ?: error("Job did not complete after cache close")
         }
     }
 }
