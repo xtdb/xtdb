@@ -6,6 +6,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.memory.util.hash.ArrowBufHasher
 import org.apache.arrow.vector.util.DecimalUtility
 import xtdb.arrow.ArrowUtil.toByteBuffer
+import xtdb.util.Hasher
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 import kotlin.math.max
@@ -174,4 +175,6 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
     }
 
     fun hashCode(hasher: ArrowBufHasher, start: Long, len: Long) = hasher.hashCode(buf, start, len)
+    
+    fun hashCode(hasher: Hasher, start: Int, len: Int) = hasher.hash(buf, start, len)
 }
