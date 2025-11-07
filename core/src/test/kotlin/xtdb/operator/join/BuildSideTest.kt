@@ -21,7 +21,9 @@ class BuildSideTest {
 
     private fun BuildSide.getMatches(hash: Int): List<Int> {
         val matches = mutableListOf<Int>()
-        forEachMatch(hash) { matches.add(it) }
+        for (idx in iterator(hash)) {
+            matches.add(idx)
+        }
         return matches
     }
 

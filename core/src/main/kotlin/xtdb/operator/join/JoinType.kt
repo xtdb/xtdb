@@ -30,7 +30,7 @@ interface JoinType {
             repeat(probeSide.rowCount) { probeIdx ->
                 var matched = false
 
-                probeSide.forEachMatch(probeIdx) { buildIdx ->
+                for (buildIdx in probeSide.iterator(probeIdx)) {
                     matched = true
                     matchingBuildIdxs.add(buildIdx)
                     matchingProbeIdxs.add(probeIdx)
@@ -63,7 +63,7 @@ interface JoinType {
                 val matchingProbeIdxs = IntArrayList()
 
                 repeat(probeSide.rowCount) { probeIdx ->
-                    probeSide.forEachMatch(probeIdx) { buildIdx ->
+                    for (buildIdx in probeSide.iterator(probeIdx)) {
                         matchingBuildIdxs.add(buildIdx)
                         matchingProbeIdxs.add(probeIdx)
                     }
@@ -137,7 +137,7 @@ interface JoinType {
 
                 repeat(probeSide.rowCount) { probeIdx ->
                     var matched = false
-                    probeSide.forEachMatch(probeIdx) { buildIdx ->
+                    for (buildIdx in probeSide.iterator(probeIdx)) {
                         if (matched)
                             throw Incorrect("cardinality violation", "xtdb.single-join/cardinality-violation")
                         matched = true

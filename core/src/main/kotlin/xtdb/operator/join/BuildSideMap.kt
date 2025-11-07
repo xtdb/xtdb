@@ -5,7 +5,6 @@ import org.roaringbitmap.RoaringBitmap
 import xtdb.arrow.IntVector
 import xtdb.arrow.VectorReader
 import xtdb.util.closeOnCatch
-import java.util.function.IntConsumer
 import java.util.function.IntUnaryOperator
 
 private const val DEFAULT_LOAD_FACTOR = 0.6
@@ -35,13 +34,30 @@ class BuildSideMap private constructor(
         }
     }
 
-    fun forEachMatch(hash: Int, c: IntConsumer) {
-        var lookupIdx = hash and hashMask
+    fun iterator(hash: Int) = object : IntIterator() {
+        private var lookupIdx = hash and hashMask
+        private var nextValue = -1
+        private var hasNextValue = false
+        
+        override fun hasNext(): Boolean {
+            if (hasNextValue) return true
 
-        while (true) {
-            if (srcIdxs.isNull(lookupIdx)) return
-            if (srcHashes.getInt(lookupIdx) == hash) c.accept(srcIdxs.getInt(lookupIdx))
-            lookupIdx = lookupIdx.inc() and hashMask
+            while (true) {
+                if (srcIdxs.isNull(lookupIdx)) return false
+                if (srcHashes.getInt(lookupIdx) == hash) {
+                    nextValue = srcIdxs.getInt(lookupIdx)
+                    hasNextValue = true
+                    lookupIdx = lookupIdx.inc() and hashMask
+                    return true
+                }
+                lookupIdx = lookupIdx.inc() and hashMask
+            }
+        }
+
+        override fun nextInt(): Int {
+            if (!hasNext()) throw NoSuchElementException()
+            hasNextValue = false
+            return nextValue
         }
     }
 

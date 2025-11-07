@@ -5,7 +5,6 @@ import xtdb.expression.map.IndexHasher
 import xtdb.expression.map.IndexHasher.Companion.hasher
 import java.util.function.BiConsumer
 import java.util.function.IntBinaryOperator
-import java.util.function.IntConsumer
 
 class ProbeSide(
     private val buildSide: BuildSide, val probeRel: RelationReader,
@@ -29,13 +28,33 @@ class ProbeSide(
             if (buildIdx >= 0) buildSide.addMatch(buildIdx)
         }
 
-    fun forEachMatch(probeIdx: Int, c: IntConsumer) {
+    fun iterator(probeIdx: Int): IntIterator {
         val hashCode = hasher.hashCode(probeIdx)
+        val iter = buildSide.iterator(hashCode)
 
-        buildSide.forEachMatch(hashCode) { idx ->
-            if (comparator.applyAsInt(idx, probeIdx) == 1) {
-                c.accept(idx)
-                buildSide.addMatch(idx)
+        return object : IntIterator() {
+            private var nextValue = -1
+            private var hasNextValue = false
+
+            override fun hasNext(): Boolean {
+                if (hasNextValue) return true
+
+                while (iter.hasNext()) {
+                    val idx = iter.nextInt()
+                    if (comparator.applyAsInt(idx, probeIdx) == 1) {
+                        nextValue = idx
+                        hasNextValue = true
+                        buildSide.addMatch(idx)
+                        return true
+                    }
+                }
+                return false
+            }
+
+            override fun nextInt(): Int {
+                if (!hasNext()) throw NoSuchElementException()
+                hasNextValue = false
+                return nextValue
             }
         }
     }

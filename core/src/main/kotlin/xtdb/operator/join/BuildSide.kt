@@ -12,7 +12,6 @@ import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.types.FieldName
 import xtdb.types.Type.Companion.I32
 import xtdb.types.Type.Companion.ofType
-import java.util.function.IntConsumer
 import java.util.function.IntUnaryOperator
 
 class BuildSide(
@@ -121,8 +120,7 @@ class BuildSide(
     fun indexOf(hashCode: Int, cmp: IntUnaryOperator, removeOnMatch: Boolean): Int =
         requireNotNull(buildMap).findValue(hashCode, cmp, removeOnMatch)
 
-    fun forEachMatch(hashCode: Int, c: IntConsumer) =
-        requireNotNull(buildMap).forEachMatch(hashCode, c)
+    fun iterator(hashCode: Int) = requireNotNull(buildMap).iterator(hashCode)
 
     override fun close() {
         buildMap?.close()
