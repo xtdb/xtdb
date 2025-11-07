@@ -24,10 +24,12 @@ For local development, a monitoring stack can be started via Docker Compose. Thi
 
 * *Prometheus* – metrics collection
 * *Grafana* – visualization, preloaded with dashboards and a Prometheus data source
+* *Tempo* – distributed tracing for OpenTelemetry traces
 
 Grafana is preconfigured to:
 
 * Use Prometheus as the default data source
+* Include Tempo as a tracing data source
 * Automatically load dashboards from `monitoring/public-dashboards/`
 
 Prometheus is configured to scrape metrics from `localhost:8080`.  
@@ -37,6 +39,12 @@ This assumes the monitored service:
 * Is reachable *from inside the Prometheus container* at:
 ** `172.17.0.1:8080`
 
+Tempo is configured to:
+
+* Accept OTLP traces on port `4317` (gRPC) and `4318` (HTTP)
+* Store traces locally for 48 hours
+* Expose the Tempo API on port `3200`
+
 Start the stack with:
 
 [source,bash]
@@ -45,6 +53,41 @@ docker-compose up -d
 ----
 
 If you then go to http://localhost:3000/dashboards - you can log in (`admin/admin`) and work on/use the dashboards.
+
+To view traces, use Grafana's Explore view with the Tempo data source at http://localhost:3000/explore.
+
+=== Configuring XTDB Tracing
+
+To enable OpenTelemetry tracing in your XTDB node, configure it under the `tracer` section:
+
+[source,clojure]
+----
+(require '[xtdb.node :as xtn])
+
+(def node
+  (xtn/start-node
+    {:tracer {:enabled? true
+              :endpoint "http://localhost:4318/v1/traces"
+              :service-name "xtdb-dev"}}))
+----
+
+Or in YAML:
+
+[source,yaml]
+----
+tracer:
+  enabled: true
+  endpoint: "http://localhost:4318/v1/traces"
+  serviceName: "xtdb-dev"
+----
+
+Configuration options:
+
+* `enabled?` (boolean) – Enable OpenTelemetry tracing. Default: `false`
+* `endpoint` (string) – OTLP HTTP endpoint for sending traces. Default: `"http://localhost:4318/v1/traces"`
+* `service-name` (string) – Service name for traces. Default: `"xtdb"` 
+
+Traces will be sent to Tempo and can be viewed in Grafana's Explore view.
 
 === Exporting Dashboards
 

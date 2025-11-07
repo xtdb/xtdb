@@ -67,6 +67,10 @@ dependencies {
     // monitoring
     api(libs.micrometer.core)
     api(libs.micrometer.registry.prometheus)
+    api(libs.micrometer.tracing)
+    api(libs.micrometer.tracing.bridge.otel)
+    api(libs.opentelemetry.exporter.otlp)
+    api(libs.opentelemetry.sdk)
 
     api(kotlin("stdlib"))
     api(libs.kotlinx.coroutines)

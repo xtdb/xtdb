@@ -1,0 +1,38 @@
+server:
+  http_listen_port: 3200
+  log_level: info
+
+# ==== INGEST (OTLP only) ====
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
+
+# Query frontend (for Grafana Explore)
+query_frontend:
+  search:
+    max_duration: 0
+
+# Querier must connect to frontend
+querier:
+  frontend_worker:
+    # Use docker compose service name
+    frontend_address: tempo:9095
+
+# ==== STORAGE ====
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+# ==== RETENTION (optional) ====
+compactor:
+  compaction:
+    block_retention: 720h   # 30 days
