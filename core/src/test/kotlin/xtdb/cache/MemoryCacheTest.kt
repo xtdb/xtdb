@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.cache.MemoryCache.Slice
-import java.lang.Thread.sleep
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout.JAVA_BYTE
@@ -68,14 +67,12 @@ class MemoryCacheTest {
                     }
                 }
 
-                sleep(10)
                 assertEquals(1, t1Evicted)
 
                 cache.get(Path.of("t1/100"), Slice(0, 100)) { it to onEvict }.use { b1 ->
                     assertEquals(2, b1.getByte(0))
                 }
 
-                sleep(10)
                 assertEquals(MemoryCache.Stats(0, 250), cache.stats0)
                 assertEquals(2, t1Evicted)
             }
@@ -93,7 +90,6 @@ class MemoryCacheTest {
                     assertEquals(MemoryCache.Stats(50, 200), cache.stats0)
                 }
 
-                sleep(10)
                 assertTrue(t2Evicted)
                 assertEquals(2, t1Evicted)
                 assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
