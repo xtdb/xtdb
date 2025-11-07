@@ -6,6 +6,9 @@ import org.apache.arrow.vector.BaseFixedWidthVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.TimeUnit
+import xtdb.arrow.VectorIndirection.Companion.Selection
+import xtdb.arrow.VectorIndirection.Companion.Slice
+import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
@@ -169,29 +172,30 @@ sealed class FixedWidthVector : Vector() {
             private val byteWidth = this@FixedWidthVector.byteWidth
 
             private fun ensureWriteable(len: Int) {
-                destValidity.ensureWritable(len)
                 destData.ensureWritable((len * byteWidth).toLong())
             }
 
             private fun unsafeCopyRange(srcIdx: Int, len: Int) {
-                destValidity.unsafeWriteBits(srcValidity, srcIdx, len)
                 destData.unsafeWriteBytes(srcData, (srcIdx * byteWidth).toLong(), (len * byteWidth).toLong())
             }
 
             override fun copyRow(srcIdx: Int) {
                 ensureWriteable(1)
+                destValidity.writeBoolean(srcValidity.getBoolean(srcIdx))
                 unsafeCopyRange(srcIdx, 1)
                 valueCount++
             }
 
             override fun copyRows(sel: IntArray) {
                 ensureWriteable(sel.size)
+                destValidity.writeBits(srcValidity, Selection(sel))
                 for (srcIdx in sel) unsafeCopyRange(srcIdx, 1)
                 valueCount += sel.size
             }
 
             override fun copyRange(startIdx: Int, len: Int) {
                 ensureWriteable(len)
+                destValidity.writeBits(srcValidity, Slice(startIdx, len))
                 unsafeCopyRange(startIdx, len)
                 valueCount += len
             }

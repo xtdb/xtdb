@@ -5,6 +5,8 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.BaseVariableWidthVector
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
+import xtdb.arrow.VectorIndirection.Companion.Selection
+import xtdb.arrow.VectorIndirection.Companion.Slice
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
@@ -85,27 +87,30 @@ abstract class VariableWidthVector : Vector() {
             }
 
             private fun unsafeCopyRange(startIdx: Int, len: Int) {
-                destValidity.unsafeWriteBits(srcValidity, startIdx, len)
+                // offsets
+                if (valueCount == 0) destOffset.unsafeWriteInt(0)
 
                 val srcStartOffset = srcOffset.getInt(startIdx)
                 val srcEndOffset = srcOffset.getInt(startIdx + len)
-                val dataLen = srcEndOffset - srcStartOffset
-                destData.unsafeWriteBytes(srcData, srcStartOffset.toLong(), dataLen.toLong())
-
-                if (valueCount == 0) destOffset.unsafeWriteInt(0)
                 val offsetDelta = lastOffset - srcStartOffset
 
-                for (i in 0 until len) {
-                    val offset = srcOffset.getInt(startIdx + i + 1) + offsetDelta
+                repeat(len) {
+                    val offset = srcOffset.getInt(startIdx + it + 1) + offsetDelta
                     destOffset.unsafeWriteInt(offset)
                 }
 
+                // data
+                val dataLen = srcEndOffset - srcStartOffset
+                destData.unsafeWriteBytes(srcData, srcStartOffset.toLong(), dataLen.toLong())
                 lastOffset += dataLen
+
                 valueCount += len
             }
 
             override fun copyRow(srcIdx: Int) {
                 ensureWriteable(1, srcOffset.getInt(srcIdx + 1) - srcOffset.getInt(srcIdx))
+                destValidity.writeBits(srcValidity, Slice(srcIdx, 1))
+
                 unsafeCopyRange(srcIdx, 1)
             }
 
@@ -118,6 +123,8 @@ abstract class VariableWidthVector : Vector() {
                 }
 
                 ensureWriteable(sel.size, totalDataBytes)
+                
+                destValidity.writeBits(srcValidity, Selection(sel))
 
                 for (srcIdx in sel)
                     unsafeCopyRange(srcIdx, 1)
@@ -129,6 +136,9 @@ abstract class VariableWidthVector : Vector() {
                 val totalDataBytes = srcOffset.getInt(startIdx + len) - srcOffset.getInt(startIdx)
 
                 ensureWriteable(len, totalDataBytes)
+                
+                destValidity.writeBits(srcValidity, Slice(startIdx, len))
+
                 unsafeCopyRange(startIdx, len)
             }
         }

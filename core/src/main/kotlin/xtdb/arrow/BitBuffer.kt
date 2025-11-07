@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.BitVectorHelper
 import org.apache.arrow.vector.BitVectorHelper.byteIndex
 import org.apache.arrow.vector.util.DataSizeRoundingUtil.divideBy8Ceil
+import xtdb.arrow.VectorIndirection.Companion.Selection
 import kotlin.math.max
 
 internal class BitBuffer private constructor(
@@ -74,26 +75,46 @@ internal class BitBuffer private constructor(
 
     fun writeBoolean(bool: Boolean) = writeBit(if (bool) 1 else 0)
 
-    fun unsafeWriteBits(src: BitBuffer, idx: Int, len: Int) {
-        // Fast path: both byte-aligned and length is a multiple of 8
-        if (writerBitIndex % 8 == 0 && idx % 8 == 0 && (len % 8 == 0 || writerBitIndex == 0)) {
-            val idxBytes = byteIndex(idx)
-            val lenBytes = divideBy8Ceil(len)
-            buf.setBytes(byteIndex(writerBitIndex.toLong()), src.buf, idxBytes.toLong(), lenBytes.toLong())
-            writerBitIndex += len
-            return
+    private fun Int.isSetAtIndex(bitIdx: Int) = (this.shr(bitIdx % 8) and 1) == 1
+
+    fun writeBits(src: BitBuffer, sel: VectorIndirection) {
+        ensureWritable(sel.valueCount())
+        val srcBuf = src.buf
+        val destBuf = buf
+
+        var writerBitIndex = this.writerBitIndex
+
+        destBuf.writerIndex((writerBitIndex / 8).toLong())
+
+        var tailByte = if (writerBitIndex % 8 == 0) 0 else destBuf.getByte(destBuf.writerIndex()).toInt()
+
+        var cacheByte = -1
+        var cacheByteIdx = -1L
+
+        for (selIdx in sel) {
+            val bitIdx = writerBitIndex % 8
+            val mask = 1 shl bitIdx
+
+            val selByteIdx = (selIdx / 8).toLong()
+            if (selByteIdx != cacheByteIdx) {
+                cacheByteIdx = selByteIdx
+                cacheByte = srcBuf.getByte(selByteIdx).toInt()
+            }
+
+            tailByte = if (cacheByte.isSetAtIndex(selIdx)) tailByte or mask else tailByte and mask.inv()
+
+            if (++writerBitIndex % 8 == 0) {
+                destBuf.writeByte(tailByte)
+                tailByte = 0
+            }
         }
 
-        // TODO medium path: copying bytes at a time. See BitVectorHelper.concatBits for inspiration.
+        // done - sync any temporary state
 
-        // Slow path: bit-by-bit copy
-        repeat(len) { setBit(writerBitIndex + it, if (src.getBoolean(idx + it)) 1 else 0) }
-        writerBitIndex += len
-    }
+        this.writerBitIndex = writerBitIndex
 
-    fun writeBits(src: BitBuffer, idx: Int, len: Int) {
-        ensureWritable(len)
-        unsafeWriteBits(src, idx, len)
+        if (writerBitIndex % 8 != 0)
+            destBuf.writeByte(tailByte)
     }
 
     internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) {
