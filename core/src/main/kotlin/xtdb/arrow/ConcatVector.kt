@@ -34,6 +34,12 @@ class ConcatVector private constructor(
         private class Overlay(private val startIdx: Int, private val len: Int) : VectorIndirection {
             override fun getIndex(idx: Int): Int = idx - startIdx
             override fun valueCount(): Int = startIdx + len
+
+            override fun iterator() = object : IntIterator() {
+                private var idx = 0
+                override fun hasNext() = idx < len
+                override fun nextInt() = idx++ - startIdx
+            }
         }
 
         fun from(name: ColumnName, readers: List<VectorReader>): ConcatVector {
