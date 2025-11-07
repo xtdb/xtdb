@@ -113,7 +113,7 @@ class MemoryCache @JvmOverloads internal constructor(
                         awaiters.also { it.add(res) }
                     } else {
                         LOGGER.trace("FetchReq: Starting new fetch for $pathSlice")
-                        val reqs = mutableSetOf(res)
+                        val res = mutableSetOf(res)
                         scope.launch(CoroutineName("MemoryCache-Fetch-$pathSlice")) {
                             var onEvict: AutoCloseable? = null
                             try {
@@ -122,14 +122,12 @@ class MemoryCache @JvmOverloads internal constructor(
                                 LOGGER.trace("FetchReq: Fetched $pathSlice to $localPath, sending FetchDone message...")
                                 fetchCh.send(FetchDone(pathSlice, localPath, onEvict))
                             } catch (t: Throwable) {
-                                // If we failed to send FetchDone (e.g., channel closed), complete the requests with the exception
-                                // Remove from fetchReqs to prevent the finally block from also trying to complete them
-                                fetchReqs.remove(pathSlice)
-                                reqs.forEach { it.completeExceptionally(t) }
+                                // If we failed to send FetchDone (e.g., channel closed),
+                                // just close onEvict - the finally block will complete the pending requests
                                 onEvict?.close()
                             }
                         }
-                        reqs
+                        res
                     }
                 }
             }
