@@ -160,6 +160,41 @@
   (t/is (= '(length "abc") (plan-expr-with-foo "LENGTH('abc')")))
   (t/is (= '(length [1 2 3]) (plan-expr-with-foo "LENGTH([1, 2, 3])"))))
 
+(t/deftest test-lpad-rpad
+  (t/testing "LPAD with 2 args"
+    (t/is (= [{:res "     hello"}]
+             (xt/q tu/*node* "SELECT LPAD('hello', 10) AS res"))))
+
+  (t/testing "LPAD with 3 args"
+    (t/is (= [{:res "xxxxxhello"}]
+             (xt/q tu/*node* "SELECT LPAD('hello', 10, 'x') AS res")))
+    (t/is (= [{:res "ababahello"}]
+             (xt/q tu/*node* "SELECT LPAD('hello', 10, 'ab') AS res"))))
+
+  (t/testing "LPAD truncates when target length is less than string length"
+    (t/is (= [{:res "hel"}]
+             (xt/q tu/*node* "SELECT LPAD('hello', 3) AS res"))))
+
+  (t/testing "RPAD with 2 args"
+    (t/is (= [{:res "hello     "}]
+             (xt/q tu/*node* "SELECT RPAD('hello', 10) AS res"))))
+
+  (t/testing "RPAD with 3 args"
+    (t/is (= [{:res "helloxxxxx"}]
+             (xt/q tu/*node* "SELECT RPAD('hello', 10, 'x') AS res")))
+    (t/is (= [{:res "helloababa"}]
+             (xt/q tu/*node* "SELECT RPAD('hello', 10, 'ab') AS res"))))
+
+  (t/testing "RPAD truncates when target length is less than string length"
+    (t/is (= [{:res "hel"}]
+             (xt/q tu/*node* "SELECT RPAD('hello', 3) AS res"))))
+
+  (t/testing "LPAD/RPAD with zero or negative length"
+    (t/is (= [{:res ""}]
+             (xt/q tu/*node* "SELECT LPAD('hello', 0) AS res")))
+    (t/is (= [{:res ""}]
+             (xt/q tu/*node* "SELECT RPAD('hello', -1) AS res")))))
+
 (t/deftest test-length-query
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1
                                              :string "abcdef"

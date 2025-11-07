@@ -1228,6 +1228,56 @@
    :->call-code (fn [[code]]
                   `(str->buf (.toLowerCase (resolve-string ~code))))})
 
+(letfn [(pad-impl [left? str-code len-code pad-code]
+          (let [s (gensym 's)
+                len (gensym 'len)
+                slen (gensym 'slen)
+                pad (gensym 'pad)
+                pad-len (gensym 'pad-len)
+                needed (gensym 'needed)
+                full-pads (gensym 'full-pads)
+                partial (gensym 'partial)
+                padding (gensym 'padding)]
+            `(let [~s (resolve-string ~str-code)
+                   ~len (long ~len-code)]
+               (if (<= ~len 0)
+                 (str->buf "")
+                 (let [~slen (.length ~s)]
+                   (if (>= ~slen ~len)
+                     (str->buf (.substring ~s 0 ~len))
+                     (let [~pad (resolve-string ~pad-code)]
+                       (if (zero? (.length ~pad))
+                         ~str-code
+                         (let [~pad-len (.length ~pad)
+                               ~needed (- ~len ~slen)
+                               ~full-pads (quot ~needed ~pad-len)
+                               ~partial (rem ~needed ~pad-len)
+                               ~padding (str (apply str (repeat ~full-pads ~pad))
+                                             (.substring ~pad 0 ~partial))]
+                           (str->buf ~(if left?
+                                        `(str ~padding ~s)
+                                        `(str ~s ~padding))))))))))))]
+
+  (defmethod codegen-call [:lpad :utf8 :int] [_]
+    {:return-type :utf8
+     :->call-code (fn [[str-code len-code]]
+                    (pad-impl true str-code len-code `" "))})
+
+  (defmethod codegen-call [:lpad :utf8 :int :utf8] [_]
+    {:return-type :utf8
+     :->call-code (fn [[str-code len-code pad-code]]
+                    (pad-impl true str-code len-code pad-code))})
+
+  (defmethod codegen-call [:rpad :utf8 :int] [_]
+    {:return-type :utf8
+     :->call-code (fn [[str-code len-code]]
+                    (pad-impl false str-code len-code `" "))})
+
+  (defmethod codegen-call [:rpad :utf8 :int :utf8] [_]
+    {:return-type :utf8
+     :->call-code (fn [[str-code len-code pad-code]]
+                    (pad-impl false str-code len-code pad-code))}))
+
 (defmethod codegen-call [:namespace :keyword] [_]
   {:return-type [:union #{:null :utf8}]
    :continue-call (fn [f [kw]]

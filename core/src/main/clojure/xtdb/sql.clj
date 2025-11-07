@@ -1135,6 +1135,7 @@
 
 ;; stringy
 (def-sql-fns [str] 1 Long/MAX_VALUE)
+(def-sql-fns [lpad rpad] 2 3)
 (def-sql-fns [namespace local_name] 1 1)
 
 (defrecord ExprPlanVisitor [env scope]
