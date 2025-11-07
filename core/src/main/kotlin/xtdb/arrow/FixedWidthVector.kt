@@ -152,7 +152,7 @@ sealed class FixedWidthVector : Vector() {
     override val metadataFlavours get() = listOf(this as MetadataFlavour)
 
     override fun hashCode0(idx: Int, hasher: Hasher) =
-        hasher.hash(getBytes0(idx))
+        dataBuffer.hashCode(hasher, idx * byteWidth, byteWidth)
 
     override fun rowCopier0(src: VectorReader): RowCopier {
         nullable = nullable || src.nullable

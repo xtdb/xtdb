@@ -165,7 +165,8 @@ object ArrowUtil {
         }
     }
 
-    fun ArrowBuf.toByteArray() = ByteArray(capacity().toInt()).also { getBytes(0, it) }
+    fun ArrowBuf.toByteArray(offset: Int = 0, len: Int = capacity().toInt() - offset) =
+        ByteArray(len).also { getBytes(offset.toLong(), it) }
 
     @Suppress("Since15") // IntelliJ flags this as unavailable, but it's actually available.
     fun ArrowBuf.toByteBuffer(start: Long = 0, len: Long = capacity()): ByteBuffer =
