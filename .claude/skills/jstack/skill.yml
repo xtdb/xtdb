@@ -1,0 +1,9 @@
+name: jstack
+version: 1.0.0
+description: Analyze Java thread dumps to identify deadlocks, performance issues, and thread contention
+author: James Henderson
+tags:
+  - java
+  - debugging
+  - performance
+  - jvm

@@ -42,7 +42,7 @@ Your analysis should identify:
 - **Thread Contention** - Locks with high contention (multiple waiters) and what threads hold them
 - **Thread State Overview** - Statistics on thread states
 - **Problematic Threads** - Details on blocked/waiting threads with context
-- **Code Locations** - If identifiable, map issues to code locations in the XTDB codebase
+- **Code Locations** - If identifiable, map issues to code locations in the codebase
 - **Recommended Actions** - Specific steps to resolve the issues
 
 Format your response in clear markdown with sections for each category. Include relevant thread IDs, lock addresses, and stack trace excerpts to support findings.
