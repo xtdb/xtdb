@@ -256,7 +256,7 @@ class LogProcessor(
                 watchers.notify(msgId, e)
                 LOG.error(
                     e,
-                    "Ingestion stopped: error processing log record at id $msgId (epoch: $epoch, logOffset: ${record.logOffset})"
+                    "Ingestion stopped for '${db.name}' database: error processing log record at id $msgId (epoch: $epoch, logOffset: ${record.logOffset})"
                 )
                 LOG.error(
                     """
