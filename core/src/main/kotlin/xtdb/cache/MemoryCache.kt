@@ -202,6 +202,7 @@ class MemoryCache @JvmOverloads internal constructor(
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Suppress("NAME_SHADOWING")
     suspend fun get(key: Path, slice: Slice? = null, fetch: Fetch): ArrowBuf {
         LOGGER.debug("Sending get for $key / $slice...")
@@ -219,6 +220,11 @@ class MemoryCache @JvmOverloads internal constructor(
             res.await()
         } catch (e: Throwable) {
             res.cancel()
+            if (res.isCompleted) {
+                val completedBuf = res.getCompleted()
+                LOGGER.trace("get: Buffer was completed before cancel, releasing (refCnt=${completedBuf.refCnt()})")
+                completedBuf.referenceManager.release()
+            }
             throw e
         }
     }
