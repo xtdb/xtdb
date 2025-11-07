@@ -35,17 +35,31 @@ class BuildSideMap private constructor(
     }
 
     fun iterator(hash: Int) = object : IntIterator() {
+        private val srcIdxsReader = srcIdxs.valueReader()
+        private val srcHashesReader = srcHashes.valueReader()
+
         private var lookupIdx = hash and hashMask
+            set(value) {
+                field = value
+                srcIdxsReader.pos = value
+                srcHashesReader.pos = value
+            }
+
         private var nextValue = -1
         private var hasNextValue = false
+
+        init {
+            srcIdxsReader.pos = lookupIdx
+            srcHashesReader.pos = lookupIdx
+        }
         
         override fun hasNext(): Boolean {
             if (hasNextValue) return true
 
             while (true) {
-                if (srcIdxs.isNull(lookupIdx)) return false
-                if (srcHashes.getInt(lookupIdx) == hash) {
-                    nextValue = srcIdxs.getInt(lookupIdx)
+                if (srcIdxsReader.isNull) return false
+                if (srcHashesReader.readInt() == hash) {
+                    nextValue = srcIdxsReader.readInt()
                     hasNextValue = true
                     lookupIdx = lookupIdx.inc() and hashMask
                     return true
