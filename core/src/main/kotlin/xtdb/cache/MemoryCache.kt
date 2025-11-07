@@ -135,7 +135,7 @@ class MemoryCache @JvmOverloads internal constructor(
         val pathSlice: PathSlice, val localPath: Path, val onEvict: AutoCloseable?
     ) : FetchChEvent {
         override fun handle(fetchReqs: FetchReqs) {
-            val reqs = fetchReqs.remove(pathSlice)
+            val reqs = fetchReqs.remove(pathSlice).orEmpty()
             LOGGER.trace("FetchDone: Completing $pathSlice for ${reqs?.size ?: 0} awaiter(s)")
 
             try {
@@ -163,19 +163,25 @@ class MemoryCache @JvmOverloads internal constructor(
                 }
 
                 try {
-                    openSlices[pathSlice] = buf
-                    reqs?.forEach {
-                        buf.referenceManager.retain()
-                        LOGGER.trace("FetchDone: Completing awaiter for $pathSlice")
-                        if (!it.complete(buf)) buf.referenceManager.release()
+                    if (reqs.isEmpty()) {
+                        LOGGER.trace("FetchDone: No awaiters for $pathSlice")
+                        buf.referenceManager.release()
+                    } else {
+                        LOGGER.trace("FetchDone: Loaded $pathSlice into memory for ${reqs.size} awaiter(s)")
+                        openSlices[pathSlice] = buf
+                        // (size - 1) because we already have refCount 1 from allocation
+                        (reqs.size - 1).takeIf { it > 0 }?.let{ buf.referenceManager.retain(it) }
+                        reqs.forEach {
+                            if (!it.complete(buf)) buf.referenceManager.release()
+                        }
                     }
-                    buf.referenceManager.release()
+
                 } catch (t: Throwable) {
                     buf.close()
                     throw t
                 }
             } catch (t: Throwable) {
-                reqs?.forEach { it.completeExceptionally(t) }
+                reqs.forEach { it.completeExceptionally(t) }
             }
         }
     }
