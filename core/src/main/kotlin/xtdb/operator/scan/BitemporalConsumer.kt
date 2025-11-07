@@ -77,7 +77,8 @@ class BitemporalConsumer private constructor(
                         if (it == "_iid") rel["_iid"].select(selArray)
                         else putReader?.vectorForOrNull(it) ?: NullVector(it, true, selArray.size)
                     }
-                    .plus(listOfNotNull(validFromVec, validToVec, systemFromVec, systemToVec)))
+                    .plus(listOfNotNull(validFromVec, validToVec, systemFromVec, systemToVec)),
+                selArray.size)
         }
 
         override fun close() {
@@ -120,12 +121,12 @@ class BitemporalConsumer private constructor(
         rowCount++
     }
 
-    fun build(): RelationReader {
-        val builtRels = rels.map { it.build() }
+    fun build(select: (RelationReader) -> RelationReader): RelationReader {
+        val builtRels = rels.map { select(it.build()) }
 
         return RelationReader.from(
             colNames.map { colName -> ConcatVector.from(colName, builtRels.map { it[colName] }) },
-            rowCount
+            builtRels.sumOf { it.rowCount }
         )
     }
 

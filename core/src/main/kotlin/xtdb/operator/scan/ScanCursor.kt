@@ -93,13 +93,14 @@ class ScanCursor(
                     if (evPtr.isValid(isValidPtr, taskPath)) mergeQueue.add(leafPtr)
                 }
 
-                val rel = bitemporalConsumer.build()
-                    .let { rel ->
-                        colPreds.entries.asSequence()
-                            .filterNot { it.key == "_iid" }
-                            .map { it.value }
-                            .fold(rel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args)) }
-                    }
+                val colPreds = colPreds.entries
+                    .filterNot { it.key == "_iid" }
+                    .map { it.value }
+
+                val rel = bitemporalConsumer.build { childRel ->
+                    colPreds
+                        .fold(childRel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args)) }
+                }
 
                 if (rel.rowCount > 0) {
                     c.accept(rel)
