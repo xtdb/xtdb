@@ -240,7 +240,7 @@ expr
 numericExpr
     : '+' numericExpr #UnaryPlusExpr
     | '-' numericExpr #UnaryMinusExpr
-    | numericExpr (SOLIDUS | ASTERISK) numericExpr #NumericFactorExpr
+    | numericExpr (SOLIDUS | ASTERISK | PERCENT) numericExpr #NumericFactorExpr
     | numericExpr (PLUS | MINUS) numericExpr #NumericTermExpr
     | TILDE numericExpr #NumericBitwiseNotExpr
     | numericExpr AMPERSAND numericExpr #NumericBitwiseAndExpr

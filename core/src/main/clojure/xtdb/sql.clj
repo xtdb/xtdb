@@ -1262,6 +1262,7 @@
     (list (cond
             (.ASTERISK ctx) '*
             (.SOLIDUS ctx) '/
+            (.PERCENT ctx) 'mod
             :else (throw (IllegalStateException.)))
           (-> (.numericExpr ctx 0) (.accept this))
           (-> (.numericExpr ctx 1) (.accept this))))

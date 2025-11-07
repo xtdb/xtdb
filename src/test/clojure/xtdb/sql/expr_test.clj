@@ -1253,6 +1253,14 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
   (t/is (= [{:col2 -8}]
            (xt/q tu/*node* "SELECT ALL - - 72 - 27 + + ( - 53 ) col2")))
 
+  (t/testing "modulo has same precedence as * and /"
+    (t/is (= [{:col2 1}]
+             (xt/q tu/*node* "SELECT 10 % 3 AS col2")))
+    (t/is (= [{:col2 3}]
+             (xt/q tu/*node* "SELECT 2 + 10 % 3 AS col2")))
+    (t/is (= [{:col2 2}]
+             (xt/q tu/*node* "SELECT 10 % 3 * 2 AS col2"))))
+
   (t/testing "bitwise and"
     (t/is (= [{:col2 true}]
              (xt/q tu/*node* "SELECT 2 * 3 & 1 = 0 col2")

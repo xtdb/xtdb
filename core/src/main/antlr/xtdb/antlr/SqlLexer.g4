@@ -57,6 +57,7 @@ PLUS : '+' ;
 MINUS : '-' ;
 ASTERISK : '*' ;
 SOLIDUS : '/' ;
+PERCENT : '%' ;
 
 BITWISE_OR : '|' ;
 BITWISE_XOR : '#' ;
