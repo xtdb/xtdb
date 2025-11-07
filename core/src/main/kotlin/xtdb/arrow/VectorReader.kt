@@ -88,23 +88,7 @@ interface VectorReader : ILookup, AutoCloseable {
 
     fun getLeg(idx: Int): String? = unsupported("getLeg")
 
-    fun valueReader() = object : ValueReader {
-        override var pos: Int = 0
-
-        override val leg get() = getLeg(pos)
-
-        override val isNull get() = isNull(pos)
-
-        override fun readBoolean() = getBoolean(pos)
-        override fun readByte() = getByte(pos)
-        override fun readShort() = getShort(pos)
-        override fun readInt() = getInt(pos)
-        override fun readLong() = getLong(pos)
-        override fun readFloat() = getFloat(pos)
-        override fun readDouble() = getDouble(pos)
-        override fun readBytes() = getBytes(pos)
-        override fun readObject() = getObject(pos)
-    }
+    fun valueReader(): ValueReader = ValueReader.ForVector(this)
 
     fun openSlice(al: BufferAllocator): VectorReader
 

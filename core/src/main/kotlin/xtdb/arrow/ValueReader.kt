@@ -22,4 +22,22 @@ interface ValueReader {
 
     fun readBytes(): ByteBuffer = unsupported("readBytes")
     fun readObject(): Any? = unsupported("readObject")
+
+    open class ForVector(private val vec: VectorReader) : ValueReader {
+        override var pos: Int = 0
+
+        override val leg get() = vec.getLeg(pos)
+
+        override val isNull get() = vec.isNull(pos)
+
+        override fun readBoolean() = vec.getBoolean(pos)
+        override fun readByte() = vec.getByte(pos)
+        override fun readShort() = vec.getShort(pos)
+        override fun readInt() = vec.getInt(pos)
+        override fun readLong() = vec.getLong(pos)
+        override fun readFloat() = vec.getFloat(pos)
+        override fun readDouble() = vec.getDouble(pos)
+        override fun readBytes() = vec.getBytes(pos)
+        override fun readObject() = vec.getObject(pos)
+    }
 }

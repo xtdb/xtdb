@@ -3,9 +3,6 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.BitVectorHelper
-import org.apache.arrow.vector.BitVectorHelper.byteIndex
-import org.apache.arrow.vector.util.DataSizeRoundingUtil.divideBy8Ceil
-import xtdb.arrow.VectorIndirection.Companion.Selection
 import kotlin.math.max
 
 internal class BitBuffer private constructor(
@@ -75,11 +72,9 @@ internal class BitBuffer private constructor(
 
     fun writeBoolean(bool: Boolean) = writeBit(if (bool) 1 else 0)
 
-    private fun Int.isSetAtIndex(bitIdx: Int) = (this.shr(bitIdx % 8) and 1) == 1
-
     fun writeBits(src: BitBuffer, sel: VectorIndirection) {
         ensureWritable(sel.valueCount())
-        val srcBuf = src.buf
+        val srcRdr = src.valueReader()
         val destBuf = buf
 
         var writerBitIndex = this.writerBitIndex
@@ -88,20 +83,12 @@ internal class BitBuffer private constructor(
 
         var tailByte = if (writerBitIndex % 8 == 0) 0 else destBuf.getByte(destBuf.writerIndex()).toInt()
 
-        var cacheByte = -1
-        var cacheByteIdx = -1L
-
         for (selIdx in sel) {
             val bitIdx = writerBitIndex % 8
             val mask = 1 shl bitIdx
+            srcRdr.pos = selIdx
 
-            val selByteIdx = (selIdx / 8).toLong()
-            if (selByteIdx != cacheByteIdx) {
-                cacheByteIdx = selByteIdx
-                cacheByte = srcBuf.getByte(selByteIdx).toInt()
-            }
-
-            tailByte = if (cacheByte.isSetAtIndex(selIdx)) tailByte or mask else tailByte and mask.inv()
+            tailByte = if (srcRdr.readBoolean()) tailByte or mask else tailByte and mask.inv()
 
             if (++writerBitIndex % 8 == 0) {
                 destBuf.writeByte(tailByte)
@@ -115,6 +102,26 @@ internal class BitBuffer private constructor(
 
         if (writerBitIndex % 8 != 0)
             destBuf.writeByte(tailByte)
+    }
+
+    fun valueReader() = object : ValueReader {
+        override var pos = 0
+
+        private var cacheByte = -1
+        private var cacheByteIdx = -1L
+
+        private fun Int.isSetAtIndex(bitIdx: Int) = (this.shr(bitIdx % 8) and 1) == 1
+
+        override fun readBoolean(): Boolean {
+            val pos = this.pos
+            val selByteIdx = (pos / 8).toLong()
+            if (selByteIdx != cacheByteIdx) {
+                cacheByteIdx = selByteIdx
+                cacheByte = buf.getByte(selByteIdx).toInt()
+            }
+
+            return cacheByte.isSetAtIndex(pos)
+        }
     }
 
     internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) {
