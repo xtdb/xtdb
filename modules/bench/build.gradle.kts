@@ -3,10 +3,15 @@ import xtdb.DataReaderTransformer
 plugins {
     `java-library`
     alias(libs.plugins.clojurephant)
+    alias(libs.plugins.kotlin.jvm)
     id("com.gradleup.shadow")
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+
+configurations.testRuntimeClasspath {
+    exclude(group = "io.grpc", module = "grpc-xds")
+}
 
 dependencies {
     api(project(":"))
@@ -35,8 +40,20 @@ dependencies {
 
     api("software.amazon.awssdk", "s3", "2.25.24")
     api("clj-http", "clj-http", "3.13.1")
+
+    // Driver benchmarks
+    testImplementation(project(":modules:xtdb-adbc"))
+    testImplementation(project(":modules:xtdb-flight-sql"))
+    testImplementation(libs.arrow.adbc.fsql)
+    testImplementation(kotlin("stdlib"))
 }
 
+
+tasks.test {
+    testLogging {
+        showStandardStreams = true
+    }
+}
 
 tasks.shadowJar {
     transform(DataReaderTransformer())
