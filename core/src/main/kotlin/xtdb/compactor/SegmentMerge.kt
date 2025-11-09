@@ -66,11 +66,11 @@ fun resolveSameSystemTimeEvents(
 
     var seenErase = false
 
-    while (evPtr.isValid(isValidPtr, path)) {
+    while (evPtr.isValid()) {
         evPtr.getIidPointer(startIidPtr)
         curSystemFrom = evPtr.systemFrom
 
-        while (evPtr.isValid(isValidPtr, path)
+        while (evPtr.isValid()
             && evPtr.systemFrom == curSystemFrom
             && startIidPtr == evPtr.getIidPointer(curIidPtr)
         ) {
@@ -160,7 +160,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
             val evPtr = EventRowPointer(rel, path)
             val rowCopier = outWriter.rowCopier(rel)
 
-            if (evPtr.isValid(isValidPtr, path))
+            if (evPtr.isValid())
                 mergeQueue.add(QueueElem(evPtr, rowCopier))
         }
 
@@ -177,7 +177,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
 
             evPtr.nextIndex()
 
-            if (evPtr.isValid(isValidPtr, path))
+            if (evPtr.isValid())
                 mergeQueue.add(elem)
         }
 

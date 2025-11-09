@@ -9,7 +9,7 @@ import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
-class IndirectVector(private val inner: VectorReader, private val sel: VectorIndirection) : VectorReader {
+class IndirectVector(private val inner: VectorReader, private val sel: VectorIndirection) : VectorReader, LongLongVectorReader {
     override val name: String get() = inner.name
     override val valueCount: Int get() = sel.valueCount()
     override val nullable: Boolean get() = inner.nullable
@@ -27,6 +27,9 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     override fun getBytes(idx: Int): ByteBuffer = inner.getBytes(sel[idx])
     override fun getPointer(idx: Int, reuse: ArrowBufPointer) = inner.getPointer(sel[idx], reuse)
     override fun getObject(idx: Int, keyFn: IKeyFn<*>) = inner.getObject(sel[idx], keyFn)
+
+    override fun getLongLongHigh(idx: Int) = (inner as LongLongVectorReader).getLongLongHigh(sel[idx])
+    override fun getLongLongLow(idx: Int) = (inner as LongLongVectorReader).getLongLongLow(sel[idx])
 
     override val keyNames get() = inner.keyNames
     override val legNames get() = inner.legNames

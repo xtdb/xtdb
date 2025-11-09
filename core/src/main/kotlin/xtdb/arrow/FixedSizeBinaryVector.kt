@@ -4,13 +4,14 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
+import java.lang.Long.reverseBytes
 import java.nio.ByteBuffer
 
 class FixedSizeBinaryVector private constructor(
     override var name: String, override var nullable: Boolean, override var valueCount: Int,
     override val byteWidth: Int,
     override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
-) : FixedWidthVector(), MetadataFlavour.Bytes {
+) : FixedWidthVector(), LongLongVectorReader, MetadataFlavour.Bytes {
 
     override val type = ArrowType.FixedSizeBinary(byteWidth)
 
@@ -20,6 +21,9 @@ class FixedSizeBinaryVector private constructor(
     override fun getBytes(idx: Int): ByteBuffer = getBytes0(idx)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getByteArray(idx)
+
+    override fun getLongLongHigh(idx: Int) = reverseBytes(dataBuffer.getLong(idx * 2))
+    override fun getLongLongLow(idx: Int) = reverseBytes(dataBuffer.getLong(idx * 2 + 1))
 
     override fun writeObject0(value: Any) = when (value) {
         is ByteBuffer -> writeBytes(value)

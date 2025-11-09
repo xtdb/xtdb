@@ -59,7 +59,7 @@ class ScanCursor(
 
             leafReaders.forEachIndexed { idx, leafReader ->
                 val evPtr = EventRowPointer(leafReader, taskPath)
-                if (!evPtr.isValid(isValidPtr, taskPath)) return@forEachIndexed
+                if (!evPtr.isValid()) return@forEachIndexed
                 mergeQueue.add(LeafPointer(evPtr, idx))
             }
 
@@ -90,7 +90,7 @@ class ScanCursor(
 
                     evPtr.nextIndex()
 
-                    if (evPtr.isValid(isValidPtr, taskPath)) mergeQueue.add(leafPtr)
+                    if (evPtr.isValid()) mergeQueue.add(leafPtr)
                 }
 
                 val colPreds = colPreds.entries
