@@ -3,6 +3,7 @@ package xtdb.compactor
 import com.carrotsearch.hppc.ByteArrayList
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.arrow.BufferedWritableByteChannel
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.compactor.RecencyPartition.*
@@ -95,7 +96,9 @@ internal interface OutWriter : AutoCloseable {
         ) : OutWriter {
             private val outRel = Relation(al, schema)
 
-            private val unloader = runCatching { outRel.startUnload(outPath.openWritableChannel()) }
+            private val unloader = runCatching { 
+                outRel.startUnload(BufferedWritableByteChannel(outPath.openWritableChannel())) 
+            }
                 .onFailure { outRel.close() }
                 .getOrThrow()
 

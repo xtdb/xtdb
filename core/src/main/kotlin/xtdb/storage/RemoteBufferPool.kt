@@ -17,6 +17,7 @@ import xtdb.arrow.ArrowUtil.openArrowBufView
 import xtdb.arrow.ArrowUtil.readArrowFooter
 import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.ArrowUtil.toByteBuffer
+import xtdb.arrow.BufferedWritableByteChannel
 import xtdb.arrow.Relation
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
@@ -165,26 +166,28 @@ internal class RemoteBufferPool(
 
         return FileChannel.open(tmpPath, READ, WRITE, TRUNCATE_EXISTING)
             .closeOnCatch { fileChannel ->
-                rel.startUnload(fileChannel).closeOnCatch { unloader ->
-                    object : ArrowWriter {
-                        override fun writePage() = unloader.writePage()
+                BufferedWritableByteChannel(fileChannel).closeOnCatch { bufferedCh ->
+                    rel.startUnload(bufferedCh).closeOnCatch { unloader ->
+                        object : ArrowWriter {
+                            override fun writePage() = unloader.writePage()
 
-                        override fun end(): FileSize {
-                            unloader.end()
-                            fileChannel.close()
+                            override fun end(): FileSize {
+                                unloader.end()
+                                bufferedCh.close()
 
-                            val size = tmpPath.fileSize()
-                            objectStore.uploadArrowFile(key, tmpPath)
-                            networkWrite?.increment(size.toDouble())
+                                val size = tmpPath.fileSize()
+                                objectStore.uploadArrowFile(key, tmpPath)
+                                networkWrite?.increment(size.toDouble())
 
-                            diskCache.put(key, tmpPath)
-                            return size
-                        }
+                                diskCache.put(key, tmpPath)
+                                return size
+                            }
 
-                        override fun close() {
-                            unloader.close()
-                            if (fileChannel.isOpen) fileChannel.close()
-                            tmpPath.deleteIfExists()
+                            override fun close() {
+                                unloader.close()
+                                if (bufferedCh.isOpen) bufferedCh.close()
+                                tmpPath.deleteIfExists()
+                            }
                         }
                     }
                 }

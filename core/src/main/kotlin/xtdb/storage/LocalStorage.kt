@@ -14,6 +14,7 @@ import xtdb.api.storage.Storage.arrowFooterCache
 import xtdb.arrow.ArrowUtil.arrowBufToRecordBatch
 import xtdb.arrow.ArrowUtil.readArrowFooter
 import xtdb.arrow.ArrowUtil.toByteArray
+import xtdb.arrow.BufferedWritableByteChannel
 import xtdb.arrow.Relation
 import xtdb.cache.MemoryCache
 import xtdb.database.DatabaseName
@@ -149,29 +150,31 @@ internal class LocalStorage(
     override fun openArrowWriter(key: Path, rel: Relation): ArrowWriter {
         val tmpPath = rootPath.createTempUploadFile()
         return newByteChannel(tmpPath, WRITE, TRUNCATE_EXISTING, CREATE).closeOnCatch { fileChannel ->
-            rel.startUnload(fileChannel).closeOnCatch { unloader ->
-                object : ArrowWriter {
-                    override fun writePage() {
-                        try {
-                            unloader.writePage()
-                        } catch (_: ClosedByInterruptException) {
-                            throw InterruptedException()
+            BufferedWritableByteChannel(fileChannel).closeOnCatch { bufferedCh ->
+                rel.startUnload(bufferedCh).closeOnCatch { unloader ->
+                    object : ArrowWriter {
+                        override fun writePage() {
+                            try {
+                                unloader.writePage()
+                            } catch (_: ClosedByInterruptException) {
+                                throw InterruptedException()
+                            }
                         }
-                    }
 
-                    override fun end(): FileSize {
-                        unloader.end()
-                        fileChannel.close()
+                        override fun end(): FileSize {
+                            unloader.end()
+                            bufferedCh.close()
 
-                        val filePath = rootPath.resolve(key).also { it.createParentDirectories() }
-                        tmpPath.moveTo(filePath, StandardCopyOption.ATOMIC_MOVE)
-                        return filePath.fileSize()
-                    }
+                            val filePath = rootPath.resolve(key).also { it.createParentDirectories() }
+                            tmpPath.moveTo(filePath, StandardCopyOption.ATOMIC_MOVE)
+                            return filePath.fileSize()
+                        }
 
-                    override fun close() {
-                        unloader.close()
-                        if (fileChannel.isOpen) fileChannel.close()
-                        tmpPath.deleteIfExists()
+                        override fun close() {
+                            unloader.close()
+                            if (bufferedCh.isOpen) bufferedCh.close()
+                            tmpPath.deleteIfExists()
+                        }
                     }
                 }
             }
