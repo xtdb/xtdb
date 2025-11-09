@@ -104,7 +104,11 @@ class Relation(
         RelationUnloader(ArrowUnloader.open(ch, schema, mode))
 
     fun startUnload(path: Path, mode: Mode = FILE) =
-        path.openWritableChannel().closeOnCatch { ch -> startUnload(ch, mode) }
+        path.openWritableChannel().closeOnCatch { ch -> 
+            BufferedWritableByteChannel(ch, autoFlush = true).closeOnCatch { bufferedCh ->
+                startUnload(bufferedCh, mode)
+            }
+        }
 
     val asArrowStream: ByteArray
         get() {
