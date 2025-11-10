@@ -37,7 +37,7 @@
      (when out-rel
        (try
          (set! (.out-rel this) nil)
-         (.accept c out-rel)
+         (.accept c [out-rel])
          true
          (finally
            (.close out-rel))))))

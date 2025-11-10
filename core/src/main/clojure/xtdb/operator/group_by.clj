@@ -571,10 +571,11 @@
        (set! (.done? this) true)
 
        (.forEachRemaining in-cursor
-                          (fn [^RelationReader in-rel]
-                            (let [group-mapping (.groupMapping group-mapper in-rel)]
-                              (doseq [^IAggregateSpec agg-spec aggregate-specs]
-                                (.aggregate agg-spec in-rel group-mapping)))))
+                          (fn [in-rels]
+                            (doseq [^RelationReader in-rel in-rels]
+                              (let [group-mapping (.groupMapping group-mapper in-rel)]
+                                (doseq [^IAggregateSpec agg-spec aggregate-specs]
+                                  (.aggregate agg-spec in-rel group-mapping))))))
 
        (util/with-open [agg-cols (map #(.finish ^IAggregateSpec %) aggregate-specs)]
          (let [gm-rel (.finish group-mapper)
@@ -582,7 +583,7 @@
                                                       (.getRowCount gm-rel))]
            (if (pos? (.getRowCount out-rel))
              (do
-               (.accept c out-rel)
+               (.accept c [out-rel])
                true)
              false))))))
 

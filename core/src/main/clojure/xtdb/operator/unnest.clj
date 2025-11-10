@@ -35,59 +35,64 @@
   (tryAdvance [_this c]
     (let [advanced? (boolean-array 1)]
       (while (and (.tryAdvance in-cursor
-                               (fn [^RelationReader in-rel]
-                                 (with-open [out-vec (Vector/open allocator to-field)]
-                                   (let [out-cols (LinkedList.)
+                               (fn [in-rels]
+                                 (let [out-rels (reduce (fn [acc ^RelationReader in-rel]
+                                                          (with-open [out-vec (Vector/open allocator to-field)]
+                                                            (let [out-cols (LinkedList.)
 
-                                         vec-rdr (.vectorForOrNull in-rel from-column-name)
-                                         vec-type (.getType (.getField vec-rdr))
+                                                                  vec-rdr (.vectorForOrNull in-rel from-column-name)
+                                                                  vec-type (.getType (.getField vec-rdr))
 
-                                         rdrs+copiers
-                                         (condp instance? vec-type
-                                           ArrowType$List
-                                           [[vec-rdr (-> (.getListElements vec-rdr)
-                                                         (.rowCopier out-vec))]]
+                                                                  rdrs+copiers
+                                                                  (condp instance? vec-type
+                                                                    ArrowType$List
+                                                                    [[vec-rdr (-> (.getListElements vec-rdr)
+                                                                                  (.rowCopier out-vec))]]
 
-                                           SetType
-                                           [[vec-rdr (-> (.getListElements vec-rdr)
-                                                         (.rowCopier out-vec))]]
+                                                                    SetType
+                                                                    [[vec-rdr (-> (.getListElements vec-rdr)
+                                                                                  (.rowCopier out-vec))]]
 
-                                           ArrowType$Union
-                                           (concat (when-let [list-rdr (.vectorForOrNull vec-rdr "list")]
-                                                     [[list-rdr (-> (.rowCopier (.getListElements list-rdr) out-vec))]])
-                                                   (when-let [set-rdr (.vectorForOrNull vec-rdr "set")]
-                                                     [[set-rdr (-> (.rowCopier (.getListElements set-rdr) out-vec))]]))
+                                                                    ArrowType$Union
+                                                                    (concat (when-let [list-rdr (.vectorForOrNull vec-rdr "list")]
+                                                                              [[list-rdr (-> (.rowCopier (.getListElements list-rdr) out-vec))]])
+                                                                            (when-let [set-rdr (.vectorForOrNull vec-rdr "set")]
+                                                                              [[set-rdr (-> (.rowCopier (.getListElements set-rdr) out-vec))]]))
 
-                                           nil)
+                                                                    nil)
 
-                                         idxs (IntStream/builder)]
+                                                                  idxs (IntStream/builder)]
 
-                                     (util/with-open [ordinal-vec (when ordinality-column
-                                                                    (IntVector/open allocator ordinality-column false 0))]
-                                       (when ordinal-vec
-                                         (.add out-cols ordinal-vec))
+                                                              (util/with-open [ordinal-vec (when ordinality-column
+                                                                                             (IntVector/open allocator ordinality-column false 0))]
+                                                                (when ordinal-vec
+                                                                  (.add out-cols ordinal-vec))
 
-                                       (dotimes [n (.getValueCount vec-rdr)]
-                                         (doseq [[^VectorReader coll-rdr, ^RowCopier el-copier] rdrs+copiers]
-                                           (when (and coll-rdr (not (.isNull coll-rdr n)))
-                                             (let [len (.getListCount coll-rdr n)
-                                                   start-pos (.getListStartIndex coll-rdr n)]
-                                               (.copyRange el-copier start-pos len)
+                                                                (dotimes [n (.getValueCount vec-rdr)]
+                                                                  (doseq [[^VectorReader coll-rdr, ^RowCopier el-copier] rdrs+copiers]
+                                                                    (when (and coll-rdr (not (.isNull coll-rdr n)))
+                                                                      (let [len (.getListCount coll-rdr n)
+                                                                            start-pos (.getListStartIndex coll-rdr n)]
+                                                                        (.copyRange el-copier start-pos len)
 
-                                               (dotimes [el-idx len]
-                                                 (.add idxs n)
-                                                 (some-> ordinal-vec (.writeInt (inc el-idx))))))))
+                                                                        (dotimes [el-idx len]
+                                                                          (.add idxs n)
+                                                                          (some-> ordinal-vec (.writeInt (inc el-idx))))))))
 
-                                       (let [idxs (.toArray (.build idxs))]
-                                         (when (pos? (alength idxs))
-                                           (doseq [^VectorReader in-col in-rel]
-                                             (when (= from-column-name (.getName in-col))
-                                               (.add out-cols out-vec))
-
-                                             (.add out-cols (.select in-col idxs)))
-
-                                           (.accept c (vr/rel-reader out-cols (alength idxs)))
-                                           (aset advanced? 0 true))))))))
+                                                                (let [idxs (.toArray (.build idxs))]
+                                                                  (if (pos? (alength idxs))
+                                                                    (do
+                                                                      (doseq [^VectorReader in-col in-rel]
+                                                                        (when (= from-column-name (.getName in-col))
+                                                                          (.add out-cols out-vec))
+                                                                        (.add out-cols (.select in-col idxs)))
+                                                                      (conj acc (vr/rel-reader out-cols (alength idxs))))
+                                                                    acc))))))
+                                                        []
+                                                        in-rels)]
+                                   (when-not (empty? out-rels)
+                                     (.accept c out-rels)
+                                     (aset advanced? 0 true)))))
 
                   (not (aget advanced? 0))))
       (aget advanced? 0)))

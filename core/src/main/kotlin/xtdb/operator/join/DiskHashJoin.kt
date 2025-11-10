@@ -44,7 +44,7 @@ class DiskHashJoin(
     private val probeColNames = probeRel.schema.fields.map { it.name }
     private val hashCol = "hashes".ofType(I32).openVector(al)
 
-    override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
+    override fun tryAdvance(c: Consumer<in List<RelationReader>>): Boolean {
         while (true) {
             if (++partIdx >= probesPerBuildPlusUnmatched * buildParts) return false
 
@@ -53,7 +53,7 @@ class DiskHashJoin(
             if (probePartIdxWithinBuildPart == probesPerBuild) {
                 buildSide.unmatchedIdxsRel(probeColNames, joinType)
                     ?.let { unmatchedIdxsRel ->
-                        c.accept(unmatchedIdxsRel)
+                        c.accept(listOf(unmatchedIdxsRel))
                         return true
                     }
             } else {
@@ -75,7 +75,7 @@ class DiskHashJoin(
                 val joinedRel = joinType.probe(probeSide)
 
                 if (joinedRel.rowCount > 0) {
-                    c.accept(joinedRel)
+                    c.accept(listOf(joinedRel))
                     return true
                 }
             }
@@ -100,9 +100,11 @@ class DiskHashJoin(
         ): DiskHashJoin =
             Relation(al, probeFields).use { tmpRel ->
                 Spill.open(al, tmpRel).use { spill ->
-                    probeCursor.forEachRemaining { inRel ->
-                        tmpRel.append(inRel)
-                        if (tmpRel.rowCount > buildSide.inMemoryThreshold) spill.spill()
+                    probeCursor.forEachRemaining { inRels ->
+                        inRels.forEach { inRel ->
+                            tmpRel.append(inRel)
+                            if (tmpRel.rowCount > buildSide.inMemoryThreshold) spill.spill()
+                        }
                     }
 
                     spill.end()

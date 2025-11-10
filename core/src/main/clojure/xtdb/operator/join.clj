@@ -116,8 +116,9 @@
 
   (tryAdvance [this c]
     (.forEachRemaining left-cursor
-                       (fn [^RelationReader left-rel]
-                         (.add left-rels (.openSlice left-rel allocator))))
+                       (fn [rels]
+                         (doseq [^RelationReader left-rel rels]
+                           (.add left-rels (.openSlice left-rel allocator)))))
 
     (boolean
       (when-let [right-rel (or (when (and left-rel-iterator (.hasNext left-rel-iterator))
@@ -127,14 +128,15 @@
                                    (.close right-rel)
                                    (set! (.right-rel this) nil))
                                  (when (.tryAdvance right-cursor
-                                                    (fn [^RelationReader right-rel]
-                                                      (set! (.right-rel this) (.openSlice right-rel allocator))
-                                                      (set! (.left-rel-iterator this) (.iterator left-rels))))
+                                                    (fn [right-rels]
+                                                      (when-let [^RelationReader first-right (first right-rels)]
+                                                        (set! (.right-rel this) (.openSlice first-right allocator))
+                                                        (set! (.left-rel-iterator this) (.iterator left-rels)))))
                                    (.right-rel this))))]
 
         (when-let [left-rel (when (.hasNext left-rel-iterator)
                               (.next left-rel-iterator))]
-          (.accept c (cross-product left-rel right-rel))
+          (.accept c [(cross-product left-rel right-rel)])
           true))))
 
   (close [_]
@@ -160,8 +162,9 @@
 
 (defn- build-phase [^BuildSide build-side, ^ICursor build-cursor]
   (.forEachRemaining build-cursor
-                     (fn [build-rel]
-                       (.append build-side build-rel)))
+                     (fn [build-rels]
+                       (doseq [build-rel build-rels]
+                         (.append build-side build-rel))))
   (.end build-side))
 
 (defn- build-pushdowns [^BuildSide build-side, pushdown-blooms, pushdown-iids]
@@ -243,18 +246,23 @@
      (let [advanced? (boolean-array 1)]
        (while (and (not (aget advanced? 0))
                    (.tryAdvance ^ICursor (.probe-cursor this)
-                                (fn [^RelationReader probe-rel]
-                                  (let [cmp (ComparatorFactory/build cmp-factory build-side probe-rel probe-key-col-names)
-                                        ^ProbeSide probe-side (ProbeSide. build-side probe-rel probe-key-col-names cmp)
-                                        row-count (.getRowCount probe-rel)]
-                                    (when (pos? row-count)
+                                (fn [probe-rels]
+                                  (let [out-rels (reduce (fn [acc ^RelationReader probe-rel]
+                                                           (let [cmp (ComparatorFactory/build cmp-factory build-side probe-rel probe-key-col-names)
+                                                                 ^ProbeSide probe-side (ProbeSide. build-side probe-rel probe-key-col-names cmp)
+                                                                 row-count (.getRowCount probe-rel)]
+                                                             (if (pos? row-count)
+                                                               (with-open [mark-col (doto (BitVector. allocator (name mark-col-name) true)
+                                                                                      (.ensureCapacity row-count))]
+                                                                 (JoinType/mark probe-side mark-col)
+                                                                 (let [out-cols (conj (seq probe-rel) mark-col)]
+                                                                   (conj acc (vr/rel-reader out-cols row-count))))
+                                                               acc)))
+                                                         []
+                                                         probe-rels)]
+                                    (when-not (empty? out-rels)
                                       (aset advanced? 0 true)
-
-                                      (with-open [mark-col (doto (BitVector. allocator (name mark-col-name) true)
-                                                             (.ensureCapacity row-count))]
-                                        (JoinType/mark probe-side mark-col)
-                                        (let [out-cols (conj (seq probe-rel) mark-col)]
-                                          (.accept c (vr/rel-reader out-cols row-count))))))))))
+                                      (.accept c out-rels)))))))
        (aget advanced? 0))))
 
   (close [_]

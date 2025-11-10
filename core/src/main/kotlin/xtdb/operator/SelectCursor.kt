@@ -15,14 +15,17 @@ class SelectCursor(
 
     override val cursorType get() = "select"
     override val childCursors get() = listOf(inCursor)
-    override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
+    override fun tryAdvance(c: Consumer<in List<RelationReader>>): Boolean {
         var advanced = false
 
         while (!advanced) {
-            inCursor.tryAdvance { inRel ->
-                val sel = selector.select(al, inRel, schema, args)
-                if (sel.isNotEmpty()) {
-                    c.accept(inRel.select(sel))
+            inCursor.tryAdvance { inRels ->
+                val outRels = inRels.mapNotNull { inRel ->
+                    val sel = selector.select(al, inRel, schema, args)
+                    if (sel.isNotEmpty()) inRel.select(sel) else null
+                }
+                if (outRels.isNotEmpty()) {
+                    c.accept(outRels)
                     advanced = true
                 }
             } || break

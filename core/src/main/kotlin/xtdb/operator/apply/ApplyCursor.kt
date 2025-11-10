@@ -26,20 +26,22 @@ class ApplyCursor(
         is ApplyMode.SingleJoin -> "apply-single-join"
     }
     override val childCursors get() = listOf(independentCursor)
-    override fun tryAdvance(c: Consumer<in RelationReader>) =
-        independentCursor.tryAdvance { inRel ->
-            val idxs = IntArrayList()
-            Relation(al, Schema(depFields)).use { depOutWriter ->
-                repeat(inRel.rowCount) { inIdx ->
-                    depCursorFactory.open(inRel, inIdx).use { depCursor ->
-                        mode.accept(depCursor, depOutWriter, idxs, inIdx)
+    override fun tryAdvance(c: Consumer<in List<RelationReader>>) =
+        independentCursor.tryAdvance { inRels ->
+            c.accept(inRels.map { inRel ->
+                val idxs = IntArrayList()
+                Relation(al, Schema(depFields)).use { depOutWriter ->
+                    repeat(inRel.rowCount) { inIdx ->
+                        depCursorFactory.open(inRel, inIdx).use { depCursor ->
+                            mode.accept(depCursor, depOutWriter, idxs, inIdx)
+                        }
                     }
-                }
 
-                val sel = idxs.toArray()
-                val cols = inRel.vectors.map { it.select(sel) } + depOutWriter.vectors
-                c.accept(RelationReader.from(cols, sel.size))
-            }
+                    val sel = idxs.toArray()
+                    val cols = inRel.vectors.map { it.select(sel) } + depOutWriter.vectors
+                    RelationReader.from(cols, sel.size)
+                }
+            })
         }
 
     override fun close() = independentCursor.close()

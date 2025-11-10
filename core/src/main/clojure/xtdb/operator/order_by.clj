@@ -71,8 +71,9 @@
     (if-let [filename (with-open [out-rel (Relation. allocator)]
                         (while (and (<= (.getRowCount out-rel) ^int *block-size*)
                                     (.tryAdvance in-cursor
-                                                 (fn [^RelationReader src-rel]
-                                                   (.append out-rel src-rel)))))
+                                                 (fn [src-rels]
+                                                   (doseq [^RelationReader src-rel src-rels]
+                                                     (.append out-rel src-rel))))))
                         (when (pos? (.getRowCount out-rel))
                           (let [out-filename (->file tmp-dir 0 file-idx)]
                             (with-open [os (io/output-stream out-filename)]
@@ -209,7 +210,7 @@
       (letfn [(load-next-batch []
                 (if (.loadNextPage ^Relation$Loader (.loader this) (.read-rel this))
                   (do
-                    (.accept c (.read-rel this))
+                    (.accept c [(.read-rel this)])
                     true)
                   (do
                     (io/delete-file (.sorted-file this))
@@ -225,8 +226,9 @@
                                               0)]
             (while (and (<= (.getRowCount acc-rel) ^int *block-size*)
                         (.tryAdvance in-cursor
-                                     (fn [^RelationReader src-rel]
-                                       (.append acc-rel src-rel)))))
+                                     (fn [src-rels]
+                                       (doseq [^RelationReader src-rel src-rels]
+                                         (.append acc-rel src-rel))))))
 
             (let [pos (.getRowCount acc-rel)]
               (if (<= pos ^int *block-size*)
@@ -237,7 +239,7 @@
                     false)
 
                   (do
-                    (.accept c (.select acc-rel (sorted-idxs acc-rel order-specs)))
+                    (.accept c [(.select acc-rel (sorted-idxs acc-rel order-specs))])
                     (set! (.consumed? this) true)
                     true))
 

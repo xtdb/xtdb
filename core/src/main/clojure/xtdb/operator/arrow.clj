@@ -22,7 +22,7 @@
   (tryAdvance [_ c]
     (if (.loadNextPage loader rel)
       (do
-        (.accept c rel)
+        (.accept c [rel])
         true)
       false))
 

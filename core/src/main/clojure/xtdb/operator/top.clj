@@ -38,14 +38,18 @@
       (while (and (not (aget advanced? 0))
                   (< (- idx skip) limit)
                   (.tryAdvance in-cursor
-                               (fn [^RelationReader in-rel]
-                                 (let [row-count (.getRowCount in-rel)
-                                       old-idx (.idx this)]
-
-                                   (set! (.-idx this) (+ old-idx row-count))
-
-                                   (when-let [[^long rel-offset, ^long rel-length] (offset+length skip limit old-idx row-count)]
-                                     (.accept c (.select in-rel (.toArray (IntStream/range rel-offset (+ rel-offset rel-length)))))
+                               (fn [in-rels]
+                                 (let [out-rels (reduce (fn [acc ^RelationReader in-rel]
+                                                          (let [row-count (.getRowCount in-rel)
+                                                                old-idx (.idx this)]
+                                                            (set! (.-idx this) (+ old-idx row-count))
+                                                            (if-let [[^long rel-offset, ^long rel-length] (offset+length skip limit old-idx row-count)]
+                                                              (conj acc (.select in-rel (.toArray (IntStream/range rel-offset (+ rel-offset rel-length)))))
+                                                              acc)))
+                                                        []
+                                                        in-rels)]
+                                   (when-not (empty? out-rels)
+                                     (.accept c out-rels)
                                      (aset advanced? 0 true)))))))
       (aget advanced? 0)))
 

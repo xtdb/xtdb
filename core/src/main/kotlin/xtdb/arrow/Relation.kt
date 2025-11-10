@@ -188,11 +188,11 @@ class Relation(
             override val cursorType: String get() = "loader"
             override val childCursors: List<ICursor> get() = emptyList()
 
-            override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
+            override fun tryAdvance(c: Consumer<in List<RelationReader>>): Boolean {
                 if (lastPageIndex + 1 >= pageCount) return false
 
                 loadPage(++lastPageIndex, rel)
-                c.accept(rel)
+                c.accept(listOf(rel))
                 return true
             }
 

@@ -31,51 +31,55 @@ class PatchGapsCursor(
         out.endRow()
     }
 
-    override fun tryAdvance(c: Consumer<in RelationReader>) = inner.tryAdvance { inRel ->
-        out.clear()
+    override fun tryAdvance(c: Consumer<in List<RelationReader>>) = inner.tryAdvance { inRels ->
+        val outRels = inRels.map { inRel ->
+            out.clear()
 
-        val iidReader = inRel["_iid"]
-        val iidCopier = iidReader.rowCopier(iidWriter)
-        val vfReader = inRel["_valid_from"]
-        val vtReader = inRel["_valid_to"]
-        val docCopier = inRel["doc"].rowCopier(docWriter)
+            val iidReader = inRel["_iid"]
+            val iidCopier = iidReader.rowCopier(iidWriter)
+            val vfReader = inRel["_valid_from"]
+            val vtReader = inRel["_valid_to"]
+            val docCopier = inRel["doc"].rowCopier(docWriter)
 
-        val currentIid = ArrowBufPointer()
-        val prevIid = ArrowBufPointer()
+            val currentIid = ArrowBufPointer()
+            val prevIid = ArrowBufPointer()
 
-        val rowCount = inRel.rowCount
-        if (rowCount > 0) {
-            var currentValidTime = validFrom
+            val rowCount = inRel.rowCount
+            if (rowCount > 0) {
+                var currentValidTime = validFrom
 
-            for (idx in 0 until rowCount) {
-                iidReader.getPointer(idx, currentIid)
-                if (currentIid != prevIid) {
-                    if (idx > 0 && currentValidTime < validTo) {
-                        copyRow(idx - 1, iidCopier, currentValidTime, validTo, null)
+                for (idx in 0 until rowCount) {
+                    iidReader.getPointer(idx, currentIid)
+                    if (currentIid != prevIid) {
+                        if (idx > 0 && currentValidTime < validTo) {
+                            copyRow(idx - 1, iidCopier, currentValidTime, validTo, null)
+                        }
+
+                        currentValidTime = validFrom
+                        prevIid.set(currentIid.buf, currentIid.offset, currentIid.length)
                     }
 
-                    currentValidTime = validFrom
-                    prevIid.set(currentIid.buf, currentIid.offset, currentIid.length)
+                    val vf = vfReader.getLong(idx)
+                    val vt = if(vtReader.isNull(idx)) MAX_LONG else vtReader.getLong(idx)
+
+                    if (vf > currentValidTime) {
+                        copyRow(idx, iidCopier, currentValidTime, vf.coerceAtMost(validTo), null)
+                    }
+
+                    copyRow(idx, iidCopier, vf.coerceAtLeast(validFrom), vt.coerceAtMost(validTo), docCopier)
+
+                    currentValidTime = vt
                 }
 
-                val vf = vfReader.getLong(idx)
-                val vt = if(vtReader.isNull(idx)) MAX_LONG else vtReader.getLong(idx)
-
-                if (vf > currentValidTime) {
-                    copyRow(idx, iidCopier, currentValidTime, vf.coerceAtMost(validTo), null)
+                if (currentValidTime < validTo) {
+                    copyRow(rowCount - 1, iidCopier, currentValidTime, validTo, null)
                 }
-
-                copyRow(idx, iidCopier, vf.coerceAtLeast(validFrom), vt.coerceAtMost(validTo), docCopier)
-
-                currentValidTime = vt
             }
 
-            if (currentValidTime < validTo) {
-                copyRow(rowCount - 1, iidCopier, currentValidTime, validTo, null)
-            }
+            out as RelationReader
         }
 
-        c.accept(out)
+        c.accept(outRels)
     }
 
     override fun close() {

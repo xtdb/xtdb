@@ -18,19 +18,21 @@ class ProjectCursor(
     override val cursorType get() = "project"
     override val childCursors get() = listOf(inCursor)
 
-    override fun tryAdvance(c: Consumer<in RelationReader>): Boolean =
-        inCursor.tryAdvance { inRel ->
-            mutableListOf<VectorReader>().useAll { closeCols ->
-                val outCols = specs.map { spec ->
-                    spec.project(al, inRel, schema, args)
-                        .also {
-                            if (spec !is ProjectionSpec.Identity && spec !is ProjectionSpec.Rename)
-                                closeCols.add(it)
-                        }
-                }
+    override fun tryAdvance(c: Consumer<in List<RelationReader>>): Boolean =
+        inCursor.tryAdvance { inRels ->
+            c.accept(inRels.map { inRel ->
+                mutableListOf<VectorReader>().useAll { closeCols ->
+                    val outCols = specs.map { spec ->
+                        spec.project(al, inRel, schema, args)
+                            .also {
+                                if (spec !is ProjectionSpec.Identity && spec !is ProjectionSpec.Rename)
+                                    closeCols.add(it)
+                            }
+                    }
 
-                c.accept(RelationReader.from(outCols, inRel.rowCount))
-            }
+                    RelationReader.from(outCols, inRel.rowCount)
+                }
+            })
         }
 
     override fun close() = inCursor.close()

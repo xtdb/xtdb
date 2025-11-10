@@ -16,16 +16,19 @@ class MemoryHashJoin(
     override val cursorType: String get() = "memory-hash-join"
     override val childCursors: List<ICursor> = listOf(probeCursor)
 
-    override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
+    override fun tryAdvance(c: Consumer<in List<RelationReader>>): Boolean {
         var advanced = false
 
         while (!advanced) {
-            probeCursor.tryAdvance { probeRel ->
-                val comparator = comparatorFactory.build(buildSide, probeRel, probeKeyColNames)
-                val probeSide = ProbeSide(buildSide, probeRel, probeKeyColNames, comparator)
-                val outRel = joinType.probe(probeSide)
-                if (outRel.rowCount > 0) {
-                    c.accept(outRel)
+            probeCursor.tryAdvance { probeRels ->
+                val outRels = probeRels.mapNotNull { probeRel ->
+                    val comparator = comparatorFactory.build(buildSide, probeRel, probeKeyColNames)
+                    val probeSide = ProbeSide(buildSide, probeRel, probeKeyColNames, comparator)
+                    val outRel = joinType.probe(probeSide)
+                    if (outRel.rowCount > 0) outRel else null
+                }
+                if (outRels.isNotEmpty()) {
+                    c.accept(outRels)
                     advanced = true
                 }
 
@@ -37,7 +40,7 @@ class MemoryHashJoin(
         if (probeFields == null) return false // semi-join
         val unmatchedBuildIdxsRel = buildSide.unmatchedIdxsRel(probeFields.map { it.name }, joinType) ?: return false
         buildSide.clearMatches() // so that we don't keep yielding them
-        c.accept(unmatchedBuildIdxsRel)
+        c.accept(listOf(unmatchedBuildIdxsRel))
 
         return true
     }

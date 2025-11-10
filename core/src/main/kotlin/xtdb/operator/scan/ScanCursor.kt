@@ -43,9 +43,9 @@ class ScanCursor(
             else -> select(iidPred.select(al, this, this@ScanCursor.schema, this@ScanCursor.args))
         }
 
-    override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
-        val isValidPtr = ArrowBufPointer()
+    override fun tryAdvance(c: Consumer<in List<RelationReader>>): Boolean {
         val iidPred = colPreds["_iid"]
+
         while (mergeTasks.hasNext()) {
             val task = mergeTasks.next()
             val taskPath = task.path
@@ -97,13 +97,15 @@ class ScanCursor(
                     .filterNot { it.key == "_iid" }
                     .map { it.value }
 
-                val rel = bitemporalConsumer.build { childRel ->
-                    colPreds
-                        .fold(childRel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args)) }
-                }
+                val rels = bitemporalConsumer.build()
+                    .map { rel ->
+                        colPreds
+                            .fold(rel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args)) }
+                      }
+                    .filter { it.rowCount > 0 }
 
-                if (rel.rowCount > 0) {
-                    c.accept(rel)
+                if (rels.isNotEmpty()) {
+                    c.accept(rels)
                     return true
                 }
             }

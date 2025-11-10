@@ -113,9 +113,10 @@
          (util/with-open [out-rel (Relation. allocator ^List static-fields)
                           group-mapping (IntVector/open allocator (str window-groups) false)]
 
-           (.forEachRemaining in-cursor (fn [^RelationReader in-rel]
-                                          (vw/append-rel out-rel in-rel)
-                                          (.append group-mapping (.groupMapping group-mapper in-rel))))
+           (.forEachRemaining in-cursor (fn [in-rels]
+                                          (doseq [^RelationReader in-rel in-rels]
+                                            (vw/append-rel out-rel in-rel)
+                                            (.append group-mapping (.groupMapping group-mapper in-rel)))))
 
            (let [sort-mapping (order-by/sorted-idxs (RelationReader/from (conj (seq out-rel) group-mapping) (.getValueCount group-mapping))
                                                     (into [[window-groups]] order-specs))]
@@ -124,7 +125,7 @@
                (let [out-rel (vr/rel-reader (concat (.select out-rel sort-mapping) window-cols))]
                  (if (pos? (.getRowCount out-rel))
                    (do
-                     (.accept c out-rel)
+                     (.accept c [out-rel])
                      true)
                    false)))))))))
 

@@ -20,9 +20,11 @@ class LetCursorFactory(
 
     private val boundBatchesLazy: Lazy<List<BoundBatch>> = lazy {
         mutableListOf<BoundBatch>().closeAllOnCatch { boundBatches ->
-            boundCursor.forEachRemaining { rel ->
-                rel.openDirectSlice(al).use { relSlice ->
-                    boundBatches += BoundBatch(relSlice.schema, relSlice.openArrowRecordBatch())
+            boundCursor.forEachRemaining { rels ->
+                rels.forEach { rel ->
+                    rel.openDirectSlice(al).use { relSlice ->
+                        boundBatches += BoundBatch(relSlice.schema, relSlice.openArrowRecordBatch())
+                    }
                 }
             }
 
@@ -38,12 +40,12 @@ class LetCursorFactory(
         override val cursorType get() = "let"
         override val childCursors get() = emptyList<ICursor>()
 
-        override fun tryAdvance(c: Consumer<in RelationReader>): Boolean =
+        override fun tryAdvance(c: Consumer<in List<RelationReader>>): Boolean =
             batches.tryAdvance { batch ->
                 Relation(al, batch.schema).use { rel ->
                     rel.load(batch.recordBatch)
 
-                    c.accept(rel)
+                    c.accept(listOf(rel))
                 }
             }
 

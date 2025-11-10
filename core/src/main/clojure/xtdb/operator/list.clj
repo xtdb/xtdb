@@ -42,7 +42,7 @@
          (set! current-pos end)
          (util/with-open [out-vec (Vector/open allocator field)]
            (.writeTo list-expr out-vec start (- end start))
-           (.accept consumer (vr/rel-reader [out-vec]))
+           (.accept consumer [(vr/rel-reader [out-vec])])
            true)))))
 
   (close [_] nil))

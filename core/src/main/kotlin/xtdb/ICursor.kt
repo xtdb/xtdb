@@ -11,7 +11,7 @@ import java.util.*
 import java.util.function.Consumer
 import java.util.stream.StreamSupport.stream
 
-interface ICursor : Spliterator<RelationReader>, AutoCloseable {
+interface ICursor : Spliterator<List<RelationReader>>, AutoCloseable {
     interface Factory {
         fun open(): ICursor
     }
@@ -27,8 +27,8 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
     val childCursors: List<ICursor>
     val explainAnalyze: ExplainAnalyze? get() = null
 
-    override fun tryAdvance(c: Consumer<in RelationReader>): Boolean
-    override fun trySplit(): Spliterator<RelationReader>? = null
+    override fun tryAdvance(c: Consumer<in List<RelationReader>>): Boolean
+    override fun trySplit(): Spliterator<List<RelationReader>>? = null
     override fun characteristics() = Spliterator.IMMUTABLE
     override fun estimateSize(): Long = Long.MAX_VALUE
 
@@ -37,7 +37,7 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
     fun consume() = consume(SNAKE_CASE_STRING)
 
     fun <K> consume(keyFn: IKeyFn<K>): List<List<Map<K, *>>> =
-        stream(this, false).map { it.toMaps(keyFn) }.toList()
+        stream(this, false).flatMap { rels -> rels.stream().map { it.toMaps(keyFn) } }.toList()
 
     companion object {
 
@@ -51,18 +51,18 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             override var timeToFirstBlock: Duration? = null; private set
             override var totalTime: Duration = Duration.ZERO; private set
 
-            override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
+            override fun tryAdvance(c: Consumer<in List<RelationReader>>): Boolean {
                 val blockStart = clock.instant()
 
-                return inner.tryAdvance { rel ->
+                return inner.tryAdvance { rels ->
                     val blockTime = Duration.between(blockStart, clock.instant())
 
                     timeToFirstBlock = timeToFirstBlock ?: blockTime
 
-                    rowCount += rel.rowCount
+                    rels.forEach { rel -> rowCount += rel.rowCount }
                     blockCount++
 
-                    c.accept(rel)
+                    c.accept(rels)
                 }.also {
                     totalTime += Duration.between(blockStart, clock.instant())
                 }
@@ -71,10 +71,10 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             override val explainAnalyze get() = this
 
             @Suppress("RedundantOverride") // otherwise `ICursor by inner` also complains
-            override fun forEachRemaining(action: Consumer<in RelationReader>?) = super.forEachRemaining(action)
+            override fun forEachRemaining(action: Consumer<in List<RelationReader>>?) = super.forEachRemaining(action)
             override fun getExactSizeIfKnown(): Long = inner.exactSizeIfKnown
             override fun hasCharacteristics(characteristics: Int): Boolean = inner.hasCharacteristics(characteristics)
-            override fun getComparator(): Comparator<in RelationReader>? = inner.comparator
+            override fun getComparator(): Comparator<in List<RelationReader>>? = inner.comparator
         }
 
         @JvmStatic

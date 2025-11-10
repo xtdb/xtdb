@@ -1275,32 +1275,33 @@
 
       (while (and (or (nil? limit) (< @n-rows-out limit))
                   (.tryAdvance cursor
-                               (fn [^RelationReader rel]
-                                 (cond
-                                   (cancelled-by-client?)
-                                   (do (log/trace "query cancelled by client")
-                                       (swap! conn-state dissoc :cancel)
-                                       (throw (err-query-cancelled "query cancelled during execution")))
+                               (fn [rels]
+                                 (doseq [^RelationReader rel rels]
+                                   (cond
+                                     (cancelled-by-client?)
+                                     (do (log/trace "query cancelled by client")
+                                         (swap! conn-state dissoc :cancel)
+                                         (throw (err-query-cancelled "query cancelled during execution")))
 
-                                   (Thread/interrupted) (throw (InterruptedException.))
+                                     (Thread/interrupted) (throw (InterruptedException.))
 
-                                   @!closing? (log/trace "query result stream stopping (conn closing)")
+                                     @!closing? (log/trace "query result stream stopping (conn closing)")
 
-                                   :else (dotimes [idx (cond-> (.getRowCount rel)
-                                                         limit (min (- limit @n-rows-out)))]
-                                           (let [row (mapv
-                                                      (fn [{:keys [^String col-name pg-type result-format]}]
-                                                        (let [{:keys [write-binary write-text]} (get types-with-default pg-type)
-                                                              rdr (.vectorForOrNull rel col-name)]
-                                                          (when-not (.isNull rdr idx)
-                                                            (if (= :binary result-format)
-                                                              (write-binary session rdr idx)
-                                                              (if write-text
-                                                                (write-text session rdr idx)
-                                                                (pg-types/write-json session rdr idx))))))
-                                                      pg-cols)]
-                                             (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
-                                             (vswap! n-rows-out inc))))))))
+                                     :else (dotimes [idx (cond-> (.getRowCount rel)
+                                                           limit (min (- limit @n-rows-out)))]
+                                             (let [row (mapv
+                                                        (fn [{:keys [^String col-name pg-type result-format]}]
+                                                          (let [{:keys [write-binary write-text]} (get types-with-default pg-type)
+                                                                rdr (.vectorForOrNull rel col-name)]
+                                                            (when-not (.isNull rdr idx)
+                                                              (if (= :binary result-format)
+                                                                (write-binary session rdr idx)
+                                                                (if write-text
+                                                                  (write-text session rdr idx)
+                                                                  (pg-types/write-json session rdr idx))))))
+                                                        pg-cols)]
+                                               (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
+                                               (vswap! n-rows-out inc)))))))))
 
       (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @n-rows-out)}))
 

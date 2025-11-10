@@ -26,14 +26,14 @@
 
   (tryAdvance [_ c]
     (.tryAdvance in-cursor
-                 (fn [^RelationReader in-rel]
-                   (let [out-cols (LinkedList.)]
-
-                     (doseq [^VectorReader in-col in-rel
-                             :let [col-name (str (get col-name-mapping (symbol (.getName in-col))))]]
-                       (.add out-cols (.withName in-col col-name)))
-
-                     (.accept c (vr/rel-reader out-cols (.getRowCount in-rel)))))))
+                 (fn [in-rels]
+                   (.accept c (mapv (fn [^RelationReader in-rel]
+                                      (let [out-cols (LinkedList.)]
+                                        (doseq [^VectorReader in-col in-rel
+                                                :let [col-name (str (get col-name-mapping (symbol (.getName in-col))))]]
+                                          (.add out-cols (.withName in-col col-name)))
+                                        (vr/rel-reader out-cols (.getRowCount in-rel))))
+                                    in-rels)))))
 
   (close [_]
     (util/try-close in-cursor)))

@@ -12,7 +12,7 @@ interface IResultCursor : ICursor {
         private val inner: IResultCursor,
         private val counter: Counter
     ) : IResultCursor by inner {
-        override fun tryAdvance(c: Consumer<in RelationReader>): Boolean =
+        override fun tryAdvance(c: Consumer<in List<RelationReader>>): Boolean =
             try {
                 inner.tryAdvance(c)
             } catch (e: Throwable) {

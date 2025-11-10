@@ -24,12 +24,14 @@ sealed interface ApplyMode {
             val outWriter = dependentOutWriter.vectorFor(columnName, maybe(BOOL).fieldType)
             var match = -1
             while (match != 1) {
-                dependentCursor.tryAdvance { depRel ->
-                    val matchVec = depRel.vectorFor("_expr")
-                    repeat(matchVec.valueCount) { idx ->
-                        match = match.coerceAtLeast(
-                            if (matchVec.isNull(idx)) 0 else if (matchVec.getBoolean(idx)) 1 else -1
-                        )
+                dependentCursor.tryAdvance { depRels ->
+                    depRels.forEach { depRel ->
+                        val matchVec = depRel.vectorFor("_expr")
+                        repeat(matchVec.valueCount) { idx ->
+                            match = match.coerceAtLeast(
+                                if (matchVec.isNull(idx)) 0 else if (matchVec.getBoolean(idx)) 1 else -1
+                            )
+                        }
                     }
                 } || break
             }
@@ -45,9 +47,11 @@ sealed interface ApplyMode {
         ) {
             dependentFields.forEach { dependentOutWriter.vectorFor(it.name, it.fieldType) }
 
-            dependentCursor.forEachRemaining { depRel ->
-                dependentOutWriter.append(depRel)
-                repeat(depRel.rowCount) { idxs.add(inIdx) }
+            dependentCursor.forEachRemaining { depRels ->
+                depRels.forEach { depRel ->
+                    dependentOutWriter.append(depRel)
+                    repeat(depRel.rowCount) { idxs.add(inIdx) }
+                }
             }
         }
     }
@@ -60,11 +64,13 @@ sealed interface ApplyMode {
             dependentFields.forEach { dependentOutWriter.vectorFor(it.name, it.fieldType) }
 
             var match = false
-            dependentCursor.forEachRemaining { depRel ->
-                if (depRel.rowCount > 0) {
-                    match = true
-                    dependentOutWriter.append(depRel)
-                    repeat(depRel.rowCount) { idxs.add(inIdx) }
+            dependentCursor.forEachRemaining { depRels ->
+                depRels.forEach { depRel ->
+                    if (depRel.rowCount > 0) {
+                        match = true
+                        dependentOutWriter.append(depRel)
+                        repeat(depRel.rowCount) { idxs.add(inIdx) }
+                    }
                 }
             }
 
@@ -86,8 +92,8 @@ sealed interface ApplyMode {
             var match = false
 
             while (!match) {
-                dependentCursor.tryAdvance { depRel ->
-                    if (depRel.rowCount > 0) {
+                dependentCursor.tryAdvance { depRels ->
+                    if (depRels.any { it.rowCount > 0 }) {
                         match = true
                         idxs.add(inIdx)
                     }
@@ -104,7 +110,9 @@ sealed interface ApplyMode {
             var match = false
 
             while (!match) {
-                dependentCursor.tryAdvance { depRel -> if (depRel.rowCount > 0) match = true } || break
+                dependentCursor.tryAdvance { depRels -> 
+                    if (depRels.any { it.rowCount > 0 }) match = true 
+                } || break
             }
 
             if (!match) idxs.add(inIdx)
@@ -125,15 +133,17 @@ sealed interface ApplyMode {
 
             var match = false
 
-            dependentCursor.forEachRemaining { depRel ->
-                val depRowCount = depRel.rowCount
-                when {
-                    depRowCount == 0 -> Unit
-                    (if (match) 1 else 0) + depRowCount > 1 -> cardinalityViolation
-                    else -> {
-                        match = true
-                        idxs.add(inIdx)
-                        dependentOutWriter.append(depRel)
+            dependentCursor.forEachRemaining { depRels ->
+                depRels.forEach { depRel ->
+                    val depRowCount = depRel.rowCount
+                    when {
+                        depRowCount == 0 -> Unit
+                        (if (match) 1 else 0) + depRowCount > 1 -> cardinalityViolation
+                        else -> {
+                            match = true
+                            idxs.add(inIdx)
+                            dependentOutWriter.append(depRel)
+                        }
                     }
                 }
             }

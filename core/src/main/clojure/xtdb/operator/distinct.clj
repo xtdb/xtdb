@@ -27,19 +27,25 @@
     (let [advanced? (boolean-array 1)]
       (while (and (not (aget advanced? 0))
                   (.tryAdvance in-cursor
-                               (fn [^RelationReader in-rel]
-                                 (let [row-count (.getRowCount in-rel)]
-                                   (when (pos? row-count)
-                                     (let [builder (.buildFromRelation rel-map in-rel)
-                                           idxs (IntStream/builder)]
-                                       (dotimes [idx row-count]
-                                         (when (neg? (.addIfNotPresent builder idx))
-                                           (.add idxs idx)))
-
-                                       (let [idxs (.toArray (.build idxs))]
-                                         (when-not (empty? idxs)
-                                           (aset advanced? 0 true)
-                                           (.accept c (.select in-rel idxs)))))))))))
+                               (fn [in-rels]
+                                 (let [out-rels (reduce (fn [acc ^RelationReader in-rel]
+                                                          (let [row-count (.getRowCount in-rel)]
+                                                            (if (pos? row-count)
+                                                              (let [builder (.buildFromRelation rel-map in-rel)
+                                                                    idxs (IntStream/builder)]
+                                                                (dotimes [idx row-count]
+                                                                  (when (neg? (.addIfNotPresent builder idx))
+                                                                    (.add idxs idx)))
+                                                                (let [idxs (.toArray (.build idxs))]
+                                                                  (if-not (empty? idxs)
+                                                                    (conj acc (.select in-rel idxs))
+                                                                    acc)))
+                                                              acc)))
+                                                        []
+                                                        in-rels)]
+                                   (when-not (empty? out-rels)
+                                     (aset advanced? 0 true)
+                                     (.accept c out-rels)))))))
       (aget advanced? 0)))
 
   (close [_]

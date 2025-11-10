@@ -18,7 +18,7 @@ class PagesCursor(
 
     private val vals = vals.spliterator()
 
-    override fun tryAdvance(c: Consumer<in RelationReader>) =
+    override fun tryAdvance(c: Consumer<in List<RelationReader>>) =
         vals.tryAdvance { rows ->
             val rel =
                 if (schema == null)
@@ -28,7 +28,7 @@ class PagesCursor(
                         it.apply { writeRows(*rows.toTypedArray()) }
                     }
             try {
-                c.accept(rel)
+                c.accept(listOf(rel))
             } finally {
                 rel.close()
             }

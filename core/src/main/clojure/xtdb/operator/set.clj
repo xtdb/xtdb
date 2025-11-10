@@ -48,15 +48,17 @@
     (let [advanced? (boolean-array 1 false)]
       (loop []
         (if (or (.tryAdvance left-cursor
-                             (fn [^RelationReader in-rel]
-                               (when (pos? (.getRowCount in-rel))
-                                 (aset advanced? 0 true)
-                                 (.accept c in-rel))))
+                             (fn [in-rels]
+                               (let [non-empty-rels (filterv #(pos? (.getRowCount ^RelationReader %)) in-rels)]
+                                 (when-not (empty? non-empty-rels)
+                                   (aset advanced? 0 true)
+                                   (.accept c non-empty-rels)))))
                 (.tryAdvance right-cursor
-                             (fn [^RelationReader in-rel]
-                               (when (pos? (.getRowCount in-rel))
-                                 (aset advanced? 0 true)
-                                 (.accept c in-rel)))))
+                             (fn [in-rels]
+                               (let [non-empty-rels (filterv #(pos? (.getRowCount ^RelationReader %)) in-rels)]
+                                 (when-not (empty? non-empty-rels)
+                                   (aset advanced? 0 true)
+                                   (.accept c non-empty-rels))))))
           (if (aget advanced? 0)
             true
             (recur))

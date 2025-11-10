@@ -51,7 +51,7 @@
                       (.getVectors rel)))
 
         (.setRowCount rel row-count)
-        (.accept c rel)
+        (.accept c [rel])
         true)
       false))
 
