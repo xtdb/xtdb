@@ -12,7 +12,7 @@ class ShortVector private constructor(
     override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Number {
 
-    override val type: ArrowType = MinorType.SMALLINT.type
+    override val arrowType: ArrowType = MinorType.SMALLINT.type
     override val byteWidth = Short.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)

@@ -17,7 +17,7 @@ class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector
         private fun Long.toZdt(): ZonedDateTime = microsAsInstant.atZone(ZoneId.of("UTC"))
     }
 
-    override val type = TsTzRangeType
+    override val arrowType = TsTzRangeType
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
         inner.listElements.let { elVec ->

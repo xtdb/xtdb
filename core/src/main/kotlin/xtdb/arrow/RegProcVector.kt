@@ -7,7 +7,7 @@ import xtdb.types.RegProc
 import xtdb.vector.extensions.RegProcType
 
 class RegProcVector(override val inner: IntVector) : ExtensionVector(), MetadataFlavour.Presence {
-    override val type = RegProcType
+    override val arrowType = RegProcType
 
     override fun getInt(idx: Int) = inner.getInt(idx)
     override fun writeInt(v: Int) = inner.writeInt(v)

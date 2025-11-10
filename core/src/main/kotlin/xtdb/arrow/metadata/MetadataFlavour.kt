@@ -8,7 +8,7 @@ import java.nio.ByteBuffer
 sealed interface MetadataFlavour {
     val valueCount: Int
     val nullable: Boolean
-    val type: ArrowType
+    val arrowType: ArrowType
     fun isNull(idx: Int): Boolean
 
     sealed interface Numeric : MetadataFlavour {

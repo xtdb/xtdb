@@ -24,7 +24,7 @@ class DateDayVector private constructor(
             : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
 
     override val byteWidth = Int.SIZE_BYTES
-    override val type = ArrowType.Date(DAY)
+    override val arrowType = ArrowType.Date(DAY)
 
     override fun getInt(idx: Int) = getInt0(idx)
     override fun writeInt(v: Int) = writeInt0(v)
@@ -55,7 +55,7 @@ class DateMilliVector internal constructor(
             : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
 
     override val byteWidth = Long.SIZE_BYTES
-    override val type = ArrowType.Date(MILLISECOND)
+    override val arrowType = ArrowType.Date(MILLISECOND)
 
     // for historical reasons, the EE always writes dates as days-since-epoch, so we need to convert here.
     override fun getLong(idx: Int) = getLong0(idx) / MILLIS_PER_DAY

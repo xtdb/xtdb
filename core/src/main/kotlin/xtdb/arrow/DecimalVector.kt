@@ -35,7 +35,7 @@ class DecimalVector private constructor(
 
     override val byteWidth = (bitWidth / 8)
 
-    override val type: ArrowType = Decimal(precision, scale, bitWidth)
+    override val arrowType: ArrowType = Decimal(precision, scale, bitWidth)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): BigDecimal =
         dataBuffer.readBigDecimal(idx, scale, byteWidth)

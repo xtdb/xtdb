@@ -22,7 +22,7 @@ class BitVector private constructor(
         al: BufferAllocator, name: String, nullable: Boolean
     ) : this(name, nullable, 0, BitBuffer(al), BitBuffer(al))
 
-    override val type: ArrowType = BIT_TYPE
+    override val arrowType: ArrowType = BIT_TYPE
     override val vectors: Iterable<Vector> = emptyList()
 
     override fun ensureCapacity(valueCount: Int) {

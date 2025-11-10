@@ -18,7 +18,7 @@ class DoubleVector private constructor(
             : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
 
     override val byteWidth = Double.SIZE_BYTES
-    override val type: ArrowType = F64
+    override val arrowType: ArrowType = F64
 
     override fun getDouble(idx: Int) = getDouble0(idx)
     override fun writeDouble(v: Double) = writeDouble0(v)

@@ -27,7 +27,7 @@ class DurationVector private constructor(
 ) : FixedWidthVector(), MetadataFlavour.Duration {
 
     override val byteWidth = Long.SIZE_BYTES
-    override val type = ArrowType.Duration(unit)
+    override val arrowType = ArrowType.Duration(unit)
 
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit

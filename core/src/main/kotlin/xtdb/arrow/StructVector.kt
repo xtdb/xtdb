@@ -42,7 +42,7 @@ class StructVector private constructor(
         BitBuffer(allocator), childWriters, valueCount
     )
 
-    override val type: ArrowType = STRUCT
+    override val arrowType: ArrowType = STRUCT
 
     override val vectors: Iterable<Vector> get() = childWriters.sequencedValues()
 

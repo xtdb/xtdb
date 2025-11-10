@@ -47,7 +47,7 @@ class DenseUnionVector private constructor(
             error("can't set DUV nullable")
         }
 
-    override val type = UNION_TYPE
+    override val arrowType = UNION_TYPE
 
     private val legVectors = legVectors.toMutableList()
 
@@ -236,7 +236,7 @@ class DenseUnionVector private constructor(
         val legName = leg.name
         val value = leg.getObject(getOffset(idx), keyFn)
 
-        return if (legName == leg.type.toLeg()) value else TaggedValue(legName.kw, value)
+        return if (legName == leg.arrowType.toLeg()) value else TaggedValue(legName.kw, value)
     }
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = throw UnsupportedOperationException()
@@ -344,10 +344,10 @@ class DenseUnionVector private constructor(
         when {
             legVectors.size == 1 -> LegVector(0, legVectors.first()).rowCopier(dest)
 
-            legVectors.size == 2 && legVectors.filter { it.type == NULL_TYPE }.size == 1 -> {
+            legVectors.size == 2 && legVectors.filter { it.arrowType == NULL_TYPE }.size == 1 -> {
                 val copier = legVectors
                     .mapIndexed { i, v -> Pair(i, v) }
-                    .first { it.second.type != NULL_TYPE }
+                    .first { it.second.arrowType != NULL_TYPE }
                     .let { (i, v) -> LegVector(i.toByte(), v).rowCopier(dest) }
 
                 RowCopier { srcIdx ->
@@ -402,7 +402,7 @@ class DenseUnionVector private constructor(
         }
 
     override fun maybePromote(al: BufferAllocator, target: FieldType) = apply {
-        if (target.type != type)
+        if (target.type != arrowType)
             legWriter(target)
     }
 

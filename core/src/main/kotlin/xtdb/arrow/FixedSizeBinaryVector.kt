@@ -13,7 +13,7 @@ class FixedSizeBinaryVector private constructor(
     override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), LongLongVectorReader, MetadataFlavour.Bytes {
 
-    override val type = ArrowType.FixedSizeBinary(byteWidth)
+    override val arrowType = ArrowType.FixedSizeBinary(byteWidth)
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, byteWidth: Int)
             : this(name, nullable, 0, byteWidth, BitBuffer(al), ExtensibleBuffer(al))

@@ -15,7 +15,7 @@ class LongVector private constructor(
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
             : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
 
-    override val type: ArrowType = MinorType.BIGINT.type
+    override val arrowType: ArrowType = MinorType.BIGINT.type
     override val byteWidth = Long.SIZE_BYTES
 
     override fun getLong(idx: Int) = getLong0(idx)

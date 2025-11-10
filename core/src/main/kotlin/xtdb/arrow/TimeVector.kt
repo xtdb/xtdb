@@ -34,7 +34,7 @@ class Time32Vector private constructor(
     override var valueCount: Int
 ) : FixedWidthVector(), MetadataFlavour.TimeOfDay {
 
-    override val type = ArrowType.Time(unit, Int.SIZE_BITS)
+    override val arrowType = ArrowType.Time(unit, Int.SIZE_BITS)
     override val byteWidth = Int.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit)
@@ -69,7 +69,7 @@ class Time64Vector private constructor(
     override var valueCount: Int
 ) : FixedWidthVector(), MetadataFlavour.TimeOfDay {
 
-    override val type = ArrowType.Time(unit, Long.SIZE_BITS)
+    override val arrowType = ArrowType.Time(unit, Long.SIZE_BITS)
     override val byteWidth = Long.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit)

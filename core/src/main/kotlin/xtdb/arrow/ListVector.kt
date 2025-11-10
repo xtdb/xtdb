@@ -33,7 +33,7 @@ class ListVector private constructor(
         BitBuffer(allocator), ExtensibleBuffer(allocator)
     )
 
-    override val type: ArrowType = LIST
+    override val arrowType: ArrowType = LIST
 
     override val vectors: Iterable<Vector> get() = listOf(elVector)
 

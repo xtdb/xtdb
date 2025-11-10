@@ -20,7 +20,7 @@ class NullVector(
 ) : Vector() {
     override val vectors = emptyList<Vector>()
 
-    override val type: ArrowType = NULL_TYPE
+    override val arrowType: ArrowType = NULL_TYPE
 
     override fun isNull(idx: Int) = true
 
@@ -52,7 +52,7 @@ class NullVector(
     override fun hashCode0(idx: Int, hasher: Hasher) = error("hashCode0 called on NullVector")
 
     override fun maybePromote(al: BufferAllocator, target: FieldType): Vector =
-        if (target.type == type) this
+        if (target.type == arrowType) this
         else
             Field(this.name, target, emptyList()).openVector(al)
                 .also { newVec ->

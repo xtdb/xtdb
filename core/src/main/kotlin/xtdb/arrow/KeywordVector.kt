@@ -9,7 +9,7 @@ import xtdb.vector.extensions.KeywordType
 
 class KeywordVector(override val inner: Utf8Vector): ExtensionVector(), MetadataFlavour.Bytes {
 
-    override val type = KeywordType
+    override val arrowType = KeywordType
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = Keyword.intern(inner.getObject0(idx, keyFn))
 

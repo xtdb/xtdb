@@ -17,7 +17,7 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
             listVector.name = value
         }
 
-    override val type = ArrowType.Map(keysSorted)
+    override val arrowType = ArrowType.Map(keysSorted)
 
     override var nullable: Boolean
         get() = listVector.nullable

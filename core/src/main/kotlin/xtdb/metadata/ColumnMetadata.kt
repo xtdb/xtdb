@@ -60,7 +60,7 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
 
     private fun writePresenceMetadata(flavours: List<Presence>) {
         flavours.forEach {
-            colsVec.vectorFor(it.type.toLeg(), nullable(BOOL_TYPE)).writeBoolean(true)
+            colsVec.vectorFor(it.arrowType.toLeg(), nullable(BOOL_TYPE)).writeBoolean(true)
         }
     }
 

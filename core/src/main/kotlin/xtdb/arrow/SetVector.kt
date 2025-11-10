@@ -9,7 +9,7 @@ import xtdb.vector.extensions.SetType
 
 class SetVector(override val inner: ListVector) : ExtensionVector(), MetadataFlavour.Set {
 
-    override val type = SetType
+    override val arrowType = SetType
 
     override val listElements get() = inner.listElements
     override fun getListElements(fieldType: FieldType) = inner.getListElements(fieldType)

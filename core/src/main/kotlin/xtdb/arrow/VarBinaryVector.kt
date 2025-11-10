@@ -19,7 +19,7 @@ class VarBinaryVector private constructor(
     constructor(al: BufferAllocator, name: String, nullable: Boolean) :
             this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al), ExtensibleBuffer(al))
 
-    override val type = VAR_BINARY
+    override val arrowType = VAR_BINARY
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getByteArray(idx)
 

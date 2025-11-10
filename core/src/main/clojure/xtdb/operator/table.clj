@@ -181,7 +181,7 @@
                                    (instance? ArrowType$Union (.getType (.getField vec-rdr))) (.vectorFor "list"))
                         el-rdr (some-> list-rdr (.getListElements))
                         el-struct-rdr (cond-> el-rdr
-                                        (instance? ArrowType$Union (.getType (.getField el-rdr))) (.vectorFor "struct"))]
+                                              (instance? ArrowType$Union (.getType (.getField el-rdr))) (.vectorFor "struct"))]
 
                     (Relation. allocator
                                ^List (vec (for [k (some-> el-struct-rdr .getKeyNames)
@@ -189,16 +189,16 @@
                                             (.openSlice (.vectorFor el-struct-rdr k) allocator)))
                                (.getValueCount el-rdr))))}))
 
-(defmethod lp/emit-expr :table [{:keys [table] :as table-expr} opts] 
+(defmethod lp/emit-expr :table [{:keys [table] :as table-expr} opts]
   (let [{:keys [fields ->out-rel row-count]} (zmatch table
                                                      [:rows rows] (emit-rows-table rows table-expr opts)
                                                      [:column col] (emit-col-table col table-expr opts)
                                                      [:param param] (emit-arg-table param table-expr opts))]
 
-    {:op :table
+    {:op       :table
      :children []
-     :fields fields
-     :stats (when row-count {:row-count row-count})
+     :fields   fields
+     :stats    (when row-count {:row-count row-count})
      :->cursor (fn [{:keys [allocator explain-analyze?] :as opts}]
                  (cond-> (TableCursor. allocator (->out-rel opts))
                    explain-analyze? (ICursor/wrapExplainAnalyze)))}))

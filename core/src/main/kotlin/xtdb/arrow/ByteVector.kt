@@ -17,7 +17,7 @@ class ByteVector private constructor(
     ) : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
 
     override val byteWidth = Byte.SIZE_BYTES
-    override val type: ArrowType = MinorType.TINYINT.type
+    override val arrowType: ArrowType = MinorType.TINYINT.type
 
     override fun getByte(idx: Int) = getByte0(idx)
     override fun writeByte(v: Byte) = writeByte0(v)

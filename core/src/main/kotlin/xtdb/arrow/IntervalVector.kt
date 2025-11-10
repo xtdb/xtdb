@@ -30,7 +30,7 @@ class IntervalYearMonthVector private constructor(
     override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Presence {
 
-    override val type: ArrowType = MinorType.INTERVALYEAR.type
+    override val arrowType: ArrowType = MinorType.INTERVALYEAR.type
     override val byteWidth = Int.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
@@ -69,7 +69,7 @@ class IntervalDayTimeVector private constructor(
     override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Presence {
 
-    override val type: ArrowType = MinorType.INTERVALDAY.type
+    override val arrowType: ArrowType = MinorType.INTERVALDAY.type
     override val byteWidth = Long.SIZE_BYTES
 
     constructor(
@@ -124,7 +124,7 @@ class IntervalMonthDayNanoVector private constructor(
     override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Presence {
 
-    override val type: ArrowType = MinorType.INTERVALMONTHDAYNANO.type
+    override val arrowType: ArrowType = MinorType.INTERVALMONTHDAYNANO.type
     override val byteWidth = 16
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
@@ -189,7 +189,7 @@ class IntervalMonthDayMicroVector(
     override val inner: IntervalMonthDayNanoVector
 ) : ExtensionVector(), MetadataFlavour.Presence {
 
-    override val type = IntervalMDMType
+    override val arrowType = IntervalMDMType
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = inner.getObject0(idx, keyFn)
     override fun writeObject0(value: Any) = inner.writeObject(value)

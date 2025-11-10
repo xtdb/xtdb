@@ -28,7 +28,7 @@ class TimestampLocalVector private constructor(
     override var valueCount: Int
 ) : FixedWidthVector(), MetadataFlavour.DateTime {
 
-    override val type = ArrowType.Timestamp(unit, null)
+    override val arrowType = ArrowType.Timestamp(unit, null)
     override val byteWidth = Long.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit) :
@@ -70,7 +70,7 @@ class TimestampTzVector private constructor(
     override var valueCount: Int
 ) : FixedWidthVector(), MetadataFlavour.DateTime {
 
-    override val type = ArrowType.Timestamp(unit, zone.toString())
+    override val arrowType = ArrowType.Timestamp(unit, zone.toString())
     override val byteWidth = Long.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit, zone: ZoneId)

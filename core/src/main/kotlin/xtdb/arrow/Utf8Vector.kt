@@ -19,7 +19,7 @@ class Utf8Vector private constructor(
     constructor(al: BufferAllocator, name: String, nullable: Boolean) :
             this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al), ExtensibleBuffer(al))
 
-    override val type: ArrowType = UTF8_TYPE
+    override val arrowType: ArrowType = UTF8_TYPE
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): String = getByteArray(idx).toString(Charsets.UTF_8)
 

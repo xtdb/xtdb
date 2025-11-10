@@ -9,7 +9,7 @@ import java.util.*
 
 class UuidVector(override val inner: FixedSizeBinaryVector) : ExtensionVector(), MetadataFlavour.Bytes {
 
-    override val type = UuidType
+    override val arrowType = UuidType
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
         ByteBuffer.wrap(inner.getObject0(idx, keyFn)).let { buf ->

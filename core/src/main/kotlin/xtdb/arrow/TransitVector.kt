@@ -15,7 +15,7 @@ private val TRANSIT_MSGPACK_READER: IFn = requiringResolve("xtdb.serde/transit-m
 
 class TransitVector(override val inner: VarBinaryVector) : ExtensionVector(), MetadataFlavour.Presence {
 
-    override val type = TransitType
+    override val arrowType = TransitType
 
     private fun transitReader(v: ByteArray): Reader = TRANSIT_MSGPACK_READER.invoke(ByteArrayInputStream(v)) as Reader
 

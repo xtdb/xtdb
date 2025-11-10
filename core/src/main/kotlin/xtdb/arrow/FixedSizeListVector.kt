@@ -26,7 +26,7 @@ class FixedSizeListVector private constructor(
         al: BufferAllocator, name: String, nullable: Boolean, listSize: Int, elVector: Vector, valueCount: Int = 0
     ) : this(al, name, nullable, listSize, BitBuffer(al), elVector, valueCount)
 
-    override val type = ArrowType.FixedSizeList(listSize)
+    override val arrowType = ArrowType.FixedSizeList(listSize)
 
     override val vectors: Iterable<Vector> get() = listOf(elVector)
 

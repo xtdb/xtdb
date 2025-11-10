@@ -42,10 +42,10 @@ sealed class Vector : VectorReader, VectorWriter {
 
     abstract override var name: String
     abstract override var nullable: Boolean
-    abstract val type: ArrowType
+    abstract val arrowType: ArrowType
     abstract val vectors: Iterable<Vector>
 
-    final override val fieldType: FieldType get() = FieldType(nullable, type, null)
+    final override val fieldType: FieldType get() = FieldType(nullable, arrowType, null)
     final override val field: Field get() = Field(name, fieldType, vectors.map { it.field })
 
     abstract override var valueCount: Int; internal set
@@ -90,7 +90,7 @@ sealed class Vector : VectorReader, VectorWriter {
     internal open fun maybePromote(al: BufferAllocator, target: FieldType): Vector =
         // if it's a NullVector coming in, don't promote - we can just set ourselves to nullable. #4675
         when {
-            target.type != type && target.type != NULL_TYPE ->
+            target.type != arrowType && target.type != NULL_TYPE ->
                 DenseUnionVector(al, name, listOf(this), valueCount)
                     .apply {
                         repeat(this.valueCount) { idx ->
@@ -115,7 +115,7 @@ sealed class Vector : VectorReader, VectorWriter {
         if (dest is DenseUnionVector) return dest.rowCopier0(this)
 
         check(dest is Vector) { "can only copy to another Vector, got ${dest::class}" }
-        if (fieldType.type != dest.type) throw InvalidCopySourceException(fieldType, dest.fieldType)
+        if (fieldType.type != dest.arrowType) throw InvalidCopySourceException(fieldType, dest.fieldType)
 
         return dest.rowCopier0(this)
     }
