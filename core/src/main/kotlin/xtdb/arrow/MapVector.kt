@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
@@ -25,7 +26,7 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
             listVector.nullable = value
         }
 
-    override val vectors: Iterable<Vector> get() = listVector.vectors
+    override val vectors get() = listVector.vectors
 
     override var valueCount: Int
         get() = listVector.valueCount

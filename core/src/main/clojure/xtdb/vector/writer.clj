@@ -8,15 +8,14 @@
            (java.nio ByteBuffer)
            (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZonedDateTime)
            (java.util Date List Map Set UUID)
-           (xtdb.arrow Relation RelationReader RelationWriter)
+           (xtdb.arrow ArrowTypes Relation RelationReader RelationWriter)
            xtdb.error.Anomaly
            xtdb.time.Interval
-           xtdb.Types
            (xtdb.types ClojureForm ZonedDateTimeRange)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn value->arrow-type [v] (Types/valueToArrowType v))
+(defn value->arrow-type [v] (ArrowTypes/valueToArrowType v))
 
 (defprotocol ArrowWriteable
   (value->col-type [v]))

@@ -8,8 +8,7 @@
   (:import (clojure.lang MapEntry)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
-           (xtdb Types)
-           (xtdb.types MergeTypes Type)
+           (xtdb.arrow ArrowTypes MergeTypes VectorType)
            (xtdb.vector.extensions IntervalMDMType KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -22,7 +21,7 @@
 ;;;; fields
 
 (defn arrow-type->leg ^String [^ArrowType arrow-type]
-  (Types/toLeg arrow-type))
+  (ArrowTypes/toLeg arrow-type))
 
 (defn- date-unit->kw [unit]
   (util/case-enum unit
@@ -179,9 +178,9 @@
 
 (defn merge-fields [& fields]
   (let [merged-type (MergeTypes/mergeFields (vec fields))]
-    (Type/ofType (or (some (fn [^Field f] (some-> f .getName)) fields)
-                     (Types/toLeg (.getArrowType merged-type)))
-                 merged-type)))
+    (VectorType/ofType (or (some (fn [^Field f] (some-> f .getName)) fields)
+                           (ArrowTypes/toLeg (.getArrowType merged-type)))
+                       merged-type)))
 
 ;;; time units
 

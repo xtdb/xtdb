@@ -2,6 +2,7 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
@@ -13,8 +14,10 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     override val name: String get() = inner.name
     override val valueCount: Int get() = sel.valueCount()
     override val nullable: Boolean get() = inner.nullable
+    override val arrowType: ArrowType get() = inner.arrowType
     override val fieldType: FieldType get() = inner.fieldType
     override val field: Field get() = inner.field
+    override val childFields: List<Field> get() = inner.childFields
 
     override fun isNull(idx: Int) = inner.isNull(sel[idx])
     override fun getBoolean(idx: Int) = inner.getBoolean(sel[idx])

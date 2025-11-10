@@ -3,12 +3,14 @@ package xtdb.arrow
 import clojure.lang.ILookup
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.VectorIndirection.Companion.slice
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import xtdb.util.closeOnCatch
@@ -19,8 +21,11 @@ interface VectorReader : ILookup, AutoCloseable {
     val valueCount: Int
 
     val nullable: Boolean
-    val fieldType: FieldType get() = this.field.fieldType
-    val field: Field
+    val arrowType: ArrowType
+    val childFields: List<Field>
+    val type get() = VectorType(arrowType, nullable, childFields)
+    val fieldType: FieldType get() = type.fieldType
+    val field get() = name ofType type
 
     private class RenamedVector(private val inner: VectorReader, override val name: String) : VectorReader by inner {
         override fun withName(newName: String) = RenamedVector(inner, newName)

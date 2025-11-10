@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.arrow.Relation.Companion.loader
-import xtdb.toFieldType
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 
@@ -277,7 +276,7 @@ class StructVectorTest {
 
             assertEquals(
                 Field("struct", FieldType(false, STRUCT, null), listOf(
-                    Field("a", FieldType(false, UNION_TYPE, null), listOf(
+                    Field("a", FieldType(false, VectorType.UNION_TYPE, null), listOf(
                         Field("i32", FieldType(false, I32, null), emptyList()),
                         Field("utf8", FieldType(false, UTF8_TYPE, null), emptyList())
                     ))

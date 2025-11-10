@@ -9,19 +9,19 @@ import xtdb.metadata.ColumnMetadata
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.trie.Trie.metaFilePath
-import xtdb.types.Type
-import xtdb.types.Type.Companion.BOOL
-import xtdb.types.Type.Companion.I32
-import xtdb.types.Type.Companion.I64
-import xtdb.types.Type.Companion.NULL
-import xtdb.types.Type.Companion.UTF8
-import xtdb.types.Type.Companion.asListOf
-import xtdb.types.Type.Companion.asStructOf
-import xtdb.types.Type.Companion.asUnionOf
-import xtdb.types.Type.Companion.listTypeOf
-import xtdb.types.Type.Companion.maybe
-import xtdb.types.Type.Companion.ofType
-import xtdb.types.schema
+import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.Companion.BOOL
+import xtdb.arrow.VectorType.Companion.I32
+import xtdb.arrow.VectorType.Companion.I64
+import xtdb.arrow.VectorType.Companion.NULL
+import xtdb.arrow.VectorType.Companion.UTF8
+import xtdb.arrow.VectorType.Companion.asListOf
+import xtdb.arrow.VectorType.Companion.asStructOf
+import xtdb.arrow.VectorType.Companion.asUnionOf
+import xtdb.arrow.VectorType.Companion.listTypeOf
+import xtdb.arrow.VectorType.Companion.maybe
+import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.arrow.schema
 
 class MetadataFileWriter(
     al: BufferAllocator, private val bp: BufferPool,
@@ -31,7 +31,7 @@ class MetadataFileWriter(
 ) : AutoCloseable {
     companion object {
         private val metadataField = listTypeOf(
-            Type.structOf(
+            VectorType.structOf(
                 "col-name" ofType UTF8,
                 "root-col?" ofType BOOL,
                 "count" ofType I64

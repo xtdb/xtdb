@@ -16,9 +16,9 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import xtdb.arrow.VectorType.Companion.I32
 import xtdb.test.AllocatorResolver
-import xtdb.types.Type
-import xtdb.types.Type.Companion.ofType
+import xtdb.arrow.VectorType.Companion.ofType
 import kotlin.collections.map
 import kotlin.random.Random
 import kotlin.use
@@ -77,7 +77,7 @@ class FixedWidthVectorTest {
             val rand = Random(seed)
             val idxs = (0..<ints.size).shuffled(rand).toIntArray()
 
-            Vector.fromList(al, "foo" ofType Type.I32, ints).use { src ->
+            Vector.fromList(al, "foo" ofType I32, ints).use { src ->
                 Vector.open(al, src.field).use { dest ->
                     val copier = src.rowCopier(dest)
                     copier.copyRows(idxs)
@@ -96,7 +96,7 @@ class FixedWidthVectorTest {
             val len = Arb.nonNegativeInt(ints.size - 1 - offset).bind()
             Triple(ints, offset, len)
         }) { (ints, offset, len) ->
-            Vector.fromList(al, "foo" ofType Type.I32, ints).use { src ->
+            Vector.fromList(al, "foo" ofType I32, ints).use { src ->
                 Vector.open(al, src.field).use { dest ->
                     val copier = src.rowCopier(dest)
                     copier.copyRange(offset, len)

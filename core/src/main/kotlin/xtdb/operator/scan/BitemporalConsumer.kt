@@ -5,9 +5,9 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.*
 import xtdb.time.TEMPORAL_COL_NAMES
 import xtdb.trie.ColumnName
-import xtdb.types.Type
-import xtdb.types.Type.Companion.maybe
-import xtdb.types.Type.Companion.ofType
+import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.Companion.maybe
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.closeAll
 import xtdb.util.closeAllOnCatch
 import xtdb.util.safeMap
@@ -35,7 +35,7 @@ class BitemporalConsumer private constructor(
             ): RelBuilder =
                 mutableListOf<VectorWriter>().closeAllOnCatch { temporalVecs ->
                     fun openTemporalVec(name: String, nullable: Boolean): VectorWriter {
-                        val vec = Vector.open(al, name ofType maybe(Type.TEMPORAL, nullable))
+                        val vec = Vector.open(al, name ofType maybe(VectorType.TEMPORAL, nullable))
                         temporalVecs.add(vec)
                         return vec
                     }

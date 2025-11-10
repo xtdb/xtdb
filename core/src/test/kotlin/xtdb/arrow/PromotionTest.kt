@@ -7,17 +7,17 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.test.AllocatorResolver
-import xtdb.types.Type.Companion.I32
-import xtdb.types.Type.Companion.I64
-import xtdb.types.Type.Companion.NULL
-import xtdb.types.Type.Companion.UTF8
-import xtdb.types.Type.Companion.asListOf
-import xtdb.types.Type.Companion.asStructOf
-import xtdb.types.Type.Companion.asUnionOf
-import xtdb.types.Type.Companion.just
-import xtdb.types.Type.Companion.listTypeOf
-import xtdb.types.Type.Companion.maybe
-import xtdb.types.Type.Companion.ofType
+import xtdb.arrow.VectorType.Companion.I32
+import xtdb.arrow.VectorType.Companion.I64
+import xtdb.arrow.VectorType.Companion.NULL
+import xtdb.arrow.VectorType.Companion.UTF8
+import xtdb.arrow.VectorType.Companion.asListOf
+import xtdb.arrow.VectorType.Companion.asStructOf
+import xtdb.arrow.VectorType.Companion.asUnionOf
+import xtdb.arrow.VectorType.Companion.just
+import xtdb.arrow.VectorType.Companion.listTypeOf
+import xtdb.arrow.VectorType.Companion.maybe
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.closeOnCatch
 
 @ExtendWith(AllocatorResolver::class)

@@ -4,16 +4,16 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
-import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 import xtdb.util.closeOnCatch
 
 class SingletonListReader(override val name: String, private val elReader: VectorReader) : VectorReader {
     override val nullable = false
-    override val fieldType: FieldType = FieldType.notNullable(ArrowType.List.INSTANCE)
-    override val valueCount get() = 1
-    override val field get() = Field(name, FieldType.notNullable(ArrowType.List.INSTANCE), listOf(elReader.field))
+    override val arrowType: ArrowType = VectorType.LIST_TYPE
+    override val childFields: List<Field> get() = listOf(elReader.field)
+
+    override val valueCount = 1
 
     override fun isNull(idx: Int) = false
 

@@ -7,8 +7,8 @@ import xtdb.arrow.RelationAsStructReader
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.trie.ColumnName
-import xtdb.types.Type
-import xtdb.types.Type.Companion.ofType
+import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.closeOnCatch
 
 interface ProjectionSpec {
@@ -31,7 +31,7 @@ interface ProjectionSpec {
     }
 
     class RowNumber(colName: ColumnName) : ProjectionSpec {
-        override val field = colName ofType Type.I64
+        override val field = colName ofType VectorType.I64
 
         private var rowNum = 1L
 
@@ -46,7 +46,7 @@ interface ProjectionSpec {
 
     // only returns the row number within the batch - see #4131
     class LocalRowNumber(colName: ColumnName) : ProjectionSpec {
-        override val field = colName ofType Type.I64
+        override val field = colName ofType VectorType.I64
 
         override fun project(
             allocator: BufferAllocator, inRel: RelationReader, schema: Map<String, Any>, args: RelationReader

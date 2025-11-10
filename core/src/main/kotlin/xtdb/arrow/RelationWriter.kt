@@ -3,7 +3,6 @@ package xtdb.arrow
 import clojure.lang.Keyword
 import clojure.lang.Symbol
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.toFieldType
 import xtdb.util.closeAll
 import xtdb.util.normalForm
 

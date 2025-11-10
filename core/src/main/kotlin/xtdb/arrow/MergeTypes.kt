@@ -1,15 +1,12 @@
-package xtdb.types
+package xtdb.arrow
 
 import com.github.benmanes.caffeine.cache.Caffeine
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
-import xtdb.arrow.unsupported
+import xtdb.arrow.VectorType.Companion.asType
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.trie.ColumnName
-import xtdb.types.Type.Companion.asType
-import xtdb.types.Type.Companion.listTypeOf
-import xtdb.types.Type.Companion.maybe
-import xtdb.types.Type.Companion.ofType
-import xtdb.types.Type.Companion.structOf
+import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.vector.extensions.*
 
 data class MergeTypes(
@@ -129,44 +126,57 @@ data class MergeTypes(
     }
 
     fun merge(field: Field?) = apply { field?.let { merge(it.type, it.isNullable, it.children) } }
-    fun merge(type: Type?) = apply { type?.let { merge(it.arrowType, it.nullable, it.children) } }
+    fun merge(type: VectorType?) = apply { type?.let { merge(it.arrowType, it.nullable, it.children) } }
 
-    val asType: Type
+    val asType: VectorType
         get() {
-            val listType = listElType?.let { maybe(listTypeOf(it.asType), nullableList) }
+            val listType = listElType?.let {
+                VectorType.Companion.maybe(
+                    VectorType.Companion.listTypeOf(it.asType),
+                    nullableList
+                )
+            }
 
             val fixedSizeListTypes = fixedSizeLists
                 ?.map { (size, tm) ->
-                    Type.fixedSizeList(size, maybe(tm.first.asType, tm.second))
+                    VectorType.fixedSizeList(size, maybe(tm.first.asType, tm.second))
                 }
                 .orEmpty()
 
-            val setType = setElType?.let { Type.setTypeOf(it.asType) }?.let { maybe(it, nullableSet) }
+            val setType = setElType?.let { VectorType.setTypeOf(it.asType) }?.let {
+                VectorType.Companion.maybe(
+                    it,
+                    nullableSet
+                )
+            }
             val tstzRangeType = tstzRangeElType?.let {
-                maybe(TsTzRangeType, nullableTsTzRange, listOf(LIST_ELS_NAME ofType it.asType))
+                VectorType.Companion.maybe(TsTzRangeType, nullableTsTzRange, listOf(LIST_ELS_NAME ofType it.asType))
             }
 
             val structType =
                 structs?.let { structs ->
-                    maybe(structOf(structs.map { it.key ofType it.value.asType }), nullableStruct)
+                    VectorType.Companion.maybe(
+                        VectorType.Companion.structOf(structs.map { it.key ofType it.value.asType }),
+                        nullableStruct
+                    )
                 }
 
-            val nullType = if (nullable) Type.NULL else null
+            val nullType = if (nullable) VectorType.NULL else null
 
             val types =
-                scalars.map { maybe(Type(it.key), it.value) }
+                scalars.map { VectorType.Companion.maybe(VectorType(it.key), it.value) }
                     .plus(fixedSizeListTypes)
                     .plus(listOfNotNull(listType, setType, structType, tstzRangeType))
 
             return when (types.size) {
-                0 -> Type.NULL
-                1 -> types.first().let { if (nullable) maybe(it) else it }
-                else -> Type.unionOf((types + listOfNotNull(nullType)).map { t -> t.asLegField })
+                0 -> VectorType.NULL
+                1 -> types.first().let { if (nullable) VectorType.Companion.maybe(it) else it }
+                else -> VectorType.unionOf((types + listOfNotNull(nullType)).map { t -> t.asLegField })
             }
         }
 
     companion object {
-        internal fun mergeTypes0(types: Collection<Type?>) =
+        internal fun mergeTypes0(types: Collection<VectorType?>) =
             MergeTypes()
                 .apply {
                     for (type in types)
@@ -176,17 +186,17 @@ data class MergeTypes(
 
         private val cache = Caffeine.newBuilder()
             .maximumSize(4096)
-            .build<Set<Type>, Type> { mergeTypes0(it) }
+            .build<Set<VectorType>, VectorType> { mergeTypes0(it) }
 
         @JvmStatic
-        fun mergeTypes(types: Collection<Type?>): Type = cache[types.mapNotNullTo(mutableSetOf()) { it }]
+        fun mergeTypes(types: Collection<VectorType?>): VectorType = cache[types.mapNotNullTo(mutableSetOf()) { it }]
 
-        fun mergeTypes(vararg types: Type?): Type = mergeTypes(types.toList())
+        fun mergeTypes(vararg types: VectorType?): VectorType = mergeTypes(types.toList())
 
         @JvmStatic
-        fun mergeFields(fields: Collection<Field?>): Type = mergeTypes(fields.map { it?.asType })
+        fun mergeFields(fields: Collection<Field?>): VectorType = mergeTypes(fields.map { it?.asType })
 
-        fun mergeFields(vararg fields: Field?): Type = mergeFields(fields.toList())
+        fun mergeFields(vararg fields: Field?): VectorType = mergeFields(fields.toList())
     }
 }
 

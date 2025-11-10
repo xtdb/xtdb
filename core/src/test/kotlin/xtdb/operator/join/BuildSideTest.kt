@@ -10,11 +10,11 @@ import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
 import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.test.AllocatorResolver
-import xtdb.types.Type
-import xtdb.types.Type.Companion.I32
-import xtdb.types.Type.Companion.maybe
-import xtdb.types.Type.Companion.ofType
-import xtdb.types.schema
+import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.Companion.I32
+import xtdb.arrow.VectorType.Companion.maybe
+import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.arrow.schema
 
 @ExtendWith(AllocatorResolver::class)
 class BuildSideTest {
@@ -31,7 +31,7 @@ class BuildSideTest {
     fun testBuildSideWithDiskSpill(al: BufferAllocator) {
         val schema = schema(
             "id" ofType maybe(I32),
-            "name" ofType maybe(Type.UTF8),
+            "name" ofType maybe(VectorType.UTF8),
             "value" ofType maybe(I32)
         )
 
@@ -132,7 +132,7 @@ class BuildSideTest {
     fun testBuildSideWithoutDiskSpill(al: BufferAllocator) {
         val schema = schema(
             "id" ofType maybe(I32),
-            "name" ofType maybe(Type.UTF8),
+            "name" ofType maybe(VectorType.UTF8),
             "value" ofType maybe(I32)
         )
 

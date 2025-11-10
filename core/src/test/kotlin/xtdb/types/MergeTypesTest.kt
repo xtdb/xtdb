@@ -2,19 +2,20 @@ package xtdb.types
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import xtdb.types.MergeTypes.Companion.mergeTypes
-import xtdb.types.Type.Companion.BOOL
-import xtdb.types.Type.Companion.F64
-import xtdb.types.Type.Companion.I64
-import xtdb.types.Type.Companion.NULL
-import xtdb.types.Type.Companion.UTF8
-import xtdb.types.Type.Companion.asStructOf
-import xtdb.types.Type.Companion.asUnionOf
-import xtdb.types.Type.Companion.listTypeOf
-import xtdb.types.Type.Companion.maybe
-import xtdb.types.Type.Companion.ofType
-import xtdb.types.Type.Companion.structOf
-import xtdb.types.Type.Companion.unionOf
+import xtdb.arrow.MergeTypes.Companion.mergeTypes
+import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.Companion.BOOL
+import xtdb.arrow.VectorType.Companion.F64
+import xtdb.arrow.VectorType.Companion.I64
+import xtdb.arrow.VectorType.Companion.NULL
+import xtdb.arrow.VectorType.Companion.UTF8
+import xtdb.arrow.VectorType.Companion.asStructOf
+import xtdb.arrow.VectorType.Companion.asUnionOf
+import xtdb.arrow.VectorType.Companion.listTypeOf
+import xtdb.arrow.VectorType.Companion.maybe
+import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.arrow.VectorType.Companion.structOf
+import xtdb.arrow.VectorType.Companion.unionOf
 
 class MergeTypesTest {
 
@@ -144,15 +145,15 @@ class MergeTypesTest {
 
     @Test
     fun `test set types`() {
-        val setInt64 = Type.setTypeOf(I64)
-        val setUtf8 = Type.setTypeOf(UTF8)
+        val setInt64 = VectorType.setTypeOf(I64)
+        val setUtf8 = VectorType.setTypeOf(UTF8)
 
         assertEquals(
             setInt64, mergeTypes(setInt64, setInt64),
             "Same set types merge"
         )
 
-        val expectedMergedSet = Type.setTypeOf(unionOf("i64" ofType I64, "utf8" ofType UTF8))
+        val expectedMergedSet = VectorType.setTypeOf(unionOf("i64" ofType I64, "utf8" ofType UTF8))
         assertEquals(
             expectedMergedSet, mergeTypes(setInt64, setUtf8),
             "Different set element types create union"

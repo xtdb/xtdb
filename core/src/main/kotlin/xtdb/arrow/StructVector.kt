@@ -13,8 +13,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Incorrect
-import xtdb.toFieldType
-import xtdb.types.Type.Companion.NULL
+import xtdb.arrow.VectorType.Companion.NULL
 import xtdb.util.Hasher
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch

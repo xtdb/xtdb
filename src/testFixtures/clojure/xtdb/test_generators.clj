@@ -12,8 +12,7 @@
            [java.util List Map Set]
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector.types.pojo Field]
-           [xtdb Types]
-           [xtdb.arrow Vector]))
+           [xtdb.arrow ArrowTypes Vector]))
 
 ;; Simple types
 ;; TODO: Ensure all arrow types are covered here
@@ -117,7 +116,7 @@
 
 (def field-type-gen
   (gen/let [v (recursive-value-gen)]
-    (Types/toFieldType v)))
+    (ArrowTypes/toFieldType v)))
 
 ;; TODO: Generating simple keys here for now, trying to ensure some overlap between records
 (defn generate-record

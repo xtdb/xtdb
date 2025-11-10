@@ -8,7 +8,6 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.TimeUnit
 import xtdb.arrow.VectorIndirection.Companion.Selection
 import xtdb.arrow.VectorIndirection.Companion.Slice
-import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import java.nio.ByteBuffer

@@ -9,9 +9,9 @@ import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorReader
 import xtdb.expression.map.IndexHasher.Companion.hasher
-import xtdb.types.FieldName
-import xtdb.types.Type.Companion.I32
-import xtdb.types.Type.Companion.ofType
+import xtdb.arrow.FieldName
+import xtdb.arrow.VectorType.Companion.I32
+import xtdb.arrow.VectorType.Companion.ofType
 import java.util.function.IntUnaryOperator
 
 class BuildSide(

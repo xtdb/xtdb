@@ -26,8 +26,8 @@ import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.dataRelSchema
 import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.TrieKey
-import xtdb.types.MergeTypes.Companion.mergeFields
-import xtdb.types.Type.Companion.ofType
+import xtdb.arrow.MergeTypes.Companion.mergeFields
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.*
 import java.nio.file.Path
 import java.time.LocalDate

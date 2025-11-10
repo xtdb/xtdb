@@ -4,7 +4,6 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
-import org.apache.arrow.vector.types.UnionMode.Dense
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
@@ -13,16 +12,12 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Unsupported
 import xtdb.kw
-import xtdb.toFieldType
-import xtdb.toLeg
 import xtdb.util.Hasher
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
 import xtdb.util.safeMap
 import java.nio.ByteBuffer
 import org.apache.arrow.vector.complex.DenseUnionVector as ArrowDenseUnionVector
-
-internal val UNION_TYPE = ArrowType.Union(Dense, null)
 
 class DenseUnionVector private constructor(
     private val allocator: BufferAllocator,
@@ -47,7 +42,7 @@ class DenseUnionVector private constructor(
             error("can't set DUV nullable")
         }
 
-    override val arrowType = UNION_TYPE
+    override val arrowType = VectorType.UNION_TYPE
 
     private val legVectors = legVectors.toMutableList()
 
@@ -61,8 +56,10 @@ class DenseUnionVector private constructor(
     ) : VectorReader {
         override val name get() = inner.name
         override val nullable get() = inner.nullable
+        override val arrowType: ArrowType get() = inner.arrowType
         override val fieldType get() = inner.fieldType
         override val field get() = inner.field
+        override val childFields get() = inner.childFields
 
         fun getTypeId(idx: Int) = typeBuffer.getByte(idx)
         fun getOffset(idx: Int) = offsetBuffer.getInt(idx)

@@ -19,11 +19,8 @@ import org.apache.arrow.vector.types.pojo.DictionaryEncoding
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
-import xtdb.toFieldType
-import xtdb.toLeg
 import xtdb.trie.ColumnName
-import xtdb.types.Type
-import xtdb.types.Type.Companion.ofType
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.Hasher
 import xtdb.vector.extensions.*
 import java.time.ZoneId
@@ -42,9 +39,10 @@ sealed class Vector : VectorReader, VectorWriter {
 
     abstract override var name: String
     abstract override var nullable: Boolean
-    abstract val arrowType: ArrowType
+    abstract override val arrowType: ArrowType
     abstract val vectors: Iterable<Vector>
 
+    override val childFields get() = vectors.map { it.field }
     final override val fieldType: FieldType get() = FieldType(nullable, arrowType, null)
     final override val field: Field get() = Field(name, fieldType, vectors.map { it.field })
 
@@ -280,6 +278,6 @@ sealed class Vector : VectorReader, VectorWriter {
 
         @JvmStatic
         fun fromList(al: BufferAllocator, name: ColumnName, values: List<*>) =
-            fromList(al, name ofType Type.NULL, values)
+            fromList(al, name ofType VectorType.NULL, values)
     }
 }

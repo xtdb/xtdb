@@ -4,6 +4,7 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
+import org.apache.arrow.vector.types.pojo.Field
 import xtdb.util.Hasher
 import xtdb.vector.extensions.XtExtensionVector
 import java.nio.ByteBuffer
@@ -23,7 +24,7 @@ abstract class ExtensionVector : Vector() {
             inner.nullable = value
         }
 
-    final override val vectors: Iterable<Vector> get() = inner.vectors
+    final override val vectors get() = inner.vectors
 
     override var valueCount: Int
         get() = inner.valueCount

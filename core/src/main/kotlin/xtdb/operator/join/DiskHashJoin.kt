@@ -7,9 +7,9 @@ import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.operator.join.ComparatorFactory.Companion.build
-import xtdb.types.FieldName
-import xtdb.types.Type.Companion.I32
-import xtdb.types.Type.Companion.ofType
+import xtdb.arrow.FieldName
+import xtdb.arrow.VectorType.Companion.I32
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.closeOnCatch
 import java.util.function.Consumer
 

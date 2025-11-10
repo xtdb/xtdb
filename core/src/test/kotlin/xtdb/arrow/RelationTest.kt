@@ -9,12 +9,10 @@ import org.junit.jupiter.api.Test
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation.Companion.loader
 import xtdb.kw
-import xtdb.types.schema
-import xtdb.types.Type
-import xtdb.types.Type.Companion.asListOf
-import xtdb.types.Type.Companion.asUnionOf
-import xtdb.types.Type.Companion.maybe
-import xtdb.types.Type.Companion.ofType
+import xtdb.arrow.VectorType.Companion.asListOf
+import xtdb.arrow.VectorType.Companion.asUnionOf
+import xtdb.arrow.VectorType.Companion.maybe
+import xtdb.arrow.VectorType.Companion.ofType
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 
@@ -197,7 +195,7 @@ class RelationTest {
         val row1 = mapOf("i32" to 4)
         val row2 = mapOf("i32" to 8)
 
-        val bytes = Relation(allocator, "i32" ofType Type.I32).use { rel ->
+        val bytes = Relation(allocator, "i32" ofType VectorType.I32).use { rel ->
             rel.writeRows(row1, row2)
             rel.asArrowStream
         }
@@ -219,18 +217,18 @@ class RelationTest {
     @Test
     fun testPromotion() {
         Relation(allocator).use { rel ->
-            val intVec = rel.vectorFor("foo", Type.I32.fieldType)
+            val intVec = rel.vectorFor("foo", VectorType.I32.fieldType)
             intVec.writeInt(32)
             rel.endRow()
 
             assertEquals(listOf(mapOf("foo".kw to 32)), rel.asMaps)
 
-            val strVec = rel.vectorFor("bar", Type.UTF8.fieldType)
+            val strVec = rel.vectorFor("bar", VectorType.UTF8.fieldType)
             strVec.writeObject("hello")
             rel.endRow()
 
             assertEquals(
-                schema("foo" ofType maybe(Type.I32), "bar" ofType maybe(Type.UTF8)),
+                schema("foo" ofType maybe(VectorType.I32), "bar" ofType maybe(VectorType.UTF8)),
                 rel.schema
             )
 
@@ -254,10 +252,10 @@ class RelationTest {
         Relation.openFromRows(allocator, rows).use { rel ->
             assertEquals(
                 schema(
-                    "foo" ofType maybe(Type.I32),
+                    "foo" ofType maybe(VectorType.I32),
                     "bar".asUnionOf(
-                        "utf8" ofType maybe(Type.UTF8),
-                        "list" asListOf Type.UTF8
+                        "utf8" ofType maybe(VectorType.UTF8),
+                        "list" asListOf VectorType.UTF8
                     )
                 ),
                 rel.schema

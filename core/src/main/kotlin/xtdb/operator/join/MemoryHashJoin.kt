@@ -4,7 +4,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import xtdb.ICursor
 import xtdb.arrow.RelationReader
 import xtdb.operator.join.ComparatorFactory.Companion.build
-import xtdb.types.FieldName
+import xtdb.arrow.FieldName
 import java.util.function.Consumer
 
 class MemoryHashJoin(

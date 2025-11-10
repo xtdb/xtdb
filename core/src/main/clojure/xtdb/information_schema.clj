@@ -9,8 +9,7 @@
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.reader :as vr])
   (:import (com.github.benmanes.caffeine.cache Cache Caffeine)
            (io.micrometer.core.instrument Counter Gauge MeterRegistry Tag Timer)
            (io.micrometer.core.instrument.distribution ValueAtPercentile)
@@ -25,8 +24,7 @@
            (xtdb.indexer Snapshot)
            xtdb.operator.SelectionSpec
            xtdb.table.TableRef
-           (xtdb.trie MemoryHashTrie Trie TrieCatalog)
-           xtdb.types.Type))
+           (xtdb.trie MemoryHashTrie Trie TrieCatalog)))
 
 (defn name->oid [s]
   (Math/abs ^Integer (hash s)))

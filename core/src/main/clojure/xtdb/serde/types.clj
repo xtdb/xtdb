@@ -4,7 +4,7 @@
            [java.util List]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
-           xtdb.types.Type
+           xtdb.arrow.VectorType
            (xtdb.vector.extensions IntervalMDMType KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (defprotocol FromArrowType
@@ -134,7 +134,7 @@
     :utf8 (.getType Types$MinorType/VARCHAR)
     :varbinary (.getType Types$MinorType/VARBINARY)
 
-    :temporal (.getArrowType Type/TEMPORAL)
+    :temporal (.getArrowType VectorType/TEMPORAL)
     :tstz-range TsTzRangeType/INSTANCE
     :keyword KeywordType/INSTANCE
     :regclass RegClassType/INSTANCE
@@ -194,7 +194,7 @@
         (map render-field)
         (.getChildren field)))
 
-(defn render-type [^Type type]
+(defn render-type [^VectorType type]
   (let [rendered (into (cond-> [(<-arrow-type (.getArrowType type))]
                          (.getNullable type) (conj :?))
                        (map render-field)
@@ -234,25 +234,25 @@
 (defn ->schema [field-specs]
   (Schema. (mapv ->field field-specs)))
 
-(defmethod print-dup Type [t, ^Writer w]
+(defmethod print-dup VectorType [t, ^Writer w]
   (.write w "#xt/type ")
   (.write w (pr-str (render-type t))))
 
-(defmethod print-method Type [t w]
+(defmethod print-method VectorType [t w]
   (print-dup t w))
 
 #_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]} ; reader-macro
 (defn ->type [type-spec]
   (if (keyword? type-spec)
-    (Type. (->arrow-type type-spec) false ^List (vector))
+    (VectorType. (->arrow-type type-spec) false ^List (vector))
 
     (let [[arrow-type & more-opts] type-spec
           [nullable? children] (if (= :? (first more-opts))
                                  [true (rest more-opts)]
                                  [false more-opts])]
-      (Type. (->arrow-type arrow-type)
-             ^boolean nullable?
-             ^List (mapv ->field children)))))
+      (VectorType. (->arrow-type arrow-type)
+                   ^boolean nullable?
+                   ^List (mapv ->field children)))))
 
 (defmethod print-dup ArrowType [arrow-type, ^Writer w]
   (.write w "#xt.arrow/type ")

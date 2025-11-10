@@ -10,9 +10,9 @@ import xtdb.arrow.Relation
 import xtdb.arrow.Vector
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.test.AllocatorResolver
-import xtdb.types.Type.Companion.I32
-import xtdb.types.Type.Companion.ofType
-import xtdb.types.schema
+import xtdb.arrow.VectorType.Companion.I32
+import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.arrow.schema
 import xtdb.util.Hasher
 import kotlin.io.path.exists
 

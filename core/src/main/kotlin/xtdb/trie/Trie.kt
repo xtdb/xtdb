@@ -6,13 +6,13 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
 import xtdb.table.TableRef
-import xtdb.types.Arrow.withName
-import xtdb.types.Type
-import xtdb.types.Type.Companion.IID
-import xtdb.types.Type.Companion.NULL
-import xtdb.types.Type.Companion.TEMPORAL
-import xtdb.types.Type.Companion.ofType
-import xtdb.types.schema
+import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.Companion.IID
+import xtdb.arrow.VectorType.Companion.NULL
+import xtdb.arrow.VectorType.Companion.TEMPORAL
+import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.arrow.schema
+import xtdb.arrow.withName
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
@@ -113,7 +113,7 @@ object Trie {
             "_system_from" ofType TEMPORAL,
             "_valid_from" ofType TEMPORAL,
             "_valid_to" ofType TEMPORAL,
-            "op" ofType Type.unionOf(
+            "op" ofType VectorType.unionOf(
                 *(listOfNotNull(
                     putDocField?.withName("put"),
                     "delete" ofType NULL,

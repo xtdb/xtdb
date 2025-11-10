@@ -10,7 +10,6 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
-import xtdb.toFieldType
 import xtdb.util.Hasher
 import org.apache.arrow.vector.complex.ListVector as ArrowListVector
 
@@ -35,8 +34,7 @@ class ListVector private constructor(
 
     override val arrowType: ArrowType = LIST
 
-    override val vectors: Iterable<Vector> get() = listOf(elVector)
-
+    override val vectors get() = listOf(elVector)
 
     private var lastOffset: Int = 0
 

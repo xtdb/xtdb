@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorWriter
-import xtdb.types.Type.Companion.IID
+import xtdb.arrow.VectorType.Companion.IID
 import java.nio.ByteBuffer
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid

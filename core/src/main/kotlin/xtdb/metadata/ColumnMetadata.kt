@@ -9,7 +9,7 @@ import xtdb.arrow.metadata.MetadataFlavour.*
 import xtdb.arrow.metadata.MetadataFlavour.Companion.metaColName
 import xtdb.bloom.BloomBuilder
 import xtdb.bloom.toByteBuffer
-import xtdb.toLeg
+import xtdb.arrow.toLeg
 import xtdb.trie.RowIndex
 import kotlin.reflect.KClass
 

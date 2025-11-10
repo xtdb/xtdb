@@ -28,7 +28,7 @@ class FixedSizeListVector private constructor(
 
     override val arrowType = ArrowType.FixedSizeList(listSize)
 
-    override val vectors: Iterable<Vector> get() = listOf(elVector)
+    override val vectors get() = listOf(elVector)
 
     override fun isNull(idx: Int) = !validityBuffer.getBoolean(idx)
 

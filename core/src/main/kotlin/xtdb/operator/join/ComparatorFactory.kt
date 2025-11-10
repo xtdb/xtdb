@@ -2,7 +2,7 @@ package xtdb.operator.join
 
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
-import xtdb.types.FieldName
+import xtdb.arrow.FieldName
 import java.util.function.IntBinaryOperator
 
 interface ComparatorFactory {

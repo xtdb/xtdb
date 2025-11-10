@@ -8,8 +8,8 @@ import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorWriter
 import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.trie.ColumnName
-import xtdb.types.Type.Companion.I32
-import xtdb.types.Type.Companion.ofType
+import xtdb.arrow.VectorType.Companion.I32
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.closeOnCatch
 import xtdb.util.deleteOnCatch
 import java.nio.file.Files.createTempFile

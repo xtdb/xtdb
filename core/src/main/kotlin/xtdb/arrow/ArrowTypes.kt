@@ -1,6 +1,6 @@
-@file:JvmName("Types")
+@file:JvmName("ArrowTypes")
 
-package xtdb
+package xtdb.arrow
 
 import clojure.lang.Keyword
 import com.github.benmanes.caffeine.cache.Caffeine
@@ -15,6 +15,7 @@ import org.apache.arrow.vector.types.TimeUnit.*
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
+import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.error.Unsupported
 import xtdb.time.Interval
@@ -166,3 +167,5 @@ fun valueToArrowType(obj: Any?): ArrowType = when (obj) {
 
 internal fun Any?.toArrowType() = valueToArrowType(this)
 internal fun Any?.toFieldType() = FieldType(this == null, toArrowType(), null)
+
+fun Field.withName(name: FieldName) = Field(name, fieldType, children)
