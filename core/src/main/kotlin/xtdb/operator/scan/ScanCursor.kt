@@ -4,7 +4,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.ICursor
 import xtdb.arrow.RelationReader
 import xtdb.bitemporal.PolygonCalculator
@@ -15,6 +14,7 @@ import xtdb.trie.ColumnName
 import xtdb.trie.EventRowPointer
 import xtdb.util.TemporalBounds
 import xtdb.util.closeAll
+import xtdb.util.safeMap
 import java.util.*
 import java.util.Comparator.comparing
 import java.util.function.Consumer
@@ -43,8 +43,15 @@ class ScanCursor(
             else -> select(iidPred.select(al, this, this@ScanCursor.schema, this@ScanCursor.args))
         }
 
+    private val bufferedRels: Queue<RelationReader> = LinkedList()
+
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
-        val isValidPtr = ArrowBufPointer()
+        bufferedRels.poll()?.let {
+            c.accept(it)
+            it.close()
+            return true
+        }
+
         val iidPred = colPreds["_iid"]
         while (mergeTasks.hasNext()) {
             val task = mergeTasks.next()
@@ -97,13 +104,17 @@ class ScanCursor(
                     .filterNot { it.key == "_iid" }
                     .map { it.value }
 
-                val rel = bitemporalConsumer.build { childRel ->
-                    colPreds
-                        .fold(childRel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args)) }
-                }
+                bitemporalConsumer.build()
+                    .map { childRel ->
+                        colPreds.fold(childRel) { acc, colPred -> acc.select(colPred.select(al, acc, schema, args)) }
+                    }
+                    .filter { it.rowCount > 0 }
+                    .safeMap { it.openSlice(al) }
+                    .also { bufferedRels.addAll(it) }
 
-                if (rel.rowCount > 0) {
-                    c.accept(rel)
+                bufferedRels.poll()?.let {
+                    c.accept(it)
+                    it.close()
                     return true
                 }
             }
@@ -112,5 +123,9 @@ class ScanCursor(
         return false
     }
 
-    override fun close() = segments.closeAll()
+    override fun close() {
+        bufferedRels.apply { closeAll(); clear() }
+        bufferedRels.clear()
+        segments.closeAll()
+    }
 }
