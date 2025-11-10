@@ -2,7 +2,6 @@
 
 package xtdb.arrow
 
-import clojure.lang.Keyword
 import com.github.benmanes.caffeine.cache.Caffeine
 import org.apache.arrow.vector.types.DateUnit
 import org.apache.arrow.vector.types.DateUnit.DAY
@@ -12,25 +11,11 @@ import org.apache.arrow.vector.types.IntervalUnit
 import org.apache.arrow.vector.types.IntervalUnit.*
 import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.TimeUnit.*
-import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
 import org.apache.arrow.vector.types.pojo.Field
-import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.error.Unsupported
-import xtdb.time.Interval
-import xtdb.time.MICRO_HZ
-import xtdb.time.NANO_HZ
-import xtdb.types.ClojureForm
-import xtdb.types.RegClass
-import xtdb.types.RegProc
-import xtdb.types.ZonedDateTimeRange
+import xtdb.arrow.VectorType.Companion.asVectorType
 import xtdb.vector.extensions.*
-import java.math.BigDecimal
-import java.net.URI
-import java.nio.ByteBuffer
-import java.time.*
-import java.util.*
 
 private fun DateUnit.toLegPart() = when (this) {
     DAY -> "day"
@@ -101,71 +86,6 @@ fun ArrowType.toLeg(): String = accept(object : ArrowTypeVisitor<String> {
     }
 })
 
-internal val TEMPORAL_COL_TYPE = ArrowType.Timestamp(MICROSECOND, "UTC")
-private val TS_MICRO_TYPE = ArrowType.Timestamp(MICROSECOND, null)
-private val DATE_DAY_TYPE = ArrowType.Date(DAY)
-private val DURATION_MICRO_TYPE = ArrowType.Duration(MICROSECOND)
-private val TIME_NANO_TYPE = ArrowType.Time(NANOSECOND, 64)
-
-fun valueToArrowType(obj: Any?): ArrowType = when (obj) {
-    null -> MinorType.NULL.type
-    is Boolean -> MinorType.BIT.type
-    is Byte -> MinorType.TINYINT.type
-    is Short -> MinorType.SMALLINT.type
-    is Int -> MinorType.INT.type
-    is Long -> MinorType.BIGINT.type
-    is Float -> MinorType.FLOAT4.type
-    is Double -> MinorType.FLOAT8.type
-
-    is BigDecimal -> {
-        val precision = when (obj.precision()) {
-            // Java Type only supports 128 and 256 bit widths
-            in 0..32 -> 32
-            in 33..64 -> 64
-            else -> throw Unsupported("Unsupported precision: ${obj.precision()}")
-        }
-        ArrowType.Decimal(precision, obj.scale(), precision * 4)
-    }
-
-    is ZonedDateTime -> ArrowType.Timestamp(MICROSECOND, obj.zone.toString())
-    is OffsetDateTime -> ArrowType.Timestamp(MICROSECOND, obj.offset.toString())
-    is Instant -> TEMPORAL_COL_TYPE
-    is Date -> TEMPORAL_COL_TYPE
-    is LocalDateTime -> TS_MICRO_TYPE
-    is LocalDate -> DATE_DAY_TYPE
-    is LocalTime -> TIME_NANO_TYPE
-    is Duration -> DURATION_MICRO_TYPE
-
-    is CharSequence -> MinorType.VARCHAR.type
-    is ByteArray -> MinorType.VARBINARY.type
-    is ByteBuffer -> MinorType.VARBINARY.type
-    is UUID -> UuidType
-    is URI -> UriType
-    is RegClass -> RegClassType
-    is RegProc -> RegProcType
-    is Keyword -> KeywordType
-    is ClojureForm -> TransitType
-    is IllegalArgumentException -> TransitType
-    is RuntimeException -> TransitType
-
-    is List<*> -> MinorType.LIST.type
-    is Set<*> -> SetType
-
-    // TODO support for Type maps
-    is Map<*, *> -> MinorType.STRUCT.type
-
-    is Interval -> when {
-        obj.nanos % (NANO_HZ / MICRO_HZ) != 0L -> MinorType.INTERVALMONTHDAYNANO.type
-        obj.nanos != 0L || obj.days != 0 -> IntervalMDMType
-        else -> MinorType.INTERVALYEAR.type
-    }
-
-    is ZonedDateTimeRange -> TsTzRangeType
-
-    else -> throw UnsupportedOperationException("unknown object type: ${obj.javaClass}")
-}
-
-internal fun Any?.toArrowType() = valueToArrowType(this)
-internal fun Any?.toFieldType() = FieldType(this == null, toArrowType(), null)
+internal fun Any?.toFieldType() = asVectorType.fieldType
 
 fun Field.withName(name: FieldName) = Field(name, fieldType, children)

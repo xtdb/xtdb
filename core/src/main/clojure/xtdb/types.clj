@@ -178,9 +178,9 @@
 
 (defn merge-fields [& fields]
   (let [merged-type (MergeTypes/mergeFields (vec fields))]
-    (VectorType/ofType (or (some (fn [^Field f] (some-> f .getName)) fields)
-                           (ArrowTypes/toLeg (.getArrowType merged-type)))
-                       merged-type)))
+    (VectorType/field (or (some (fn [^Field f] (some-> f .getName)) fields)
+                          (ArrowTypes/toLeg (.getArrowType merged-type)))
+                      merged-type)))
 
 ;;; time units
 

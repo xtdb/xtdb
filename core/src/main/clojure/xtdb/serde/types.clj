@@ -196,7 +196,7 @@
 
 (defn render-type [^VectorType type]
   (let [rendered (into (cond-> [(<-arrow-type (.getArrowType type))]
-                         (.getNullable type) (conj :?))
+                         (.isNullable type) (conj :?))
                        (map render-field)
                        (.getChildren type))]
     (if (= 1 (count rendered))
