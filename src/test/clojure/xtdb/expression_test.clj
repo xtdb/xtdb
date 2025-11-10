@@ -2048,12 +2048,12 @@
 
 (t/deftest test-cast-null
   (letfn [(test-null-cast [tgt-type]
-            (let [{:keys [res col-types]} (tu/query-ra [:project [{'res (list 'cast nil tgt-type)}]
-                                                        [:table [{}]]]
-                                                       {:with-col-types? true})]
+            (let [{:keys [res types]} (tu/query-ra [:project [{'res (list 'cast nil tgt-type)}]
+                                                    [:table [{}]]]
+                                                   {:with-types? true})]
               {:res (:res (first res))
-               :col-type (get col-types 'res)}))]
-    (let [exp {:res nil, :col-type :null}]
+               :type (get types 'res)}))]
+    (let [exp {:res nil, :type #xt/type [:null :?]}]
       (t/is (= exp (test-null-cast :i32)))
       (t/is (= exp (test-null-cast :i64)))
       (t/is (= exp (test-null-cast :utf8)))

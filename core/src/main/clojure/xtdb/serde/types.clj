@@ -247,6 +247,21 @@
     (VectorType. (->arrow-type type-spec) false ^List (vector))
 
     (let [[arrow-type & more-opts] type-spec
+          [arrow-type more-opts] (case arrow-type
+                                   ;; TODO to be finished, need to reduce duplication here with what's above
+                                   :timestamp-tz (let [[_ time-unit tz & rest-opts] type-spec]
+                                                   [[:timestamp-tz time-unit tz] rest-opts])
+                                   :duration (let [[_ time-unit & rest-opts] type-spec]
+                                               [[:duration time-unit] rest-opts])
+                                   :interval (let [[_ interval-unit & rest-opts] type-spec]
+                                               [[:interval interval-unit] rest-opts])
+                                   :timestamp-local (let [[_ time-unit & rest-opts] type-spec]
+                                                      [[:timestamp-local time-unit] rest-opts])
+                                   :fixed-size-list (let [[_ list-size & rest-opts] type-spec]
+                                                      [[:fixed-size-list list-size] rest-opts])
+                                   :fixed-size-binary (let [[_ byte-width & rest-opts] type-spec]
+                                                        [[:fixed-size-binary byte-width] rest-opts])
+                                   [arrow-type more-opts])
           [nullable? children] (if (= :? (first more-opts))
                                  [true (rest more-opts)]
                                  [false more-opts])]

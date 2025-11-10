@@ -18,7 +18,7 @@
     {:xt/id "foo5", :a-long 53, :a-double 10.0, :an-inst #xt/zdt "2022-01-01Z[UTC]"}]])
 
 (t/deftest test-csv-cursor
-  (t/is (= {:col-types '{_id :utf8, a-long :i64, a-double :f64, an-inst [:timestamp-tz :micro "UTC"]}
+  (t/is (= {:types '{_id #xt/type :utf8, a-long #xt/type :i64, a-double #xt/type :f64, an-inst #xt/type [:timestamp-tz :micro "UTC"]}
             :res example-data}
            (tu/query-ra [:csv (-> (io/resource "xtdb/operator/csv-cursor-test.csv")
                                   .toURI
@@ -29,7 +29,7 @@
                            an-inst :timestamp}
                          {:batch-size 3}]
                         {:preserve-pages? true
-                         :with-col-types? true}))))
+                         :with-types? true}))))
 
 (def ^:private arrow-stream-url
   (io/resource "xtdb/operator/arrow-cursor-test.arrows"))
@@ -38,12 +38,12 @@
   (io/resource "xtdb/operator/arrow-cursor-test.arrow"))
 
 (t/deftest test-arrow-cursor
-  (let [expected {:col-types '{_id :utf8, a_long :i64, a_double :f64, an_inst [:timestamp-tz :micro "UTC"]}
+  (let [expected {:types '{_id #xt/type :utf8, a_long #xt/type :i64, a_double #xt/type :f64, an_inst #xt/type [:timestamp-tz :micro "UTC"]}
                   :res example-data}]
     (t/is (= expected (tu/query-ra [:arrow arrow-file-url]
-                                   {:preserve-pages? true, :with-col-types? true})))
+                                   {:preserve-pages? true, :with-types? true})))
     (t/is (= expected (tu/query-ra [:arrow arrow-stream-url]
-                                   {:preserve-pages? true, :with-col-types? true})))))
+                                   {:preserve-pages? true, :with-types? true})))))
 
 (comment
   (import 'xtdb.arrow.Relation)

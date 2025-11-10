@@ -5,7 +5,7 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-project
-  (t/is (= {:col-types '{a :i64, c :i64}
+  (t/is (= {:types '{a #xt/type :i64, c #xt/type :i64}
             :res [[{:a 12, :c 22}, {:a 0, :c 15}]
                   [{:a 100, :c 183}]]}
            (tu/query-ra [:project '[a {c (+ a b)}]
@@ -14,7 +14,7 @@
                             {:a 0, :b 15}]
                            [{:a 100, :b 83}]]]]
                         {:preserve-pages? true
-                         :with-col-types? true})))
+                         :with-types? true})))
 
   (t/testing "param"
     (t/is (= [[{:a 12, :b 52}, {:a 0, :b 57}]
@@ -28,7 +28,7 @@
                            :preserve-pages? true})))))
 
 (t/deftest test-project-row-number
-  (t/is (= {:col-types '{a :i64, row-num :i64}
+  (t/is (= {:types '{a #xt/type :i64, row-num #xt/type :i64}
             :res [[{:a 12, :row-num 1}, {:a 0, :row-num 2}]
                   [{:a 100, :row-num 3}]]}
            (tu/query-ra [:project '[a, {row-num (row-number)}]
@@ -37,10 +37,10 @@
                             {:a 0, :b 15}]
                            [{:a 100, :b 83}]]]]
                         {:preserve-pages? true
-                         :with-col-types? true}))))
+                         :with-types? true}))))
 
 (t/deftest test-project-star
-  (t/is (= {:col-types '{ret [:struct {a :i64, b :i64}]}
+  (t/is (= {:types '{ret #xt/type [:struct ["b" :i64] ["a" :i64]]}
             :res [[{:ret {:a 12, :b 10}}
                    {:ret {:a 0, :b 15}}]
                   [{:ret {:a 100, :b 83}}]]}
@@ -50,7 +50,7 @@
                             {:a 0, :b 15}]
                            [{:a 100, :b 83}]]]]
                         {:preserve-pages? true
-                         :with-col-types? true}))))
+                         :with-types? true}))))
 
 (t/deftest test-identity-projection-not-closed
   (t/is (= [{:b 12} {:b 2} {:a 12} {:a 0}]

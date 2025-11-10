@@ -10,7 +10,7 @@
                  [{:a 3 :b []}]
                  [{:a 4 :b [6 7 8]} {:a 5 :b []}]]]
 
-    (t/is (= {:col-types '{a :i64, b [:list :i64], b* :i64}
+    (t/is (= {:types '{a #xt/type :i64, b #xt/type [:list ["$data$" :i64]], b* #xt/type :i64}
               :res [[{:a 1, :b [1 2], :b* 1}
                      {:a 1, :b [1 2], :b* 2}
                      {:a 2, :b [3 4 5], :b* 3}
@@ -22,9 +22,9 @@
              (tu/query-ra [:unnest '{b* b}
                            [::tu/pages '{a #xt/type :i64, b #xt/type [:list ["$data$" :i64]]} in-vals]]
                           {:preserve-pages? true
-                           :with-col-types? true})))
+                           :with-types? true})))
 
-    (t/is (= {:col-types '{a :i64, b [:list :i64], b* :i64, ordinal :i32}
+    (t/is (= {:types '{a #xt/type :i64, b #xt/type [:list ["$data$" :i64]], b* #xt/type :i64, ordinal #xt/type :i32}
               :res [[{:a 1, :b [1 2], :b* 1, :ordinal 1}
                      {:a 1, :b [1 2], :b* 2, :ordinal 2}
                      {:a 2, :b [3 4 5], :b* 3, :ordinal 1}
@@ -36,7 +36,7 @@
              (tu/query-ra [:unnest '{b* b} '{:ordinality-column ordinal}
                            [::tu/pages '{a #xt/type :i64, b #xt/type [:list ["$data$" :i64]]} in-vals]]
                           {:preserve-pages? true
-                           :with-col-types? true
+                           :with-types? true
                            :key-fn :snake-case-keyword})))))
 
 (t/deftest test-unnest-operator

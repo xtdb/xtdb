@@ -218,7 +218,7 @@
 
 (defn query-ra
   ([query] (query-ra query {}))
-  ([query {:keys [node args preserve-pages? with-col-types? key-fn] :as query-opts
+  ([query {:keys [node args preserve-pages? with-types? key-fn] :as query-opts
            :or {key-fn (serde/read-key-fn :kebab-case-keyword)}}]
    (let [allocator (:allocator node *allocator*)
          query-opts (-> query-opts
@@ -243,11 +243,11 @@
                                                  (assoc :args args-rel, :close-args? false)))]
            (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
                           (cond->> (not preserve-pages?) (into [] cat)))]
-             (if with-col-types?
+             (if with-types?
                {:res rows,
-                :col-types (->> (.getResultFields res)
-                                (into {} (map (juxt #(symbol (.getName ^Field %))
-                                                    types/field->col-type))))}
+                :types (->> (.getResultFields res)
+                            (into {} (map (juxt #(symbol (.getName ^Field %))
+                                                VectorType/fromField))))}
                rows))))
        (finally
          (when close-q-src?

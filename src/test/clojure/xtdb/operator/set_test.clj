@@ -5,7 +5,7 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-union-all
-  (t/is (= {:col-types '{a :i64, b :i64}
+  (t/is (= {:types '{a #xt/type :i64, b #xt/type :i64}
             :res [#{{:a 0, :b 15}
                     {:a 12, :b 10}}
                   #{{:a 100, :b 15}}
@@ -20,7 +20,7 @@
                               [[{:a 10 :b 1}, {:a 15 :b 2}]
                                [{:a 83 :b 3}]]]]
                             {:preserve-pages? true
-                             :with-col-types? true})
+                             :with-types? true})
                (update :res (partial mapv set)))))
 
   (t/testing "empty input and output"
@@ -46,7 +46,7 @@
              [::tu/pages '{a #xt/type :i64} [[] [{:a 15}]]]]))))
 
 (t/deftest test-intersection
-  (t/is (= {:col-types '{a :i64, b :i64}
+  (t/is (= {:types '{a #xt/type :i64, b #xt/type :i64}
             :res [[{:a 0, :b 15}]]}
            (tu/query-ra [:intersect
                          [::tu/pages
@@ -56,7 +56,7 @@
                           [[{:a 10 :b 1}, {:a 15 :b 2}]
                            [{:a 0 :b 15}]]]]
                         {:preserve-pages? true
-                         :with-col-types? true})))
+                         :with-types? true})))
 
   (t/is (= {{:a 1} 2, {:a 2} 2}
            (-> (tu/query-ra [:intersect
@@ -83,7 +83,7 @@
                                 [::tu/pages [[{:a 20}]]]])))))
 
 (t/deftest test-difference
-  (t/is (= {:col-types '{a :i64, b :i64}
+  (t/is (= {:types '{a #xt/type :i64, b #xt/type :i64}
             :res [#{{:a 12, :b 10}}
                   #{{:a 100 :b 15}}]}
            (-> (tu/query-ra [:difference
@@ -94,7 +94,7 @@
                               [[{:a 10 :b 1}, {:a 15 :b 2}]
                                [{:a 0 :b 15}]]]]
                             {:preserve-pages? true
-                             :with-col-types? true})
+                             :with-types? true})
                (update :res (partial mapv set)))))
 
   (t/is (= {{:a 1} 1}
@@ -122,8 +122,8 @@
 
 (t/deftest first-tuple-in-rhs-is-taken-into-account-test
   (t/is
-   (= {:res [{:x1 2}], :col-types '{x1 :i64}}
+   (= {:res [{:x1 2}], :types '{x1 #xt/type :i64}}
       (tu/query-ra '[:difference
                      [:table [{x1 1} {x1 2}]]
                      [:table [{x1 1}]]]
-                   {:with-col-types? true}))))
+                   {:with-types? true}))))

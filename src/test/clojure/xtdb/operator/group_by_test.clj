@@ -14,7 +14,7 @@
   (letfn [(run-test [group-by-spec batches]
             (-> (tu/query-ra [:group-by group-by-spec
                               [::tu/pages '{a #xt/type :i64, b #xt/type :i64} batches]]
-                             {:with-col-types? true})
+                             {:with-types? true})
                 (update :res set)))]
 
     (let [agg-specs '[{sum (sum b)}
@@ -26,11 +26,11 @@
                       {var-samp (var-samp b)}
                       {stddev-pop (stddev-pop b)}
                       {stddev-samp (stddev-samp b)}]
-          expected-col-types '{a :i64, cnt :i64
-                               sum [:union #{:null :i64}], avg [:union #{:null :f64}]
-                               min [:union #{:null :i64}], max [:union #{:null :i64}]
-                               var-pop [:union #{:null :f64}], stddev-pop [:union #{:null :f64}]
-                               var-samp [:union #{:null :f64}], stddev-samp [:union #{:null :f64}]}]
+          expected-col-types '{a #xt/type :i64, cnt #xt/type :i64
+                               sum #xt/type [:i64 :?], avg #xt/type [:f64 :?]
+                               min #xt/type [:i64 :?], max #xt/type [:i64 :?]
+                               var-pop #xt/type [:f64 :?], stddev-pop #xt/type [:f64 :?]
+                               var-samp #xt/type [:f64 :?], stddev-samp #xt/type [:f64 :?]}]
 
       (t/is (= {:res #{{:a 1, :sum 140, :avg 35.0, :cnt 4 :min 10 :max 60,
                         :var-pop 425.0, :stddev-pop 20.615528128088304
@@ -41,7 +41,7 @@
                        {:a 3, :sum 170, :avg 85.0, :cnt 2 :min 80 :max 90,
                         :var-pop 25.0, :stddev-pop 5.0
                         :var-samp 50.0, :stddev-samp 7.0710678118654755}}
-                :col-types expected-col-types}
+                :types expected-col-types}
 
                (run-test (cons 'a agg-specs)
                          [[{:a 1 :b 20}
@@ -73,7 +73,7 @@
                                    {:a 3 :b nil}]]]]))))
 
     (t/is (= {:res #{{:a 1} {:a 2} {:a 3}}
-              :col-types '{a :i64}}
+              :types '{a #xt/type :i64}}
              (run-test '[a]
                        [[{:a 1 :b 10}
                          {:a 1 :b 20}
@@ -93,7 +93,7 @@
                      {:a 2, :b 20, :cnt 1}
                      {:a 3, :b 10, :cnt 1}
                      {:a 3, :b 20, :cnt 1}}
-              :col-types '{a :i64, b :i64, cnt :i64}}
+              :types '{a #xt/type :i64, b #xt/type :i64, cnt #xt/type :i64}}
              (run-test '[a b {cnt (count b)}]
                        [[{:a 1 :b 10}
                          {:a 1 :b 20}
@@ -106,7 +106,7 @@
                          {:a 3 :b 10}]]))
           "multiple group columns (distinct)")
 
-    (t/is (= {:res #{{:cnt 9}}, :col-types '{cnt :i64}}
+    (t/is (= {:res #{{:cnt 9}}, :types '{cnt #xt/type :i64}}
              (run-test '[{cnt (count b)}]
                        [[{:a 1 :b 10}
                          {:a 1 :b 20}
@@ -401,7 +401,7 @@
                    {:k "tn", :all-vs true, :any-vs true}
                    {:k "tf", :all-vs false, :any-vs true}
                    {:k "tfn", :all-vs false, :any-vs true}}
-            :col-types '{k :utf8, all-vs [:union #{:null :bool}], any-vs [:union #{:null :bool}]}}
+            :types '{k #xt/type :utf8, all-vs #xt/type [:bool :?], any-vs #xt/type [:bool :?]}}
 
            (-> (tu/query-ra [:group-by '[k {all-vs (bool-and v)} {any-vs (bool-or v)}]
                              [::tu/pages
@@ -411,7 +411,7 @@
                                 {:k "fn", :v false} {:k "fn", :v nil} {:k "fn", :v false}
                                 {:k "tf", :v true} {:k "tf", :v false} {:k "tf", :v true}
                                 {:k "tfn", :v true} {:k "tfn", :v false} {:k "tfn", :v nil}]]]]
-                            {:with-col-types? true})
+                            {:with-types? true})
                (update :res set))))
 
   (t/is (= []
@@ -441,12 +441,12 @@
                     :avg 13.0, :avg-distinct 12.333333333333334
                     :array-agg [12 15 15 10], :array-agg-distinct [12 15 10]}}
 
-            :col-types '{k :keyword,
-                         cnt :i64, cnt-distinct :i64,
-                         sum [:union #{:null :i64}], sum-distinct [:union #{:null :i64}],
-                         avg [:union #{:null :f64}], avg-distinct [:union #{:null :f64}],
-                         array-agg [:list :i64],
-                         array-agg-distinct [:list :i64]}}
+            :types '{k #xt/type :keyword,
+                     cnt #xt/type :i64, cnt-distinct #xt/type :i64,
+                     sum #xt/type [:i64 :?], sum-distinct #xt/type [:i64 :?],
+                     avg #xt/type [:f64 :?], avg-distinct #xt/type [:f64 :?],
+                     array-agg #xt/type [:list ["$data$" :i64]],
+                     array-agg-distinct #xt/type [:list ["$data$" :i64]]}}
 
            (util/->clj (-> (tu/query-ra [:group-by '[k
                                                      {cnt (count v)}
@@ -465,24 +465,24 @@
                                             {:k :b, :v 10}]
                                            [{:k :a, :v 12}
                                             {:k :a, :v 10}]]]]
-                                        {:with-col-types? true})
+                                        {:with-types? true})
                            (update :res set))))))
 
 (t/deftest test-group-by-with-nils-coerce-to-boolean-npe-regress
   (t/is (= {:res #{{:a 42} {}}
-            :col-types '{a [:union #{:i64 :null}]}}
+            :types '{a #xt/type [:i64 :?]}}
            (-> (tu/query-ra '[:group-by [a]
                               [:table [{:a 42, :b 42}, {:a nil, :b 42}, {:a nil, :b 42}]]]
-                            {:with-col-types? true})
+                            {:with-types? true})
                (update :res set)))))
 
 (t/deftest test-group-by-groups-nils
   (t/is (= {:res #{{:b 1, :n 85}}
-            :col-types '{a :null, b :i64, n [:union #{:null :i64}]}}
+            :types '{a #xt/type [:null :?], b #xt/type :i64, n #xt/type [:i64 :?]}}
            (-> (tu/query-ra '[:group-by [a b {n (sum c)}]
                               [:table [{:a nil, :b 1, :c 42}
                                        {:a nil, :b 1, :c 43}]]]
-                            {:with-col-types? true})
+                            {:with-types? true})
                (update :res set)))))
 
 (t/deftest test-throws-for-variable-width-minmax-340

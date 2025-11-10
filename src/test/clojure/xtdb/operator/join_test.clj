@@ -20,7 +20,7 @@
                   {{:a 100, :b 10, :c 1} 1, {:a 100, :b 15, :c 2} 1}
                   {{:a 12, :b 83, :c 3} 2, {:a 0, :b 83, :c 3} 1}
                   {{:a 100, :b 83, :c 3} 1}]
-            :col-types '{a :i64, b :i64, c :i64}}
+            :types '{a #xt/type :i64, b #xt/type :i64, c #xt/type :i64}}
            (-> (tu/query-ra [:cross-join
                              [::tu/pages
                               [[{:a 12}, {:a 12}, {:a 0}]
@@ -28,32 +28,32 @@
                              [::tu/pages
                               [[{:b 10 :c 1}, {:b 15 :c 2}]
                                [{:b 83 :c 3}]]]]
-                            {:with-col-types? true, :preserve-pages? true})
+                            {:with-types? true, :preserve-pages? true})
                (update :res #(mapv frequencies %)))))
 
   (t/is (= {:res []
-            :col-types '{a :i64, b :i64}}
+            :types '{a #xt/type :i64, b #xt/type :i64}}
            (tu/query-ra [:cross-join
                          [::tu/pages
                           [[{:a 12}, {:a 0}]
                            [{:a 100}]]]
                          [::tu/pages '{b #xt/type :i64} []]]
-                        {:with-col-types? true, :preserve-pages? true}))
+                        {:with-types? true, :preserve-pages? true}))
         "empty input and output")
 
   (t/is (= {:res [[{} {} {} {} {} {}]]
-            :col-types {}}
+            :types {}}
            (tu/query-ra [:cross-join
                          [::tu/pages [[{} {} {}]]]
                          [::tu/pages [[{} {}]]]]
-                        {:with-col-types? true, :preserve-pages? true}))
+                        {:with-types? true, :preserve-pages? true}))
         "tables with no cols"))
 
 (t/deftest test-equi-join
   (t/is (= {:res [#{{:a 12, :b 12}}
                   #{{:a 100, :b 100}
                     {:a 0, :b 0}}]
-            :col-types '{a :i64, b :i64}}
+            :types '{a #xt/type :i64, b #xt/type :i64}}
            (-> (tu/query-ra [:join '[{a b}]
                              [::tu/pages
                               [[{:a 12}, {:a 0}]
@@ -61,12 +61,12 @@
                              [::tu/pages
                               [[{:b 12}, {:b 2}]
                                [{:b 100} {:b 0}]]]]
-                            {:with-col-types? true, :preserve-pages? true})
+                            {:with-types? true, :preserve-pages? true})
                (update :res (partial mapv set)))))
 
   (t/is (= {:res [{{:a 12} 2}
                   {{:a 100} 1, {:a 0} 1}]
-            :col-types '{a :i64}}
+            :types '{a #xt/type :i64}}
            (-> (tu/query-ra [:join '[{a a}]
                              [::tu/pages
                               [[{:a 12}, {:a 0}]
@@ -74,23 +74,23 @@
                              [::tu/pages
                               [[{:a 12}, {:a 2}]
                                [{:a 100} {:a 0}]]]]
-                            {:with-col-types? true, :preserve-pages? true})
+                            {:with-types? true, :preserve-pages? true})
                (update :res (partial mapv frequencies))))
         "same column name")
 
   (t/is (= {:res []
-            :col-types '{a :i64, b :i64}}
+            :types '{a #xt/type :i64, b #xt/type :i64}}
            (tu/query-ra [:join '[{a b}]
                          [::tu/pages
                           [[{:a 12}, {:a 0}]
                            [{:a 100}]]]
                          [::tu/pages '{b #xt/type :i64}
                           []]]
-                        {:with-col-types? true, :preserve-pages? true}))
+                        {:with-types? true, :preserve-pages? true}))
         "empty input")
 
   (t/is (= {:res []
-            :col-types '{a :i64, b :i64, c :i64}}
+            :types '{a #xt/type :i64, b #xt/type :i64, c #xt/type :i64}}
            (tu/query-ra [:join '[{a b}]
                          [::tu/pages
                           [[{:a 12}, {:a 0}]
@@ -98,7 +98,7 @@
                          [::tu/pages
                           [[{:b 10 :c 1}, {:b 15 :c 2}]
                            [{:b 83 :c 3}]]]]
-                        {:with-col-types? true, :preserve-pages? true}))
+                        {:with-types? true, :preserve-pages? true}))
         "empty output"))
 
 (t/deftest test-equi-join-multi-col
@@ -227,7 +227,7 @@
 
 (t/deftest test-mark-equi-join
   (t/is (= {:res [{{:a 12, :m true} 2, {:a 0, :m false} 1} {{:a 100, :m true} 1}]
-            :col-types '{a :i64, m [:union #{:null :bool}]}}
+            :types '{a #xt/type :i64, m #xt/type [:bool :?]}}
            (-> (tu/query-ra [:mark-join '{m [{a b}]}
                              [::tu/pages
                               [[{:a 12}, {:a 12}, {:a 0}]
@@ -235,7 +235,7 @@
                              [::tu/pages
                               [[{:b 12}, {:b 2}]
                                [{:b 100}]]]]
-                            {:preserve-pages? true, :with-col-types? true})
+                            {:preserve-pages? true, :with-types? true})
                (update :res (partial mapv frequencies)))))
 
   (t/testing "empty input"
@@ -348,7 +348,7 @@
 (t/deftest test-left-equi-join
   (t/is (= {:res [{{:a 12, :b 12, :c 2} 1, {:a 12, :b 12, :c 0} 1, {:a 0} 1}
                   {{:a 12, :b 12, :c 2} 1, {:a 100, :b 100, :c 3} 1, {:a 12, :b 12, :c 0} 1}]
-            :col-types '{a :i64, b [:union #{:null :i64}], c [:union #{:null :i64}]}}
+            :types '{a #xt/type :i64, b #xt/type [:i64 :?], c #xt/type [:i64 :?]}}
            (-> (tu/query-ra [:left-outer-join '[{a b}]
                              [::tu/pages
                               [[{:a 12}, {:a 0}]
@@ -356,40 +356,40 @@
                              [::tu/pages
                               [[{:b 12, :c 0}, {:b 2, :c 1}]
                                [{:b 12, :c 2}, {:b 100, :c 3}]]]]
-                            {:preserve-pages? true, :with-col-types? true})
+                            {:preserve-pages? true, :with-types? true})
                (update :res (partial mapv frequencies)))))
 
   (t/testing "empty input"
     (t/is (= {:res [#{{:a 12}, {:a 0}}
                     #{{:a 100}}]
-              :col-types '{a :i64, b [:union #{:null :i64}]}}
+              :types '{a #xt/type :i64, b #xt/type [:i64 :?]}}
              (-> (tu/query-ra [:left-outer-join '[{a b}]
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
                                  [{:a 100}]]]
                                [::tu/pages '{b #xt/type :i64} []]]
-                              {:preserve-pages? true, :with-col-types? true})
+                              {:preserve-pages? true, :with-types? true})
                  (update :res (partial mapv set)))))
 
     (t/is (= {:res []
-              :col-types '{a :i64, b [:union #{:null :i64}]}}
+              :types '{a #xt/type :i64, b #xt/type [:i64 :?]}}
              (tu/query-ra [:left-outer-join '[{a b}]
                            [::tu/pages '{a #xt/type :i64} []]
                            [::tu/pages
                             [[{:b 12}, {:b 2}]
                              [{:b 100} {:b 0}]]]]
-                          {:preserve-pages? true, :with-col-types? true})))
+                          {:preserve-pages? true, :with-types? true})))
 
     (t/is (= {:res [#{{:a 12}, {:a 0}}
                     #{{:a 100}}]
-              :col-types '{a :i64, b [:union #{:null :i64}]}}
+              :types '{a #xt/type :i64, b #xt/type [:i64 :?]}}
              (-> (tu/query-ra [:left-outer-join '[{a b}]
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
                                  [{:a 100}]]]
                                [::tu/pages '{b #xt/type :i64}
                                 [[]]]]
-                              {:preserve-pages? true, :with-col-types? true})
+                              {:preserve-pages? true, :with-types? true})
                  (update :res (partial mapv set)))))))
 
 (t/deftest test-left-equi-join-multi-col
@@ -457,7 +457,7 @@
     (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:b 2, :c 1} 1}
                     {{:a 12, :b 12, :c 2} 2, {:a 100, :b 100, :c 3} 1}
                     {{:a 0} 1}]
-              :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}], c [:union #{:null :i64}]}}
+              :types '{a #xt/type [:i64 :?], b #xt/type [:i64 :?], c #xt/type [:i64 :?]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
@@ -465,13 +465,13 @@
                                [::tu/pages
                                 [[{:b 12, :c 0}, {:b 2, :c 1}]
                                  [{:b 12, :c 2}, {:b 100, :c 3}]]]]
-                              {:preserve-pages? true, :with-col-types? true})
+                              {:preserve-pages? true, :with-types? true})
                  (update :res (partial mapv frequencies)))))
 
     (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a 12, :b 12, :c 2} 2, {:b 2, :c 1} 1}
                     {{:a 100, :b 100, :c 3} 1}
                     {{:a 0} 1}]
-              :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}], c [:union #{:null :i64}]}}
+              :types '{a #xt/type [:i64 :?], b #xt/type [:i64 :?], c #xt/type [:i64 :?]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
@@ -479,13 +479,13 @@
                                [::tu/pages
                                 [[{:b 12, :c 0}, {:b 12, :c 2}, {:b 2, :c 1}]
                                  [{:b 100, :c 3}]]]]
-                              {:preserve-pages? true, :with-col-types? true})
+                              {:preserve-pages? true, :with-types? true})
                  (update :res (partial mapv frequencies))))))
 
   (t/testing "all matched"
     (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a 100, :b 100, :c 3} 1}
                     {{:a 12, :b 12, :c 2} 2}]
-              :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}], c [:union #{:null :i64}]}}
+              :types '{a #xt/type [:i64 :?], b #xt/type [:i64 :?], c #xt/type [:i64 :?]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/pages
                                 [[{:a 12}]
@@ -493,12 +493,12 @@
                                [::tu/pages
                                 [[{:b 12, :c 0}, {:b 100, :c 3}]
                                  [{:b 12, :c 2}]]]]
-                              {:preserve-pages? true, :with-col-types? true})
+                              {:preserve-pages? true, :with-types? true})
                  (update :res (partial mapv frequencies)))))
 
     (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a 12, :b 12, :c 2} 2}
                     {{:a 100, :b 100, :c 3} 1}]
-              :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}], c [:union #{:null :i64}]}}
+              :types '{a #xt/type [:i64 :?], b #xt/type [:i64 :?], c #xt/type [:i64 :?]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/pages
                                 [[{:a 12}]
@@ -506,29 +506,29 @@
                                [::tu/pages
                                 [[{:b 12, :c 0}, {:b 12, :c 2}]
                                  [{:b 100, :c 3}]]]]
-                              {:preserve-pages? true, :with-col-types? true})
+                              {:preserve-pages? true, :with-types? true})
                  (update :res (partial mapv frequencies))))))
 
   (t/testing "empty input"
     (t/is (= {:res [{{:a 0} 1, {:a 100} 1, {:a 12} 1}]
-              :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}]}}
+              :types '{a #xt/type [:i64 :?], b #xt/type [:i64 :?]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
                                  [{:a 100}]]]
                                [::tu/pages '{b #xt/type :i64} []]]
-                              {:preserve-pages? true, :with-col-types? true})
+                              {:preserve-pages? true, :with-types? true})
                  (update :res (partial mapv frequencies)))))
 
     (t/is (= {:res [{{:b 12} 1, {:b 2} 1}
                     {{:b 100} 1, {:b 0} 1}]
-              :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}]}}
+              :types '{a #xt/type [:i64 :?], b #xt/type [:i64 :?]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/pages '{a #xt/type :i64} []]
                                [::tu/pages
                                 [[{:b 12}, {:b 2}]
                                  [{:b 100} {:b 0}]]]]
-                              {:preserve-pages? true, :with-col-types? true})
+                              {:preserve-pages? true, :with-types? true})
                  (update :res (partial mapv frequencies)))))))
 
 (t/deftest test-full-outer-equi-join-multi-col
@@ -584,7 +584,7 @@
 
 (t/deftest test-anti-equi-join
   (t/is (= {:res [{{:a 0} 2}]
-            :col-types '{a :i64}}
+            :types '{a #xt/type :i64}}
            (-> (tu/query-ra [:anti-join '[{a b}]
                              [::tu/pages
                               [[{:a 12}, {:a 0}, {:a 0}]
@@ -592,7 +592,7 @@
                              [::tu/pages
                               [[{:b 12}, {:b 2}]
                                [{:b 100}]]]]
-                            {:preserve-pages? true, :with-col-types? true})
+                            {:preserve-pages? true, :with-types? true})
                (update :res (partial mapv frequencies)))))
 
   (t/testing "empty input"
@@ -1077,39 +1077,39 @@
 (t/deftest full-outer-join-with-polymorphic-types
   (t/testing "polymorphic types on both sides - all matching"
     (t/is (= {:res [[{:a 1 :b 1} {:a "2" :b "2"}]],
-              :col-types
-              '{a [:union #{:utf8 :null :i64}]
-                b [:union #{:utf8 :null :i64}]}}
+              :types
+              '{a #xt/type [:union ["utf8" :utf8] ["i64" :i64] ["null" :null :?]]
+                b #xt/type [:union ["utf8" :utf8] ["i64" :i64] ["null" :null :?]]}}
              (tu/query-ra [:full-outer-join '[{a b}]
                            [::tu/pages
                             [[{:a 1}, {:a "2"}]]]
                            [::tu/pages
                             [[{:b 1}, {:b "2"}]]]]
-                          {:preserve-pages? true, :with-col-types? true}))))
+                          {:preserve-pages? true, :with-types? true}))))
 
   (t/testing "polymorphic types on both sides - some unmatching"
     (t/is (= {:res [[{:b 1, :a 1} {:b "3"}] [{:a "2"}]],
-              :col-types
-              '{a [:union #{:utf8 :null :i64}]
-                b [:union #{:utf8 :null :i64}]}}
+              :types
+              '{a #xt/type [:union ["utf8" :utf8] ["i64" :i64] ["null" :null :?]]
+                b #xt/type [:union ["utf8" :utf8] ["i64" :i64] ["null" :null :?]]}}
              (tu/query-ra [:full-outer-join '[{a b}]
                            [::tu/pages
                             [[{:a 1}, {:a "2"}]]]
                            [::tu/pages
                             [[{:b 1}, {:b "3"}]]]]
-                          {:preserve-pages? true, :with-col-types? true}))))
+                          {:preserve-pages? true, :with-types? true}))))
 
   (t/testing "polymorphic types on both sides - all unmatching"
     (t/is (= {:res [[{:b 3} {:b "4"}] [{:a 1} {:a "2"}]],
-              :col-types
-              '{a [:union #{:utf8 :null :i64}]
-                b [:union #{:utf8 :null :i64}]}}
+              :types
+              '{a #xt/type [:union ["utf8" :utf8] ["i64" :i64] ["null" :null :?]]
+                b #xt/type [:union ["utf8" :utf8] ["i64" :i64] ["null" :null :?]]}}
              (tu/query-ra [:full-outer-join '[{a b}]
                            [::tu/pages
                             [[{:a 1}, {:a "2"}]]]
                            [::tu/pages
                             [[{:b 3}, {:b "4"}]]]]
-                          {:preserve-pages? true, :with-col-types? true})))))
+                          {:preserve-pages? true, :with-types? true})))))
 
 (t/deftest test-determine-build-side
   (t/is (= :left (join/determine-build-side {:stats {:row-count 1}} {:stats {:row-count 10}} :right))

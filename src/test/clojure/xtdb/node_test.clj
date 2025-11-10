@@ -1117,13 +1117,13 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (tu/finish-block! tu/*node*)
 
     (t/is (= {:res [{:xt/id 2, :foo "foo"} {:xt/id 3, :bar "bar"}],
-              :col-types '{_id :i64
-                           bar [:union #{:utf8 :null}]
-                           foo [:union #{:utf8 :null}]}}
+              :types '{_id #xt/type :i64
+                       bar #xt/type [:utf8 :?]
+                       foo #xt/type [:utf8 :?]}}
              (tu/query-ra '[:order-by [[_id]]
                             [:scan {:table #xt/table device} [_id foo bar]]]
                           {:node tu/*node*
-                           :with-col-types? true})))
+                           :with-types? true})))
 
     (t/is (= [{:xt/id 1}]
              (xt/q tu/*node* "FROM system WHERE EXISTS(FROM device WHERE system._id = device.system_id)")))))

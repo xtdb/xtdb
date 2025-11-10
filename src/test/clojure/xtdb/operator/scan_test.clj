@@ -357,20 +357,20 @@
 
 (t/deftest test-scan-col-types
   (letfn [(->col-type [col]
-            (:col-types
+            (:types
              (tu/query-ra [:scan '{:table #xt/table xt_docs} [col]]
-                          {:node tu/*node*, :with-col-types? true})))]
+                          {:node tu/*node*, :with-types? true})))]
 
     (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :doc}]])
 
     (tu/finish-block! tu/*node*)
 
-    (t/is (= '{_id :keyword}
+    (t/is (= '{_id #xt/type :keyword}
              (->col-type '_id)))
 
     (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo"}]])
 
-    (t/is (= '{_id [:union #{:keyword :utf8}]}
+    (t/is (= '{_id #xt/type [:union ["keyword" :keyword] ["utf8" :utf8]]}
              (->col-type '_id)))))
 
 (t/deftest test-content-pred
@@ -569,14 +569,14 @@
 (t/deftest test-iid-col-type-3016
   (xt/submit-tx tu/*node* [[:put-docs :comments {:xt/id 1}]])
 
-  (t/is (= {'_iid [:fixed-size-binary 16]
-            '_valid_from types/temporal-col-type
-            '_valid_to types/nullable-temporal-col-type}
+  (t/is (= {'_iid #xt/type [:fixed-size-binary 16]
+            '_valid_from types/temporal-type
+            '_valid_to types/nullable-temporal-type}
 
-           (:col-types (tu/query-ra '[:scan {:table #xt/table comments}
+           (:types (tu/query-ra '[:scan {:table #xt/table comments}
                                       [_iid _valid_from _valid_to]]
                                     {:node tu/*node*
-                                     :with-col-types? true})))))
+                                     :with-types? true})))))
 
 (deftest live-hash-trie-branches-get-expanded-3247
   (xt/submit-tx tu/*node* (for [id (range 2000)] ; 2000 to go over the page size

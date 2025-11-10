@@ -4,8 +4,7 @@
             [clojure.spec.alpha :as s]
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.util :as util])
   (:import java.lang.AutoCloseable
            (java.nio.file Files)
            java.time.Duration

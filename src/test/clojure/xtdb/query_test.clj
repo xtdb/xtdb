@@ -313,7 +313,7 @@
 (t/deftest test-left-outer-join-with-composite-types-2393
   (t/is (= {:res [{{:a 12, :b 12, :c {:foo 1}} 1, {:a 12, :b 12, :c {:foo 2}} 1, {:a 0} 1}
                   {{:a 12, :b 12, :c {:foo 1}} 1, {:a 12, :b 12, :c {:foo 2}} 1, {:a 100, :b 100, :c {:foo 2}} 1}]
-            :col-types '{a :i64, c [:union #{[:struct {foo :i64}] :null}], b [:union #{:null :i64}]}}
+            :types '{a #xt/type :i64, c #xt/type [:struct :? ["foo" :i64]], b #xt/type [:i64 :?]}}
            (-> (tu/query-ra [:left-outer-join '[{a b}]
                              [::tu/pages
                               [[{:a 12}, {:a 0}]
@@ -321,13 +321,13 @@
                              [::tu/pages
                               [[{:b 12, :c {:foo 1}}, {:b 2, :c {:foo 1}}]
                                [{:b 12, :c {:foo 2}}, {:b 100, :c {:foo 2}}]]]]
-                            {:preserve-pages? true, :with-col-types? true})
+                            {:preserve-pages? true, :with-types? true})
                (update :res (partial mapv frequencies))))
         "testing left-outer-join with structs")
 
   (t/is (= {:res [{{:a 12, :c [1], :b 12} 1, {:a 12, :c [2], :b 12} 1, {:a 0} 1}
                   {{:a 12, :c [1], :b 12} 1, {:a 12, :c [2], :b 12} 1, {:a 100, :c [4], :b 100} 1}]
-            :col-types '{a :i64, c [:union #{[:list :i64] :null}], b [:union #{:null :i64}]}}
+            :types '{a #xt/type :i64, b #xt/type [:i64 :?], c #xt/type [:list :? ["$data$" :i64]]}}
            (-> (tu/query-ra [:left-outer-join '[{a b}]
                              [::tu/pages
                               [[{:a 12}, {:a 0}]
@@ -335,7 +335,7 @@
                              [::tu/pages
                               [[{:b 12, :c (list 1)}, {:b 2, :c (list 3)}]
                                [{:b 12, :c (list 2)}, {:b 100, :c (list 4)}]]]]
-                            {:preserve-pages? true, :with-col-types? true})
+                            {:preserve-pages? true, :with-types? true})
                (update :res (partial mapv frequencies))))
         "testing left-outer-join with lists"))
 
@@ -362,19 +362,19 @@
       (xt/execute-tx new-db-conn [[:put-docs :foo {:xt/id :new-db}]])
 
       (t/is (= {:res [{:xt/id "xtdb-db"}],
-                :col-types '{_id :utf8}}
+                :types '{_id #xt/type :utf8}}
                (tu/query-ra '[:scan {:table #xt/table foo} [_id]]
-                            {:node node, :with-col-types? true})))
+                            {:node node, :with-types? true})))
 
       (t/is (= {:res [{:xt/id :new-db}],
-                :col-types '{_id :keyword}}
+                :types '{_id #xt/type :keyword}}
                (tu/query-ra '[:scan {:table #xt/table [new_db foo]} [_id]]
-                            {:node node, :default-db "new_db", :with-col-types? true})))
+                            {:node node, :default-db "new_db", :with-types? true})))
 
       (t/is (= {:res #{{:xt/id "xtdb-db"} {:xt/id :new-db}},
-                :col-types '{_id [:union #{:utf8 :keyword}]}}
+                :types '{_id #xt/type [:union ["utf8" :utf8] ["keyword" :keyword]]}}
                (-> (tu/query-ra '[:union-all
                                   [:scan {:table #xt/table [xtdb foo]} [_id]]
                                   [:scan {:table #xt/table [new_db foo]} [_id]]]
-                                {:node node, :with-col-types? true})
+                                {:node node, :with-types? true})
                    (update :res set)))))))

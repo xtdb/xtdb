@@ -42,7 +42,7 @@
   (t/is (= {:res [{:c-id "c1", :c-name "Alan", :match true}
                   {:c-id "c2", :c-name "Bob", :match true}
                   {:c-id "c3", :c-name "Charlie", :match false}]
-            :col-types '{c_id :utf8, c_name :utf8, match [:union #{:null :bool}]}}
+            :types '{c_id #xt/type :utf8, c_name #xt/type :utf8, match #xt/type [:bool :?]}}
            (-> (tu/query-ra [:apply '{:mark-join {match (= ?c_id o_customer_id)}} '{c_id ?c_id}
                              [::tu/pages
                               [[{:c_id "c1", :c_name "Alan"}
@@ -53,14 +53,14 @@
                                 {:o_customer_id "c1"}
                                 {:o_customer_id "c2"}
                                 {:o_customer_id "c4"}]]]]
-                            {:with-col-types? true}))))
+                            {:with-types? true}))))
 
   (t/is (= {:res [{:x 0}]
-            :col-types '{x :i64, match [:union #{:null :bool}]}}
+            :types '{x #xt/type :i64, match #xt/type [:bool :?]}}
            (-> (tu/query-ra '[:apply {:mark-join {match (= 4 y)}} {}
                               [:table [{x 0}]]
                               [:table [{y nil}]]]
-                            {:with-col-types? true})))
+                            {:with-types? true})))
         "nil in RHS")
 
   (t/is (= [{:x 0, :match false} {:x 1, :match false}]
@@ -102,22 +102,22 @@
                           {:args {:x []}})))))
 
 (t/deftest test-apply-empty-rel-bug-237
-  (t/is (= {:res [{}], :col-types '{x3 [:union #{:null :i64}]}}
+  (t/is (= {:res [{}], :types '{x3 #xt/type [:i64 :?]}}
            (-> (tu/query-ra
                 '[:group-by [{x3 (sum x2)}]
                   [:apply :cross-join {}
                    [:table [{x1 15}]]
                    [:select false
                     [:table [{x2 20}]]]]]
-                {:with-col-types? true}))))
+                {:with-types? true}))))
 
-  (t/is (= {:res [], :col-types '{x1 :i64, x2 :i64}}
+  (t/is (= {:res [], :types '{x1 #xt/type :i64, x2 #xt/type :i64}}
            (-> (tu/query-ra '[:project [x1 x2]
                               [:apply :cross-join {}
                                [:table [{x1 15}]]
                                [:select false
                                 [:table [{x2 20}]]]]]
-                            {:with-col-types? true})))))
+                            {:with-types? true})))))
 
 (t/deftest test-nested-apply
   (t/is (= [{:z 0, :x 0, :y 0}
