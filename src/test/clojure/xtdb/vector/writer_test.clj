@@ -29,16 +29,16 @@
 
             "vectorFor creates lists/sets with uninitialized data vectors")
 
-      (.getListElements my-list-wtr (FieldType/notNullable (.getType (types/col-type->field :i64))))
+      (.getListElements my-list-wtr (.getFieldType #xt/type :i64))
 
-      (.getListElements my-set-wtr (FieldType/notNullable (.getType (types/col-type->field :f64))))
+      (.getListElements my-set-wtr (.getFieldType #xt/type :f64))
 
       (t/is (= #xt/field ["my-duv" :union
                           ["list" :list ["$data$" :i64]]
                           ["set" :set ["$data$" :f64]]]
                (.getField duv)))
 
-      (.getListElements my-list-wtr (FieldType/notNullable (.getType (types/col-type->field :f64))))
+      (.getListElements my-list-wtr (.getFieldType #xt/type :f64))
 
       (t/is (= #xt/field ["my-duv" :union
                           ["list" :list ["$data$" :union ["i64" :i64] ["f64" :f64]]]

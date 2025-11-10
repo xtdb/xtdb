@@ -104,7 +104,7 @@
 (defn write-arrow-file [^Path path, ^List data]
   (with-open [al (RootAllocator.)
               ch (util/->file-channel path #{:write :create})
-              struct-vec (Vector/fromList al (types/col-type->field "my-struct" [:struct {}]) data)]
+              struct-vec (Vector/fromList al #xt/field ["my-struct" :struct] data)]
     (let [rel (Relation. al ^List (into [] (.getVectors struct-vec)) (.getValueCount struct-vec))]
       (with-open [unloader (.startUnload rel ch)]
         (.writePage unloader)

@@ -81,8 +81,8 @@
   (t/is (= (types/col-type->field :utf8)
            (types/merge-fields (types/col-type->field :utf8) (types/col-type->field :utf8))))
 
-  (t/is (= (types/col-type->field "a" [:union #{:utf8 :i64}])
-           (types/merge-fields (types/col-type->field "a" :utf8) (types/col-type->field "a" :i64))))
+  (t/is (= #xt/field ["a" :union ["utf8" :utf8] ["i64" :i64]]
+           (types/merge-fields #xt/field ["a" :utf8] #xt/field ["a" :i64])))
 
   (t/is (=
          ;; ordering seems to be important
@@ -103,7 +103,7 @@
                                  (types/col-type->field [:list :i64]))))
 
     (t/is (= (types/->field-default-name #xt.arrow/type :list false
-                                         [(types/col-type->field "$data$" [:union #{:null :i64}])])
+                                         [#xt/field ["$data$" :i64 :?]])
              #_(types/col-type->field [:list [:union #{:null :i64}]])
              (types/merge-fields (types/col-type->field [:list :null])
                                  (types/col-type->field [:list :i64])))))
@@ -118,11 +118,9 @@
              (types/merge-fields (types/col-type->field '[:struct {a :utf8, b :utf8}])
                                  (types/col-type->field '[:struct {a :utf8, b :i64}]))))
 
-    (t/is (= (types/col-type->field "struct" '[:union #{[:struct {a :utf8
-                                                                  b [:union #{:utf8 :i64}]}]
-                                                        :null}])
-             (types/merge-fields (types/col-type->field "struct" '[:union #{[:struct {a :utf8, b :utf8}] :null}])
-                                 (types/col-type->field "struct" '[:struct {a :utf8, b :i64}]))))
+    (t/is (= #xt/field ["struct" :struct :? ["a" :utf8] ["b" :union ["utf8" :utf8] ["i64" :i64]]]
+             (types/merge-fields #xt/field ["struct" :union ["null" :null :?] ["struct" :struct ["a" :utf8] ["b" :utf8]]]
+                                 #xt/field ["struct" :struct ["a" :utf8] ["b" :i64]])))
 
     (let [struct0 (types/col-type->field '[:struct {a :utf8, b :utf8}])
           struct1 (types/col-type->field '[:struct {b :utf8, c :i64}])]
@@ -152,8 +150,8 @@
     (t/is (= (types/col-type->field :null)
              (types/merge-fields (types/col-type->field :null) (types/col-type->field :null))))
 
-    (t/is (= (types/col-type->field "a" [:union #{:null :i64}])
-             (types/merge-fields (types/col-type->field "a" :null) (types/col-type->field "a" :i64))))
+    (t/is (= #xt/field ["a" :i64 :?]
+             (types/merge-fields #xt/field ["a" :null] #xt/field ["a" :i64])))
 
     (t/is (= #xt/field ["a" :union ["f64" :f64] ["i64" :i64] ["null" :null :?]]
              (types/merge-fields #xt/field ["a" :f64]

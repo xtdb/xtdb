@@ -371,10 +371,14 @@
                (tu/query-ra '[:scan {:table #xt/table [new_db foo]} [_id]]
                             {:node node, :default-db "new_db", :with-types? true})))
 
-      (t/is (= {:res #{{:xt/id "xtdb-db"} {:xt/id :new-db}},
-                :types '{_id #xt/type [:union ["utf8" :utf8] ["keyword" :keyword]]}}
-               (-> (tu/query-ra '[:union-all
-                                  [:scan {:table #xt/table [xtdb foo]} [_id]]
-                                  [:scan {:table #xt/table [new_db foo]} [_id]]]
-                                {:node node, :with-types? true})
-                   (update :res set)))))))
+      (let [{:keys [res types]} (tu/query-ra '[:union-all
+                                               [:scan {:table #xt/table [xtdb foo]} [_id]]
+                                               [:scan {:table #xt/table [new_db foo]} [_id]]]
+                                             {:node node, :with-types? true})]
+        (t/is (= #{{:xt/id "xtdb-db"} {:xt/id :new-db}} (set res)))
+
+        ;; these two are equivalent - for some reason CI gives different ordering
+        (t/is (or (= '{_id #xt/type [:union ["utf8" :utf8] ["keyword" :keyword]]}
+                     types)
+                  (= '{_id #xt/type [:union ["keyword" :keyword] ["utf8" :utf8]]}
+                     types)))))))

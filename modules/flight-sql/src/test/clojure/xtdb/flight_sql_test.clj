@@ -123,7 +123,7 @@
 
 (t/deftest test-prepared-stmts
   (with-open [ps (.prepare *client* "INSERT INTO users (_id, name) VALUES (?, ?)" empty-call-opts)
-              param-root (VectorSchemaRoot/create (Schema. [(types/col-type->field '_id :utf8) (types/col-type->field 'name :utf8)]) tu/*allocator*)]
+              param-root (VectorSchemaRoot/create (Schema. [#xt/field ["_id" :utf8] #xt/field ["name" :utf8]]) tu/*allocator*)]
     (.setParameters ps param-root)
 
     (populate-root param-root [{:_id "jms", :name "James"}
@@ -135,7 +135,7 @@
     (.executeUpdate ps empty-call-opts))
 
   (with-open [ps (.prepare *client* "SELECT users.name FROM users WHERE users._id >= ?" empty-call-opts)
-              param-root (VectorSchemaRoot/create (Schema. [(types/col-type->field '$1 :utf8)]) tu/*allocator*)]
+              param-root (VectorSchemaRoot/create (Schema. [#xt/field ["$1" :utf8]]) tu/*allocator*)]
     (.setParameters ps param-root)
 
     (populate-root param-root [{:$1 "l"}])
@@ -157,7 +157,7 @@
                      (flight-info->rows))))]
     (let [fsql-tx (.beginTransaction *client* empty-call-opts)]
       (with-open [ps (.prepare *client* "INSERT INTO users (_id, name) VALUES (?, ?)" fsql-tx empty-call-opts)
-                  param-root (VectorSchemaRoot/create (Schema. [(types/col-type->field '_id :utf8) (types/col-type->field 'name :utf8)]) tu/*allocator*)]
+                  param-root (VectorSchemaRoot/create (Schema. [#xt/field ["_id" :utf8] #xt/field ["name" :utf8]]) tu/*allocator*)]
         (.setParameters ps param-root)
 
         (populate-root param-root [{:_id "jms", :name "James"}

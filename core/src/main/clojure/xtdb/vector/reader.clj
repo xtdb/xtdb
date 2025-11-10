@@ -1,6 +1,7 @@
 (ns xtdb.vector.reader
   (:require [clojure.set :as set]
-            [xtdb.types :as types])
+            [xtdb.types :as types]
+            [xtdb.serde.types :as st])
   (:import java.util.List
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.arrow RelationReader VectorReader Vector)))
@@ -15,7 +16,7 @@
    (RelationReader/from cols row-count)))
 
 (defn- ->absent-col [col-name allocator row-count]
-  (doto (Vector/open allocator (types/col-type->field col-name :null))
+  (doto (Vector/open allocator (st/->field [col-name :null :?]))
     (.ensureCapacity row-count)))
 
 (defn- available-col-names [^xtdb.arrow.RelationReader rel]

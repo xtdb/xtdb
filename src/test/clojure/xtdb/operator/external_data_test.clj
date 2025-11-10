@@ -2,7 +2,6 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [xtdb.test-util :as tu]
-            [xtdb.types :as types]
             [xtdb.util :as util])
   (:import org.apache.arrow.memory.RootAllocator
            org.apache.arrow.vector.types.pojo.Schema
@@ -53,10 +52,10 @@
                        util/->path)]
     (with-open [al (RootAllocator.)
                 rel (Relation. al
-                               (Schema. [(types/col-type->field "_id" :utf8)
-                                         (types/col-type->field "a_long" :i64)
-                                         (types/col-type->field "a_double" :f64)
-                                         (types/col-type->field "an_inst" [:timestamp-tz :micro "UTC"])]))
+                               (Schema. [#xt/field ["_id" :utf8]
+                                         #xt/field ["a_long" :i64]
+                                         #xt/field ["a_double" :f64]
+                                         #xt/field ["an_inst" [:timestamp-tz :micro "UTC"]]]))
                 ch (util/->file-channel arrow-path util/write-truncate-open-opts)
                 unl (.startUnload rel ch ArrowUnloader$Mode/FILE)]
       (doseq [page example-data]

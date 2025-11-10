@@ -179,7 +179,7 @@
 
 (t/deftest dont-list-temporary-objects-3544
   (tu/with-tmp-dirs #{tmp-dir}
-    (let [schema (Schema. [(types/col-type->field "a" :i32)])]
+    (let [schema (Schema. [#xt/field ["a" :i32]])]
       (with-caches {}
         (with-open [bp (open-storage (Storage/local tmp-dir))
                     rel (Relation. tu/*allocator* schema)
