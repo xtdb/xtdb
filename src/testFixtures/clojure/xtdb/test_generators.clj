@@ -3,8 +3,7 @@
             [clojure.test.check.generators :as gen]
             [honey.sql :as sql]
             [xtdb.time :as time]
-            [xtdb.types :as types]
-            [xtdb.vector.writer :as vw])
+            [xtdb.types :as types])
   (:import [java.math BigDecimal]
            [java.net URI]
            [java.nio ByteBuffer]
@@ -12,7 +11,7 @@
            [java.util List Map Set]
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector.types.pojo Field]
-           [xtdb.arrow ArrowTypes Vector]))
+           [xtdb.arrow ArrowTypes MergeTypes Vector VectorType]))
 
 ;; Simple types
 ;; TODO: Ensure all arrow types are covered here
@@ -222,11 +221,11 @@
   (= (map normalize-for-comparison list1)
      (map normalize-for-comparison list2)))
 
-(defn field->value-generator
+(defn vec-type->value-generator
   "Generate a value generator for a given Arrow Field"
-  [^Field field]
-  (let [arrow-type (.getType field)
-        nullable? (.isNullable field)]
+  [^VectorType vec-type]
+  (let [arrow-type (.getArrowType vec-type)
+        nullable? (.isNullable vec-type)]
     (gen/frequency
      (cond-> [[15 (condp = arrow-type
                     #xt.arrow/type :i8 i8-gen
@@ -244,13 +243,13 @@
                     #xt.arrow/type [:timestamp-tz :micro "UTC"] instant-gen
                     #xt.arrow/type [:date :day] local-date-gen
                     #xt.arrow/type [:time-local :nano] local-time-gen
-                    #xt.arrow/type :list (gen/vector (field->value-generator (first (.getChildren field))) 0 10)
-                    #xt.arrow/type :set (gen/set (field->value-generator (first (.getChildren field))) {:min-elements 0 :max-elements 10})
-                    #xt.arrow/type :union (gen/one-of (map field->value-generator (.getChildren field)))
+                    #xt.arrow/type :list (gen/vector (vec-type->value-generator (first (.getChildren vec-type))) 0 10)
+                    #xt.arrow/type :set (gen/set (vec-type->value-generator (first (.getChildren vec-type))) {:min-elements 0 :max-elements 10})
+                    #xt.arrow/type :union (gen/one-of (map vec-type->value-generator (.getChildren vec-type)))
                     #xt.arrow/type :struct (gen/let [entries (apply gen/tuple (map (fn [^Field child-field]
-                                                                                     (gen/let [v (field->value-generator child-field)]
+                                                                                     (gen/let [v (vec-type->value-generator child-field)]
                                                                                        (when v [(keyword (.getName child-field)) v])))
-                                                                                   (.getChildren field)))]
+                                                                                   (.getChildren vec-type)))]
                                              (->> (filter some? entries)
                                                   (into {})))
                     ;; fallback for unknown types
@@ -260,9 +259,9 @@
 (defn records->generator
   "Given a list of records, produce a generator that will generate similar records"
   [records]
-  (let [record-col-type (mapv vw/value->col-type records)
-        fields (mapv types/col-type->field record-col-type)]
-    (field->value-generator (apply types/merge-fields fields))))
+  (vec-type->value-generator (MergeTypes/mergeTypes (mapv VectorType/fromValue records))))
+
+(MergeTypes/mergeTypes (mapv VectorType/fromValue [{:a 1}]))
 
 (defn info-schema->generator
   "Given an XTDB info schema for a specific table, produce a generator that will generate records"
@@ -272,7 +271,7 @@
                               (not (#{"_system_from" "_system_to" "_valid_from" "_valid_to"} column-name))))
                     (mapv (fn [{:keys [column-name data-type]}]
                             (types/col-type->field column-name (read-string data-type)))))]
-    (field->value-generator (apply types/->field "docs" #xt.arrow/type :struct false fields))))
+    (vec-type->value-generator (apply types/->field "docs" #xt.arrow/type :struct false fields))))
 
 (defn generate-unique-id-records
   ([num-records] (generate-unique-id-records num-records num-records))

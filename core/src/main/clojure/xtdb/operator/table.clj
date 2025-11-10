@@ -87,7 +87,7 @@
                                                                            ^Set field-set (.computeIfAbsent field-sets k (fn [_] (HashSet.)))]
                                                                        (case (:op expr)
                                                                          :literal (do
-                                                                                    (.add field-set (types/col-type->field (vw/value->col-type v)))
+                                                                                    (.add field-set (types/vec-type->field (types/value->vec-type v)))
                                                                                     (MapEntry/create k (fn write-literal! [_ ^VectorWriter out-col]
                                                                                                          (.writeObject out-col v))))
 

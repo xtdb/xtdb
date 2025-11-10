@@ -5,8 +5,7 @@
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.reader :as vr])
   (:import [xtdb.arrow IntVector Vector]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
@@ -14,7 +13,7 @@
 (t/deftest test-group-by
   (letfn [(run-test [group-by-spec batches]
             (-> (tu/query-ra [:group-by group-by-spec
-                              [::tu/pages '{a :i64, b :i64} batches]]
+                              [::tu/pages '{a #xt/type :i64, b #xt/type :i64} batches]]
                              {:with-col-types? true})
                 (update :res set)))]
 
@@ -67,7 +66,7 @@
                                             {var-samp (var-samp b)}
                                             {stddev-pop (stddev-pop b)}
                                             {stddev-samp (stddev-samp b)}]
-                                [::tu/pages '{a :i64, b [:union #{:null :i64}]}
+                                [::tu/pages '{a #xt/type :i64, b #xt/type [:union ["null" :null] ["i64" :i64]]}
                                  [[{:a 1 :b 20}
                                    {:a 1 :b 10}
                                    {:a 2 :b 30}
@@ -141,42 +140,42 @@
 (t/deftest test-row-count
   (t/is (= [{:n 0}]
            (tu/query-ra '[:group-by [{n (row-count)}]
-                          [::tu/pages {a [:union #{:null :i64}]}
+                          [::tu/pages {a #xt/type [:i64 :?]}
                            []]])))
 
   (t/is (= [{:n 2}]
            (tu/query-ra '[:group-by [{n (row_count)}]
-                          [::tu/pages {a [:union #{:null :i64}]}
+                          [::tu/pages {a #xt/type [:i64 :?]}
                            [[{:a nil}
                              {:a 1}]]]])))
 
   (t/is (= [{:a 1, :n 1}, {:a 2, :n 2}]
            (tu/query-ra '[:group-by [a {n (row-count)}]
-                          [::tu/pages {a :i64, b [:union #{:null :i64}]}
+                          [::tu/pages {a #xt/type :i64, b #xt/type [:i64 :?]}
                            [[{:a 1, :b nil}
                              {:a 2, :b 1}
                              {:a 2, :b nil}]]]])))
 
   (t/is (= []
            (tu/query-ra '[:group-by [a {bs (row-count)}]
-                          [::tu/pages {a :i64, b [:union #{:null :i64}]}
+                          [::tu/pages {a #xt/type :i64, b #xt/type [:i64 :?]}
                            []]]))
         "empty if there's a grouping key"))
 
 (t/deftest test-count-empty-null-behaviour
   (t/is (= [{:n 0}]
            (tu/query-ra '[:group-by [{n (count a)}]
-                          [::tu/pages {a [:union #{:null :i64}]}
+                          [::tu/pages {a #xt/type [:i64 :?]}
                            []]])))
 
   (t/is (= [{:n 0}]
            (tu/query-ra '[:group-by [{n (count a)}]
-                          [::tu/pages {a [:union #{:null :i64}]}
+                          [::tu/pages {a #xt/type [:i64 :?]}
                            [[{:a nil}]]]])))
 
   (t/is (= [{:n 1}]
            (tu/query-ra '[:group-by [{n (count a)}]
-                          [::tu/pages {a [:union #{:null :i64}]}
+                          [::tu/pages {a #xt/type [:i64 :?]}
                            [[{:a nil}
                              {:a 1}]]]])))
 
@@ -189,7 +188,7 @@
 
   (t/is (= []
            (tu/query-ra '[:group-by [a {bs (count b)}]
-                          [::tu/pages {a :i64, b [:union #{:null :i64}]}
+                          [::tu/pages {a #xt/type :i64, b #xt/type [:i64 :?]}
                            []]]))
         "empty if there's a grouping key"))
 
@@ -201,7 +200,7 @@
 
   (t/is (= []
            (tu/query-ra '[:group-by [b {n (sum a)}]
-                          [::tu/pages {a :f64, b :utf8} []]]))
+                          [::tu/pages {a #xt/type :f64, b #xt/type :utf8} []]]))
         "sum empty returns empty when there are groups")
 
   (t/is (= [{}]
@@ -226,7 +225,7 @@
 
   (t/is (= []
            (tu/query-ra '[:group-by [b {n (avg a)}]
-                          [::tu/pages {a :f64, b :utf8} []]]))
+                          [::tu/pages {a #xt/type :f64, b #xt/type :utf8} []]]))
         "avg empty returns empty when there are groups")
 
   (t/is (= [{}]
@@ -251,7 +250,7 @@
 
   (t/is (= []
            (tu/query-ra '[:group-by [b {n (min a)}]
-                          [::tu/pages {a :f64, b :utf8} []]]))
+                          [::tu/pages {a #xt/type :f64, b #xt/type :utf8} []]]))
         "min empty returns empty when there are groups")
 
   (t/is (= [{}]
@@ -347,12 +346,12 @@
 (t/deftest test-array-agg-of-empty-rel-returns-empty-array-3819
   (t/is (= [{}]
            (tu/query-ra '[:group-by [{arr-out (array-agg a)}]
-                          [::tu/pages {a :i64} []]]))
+                          [::tu/pages {a #xt/type :i64} []]]))
         "array agg empty returns null")
 
   (t/is (= []
            (tu/query-ra '[:group-by [b {arr-out (array-agg a)}]
-                          [::tu/pages {a :i64, b :utf8} []]]))
+                          [::tu/pages {a #xt/type :i64, b #xt/type :utf8} []]]))
         "array-agg empty returns empty when there are groups")
 
   (t/is (= [{:arr-out [nil]}]
@@ -377,7 +376,7 @@
 
   (t/is (= []
            (tu/query-ra '[:group-by [b {vec-out (vec-agg a)}]
-                          [::tu/pages {a :f64, b :utf8} []]]))
+                          [::tu/pages {a #xt/type :f64, b #xt/type :utf8} []]]))
         "vec-agg empty returns empty when there are groups")
 
   (t/is (= [{:vec-out [nil]}]
@@ -417,12 +416,12 @@
 
   (t/is (= []
            (tu/query-ra [:group-by '[k {all-vs (bool-and v)} {any-vs (bool-or v)}]
-                         [::tu/pages '{k :utf8, v [:union #{:bool :null}]}
+                         [::tu/pages '{k #xt/type :utf8, v #xt/type [:bool :?]}
                           []]])))
 
   (t/is (= [{}]
            (tu/query-ra [:group-by '[{all-vs (bool-and v)} {any-vs (bool-or v)}]
-                         [::tu/pages '{v [:union #{:bool :null}]}
+                         [::tu/pages '{v #xt/type [:bool :?]}
                           []]])))
 
   (t/is (= [{}]

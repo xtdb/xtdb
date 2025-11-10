@@ -171,8 +171,12 @@ data class VectorType(
             just(ArrowType.Map(sorted), entriesName.asStructOf(key, value))
 
         @JvmStatic
-        @JvmName("field")
-        infix fun FieldName.ofType(type: VectorType) = Field(this, type.fieldType, type.children)
+        fun field(name: FieldName, type: VectorType) = Field(name, type.fieldType, type.children)
+
+        @JvmStatic
+        fun field(type: VectorType) = type.asLegField
+
+        infix fun FieldName.ofType(type: VectorType) = field(this, type)
 
         @JvmStatic
         @get:JvmName("fromField")

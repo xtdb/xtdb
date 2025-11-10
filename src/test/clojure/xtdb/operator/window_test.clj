@@ -12,7 +12,7 @@
                                          :projections (mapv (fn [[col-name projection]]
                                                               {col-name {:window-name window-name
                                                                          :window-agg projection}}) projection-specs) }
-                                [::tu/pages '{a :i64, b :i64} batches]])
+                                [::tu/pages '{a #xt/type :i64, b #xt/type :i64} batches]])
                   set)))]
 
     (t/is (= #{} (run-test '{:partition-cols [a]

@@ -25,8 +25,8 @@
 
   (t/testing "empty input and output"
     (t/is (empty? (tu/query-ra [:union-all
-                                [::tu/pages '{a :i64} []]
-                                [::tu/pages '{a :i64} []]])))))
+                                [::tu/pages '{a #xt/type :i64} []]
+                                [::tu/pages '{a #xt/type :i64} []]])))))
 
 (t/deftest test-union-all-empty-left-side-bug
   (t/testing "empty left side"
@@ -35,15 +35,15 @@
               [:cross-join
                [:table [{}]]
                [:union-all
-                [::tu/pages '{a :i64} [[]]]
+                [::tu/pages '{a #xt/type :i64} [[]]]
                 [::tu/pages [[{:a 10}, {:a 15}]]]]])))))
 
 (t/deftest test-union-all-empty-batches-both-sides
   (t/is (= [{:a 10} {:a 15}]
            (tu/query-ra
             [:union-all
-             [::tu/pages '{a :i64} [[] [{:a 10}]]]
-             [::tu/pages '{a :i64} [[] [{:a 15}]]]]))))
+             [::tu/pages '{a #xt/type :i64} [[] [{:a 10}]]]
+             [::tu/pages '{a #xt/type :i64} [[] [{:a 15}]]]]))))
 
 (t/deftest test-intersection
   (t/is (= {:col-types '{a :i64, b :i64}
@@ -67,16 +67,16 @@
 
   (t/testing "empty input and output"
     (t/is (empty? (tu/query-ra [:intersect
-                                [::tu/pages '{a :i64} []]
-                                [::tu/pages '{a :i64} []]])))
+                                [::tu/pages '{a #xt/type :i64} []]
+                                [::tu/pages '{a #xt/type :i64} []]])))
 
     (t/is (empty? (tu/query-ra [:intersect
-                                [::tu/pages '{a :i64} []]
-                                [::tu/pages '{a :i64} [[{:a 10}, {:a 15}]]]])))
+                                [::tu/pages '{a #xt/type :i64} []]
+                                [::tu/pages '{a #xt/type :i64} [[{:a 10}, {:a 15}]]]])))
 
     (t/is (empty? (tu/query-ra [:intersect
                                 [::tu/pages [[{:a 10}, {:a 15}]]]
-                                [::tu/pages '{a :i64} []]])))
+                                [::tu/pages '{a #xt/type :i64} []]])))
 
     (t/is (empty? (tu/query-ra [:intersect
                                 [::tu/pages [[{:a 10}]]]
@@ -106,17 +106,17 @@
 
   (t/testing "empty input and output"
     (t/is (empty? (tu/query-ra [:difference
-                                [::tu/pages '{a :i64} []]
-                                [::tu/pages '{a :i64} []]])))
+                                [::tu/pages '{a #xt/type :i64} []]
+                                [::tu/pages '{a #xt/type :i64} []]])))
 
     (t/is (empty? (tu/query-ra [:difference
-                                [::tu/pages '{a :i64} []]
-                                [::tu/pages '{a :i64} [[{:a 10}, {:a 15}]]]])))
+                                [::tu/pages '{a #xt/type :i64} []]
+                                [::tu/pages '{a #xt/type :i64} [[{:a 10}, {:a 15}]]]])))
 
     (t/is (= [#{{:a 10} {:a 15}}]
              (->> (tu/query-ra [:difference
-                                [::tu/pages '{a :i64} [[{:a 10}, {:a 15}]]]
-                                [::tu/pages '{a :i64} []]]
+                                [::tu/pages '{a #xt/type :i64} [[{:a 10}, {:a 15}]]]
+                                [::tu/pages '{a #xt/type :i64} []]]
                                {:preserve-pages? true})
                   (mapv set))))))
 

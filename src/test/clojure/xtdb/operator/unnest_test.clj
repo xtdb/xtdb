@@ -20,7 +20,7 @@
                      {:a 4, :b [6 7 8], :b* 7}
                      {:a 4, :b [6 7 8], :b* 8}]]}
              (tu/query-ra [:unnest '{b* b}
-                           [::tu/pages '{a :i64, b [:list :i64]} in-vals]]
+                           [::tu/pages '{a #xt/type :i64, b #xt/type [:list ["$data$" :i64]]} in-vals]]
                           {:preserve-pages? true
                            :with-col-types? true})))
 
@@ -34,7 +34,7 @@
                      {:a 4, :b [6 7 8], :b* 7, :ordinal 2}
                      {:a 4, :b [6 7 8], :b* 8, :ordinal 3}]]}
              (tu/query-ra [:unnest '{b* b} '{:ordinality-column ordinal}
-                           [::tu/pages '{a :i64, b [:list :i64]} in-vals]]
+                           [::tu/pages '{a #xt/type :i64, b #xt/type [:list ["$data$" :i64]]} in-vals]]
                           {:preserve-pages? true
                            :with-col-types? true
                            :key-fn :snake-case-keyword})))))

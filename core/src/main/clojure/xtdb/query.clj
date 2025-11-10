@@ -53,7 +53,7 @@
            (xtdb ICursor IResultCursor IResultCursor$ErrorTrackingCursor PagesCursor)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn Query)
-           (xtdb.arrow RelationReader VectorReader)
+           (xtdb.arrow RelationReader VectorReader VectorType)
            (xtdb.database Database$Catalog)
            (xtdb.indexer Snapshot)
            xtdb.operator.scan.IScanEmitter
@@ -236,11 +236,14 @@
     (->explain-plan* emitted-expr 0)))
 
 (defn- explain-plan-fields [explain-plan]
-  (let [[_struct col-types] (->> (map vw/value->col-type explain-plan)
-                                 distinct
-                                 (apply types/merge-col-types))]
-    (for [field-name '[depth op explain]]
-      (types/col-type->field field-name (get col-types field-name)))))
+  (let [^VectorType vec-type (->> (map types/value->vec-type explain-plan)
+                                  (apply types/merge-types))]
+
+    (map (->> (.getChildren vec-type)
+              (into {} (map (fn [^Field field]
+                              [(symbol (.getName field))
+                               field]))))
+         '[depth op explain])))
 
 (def ^:private explain-analyze-fields
   ;; for some reason we're not able to use the reader macro here.

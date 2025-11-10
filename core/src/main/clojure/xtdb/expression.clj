@@ -456,7 +456,9 @@
      (PeriodDuration. (.getPeriod i#) (.getDuration i#))))
 
 (defmethod codegen-expr :literal [{:keys [literal]} _]
-  (let [return-type (vw/value->col-type literal)
+  (let [return-type (-> (types/value->vec-type literal)
+                        types/vec-type->field
+                        types/field->col-type)
         literal-type (class literal)]
     {:return-type return-type
      :continue (fn [f]

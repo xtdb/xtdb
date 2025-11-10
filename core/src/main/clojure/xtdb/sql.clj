@@ -3202,12 +3202,15 @@
 
   ([sql arg-rows {:keys [scope] :as opts}]
    (try
-     (let [{:keys [!errors !warnings] :as env} (-> (->env opts)
-                                                   (assoc :arg-fields (for [arg-idx (range (count (first arg-rows)))]
-                                                                        (->> (for [arg-row arg-rows]
-                                                                               (vw/value->col-type (nth arg-row arg-idx)))
-                                                                             (apply types/merge-col-types)
-                                                                             types/col-type->field))))
+     ;; this could probably be arg-types, save us converting to field
+     (let [arg-fields (for [arg-idx (range (count (first arg-rows)))]
+                        (-> (for [arg-row arg-rows]
+                              (types/value->vec-type (nth arg-row arg-idx)))
+                            (->> (apply types/merge-types))
+                            types/vec-type->field))
+           
+           {:keys [!errors !warnings] :as env} (-> (->env opts)
+                                                   (assoc :arg-fields arg-fields))
            tx-ops (-> (antlr/parse-statement sql)
                       (.accept (->SqlToStaticOpsVisitor env scope arg-rows)))]
        (when (and (empty? @!errors) (empty? @!warnings))

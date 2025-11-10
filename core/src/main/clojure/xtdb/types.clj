@@ -68,14 +68,16 @@
   (Field. field-name field-type children))
 
 (def temporal-col-type [:timestamp-tz :micro "UTC"])
-(def nullable-temporal-type [:union #{:null temporal-col-type}])
+(def temporal-type (st/->type [[:timestamp-tz :micro "UTC"]]))
+(def nullable-temporal-col-type [:union #{:null temporal-col-type}])
+(def nullable-temporal-type (st/->type [[:timestamp-tz :micro "UTC"] :?]))
 (def temporal-arrow-type (st/->arrow-type [:timestamp-tz :micro "UTC"]))
 (def nullable-temporal-field-type (FieldType/nullable temporal-arrow-type))
 
 (def temporal-col-types
   {"_iid" [:fixed-size-binary 16],
-   "_system_from" temporal-col-type, "_system_to" nullable-temporal-type
-   "_valid_from" temporal-col-type, "_valid_to" nullable-temporal-type})
+   "_system_from" temporal-col-type, "_system_to" nullable-temporal-col-type
+   "_valid_from" temporal-col-type, "_valid_to" nullable-temporal-col-type})
 
 (defn temporal-column? [col-name]
   (contains? temporal-col-types (str col-name)))
@@ -174,13 +176,23 @@
     (-> (transduce (comp (remove nil?) (distinct)) (completing merge-col-type*) {} col-types)
         (map->col-type))))
 
-(def ^Field null-field (->field "null" ArrowType$Null/INSTANCE true))
+(def ^Field null-field (st/->field ["null" :null]))
+
+(defn merge-types ^xtdb.arrow.VectorType [& types]
+  (MergeTypes/mergeTypes (vec types)))
 
 (defn merge-fields [& fields]
   (let [merged-type (MergeTypes/mergeFields (vec fields))]
     (VectorType/field (or (some (fn [^Field f] (some-> f .getName)) fields)
                           (ArrowTypes/toLeg (.getArrowType merged-type)))
                       merged-type)))
+
+(defn value->vec-type ^xtdb.arrow.VectorType [v]
+  (VectorType/fromValue v))
+
+(defn vec-type->field
+  (^org.apache.arrow.vector.types.pojo.Field [^VectorType vec-type field-name] (VectorType/field (str field-name) vec-type))
+  (^org.apache.arrow.vector.types.pojo.Field [^VectorType vec-type] (VectorType/field vec-type)))
 
 ;;; time units
 

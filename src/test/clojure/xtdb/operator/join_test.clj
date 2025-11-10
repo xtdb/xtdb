@@ -37,7 +37,7 @@
                          [::tu/pages
                           [[{:a 12}, {:a 0}]
                            [{:a 100}]]]
-                         [::tu/pages '{b :i64} []]]
+                         [::tu/pages '{b #xt/type :i64} []]]
                         {:with-col-types? true, :preserve-pages? true}))
         "empty input and output")
 
@@ -84,7 +84,7 @@
                          [::tu/pages
                           [[{:a 12}, {:a 0}]
                            [{:a 100}]]]
-                         [::tu/pages '{b :i64}
+                         [::tu/pages '{b #xt/type :i64}
                           []]]
                         {:with-col-types? true, :preserve-pages? true}))
         "empty input")
@@ -152,10 +152,10 @@
                                 [::tu/pages
                                  [[{:a 12}, {:a 0}]
                                   [{:a 100}]]]
-                                [::tu/pages '{b :i64} []]])))
+                                [::tu/pages '{b #xt/type :i64} []]])))
 
     (t/is (empty? (tu/query-ra [:semi-join '[{a b}]
-                                [::tu/pages '{a :i64} []]
+                                [::tu/pages '{a #xt/type :i64} []]
                                 [::tu/pages
                                  [[{:b 12}, {:b 2}]
                                   [{:b 100} {:b 0}]]]])))
@@ -164,7 +164,7 @@
                                 [::tu/pages
                                  [[{:a 12}, {:a 0}]
                                   [{:a 100}]]]
-                                [::tu/pages '{b :i64}
+                                [::tu/pages '{b #xt/type :i64}
                                  [[]]]]))))
 
   (t/testing "nulls"
@@ -245,11 +245,11 @@
                            [::tu/pages
                             [[{:a 12}, {:a 0}]
                              [{:a 100}, {:a nil}]]]
-                           [::tu/pages '{b :i64} []]]
+                           [::tu/pages '{b #xt/type :i64} []]]
                           {:preserve-pages? true})))
 
     (t/is (empty? (tu/query-ra [:mark-join '{m [{a b}]}
-                                [::tu/pages '{a :i64} []]
+                                [::tu/pages '{a #xt/type :i64} []]
                                 [::tu/pages
                                  [[{:b 12}, {:b 2}]
                                   [{:b 100} {:b 0}]]]]))))
@@ -367,14 +367,14 @@
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
                                  [{:a 100}]]]
-                               [::tu/pages '{b :i64} []]]
+                               [::tu/pages '{b #xt/type :i64} []]]
                               {:preserve-pages? true, :with-col-types? true})
                  (update :res (partial mapv set)))))
 
     (t/is (= {:res []
               :col-types '{a :i64, b [:union #{:null :i64}]}}
              (tu/query-ra [:left-outer-join '[{a b}]
-                           [::tu/pages '{a :i64} []]
+                           [::tu/pages '{a #xt/type :i64} []]
                            [::tu/pages
                             [[{:b 12}, {:b 2}]
                              [{:b 100} {:b 0}]]]]
@@ -387,7 +387,7 @@
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
                                  [{:a 100}]]]
-                               [::tu/pages '{b :i64}
+                               [::tu/pages '{b #xt/type :i64}
                                 [[]]]]
                               {:preserve-pages? true, :with-col-types? true})
                  (update :res (partial mapv set)))))))
@@ -516,7 +516,7 @@
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
                                  [{:a 100}]]]
-                               [::tu/pages '{b :i64} []]]
+                               [::tu/pages '{b #xt/type :i64} []]]
                               {:preserve-pages? true, :with-col-types? true})
                  (update :res (partial mapv frequencies)))))
 
@@ -524,7 +524,7 @@
                     {{:b 100} 1, {:b 0} 1}]
               :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
-                               [::tu/pages '{a :i64} []]
+                               [::tu/pages '{a #xt/type :i64} []]
                                [::tu/pages
                                 [[{:b 12}, {:b 2}]
                                  [{:b 100} {:b 0}]]]]
@@ -597,7 +597,7 @@
 
   (t/testing "empty input"
     (t/is (empty? (:res (tu/query-ra [:anti-join '[{a b}]
-                                      [::tu/pages '{a :i64} []]
+                                      [::tu/pages '{a #xt/type :i64} []]
                                       [::tu/pages
                                        [[{:b 12}, {:b 2}]
                                         [{:b 100}]]]]))))
@@ -608,7 +608,7 @@
                                 [::tu/pages
                                  [[{:a 12}, {:a 0}]
                                   [{:a 100}]]]
-                                [::tu/pages '{b :i64} []]]
+                                [::tu/pages '{b #xt/type :i64} []]]
                                {:preserve-pages? true})
                   (mapv set)))))
 
@@ -682,9 +682,9 @@
 (t/deftest test-join-on-true
   (letfn [(run-join [left? right? theta-expr]
             (->> (tu/query-ra [:join [theta-expr]
-                               [::tu/pages '{a :i64}
+                               [::tu/pages '{a #xt/type :i64}
                                 (if left? [[{:a 12}, {:a 0}]] [])]
-                               [::tu/pages '{b :i64}
+                               [::tu/pages '{b #xt/type :i64}
                                 (if right? [[{:b 12}, {:b 2}]] [])]]
                               {:preserve-pages? true})
                  (mapv frequencies)))]
@@ -709,9 +709,9 @@
 (t/deftest test-loj-on-true
   (letfn [(run-loj [left? right? theta-expr]
             (->> (tu/query-ra [:left-outer-join [theta-expr]
-                               [::tu/pages '{a :i64}
+                               [::tu/pages '{a #xt/type :i64}
                                 (if left? [[{:a 12}, {:a 0}]] [])]
-                               [::tu/pages '{b :i64}
+                               [::tu/pages '{b #xt/type :i64}
                                 (if right? [[{:b 12}, {:b 2}]] [])]]
                               {:preserve-pages? true})
                  (mapv frequencies)))]
@@ -746,9 +746,9 @@
 (t/deftest test-foj-on-true
   (letfn [(run-foj [left? right? theta-expr]
             (->> (tu/query-ra [:full-outer-join [theta-expr]
-                               [::tu/pages '{a :i64}
+                               [::tu/pages '{a #xt/type :i64}
                                 (if left? [[{:a 12}, {:a 0}]] [])]
-                               [::tu/pages '{b :i64}
+                               [::tu/pages '{b #xt/type :i64}
                                 (if right? [[{:b 12}, {:b 2}]] [])]]
                               {:preserve-pages? true})
                  (mapv frequencies)))]
@@ -789,10 +789,10 @@
 (t/deftest test-semi-join-on-true
   (letfn [(run-semi [left? right? theta-expr]
             (->> (tu/query-ra [:semi-join [theta-expr]
-                               [::tu/pages '{a :i64}
+                               [::tu/pages '{a #xt/type :i64}
                                 (if left? [[{:a 12}, {:a 0}]] [])]
 
-                               [::tu/pages '{b :i64}
+                               [::tu/pages '{b #xt/type :i64}
                                 (if right? [[{:b 12}, {:b 2}]] [])]]
                               {:preserve-pages? true})
                  (mapv frequencies)))]
@@ -808,9 +808,9 @@
 (t/deftest test-anti-join-on-true
   (letfn [(run-anti [left? right? theta-expr]
             (->> (tu/query-ra [:anti-join [theta-expr]
-                               [::tu/pages '{a :i64}
+                               [::tu/pages '{a #xt/type :i64}
                                 (if left? [[{:a 12}, {:a 0}]] [])]
-                               [::tu/pages '{b :i64}
+                               [::tu/pages '{b #xt/type :i64}
                                 (if right? [[{:b 12}, {:b 2}]] [])]]
                               {:preserve-pages? true})
                  (mapv frequencies)))]
@@ -858,13 +858,13 @@
   (t/testing "empty input"
     (t/is (= []
              (tu/query-ra '[:single-join [{x y}]
-                            [::tu/pages {x :i64} []]
+                            [::tu/pages {x #xt/type :i64} []]
                             [::tu/pages [[{:y 0}, {:y 1}, {:y 1}]]]])))
 
     (t/is (= [{:x 0}]
              (tu/query-ra '[:single-join [{x y}]
                             [::tu/pages [[{:x 0}]]]
-                            [::tu/pages {y :i64} []]])))))
+                            [::tu/pages {y #xt/type :i64} []]])))))
 
 (t/deftest test-mega-join
   (t/is (= [{:x1 1, :x2 1, :x4 3, :x3 1}]
@@ -921,7 +921,7 @@
                 [{x1 x2}
                  (> (+ x1 10) (+ (+ x3 2) x4))
                  {x1 x3}]
-                [[::tu/pages {x1 :i64} []]
+                [[::tu/pages {x1 #xt/type :i64} []]
                  [::tu/pages [[{:x2 1}]]]
                  [::tu/pages [[{:x3 1 :x4 3}]]]]]))))
 

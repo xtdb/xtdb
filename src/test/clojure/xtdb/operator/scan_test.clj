@@ -571,7 +571,7 @@
 
   (t/is (= {'_iid [:fixed-size-binary 16]
             '_valid_from types/temporal-col-type
-            '_valid_to types/nullable-temporal-type}
+            '_valid_to types/nullable-temporal-col-type}
 
            (:col-types (tu/query-ra '[:scan {:table #xt/table comments}
                                       [_iid _valid_from _valid_to]]

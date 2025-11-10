@@ -29,11 +29,11 @@
 
   (t/testing "empty input and output"
     (t/is (empty? (tu/query-ra [:distinct
-                                [::tu/pages '{a :i64} []]]))))
+                                [::tu/pages '{a #xt/type :i64} []]]))))
 
   (t/testing "distinct null"
     (t/is (= [{}]
              (tu/query-ra [:distinct
-                           [::tu/pages '{a :null}
+                           [::tu/pages '{a #xt/type :null}
                             [[{:a nil}, {:a nil}]
                              [{:a nil}]]]])))))

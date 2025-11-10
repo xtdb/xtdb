@@ -57,7 +57,8 @@
 (defn- bloom-expr [{col :variable} value-expr]
   (-> {:op :call, :f :or
        :args (for [value-type (-> (case (:op value-expr)
-                                    :literal (vw/value->col-type (:literal value-expr))
+                                    ;; temporary, while the EE needs col-types
+                                    :literal (types/field->col-type (types/vec-type->field (types/value->vec-type (:literal value-expr))))
                                     :param (:param-type value-expr))
                                   types/flatten-union-types)]
                (if (= MetadataFlavour$Bytes (MetadataFlavour/getMetadataFlavour (st/->arrow-type value-type)))
@@ -72,7 +73,8 @@
 (defn- presence-expr [{col :variable} value-expr]
   (-> {:op :call, :f :or
        :args (for [col-type (-> (case (:op value-expr)
-                                  :literal (vw/value->col-type (:literal value-expr))
+                                  ;; temporary, while the EE needs col-types
+                                  :literal (types/field->col-type (types/vec-type->field (types/value->vec-type (:literal value-expr))))
                                   :param (:param-type value-expr))
                                 types/flatten-union-types)
                    :let [value-type (st/->arrow-type col-type)]]

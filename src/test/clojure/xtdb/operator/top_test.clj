@@ -49,7 +49,7 @@
     (letfn [(top [offset length]
               (tu/query-ra [:top (->> {:skip offset, :limit length}
                                       (into {} (filter (comp some? val))))
-                            [::tu/pages '{idx :i64} batches]]
+                            [::tu/pages '{idx #xt/type :i64} batches]]
                            {:preserve-pages? true}))]
       (t/is (= batches (top nil nil)))
 
@@ -72,7 +72,7 @@
                  (top 3 nil)))))))
 
 (t/deftest test-param-3699
-  (let [batches '[::tu/pages {idx :i64}
+  (let [batches '[::tu/pages {idx #xt/type :i64}
                   [[{:idx 0}, {:idx 1}]
                    [{:idx 2}, {:idx 3}]]]]
 

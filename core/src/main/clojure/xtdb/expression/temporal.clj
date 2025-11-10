@@ -1729,7 +1729,7 @@
                   `(from ~arg))})
 
 (defmethod expr/codegen-call [:upper :tstz-range] [_]
-  {:return-type types/nullable-temporal-type
+  {:return-type types/nullable-temporal-col-type
    :continue-call (fn [f [arg]]
                     (let [to-sym (gensym 'to)]
                       `(let [~to-sym (to ~arg)]

@@ -27,21 +27,18 @@
            (java.time Duration Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
            (java.time.temporal ChronoUnit)
            (java.util List)
-           (java.util.function IntConsumer)
-           (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector.types.pojo Field Schema)
            (org.testcontainers.containers GenericContainer)
            (xtdb ICursor PagesCursor)
            (xtdb.api TransactionKey)
            xtdb.api.query.IKeyFn
-           (xtdb.arrow Relation RelationReader Vector)
+           (xtdb.arrow Relation RelationReader Vector VectorType)
            xtdb.database.Database$Catalog
            (xtdb.indexer LiveTable)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.storage.BufferPool
-           (xtdb.trie MetadataFileWriter)
            xtdb.types.ZonedDateTimeRange
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)))
 
@@ -164,21 +161,21 @@
 
 (defmethod lp/ra-expr ::pages [_]
   (s/cat :op #{::pages}
-         :col-types (s/? (s/map-of simple-symbol? some?))
+         :vec-types (s/? (s/map-of simple-symbol? #(instance? VectorType %)))
          :pages vector?))
 
 (defn rows->fields [rows]
   (->> (for [col-name (into #{} (mapcat keys) rows)]
          [(symbol col-name) (-> rows
                                 (->> (into #{} (map (fn [row]
-                                                      (types/col-type->field (vw/value->col-type (get row col-name))))))
-                                     (apply types/merge-fields))
-                                (types/field-with-name (str (symbol col-name))))])
+                                                      (types/value->vec-type (get row col-name)))))
+                                     (apply types/merge-types))
+                                (types/vec-type->field (str (symbol col-name))))])
        (into {})))
 
-(defmethod lp/emit-expr ::pages [{:keys [col-types pages stats]} _args]
-  (let [fields (or (some->> col-types (into {} (map (fn [[col-name col-type]]
-                                                      [col-name (types/col-type->field col-name col-type)]))))
+(defmethod lp/emit-expr ::pages [{:keys [vec-types pages stats]} _args]
+  (let [fields (or (some->> vec-types (into {} (map (fn [[col-name vec-type]]
+                                                      [col-name (types/vec-type->field vec-type col-name)]))))
                    (rows->fields (into [] cat pages)))
         ^Schema schema (Schema. (for [[col-name field] fields]
                                   (types/field-with-name field (str col-name))))]
