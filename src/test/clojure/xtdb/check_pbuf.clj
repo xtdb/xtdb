@@ -14,13 +14,6 @@
            (xtdb.log.proto TrieDetails)
            (xtdb.util HyperLogLog)))
 
-(defn multi-parse-fn
-  "Tries to parse a byte array from a given list of parse-fns. Throws if non parses."
-  [parse-fns]
-  (fn [v]
-    (or (some #(% v) parse-fns)
-        (throw (RuntimeException. "No matching parse-fn!")))))
-
 (defmacro ignoring-ex [& body]
   `(try
      ~@body
@@ -49,7 +42,7 @@
 (defn- write-pbuf-edn-file [^Path path parse-fn update-fn]
   (let [edn-file (.resolveSibling path (str (.getFileName path) ".edn"))]
     (with-open [out (io/writer (.toFile edn-file))]
-      (pp/pprint (update-fn (parse-fn (Files/readAllBytes path))) out))
+      (pp/pprint (update-fn (parse-fn path (Files/readAllBytes path))) out))
 
     edn-file))
 
@@ -64,8 +57,13 @@
 
   ([^Path expected-dir, ^Path actual-dir,
     {:keys [parse-fn file-pattern update-fn]
-     :or {parse-fn (multi-parse-fn [#(some-> (ignoring-ex (Block/parseFrom ^bytes %)) <-Block)
-                                    #(some-> (ignoring-ex (TableBlock/parseFrom ^bytes %)) <-TableBlock)])
+     :or {parse-fn (fn [path ^bytes ba]
+                     (cond
+                       (re-matches #".*/tables/.*" (str path))
+                       (some-> (ignoring-ex (TableBlock/parseFrom ba)) <-TableBlock)
+
+                       :else
+                       (some-> (ignoring-ex (Block/parseFrom ^bytes ba)) <-Block)))
           update-fn identity}}]
 
    (when aet/*regen?*
