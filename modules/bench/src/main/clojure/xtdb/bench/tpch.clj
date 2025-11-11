@@ -61,7 +61,6 @@
                       {:t :call, :stage :compact
                        :f (fn [{:keys [node]}] (b/compact! node))}])}
 
-           #_
            (queries-stage :cold-queries)
 
            (queries-stage :hot-queries)]})
