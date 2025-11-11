@@ -99,6 +99,18 @@ variable "anomaly_schedule_interval" {
   default     = 1
 }
 
+variable "anomaly_schedule_hour" {
+  description = "Hour of day to run anomaly detection (0-23, in specified timezone)"
+  type        = number
+  default     = 9
+}
+
+variable "anomaly_schedule_timezone" {
+  description = "Timezone for anomaly detection schedule (e.g., UTC, Europe/London)"
+  type        = string
+  default     = "UTC"
+}
+
 variable "anomaly_timespan" {
   description = "Time span for Logs Query API (ISO8601, e.g., P30D)"
   type        = string

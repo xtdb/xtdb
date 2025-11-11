@@ -233,6 +233,10 @@ resource "azapi_resource" "bench_anomaly" {
             "recurrence" = {
               "frequency" = var.anomaly_schedule_frequency
               "interval"  = var.anomaly_schedule_interval
+              "timeZone"  = var.anomaly_schedule_timezone
+              "schedule" = {
+                "hours" = [var.anomaly_schedule_hour]
+              }
             }
           }
         }
