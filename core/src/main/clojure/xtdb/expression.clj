@@ -7,8 +7,7 @@
             [xtdb.serde.types :as st]
             [xtdb.time :as time]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.util :as util])
   (:import (clojure.lang IPersistentMap Keyword MapEntry)
            (java.lang NumberFormatException)
            (java.math RoundingMode)
@@ -58,7 +57,7 @@
 
       "unknown"))
 
-(defn form->expr [form {:keys [col-types param-types locals] :as env}]
+(defn form->expr [form {:keys [vec-fields param-fields locals] :as env}]
   (cond
     (symbol? form) (cond
                      (= 'xtdb/start-of-time form) {:op :literal, :literal time/start-of-time}
@@ -66,8 +65,8 @@
                      (= 'xtdb/postgres-server-version form) {:op :literal, :literal (str "PostgreSQL " postgres-server-version)}
                      (= 'xtdb/xtdb-server-version form) {:op :literal, :literal (str "XTDB @ " (xtdb-server-version))}
                      (contains? locals form) {:op :local, :local form}
-                     (contains? param-types form) {:op :param, :param form, :param-type (get param-types form)}
-                     (contains? col-types form) {:op :variable, :variable form, :var-type (get col-types form)}
+                     (contains? param-fields form) {:op :param, :param form, :param-type (types/field->col-type (get param-fields form))}
+                     (contains? vec-fields form) {:op :variable, :variable form, :var-type (types/field->col-type (get vec-fields form))}
                      :else (throw (err/illegal-arg :xtdb.expression/unknown-symbol
                                                    {::err/message (format "Unknown symbol: '%s'" form)
                                                     :symbol form})))
@@ -1901,6 +1900,11 @@
       (util/lru-memoize) ; <<no-commit>>
       wrap-zone-id-cache-buster))
 
+(defn ->param-fields [^RelationReader args]
+  (->> args
+       (into {} (map (fn [^VectorReader col]
+                       (MapEntry/create (symbol (.getName col)) (.getField col)))))))
+
 (defn ->param-types [^RelationReader args]
   (->> args
        (into {} (map (fn [^VectorReader col]
@@ -1908,10 +1912,10 @@
                         (symbol (.getName col))
                         (types/field->col-type (.getField col))))))))
 
-(defn ->expression-projection-spec ^xtdb.operator.ProjectionSpec [col-name expr {:keys [col-types param-types]}]
+(defn ->expression-projection-spec ^xtdb.operator.ProjectionSpec [col-name expr {:keys [vec-fields param-fields]}]
   (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
-        widest-out-type (-> (emit-projection expr {:param-types param-types
-                                                   :var->col-type col-types})
+        widest-out-type (-> (emit-projection expr {:param-types (update-vals param-fields types/field->col-type)
+                                                   :var->col-type (update-vals vec-fields types/field->col-type)})
                             :return-type)]
 
     (reify ProjectionSpec

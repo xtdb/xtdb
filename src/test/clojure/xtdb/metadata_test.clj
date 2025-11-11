@@ -129,7 +129,7 @@
                                 (map (comp bucket->page-idx first)))
 
             metadata-mgr (.getMetadataManager (db/primary-db node))
-            literal-selector (expr.meta/->metadata-selector tu/*allocator* '(and (< _id 11) (> _id 9)) '{_id :i64} vw/empty-args)]
+            literal-selector (expr.meta/->metadata-selector tu/*allocator* '(and (< _id 11) (> _id 9)) '{_id #xt/field ["_id" :i64]} vw/empty-args)]
 
         (t/testing "L0"
           (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))]
@@ -166,7 +166,7 @@
   (tu/finish-block! tu/*node*)
 
   (let [metadata-mgr (.getMetadataManager (db/primary-db tu/*node*))
-        true-selector (expr.meta/->metadata-selector tu/*allocator* '(= boolean_or_int true) '{boolean_or_int :bool} vw/empty-args)]
+        true-selector (expr.meta/->metadata-selector tu/*allocator* '(= boolean_or_int true) '{boolean_or_int #xt/field ["boolean_or_int" :bool]} vw/empty-args)]
 
     (t/testing "L0"
       (let [meta-file-path (Trie/metaFilePath "public$xt_docs" ^String (trie/->l0-trie-key 0))]
@@ -266,7 +266,7 @@
           (tu/finish-block! node)
 
           (let [metadata-mgr (.getMetadataManager (db/primary-db node))
-                not-null-selector (expr.meta/->metadata-selector tu/*allocator* '(not (nil? status)) '{status :utf8} vw/empty-args)]
+                not-null-selector (expr.meta/->metadata-selector tu/*allocator* '(not (nil? status)) '{status #xt/field ["status" :utf8]} vw/empty-args)]
 
             (t/testing "L0 metadata pred"
               (let [meta-file-path (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))]

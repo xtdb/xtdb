@@ -71,10 +71,10 @@
                                   (time/sql-temporal->micros expr/*default-tz*))
                           default)
                :now (-> (expr/current-time) (time/instant->micros))
-               :expr (let [param-types (expr/->param-types args)
+               :expr (let [param-fields (expr/->param-fields args)
                            projection (expr/->expression-projection-spec "_temporal_expression"
-                                                                         (expr/form->expr (list 'cast_tstz arg) {:param-types param-types})
-                                                                         {:param-types param-types})]
+                                                                         (expr/form->expr (list 'cast_tstz arg) {:param-fields param-fields})
+                                                                         {:param-fields param-fields})]
                        (util/with-open [res (.project projection alloc vw/empty-args {} args)]
                          (if-let [inst-like (.getObject res 0)]
                            (do
@@ -218,8 +218,7 @@
 
             col-preds (->> (for [[col-name select-form] selects]
                              ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
-                             (let [input-types {:col-types (update-vals fields types/field->col-type)
-                                                :param-types (update-vals param-fields types/field->col-type)}]
+                             (let [input-types {:vec-fields fields, :param-fields param-fields}]
                                (MapEntry/create col-name
                                                 (expr/->expression-selection-spec (expr/form->expr select-form input-types)
                                                                                   input-types))))
@@ -258,7 +257,7 @@
                                            (assoc "_iid" (if (= 1 (count iid-set))
                                                            (SingleIidSelector. (first iid-set))
                                                            (MultiIidSelector. iid-set))))
-                               metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) (update-vals fields types/field->col-type) args)
+                               metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) fields args)
                                metadata-pred (reify MetadataPredicate
                                                (build [_ page-metadata]
                                                  (-> (.build metadata-pred page-metadata)

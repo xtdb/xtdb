@@ -270,8 +270,7 @@
                 {:key-col-name form}
 
                 (let [col-name (symbol (format "?join-expr-%s-%d" (name side) idx))
-                      input-types {:col-types (update-vals fields types/field->col-type)
-                                   :param-types (update-vals param-fields types/field->col-type)}]
+                      input-types {:vec-fields fields, :param-fields param-fields}]
                   {:key-col-name col-name
                    :projection (expr/->expression-projection-spec col-name (expr/form->expr form input-types)
                                                                   input-types)})))]
@@ -300,20 +299,19 @@
                 *disk-join-threshold-rows*)))
 
 (defn ->cmp-factory [{:keys [build-fields probe-fields theta-expr param-fields args with-nil-row?]}]
-  (let [param-types (update-vals param-fields types/field->col-type)]
-    (reify ComparatorFactory
-      (buildEqui [_ build-col probe-col]
-        (emap/->equi-comparator build-col probe-col args
-                                {:nil-keys-equal? with-nil-row?
-                                 :param-types param-types}))
+  (reify ComparatorFactory
+    (buildEqui [_ build-col probe-col]
+      (emap/->equi-comparator build-col probe-col args
+                              {:nil-keys-equal? with-nil-row?
+                               :param-fields param-fields}))
 
-      (buildTheta [_ build-rel probe-rel]
-        (when theta-expr
-          (emap/->theta-comparator build-rel probe-rel theta-expr args
-                                   {:nil-keys-equal? with-nil-row?
-                                    :build-fields build-fields
-                                    :probe-fields probe-fields
-                                    :param-types param-types}))))))
+    (buildTheta [_ build-rel probe-rel]
+      (when theta-expr
+        (emap/->theta-comparator build-rel probe-rel theta-expr args
+                                 {:nil-keys-equal? with-nil-row?
+                                  :build-fields build-fields
+                                  :probe-fields probe-fields
+                                  :param-fields param-fields})))))
 
 (defn- emit-join-expr {:style/indent 2}
   [{:keys [condition left right]}

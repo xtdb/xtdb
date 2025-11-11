@@ -71,8 +71,7 @@
                                                      (ProjectionSpec$Rename. (str from-name) field))
 
                                            :extend (let [[col-name form] (first arg)
-                                                         input-types {:col-types (update-vals inner-fields types/field->col-type)
-                                                                      :param-types (update-vals param-fields types/field->col-type)}
+                                                         input-types {:vec-fields inner-fields, :param-fields param-fields}
                                                          expr (expr/form->expr form input-types)]
                                                      (expr/->expression-projection-spec col-name expr input-types)))))]
           {:op :project

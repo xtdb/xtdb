@@ -18,7 +18,11 @@
 
 (def build-comparator
   (-> (fn [expr input-opts]
-        (let [{:keys [continue], :as emitted-expr}
+        (let [{:keys [vec-fields param-fields]} input-opts
+              input-opts {:var->col-type (update-vals vec-fields types/field->col-type)
+                          :param-types (update-vals param-fields types/field->col-type)}
+                          
+              {:keys [continue], :as emitted-expr}
               (expr/codegen-expr expr input-opts)]
 
           (-> `(fn [~(expr/with-tag left-rel RelationReader)
@@ -41,21 +45,21 @@
   {"pg_catalog/pg_class" #{}})
 
 (defn ->equi-comparator [^VectorReader left-col, ^VectorReader right-col, params
-                         {:keys [nil-keys-equal? param-types]}]
+                         {:keys [nil-keys-equal? param-fields]}]
   (let [f (build-comparator {:op :call, :f (if nil-keys-equal? :null-eq :=)
                              :args [{:op :variable, :variable left-vec, :rel left-rel, :idx left-idx}
                                     {:op :variable, :variable right-vec, :rel right-rel, :idx right-idx}]}
-                            {:var->col-type {left-vec (types/field->col-type (.getField left-col))
-                                             right-vec (types/field->col-type (.getField right-col))}
-                             :param-types param-types})]
+                            {:vec-fields {left-vec (.getField left-col)
+                                          right-vec (.getField right-col)}
+                             :param-fields param-fields})]
     (f (vr/rel-reader [(.withName left-col (str left-vec))])
        (vr/rel-reader [(.withName right-col (str right-vec))])
        pg-class-schema-hack
        params)))
 
-(defn ->theta-comparator [build-rel probe-rel theta-expr params {:keys [build-fields probe-fields param-types]}]
-  (let [col-types (update-vals (merge build-fields probe-fields) types/field->col-type)
-        f (build-comparator (->> (expr/form->expr theta-expr {:col-types col-types, :param-types param-types})
+(defn ->theta-comparator [build-rel probe-rel theta-expr params {:keys [build-fields probe-fields param-fields]}]
+  (let [vec-fields (merge build-fields probe-fields)
+        f (build-comparator (->> (expr/form->expr theta-expr {:vec-fields vec-fields, :param-fields param-fields})
                                  (expr/prepare-expr)
                                  (ewalk/postwalk-expr (fn [{:keys [op] :as expr}]
                                                         (cond-> expr
@@ -64,7 +68,7 @@
                                                                   (if (contains? probe-fields variable)
                                                                     {:rel right-rel, :idx right-idx}
                                                                     {:rel left-rel, :idx left-idx})))))))
-                            {:var->col-type col-types, :param-types param-types})]
+                            {:vec-fields vec-fields, :param-fields param-fields})]
     (f build-rel
        probe-rel
        pg-class-schema-hack

@@ -128,6 +128,9 @@ sealed class Vector : VectorReader, VectorWriter {
         @JvmStatic
         fun open(al: BufferAllocator, field: Field) = field.openVector(al)
 
+        @JvmStatic
+        fun open(al: BufferAllocator, name: FieldName, type: VectorType) = open(al, name ofType type)
+
         fun Field.openVector(al: BufferAllocator): Vector {
             val name: String = this.name
             val isNullable = this.fieldType.isNullable

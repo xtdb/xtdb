@@ -4,13 +4,12 @@
             [xtdb.metadata :as meta]
             [xtdb.serde.types :as st]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.util :as util])
   (:import java.util.function.IntPredicate
            java.util.List
            org.apache.arrow.memory.BufferAllocator
            (xtdb.arrow RelationReader Vector VectorReader)
-           (xtdb.arrow.metadata MetadataFlavour MetadataFlavour$Bytes MetadataFlavour$Numeric MetadataFlavour$Presence)
+           (xtdb.arrow.metadata MetadataFlavour MetadataFlavour$Bytes MetadataFlavour$Presence)
            (xtdb.bloom BloomUtils)
            (xtdb.metadata MetadataPredicate PageMetadata)))
 
@@ -252,7 +251,10 @@
 
 (def ^:private compile-meta-expr
   (-> (fn [expr opts]
-        (let [expr (or (-> expr (expr/prepare-expr) (meta-expr opts) (expr/prepare-expr))
+        (let [{:keys [param-fields vec-fields]} opts
+              opts {:param-types (update-vals param-fields types/field->col-type)
+                    :col-types (update-vals vec-fields types/field->col-type)}
+              expr (or (-> expr (expr/prepare-expr) (meta-expr opts) (expr/prepare-expr))
                        (expr/prepare-expr {:op :literal, :literal true}))
               {:keys [continue] :as emitted-expr} (expr/codegen-expr expr opts)]
           {:expr expr
@@ -272,12 +274,12 @@
 
       (util/lru-memoize)))
 
-(defn ->metadata-selector ^xtdb.metadata.MetadataPredicate [allocator form col-types params]
-  (let [param-types (expr/->param-types params)
-        {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types param-types,
-                                                                   :col-types col-types})
-                                            {:param-types param-types
-                                             :col-types col-types})
+(defn ->metadata-selector ^xtdb.metadata.MetadataPredicate [allocator form vec-fields params]
+  (let [param-fields (expr/->param-fields params)
+        {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-fields param-fields,
+                                                                   :vec-fields vec-fields})
+                                            {:param-fields param-fields
+                                             :vec-fields vec-fields})
         bloom-hashes (->bloom-hashes allocator expr params)]
     (reify MetadataPredicate
       (build [_ table-metadata]

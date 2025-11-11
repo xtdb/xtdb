@@ -249,8 +249,8 @@
                                       :to-name 'sum, :zero-row? zero-row?})
         count-agg (->aggregate-factory {:f :count, :from-name from-name, :from-type from-type,
                                         :to-name 'cnt, :zero-row? zero-row?})
-        input-types {:col-types {'sum (types/field->col-type (.getField sum-agg))
-                                 'cnt (types/field->col-type (.getField count-agg))}}
+        input-types {:vec-fields {'sum (.getField sum-agg)
+                                  'cnt (.getField count-agg)}}
         ^Field sum-field (.getField sum-agg)
 
         avg-formula (if (instance? ArrowType$Duration (.getType sum-field))
@@ -287,7 +287,7 @@
                                        :to-name 'sumx, :zero-row? zero-row?})
 
         x2-projecter (->projector 'x2 (list '* from-name from-name)
-                                  {:col-types {from-name from-type}})
+                                  {:vec-fields {from-name (types/col-type->field from-name from-type)}})
 
         sumx2-agg (->aggregate-factory {:f :sum, :from-name 'x2, :from-type (types/field->col-type (.getField x2-projecter))
                                         :to-name 'sumx2, :zero-row? zero-row?})
@@ -303,9 +303,9 @@
                                                                    (/ (* sumx sumx) (double countx)))
                                                                 (double (- countx 1)))
                                                              nil))
-                                      {:col-types {'sumx (types/field->col-type (.getField sumx-agg))
-                                                   'sumx2 (types/field->col-type (.getField sumx2-agg))
-                                                   'countx (types/field->col-type (.getField countx-agg))}})]
+                                      {:vec-fields {'sumx (.getField sumx-agg)
+                                                    'sumx2 (.getField sumx2-agg)
+                                                    'countx (.getField countx-agg)}})]
 
     (reify IAggregateSpecFactory
       (getField [_] (.getField finish-projecter))
@@ -345,7 +345,7 @@
   (let [variance-agg (->aggregate-factory {:f variance-op, :from-name from-name, :from-type from-type
                                            :to-name 'variance, :zero-row? zero-row?})
         finish-projecter (->projector to-name '(sqrt variance)
-                                      {:col-types {'variance (types/field->col-type (.getField variance-agg))}})]
+                                      {:vec-fields {'variance (.getField variance-agg)}})]
     (reify IAggregateSpecFactory
       (getField [_] (.getField finish-projecter))
 

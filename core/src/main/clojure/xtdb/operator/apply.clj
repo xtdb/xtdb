@@ -84,8 +84,8 @@
                          (zmatch mode
                            [:mark-join mark-spec]
                            (let [[_col-name form] (first (:mark-join mark-spec))
-                                 input-types {:col-types (update-vals dependent-fields types/field->col-type)
-                                              :param-types (update-vals param-fields types/field->col-type)}
+                                 input-types {:vec-fields dependent-fields
+                                              :param-fields param-fields}
                                  projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
                              (fn [{:keys [allocator args explain-analyze?] :as query-opts}]
                                (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
