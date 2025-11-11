@@ -23,5 +23,20 @@ services:
       - ./dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml
       - ./dev-dashboards:/var/lib/grafana/dashboards
 
+  tempo:
+    image: grafana/tempo:2.7.2
+    container_name: tempo
+    ports:
+      - "3200:3200"   # Tempo UI/API
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "9095:9095"
+    volumes:
+      - ./tempo.yml:/etc/tempo.yml
+      - tempo-data:/var/tempo
+    command:
+      - '-config.file=/etc/tempo.yml'
+
 volumes:
   grafana-storage:
+  tempo-data:

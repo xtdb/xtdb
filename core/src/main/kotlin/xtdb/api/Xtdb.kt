@@ -10,6 +10,7 @@ import xtdb.api.Authenticator.Factory.UserTable
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
 import xtdb.api.metrics.HealthzConfig
+import xtdb.api.metrics.TracerConfig
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage
 import xtdb.cache.DiskCache
@@ -51,6 +52,7 @@ interface Xtdb : DataSource, AutoCloseable {
         val compactor: CompactorConfig = CompactorConfig(),
         var authn: Authenticator.Factory = UserTable(),
         var garbageCollector: GarbageCollectorConfig = GarbageCollectorConfig(),
+        var tracer: TracerConfig = TracerConfig(),
         var nodeId: String = System.getenv("XTDB_NODE_ID") ?: randomUUID().toString().takeWhile { it != '-' }
     ) {
         private val modules: MutableList<XtdbModule.Factory> = mutableListOf()
@@ -75,6 +77,11 @@ interface Xtdb : DataSource, AutoCloseable {
         fun compactor(configure: CompactorConfig.() -> Unit) = apply { compactor.configure() }
 
         fun healthz(healthz: HealthzConfig) = apply { this.healthz = healthz }
+
+        fun tracer(tracer: TracerConfig) = apply { this.tracer = tracer }
+
+        @JvmSynthetic
+        fun tracer(configure: TracerConfig.() -> Unit) = tracer(TracerConfig().also(configure))
 
         fun garbageCollector(garbageCollector: GarbageCollectorConfig) =
             apply { this.garbageCollector = garbageCollector }

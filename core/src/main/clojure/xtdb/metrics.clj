@@ -8,6 +8,7 @@
            (io.micrometer.core.instrument.binder.jvm ClassLoaderMetrics JvmGcMetrics JvmHeapPressureMetrics JvmMemoryMetrics JvmThreadMetrics)
            (io.micrometer.core.instrument.binder.system ProcessorMetrics)
            (io.micrometer.prometheusmetrics PrometheusConfig PrometheusMeterRegistry)
+           (io.micrometer.tracing Tracer Span)
            java.util.List
            (java.util.stream Stream)
            (org.apache.arrow.memory BufferAllocator)))
@@ -53,6 +54,26 @@
 
 (defn add-allocator-gauge [reg meter-name ^BufferAllocator allocator]
   (add-gauge reg meter-name (fn [] (.getAllocatedMemory allocator)) {:unit "bytes"}))
+
+(defn start-span ^Span [^Tracer tracer span-name attributes]
+  (let [span (-> (.nextSpan tracer)
+                 (.name span-name)
+                 (.start))]
+    (doseq [[k v] attributes]
+      (.tag span (name k) (str v)))
+    span))
+
+(defn end-span [^Span span]
+  (.end span))
+
+(defmacro with-span [tracer span-name attributes & body]
+  `(if-let [tracer# ~tracer]
+     (let [span# (start-span tracer# ~span-name ~attributes)]
+       (try
+         ~@body
+         (finally
+           (end-span span#))))
+     (do ~@body)))
 
 (defn direct-memory-pool ^java.lang.management.BufferPoolMXBean []
   (->> (java.lang.management.ManagementFactory/getPlatformMXBeans java.lang.management.BufferPoolMXBean)

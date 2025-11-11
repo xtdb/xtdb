@@ -70,6 +70,9 @@
 (defmethod apply-config! :healthz [config _ opts]
   (apply-config! config :xtdb/healthz opts))
 
+(defmethod apply-config! :tracer [config _ opts]
+  (apply-config! config :xtdb/tracer opts))
+
 (defmethod apply-config! :garbage-collector [config _ opts]
   (apply-config! config :xtdb/garbage-collector opts))
 

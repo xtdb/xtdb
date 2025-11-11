@@ -1377,7 +1377,11 @@
               (cmd-commit conn)
               (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "COMMIT"}))
 
-    (:query :show-variable) (metrics/record-callable! query-timer (cmd-exec-query conn portal))
+    (:query :show-variable) (let [query-tracer (:query-tracer conn)
+                                   query-str (:query portal)]
+                              (metrics/with-span query-tracer "pgwire.query"
+                                {:db.statement query-str}
+                                (metrics/record-callable! query-timer (cmd-exec-query conn portal))))
     :prepare (cmd-prepare conn portal)
     :dml (cmd-exec-dml conn portal)
 
@@ -1620,7 +1624,7 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [{:keys [node, ^Authenticator authn, server-state, port, allocator, query-error-counter, tx-error-counter, ^Counter total-connections-counter, ^Counter cancelled-connections-counter, query-timer] :as server} ^Socket conn-socket]
+  [{:keys [node, ^Authenticator authn, server-state, port, allocator, query-error-counter, tx-error-counter, ^Counter total-connections-counter, ^Counter cancelled-connections-counter, query-timer, query-tracer] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
@@ -1643,6 +1647,7 @@
         conn (assoc conn
                     :query-error-counter query-error-counter
                     :query-timer query-timer
+                    :query-tracer query-tracer
                     :tx-error-counter tx-error-counter
                     :cancelled-connections-counter cancelled-connections-counter)]
 
@@ -1727,14 +1732,14 @@
   :playground? (default false) - if true, the server will create a new in-memory database if it doesn't already exist.
   "
   (^Server [node] (serve node {}))
-  (^Server [node {:keys [allocator host port num-threads drain-wait ssl-ctx metrics-registry read-only? playground?]
+  (^Server [node {:keys [allocator host port num-threads drain-wait ssl-ctx metrics-registry tracer read-only? playground?]
                   :or {host (InetAddress/getLoopbackAddress)
                        port 0
                        num-threads 42
                        drain-wait 5000}}]
    (util/with-close-on-catch [accept-socket (ServerSocket. port 0 host)]
      (let [host (.getInetAddress accept-socket)
-           port (.getLocalPort accept-socket)
+           port (.getLocalPort accept-socket) 
            query-error-counter (when metrics-registry (metrics/add-counter metrics-registry "query.error"))
            query-timer (when metrics-registry (metrics/add-timer metrics-registry "query.timer" {}))
            tx-error-counter (when metrics-registry (metrics/add-counter metrics-registry "tx.error"))
@@ -1770,6 +1775,7 @@
            server (assoc server
                          :query-error-counter query-error-counter
                          :query-timer query-timer
+                         :query-tracer tracer
                          :tx-error-counter tx-error-counter
                          :total-connections-counter total-connections-counter
                          :cancelled-connections-counter cancelled-connections-counter)
@@ -1822,7 +1828,8 @@
 (defmethod ig/expand-key ::server [k config]
   {k (into {:node (ig/ref :xtdb/node)
             :allocator (ig/ref :xtdb/allocator)
-            :metrics-registry (ig/ref :xtdb.metrics/registry)}
+            :metrics-registry (ig/ref :xtdb.metrics/registry)
+            :tracer (ig/ref :xtdb/tracer)}
            (<-config config))})
 
 (defmethod ig/init-key ::server [_ {:keys [host node allocator port ro-port] :as opts}]

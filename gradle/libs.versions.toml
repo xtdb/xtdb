@@ -20,6 +20,8 @@ reitit = "0.9.1"
 muuntaja = "0.6.11"
 testcontainers = "1.21.3"
 micrometer = "1.15.1"
+micrometer-tracing = "1.4.1"
+opentelemetry = "1.45.0"
 transit = "1.0.329"
 
 slf4j = "2.0.17"
@@ -101,6 +103,10 @@ micrometer-core = { group = "io.micrometer", name = "micrometer-core", version.r
 micrometer-registry-prometheus = { group = "io.micrometer", name = "micrometer-registry-prometheus", version.ref = "micrometer" }
 micrometer-registry-cloudwatch2 = { group = "io.micrometer", name = "micrometer-registry-cloudwatch2", version.ref = "micrometer" }
 micrometer-registry-azuremonitor = { group = "io.micrometer", name = "micrometer-registry-azure-monitor", version.ref = "micrometer" }
+micrometer-tracing = { group = "io.micrometer", name = "micrometer-tracing", version.ref = "micrometer-tracing" }
+micrometer-tracing-bridge-otel = { group = "io.micrometer", name = "micrometer-tracing-bridge-otel", version.ref = "micrometer-tracing" }
+opentelemetry-exporter-otlp = { group = "io.opentelemetry", name = "opentelemetry-exporter-otlp", version.ref = "opentelemetry" }
+opentelemetry-sdk = { group = "io.opentelemetry", name = "opentelemetry-sdk", version.ref = "opentelemetry" }
 
 
 # logging in XTDB:

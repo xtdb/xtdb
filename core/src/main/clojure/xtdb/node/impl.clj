@@ -6,6 +6,7 @@
             [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.garbage-collector]
+            [xtdb.tracer]
             [xtdb.log :as xt-log]
             [xtdb.metrics :as metrics]
             [xtdb.protocols :as xtp]
@@ -321,7 +322,8 @@
 
 (defn node-system [^Xtdb$Config opts]
   (let [srv-config (.getServer opts)
-        healthz (.getHealthz opts)]
+        healthz (.getHealthz opts)
+        tracer (.getTracer opts)]
     (-> {:xtdb/node {}
          :xtdb/config opts
          :xtdb/allocator {}
@@ -331,6 +333,7 @@
          :xtdb.query/query-source {}
          :xtdb/compactor (.getCompactor opts)
          :xtdb.metrics/registry {}
+         :xtdb/tracer tracer
          :xtdb.log/clusters (.getLogClusters opts)
          :xtdb/db-catalog {}
          :xtdb/authn {:authn-factory (.getAuthn opts)}
