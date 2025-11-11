@@ -55,11 +55,7 @@
 (defn add-allocator-gauge [reg meter-name ^BufferAllocator allocator]
   (add-gauge reg meter-name (fn [] (.getAllocatedMemory allocator)) {:unit "bytes"}))
 
-(defn start-span
-  "Start a new span with the given tracer, name, and attributes map.
-   Returns the span."
-  ^Span
-  [^Tracer tracer span-name attributes]
+(defn start-span ^Span [^Tracer tracer span-name attributes]
   (let [span (-> (.nextSpan tracer)
                  (.name span-name)
                  (.start))]
@@ -67,15 +63,10 @@
       (.tag span (name k) (str v)))
     span))
 
-(defn end-span
-  "End a span."
-  [^Span span]
+(defn end-span [^Span span]
   (.end span))
 
-(defmacro with-span
-  "Execute body within a tracing span. Attributes map required.
-   Span is automatically ended."
-  [tracer span-name attributes & body]
+(defmacro with-span [tracer span-name attributes & body]
   `(if-let [tracer# ~tracer]
      (let [span# (start-span tracer# ~span-name ~attributes)]
        (try
