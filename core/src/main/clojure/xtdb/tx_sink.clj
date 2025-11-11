@@ -44,7 +44,7 @@
   (case fmt
     :transit+json xtdb.serde/write-transit))
 
-(defmethod xtn/apply-config! :tx-sink [^Xtdb$Config config _ {:keys [output-log format table-filter enable]}]
+(defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format table-filter enable]}]
   (let [table-filter (when-let [{:keys [include exclude]} table-filter]
                        (TxSinkConfig$TableFilter.
                          (if (some? include) (set include) #{})
