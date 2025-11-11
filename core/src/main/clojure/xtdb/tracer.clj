@@ -61,9 +61,8 @@
       :span-processor (.getSpanProcessor config)
       :config (ig/ref :xtdb/config)}})
 
-(defmethod ig/init-key :xtdb/tracer [_ {:keys [enabled? endpoint service-name span-processor] {:keys [node-id]} :config}]
-  (let [service-name (or service-name (str "xtdb-" node-id))]
-    (create-tracer {:enabled? enabled?
-                    :endpoint endpoint
-                    :service-name service-name
-                    :span-processor span-processor})))
+(defmethod ig/init-key :xtdb/tracer [_ {:keys [enabled? endpoint service-name span-processor]}]
+  (create-tracer {:enabled? enabled?
+                  :endpoint endpoint
+                  :service-name service-name
+                  :span-processor span-processor}))
