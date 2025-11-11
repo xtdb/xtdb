@@ -353,7 +353,7 @@
 
             (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
-            (openQuery [_ {:keys [args current-time snapshot-token snapshot-time default-tz close-args? await-token]
+            (openQuery [_ {:keys [args current-time snapshot-token snapshot-time default-tz close-args? await-token tracer]
                            :or {default-tz default-tz
                                 close-args? true}}]
               (util/with-close-on-catch [^BufferAllocator allocator (if allocator
@@ -408,7 +408,8 @@
                                                     :current-time current-time
                                                     :args args, :schema table-info
                                                     :default-tz default-tz
-                                                    :explain-analyze? (:explain-analyze? planned-query)})
+                                                    :explain-analyze? (:explain-analyze? planned-query)
+                                                    :tracer tracer})
 
                                          (wrap-result-fields fields)
                                          (wrap-dynvars current-time expr/*snapshot-token* default-tz ref-ctr))]

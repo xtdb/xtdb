@@ -1,5 +1,7 @@
 package xtdb
 
+import io.micrometer.tracing.Tracer
+import io.micrometer.tracing.Span
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
@@ -77,7 +79,59 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             override fun getComparator(): Comparator<in RelationReader>? = inner.comparator
         }
 
+        private class TracingCursor(
+            private val inner: ICursor,
+            private val tracer: Tracer,
+            private val parentSpan: Span? = null
+        ) : ICursor by inner {
+            // Create span eagerly so children can use it as parent
+            private val span: Span = run {
+                val spanBuilder = if (parentSpan != null) {
+                    tracer.nextSpan(parentSpan)
+                } else {
+                    tracer.nextSpan()
+                }
+                spanBuilder
+                    .name("query.cursor.${inner.cursorType}")
+                    .tag("cursor.type", inner.cursorType)
+                    .start()
+            }
+
+            // Wrap child cursors with tracing using this cursor's span as parent
+            private val tracedChildren: List<ICursor> by lazy {
+                inner.childCursors.map { child ->
+                    // Only wrap if the child isn't already wrapped
+                    if (child is TracingCursor) child
+                    else TracingCursor(child, tracer, span)
+                }
+            }
+
+            override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
+                return inner.tryAdvance { rel ->
+                    c.accept(rel)
+                }
+            }
+
+            override val childCursors: List<ICursor>
+                get() = tracedChildren
+
+            override fun close() {
+                span.end()
+                inner.close()
+            }
+
+            @Suppress("RedundantOverride")
+            override fun forEachRemaining(action: Consumer<in RelationReader>?) = super.forEachRemaining(action)
+            override fun getExactSizeIfKnown(): Long = inner.exactSizeIfKnown
+            override fun hasCharacteristics(characteristics: Int): Boolean = inner.hasCharacteristics(characteristics)
+            override fun getComparator(): Comparator<in RelationReader>? = inner.comparator
+        }
+
         @JvmStatic
         fun ICursor.wrapExplainAnalyze(): ICursor = ExplainAnalyzeCursor(this)
+
+        @JvmStatic
+        @JvmOverloads
+        fun ICursor.wrapTracing(tracer: Tracer, parentSpan: Span? = null): ICursor = TracingCursor(this, tracer, parentSpan)
     }
 }

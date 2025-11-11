@@ -47,11 +47,12 @@
                        loader (path->loader al path)]
              (->> (.getFields (.getSchema loader))
                   (into {} (map (juxt #(symbol (.getName ^Field %)) identity)))))
-   :->cursor (fn [{:keys [^BufferAllocator allocator explain-analyze?]}]
+   :->cursor (fn [{:keys [^BufferAllocator allocator explain-analyze? tracer]}]
                (util/with-close-on-catch [loader (path->loader allocator path)
                                           rel (Relation. allocator (.getSchema loader))]
                  (cond-> (ArrowCursor. rel loader on-close-fn)
-                   explain-analyze? (ICursor/wrapExplainAnalyze))))})
+                   explain-analyze? (ICursor/wrapExplainAnalyze)
+                   tracer (ICursor/wrapTracing tracer))))})
 
 (defmethod lp/emit-expr :arrow [{:keys [^URL url]} _args]
   ;; TODO: should we make it possible to disable local files?

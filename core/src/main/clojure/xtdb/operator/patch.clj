@@ -42,7 +42,7 @@
          :explain {:valid-from (pr-str valid-from)
                    :valid-to (pr-str valid-to)}
          :fields fields
-         :->cursor (fn [{:keys [^BufferAllocator allocator current-time explain-analyze?] :as qopts} inner]
+         :->cursor (fn [{:keys [^BufferAllocator allocator current-time explain-analyze? tracer] :as qopts} inner]
                      (let [valid-from (time/instant->micros (->instant (or valid-from [:literal current-time]) qopts))
                            valid-to (or (some-> valid-to (->instant qopts) time/instant->micros) Long/MAX_VALUE)]
                        (if (> valid-from valid-to)
@@ -56,4 +56,5 @@
                                                                          (types/field-with-name field (str nm)))))
                                                    valid-from
                                                    valid-to)
-                           explain-analyze? (ICursor/wrapExplainAnalyze)))))}))))
+                           explain-analyze? (ICursor/wrapExplainAnalyze)
+                           tracer (ICursor/wrapTracing tracer)))))}))))

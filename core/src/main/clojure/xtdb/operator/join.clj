@@ -151,9 +151,10 @@
       {:op :cross-join
        :children [left-rel right-rel]
        :fields (merge left-fields right-fields)
-       :->cursor (fn [{:keys [allocator explain-analyze?]} left-cursor right-cursor]
+       :->cursor (fn [{:keys [allocator explain-analyze? tracer]} left-cursor right-cursor]
                    (cond-> (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil)
-                     explain-analyze? (ICursor/wrapExplainAnalyze)))})))
+                     explain-analyze? (ICursor/wrapExplainAnalyze)
+                     tracer (ICursor/wrapTracing tracer)))})))
 
 (defmethod lp/emit-expr :cross-join [join-expr args]
   (emit-cross-join (emit-join-children join-expr args)))
@@ -381,7 +382,7 @@
 
      :fields (projection-specs->fields output-projections)
 
-     :->cursor (fn [{:keys [allocator explain-analyze? args] :as opts}]
+     :->cursor (fn [{:keys [allocator explain-analyze? tracer args] :as opts}]
                  (util/with-close-on-catch [build-cursor (->build-cursor opts)
                                             build-side (->build-side allocator {:fields build-fields
                                                                                 :key-col-names build-key-col-names
@@ -425,7 +426,8 @@
                                                                           ::semi-join JoinType/SEMI
                                                                           ::anti-semi-join JoinType/ANTI
                                                                           ::single-join JoinType/SINGLE)))
-                                                   explain-analyze? (ICursor/wrapExplainAnalyze))
+                                                   explain-analyze? (ICursor/wrapExplainAnalyze)
+                                                   tracer (ICursor/wrapTracing tracer))
                                                  output-projections)))))}))
 
 (defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]

@@ -1038,7 +1038,7 @@
           pg-types
           result-formats)))
 
-(defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator] :as conn} {:keys [statement-type ^PreparedQuery prepared-query args result-format] :as stmt}]
+(defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator query-tracer] :as conn} {:keys [statement-type ^PreparedQuery prepared-query args result-format] :as stmt}]
   (let [{:keys [session transaction await-token]} @conn-state
         {:keys [^Clock clock], session-params :parameters} session
         await-token (:await-token transaction await-token)
@@ -1049,7 +1049,8 @@
                                       (:current-time transaction)
                                       (.instant clock))
                     :default-tz (or (:default-tz transaction) (.getZone clock))
-                    :await-token await-token}
+                    :await-token await-token
+                    :tracer query-tracer}
 
         xt-args (xtify-args conn args stmt)]
 

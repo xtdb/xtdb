@@ -85,7 +85,7 @@
     {:op :csv
      :children []
      :fields fields
-     :->cursor (fn [{:keys [^BufferAllocator allocator, explain-analyze?]}]
+     :->cursor (fn [{:keys [^BufferAllocator allocator, explain-analyze? tracer]}]
                  (cond-> (let [rdr (Files/newBufferedReader path)
                                rows (rest (csv/read-csv rdr))
                                schema (Schema. (vals fields))]
@@ -94,4 +94,6 @@
                                        (->> fields (into {} (map (juxt (comp name key)
                                                                        (comp col-parsers types/field->col-type val)))))
                                        (.iterator ^Iterable (partition-all batch-size rows))))
-                   explain-analyze? (ICursor/wrapExplainAnalyze)))}))
+                   explain-analyze? (ICursor/wrapExplainAnalyze)
+                   tracer (ICursor/wrapTracing tracer)))}))
+

@@ -241,7 +241,7 @@
 
          :fields fields
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze?]}]
+         :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze? tracer]}]
                      (let [^Snapshot snapshot (get snaps db-name)
                            derived-table-schema (info-schema/derived-table table)
                            template-table? (boolean (info-schema/template-table table))]
@@ -299,7 +299,8 @@
                                                     temporal-bounds
                                                     !segments (.iterator ^Iterable merge-tasks)
                                                     schema args)
-                                 explain-analyze? (ICursor/wrapExplainAnalyze))))))))}))))
+                                 explain-analyze? (ICursor/wrapExplainAnalyze)
+                                 tracer (ICursor/wrapTracing tracer))))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-fields, param-fields]}]
   (assert db-cat)

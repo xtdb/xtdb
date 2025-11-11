@@ -271,6 +271,7 @@
        :children [rel]
        :explain {:order-specs (pr-str order-specs)}
        :fields fields
-       :->cursor (fn [{:keys [allocator explain-analyze?]} in-cursor]
+       :->cursor (fn [{:keys [allocator explain-analyze? tracer]} in-cursor]
                    (cond-> (OrderByCursor. allocator in-cursor (rename-fields fields) order-specs false nil nil nil nil)
-                     explain-analyze? (ICursor/wrapExplainAnalyze)))})))
+                     explain-analyze? (ICursor/wrapExplainAnalyze)
+                     tracer (ICursor/wrapTracing tracer)))})))

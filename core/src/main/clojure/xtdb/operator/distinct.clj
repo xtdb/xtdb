@@ -80,10 +80,11 @@
                    {:op :distinct
                     :children [inner-rel]
                     :fields inner-fields
-                    :->cursor (fn [{:keys [allocator explain-analyze?]} in-cursor]
+                    :->cursor (fn [{:keys [allocator explain-analyze? tracer]} in-cursor]
                                 (cond-> (DistinctCursor. allocator in-cursor
                                                          (->relation-map allocator
                                                                          {:build-fields inner-fields
                                                                           :key-col-names (set (keys inner-fields))
                                                                           :nil-keys-equal? true}))
-                                  explain-analyze? (ICursor/wrapExplainAnalyze)))})))
+                                  explain-analyze? (ICursor/wrapExplainAnalyze)
+                                  tracer (ICursor/wrapTracing tracer)))})))

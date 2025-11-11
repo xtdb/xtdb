@@ -71,9 +71,10 @@
                     {:op :union-all
                      :children [left-rel right-rel]
                      :fields (union-fields left-fields right-fields)
-                     :->cursor (fn [{:keys [explain-analyze?]} left-cursor right-cursor]
+                     :->cursor (fn [{:keys [explain-analyze? tracer]} left-cursor right-cursor]
                                  (cond-> (UnionAllCursor. left-cursor right-cursor)
-                                   explain-analyze? (ICursor/wrapExplainAnalyze)))})))
+                                   explain-analyze? (ICursor/wrapExplainAnalyze)
+                                   tracer (ICursor/wrapTracing tracer)))})))
 
 (deftype IntersectionCursor [^ICursor left-cursor, ^ICursor right-cursor
                              ^BuildSide build-side, key-col-names
@@ -128,7 +129,7 @@
                       {:op :intersect
                        :children [left-rel right-rel]
                        :fields fields
-                       :->cursor (fn [{:keys [allocator explain-analyze?]} left-cursor right-cursor]
+                       :->cursor (fn [{:keys [allocator explain-analyze? tracer]} left-cursor right-cursor]
                                    (let [build-side (join/->build-side allocator
                                                                        {:fields left-fields
                                                                         :key-col-names key-col-names})]
@@ -138,7 +139,8 @@
                                                                   (join/->cmp-factory {:fields right-fields
                                                                                        :key-col-names key-col-names})
                                                                   false false)
-                                       explain-analyze? (ICursor/wrapExplainAnalyze))))}))))
+                                       explain-analyze? (ICursor/wrapExplainAnalyze)
+                                       tracer (ICursor/wrapTracing tracer))))}))))
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
@@ -148,7 +150,7 @@
                       {:op :difference
                        :children [left-rel right-rel]
                        :fields fields
-                       :->cursor (fn [{:keys [allocator explain-analyze?]} left-cursor right-cursor]
+                       :->cursor (fn [{:keys [allocator explain-analyze? tracer]} left-cursor right-cursor]
                                    (let [build-side (join/->build-side allocator
                                                                        {:fields left-fields
                                                                         :key-col-names key-col-names})]
@@ -158,4 +160,5 @@
                                                                   (join/->cmp-factory {:fields right-fields
                                                                                        :key-col-names key-col-names})
                                                                   true false)
-                                       explain-analyze? (ICursor/wrapExplainAnalyze))))}))))
+                                       explain-analyze? (ICursor/wrapExplainAnalyze)
+                                       tracer (ICursor/wrapTracing tracer))))}))))

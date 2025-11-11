@@ -67,10 +67,11 @@
   (.end span))
 
 (defmacro with-span [tracer span-name attributes & body]
-  `(if-let [tracer# ~tracer]
+  `(if-let [^Tracer tracer# ~tracer]
      (let [span# (start-span tracer# ~span-name ~attributes)]
        (try
-         ~@body
+         (with-open [_# (.withSpan tracer# span#)]
+           ~@body)
          (finally
            (end-span span#))))
      (do ~@body)))

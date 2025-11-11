@@ -57,10 +57,11 @@
                                                (types/field-with-name (str (col-name-mapping (symbol (.getName field)))))))
                                          val)))))
      :stats (:stats emitted-child-relation)
-     :->cursor (fn [{:keys [explain-analyze?] :as opts}]
+     :->cursor (fn [{:keys [explain-analyze? tracer] :as opts}]
                  (let [opts (-> opts
                                 (update :pushdown-blooms update-keys #(get col-name-reverse-mapping %))
                                 (update :pushdown-iids update-keys #(get col-name-reverse-mapping %)))]
                    (cond-> (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
                              (RenameCursor. in-cursor col-name-mapping))
-                     explain-analyze? (ICursor/wrapExplainAnalyze))))}))
+                     explain-analyze? (ICursor/wrapExplainAnalyze)
+                     tracer (ICursor/wrapTracing tracer))))}))

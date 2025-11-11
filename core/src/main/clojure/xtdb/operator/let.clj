@@ -20,12 +20,13 @@
      :children [emitted-bound-rel emitted-body-rel]
      :fields (:fields emitted-body-rel)
      :stats (:stats emitted-body-rel)
-     :->cursor (fn [{:keys [allocator explain-analyze?] :as opts}]
+     :->cursor (fn [{:keys [allocator explain-analyze? tracer] :as opts}]
                  (cond-> (util/with-close-on-catch [bound-cursor (->bound-cursor opts)
                                                     factory (LetCursorFactory. allocator bound-cursor)
                                                     body-cursor (->body-cursor (assoc-in opts [:let-bindings binding] factory))]
                            (.wrapBodyCursor factory body-cursor))
-                   explain-analyze? (ICursor/wrapExplainAnalyze)))}))
+                   explain-analyze? (ICursor/wrapExplainAnalyze)
+                   tracer (ICursor/wrapTracing tracer)))}))
 
 (s/def ::relation simple-symbol?)
 (s/def ::col-names (s/coll-of ::lp/column :kind vector?))
@@ -47,7 +48,7 @@
     {:op :relation
      :children []
      :fields fields, :stats stats
-     :->cursor (fn [{:keys [explain-analyze?] :as opts}]
+     :->cursor (fn [{:keys [explain-analyze? tracer] :as opts}]
                  (let [^ICursor$Factory cursor-factory (or (get-in opts [:let-bindings relation])
                                                            (let [available (set (keys (:let-bindings opts)))]
                                                              (throw (err/fault ::missing-relation
@@ -57,4 +58,6 @@
                                                                                 :available available}))))]
 
                    (cond-> (.open cursor-factory)
-                     explain-analyze? (ICursor/wrapExplainAnalyze))))}))
+                     explain-analyze? (ICursor/wrapExplainAnalyze)
+                     tracer (ICursor/wrapTracing tracer))))}))
+
