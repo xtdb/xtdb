@@ -28,11 +28,6 @@
     DateUnit/DAY :day
     DateUnit/MILLISECOND :milli))
 
-(defn- kw->date-unit [kw]
-  (case kw
-    :day DateUnit/DAY
-    :milli DateUnit/MILLISECOND))
-
 (defn- time-unit->kw [unit]
   (util/case-enum unit
     TimeUnit/SECOND :second
@@ -40,24 +35,11 @@
     TimeUnit/MICROSECOND :micro
     TimeUnit/NANOSECOND :nano))
 
-(defn- kw->time-unit [kw]
-  (case kw
-    :second TimeUnit/SECOND
-    :milli TimeUnit/MILLISECOND
-    :micro TimeUnit/MICROSECOND
-    :nano TimeUnit/NANOSECOND))
-
 (defn- interval-unit->kw [unit]
   (util/case-enum unit
     IntervalUnit/DAY_TIME :day-time
     IntervalUnit/MONTH_DAY_NANO :month-day-nano
     IntervalUnit/YEAR_MONTH :year-month))
-
-(defn- kw->interval-unit [kw]
-  (case kw
-    :day-time IntervalUnit/DAY_TIME
-    :month-day-nano IntervalUnit/MONTH_DAY_NANO
-    :year-month IntervalUnit/YEAR_MONTH))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]} ; xt.arrow/field-type reader macro
 (defn ->field-type ^org.apache.arrow.vector.types.pojo.FieldType [[arrow-type nullable? dictionary metadata]]
@@ -82,17 +64,23 @@
 (defn temporal-column? [col-name]
   (contains? temporal-col-types (str col-name)))
 
-(defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
-  (Field. field-name (FieldType. nullable arrow-type nil nil) children))
+(defn ->type ^xtdb.arrow.VectorType [type-spec]
+  (st/->type type-spec))
+
+(defn ->field
+  (^org.apache.arrow.vector.types.pojo.Field [^VectorType vec-type]
+   (VectorType/field vec-type))
+
+  (^org.apache.arrow.vector.types.pojo.Field [^VectorType vec-type, field-name]
+   (VectorType/field field-name vec-type)))
 
 (defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, name]
   (Field. name (.getFieldType field) (.getChildren field)))
 
-(defn ->field-default-name ^org.apache.arrow.vector.types.pojo.Field [^ArrowType arrow-type nullable children]
-  (apply ->field (name (arrow-type->leg arrow-type)) arrow-type nullable children))
-
 (defn ->nullable-field ^org.apache.arrow.vector.types.pojo.Field [^Field field]
-  (if (.isNullable field) field (apply ->field (.getName field) (.getType field) true (.getChildren field))))
+  (if (.isNullable field)
+    field
+    (Field. (.getName field) (FieldType. true (.getType field) nil nil) (.getChildren field))))
 
 ;;;; col-types
 
@@ -191,8 +179,8 @@
   (VectorType/fromValue v))
 
 (defn vec-type->field
-  (^org.apache.arrow.vector.types.pojo.Field [^VectorType vec-type field-name] (VectorType/field (str field-name) vec-type))
-  (^org.apache.arrow.vector.types.pojo.Field [^VectorType vec-type] (VectorType/field vec-type)))
+  (^org.apache.arrow.vector.types.pojo.Field [^VectorType vec-type field-name] (->field vec-type (str field-name)))
+  (^org.apache.arrow.vector.types.pojo.Field [^VectorType vec-type] (->field vec-type)))
 
 ;;; time units
 
@@ -214,61 +202,34 @@
 
 ;;; multis
 
-;; HACK not ideal that end-users would need to extend all of these
-;; to add their own extension types
-
 (defmulti ^String col-type->field-name col-type-head, :default ::default, :hierarchy #'col-type-hierarchy)
 (defmethod col-type->field-name ::default [col-type] (name (col-type-head col-type)))
 (defmethod col-type->field-name :varbinary [_col-type] "binary")
 
 #_{:clj-kondo/ignore [:unused-binding]}
-(defmulti col-type->field*
-  (fn [col-name nullable? col-type]
+(defmulti col-type->vec-type
+  (fn [nullable? col-type]
     (col-type-head col-type))
   :default ::default, :hierarchy #'col-type-hierarchy)
 
-(alter-meta! #'col-type->field* assoc :tag Field)
+(alter-meta! #'col-type->vec-type assoc :tag Field)
 
-(defmethod col-type->field* ::default [col-name nullable? col-type]
-  (let [^Types$MinorType
-        minor-type (case (col-type-head col-type)
-                     :null Types$MinorType/NULL, :bool Types$MinorType/BIT
-                     :f32 Types$MinorType/FLOAT4, :f64 Types$MinorType/FLOAT8
-                     :i8 Types$MinorType/TINYINT, :i16 Types$MinorType/SMALLINT, :i32 Types$MinorType/INT, :i64 Types$MinorType/BIGINT
-                     :utf8 Types$MinorType/VARCHAR, :varbinary Types$MinorType/VARBINARY)]
-    (->field col-name (.getType minor-type) (or nullable? (= col-type :null)))))
+(defmethod col-type->vec-type ::default [nullable? col-type]
+  (VectorType. (st/->arrow-type col-type) (or nullable? (= col-type :null)) []))
 
-(defmethod col-type->field* :decimal [col-name nullable? [_ precision scale bit-width]]
-  (->field col-name (ArrowType$Decimal/createDecimal precision scale (int bit-width)) nullable?))
-
-(defmethod col-type->field-name :decimal [[type-head precision scale bit-width :as v]]
+(defmethod col-type->field-name :decimal [[type-head precision scale bit-width]]
   (str (name type-head) "-" precision "-" scale "-" bit-width))
 
-(defmethod col-type->field* :tstz-range [col-name nullable? _col-type]
-  (->field col-name TsTzRangeType/INSTANCE nullable?
-           (->field "$data" temporal-arrow-type false)))
-
-(defmethod col-type->field* :keyword [col-name nullable? _col-type]
-  (->field col-name KeywordType/INSTANCE nullable?))
-
-(defmethod col-type->field* :regclass [col-name nullable? _col-type]
-  (->field col-name RegClassType/INSTANCE nullable?))
-
-(defmethod col-type->field* :regproc [col-name nullable? _col-type]
-  (->field col-name RegProcType/INSTANCE nullable?))
-
-(defmethod col-type->field* :uuid [col-name nullable? _col-type]
-  (->field col-name UuidType/INSTANCE nullable?))
-
-(defmethod col-type->field* :uri [col-name nullable? _col-type]
-  (->field col-name UriType/INSTANCE nullable?))
-
-(defmethod col-type->field* :transit [col-name nullable? _col-type]
-  (->field col-name TransitType/INSTANCE nullable?))
+(defmethod col-type->vec-type :tstz-range [nullable? _col-type]
+  (VectorType. TsTzRangeType/INSTANCE nullable?
+               [(->field temporal-type "$data$")]))
 
 (defn col-type->field
-  (^org.apache.arrow.vector.types.pojo.Field [col-type] (col-type->field (col-type->field-name col-type) col-type))
-  (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* (str col-name) false col-type)))
+  (^org.apache.arrow.vector.types.pojo.Field [col-type]
+   (col-type->field (col-type->field-name col-type) col-type))
+
+  (^org.apache.arrow.vector.types.pojo.Field [col-name col-type]
+   (VectorType/field (str col-name) (col-type->vec-type false col-type))))
 
 (defn col-type->leg [col-type]
   (let [head (col-type-head col-type)]
@@ -309,36 +270,32 @@
 (defmethod arrow-type->col-type ArrowType$FixedSizeBinary [^ArrowType$FixedSizeBinary fsb-type]
   [:fixed-size-binary (.getByteWidth fsb-type)])
 
-(defmethod col-type->field* :fixed-size-binary [col-name nullable? [_ byte-width]]
-  (->field col-name (ArrowType$FixedSizeBinary. byte-width) nullable?))
-
 ;;; list
 
-
-(defmethod col-type->field* :list [col-name nullable? [_ inner-col-type]]
-  (->field col-name ArrowType$List/INSTANCE nullable?
-           (col-type->field "$data$" inner-col-type)))
+(defmethod col-type->vec-type :list [nullable? [_ inner-col-type]]
+  (VectorType. ArrowType$List/INSTANCE nullable?
+               [(col-type->field "$data$" inner-col-type)]))
 
 (defmethod arrow-type->col-type ArrowType$List [_ & [data-field]]
   [:list (or (some-> data-field field->col-type) :null)])
 
-(defmethod col-type->field* :fixed-size-list [col-name nullable? [_ list-size inner-col-type]]
-  (->field col-name (ArrowType$FixedSizeList. list-size) nullable?
-           (col-type->field inner-col-type)))
+(defmethod col-type->vec-type :fixed-size-list [nullable? [_ list-size inner-col-type]]
+  (VectorType. (ArrowType$FixedSizeList. list-size) nullable?
+               [(col-type->field inner-col-type)]))
 
 (defmethod arrow-type->col-type ArrowType$FixedSizeList [^ArrowType$FixedSizeList list-type & [data-field]]
   [:fixed-size-list (.getListSize list-type) (or (some-> data-field field->col-type) :null)])
 
-(defmethod col-type->field* :set [col-name nullable? [_ inner-col-type]]
-  (->field col-name SetType/INSTANCE nullable?
-           (col-type->field "$data$" inner-col-type)))
+(defmethod col-type->vec-type :set [nullable? [_ inner-col-type]]
+  (VectorType. SetType/INSTANCE nullable?
+               [(col-type->field "$data$" inner-col-type)]))
 
 (defmethod arrow-type->col-type SetType [_ & [data-field]]
   [:set (or (some-> data-field field->col-type) :null)])
 
-(defmethod col-type->field* :map [col-name nullable? [_ {:keys [sorted?]} inner-col-type]]
-  (->field col-name (ArrowType$Map. (boolean sorted?)) nullable?
-           (col-type->field inner-col-type)))
+(defmethod col-type->vec-type :map [nullable? [_ {:keys [sorted?]} inner-col-type]]
+  (VectorType. (ArrowType$Map. (boolean sorted?)) nullable?
+               [(col-type->field inner-col-type)]))
 
 (defmethod arrow-type->col-type ArrowType$Map [^ArrowType$Map arrow-field & [data-field]]
   [:map {:sorted? (.getKeysSorted arrow-field)} (field->col-type data-field)])
@@ -352,10 +309,10 @@
 
 ;;; struct
 
-(defmethod col-type->field* :struct [col-name nullable? [_ inner-col-types]]
-  (apply ->field col-name ArrowType$Struct/INSTANCE nullable?
-         (for [[col-name col-type] inner-col-types]
-           (col-type->field col-name col-type))))
+(defmethod col-type->vec-type :struct [nullable? [_ inner-col-types]]
+  (VectorType. ArrowType$Struct/INSTANCE nullable?
+               (for [[col-name col-type] inner-col-types]
+                 (col-type->field col-name col-type))))
 
 (defmethod arrow-type->col-type ArrowType$Struct [_ & child-fields]
   [:struct (->> (for [^Field child-field child-fields]
@@ -364,17 +321,17 @@
 
 ;;; union
 
-(defmethod col-type->field* :union [col-name nullable? col-type]
+(defmethod col-type->vec-type :union [nullable? col-type]
   (let [col-types (cond-> (flatten-union-types col-type)
                     nullable? (conj :null))
         nullable? (contains? col-types :null)
         without-null (disj col-types :null)]
     (case (count without-null)
-      0 (col-type->field* col-name true :null)
-      1 (col-type->field* col-name nullable? (first without-null))
+      0 (col-type->vec-type true :null)
+      1 (col-type->vec-type nullable? (first without-null))
 
-      (apply ->field col-name (.getType Types$MinorType/DENSEUNION) false
-             (map col-type->field col-types)))))
+      (VectorType. (.getType Types$MinorType/DENSEUNION) false
+                   (map col-type->field col-types)))))
 
 (defmethod arrow-type->col-type ArrowType$Union [_ & child-fields]
   (->> child-fields
@@ -402,15 +359,8 @@
 (defmethod col-type->field-name :timestamp-tz [[type-head time-unit tz]]
   (str (name type-head) "-" (name time-unit) "-" (-> (str/lower-case tz) (str/replace #"[/:]" "_"))))
 
-(defmethod col-type->field* :timestamp-tz [col-name nullable? [_type-head time-unit tz]]
-  (assert (string? tz))
-  (->field col-name (ArrowType$Timestamp. (kw->time-unit time-unit) tz) nullable?))
-
 (defmethod col-type->field-name :timestamp-local [[type-head time-unit]]
   (str (name type-head) "-" (name time-unit)))
-
-(defmethod col-type->field* :timestamp-local [col-name nullable? [_type-head time-unit]]
-  (->field col-name (ArrowType$Timestamp. (kw->time-unit time-unit) nil) nullable?))
 
 (defmethod arrow-type->col-type ArrowType$Timestamp [^ArrowType$Timestamp arrow-type]
   (let [time-unit (time-unit->kw (.getUnit arrow-type))]
@@ -423,11 +373,6 @@
 (defmethod col-type->field-name :date [[type-head date-unit]]
   (str (name type-head) "-" (name date-unit)))
 
-(defmethod col-type->field* :date [col-name nullable? [_type-head date-unit]]
-  (->field col-name
-           (ArrowType$Date. (kw->date-unit date-unit))
-           nullable?))
-
 (defmethod arrow-type->col-type ArrowType$Date [^ArrowType$Date arrow-type]
   [:date (date-unit->kw (.getUnit arrow-type))])
 
@@ -435,12 +380,6 @@
 
 (defmethod col-type->field-name :time-local [[type-head time-unit]]
   (str (name type-head) "-" (name time-unit)))
-
-(defmethod col-type->field* :time-local [col-name nullable? [_type-head time-unit]]
-  (->field col-name
-           (ArrowType$Time. (kw->time-unit time-unit)
-                            (case time-unit (:second :milli) 32, (:micro :nano) 64))
-           nullable?))
 
 (defmethod arrow-type->col-type ArrowType$Time [^ArrowType$Time arrow-type]
   [:time-local (time-unit->kw (.getUnit arrow-type))])
@@ -450,9 +389,6 @@
 (defmethod col-type->field-name :duration [[type-head time-unit]]
   (str (name type-head) "-" (name time-unit)))
 
-(defmethod col-type->field* :duration [col-name nullable? [_type-head time-unit]]
-  (->field col-name (ArrowType$Duration. (kw->time-unit time-unit)) nullable?))
-
 (defmethod arrow-type->col-type ArrowType$Duration [^ArrowType$Duration arrow-type]
   [:duration (time-unit->kw (.getUnit arrow-type))])
 
@@ -460,13 +396,6 @@
 
 (defmethod col-type->field-name :interval [[type-head interval-unit]]
   (str (name type-head) "-" (name interval-unit)))
-
-(defmethod col-type->field* :interval [col-name nullable? [_type-head interval-unit]]
-  (->field
-   col-name
-   (if (= :month-day-micro interval-unit)
-     IntervalMDMType/INSTANCE
-     (ArrowType$Interval. (kw->interval-unit interval-unit))) nullable?))
 
 (defmethod arrow-type->col-type ArrowType$Interval [^ArrowType$Interval arrow-type]
   [:interval (interval-unit->kw (.getUnit arrow-type))])

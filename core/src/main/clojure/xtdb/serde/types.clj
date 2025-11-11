@@ -210,14 +210,17 @@
 (defmethod print-method Field [f w]
   (print-dup f w))
 
-(defn ->field [field-spec]
-  (let [[field-name arrow-type & more-opts] field-spec
-        [nullable? children] (if (= :? (first more-opts))
-                               [true (rest more-opts)]
-                               [false more-opts])]
-    (Field. field-name
-            (FieldType. nullable? (->arrow-type arrow-type) nil nil)
-            (mapv ->field children))))
+(defn ->field ^org.apache.arrow.vector.types.pojo.Field [field-spec]
+  (if (instance? Field field-spec)
+    field-spec
+
+    (let [[field-name arrow-type & more-opts] field-spec
+          [nullable? children] (if (= :? (first more-opts))
+                                 [true (rest more-opts)]
+                                 [false more-opts])]
+      (Field. field-name
+              (FieldType. nullable? (->arrow-type arrow-type) nil nil)
+              (mapv ->field children)))))
 
 (defmethod print-dup Schema [^Schema s, ^Writer w]
   (.write w "#xt/schema ")
@@ -242,32 +245,33 @@
   (print-dup t w))
 
 #_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]} ; reader-macro
-(defn ->type [type-spec]
-  (if (keyword? type-spec)
-    (VectorType. (->arrow-type type-spec) false ^List (vector))
+(defn ->type ^xtdb.arrow.VectorType [type-spec]
+  (cond
+    (instance? VectorType type-spec) type-spec
+    (keyword? type-spec) (VectorType. (->arrow-type type-spec) false ^List (vector))
 
-    (let [[arrow-type & more-opts] type-spec
-          [arrow-type more-opts] (case arrow-type
-                                   ;; TODO to be finished, need to reduce duplication here with what's above
-                                   :timestamp-tz (let [[_ time-unit tz & rest-opts] type-spec]
-                                                   [[:timestamp-tz time-unit tz] rest-opts])
-                                   :duration (let [[_ time-unit & rest-opts] type-spec]
-                                               [[:duration time-unit] rest-opts])
-                                   :interval (let [[_ interval-unit & rest-opts] type-spec]
-                                               [[:interval interval-unit] rest-opts])
-                                   :timestamp-local (let [[_ time-unit & rest-opts] type-spec]
-                                                      [[:timestamp-local time-unit] rest-opts])
-                                   :fixed-size-list (let [[_ list-size & rest-opts] type-spec]
-                                                      [[:fixed-size-list list-size] rest-opts])
-                                   :fixed-size-binary (let [[_ byte-width & rest-opts] type-spec]
-                                                        [[:fixed-size-binary byte-width] rest-opts])
-                                   [arrow-type more-opts])
-          [nullable? children] (if (= :? (first more-opts))
-                                 [true (rest more-opts)]
-                                 [false more-opts])]
-      (VectorType. (->arrow-type arrow-type)
-                   ^boolean nullable?
-                   ^List (mapv ->field children)))))
+    :else (let [[arrow-type & more-opts] type-spec
+                [arrow-type more-opts] (case arrow-type
+                                         ;; TODO to be finished, need to reduce duplication here with what's above
+                                         :timestamp-tz (let [[_ time-unit tz & rest-opts] type-spec]
+                                                         [[:timestamp-tz time-unit tz] rest-opts])
+                                         :duration (let [[_ time-unit & rest-opts] type-spec]
+                                                     [[:duration time-unit] rest-opts])
+                                         :interval (let [[_ interval-unit & rest-opts] type-spec]
+                                                     [[:interval interval-unit] rest-opts])
+                                         :timestamp-local (let [[_ time-unit & rest-opts] type-spec]
+                                                            [[:timestamp-local time-unit] rest-opts])
+                                         :fixed-size-list (let [[_ list-size & rest-opts] type-spec]
+                                                            [[:fixed-size-list list-size] rest-opts])
+                                         :fixed-size-binary (let [[_ byte-width & rest-opts] type-spec]
+                                                              [[:fixed-size-binary byte-width] rest-opts])
+                                         [arrow-type more-opts])
+                [nullable? children] (if (= :? (first more-opts))
+                                       [true (rest more-opts)]
+                                       [false more-opts])]
+            (VectorType. (->arrow-type arrow-type)
+                         ^boolean nullable?
+                         ^List (mapv ->field children)))))
 
 (defmethod print-dup ArrowType [arrow-type, ^Writer w]
   (.write w "#xt.arrow/type ")

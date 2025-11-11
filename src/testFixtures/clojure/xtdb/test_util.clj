@@ -136,7 +136,10 @@
    (cond
      (string? col-name-or-field) (Vector/fromList *allocator* ^String col-name-or-field rows)
      (instance? Field col-name-or-field) (Vector/fromList *allocator* ^Field col-name-or-field rows)
-     :else (throw (err/incorrect ::invalid-vec {:col-name-or-field col-name-or-field})))))
+     :else (throw (err/incorrect ::invalid-vec {:col-name-or-field col-name-or-field}))))
+
+  (^xtdb.arrow.Vector [col-name vec-type rows]
+   (Vector/fromList *allocator* col-name vec-type rows)))
 
 (defn open-rel
   (^xtdb.arrow.Relation [] (Relation. *allocator*))
@@ -170,12 +173,13 @@
                                 (->> (into #{} (map (fn [row]
                                                       (types/value->vec-type (get row col-name)))))
                                      (apply types/merge-types))
-                                (types/vec-type->field (str (symbol col-name))))])
+                                (types/->field (str (symbol col-name))))])
        (into {})))
 
 (defmethod lp/emit-expr ::pages [{:keys [vec-types pages stats]} _args]
-  (let [fields (or (some->> vec-types (into {} (map (fn [[col-name vec-type]]
-                                                      [col-name (types/vec-type->field vec-type col-name)]))))
+  (let [fields (or (some->> vec-types
+                            (into {} (map (fn [[col-name vec-type]]
+                                            [col-name (types/vec-type->field vec-type col-name)]))))
                    (rows->fields (into [] cat pages)))
         ^Schema schema (Schema. (for [[col-name field] fields]
                                   (types/field-with-name field (str col-name))))]

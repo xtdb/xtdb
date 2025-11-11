@@ -1528,11 +1528,11 @@
 
 (t/deftest test-mixing-timestamp-types
   (letfn [(->ts-vec [col-name time-unit, ^long value]
-            (doto (tu/open-vec (types/->field col-name (ArrowType$Timestamp. time-unit "UTC") false) [])
+            (doto (tu/open-vec col-name (types/->type [:timestamp-tz time-unit "UTC"]) [])
               (.writeLong value)))
 
           (->dur-vec [col-name ^TimeUnit time-unit, ^long value]
-            (doto (tu/open-vec (types/->field col-name (ArrowType$Duration. time-unit) false) [])
+            (doto (tu/open-vec col-name (types/->type [:duration time-unit]) [])
               (.writeLong value)))
 
           (test-projection [f-sym ->x-vec ->y-vec]
@@ -1545,37 +1545,37 @@
       (t/is (= {:res [(time/->zdt #inst "2021-01-01T00:02:03Z")]
                 :res-type [:timestamp-tz :second "UTC"]}
                (test-projection '+
-                                #(->ts-vec "x" TimeUnit/SECOND (.getEpochSecond (time/->instant #inst "2021")))
-                                #(->dur-vec "y" TimeUnit/SECOND 123))))
+                                #(->ts-vec "x" :second (.getEpochSecond (time/->instant #inst "2021")))
+                                #(->dur-vec "y" :second 123))))
 
       (t/is (= {:res [(time/->zdt #inst "2021-01-01T00:00:00.123Z")]
                 :res-type [:timestamp-tz :milli "UTC"]}
                (test-projection '+
-                                #(->ts-vec "x" TimeUnit/SECOND (.getEpochSecond (time/->instant #inst "2021")))
-                                #(->dur-vec "y" TimeUnit/MILLISECOND 123))))
+                                #(->ts-vec "x" :second (.getEpochSecond (time/->instant #inst "2021")))
+                                #(->dur-vec "y" :milli 123))))
 
       (t/is (= {:res [(ZonedDateTime/parse "1970-01-01T00:02:34.000001234Z[UTC]")]
                 :res-type [:timestamp-tz :nano "UTC"]}
                (test-projection '+
-                                #(->dur-vec "x" TimeUnit/SECOND 154)
-                                #(->ts-vec "y" TimeUnit/NANOSECOND 1234))))
+                                #(->dur-vec "x" :second 154)
+                                #(->ts-vec "y" :nano 1234))))
 
       (t/is (thrown-with-msg? RuntimeException  #"data exception - overflow error"
                               (test-projection '+
-                                               #(->ts-vec "x" TimeUnit/MILLISECOND (- Long/MAX_VALUE 500))
-                                               #(->dur-vec "y" TimeUnit/SECOND 1))))
+                                               #(->ts-vec "x" :milli (- Long/MAX_VALUE 500))
+                                               #(->dur-vec "y" :second 1))))
 
       (t/is (= {:res [(time/->zdt #inst "2020-12-31T23:59:59.998Z")]
                 :res-type [:timestamp-tz :micro "UTC"]}
                (test-projection '-
-                                #(->ts-vec "x" TimeUnit/MICROSECOND (time/instant->micros (time/->instant #inst "2021")))
-                                #(->dur-vec "y" TimeUnit/MILLISECOND 2)))))
+                                #(->ts-vec "x" :micro (time/instant->micros (time/->instant #inst "2021")))
+                                #(->dur-vec "y" :milli 2)))))
 
     (t/is (t/is (= {:res [(Duration/parse "PT23H59M59.999S")]
                     :res-type [:duration :milli]}
                    (test-projection '-
-                                    #(->ts-vec "x" TimeUnit/MILLISECOND (.toEpochMilli (time/->instant #inst "2021-01-02")))
-                                    #(->ts-vec "y" TimeUnit/MILLISECOND (.toEpochMilli (time/->instant #inst "2021-01-01T00:00:00.001Z")))))))
+                                    #(->ts-vec "x" :milli (.toEpochMilli (time/->instant #inst "2021-01-02")))
+                                    #(->ts-vec "y" :milli (.toEpochMilli (time/->instant #inst "2021-01-01T00:00:00.001Z")))))))
 
     (t/testing "durations"
       (letfn [(->bigint-vec [^String col-name, ^long value]
@@ -1587,37 +1587,37 @@
         (t/is (= {:res [(Duration/parse "PT0.002001S")]
                   :res-type [:duration :micro]}
                  (test-projection '+
-                                  #(->dur-vec "x" TimeUnit/MICROSECOND 1)
-                                  #(->dur-vec "y" TimeUnit/MILLISECOND 2))))
+                                  #(->dur-vec "x" :micro 1)
+                                  #(->dur-vec "y" :milli 2))))
 
         (t/is (= {:res [(Duration/parse "PT-1.999S")]
                   :res-type [:duration :milli]}
                  (test-projection '-
-                                  #(->dur-vec "x" TimeUnit/MILLISECOND 1)
-                                  #(->dur-vec "y" TimeUnit/SECOND 2))))
+                                  #(->dur-vec "x" :milli 1)
+                                  #(->dur-vec "y" :second 2))))
 
         (t/is (= {:res [(Duration/parse "PT0.002S")]
                   :res-type [:duration :milli]}
                  (test-projection '*
-                                  #(->dur-vec "x" TimeUnit/MILLISECOND 1)
+                                  #(->dur-vec "x" :milli 1)
                                   #(->bigint-vec "y" 2))))
 
         (t/is (= {:res [(Duration/parse "PT10S")]
                   :res-type [:duration :second]}
                  (test-projection '*
                                   #(->bigint-vec "x" 2)
-                                  #(->dur-vec "y" TimeUnit/SECOND 5))))
+                                  #(->dur-vec "y" :second 5))))
 
         (t/is (= {:res [(Duration/parse "PT0.000012S")]
                   :res-type [:duration :micro]}
                  (test-projection '*
                                   #(->float8-vec "x" 2.4)
-                                  #(->dur-vec "y" TimeUnit/MICROSECOND 5))))
+                                  #(->dur-vec "y" :micro 5))))
 
         (t/is (= {:res [(Duration/parse "PT3S")]
                   :res-type [:duration :second]}
                  (test-projection '/
-                                  #(->dur-vec "x" TimeUnit/SECOND 10)
+                                  #(->dur-vec "x" :second 10)
                                   #(->bigint-vec "y" 3))))))))
 
 (t/deftest cast-duration-test

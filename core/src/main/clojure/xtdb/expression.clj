@@ -456,7 +456,7 @@
 
 (defmethod codegen-expr :literal [{:keys [literal]} _]
   (let [return-type (-> (types/value->vec-type literal)
-                        types/vec-type->field
+                        types/->field
                         types/field->col-type)
         literal-type (class literal)]
     {:return-type return-type

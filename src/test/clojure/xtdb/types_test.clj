@@ -84,14 +84,9 @@
   (t/is (= #xt/field ["a" :union ["utf8" :utf8] ["i64" :i64]]
            (types/merge-fields #xt/field ["a" :utf8] #xt/field ["a" :i64])))
 
-  (t/is (=
-         ;; ordering seems to be important
-         ;; (types/col-type->field [:union #{:utf8 :i64 :f64}])
-         (types/->field-default-name #xt.arrow/type :union false
-                                     [(types/col-type->field :utf8)
-                                      (types/col-type->field :i64)
-                                      (types/col-type->field :f64)])
-         (types/merge-fields (types/col-type->field [:union #{:utf8 :i64}]) (types/col-type->field :f64))))
+  (t/is (= #xt/field ["union" :union ["utf8" :utf8] ["i64" :i64] ["f64" :f64]]
+           (types/merge-fields #xt/field ["union" :union ["utf8" :utf8] ["i64" :i64]]
+                               #xt/field ["f64" :f64])))
 
   (t/testing "merges list types"
     (t/is (= (types/col-type->field [:list :utf8])
@@ -102,9 +97,7 @@
              (types/merge-fields (types/col-type->field [:list :utf8])
                                  (types/col-type->field [:list :i64]))))
 
-    (t/is (= (types/->field-default-name #xt.arrow/type :list false
-                                         [#xt/field ["$data$" :i64 :?]])
-             #_(types/col-type->field [:list [:union #{:null :i64}]])
+    (t/is (= #xt/field ["list" :list ["$data$" :i64 :?]]
              (types/merge-fields (types/col-type->field [:list :null])
                                  (types/col-type->field [:list :i64])))))
 
@@ -193,13 +186,15 @@
 
 (t/deftest test-npe-on-empty-list-children-4721
   (t/testing "merge fields with empty list children shouldn't throw NPE"
-    (let [set-field (types/->field "a" #xt.arrow/type :set true)
-          list-field (types/->field "b" #xt.arrow/type :list true)]
-      (t/is (= (types/->field "a" #xt.arrow/type :set true (types/->field "$data$" #xt.arrow/type :null true)) 
+    (let [set-field #xt/field ["a" :set :?]
+          list-field #xt/field ["b" :list :?]]
+      (t/is (= #xt/field ["a" :set :? ["$data$" :null :?]] 
                (types/merge-fields nil set-field)))
-      (t/is (= (types/->field "b" #xt.arrow/type :list true (types/->field "$data$" #xt.arrow/type :null true)) 
+      (t/is (= #xt/field ["b" :list :? ["$data$" :null :?]] 
                (types/merge-fields nil list-field))))))
 
 (t/deftest field->col-type-error-on-empty-list-4774
-  (t/is (= [:union #{[:list :null] :null}] (types/field->col-type (types/->field "a" #xt.arrow/type :list true))))
-  (t/is (= [:union #{[:set :null] :null}] (types/field->col-type (types/->field "b" #xt.arrow/type :set true)))))
+  (t/is (= [:union #{[:list :null] :null}]
+           (types/field->col-type #xt/field ["a" :list :?])))
+  (t/is (= [:union #{[:set :null] :null}]
+           (types/field->col-type #xt/field ["b" :set :?]))))

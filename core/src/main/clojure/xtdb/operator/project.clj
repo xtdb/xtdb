@@ -62,7 +62,8 @@
                                                                       (ProjectionSpec$LocalRowNumber. (str col-name)))
 
                                            :star (let [[col-name _star] (first arg)]
-                                                   (ProjectionSpec$Star. (apply types/->field (str col-name) #xt.arrow/type :struct false (vals inner-fields))))
+                                                   (ProjectionSpec$Star. (-> (types/->type (into [:struct] (vals inner-fields)))
+                                                                             (types/->field (str col-name)))))
 
                                            :rename (let [[to-name from-name] (first arg)
                                                          field (some-> (get inner-fields from-name)
@@ -88,3 +89,4 @@
 
 (defmethod lp/emit-expr :map [op args]
   (lp/emit-expr (assoc op :op :project :opts {:append-columns? true}) args))
+

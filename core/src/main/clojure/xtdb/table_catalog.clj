@@ -106,9 +106,9 @@
     :else (->> (for [col-name (set/union (set (keys old-fields))
                                          (set (keys new-fields)))]
                  [col-name (-> (types/merge-fields (or (get old-fields col-name)
-                                                       (types/->field col-name #xt.arrow/type :null true))
+                                                       (types/->field #xt/type [:null :?] col-name))
                                                    (or (get new-fields col-name)
-                                                       (types/->field col-name #xt.arrow/type :null true)))
+                                                       (types/->field #xt/type [:null :?] col-name)))
                                (types/field-with-name col-name))])
                (into {}))))
 
@@ -169,7 +169,7 @@
 
   (getField [_ table col-name]
     (some-> (get-in table->metadata [table :fields])
-            (get col-name (types/->field col-name #xt.arrow/type :null true))))
+            (get col-name (types/->field #xt/type [:null :?] col-name))))
 
   (getFields [_ table] (get-in table->metadata [table :fields]))
   (getFields [_] (update-vals table->metadata :fields)))

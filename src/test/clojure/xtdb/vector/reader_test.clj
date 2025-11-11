@@ -54,7 +54,7 @@
                      (tg/lists-equal-normalized? expected-data actual-data))))))
 
 (defn- merge-vectors-into-duv ^Vector [^BufferAllocator al vectors]
-  (util/with-close-on-catch [^Vector duv-vec (Vector/open al (types/->field "mixed" #xt.arrow/type :union true))]
+  (util/with-close-on-catch [^Vector duv-vec (Vector/open al "mixed" #xt/type :union)]
     (doseq [^Vector vec vectors]
       (let [copier (.rowCopier vec duv-vec)]
         (dotimes [i (.getValueCount vec)]

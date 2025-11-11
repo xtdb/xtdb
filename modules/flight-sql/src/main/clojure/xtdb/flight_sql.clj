@@ -224,7 +224,8 @@
                    (pack-result (-> (doto (FlightSql$ActionCreatePreparedStatementResult/newBuilder)
                                       (.setPreparedStatementHandle ps-id)
                                       (.setParameterSchema (-> (Schema. (for [idx (range (.getParamCount pq))]
-                                                                          (types/->field (str "$" idx) #xt.arrow/type :union false)))
+                                                                          (-> (types/->type :union)
+                                                                              (types/->field (str "$" idx)))))
                                                                (.serializeAsMessage)
                                                                (ByteString/copyFrom))))
                                     (.build))))

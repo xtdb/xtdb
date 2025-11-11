@@ -280,6 +280,10 @@ sealed class Vector : VectorReader, VectorWriter {
         }
 
         @JvmStatic
+        fun fromList(al: BufferAllocator, colName: FieldName, type: VectorType, values: List<*>) =
+            fromList(al, colName ofType type, values)
+
+        @JvmStatic
         fun fromList(al: BufferAllocator, name: ColumnName, values: List<*>) =
             fromList(al, name ofType VectorType.NULL, values)
     }
