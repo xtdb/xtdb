@@ -5,7 +5,6 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
@@ -96,8 +95,8 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
     override val mapValues get() = listElements.mapValues
     override fun getMapValues(fieldType: FieldType) = listElements.getMapValues(fieldType)
 
-    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
-        listVector.unloadPage(nodes, buffers)
+    override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
+        listVector.openUnloadedPage(nodes, buffers)
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         listVector.loadPage(nodes, buffers)

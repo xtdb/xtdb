@@ -144,11 +144,11 @@ abstract class VariableWidthVector : Vector() {
         }
     }
 
-    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
-        validityBuffer.unloadBuffer(buffers)
-        offsetBuffer.unloadBuffer(buffers)
-        dataBuffer.unloadBuffer(buffers)
+        validityBuffer.openUnloadedBuffer(buffers)
+        offsetBuffer.openUnloadedBuffer(buffers)
+        dataBuffer.openUnloadedBuffer(buffers)
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

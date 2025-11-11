@@ -4,7 +4,6 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
-import org.apache.arrow.vector.types.pojo.Field
 import xtdb.util.Hasher
 import xtdb.vector.extensions.XtExtensionVector
 import java.nio.ByteBuffer
@@ -49,8 +48,8 @@ abstract class ExtensionVector : Vector() {
 
     override fun hashCode0(idx: Int, hasher: Hasher) = inner.hashCode0(idx, hasher)
 
-    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
-        inner.unloadPage(nodes, buffers)
+    override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
+        inner.openUnloadedPage(nodes, buffers)
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         inner.loadPage(nodes, buffers)

@@ -201,10 +201,10 @@ sealed class FixedWidthVector : Vector() {
         }
     }
 
-    final override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    final override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
-        validityBuffer.unloadBuffer(buffers)
-        dataBuffer.unloadBuffer(buffers)
+        validityBuffer.openUnloadedBuffer(buffers)
+        dataBuffer.openUnloadedBuffer(buffers)
     }
 
     final override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

@@ -16,7 +16,8 @@ internal val NULL_CHECKS =
         ?: System.getProperty("xtdb.vector.null-checks")?.toBoolean()
         ?: true
 
-internal class ExtensibleBuffer private constructor(private val allocator: BufferAllocator, private var buf: ArrowBuf) : AutoCloseable {
+internal class ExtensibleBuffer private constructor(private val allocator: BufferAllocator, private var buf: ArrowBuf) :
+    AutoCloseable {
 
     constructor(allocator: BufferAllocator) : this(allocator, allocator.empty)
 
@@ -153,7 +154,8 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
     fun getPointer(idx: Int, len: Int, reuse: ArrowBufPointer? = null) =
         (reuse ?: ArrowBufPointer()).apply { set(this@ExtensibleBuffer.buf, idx.toLong(), len.toLong()) }
 
-    internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) = buffers.add(buf.readerIndex(0))
+    internal fun openUnloadedBuffer(buffers: MutableList<ArrowBuf>) =
+        buffers.add(buf.readerIndex(0).also { it.referenceManager.retain() })
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, writerIndex: Long = arrowBuf.writerIndex()) {
         buf.close()
@@ -175,6 +177,6 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
     }
 
     fun hashCode(hasher: ArrowBufHasher, start: Long, len: Long) = hasher.hashCode(buf, start, len)
-    
+
     fun hashCode(hasher: Hasher, start: Int, len: Int) = hasher.hash(buf, start, len)
 }

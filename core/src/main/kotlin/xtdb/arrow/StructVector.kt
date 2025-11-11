@@ -168,11 +168,11 @@ class StructVector private constructor(
         }
     }
 
-    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
-        validityBuffer.unloadBuffer(buffers)
+        validityBuffer.openUnloadedBuffer(buffers)
 
-        childWriters.sequencedValues().forEach { it.unloadPage(nodes, buffers) }
+        childWriters.sequencedValues().forEach { it.openUnloadedPage(nodes, buffers) }
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

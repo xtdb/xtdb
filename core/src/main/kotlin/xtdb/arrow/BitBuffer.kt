@@ -124,9 +124,9 @@ internal class BitBuffer private constructor(
         }
     }
 
-    internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) {
+    internal fun openUnloadedBuffer(buffers: MutableList<ArrowBuf>) {
         val writerByteIndex = bufferSize(writerBitIndex)
-        buffers.add(buf.readerIndex(0).writerIndex(writerByteIndex))
+        buffers.add(buf.readerIndex(0).writerIndex(writerByteIndex).also { it.referenceManager.retain() })
     }
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, bitCount: Int) {
