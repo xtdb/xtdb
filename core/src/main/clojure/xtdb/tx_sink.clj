@@ -15,9 +15,8 @@
                  (.getSchemaName table-ref)
                  (.getTableName table-ref)]))
 
-(defn read-table-rows [table ^LiveIndex$Tx live-idx-tx]
-  (let [table-name (table-name table)
-        live-table (.liveTable live-idx-tx table)
+(defn read-table-rows [^TableRef table ^LiveIndex$Tx live-idx-tx]
+  (let [live-table (.liveTable live-idx-tx table)
         start-pos (.getStartPos live-table)
         live-relation (.getLiveRelation live-table)
         pos (.getRowCount live-relation)
@@ -32,13 +31,16 @@
         (let [leg (.getLeg op-vec i)
               put? (= leg "put")
               data (when put? (.getObject put-vec i))]
-          (cond-> {:table table-name
+          (cond-> {:db (.getDbName table)
+                   :schema (.getSchemaName table)
+                   :table (.getTableName table)
+                   :op (keyword leg)
                    :iid (.getObject iid-vec i)
                    :system-from (.getObject system-from-vec i)
                    :valid-from (.getObject valid-from-vec i)
-                   :valid-to (.getObject valid-to-vec i)
-                   :op (keyword leg)}
-            put? (assoc :data data)))))))
+                   :valid-to (when-not (= Long/MAX_VALUE (.getLong valid-to-vec i))
+                               (.getObject valid-to-vec i))}
+            put? (assoc :payload data)))))))
 
 (defn ->encode-fn [fmt]
   (case fmt
@@ -56,29 +58,34 @@
                (some? format) (.format (str (symbol format)))
                (some? table-filter) (.tableFilter table-filter)))))
 
-(defmethod ig/expand-key ::for-db [k {:keys [base ^TxSinkConfig tx-sink-conf]}]
+(defmethod ig/expand-key ::for-db [k {:keys [base ^TxSinkConfig tx-sink-conf db-name]}]
   {k {:tx-sink-conf tx-sink-conf
-      :output-log (ig/ref ::output-log)}
+      :output-log (ig/ref ::output-log)
+      :db-name db-name}
    ::output-log {:tx-sink-conf tx-sink-conf
                  :base base}})
 
-(defrecord TxSink [^Log output-log ^TxSinkConfig$TableFilter table-filter encode-as-bytes]
+(defrecord TxSink [^Log output-log ^TxSinkConfig$TableFilter table-filter encode-as-bytes db-name]
   Indexer$TxSink
-  (onCommit [_ _tx-key live-idx-tx]
+  (onCommit [_ tx-key live-idx-tx]
     (util/with-open [live-idx-snap (.openSnapshot live-idx-tx)]
-      (doseq [^TableRef table (.getLiveTables live-idx-snap)
-              :when (.test table-filter (table-name table))]
-        (doseq [row (read-table-rows table live-idx-tx)]
-          (->> row
-               encode-as-bytes
-               Log$Message$Tx.
-               (.appendMessage output-log)))))))
+      (->> {:transaction {:id tx-key}
+            :source {;:version "1.0.0" ;; TODO
+                     :db db-name}
+            :payloads (->> (.getLiveTables live-idx-snap)
+                           (filter #(.test table-filter (table-name %)))
+                           (mapcat #(read-table-rows % live-idx-tx))
+                           (into []))}
+           encode-as-bytes
+           Log$Message$Tx.
+           (.appendMessage output-log)))))
 
-(defmethod ig/init-key ::for-db [_ {:keys [^TxSinkConfig tx-sink-conf output-log]}]
+(defmethod ig/init-key ::for-db [_ {:keys [^TxSinkConfig tx-sink-conf output-log db-name]}]
   (when (and tx-sink-conf (.getEnable tx-sink-conf))
     (map->TxSink {:output-log output-log
                   :table-filter (.getTableFilter tx-sink-conf)
-                  :encode-as-bytes (->encode-fn (keyword (.getFormat tx-sink-conf)))})))
+                  :encode-as-bytes (->encode-fn (keyword (.getFormat tx-sink-conf)))
+                  :db-name db-name})))
 
 (defmethod ig/init-key ::output-log [_ {:keys [^TxSinkConfig tx-sink-conf]
                                         {:keys [log-clusters]} :base}]
