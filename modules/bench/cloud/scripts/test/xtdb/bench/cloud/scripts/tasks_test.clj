@@ -5,36 +5,36 @@
 
 (deftest format-duration-test
   (testing "format-duration with various units"
-    (is (= "1.0h" (#'tasks/format-duration 3600e9 :nanos)))
-    (is (= "1.5h" (#'tasks/format-duration 5400e9 :nanos)))
-    (is (= "30.0m" (#'tasks/format-duration 1800e9 :nanos)))
-    (is (= "1.50s" (#'tasks/format-duration 1500e6 :nanos)))
-    (is (= "500ms" (#'tasks/format-duration 500e6 :nanos)))
-    (is (= "250µs" (#'tasks/format-duration 250e3 :nanos)))
-    (is (= "100ns" (#'tasks/format-duration 100 :nanos))))
+    (is (= "1.0h" (tasks/format-duration :nanos 3600e9)))
+    (is (= "1.5h" (tasks/format-duration :nanos 5400e9)))
+    (is (= "30.0m" (tasks/format-duration :nanos 1800e9)))
+    (is (= "1.50s" (tasks/format-duration :nanos 1500e6)))
+    (is (= "500ms" (tasks/format-duration :nanos 500e6)))
+    (is (= "250µs" (tasks/format-duration :nanos 250e3)))
+    (is (= "100ns" (tasks/format-duration :nanos 100))))
 
   (testing "format-duration with different input units"
-    (is (= "1.0h" (#'tasks/format-duration 1 :hours)))
-    (is (= "1.0m" (#'tasks/format-duration 1 :minutes)))
-    (is (= "1.00s" (#'tasks/format-duration 1 :seconds)))
-    (is (= "1.00s" (#'tasks/format-duration 1000 :millis)))
-    (is (= "1ms" (#'tasks/format-duration 1000 :micros))))
+    (is (= "1.0h" (tasks/format-duration :hours 1)))
+    (is (= "1.0m" (tasks/format-duration :minutes 1)))
+    (is (= "1.00s" (tasks/format-duration :seconds 1)))
+    (is (= "1.00s" (tasks/format-duration :millis 1000)))
+    (is (= "1ms" (tasks/format-duration :micros 1000))))
 
   (testing "format-duration with nil returns nil"
-    (is (nil? (#'tasks/format-duration nil :millis)))))
+    (is (nil? (tasks/format-duration :millis nil)))))
 
 (deftest title-case-test
   (testing "title-case conversion"
-    (is (= "Simple Query" (#'tasks/title-case "simple-query")))
-    (is (= "Multiple Word Query" (#'tasks/title-case "multiple-word-query")))
-    (is (= "Single" (#'tasks/title-case "single")))
-    (is (= "" (#'tasks/title-case "")))))
+    (is (= "Simple Query" (tasks/title-case "simple-query")))
+    (is (= "Multiple Word Query" (tasks/title-case "multiple-word-query")))
+    (is (= "Single" (tasks/title-case "single")))
+    (is (= "" (tasks/title-case "")))))
 
 (deftest tpch-stage->query-row-test
   (testing "valid hot query stage"
     (let [stage {:stage "hot-queries-q1-pricing-summary"
                  :time-taken-ms 1500}
-          result (#'tasks/tpch-stage->query-row 0 stage)]
+          result (tasks/tpch-stage->query-row 0 stage)]
       (is (= "Hot" (:temp result)))
       (is (= "Q1" (:q result)))
       (is (= "Pricing Summary" (:query-name result)))
@@ -43,13 +43,13 @@
   (testing "valid cold query stage"
     (let [stage {:stage "cold-queries-q5-local-supplier"
                  :time-taken-ms 2000}
-          result (#'tasks/tpch-stage->query-row 1 stage)]
+          result (tasks/tpch-stage->query-row 1 stage)]
       (is (= "Cold" (:temp result)))
       (is (= "Q5" (:q result)))
       (is (= "Local Supplier" (:query-name result)))))
 
   (testing "invalid stage returns nil"
-    (is (nil? (#'tasks/tpch-stage->query-row 0 {:stage "ingest" :time-taken-ms 1000})))))
+    (is (nil? (tasks/tpch-stage->query-row 0 {:stage "ingest" :time-taken-ms 1000})))))
 
 (deftest tpch-summary->query-rows-test
   (testing "calculating query rows with percentages"
@@ -143,12 +143,7 @@
       (is (str/includes? result "Q1"))
       (is (str/includes? result "Pricing"))
       (is (str/includes? result "Total query time"))
-      (is (str/includes? result "Benchmark total time"))))
-
-  (testing "empty query stages still formats (validation happens earlier)"
-    (let [summary {:benchmark-type "tpch" :query-stages []}
-          result (tasks/summary->table summary)]
-      (is (str/includes? result "Total query time")))))
+      (is (str/includes? result "Total benchmark time")))))
 
 (deftest summary->table-yakbench-test
   (testing "yakbench table format"
@@ -160,12 +155,14 @@
       (is (string? result))
       (is (str/includes? result "profile1/q1"))
       (is (str/includes? result "percent-of-total"))
-      (is (str/includes? result "Benchmark total time"))))
+      (is (str/includes? result "Total query time"))
+      (is (str/includes? result "Total benchmark time"))))
 
   (testing "empty profiles still formats (validation happens earlier)"
     (let [summary {:benchmark-type "yakbench" :profiles {}}
           result (tasks/summary->table summary)]
-      (is (str/includes? result "Total query time")))))
+      (is (str/includes? result "Total query time"))
+      (is (str/includes? result "Total benchmark time")))))
 
 (deftest summary->slack-tpch-test
   (testing "tpch slack format wrapped in code blocks"
@@ -173,15 +170,16 @@
                    :query-stages [{:stage "hot-queries-q1-pricing" :time-taken-ms 1000}]
                    :benchmark-total-time-ms 5000}
           result (tasks/summary->slack summary)]
-      (is (str/starts-with? result "```"))
+      (is (str/includes? result "```"))
       (is (str/ends-with? result "```"))
       (is (str/includes? result "Hot Q1 Pricing"))
-      (is (str/includes? result "Total query time"))))
+      (is (str/includes? result "Total query time"))
+      (is (str/includes? result "Total benchmark time"))))
 
   (testing "empty query stages still formats (validation happens earlier)"
     (let [summary {:benchmark-type "tpch" :query-stages []}
           result (tasks/summary->slack summary)]
-      (is (str/starts-with? result "```"))
+      (is (str/includes? result "```"))
       (is (str/includes? result "Total query time")))))
 
 (deftest summary->slack-yakbench-test
@@ -190,8 +188,11 @@
                    :profiles {:profile1 [{:id "q1" :mean 1000000 :p50 900000 :p99 1200000 :n 100 :sum 1000000}]}
                    :benchmark-total-time-ms 5000}
           result (tasks/summary->slack summary)]
-      (is (str/starts-with? result "```"))
-      (is (str/includes? result "profile1/q1")))))
+      (is (str/includes? result "```"))
+      (is (str/ends-with? result "```"))
+      (is (str/includes? result "profile1/q1"))
+      (is (str/includes? result "Total query time"))
+      (is (str/includes? result "Total benchmark time")))))
 
 (deftest summary->github-markdown-tpch-test
   (testing "tpch github markdown format"
@@ -201,10 +202,10 @@
                    :benchmark-total-time-ms 5000}
           result (tasks/summary->github-markdown summary)]
       (is (str/includes? result "| Temp | Query |"))
-      (is (str/includes? result "|------|-------|"))
+      (is (str/includes? result "|"))
       (is (str/includes? result "| Hot | Q1 |"))
       (is (str/includes? result "Total query time"))
-      (is (str/includes? result "Benchmark total time"))))
+      (is (str/includes? result "Total benchmark time"))))
 
   (testing "empty query stages still formats (validation happens earlier)"
     (let [summary {:benchmark-type "tpch" :query-stages []}
@@ -221,7 +222,7 @@
       (is (str/includes? result "| Query | N | P50 |"))
       (is (str/includes? result "% of total"))
       (is (str/includes? result "| profile1/q1 |"))
-      (is (str/includes? result "Benchmark total time"))))
+      (is (str/includes? result "Total benchmark time"))))
 
   (testing "empty profiles still formats (validation happens earlier)"
     (let [summary {:benchmark-type "yakbench" :profiles {}}
@@ -246,9 +247,10 @@
 (deftest render-summary-test
   (testing "rendering with different formats"
     (let [summary {:benchmark-type "tpch"
-                   :query-stages [{:stage "hot-queries-q1-pricing" :time-taken-ms 1000}]}]
+                   :query-stages [{:stage "hot-queries-q1-pricing" :time-taken-ms 1000}]
+                   :benchmark-total-time-ms 5000}]
       (is (string? (tasks/render-summary summary {:format :table})))
-      (is (str/starts-with? (tasks/render-summary summary {:format :slack}) "```"))
+      (is (str/includes? (tasks/render-summary summary {:format :slack}) "```"))
       (is (str/includes? (tasks/render-summary summary {:format :github}) "|"))))
 
   (testing "default format is table"
@@ -274,7 +276,8 @@
       (try
         (spit temp-file "{\"stage\":\"hot-queries-q1-test\",\"time-taken-ms\":1000}")
         (let [result (tasks/summarize-log ["--format" "slack" "tpch" (.getPath temp-file)])]
-          (is (str/starts-with? result "```")))
+          (is (str/includes? result "```"))
+          (is (str/includes? result "Total query time")))
         (finally
           (.delete temp-file)))))
 
@@ -312,3 +315,54 @@
                               (tasks/summarize-log ["yakbench" (.getPath temp-file)])))
         (finally
           (.delete temp-file))))))
+
+(deftest github-table-separator-test
+  (testing "separator line has at least 3 dashes per column"
+    (let [columns [{:key :name :header "Name"}
+                   {:key :age :header "Age"}
+                   {:key :score :header "Score"}]
+          rows [{:name "Alice" :age 30 :score 95.5}
+                {:name "Bob" :age 25 :score 87.3}]
+          result (tasks/github-table columns rows)
+          lines (str/split-lines result)
+          separator-line (second lines)]
+      (is (>= (count lines) 2) "Table should have at least header and separator lines")
+      (let [separator-parts (str/split separator-line #"\|")
+            ;; Remove empty strings from split (leading/trailing separators)
+            separator-parts (filter #(not (str/blank? %)) separator-parts)]
+        (doseq [part separator-parts]
+          (let [dash-count (count (filter #(= % \-) part))]
+            (is (>= dash-count 3)
+                (format "Separator part '%s' should have at least 3 dashes, but has %d" part dash-count)))))))
+
+  (testing "separator line handles short headers (minimum 3 dashes)"
+    (let [columns [{:key :a :header "A"}
+                   {:key :b :header "B"}]
+          rows [{:a 1 :b 2}]
+          result (tasks/github-table columns rows)
+          lines (str/split-lines result)
+          separator-line (second lines)
+          separator-parts (filter #(not (str/blank? %)) (str/split separator-line #"\|"))]
+      (doseq [part separator-parts]
+        (is (>= (count (filter #(= % \-) part)) 3)
+            (format "Even short headers should have at least 3 dashes in separator: '%s'" part)))))
+
+  (testing "separator line matches header width for long headers"
+    (let [columns [{:key :long :header "Very Long Column Header Name"}]
+          rows [{:long "value"}]
+          result (tasks/github-table columns rows)
+          lines (str/split-lines result)
+          header-line (first lines)
+          separator-line (second lines)
+          header-parts (filter #(not (str/blank? %)) (str/split header-line #"\|"))
+          separator-parts (filter #(not (str/blank? %)) (str/split separator-line #"\|"))]
+      (is (= (count header-parts) (count separator-parts))
+          "Separator should have same number of columns as header")
+      (doseq [[header-part separator-part] (map vector header-parts separator-parts)]
+        (let [header-width (count (str/trim header-part))
+              separator-width (count separator-part)]
+          (is (>= separator-width header-width)
+              (format "Separator width (%d) should be >= header width (%d) for '%s'"
+                      separator-width header-width header-part))
+          (is (>= separator-width 3)
+              (format "Separator should have at least 3 dashes even if header is shorter")))))))

@@ -5,17 +5,9 @@
             [clojure.string :as str]))
 
 (defn format-duration
-  "Format a duration value with appropriate unit (h/m/s/ms/µs/ns).
-
-   Args:
-     value: The numeric value to format
-     unit: The input unit - :nanos, :micros, :millis, :seconds, :minutes, or :hours
-
-   Returns a human-readable string with the most appropriate unit."
-  [value unit]
+  [unit value]
   (when value
-    (let [;; Convert everything to nanoseconds first
-          nanos (case unit
+    (let [nanos (case unit
                   :nanos value
                   :micros (* value 1e3)
                   :millis (* value 1e6)
@@ -91,15 +83,18 @@
   (when-let [[_ hot-cold query-num name] (re-find #"^((?:hot|cold))-queries-q(\d+)-(.*)$" stage)]
     (let [friendly-name (title-case name)
           query-index (Long/parseLong query-num)
-          duration-pt (.toString (java.time.Duration/ofMillis time-taken-ms))]
+          duration-pt (format-duration :millis time-taken-ms)
+          temp (str/capitalize hot-cold)
+          q (str "Q" query-num)]
       {:query-order idx
        :query-index query-index
-       :temp (str/capitalize hot-cold)
-       :q (str "Q" query-num)
+       :temp temp
+       :q q
+       :query (str temp " " q " " friendly-name)
        :query-name friendly-name
        :stage stage
        :time-taken-ms time-taken-ms
-       :time-taken-duration duration-pt})))
+       :duration duration-pt})))
 
 (defn tpch-summary->query-rows
   [summary]
@@ -124,10 +119,10 @@
 (defn yakbench-query->query-row
   [profile {:keys [id mean p50 p90 p99 n sum]}]
   {:query (str (name profile) "/" id)
-   :mean (format-duration mean :nanos)
-   :p50 (format-duration p50 :nanos)
-   :p90 (format-duration p90 :nanos)
-   :p99 (format-duration p99 :nanos)
+   :mean (format-duration :nanos mean)
+   :p50 (format-duration :nanos p50)
+   :p90 (format-duration :nanos p90)
+   :p99 (format-duration :nanos p99)
    :n n
    :sum sum})
 
@@ -147,100 +142,119 @@
     {:rows rows-with-percent
      :total-ms (* total-nanos 1e-6)}))
 
+(defn totals->string [query-ms benchmark-ms]
+  (str (format "Total query time: %s (%s)"
+               (format-duration :millis query-ms)
+               (if query-ms (java.time.Duration/ofMillis query-ms) "N/A"))
+       "\n"
+       (format "Total benchmark time: %s (%s)"
+               (format-duration :millis benchmark-ms)
+               (if benchmark-ms (java.time.Duration/ofMillis benchmark-ms) "N/A"))))
+
+(defn rows->string [columns rows]
+  (-> (with-out-str
+        (pprint/print-table columns rows))
+      str/trim))
+
+(defn rows-and-totals->summary-string [{:keys [columns rows query-ms benchmark-ms]}]
+  (str (rows->string columns rows)
+       "\n\n"
+       (totals->string query-ms benchmark-ms)))
+
 (defmulti summary->table :benchmark-type)
 
 (defmethod summary->table "tpch" [summary]
   (let [{:keys [rows total-ms]} (tpch-summary->query-rows summary)]
-    (str (-> (with-out-str
-               (pprint/print-table [:temp :q :query-name :time-taken-ms :time-taken-duration :percent-of-total] rows))
-             str/trim)
+    (str (totals->string total-ms (:benchmark-total-time-ms summary))
          "\n\n"
-         (format "Query total time: %s"
-                 (format-duration total-ms :millis))
-         "\n"
-         (format "Benchmark total time: %s"
-                 (format-duration (:benchmark-total-time-ms summary) :millis)))))
+         (rows->string [:temp :q :query-name :time-taken-ms :duration :percent-of-total] rows))))
 
 (defmethod summary->table "yakbench" [summary]
   (let [{:keys [rows total-ms]} (yakbench-summary->query-rows summary)]
-    (str (-> (with-out-str
-               (pprint/print-table [:query :n :p50 :p90 :p99 :mean :percent-of-total] rows))
-             str/trim)
+    (str (totals->string total-ms (:benchmark-total-time-ms summary))
          "\n\n"
-         (format "Query total time: %s"
-                 (format-duration total-ms :millis))
-         "\n"
-         (format "Benchmark total time: %s"
-                 (format-duration (:benchmark-total-time-ms summary) :millis)))))
+         (rows->string [:query :n :p50 :p90 :p99 :mean :percent-of-total] rows))))
+
+(defn wrap-slack-code [& strings]
+  (str "```\n" (str/join strings) "\n```"))
 
 ;; Slack wraps code blocks at 76 characters, so we need to keep columns minimal
 (defmulti summary->slack :benchmark-type)
 
 (defmethod summary->slack "tpch" [summary]
-  (let [{:keys [rows total-ms]} (tpch-summary->query-rows summary)
-        table-rows (map (fn [{:keys [temp q query-name time-taken-ms]}]
-                          {:query (str temp " " q " " query-name)
-                           :duration (format-duration time-taken-ms :millis)})
-                        rows)]
-    (str "```\n"
-         (-> (with-out-str
-               (pprint/print-table [:query :duration] table-rows))
-             str/trim)
-         "\n\n"
-         (format "Query total time: %s"
-                 (format-duration total-ms :millis))
-         "\n"
-         (format "Benchmark total time: %s"
-                 (format-duration (:benchmark-total-time-ms summary) :millis))
-         "\n```")))
+  (let [{:keys [rows total-ms]} (tpch-summary->query-rows summary)]
+    (str
+     (totals->string total-ms (:benchmark-total-time-ms summary))
+     "\n\n"
+     (wrap-slack-code
+      (rows->string [:query :duration] rows)))))
 
 (defmethod summary->slack "yakbench" [summary]
   (let [{:keys [rows total-ms]} (yakbench-summary->query-rows summary)]
-    (str "```\n"
-         (-> (with-out-str
-               (pprint/print-table [:query :p50 :p99 :mean] rows))
-             str/trim)
-         "\n\n"
-         (format "Query total time: %s"
-                 (format-duration total-ms :millis))
-         "\n"
-         (format "Benchmark total time: %s"
-                 (format-duration (:benchmark-total-time-ms summary) :millis))
-         "\n```")))
+    (str
+     (totals->string total-ms (:benchmark-total-time-ms summary))
+     "\n\n"
+     (wrap-slack-code
+      (rows->string [:query :p50 :p99 :mean] rows)))))
+
+(defn github-table
+  "Generate a GitHub-flavored markdown table from columns and rows.
+
+   columns: vector of {:key :column-key :header \"Column Header\" :format (optional fn)}
+   rows: sequence of maps with keys matching column :key values
+
+   Example:
+   (github-table
+     [{:key :name :header \"Name\"}
+      {:key :age :header \"Age\" :format str}
+      {:key :score :header \"Score\" :format #(format \"%.2f\" %)}]
+     [{:name \"Alice\" :age 30 :score 95.5}
+      {:name \"Bob\" :age 25 :score 87.3}])"
+  [columns rows]
+  (let [headers (map :header columns)
+        separator (map (fn [h] (apply str (repeat (max 3 (count h)) "-"))) headers)
+        format-cell (fn [col value]
+                      (let [formatter (or (:format col) str)]
+                        (formatter value)))
+        format-row (fn [row]
+                     (str "| "
+                          (->> columns
+                               (map (fn [col]
+                                      (format-cell col (get row (:key col)))))
+                               (str/join " | "))
+                          " |"))]
+    (str "| " (str/join " | " headers) " |\n"
+         "| " (str/join " | " separator) " |\n"
+         (->> rows
+              (map format-row)
+              (str/join "\n")))))
 
 (defmulti summary->github-markdown :benchmark-type)
 
 (defmethod summary->github-markdown "tpch" [summary]
-  (let [{:keys [rows total-ms]} (tpch-summary->query-rows summary)]
-    (str "| Temp | Query | Query Name | Time (ms) | Duration | % of total |\n"
-         "|------|-------|------------|-----------|----------|------------|\n"
-         (->> rows
-              (map (fn [{:keys [temp q query-name time-taken-ms time-taken-duration percent-of-total]}]
-                     (format "| %s | %s | %s | %d | %s | %s |"
-                             temp q query-name time-taken-ms time-taken-duration percent-of-total)))
-              (str/join "\n"))
+  (let [{:keys [rows total-ms]} (tpch-summary->query-rows summary)
+        columns [{:key :temp :header "Temp"}
+                 {:key :q :header "Query"}
+                 {:key :query-name :header "Query Name"}
+                 {:key :time-taken-ms :header "Time (ms)"}
+                 {:key :duration :header "Duration"}
+                 {:key :percent-of-total :header "% of total"}]]
+    (str (github-table columns rows)
          "\n\n"
-         (format "Query total time: %s"
-                 (format-duration total-ms :millis))
-         "\n"
-         (format "Benchmark total time: %s"
-                 (format-duration (:benchmark-total-time-ms summary) :millis)))))
+         (totals->string total-ms (:benchmark-total-time-ms summary)))))
 
 (defmethod summary->github-markdown "yakbench" [summary]
-  (let [{:keys [rows total-ms]} (yakbench-summary->query-rows summary)]
-    (str "| Query | N | P50 | P90 | P99 | Mean | % of total |\n"
-         "|-------|---|-----|-----|-----|------|------------|\n"
-         (->> rows
-              (map (fn [{:keys [query mean p50 p90 p99 n percent-of-total]}]
-                     (format "| %s | %d | %s | %s | %s | %s | %s |"
-                             query n p50 p90 p99 mean percent-of-total)))
-              (str/join "\n"))
+  (let [{:keys [rows total-ms]} (yakbench-summary->query-rows summary)
+        columns [{:key :query :header "Query"}
+                 {:key :n :header "N"}
+                 {:key :p50 :header "P50"}
+                 {:key :p90 :header "P90"}
+                 {:key :p99 :header "P99"}
+                 {:key :mean :header "Mean"}
+                 {:key :percent-of-total :header "% of total"}]]
+    (str (github-table columns rows)
          "\n\n"
-         (format "Query total time: %s"
-                 (format-duration total-ms :millis))
-         "\n"
-         (format "Benchmark total time: %s"
-                 (format-duration (:benchmark-total-time-ms summary) :millis)))))
+         (totals->string total-ms (:benchmark-total-time-ms summary)))))
 
 (defn load-summary
   [benchmark-type log-file-path]
