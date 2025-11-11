@@ -37,7 +37,6 @@ object MergePlanner {
         filterPages: PagesFilter = PagesFilter { it }
     ) = runBlocking { plan(segments, pathPred, filterPages) }
 
-    // IMPORTANT - Tries (i.e. segments) and nodes need to be returned in system time order
     suspend fun plan(
         segments: List<Segment<*>>,
         pathPred: Predicate<ByteArray>?,
