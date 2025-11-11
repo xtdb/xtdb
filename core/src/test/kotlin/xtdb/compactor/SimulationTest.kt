@@ -476,4 +476,87 @@ class SimulationTest : SimulationTestBase() {
                 "Should have 4 L1C tries and 4 L2C partitions")
         }
     }
+
+    @RepeatedTest(testIterations)
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @WithDriverConfig(temporalSplitting = CURRENT)
+    fun l2cGapFillingAndL3cCompaction() {
+        val docsTable = TableRef("xtdb", "public", "docs")
+        val defaultFileTarget = 100L * 1024L * 1024L
+
+        // Create a complex scenario with interleaved L1C and L2C tries
+        // Simulates the "up to L3" test from compactor_test.clj
+        val l1Tries = L1TrieKeys.take(16).map { buildTrieDetails(docsTable.tableName, it, defaultFileTarget) }
+        val l2tries = mutableListOf<TrieDetails>()
+
+        // Add some existing L2C partitions with gaps
+        // Partition 0: has b03, b07, b0b (missing b0f to complete first L3)
+        l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p0-b03", defaultFileTarget))
+        l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p0-b07", defaultFileTarget))
+        l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p0-b0b", defaultFileTarget))
+
+        // Partition 1: completely missing (will be created from L1s)
+
+        // Partition 2: has b03, b07 (missing b0b, b0f)
+        l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p2-b03", defaultFileTarget))
+        l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p2-b07", defaultFileTarget))
+
+        // Partition 3: has b03, b07 (missing b0b, b0f)
+        l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p3-b03", defaultFileTarget))
+        l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p3-b07", defaultFileTarget))
+
+        compactor.openForDatabase(db).use {
+            addTries(docsTable, l1Tries.toList() + l2tries)
+
+            it.compactAll()
+
+            val allTries = trieCatalog.listAllTrieKeys(docsTable)
+
+            // Verify L2C partitions are complete (should have b03, b07, b0b, b0f for each partition)
+            for (partition in 0..3) {
+                for (blockHex in listOf("03", "07", "0b", "0f")) {
+                    Assertions.assertTrue(
+                        allTries.contains("l02-rc-p$partition-b$blockHex"),
+                        "L2C partition $partition should have block b$blockHex"
+                    )
+                }
+            }
+
+            Assertions.assertEquals(16, allTries.prefix("l02-rc").size)
+            Assertions.assertEquals(16, allTries.prefix("l03-rc").size)
+        }
+    }
+
+    @RepeatedTest(testIterations)
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @WithDriverConfig(temporalSplitting = CURRENT)
+    fun concurrentTableCompaction() {
+        val docsTable = TableRef("xtdb", "public", "docs")
+        val usersTable = TableRef("xtdb", "public", "users")
+        val ordersTable = TableRef("xtdb", "public", "orders")
+        val l0FileSize = 100L * 1024L * 1024L
+
+        // Start from L0 files to test the full compaction pipeline with multiple tables
+        val docsTries = L0TrieKeys.take(16).map { buildTrieDetails(docsTable.tableName, it, l0FileSize) }
+        val usersTries = L0TrieKeys.take(16).map { buildTrieDetails(usersTable.tableName, it, l0FileSize) }
+        val ordersTries = L0TrieKeys.take(16).map { buildTrieDetails(ordersTable.tableName, it, l0FileSize) }
+
+        compactor.openForDatabase(db).use {
+            addTries(docsTable, docsTries.toList())
+            addTries(usersTable, usersTries.toList())
+            addTries(ordersTable, ordersTries.toList())
+            it.compactAll()
+
+            val docsKeys = trieCatalog.listAllTrieKeys(docsTable)
+            val usersKeys = trieCatalog.listAllTrieKeys(usersTable)
+            val ordersKeys = trieCatalog.listAllTrieKeys(ordersTable)
+            Assertions.assertEquals(16, docsKeys.prefix("l00-rc-").size)
+            Assertions.assertEquals(16, docsKeys.prefix("l01-rc-").size)
+            Assertions.assertEquals(16, docsKeys.prefix("l02-rc-").size)
+            Assertions.assertEquals(16, docsKeys.prefix("l03-rc-").size)
+            Assertions.assertEquals(docsKeys.toSet(), usersKeys.toSet(), "Docs and Users tables should have identical trie keys")
+            Assertions.assertEquals(docsKeys.toSet(), ordersKeys.toSet(), "Docs and Orders tables should have identical trie keys")
+
+        }
+    }
 }
