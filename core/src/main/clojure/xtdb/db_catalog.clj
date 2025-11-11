@@ -60,7 +60,7 @@
 
          ::for-query (assoc opts :db-config db-config)
 
-         :xtdb/tx-sink (assoc opts :tx-sink-conf (.getTxSink conf))
+         :xtdb.tx-sink/for-db (assoc opts :tx-sink-conf (.getTxSink conf))
          :xtdb.indexer/for-db opts
          :xtdb.compactor/for-db opts
          :xtdb.log/processor (assoc opts :indexer-conf indexer-conf)}

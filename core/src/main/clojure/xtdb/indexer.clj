@@ -762,7 +762,7 @@
 (defmethod ig/expand-key ::for-db [k {:keys [base]}]
   {k {:base base
       :query-db (ig/ref :xtdb.db-catalog/for-query)
-      :tx-sink (ig/ref :xtdb/tx-sink)}})
+      :tx-sink (ig/ref :xtdb.tx-sink/for-db)}})
 
 (defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base,
                                     :keys [query-db tx-sink]}]

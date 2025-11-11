@@ -56,26 +56,29 @@
                (some? format) (.format (str (symbol format)))
                (some? table-filter) (.tableFilter table-filter)))))
 
-(defmethod ig/expand-key :xtdb/tx-sink [k {:keys [base ^TxSinkConfig tx-sink-conf]}]
+(defmethod ig/expand-key ::for-db [k {:keys [base ^TxSinkConfig tx-sink-conf]}]
   {k {:tx-sink-conf tx-sink-conf
       :output-log (ig/ref ::output-log)}
    ::output-log {:tx-sink-conf tx-sink-conf
                  :base base}})
 
-(defmethod ig/init-key :xtdb/tx-sink [_ {:keys [^TxSinkConfig tx-sink-conf ^Log output-log]}]
+(defrecord TxSink [^Log output-log ^TxSinkConfig$TableFilter table-filter encode-as-bytes]
+  Indexer$TxSink
+  (onCommit [_ _tx-key live-idx-tx]
+    (util/with-open [live-idx-snap (.openSnapshot live-idx-tx)]
+      (doseq [^TableRef table (.getLiveTables live-idx-snap)
+              :when (.test table-filter (table-name table))]
+        (doseq [row (read-table-rows table live-idx-tx)]
+          (->> row
+               encode-as-bytes
+               Log$Message$Tx.
+               (.appendMessage output-log)))))))
+
+(defmethod ig/init-key ::for-db [_ {:keys [^TxSinkConfig tx-sink-conf output-log]}]
   (when (and tx-sink-conf (.getEnable tx-sink-conf))
-    (let [encode-as-bytes (->encode-fn (keyword (.getFormat tx-sink-conf)))
-          table-filter (.getTableFilter tx-sink-conf)]
-      (reify Indexer$TxSink
-        (onCommit [_ _tx-key live-idx-tx]
-          (util/with-open [live-idx-snap (.openSnapshot live-idx-tx)]
-            (doseq [^TableRef table (.getLiveTables live-idx-snap)
-                    :when (.test table-filter (table-name table))]
-              (doseq [row (read-table-rows table live-idx-tx)]
-                (->> row
-                     encode-as-bytes
-                     Log$Message$Tx.
-                     (.appendMessage output-log))))))))))
+    (map->TxSink {:output-log output-log
+                  :table-filter (.getTableFilter tx-sink-conf)
+                  :encode-as-bytes (->encode-fn (keyword (.getFormat tx-sink-conf)))})))
 
 (defmethod ig/init-key ::output-log [_ {:keys [^TxSinkConfig tx-sink-conf]
                                         {:keys [log-clusters]} :base}]
