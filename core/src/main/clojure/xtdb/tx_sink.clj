@@ -1,19 +1,13 @@
 (ns xtdb.tx-sink 
-  (:require [clojure.string :as str]
-            [integrant.core :as ig]
+  (:require [integrant.core :as ig]
             [xtdb.log :as log]
             [xtdb.node :as xtn]
             [xtdb.util :as util]
             xtdb.serde)
-  (:import (xtdb.api TxSinkConfig TxSinkConfig$TableFilter Xtdb$Config)
+  (:import (xtdb.api TxSinkConfig Xtdb$Config)
            (xtdb.api.log Log Log$Message$Tx)
            (xtdb.indexer Indexer$TxSink LiveIndex$Tx)
            (xtdb.table TableRef)))
-
-(defn- table-name [^TableRef table-ref]
-  (str/join "." [(.getDbName table-ref)
-                 (.getSchemaName table-ref)
-                 (.getTableName table-ref)]))
 
 (defn read-table-rows [^TableRef table ^LiveIndex$Tx live-idx-tx]
   (let [live-table (.liveTable live-idx-tx table)
@@ -46,17 +40,12 @@
   (case fmt
     :transit+json xtdb.serde/write-transit))
 
-(defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format table-filter enable]}]
-  (let [table-filter (when-let [{:keys [include exclude]} table-filter]
-                       (TxSinkConfig$TableFilter.
-                         (if (some? include) (set include) #{})
-                         (if (some? exclude) (set exclude) #{})))]
-    (.txSink config
-             (cond-> (TxSinkConfig.)
-               (some? enable) (.enable enable)
-               (some? output-log) (.outputLog (log/->log-factory (first output-log) (second output-log)))
-               (some? format) (.format (str (symbol format)))
-               (some? table-filter) (.tableFilter table-filter)))))
+(defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format enable]}]
+  (.txSink config
+           (cond-> (TxSinkConfig.)
+             (some? enable) (.enable enable)
+             (some? output-log) (.outputLog (log/->log-factory (first output-log) (second output-log)))
+             (some? format) (.format (str (symbol format))))))
 
 (defmethod ig/expand-key ::for-db [k {:keys [base ^TxSinkConfig tx-sink-conf db-name]}]
   {k {:tx-sink-conf tx-sink-conf
@@ -65,7 +54,7 @@
    ::output-log {:tx-sink-conf tx-sink-conf
                  :base base}})
 
-(defrecord TxSink [^Log output-log ^TxSinkConfig$TableFilter table-filter encode-as-bytes db-name]
+(defrecord TxSink [^Log output-log encode-as-bytes db-name]
   Indexer$TxSink
   (onCommit [_ tx-key live-idx-tx]
     (util/with-open [live-idx-snap (.openSnapshot live-idx-tx)]
@@ -73,7 +62,6 @@
             :source {;:version "1.0.0" ;; TODO
                      :db db-name}
             :payloads (->> (.getLiveTables live-idx-snap)
-                           (filter #(.test table-filter (table-name %)))
                            (mapcat #(read-table-rows % live-idx-tx))
                            (into []))}
            encode-as-bytes
@@ -83,7 +71,6 @@
 (defmethod ig/init-key ::for-db [_ {:keys [^TxSinkConfig tx-sink-conf output-log db-name]}]
   (when (and tx-sink-conf (.getEnable tx-sink-conf))
     (map->TxSink {:output-log output-log
-                  :table-filter (.getTableFilter tx-sink-conf)
                   :encode-as-bytes (->encode-fn (keyword (.getFormat tx-sink-conf)))
                   :db-name db-name})))
 

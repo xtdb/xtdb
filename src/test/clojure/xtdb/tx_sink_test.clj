@@ -117,36 +117,3 @@
     (t/is (thrown? java.lang.IllegalStateException
                    "tx sink not initialised"
                    (get-output-log node)))))
-
-(t/deftest test-tx-sink-filtering
-  (t/testing "include"
-    (with-open [node (xtn/start-node (merge tu/*node-opts*
-                                            {:tx-sink {:enable true
-                                                       :output-log [:in-memory {}]
-                                                       :table-filter {:include ["xtdb.public.docs"]}}}))]
-      (let [output-log ^Log (get-output-log node)
-            store (recording-subscriber output-log)]
-        (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1}]])
-        (xt/execute-tx node [[:put-docs :other {:xt/id :doc2}]])
-        (xt/execute-tx node [[:put-docs :docs {:xt/id :doc3}]])
-
-        (t/is (= 3 (count @store)))
-        (->> @store (map decode-record) println)
-        (let [msgs (->> @store (map decode-record) (mapcat :payloads))]
-          (t/is (= [:put :put] (map :op msgs)))))))
-
-  (t/testing "exclude"
-    (with-open [node (xtn/start-node (merge tu/*node-opts*
-                                            {:tx-sink {:enable true
-                                                       :output-log [:in-memory {}]
-                                                       :table-filter {:exclude ["xtdb.xt.txs"]}}}))]
-      (let [output-log ^Log (get-output-log node)
-            store (recording-subscriber output-log)]
-        (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1}]])
-        (xt/execute-tx node [[:put-docs :other {:xt/id :doc2}]])
-        (xt/execute-tx node [[:put-docs :docs {:xt/id :doc3}]])
-
-        (t/is (= 3 (count @store)))
-        (let [msgs (->> @store (map decode-record) (mapcat :payloads))]
-          (t/is (= [:put :put :put] (map :op msgs)))
-          (t/is (= ["docs" "other" "docs"] (map :table msgs))))))))
