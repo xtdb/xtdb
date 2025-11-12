@@ -23,6 +23,7 @@ import xtdb.compactor.RecencyPartition.WEEK
 import xtdb.compactor.TemporalSplitting.*
 import xtdb.database.DatabaseName
 import xtdb.database.IDatabase
+import xtdb.indexer.Indexer
 import xtdb.indexer.LogProcessor
 import xtdb.log.proto.TrieDetails
 import xtdb.metadata.PageMetadata
@@ -55,6 +56,7 @@ class MockDb(override val name: DatabaseName, override val trieCatalog: TrieCata
 
     override val logProcessor: LogProcessor get() = unsupported("logProcessor")
     override val compactor: Compactor.ForDatabase get() = unsupported("compactor")
+    override val txSink: Indexer.TxSink get() = unsupported("txSink")
 }
 
 private val LOGGER = MockDriver::class.logger
