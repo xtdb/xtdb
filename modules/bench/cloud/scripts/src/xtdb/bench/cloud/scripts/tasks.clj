@@ -144,22 +144,17 @@
 
 (defn totals->string [query-ms benchmark-ms]
   (str (format "Total query time: %s (%s)"
-               (format-duration :millis query-ms)
+               (or (format-duration :millis query-ms) "N/A")
                (if query-ms (java.time.Duration/ofMillis query-ms) "N/A"))
        "\n"
        (format "Total benchmark time: %s (%s)"
-               (format-duration :millis benchmark-ms)
+               (or (format-duration :millis benchmark-ms) "N/A")
                (if benchmark-ms (java.time.Duration/ofMillis benchmark-ms) "N/A"))))
 
 (defn rows->string [columns rows]
   (-> (with-out-str
         (pprint/print-table columns rows))
       str/trim))
-
-(defn rows-and-totals->summary-string [{:keys [columns rows query-ms benchmark-ms]}]
-  (str (rows->string columns rows)
-       "\n\n"
-       (totals->string query-ms benchmark-ms)))
 
 (defmulti summary->table :benchmark-type)
 

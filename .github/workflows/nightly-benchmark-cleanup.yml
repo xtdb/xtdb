@@ -677,7 +677,7 @@ jobs:
           fi
 
           log_path="$(pwd)/benchmark.log"
-          summary="$(cd modules/bench/cloud/scripts && bb summarize-log --format github "${{ inputs.benchType }}" "$log_path")"
+          summary="$(./modules/bench/cloud/scripts/tasks summarize-log --format github "${{ inputs.benchType }}" "$log_path")"
           echo "## Query summary:" >> "$GITHUB_STEP_SUMMARY"
           echo "$summary" >> "$GITHUB_STEP_SUMMARY"
 
@@ -691,7 +691,7 @@ jobs:
           [ "$type" = "yakbench" ] && type="Yakbench"
 
           log_path="$(pwd)/benchmark.log"
-          summary="$(cd modules/bench/cloud/scripts && bb summarize-log --format slack "${{ inputs.benchType }}" "$log_path")"
+          summary="$(./modules/bench/cloud/scripts/tasks summarize-log --format slack "${{ inputs.benchType }}" "$log_path")"
 
           # Build base message without summary
           if [ -n "${{ steps.logs.outputs.time_taken_iso }}" ]; then

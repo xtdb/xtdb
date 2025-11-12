@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Script to run tasks.clj with proper classpath
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Set the classpath to include the src directory
+CLASSPATH="${SCRIPT_DIR}/src"
+
+# Run tasks.clj with bb (Babashka), passing all arguments through
+bb -cp "${CLASSPATH}" "${SCRIPT_DIR}/src/xtdb/bench/cloud/scripts/tasks.clj" "$@"
