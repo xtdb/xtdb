@@ -18,8 +18,8 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
 
     sealed interface ExplainAnalyze {
         val rowCount: Long
-        val blockCount: Int
-        val timeToFirstBlock: Duration?
+        val pageCount: Int
+        val timeToFirstPage: Duration?
         val totalTime: Duration
     }
 
@@ -45,26 +45,26 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             private val inner: ICursor,
             private val clock: InstantSource = InstantSource.system()
         ) : ICursor by inner, ExplainAnalyze {
-            override var blockCount: Int = 0; private set
+            override var pageCount: Int = 0; private set
             override var rowCount: Long = 0; private set
 
-            override var timeToFirstBlock: Duration? = null; private set
+            override var timeToFirstPage: Duration? = null; private set
             override var totalTime: Duration = Duration.ZERO; private set
 
             override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
-                val blockStart = clock.instant()
+                val pageStart = clock.instant()
 
                 return inner.tryAdvance { rel ->
-                    val blockTime = Duration.between(blockStart, clock.instant())
+                    val pageTime = Duration.between(pageStart, clock.instant())
 
-                    timeToFirstBlock = timeToFirstBlock ?: blockTime
+                    timeToFirstPage = timeToFirstPage ?: pageTime
 
                     rowCount += rel.rowCount
-                    blockCount++
+                    pageCount++
 
                     c.accept(rel)
                 }.also {
-                    totalTime += Duration.between(blockStart, clock.instant())
+                    totalTime += Duration.between(pageStart, clock.instant())
                 }
             }
 

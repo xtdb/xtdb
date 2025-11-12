@@ -252,9 +252,9 @@
    (serde-types/->field ["op" :keyword])
 
    (serde-types/->field ["total_time" [:duration :micro]])
-   (serde-types/->field ["time_to_first_block" [:duration :micro]])
+   (serde-types/->field ["time_to_first_page" [:duration :micro]])
 
-   (serde-types/->field ["block_count" :i64])
+   (serde-types/->field ["page_count" :i64])
    (serde-types/->field ["row_count" :i64])])
 
 (defn- explain-analyze-results [^IResultCursor cursor]
@@ -264,8 +264,8 @@
                (cons {:depth (str (str/join (repeat depth "  ")) "->")
                       :op (keyword (.getCursorType cursor))
                       :total-time (.getTotalTime ea)
-                      :time-to-first-block (.getTimeToFirstBlock ea)
-                      :block-count (.getBlockCount ea)
+                      :time-to-first-page (.getTimeToFirstPage ea)
+                      :page-count (.getPageCount ea)
                       :row-count (.getRowCount ea)}
                      (->> (for [child (.getChildCursors cursor)]
                             (->results child (inc depth)))

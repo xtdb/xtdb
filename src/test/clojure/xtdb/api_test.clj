@@ -480,14 +480,14 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (letfn [(elide-durations [row]
             (-> row
                 (update :total-time class)
-                (update :time-to-first-block class)))]
+                (update :time-to-first-page class)))]
 
     (t/is (= [{:depth "->", :op :project,
-               :block-count 1, :row-count 1
-               :total-time Duration, :time-to-first-block Duration}
+               :page-count 1, :row-count 1
+               :total-time Duration, :time-to-first-page Duration}
               {:depth "  ->", :op :scan,
-               :block-count 1, :row-count 1
-               :total-time Duration, :time-to-first-block Duration}]
+               :page-count 1, :row-count 1
+               :total-time Duration, :time-to-first-page Duration}]
              (->> (xt/q tu/*node*
                         [(format "EXPLAIN ANALYZE XTQL ($$ %s $$, ?)"
                                  (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))
@@ -495,14 +495,14 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                   (mapv elide-durations))))
 
     (t/is (= [{:depth "->", :op :project,
-               :block-count 1, :row-count 1
-               :total-time Duration, :time-to-first-block Duration}
+               :page-count 1, :row-count 1
+               :total-time Duration, :time-to-first-page Duration}
               {:depth "  ->", :op :rename,
-               :block-count 1, :row-count 1
-               :total-time Duration, :time-to-first-block Duration}
+               :page-count 1, :row-count 1
+               :total-time Duration, :time-to-first-page Duration}
               {:depth "    ->", :op :scan,
-               :block-count 1, :row-count 1
-               :total-time Duration, :time-to-first-block Duration}]
+               :page-count 1, :row-count 1
+               :total-time Duration, :time-to-first-page Duration}]
              (->> (xt/q tu/*node*
                         ["EXPLAIN ANALYZE SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?" 1])
                   (mapv elide-durations))))))
