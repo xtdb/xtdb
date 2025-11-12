@@ -13,8 +13,9 @@ import java.math.BigDecimal
 private const val DECIMAL_ERROR_KEY = "xtdb.error/decimal-error"
 
 class DecimalVector private constructor(
-    override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer,
+    override val al: BufferAllocator,
+    override var name: String, override var valueCount: Int,
+    override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer,
     private val decimalType: Decimal
 ) : FixedWidthVector(), MetadataFlavour.Number {
 
@@ -31,7 +32,7 @@ class DecimalVector private constructor(
     }
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, decimalType: Decimal)
-            : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al), decimalType)
+            : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), decimalType)
 
     override val byteWidth = (bitWidth / 8)
 
@@ -63,5 +64,5 @@ class DecimalVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getObject0(idx, KEBAB_CASE_KEYWORD).toDouble())
 
     override fun openSlice(al: BufferAllocator) =
-        DecimalVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al), decimalType)
+        DecimalVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al), decimalType)
 }

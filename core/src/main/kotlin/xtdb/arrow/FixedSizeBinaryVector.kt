@@ -8,15 +8,16 @@ import java.lang.Long.reverseBytes
 import java.nio.ByteBuffer
 
 class FixedSizeBinaryVector private constructor(
-    override var name: String, override var nullable: Boolean, override var valueCount: Int,
+    override val al: BufferAllocator,
+    override var name: String, override var valueCount: Int,
     override val byteWidth: Int,
-    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
+    override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), LongLongVectorReader, MetadataFlavour.Bytes {
 
     override val arrowType = ArrowType.FixedSizeBinary(byteWidth)
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, byteWidth: Int)
-            : this(name, nullable, 0, byteWidth, BitBuffer(al), ExtensibleBuffer(al))
+            : this(al, name, 0, byteWidth, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override fun getBytes(idx: Int): ByteBuffer = getBytes0(idx)
 
@@ -36,5 +37,5 @@ class FixedSizeBinaryVector private constructor(
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) =
-        FixedSizeBinaryVector(name, nullable, valueCount, byteWidth, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
+        FixedSizeBinaryVector(al, name, valueCount, byteWidth, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 }

@@ -1,6 +1,7 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.BaseVariableWidthVector
 import org.apache.arrow.vector.ValueVector
@@ -14,13 +15,21 @@ abstract class VariableWidthVector : Vector() {
 
     override val vectors: Iterable<Vector> = emptyList()
 
-    internal abstract val validityBuffer: BitBuffer
+    internal abstract val al: BufferAllocator
+    internal abstract var validityBuffer: BitBuffer?
     internal abstract val offsetBuffer: ExtensibleBuffer
     internal abstract val dataBuffer: ExtensibleBuffer
 
+    override var nullable: Boolean
+        get() = validityBuffer != null
+        set(value) {
+            if (value && validityBuffer == null)
+                BitBuffer(al).also { validityBuffer = it }.writeOnes(valueCount)
+        }
+
     private var lastOffset: Int = 0
 
-    override fun isNull(idx: Int) = nullable && !validityBuffer.getBoolean(idx)
+    override fun isNull(idx: Int) = nullable && !validityBuffer!!.getBoolean(idx)
 
     private fun writeOffset(newOffset: Int) {
         if (valueCount == 0) offsetBuffer.writeInt(0)
@@ -30,12 +39,14 @@ abstract class VariableWidthVector : Vector() {
 
     override fun writeUndefined() {
         writeOffset(lastOffset)
-        validityBuffer.writeBit(valueCount++, 0)
+        validityBuffer?.writeBit(valueCount, 0)
+        valueCount++
     }
 
     private fun writeNotNull(len: Int) {
         writeOffset(lastOffset + len)
-        validityBuffer.writeBit(valueCount++, 1)
+        validityBuffer?.writeBit(valueCount, 1)
+        valueCount++
     }
 
     override fun getBytes(idx: Int): ByteBuffer {
@@ -81,7 +92,7 @@ abstract class VariableWidthVector : Vector() {
             private val destData = this@VariableWidthVector.dataBuffer
 
             private fun ensureWriteable(len: Int, dataBytes: Int) {
-                destValidity.ensureWritable(len)
+                destValidity?.ensureWritable(len)
                 destOffset.ensureWritable(((len + 1) * Integer.BYTES).toLong())
                 destData.ensureWritable(dataBytes.toLong())
             }
@@ -109,7 +120,7 @@ abstract class VariableWidthVector : Vector() {
 
             override fun copyRow(srcIdx: Int) {
                 ensureWriteable(1, srcOffset.getInt(srcIdx + 1) - srcOffset.getInt(srcIdx))
-                destValidity.writeBits(srcValidity, Slice(srcIdx, 1))
+                destValidity?.writeBits(srcValidity, Slice(srcIdx, 1))
 
                 unsafeCopyRange(srcIdx, 1)
             }
@@ -123,8 +134,8 @@ abstract class VariableWidthVector : Vector() {
                 }
 
                 ensureWriteable(sel.size, totalDataBytes)
-                
-                destValidity.writeBits(srcValidity, Selection(sel))
+
+                destValidity?.writeBits(srcValidity, Selection(sel))
 
                 for (srcIdx in sel)
                     unsafeCopyRange(srcIdx, 1)
@@ -136,8 +147,8 @@ abstract class VariableWidthVector : Vector() {
                 val totalDataBytes = srcOffset.getInt(startIdx + len) - srcOffset.getInt(startIdx)
 
                 ensureWriteable(len, totalDataBytes)
-                
-                destValidity.writeBits(srcValidity, Slice(startIdx, len))
+
+                destValidity?.writeBits(srcValidity, Slice(startIdx, len))
 
                 unsafeCopyRange(startIdx, len)
             }
@@ -146,7 +157,11 @@ abstract class VariableWidthVector : Vector() {
 
     override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
-        validityBuffer.openUnloadedBuffer(buffers)
+        if (nullable) {
+            validityBuffer?.openUnloadedBuffer(buffers)
+        } else {
+            buffers.add(BitBuffer.openAllOnes(al, valueCount))
+        }
         offsetBuffer.openUnloadedBuffer(buffers)
         dataBuffer.openUnloadedBuffer(buffers)
     }
@@ -155,7 +170,8 @@ abstract class VariableWidthVector : Vector() {
         val node = nodes.removeFirstOrNull() ?: error("missing node")
         valueCount = node.length
 
-        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"), valueCount)
+        val validityBuf = buffers.removeFirstOrNull() ?: error("missing validity buffer")
+        validityBuffer?.loadBuffer(validityBuf, valueCount)
         offsetBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing offset buffer"))
         dataBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing data buffer"))
     }
@@ -163,7 +179,7 @@ abstract class VariableWidthVector : Vector() {
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is BaseVariableWidthVector)
 
-        validityBuffer.loadBuffer(vec.validityBuffer, vec.valueCount)
+        validityBuffer?.loadBuffer(vec.validityBuffer, vec.valueCount)
         offsetBuffer.loadBuffer(vec.offsetBuffer)
         dataBuffer.loadBuffer(vec.dataBuffer)
 
@@ -171,7 +187,7 @@ abstract class VariableWidthVector : Vector() {
     }
 
     override fun clear() {
-        validityBuffer.clear()
+        validityBuffer?.clear()
         offsetBuffer.clear()
         dataBuffer.clear()
         valueCount = 0
@@ -179,7 +195,7 @@ abstract class VariableWidthVector : Vector() {
     }
 
     override fun close() {
-        validityBuffer.close()
+        validityBuffer?.close()
         offsetBuffer.close()
         dataBuffer.close()
     }

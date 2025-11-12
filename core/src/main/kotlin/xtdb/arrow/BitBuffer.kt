@@ -3,6 +3,7 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.BitVectorHelper
+import xtdb.util.closeOnCatch
 import kotlin.math.max
 
 internal class BitBuffer private constructor(
@@ -13,6 +14,12 @@ internal class BitBuffer private constructor(
 
     companion object {
         private fun bufferSize(bitCount: Int) = BitVectorHelper.getValidityBufferSize(bitCount).toLong()
+
+        fun openAllOnes(al: BufferAllocator, bitCount: Int): ArrowBuf =
+            al.buffer(bufferSize(bitCount)).closeOnCatch {
+                it.setOne(0, it.capacity())
+                it.writerIndex(it.capacity())
+            }
     }
 
     constructor(allocator: BufferAllocator) : this(allocator, allocator.empty, 0)
@@ -114,8 +121,14 @@ internal class BitBuffer private constructor(
         this.writerBitIndex = writerBitIndex
     }
 
-    fun writeBits(src: BitBuffer, sel: VectorIndirection) {
+    fun writeBits(src: BitBuffer?, sel: VectorIndirection) {
+        if (src == null) {
+            writeOnes(sel.valueCount())
+            return
+        }
+
         ensureWritable(sel.valueCount())
+
         val srcRdr = src.valueReader()
         val destBuf = buf
 

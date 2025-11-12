@@ -8,15 +8,16 @@ import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 
 class FloatVector private constructor(
-    override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
+    override val al: BufferAllocator,
+    override var name: String, override var valueCount: Int,
+    override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Number {
 
     override val byteWidth = Float.SIZE_BYTES
     override val arrowType: ArrowType = MinorType.FLOAT4.type
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
+            : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override fun getFloat(idx: Int) = getFloat0(idx)
     override fun writeFloat(v: Float) = writeFloat0(v)
@@ -35,5 +36,5 @@ class FloatVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher): Int = hasher.hash(getFloat(idx).toDouble())
 
     override fun openSlice(al: BufferAllocator) =
-        FloatVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
+        FloatVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 }

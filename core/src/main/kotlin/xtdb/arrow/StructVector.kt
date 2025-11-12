@@ -13,7 +13,6 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Incorrect
-import xtdb.arrow.VectorType.Companion.NULL
 import xtdb.util.Hasher
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
@@ -24,11 +23,18 @@ internal val STRUCT = ArrowType.Struct.INSTANCE
 
 class StructVector private constructor(
     private val allocator: BufferAllocator,
-    override var name: String, override var nullable: Boolean,
-    private val validityBuffer: BitBuffer,
+    override var name: String,
+    private var validityBuffer: BitBuffer?,
     private val childWriters: SequencedMap<String, Vector> = LinkedHashMap(),
     override var valueCount: Int = 0,
 ) : Vector(), MetadataFlavour.Struct {
+
+    override var nullable: Boolean
+        get() = validityBuffer != null
+        set(value) {
+            if (value && validityBuffer == null)
+                BitBuffer(allocator).also { validityBuffer = it }.writeOnes(valueCount)
+        }
 
     @JvmOverloads
     constructor(
@@ -37,18 +43,19 @@ class StructVector private constructor(
         childWriters: SequencedMap<String, Vector> = LinkedHashMap(),
         valueCount: Int = 0,
     ) : this(
-        allocator, name, nullable,
-        BitBuffer(allocator), childWriters, valueCount
+        allocator, name,
+        if (nullable) BitBuffer(allocator) else null, childWriters, valueCount
     )
 
     override val arrowType: ArrowType = STRUCT
 
     override val vectors: Iterable<Vector> get() = childWriters.sequencedValues()
 
-    override fun isNull(idx: Int) = !validityBuffer.getBoolean(idx)
+    override fun isNull(idx: Int) = nullable && !validityBuffer!!.getBoolean(idx)
 
     override fun writeUndefined() {
-        validityBuffer.writeBit(valueCount++, 0)
+        validityBuffer?.writeBit(valueCount, 0)
+        valueCount++
         childWriters.sequencedValues().forEach { it.writeUndefined() }
     }
 
@@ -74,7 +81,8 @@ class StructVector private constructor(
         }!!
 
     override fun endStruct() {
-        validityBuffer.writeBit(valueCount++, 1)
+        validityBuffer?.writeBit(valueCount, 1)
+        valueCount++
 
         val valueCount = valueCount
 
@@ -149,13 +157,11 @@ class StructVector private constructor(
         nullable = nullable || src.nullable
 
         check(src is StructVector)
-        val childCopiers = src.childWriters.map { (childName, child) ->
-            child.rowCopier(vectorFor(childName, child.fieldType))
-        }
+        val colNames = (src.childWriters.keys + childWriters.keys)
 
-        val srcKeys = src.childWriters.keys
-        for (child in childWriters.values) {
-            if (child.name !in srcKeys) child.maybePromote(allocator, NULL.fieldType)
+        val childCopiers = colNames.map { colName ->
+            val srcVec = src.vectorForOrNull(colName) ?: NullVector(colName, true, src.valueCount)
+            srcVec.rowCopier(vectorFor(colName, srcVec.fieldType))
         }
 
         return RowCopier { srcIdx ->
@@ -170,7 +176,11 @@ class StructVector private constructor(
 
     override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
-        validityBuffer.openUnloadedBuffer(buffers)
+        if (nullable) {
+            validityBuffer?.openUnloadedBuffer(buffers)
+        } else {
+            buffers.add(BitBuffer.openAllOnes(allocator, valueCount))
+        }
 
         childWriters.sequencedValues().forEach { it.openUnloadedPage(nodes, buffers) }
     }
@@ -179,23 +189,24 @@ class StructVector private constructor(
         val node = nodes.removeFirstOrNull() ?: error("missing node")
         valueCount = node.length
 
-        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"), valueCount)
+        val validityBuf = buffers.removeFirstOrNull() ?: error("missing validity buffer")
+        validityBuffer?.loadBuffer(validityBuf, valueCount)
         childWriters.sequencedValues().forEach { it.loadPage(nodes, buffers) }
     }
 
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is NonNullableStructVector)
         val valCount = vec.valueCount
-        validityBuffer.loadBuffer(vec.validityBuffer, valCount)
+        validityBuffer?.loadBuffer(vec.validityBuffer, valCount)
         childWriters.sequencedValues().forEach { it.loadFromArrow(vec.getChild(it.name)) }
 
         valueCount = valCount
     }
 
     override fun openSlice(al: BufferAllocator) =
-        validityBuffer.openSlice(al).closeOnCatch { validityBuffer ->
+        validityBuffer?.openSlice(al).closeOnCatch { validityBuffer ->
             StructVector(
-                al, name, nullable, validityBuffer,
+                al, name, validityBuffer,
                 LinkedHashMap<String, Vector>().closeAllOnCatch { cws ->
                     childWriters.entries.associateTo(cws) { it.key to it.value.openSlice(al) }
                 },
@@ -205,13 +216,13 @@ class StructVector private constructor(
 
 
     override fun clear() {
-        validityBuffer.clear()
+        validityBuffer?.clear()
         valueCount = 0
         childWriters.sequencedValues().forEach(Vector::clear)
     }
 
     override fun close() {
-        validityBuffer.close()
+        validityBuffer?.close()
         childWriters.sequencedValues().forEach(Vector::close)
     }
 }

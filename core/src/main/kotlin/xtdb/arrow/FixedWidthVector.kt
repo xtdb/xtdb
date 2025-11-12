@@ -1,6 +1,7 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.BaseFixedWidthVector
 import org.apache.arrow.vector.ValueVector
@@ -21,26 +22,38 @@ internal fun TimeUnit.toLong(seconds: Long, nanos: Int): Long = when (this) {
 
 sealed class FixedWidthVector : Vector() {
 
+    protected abstract val al: BufferAllocator
     protected abstract val byteWidth: Int
     override val vectors: Iterable<Vector> = emptyList()
 
-    internal abstract val validityBuffer: BitBuffer
+    internal abstract var validityBuffer: BitBuffer?
     internal abstract val dataBuffer: ExtensibleBuffer
 
-    final override fun isNull(idx: Int) = nullable && !validityBuffer.getBoolean(idx)
+    final override var nullable: Boolean
+        get() = validityBuffer != null
+        set(value) {
+            if (value && validityBuffer == null)
+                BitBuffer(al).also { validityBuffer = it }.writeOnes(valueCount)
+        }
+
+    final override fun isNull(idx: Int) = validityBuffer?.getBoolean(idx) == false
 
     final override fun writeUndefined() {
-        validityBuffer.writeBit(valueCount++, 0)
+        validityBuffer?.writeBit(valueCount, 0)
         dataBuffer.writeZero(byteWidth)
+        valueCount++
     }
 
     final override fun writeNull() {
-        if (!nullable) nullable = true
+        nullable = true
         writeUndefined()
     }
 
-    protected fun setNotNull(idx: Int) = validityBuffer.setBit(idx, 1)
-    protected fun writeNotNull() = validityBuffer.writeBit(valueCount++, 1)
+    protected fun setNotNull(idx: Int) = validityBuffer?.setBit(idx, 1)
+    protected fun writeNotNull() {
+        validityBuffer?.writeBit(valueCount, 1)
+        valueCount++
+    }
 
     protected fun getByte0(idx: Int) =
         if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
@@ -67,14 +80,14 @@ sealed class FixedWidthVector : Vector() {
     override fun ensureCapacity(valueCount: Int) {
         if (valueCount > this.valueCount) {
             this.valueCount = valueCount
-            validityBuffer.ensureCapacity(valueCount)
+            validityBuffer?.ensureCapacity(valueCount)
             dataBuffer.ensureCapacity((valueCount * byteWidth).toLong())
         }
     }
 
     override fun setNull(idx: Int) {
         ensureCapacity(idx + 1)
-        validityBuffer.setBit(idx, 0)
+        validityBuffer?.setBit(idx, 0)
     }
 
     override fun setInt(idx: Int, v: Int) {
@@ -180,21 +193,21 @@ sealed class FixedWidthVector : Vector() {
 
             override fun copyRow(srcIdx: Int) {
                 ensureWriteable(1)
-                destValidity.writeBoolean(srcValidity.getBoolean(srcIdx))
+                destValidity?.writeBoolean(srcValidity?.getBoolean(srcIdx) ?: true)
                 unsafeCopyRange(srcIdx, 1)
                 valueCount++
             }
 
             override fun copyRows(sel: IntArray) {
                 ensureWriteable(sel.size)
-                destValidity.writeBits(srcValidity, Selection(sel))
+                destValidity?.writeBits(srcValidity, Selection(sel))
                 for (srcIdx in sel) unsafeCopyRange(srcIdx, 1)
                 valueCount += sel.size
             }
 
             override fun copyRange(startIdx: Int, len: Int) {
                 ensureWriteable(len)
-                destValidity.writeBits(srcValidity, Slice(startIdx, len))
+                destValidity?.writeBits(srcValidity, Slice(startIdx, len))
                 unsafeCopyRange(startIdx, len)
                 valueCount += len
             }
@@ -203,7 +216,12 @@ sealed class FixedWidthVector : Vector() {
 
     final override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
-        validityBuffer.openUnloadedBuffer(buffers)
+
+        if (nullable) {
+            validityBuffer?.openUnloadedBuffer(buffers)
+        } else {
+            buffers.add(BitBuffer.openAllOnes(al, valueCount))
+        }
         dataBuffer.openUnloadedBuffer(buffers)
     }
 
@@ -211,26 +229,27 @@ sealed class FixedWidthVector : Vector() {
         val node = nodes.removeFirstOrNull() ?: throw IllegalStateException("missing node")
         valueCount = node.length
 
-        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: throw IllegalStateException("missing validity buffer"), valueCount)
+        val validityBuf = buffers.removeFirstOrNull() ?: throw IllegalStateException("missing validity buffer")
+        validityBuffer?.loadBuffer(validityBuf, valueCount)
         dataBuffer.loadBuffer(buffers.removeFirstOrNull() ?: throw IllegalStateException("missing data buffer"))
     }
 
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is BaseFixedWidthVector)
-        validityBuffer.loadBuffer(vec.validityBuffer, vec.valueCount)
+        validityBuffer?.loadBuffer(vec.validityBuffer, vec.valueCount)
         dataBuffer.loadBuffer(vec.dataBuffer)
 
         valueCount = vec.valueCount
     }
 
     final override fun clear() {
-        validityBuffer.clear()
+        validityBuffer?.clear()
         dataBuffer.clear()
         valueCount = 0
     }
 
     final override fun close() {
-        validityBuffer.close()
+        validityBuffer?.close()
         dataBuffer.close()
     }
 }

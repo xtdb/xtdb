@@ -12,8 +12,9 @@ import xtdb.util.closeOnCatch
 internal val I32 = MinorType.INT.type
 
 class IntVector private constructor(
-    override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
+    override val al: BufferAllocator,
+    override var name: String, override var valueCount: Int,
+    override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Number {
 
     override val arrowType: ArrowType = I32
@@ -29,9 +30,10 @@ class IntVector private constructor(
         @JvmStatic
         @JvmOverloads
         fun open(al: BufferAllocator, name: String, nullable: Boolean, valueCount: Int = 0): IntVector =
-            openValidityBuffer(al, valueCount).closeOnCatch { validityBuffer ->
-                openDataBuffer(al, valueCount).closeOnCatch { dataBuffer ->
-                    IntVector(name, nullable, valueCount, validityBuffer, dataBuffer)
+            openDataBuffer(al, valueCount).closeOnCatch { dataBuffer ->
+                val validityBuffer = if (nullable) openValidityBuffer(al, valueCount) else null
+                validityBuffer.closeOnCatch {
+                    IntVector(al, name, valueCount, validityBuffer, dataBuffer)
                 }
             }
     }
@@ -53,9 +55,10 @@ class IntVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getInt(idx).toDouble())
 
     override fun openSlice(al: BufferAllocator) =
-        validityBuffer.openSlice(al).closeOnCatch { validityBuffer ->
-            dataBuffer.openSlice(al).closeOnCatch { dataBuffer ->
-                IntVector(name, nullable, valueCount, validityBuffer, dataBuffer)
+        dataBuffer.openSlice(al).closeOnCatch { dataBuffer ->
+            val validityBuffer = this.validityBuffer?.openSlice(al)
+            validityBuffer.closeOnCatch {
+                IntVector(al, name, valueCount, validityBuffer, dataBuffer)
             }
         }
 }

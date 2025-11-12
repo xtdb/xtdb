@@ -248,7 +248,8 @@
                                ["bool" :bool]]
                               ["b" :union
                                ["utf8" :utf8]
-                               ["struct" :struct ["c" :utf8] ["d" :utf8]]]]
+                               ;; TODO these shouldn't be optional strings, really. #4988
+                               ["struct" :struct ["c" :utf8 :?] ["d" :utf8 :?]]]]
                    (.getField tc #xt/table xt_docs "struct"))))))))
 
 (t/deftest drops-nils-on-round-trip

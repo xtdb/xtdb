@@ -23,8 +23,9 @@ private fun TimeUnit.toInstant(value: Long) = when (this) {
 }
 
 class TimestampLocalVector private constructor(
-    override var name: String, override var nullable: Boolean, val unit: TimeUnit = MICROSECOND,
-    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer,
+    override val al: BufferAllocator,
+    override var name: String, val unit: TimeUnit = MICROSECOND,
+    override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer,
     override var valueCount: Int
 ) : FixedWidthVector(), MetadataFlavour.DateTime {
 
@@ -32,7 +33,7 @@ class TimestampLocalVector private constructor(
     override val byteWidth = Long.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit) :
-            this(name, nullable, unit, BitBuffer(al), ExtensibleBuffer(al), 0)
+            this(al, name, unit, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), 0)
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(v: Long) = writeLong0(v)
@@ -60,13 +61,14 @@ class TimestampLocalVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getMetaDouble(idx))
 
     override fun openSlice(al: BufferAllocator) =
-        TimestampLocalVector(name, nullable, unit, validityBuffer.openSlice(al), dataBuffer.openSlice(al), valueCount)
+        TimestampLocalVector(al, name, unit, validityBuffer?.openSlice(al), dataBuffer.openSlice(al), valueCount)
 }
 
 class TimestampTzVector private constructor(
-    override var name: String, override var nullable: Boolean,
+    override val al: BufferAllocator,
+    override var name: String,
     val unit: TimeUnit = MICROSECOND, val zone: ZoneId = UTC,
-    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer,
+    override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer,
     override var valueCount: Int
 ) : FixedWidthVector(), MetadataFlavour.DateTime {
 
@@ -74,7 +76,7 @@ class TimestampTzVector private constructor(
     override val byteWidth = Long.SIZE_BYTES
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit, zone: ZoneId)
-            : this(name, nullable, unit, zone, BitBuffer(al), ExtensibleBuffer(al), 0)
+            : this(al, name, unit, zone, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), 0)
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(v: Long) = writeLong0(v)
@@ -115,7 +117,7 @@ class TimestampTzVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         TimestampTzVector(
-            name, nullable, unit, zone, validityBuffer.openSlice(al),
+            al, name, unit, zone, validityBuffer?.openSlice(al),
             dataBuffer.openSlice(al), valueCount
         )
 }

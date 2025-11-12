@@ -14,37 +14,45 @@ import org.apache.arrow.vector.types.pojo.ArrowType.Bool.INSTANCE as BIT_TYPE
 internal val BOOL_TYPE: ArrowType = ArrowType.Bool.INSTANCE
 
 class BitVector private constructor(
-    override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    private val validityBuffer: BitBuffer, private val dataBuffer: BitBuffer
+    private val al: BufferAllocator,
+    override var name: String, override var valueCount: Int,
+    private var validityBuffer: BitBuffer?, private val dataBuffer: BitBuffer
 ) : Vector(), MetadataFlavour.Presence {
 
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean
-    ) : this(name, nullable, 0, BitBuffer(al), BitBuffer(al))
+    ) : this(al, name, 0, if (nullable) BitBuffer(al) else null, BitBuffer(al))
+
+    override var nullable: Boolean
+        get() = validityBuffer != null
+        set(value) {
+            if (value && validityBuffer == null)
+                BitBuffer(al).also { validityBuffer = it }.writeOnes(valueCount)
+        }
 
     override val arrowType: ArrowType = BIT_TYPE
     override val vectors: Iterable<Vector> = emptyList()
 
     override fun ensureCapacity(valueCount: Int) {
         this.valueCount = this.valueCount.coerceAtLeast(valueCount)
-        validityBuffer.ensureCapacity(valueCount)
+        validityBuffer?.ensureCapacity(valueCount)
         dataBuffer.ensureCapacity(valueCount)
     }
 
-    override fun isNull(idx: Int) = !validityBuffer.getBoolean(idx)
+    override fun isNull(idx: Int) = nullable && validityBuffer?.getBoolean(idx) == false
 
     override fun writeUndefined() {
-        validityBuffer.writeBit(valueCount, 0)
+        validityBuffer?.writeBit(valueCount, 0)
         dataBuffer.writeBit(valueCount++, 0)
     }
 
     override fun setNull(idx: Int) {
         ensureCapacity(idx + 1)
-        validityBuffer.setBit(idx, 0)
+        validityBuffer?.setBit(idx, 0)
     }
 
     override fun writeNull() {
-        if (!nullable) nullable = true
+        nullable = true
         writeUndefined()
     }
 
@@ -54,12 +62,12 @@ class BitVector private constructor(
     override fun setBoolean(idx: Int, v: Boolean) {
         ensureCapacity(idx + 1)
 
-        validityBuffer.setBit(idx, 1)
+        validityBuffer?.setBit(idx, 1)
         dataBuffer.setBit(idx, if (v) 1 else 0)
     }
 
     override fun writeBoolean(v: Boolean) {
-        validityBuffer.writeBit(valueCount, 1)
+        validityBuffer?.writeBit(valueCount, 1)
         dataBuffer.writeBit(valueCount++, if (v) 1 else 0)
     }
 
@@ -87,7 +95,11 @@ class BitVector private constructor(
 
     override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
-        validityBuffer.openUnloadedBuffer(buffers)
+        if (nullable) {
+            validityBuffer?.openUnloadedBuffer(buffers)
+        } else {
+            buffers.add(BitBuffer.openAllOnes(al, valueCount))
+        }
         dataBuffer.openUnloadedBuffer(buffers)
     }
 
@@ -95,29 +107,30 @@ class BitVector private constructor(
         val node = nodes.removeFirstOrNull() ?: error("missing node")
         valueCount = node.length
 
-        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"), valueCount)
+        val validityBuf = buffers.removeFirstOrNull() ?: error("missing validity buffer")
+        validityBuffer?.loadBuffer(validityBuf, valueCount)
         dataBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing data buffer"), valueCount)
     }
 
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is ArrowBitVector)
-        validityBuffer.loadBuffer(vec.validityBuffer, vec.valueCount)
+        validityBuffer?.loadBuffer(vec.validityBuffer, vec.valueCount)
         dataBuffer.loadBuffer(vec.dataBuffer, vec.valueCount)
 
         valueCount = vec.valueCount
     }
 
     override fun clear() {
-        validityBuffer.clear()
+        validityBuffer?.clear()
         dataBuffer.clear()
         valueCount = 0
     }
 
     override fun close() {
-        validityBuffer.close()
+        validityBuffer?.close()
         dataBuffer.close()
     }
 
     override fun openSlice(al: BufferAllocator) =
-        BitVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
+        BitVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 }

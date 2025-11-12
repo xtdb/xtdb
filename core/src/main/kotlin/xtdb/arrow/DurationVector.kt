@@ -21,9 +21,10 @@ internal fun TimeUnit.toDuration(value: Long): Duration = when (this) {
 }
 
 class DurationVector private constructor(
-    override var name: String, override var nullable: Boolean, override var valueCount: Int,
+    override val al: BufferAllocator,
+    override var name: String, override var valueCount: Int,
     val unit: TimeUnit = MICROSECOND,
-    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
+    override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Duration {
 
     override val byteWidth = Long.SIZE_BYTES
@@ -31,7 +32,7 @@ class DurationVector private constructor(
 
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean, unit: TimeUnit
-    ) : this(name, nullable, 0, unit, BitBuffer(al), ExtensibleBuffer(al))
+    ) : this(al, name, 0, unit, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(v: Long) = writeLong0(v)
@@ -56,5 +57,5 @@ class DurationVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getMetaDouble(idx))
 
     override fun openSlice(al: BufferAllocator) =
-        DurationVector(name, nullable, valueCount, unit, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
+        DurationVector(al, name, valueCount, unit, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 }

@@ -5,7 +5,7 @@
   "list"
   #xt/field ["list" :list :? ["$data$" :union ["f64" :f64] ["utf8" :utf8] ["timestamp-tz-micro-utc" [:timestamp-tz :micro "UTC"]] ["bool" :bool]]],
   "struct"
-  #xt/field ["struct" :struct :? ["a" :union ["i64" :i64] ["bool" :bool]] ["b" :union ["utf8" :utf8] ["struct" :struct ["c" :utf8] ["d" :utf8]]]]},
+  #xt/field ["struct" :struct :? ["a" :union ["i64" :i64] ["bool" :bool]] ["b" :union ["utf8" :utf8] ["struct" :struct ["c" :utf8 :?] ["d" :utf8 :?]]]]},
  :tries
  [{:trie-key "l00-rc-b00",
    :data-file-size 5726,

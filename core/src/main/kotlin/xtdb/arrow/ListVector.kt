@@ -17,19 +17,26 @@ internal val LIST: ArrowType.List = ArrowType.List.INSTANCE
 
 class ListVector private constructor(
     private val al: BufferAllocator,
-    override var name: String, override var nullable: Boolean,
+    override var name: String,
     private var elVector: Vector,
-    private val validityBuffer: BitBuffer,
+    private var validityBuffer: BitBuffer?,
     private val offsetBuffer: ExtensibleBuffer,
     override var valueCount: Int = 0
 ) : Vector(), MetadataFlavour.List {
+
+    override var nullable: Boolean
+        get() = validityBuffer != null
+        set(value) {
+            if (value && validityBuffer == null)
+                BitBuffer(al).also { validityBuffer = it }.writeOnes(valueCount)
+        }
 
     @JvmOverloads
     constructor(
         allocator: BufferAllocator, name: String, nullable: Boolean, elVector: Vector = NullVector("\$data$"),
     ) : this(
-        allocator, name, nullable, elVector,
-        BitBuffer(allocator), ExtensibleBuffer(allocator)
+        allocator, name, elVector,
+        if (nullable) BitBuffer(allocator) else null, ExtensibleBuffer(allocator)
     )
 
     override val arrowType: ArrowType = LIST
@@ -38,7 +45,7 @@ class ListVector private constructor(
 
     private var lastOffset: Int = 0
 
-    override fun isNull(idx: Int) = nullable && !validityBuffer.getBoolean(idx)
+    override fun isNull(idx: Int) = nullable && !validityBuffer!!.getBoolean(idx)
 
     private fun writeOffset(newOffset: Int) {
         if (valueCount == 0) offsetBuffer.writeInt(0)
@@ -48,12 +55,14 @@ class ListVector private constructor(
 
     override fun writeUndefined() {
         writeOffset(lastOffset)
-        validityBuffer.writeBit(valueCount++, 0)
+        validityBuffer?.writeBit(valueCount, 0)
+        valueCount++
     }
 
     private fun writeNotNull(len: Int) {
         writeOffset(lastOffset + len)
-        validityBuffer.writeBit(valueCount++, 1)
+        validityBuffer?.writeBit(valueCount, 1)
+        valueCount++
     }
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): List<*> {
@@ -146,7 +155,11 @@ class ListVector private constructor(
 
     override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
-        validityBuffer.openUnloadedBuffer(buffers)
+        if (nullable) {
+            validityBuffer?.openUnloadedBuffer(buffers)
+        } else {
+            buffers.add(BitBuffer.openAllOnes(al, valueCount))
+        }
         offsetBuffer.openUnloadedBuffer(buffers)
         elVector.openUnloadedPage(nodes, buffers)
     }
@@ -155,7 +168,8 @@ class ListVector private constructor(
         val node = nodes.removeFirstOrNull() ?: error("missing node")
         valueCount = node.length
 
-        validityBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing validity buffer"), valueCount)
+        val validityBuf = buffers.removeFirstOrNull() ?: error("missing validity buffer")
+        validityBuffer?.loadBuffer(validityBuf, valueCount)
         offsetBuffer.loadBuffer(buffers.removeFirstOrNull() ?: error("missing offset buffer"))
 
         elVector.loadPage(nodes, buffers)
@@ -164,7 +178,7 @@ class ListVector private constructor(
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is ArrowListVector)
 
-        validityBuffer.loadBuffer(vec.validityBuffer, vec.valueCount)
+        validityBuffer?.loadBuffer(vec.validityBuffer, vec.valueCount)
         offsetBuffer.loadBuffer(vec.offsetBuffer)
         elVector.loadFromArrow(vec.dataVector)
 
@@ -173,8 +187,8 @@ class ListVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         ListVector(
-            al, name, nullable, elVector.openSlice(al),
-            validityBuffer.openSlice(al),
+            al, name, elVector.openSlice(al),
+            validityBuffer?.openSlice(al),
             offsetBuffer.openSlice(al),
             valueCount
         )
@@ -198,7 +212,7 @@ class ListVector private constructor(
     }
 
     override fun clear() {
-        validityBuffer.clear()
+        validityBuffer?.clear()
         offsetBuffer.clear()
         elVector.clear()
         valueCount = 0
@@ -206,7 +220,7 @@ class ListVector private constructor(
     }
 
     override fun close() {
-        validityBuffer.close()
+        validityBuffer?.close()
         offsetBuffer.close()
         elVector.close()
         valueCount = 0

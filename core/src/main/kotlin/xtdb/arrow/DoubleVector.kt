@@ -10,12 +10,13 @@ import xtdb.util.Hasher
 val F64: ArrowType = MinorType.FLOAT8.type
 
 class DoubleVector private constructor(
-    override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
+    override val al: BufferAllocator,
+    override var name: String, override var valueCount: Int,
+    override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Number {
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
-            : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
+            : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override val byteWidth = Double.SIZE_BYTES
     override val arrowType: ArrowType = F64
@@ -36,5 +37,5 @@ class DoubleVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher): Int = hasher.hash(getDouble(idx))
 
     override fun openSlice(al: BufferAllocator) =
-        DoubleVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
+        DoubleVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 }

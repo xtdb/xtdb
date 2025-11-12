@@ -10,14 +10,15 @@ import java.nio.ByteBuffer
 internal val UTF8_TYPE = MinorType.VARCHAR.type
 
 class Utf8Vector private constructor(
-    override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: BitBuffer,
+    override val al: BufferAllocator,
+    override var name: String, override var valueCount: Int,
+    override var validityBuffer: BitBuffer?,
     override val offsetBuffer: ExtensibleBuffer,
     override val dataBuffer: ExtensibleBuffer
 ) : VariableWidthVector(), MetadataFlavour.Bytes {
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean) :
-            this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al), ExtensibleBuffer(al))
+            this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al), ExtensibleBuffer(al))
 
     override val arrowType: ArrowType = UTF8_TYPE
 
@@ -32,7 +33,7 @@ class Utf8Vector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         Utf8Vector(
-            name, nullable, valueCount,
-            validityBuffer.openSlice(al), offsetBuffer.openSlice(al), dataBuffer.openSlice(al)
+            al, name, valueCount,
+            validityBuffer?.openSlice(al), offsetBuffer.openSlice(al), dataBuffer.openSlice(al)
         )
 }

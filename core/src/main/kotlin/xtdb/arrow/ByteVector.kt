@@ -8,13 +8,14 @@ import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 
 class ByteVector private constructor(
-    override var name: String, override var nullable: Boolean, override var valueCount: Int,
-    override val validityBuffer: BitBuffer, override val dataBuffer: ExtensibleBuffer
+    override val al: BufferAllocator,
+    override var name: String, override var valueCount: Int,
+    override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Number {
 
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean
-    ) : this(name, nullable, 0, BitBuffer(al), ExtensibleBuffer(al))
+    ) : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override val byteWidth = Byte.SIZE_BYTES
     override val arrowType: ArrowType = MinorType.TINYINT.type
@@ -40,5 +41,5 @@ class ByteVector private constructor(
     override fun hashCode0(idx: Int, hasher: Hasher) = hasher.hash(getByte(idx).toDouble())
 
     override fun openSlice(al: BufferAllocator) =
-        ByteVector(name, nullable, valueCount, validityBuffer.openSlice(al), dataBuffer.openSlice(al))
+        ByteVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
 }
