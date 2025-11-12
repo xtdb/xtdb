@@ -1142,7 +1142,7 @@
 (defn unnamed-portal? [portal-name]
   (= "" portal-name))
 
-(defmethod handle-msg* :msg-bind [{:keys [conn-state] :as conn} {:keys [portal-name stmt-name] :as bind-msg}]
+(defmethod handle-msg* :msg-bind [{:keys [conn-state query-tracer] :as conn} {:keys [portal-name stmt-name] :as bind-msg}]
   (swap! conn-state assoc :protocol :extended)
   (let [stmt (into (or (get-in @conn-state [:prepared-statements stmt-name])
                        (throw (pgio/err-protocol-violation "no prepared statement")))
@@ -1152,6 +1152,11 @@
 
     (when (get-in @conn-state [:portals portal-name])
       (throw (pgio/err-protocol-violation "Named portals must be explicit closed before they can be redefined")))
+
+    ;; Create query span at bind time for query/show-variable statements and store in conn-state
+    (when (and query-tracer (#{:query :show-variable} (:statement-type stmt)))
+      (let [query-span (metrics/start-span query-tracer "pgwire.query" {:attributes {:db.statement (:query stmt)}})]
+        (swap! conn-state assoc :query-span query-span)))
 
     (let [bound-stmt (bind-stmt conn stmt)]
       (swap! conn-state
@@ -1384,11 +1389,13 @@
               (cmd-commit conn)
               (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "COMMIT"}))
 
-    (:query :show-variable) (let [query-tracer (:query-tracer conn)
-                                   query-str (:query portal)]
-                              (metrics/with-span query-tracer "pgwire.query"
-                                {:db.statement query-str}
-                                (metrics/record-callable! query-timer (cmd-exec-query conn portal))))
+    (:query :show-variable) (let [query-span (:query-span @conn-state)]
+                              (try
+                                (metrics/record-callable! query-timer (cmd-exec-query conn portal))
+                                (finally
+                                  (when query-span
+                                    (metrics/end-span query-span)
+                                    (swap! conn-state dissoc :query-span)))))
     :prepare (cmd-prepare conn portal)
     :dml (cmd-exec-dml conn portal)
 
@@ -1433,7 +1440,7 @@
     (execute-portal conn (cond-> portal
                            (not (zero? limit)) (assoc :limit limit)))))
 
-(defmethod handle-msg* :msg-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
+(defmethod handle-msg* :msg-simple-query [{:keys [conn-state query-tracer] :as conn} {:keys [query]}]
   (swap! conn-state assoc :protocol :simple)
 
   (close-portal conn "")
@@ -1449,7 +1456,10 @@
           (when (and (seq param-oids) (not= statement-type :show-variable))
             (throw (pgio/err-protocol-violation "Parameters not allowed in simple queries")))
 
-          (let [portal (bind-stmt conn prepared-stmt)]
+          (let [query-span (when (and query-tracer (#{:query :show-variable} statement-type))
+                             (metrics/start-span query-tracer "pgwire.query" {:attributes {:db.statement (:query stmt)}}))
+                _ (swap! conn-state assoc :query-span query-span)
+                portal (bind-stmt conn prepared-stmt)]
             (try
               (when (or (contains? #{:query :canned-response :show-variable} statement-type)
                         (and (= :execute statement-type)
