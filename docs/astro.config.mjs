@@ -39,8 +39,6 @@ export default defineConfig({
             sidebar: [
                 { label: '← xtdb.com', link: 'https://xtdb.com', attrs: { target: '_blank' } },
 
-                { label: '← 1.x docs', link: 'https://v1-docs.xtdb.com', attrs: { target: '_blank' } },
-
                 {
                     label: 'Getting Started',
                     collapsed: true,
@@ -239,6 +237,8 @@ export default defineConfig({
                         { label: 'Key Concepts', link: '/concepts/key-concepts' },
                     ],
                 },
+
+                { label: '← 1.x docs', link: 'https://v1-docs.xtdb.com', attrs: { target: '_blank' } },
             ],
 
             customCss: [
