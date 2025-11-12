@@ -212,7 +212,7 @@
                     (cond-> table-tries
                       (completed-part-group? table-tries trie)
                       (-> (mark-part-group-live trie)
-                          (update [(dec level) recency (when (seq part) (pop part))] supersede-by-block-idx block-idx as-of)))))))))
+                          (update [(dec level) recency (cond-> part (seq part) pop)] supersede-by-block-idx block-idx as-of)))))))))
 
 (defn apply-trie-notification
   ([trie-cat table-cat trie]
