@@ -51,6 +51,11 @@ image:
   pullPolicy: Always
   tag: "latest"
 
+# Git metadata for tracking benchmark versions (stored in annotations)
+git:
+  sha: ""
+  branch: ""
+
 resources:
   limits:
     cpu: "2000m"

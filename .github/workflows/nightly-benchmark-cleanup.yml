@@ -551,6 +551,58 @@ jobs:
             rm -f /tmp/grafana-pf.pid
           fi
 
+      - name: Gather Benchmark Image
+        id: image-info
+        if: steps.check-deployment.outcome == 'success'
+        run: |
+          set -euo pipefail
+          NS="cloud-benchmark"
+          pod=$(kubectl get pods -n "$NS" -l app.kubernetes.io/name=xtdb,app.kubernetes.io/component=benchmark -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+          if [ -z "$pod" ]; then
+            echo "image=" >> "$GITHUB_OUTPUT"
+            echo "image_repo=" >> "$GITHUB_OUTPUT"
+            echo "image_tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          image=$(kubectl get pod "$pod" -n "$NS" -o jsonpath='{.spec.containers[?(@.name=="xtdb-node")].image}' 2>/dev/null || true)
+          if [ -z "$image" ]; then
+            echo "image=" >> "$GITHUB_OUTPUT"
+            echo "image_repo=" >> "$GITHUB_OUTPUT"
+            echo "image_tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$image" == *:* ]]; then
+            repo="${image%:*}"
+            tag="${image##*:}"
+          else
+            repo="$image"
+            tag=""
+          fi
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+          echo "image_repo=${repo}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Gather Git Metadata from Job
+        id: git-info
+        if: steps.check-deployment.outcome == 'success'
+        run: |
+          set -euo pipefail
+          NS="cloud-benchmark"
+          JOB_NAME="${{ inputs.benchType }}"
+
+          # Get git metadata from the job annotations
+          git_sha=$(kubectl get job "$JOB_NAME" -n "$NS" -o jsonpath='{.metadata.annotations.xtdb\.com/git-sha}' 2>/dev/null || true)
+          git_branch=$(kubectl get job "$JOB_NAME" -n "$NS" -o jsonpath='{.metadata.annotations.xtdb\.com/git-branch}' 2>/dev/null || true)
+
+          echo "sha=${git_sha}" >> "$GITHUB_OUTPUT"
+          echo "branch=${git_branch}" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$git_sha" ] || [ -n "$git_branch" ]; then
+            echo "Retrieved git metadata from job: branch=${git_branch}, sha=${git_sha}"
+          else
+            echo "No git metadata found on job"
+          fi
+
       - name: Run Cleanup Script
         if: ${{ always() && steps.check-deployment.outcome == 'success' }}
         run: |
@@ -588,6 +640,9 @@ jobs:
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           scale_factor_val="${{ env.SCALE_FACTOR || '' }}"
           concurrency_val="${{ env.CONCURRENCY || '' }}"
+          git_sha="${{ steps.git-info.outputs.sha || '' }}"
+          git_branch="${{ steps.git-info.outputs.branch || '' }}"
+          repo_url="${{ github.server_url }}/${{ github.repository }}"
 
           echo "# Benchmark Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -602,6 +657,12 @@ jobs:
           fi
           if [ -n "$concurrency_val" ]; then
             echo "- **Concurrency**: ${concurrency_val}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -n "$git_branch" ]; then
+            echo "- **Branch**: [${git_branch}](${repo_url}/tree/${git_branch})" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -n "$git_sha" ]; then
+            echo "- **Commit**: [${git_sha:0:7}](${repo_url}/commit/${git_sha})" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "- **Repository**: ${repo}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -632,17 +693,62 @@ jobs:
           log_path="$(pwd)/benchmark.log"
           summary="$(cd modules/bench/cloud/scripts && bb summarize-log --format slack "${{ inputs.benchType }}" "$log_path")"
 
-          if [ -n "$summary" ]; then
-            printf -v base '%s Benchmark completed — {status_message}\n\n%s' "$type" "$summary"
-          elif [ -n "${{ steps.logs.outputs.time_taken_iso }}" ]; then
+          # Build base message without summary
+          if [ -n "${{ steps.logs.outputs.time_taken_iso }}" ]; then
             base="$type Benchmark completed in ${{ steps.logs.outputs.time_taken_iso }} — {status_message}"
           else
-            base="$type Benchmark cleanup — {status_message}"
+            base="$type Benchmark completed — {status_message}"
+          fi
+
+          IMAGE="${{ steps.image-info.outputs.image || '' }}"
+          IMAGE_REPO="${{ steps.image-info.outputs.image_repo || '' }}"
+          IMAGE_TAG="${{ steps.image-info.outputs.image_tag || '' }}"
+          GIT_SHA="${{ steps.git-info.outputs.sha || '' }}"
+          GIT_BRANCH="${{ steps.git-info.outputs.branch || '' }}"
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+
+          # Build git info line if we have metadata
+          GIT_INFO=""
+          if [ -n "$GIT_SHA" ] || [ -n "$GIT_BRANCH" ]; then
+            SHORT_SHA="${GIT_SHA:0:7}"
+            GIT_INFO_PARTS=()
+            if [ -n "$GIT_BRANCH" ]; then
+              GIT_INFO_PARTS+=("Branch: <${REPO_URL}/tree/${GIT_BRANCH}|\`${GIT_BRANCH}\`>")
+            fi
+            if [ -n "$GIT_SHA" ]; then
+              GIT_INFO_PARTS+=("Commit: <${REPO_URL}/commit/${GIT_SHA}|\`${SHORT_SHA}\`>")
+            fi
+            GIT_INFO="${GIT_INFO_PARTS[0]}"
+            for ((i=1; i<${#GIT_INFO_PARTS[@]}; i++)); do
+              GIT_INFO="$GIT_INFO | ${GIT_INFO_PARTS[i]}"
+            done
+          fi
+
+          # Build image info line if we have image metadata
+          IMAGE_INFO=""
+          if [ -n "$IMAGE" ]; then
+            # Strip ghcr.io/ prefix for display
+            IMAGE_DISPLAY="${IMAGE#ghcr.io/}"
+            if [ -n "$IMAGE_REPO" ] && [ -n "$IMAGE_TAG" ]; then
+              IMAGE_INFO="Image: <https://github.com/${{ github.repository_owner }}/xtdb-bench/pkgs/container/xtdb-bench|\`${IMAGE_DISPLAY}\`>"
+            else
+              IMAGE_INFO="Image: \`${IMAGE_DISPLAY}\`"
+            fi
           fi
 
           {
             echo "msg<<EOF"
             echo "$base"
+            if [ -n "$GIT_INFO" ]; then
+              echo "$GIT_INFO"
+            fi
+            if [ -n "$IMAGE_INFO" ]; then
+              echo "$IMAGE_INFO"
+            fi
+            if [ -n "$summary" ]; then
+              echo ""
+              echo "$summary"
+            fi
             if [ "${{ steps.upload-logs.outcome }}" = "success" ] || [ "${{ steps.upload-grafana.outcome }}" = "success" ]; then
               echo ":link: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|view artifacts>"
             else

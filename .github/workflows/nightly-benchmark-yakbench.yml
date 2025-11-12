@@ -16,6 +16,7 @@ permissions:
   id-token: write
   contents: read
   actions: write
+  packages: write
 
 concurrency:
   group: nightly-benchmark-yakbench
@@ -28,7 +29,7 @@ jobs:
     with:
       bench_type: yakbench
       job_display_name: Yakbench
-      slack_label: Yakbench
       scale_factor: ${{ inputs.scale_factor || '1.0' }}
+      branch: ${{ github.ref_name }}
       timeout_minutes: 90
     secrets: inherit

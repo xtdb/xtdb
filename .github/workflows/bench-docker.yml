@@ -4,6 +4,36 @@ on:
   schedule:
     - cron:  '0 22 * * 1-5'
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build from'
+        required: false
+        default: 'main'
+        type: string
+      image_owner:
+        description: 'Docker registry owner (defaults to repository owner)'
+        required: false
+        default: ''
+        type: string
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to build from'
+        required: false
+        default: 'main'
+        type: string
+      image_owner:
+        description: 'Docker registry owner (defaults to repository owner)'
+        required: false
+        default: ''
+        type: string
+    outputs:
+      image_tag:
+        description: 'The generated image tag'
+        value: ${{ jobs.build-bench.outputs.image_tag }}
+      image_full:
+        description: 'The full image reference'
+        value: ${{ jobs.build-bench.outputs.image_full }}
 
 jobs:
   build-bench:
@@ -11,9 +41,14 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image_tag: ${{ steps.image-tag.outputs.tag }}
+      image_full: ${{ steps.image-tag.outputs.full }}
 
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          ref: ${{ inputs.branch || github.ref }}
 
       - name: Set up JDK 21
         uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
@@ -34,16 +69,33 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate Image Tag
+        id: image-tag
+        run: |
+          IMAGE_OWNER="${{ inputs.image_owner || github.repository_owner }}"
+          BRANCH="${{ inputs.branch || github.ref_name }}"
+          BRANCH_SLUG=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]')
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          IMAGE_TAG="${BRANCH_SLUG}-${SHORT_SHA}"
+          IMAGE_FULL="ghcr.io/${IMAGE_OWNER}/xtdb-bench:${IMAGE_TAG}"
+
+          echo "tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "full=${IMAGE_FULL}" >> "$GITHUB_OUTPUT"
+          echo "owner=${IMAGE_OWNER}" >> "$GITHUB_OUTPUT"
+          echo "Generated image tag: ${IMAGE_TAG}"
+          echo "Full image reference: ${IMAGE_FULL}"
+
       - name: Docker meta for xtdb-bench
         id: meta
         uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5
         with:
-          images: ghcr.io/xtdb/xtdb-bench
+          images: ghcr.io/${{ steps.image-tag.outputs.owner }}/xtdb-bench
           tags: |
             type=schedule
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.image-tag.outputs.tag }}
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@4d9f0ba0025fe599b4ebab900eb7f3a1d93ef4c2 # v5.0.0

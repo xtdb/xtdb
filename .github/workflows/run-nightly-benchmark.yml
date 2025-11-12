@@ -13,11 +13,7 @@ on:
         default: '1.0'
         type: string
       job_display_name:
-        description: 'Label to show in the job name'
-        required: true
-        type: string
-      slack_label:
-        description: 'Human readable label used in Slack notifications'
+        description: 'Label to show in the job name and Slack notifications'
         required: true
         type: string
       timeout_minutes:
@@ -25,21 +21,39 @@ on:
         required: false
         default: 90
         type: number
+      branch:
+        description: 'Branch to build the benchmark image from'
+        required: false
+        default: 'main'
+        type: string
+      image_owner:
+        description: 'Docker registry owner/organization for the benchmark image (defaults to repository owner)'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   id-token: write
   contents: read
   actions: write
+  packages: write
 
 jobs:
+  build-benchmark-image:
+    uses: ./.github/workflows/bench-docker.yml
+    with:
+      branch: ${{ inputs.branch }}
+      image_owner: ${{ inputs.image_owner }}
+
   benchmark:
+    needs: build-benchmark-image
     name: "${{ inputs.job_display_name }} (SF: ${{ inputs.scale_factor }})"
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
     env:
       BENCH_TYPE: ${{ inputs.bench_type }}
       SCALE_FACTOR: ${{ inputs.scale_factor }}
-      SLACK_LABEL: ${{ inputs.slack_label }}
+      SLACK_LABEL: ${{ inputs.job_display_name }}
       GRAFANA_ADMIN_PASSWORD: ${{ secrets.BENCHMARK_GRAFANA_ADMIN_PASSWORD }}
 
     steps:
@@ -161,6 +175,10 @@ jobs:
         env:
           BENCH_TYPE: ${{ env.BENCH_TYPE }}
           SCALE_FACTOR: ${{ env.SCALE_FACTOR }}
+          IMAGE_TAG: ${{ needs.build-benchmark-image.outputs.image_tag }}
+          IMAGE_OWNER: ${{ inputs.image_owner || github.repository_owner }}
+          GIT_SHA: ${{ github.sha }}
+          GIT_BRANCH: ${{ inputs.branch }}
         run: |
           helm dependency update ./modules/bench/cloud/helm
           helm upgrade --install "xtdb-benchmark" ./modules/bench/cloud/helm \
@@ -169,6 +187,10 @@ jobs:
             -f ./modules/bench/cloud/azure/values.yaml \
             --set "benchType=${BENCH_TYPE}" \
             --set "${BENCH_TYPE}.scaleFactor=${SCALE_FACTOR}" \
+            --set "image.repository=ghcr.io/${IMAGE_OWNER}/xtdb-bench" \
+            --set "image.tag=${IMAGE_TAG}" \
+            --set "git.sha=${GIT_SHA}" \
+            --set "git.branch=${GIT_BRANCH}" \
             --set "providerConfig.existingSecret=xtdb-bench-secrets" \
             --set "providerConfig.env.AZURE_USER_MANAGED_IDENTITY_CLIENT_ID=${{ secrets.BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID }}" \
             --set "providerConfig.serviceAccountAnnotations.azure\.workload\.identity/client-id=${{ secrets.BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID }}"
@@ -316,11 +338,29 @@ jobs:
         env:
           SLACK_LABEL: ${{ env.SLACK_LABEL }}
           SCALE_FACTOR: ${{ env.SCALE_FACTOR }}
+          GIT_SHA: ${{ github.sha }}
+          GIT_BRANCH: ${{ inputs.branch }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          IMAGE_OWNER: ${{ inputs.image_owner || github.repository_owner }}
+          IMAGE_TAG: ${{ needs.build-benchmark-image.outputs.image_tag }}
         run: |
           set -euo pipefail
 
+          SHORT_SHA="${GIT_SHA:0:7}"
+          GIT_INFO="Branch: <${REPO_URL}/tree/${GIT_BRANCH}|\`${GIT_BRANCH}\`> | Commit: <${REPO_URL}/commit/${GIT_SHA}|\`${SHORT_SHA}\`>"
+          IMAGE="ghcr.io/${IMAGE_OWNER}/xtdb-bench:${IMAGE_TAG}"
+          # Strip ghcr.io/ prefix for display
+          IMAGE_DISPLAY="${IMAGE#ghcr.io/}"
+          IMAGE_INFO="Image: <https://github.com/${IMAGE_OWNER}/xtdb-bench/pkgs/container/xtdb-bench|\`${IMAGE_DISPLAY}\`>"
+
           if [ "${{ steps.check-deployment.outcome }}" = "success" ] && [ "${{ steps.inspect-deployment.outputs.deployment_status }}" = "in_progress" ]; then
-            echo "msg=:information_source: ${SLACK_LABEL} Benchmark skipped — existing deployment found" >> "$GITHUB_OUTPUT"
+            {
+              echo 'msg<<EOF_MSG'
+              echo ":information_source: ${SLACK_LABEL} Benchmark skipped — existing deployment found"
+              echo "${GIT_INFO}"
+              echo "${IMAGE_INFO}"
+              echo 'EOF_MSG'
+            } >> "$GITHUB_OUTPUT"
           elif [ "${{ steps.immediate-check.outputs.immediate_failure }}" = "true" ]; then
             POD_NAME='${{ steps.immediate-check.outputs.immediate_failure_pod }}'
             LOG_PATH='${{ steps.immediate-check.outputs.immediate_failure_log_path }}'
@@ -328,6 +368,8 @@ jobs:
             : > "$MSG_FILE"
             {
               printf ':x: %s Benchmark failed during startup (pod: `%s`).\n' "${SLACK_LABEL}" "${POD_NAME:-unknown}"
+              echo "${GIT_INFO}"
+              echo "${IMAGE_INFO}"
               if [ -n "$LOG_PATH" ] && [ -f "$LOG_PATH" ]; then
                 echo >> "$MSG_FILE"
                 echo '```' >> "$MSG_FILE"
@@ -342,7 +384,13 @@ jobs:
               echo 'EOF_MSG'
             } >> "$GITHUB_OUTPUT"
           else
-            echo "msg=${SLACK_LABEL} Benchmark (Scale Factor: ${SCALE_FACTOR}) started" >> "$GITHUB_OUTPUT"
+            {
+              echo 'msg<<EOF_MSG'
+              echo "${SLACK_LABEL} Benchmark (Scale Factor: ${SCALE_FACTOR}) started"
+              echo "${GIT_INFO}"
+              echo "${IMAGE_INFO}"
+              echo 'EOF_MSG'
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Post Slack Notification
@@ -350,7 +398,7 @@ jobs:
         if: always()
         with:
           status: ${{ job.status }}
-          notification_title: "*${{ inputs.slack_label }} Benchmark*"
+          notification_title: "*${{ inputs.job_display_name }} Benchmark*"
           message_format: "${{ steps.compose.outputs.msg }}"
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.BENCHMARK_SLACK_WEBHOOK_URL }}

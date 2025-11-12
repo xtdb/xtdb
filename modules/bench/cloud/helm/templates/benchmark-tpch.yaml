@@ -4,6 +4,16 @@ kind: Job
 metadata:
   name: tpch
   namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: xtdb
+    app.kubernetes.io/component: benchmark
+  annotations:
+    {{- if .Values.git.sha }}
+    xtdb.com/git-sha: {{ .Values.git.sha | quote }}
+    {{- end }}
+    {{- if .Values.git.branch }}
+    xtdb.com/git-branch: {{ .Values.git.branch | quote }}
+    {{- end }}
 spec:
   parallelism: 1
   completions: 1

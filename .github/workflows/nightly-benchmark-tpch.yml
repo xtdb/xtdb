@@ -16,6 +16,7 @@ permissions:
   id-token: write
   contents: read
   actions: write
+  packages: write
 
 concurrency:
   group: nightly-benchmark-tpch
@@ -28,7 +29,7 @@ jobs:
     with:
       bench_type: tpch
       job_display_name: TPC-H
-      slack_label: TPC-H
       scale_factor: ${{ inputs.scale_factor || '1.0' }}
+      branch: ${{ github.ref_name }}
       timeout_minutes: 90
     secrets: inherit
