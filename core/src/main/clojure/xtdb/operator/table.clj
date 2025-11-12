@@ -199,6 +199,7 @@
      :children []
      :fields   fields
      :stats    (when row-count {:row-count row-count})
-     :->cursor (fn [{:keys [allocator explain-analyze?] :as opts}]
+     :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span] :as opts}]
                  (cond-> (TableCursor. allocator (->out-rel opts))
-                   explain-analyze? (ICursor/wrapExplainAnalyze)))}))
+                   explain-analyze? (ICursor/wrapExplainAnalyze)
+                   (and tracer query-span) (ICursor/wrapTracing tracer query-span)))}))

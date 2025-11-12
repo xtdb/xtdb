@@ -626,7 +626,7 @@
                               (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
                                                   #(.getField ^IAggregateSpecFactory %))))))
 
-           :->cursor (fn [{:keys [allocator explain-analyze?]} in-cursor]
+           :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                        (cond-> (util/with-close-on-catch [agg-specs (LinkedList.)]
                                  (doseq [^IAggregateSpecFactory factory agg-factories]
                                    (.add agg-specs (.build factory allocator)))
@@ -635,4 +635,5 @@
                                                  (->group-mapper allocator (select-keys fields group-cols))
                                                  (vec agg-specs)
                                                  false))
-                         explain-analyze? (ICursor/wrapExplainAnalyze)))})))))
+                         explain-analyze? (ICursor/wrapExplainAnalyze)
+                         (and tracer query-span) (ICursor/wrapTracing tracer query-span)))})))))

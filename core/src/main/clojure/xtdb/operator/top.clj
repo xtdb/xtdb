@@ -69,7 +69,7 @@
                       :limit (some-> limit-arg pr-str)}
                      (into {} (filter val)))
        :fields fields
-       :->cursor (fn [{:keys [args explain-analyze?]} in-cursor]
+       :->cursor (fn [{:keys [args explain-analyze? tracer query-span]} in-cursor]
                    (cond-> (TopCursor. in-cursor
                                        (case skip-tag
                                          :literal skip-arg
@@ -80,4 +80,5 @@
                                          :param (read-param args limit-arg)
                                          nil Long/MAX_VALUE)
                                        0)
-                     explain-analyze? (ICursor/wrapExplainAnalyze)))})))
+                     explain-analyze? (ICursor/wrapExplainAnalyze)
+                     (and tracer query-span) (ICursor/wrapTracing tracer query-span)))})))

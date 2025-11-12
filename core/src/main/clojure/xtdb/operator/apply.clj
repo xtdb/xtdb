@@ -87,7 +87,7 @@
                                  input-types {:vec-fields dependent-fields
                                               :param-fields param-fields}
                                  projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
-                             (fn [{:keys [allocator args explain-analyze?] :as query-opts}]
+                             (fn [{:keys [allocator args explain-analyze? tracer query-span] :as query-opts}]
                                (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
                                  (cond-> (reify ICursor
                                            (getCursorType [_] "apply-mark-join")
@@ -99,11 +99,12 @@
                                                                          (.accept c (vr/rel-reader [match-vec]))))))
 
                                            (close [_] (.close dep-cursor)))
-                                   explain-analyze? (ICursor/wrapExplainAnalyze)))))
+                                   explain-analyze? (ICursor/wrapExplainAnalyze) 
+                                   (and tracer query-span) (ICursor/wrapTracing tracer query-span)))))
 
                            [:otherwise _] ->dependent-cursor)]
 
-                     (fn [{:keys [allocator explain-analyze?] :as query-opts} independent-cursor]
+                     (fn [{:keys [allocator explain-analyze? tracer query-span] :as query-opts} independent-cursor]
                        (cond-> (ApplyCursor. allocator mode-strat independent-cursor out-dep-fields
                                              (reify DependentCursorFactory
                                                (open [_this in-rel idx]
@@ -116,4 +117,5 @@
                                                                                                                          (.select (int-array [idx]))
                                                                                                                          (.withName (str dk)))))
                                                                                                            1))))))))
-                         explain-analyze? (ICursor/wrapExplainAnalyze))))}))))
+                         explain-analyze? (ICursor/wrapExplainAnalyze)
+                         (and tracer query-span) (ICursor/wrapTracing tracer query-span))))}))))
