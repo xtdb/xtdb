@@ -1475,6 +1475,27 @@
     {:return-type :f64
      :->call-code #(do `(~math-method ~@%))}))
 
+(defmethod codegen-call [:round :int] [{[int-type] :arg-types}]
+  {:return-type int-type
+   :->call-code (fn [[value]]
+                  value)})
+
+(defmethod codegen-call [:round :int :int] [{[int-type _] :arg-types :keys [args]}]
+  (let [[_ scale-arg] args
+        scale-literal (:literal scale-arg)]
+    (when-not (integer? scale-literal)
+      (throw (err/illegal-arg ::non-literal-scale
+                              {::err/message "ROUND(INTEGER, INTEGER) with non-constant scale is not supported. Use ROUND(val::DOUBLE, scale) for dynamic scales."})))
+    (let [bit-width 128
+          precision (case int-type
+                      :i32 10
+                      :i64 19)]
+      {:return-type [:decimal precision scale-literal bit-width]
+       :->call-code (fn [[value scale-code]]
+                      `(.setScale (java.math.BigDecimal/valueOf (long ~value))
+                                  ~scale-code
+                                  RoundingMode/HALF_UP))})))
+
 (defmethod codegen-call [:round :num] [_]
   {:return-type :f64
    :->call-code (fn [[value]]
@@ -1486,15 +1507,27 @@
 (defmethod codegen-call [:round :num :int] [{[num-type _] :arg-types}]
   {:return-type :f64
    :->call-code (fn [[value scale]]
-                  `(let [scale# ~scale
-                         multiplier# (Math/pow 10.0 scale#)
-                         scaled# (* ~value multiplier#)]
-                     (when-not (Double/isFinite scaled#)
-                       (throw (ArithmeticException. "ROUND scale parameter produces overflow")))
-                     (let [rounded# (if (>= scaled# 0)
-                                      (Math/floor (+ scaled# 0.5))
-                                      (Math/ceil (- scaled# 0.5)))]
-                       (/ rounded# multiplier#))))})
+                  `(let [v# ~value]
+                     (if-not (Double/isFinite v#)
+                       v#
+                       (let [scale# ~scale]
+                         (if (>= scale# 0)
+                           (let [multiplier# (Math/pow 10.0 scale#)
+                                 scaled# (* v# multiplier#)]
+                             (when-not (Double/isFinite scaled#)
+                               (throw (ArithmeticException. "ROUND scale parameter produces overflow")))
+                             (let [rounded# (if (>= scaled# 0)
+                                              (Math/floor (+ scaled# 0.5))
+                                              (Math/ceil (- scaled# 0.5)))]
+                               (/ rounded# multiplier#)))
+                           (let [divisor# (Math/pow 10.0 (- scale#))
+                                 divided# (/ v# divisor#)]
+                             (when-not (Double/isFinite divided#)
+                               (throw (ArithmeticException. "ROUND scale parameter produces overflow")))
+                             (let [rounded# (if (>= divided# 0)
+                                              (Math/floor (+ divided# 0.5))
+                                              (Math/ceil (- divided# 0.5)))]
+                               (* rounded# divisor#))))))))})
 
 (defmethod codegen-call [:round :decimal] [{[[_ precision scale bit-width]] :arg-types}]
   {:return-type [:decimal precision 0 bit-width]

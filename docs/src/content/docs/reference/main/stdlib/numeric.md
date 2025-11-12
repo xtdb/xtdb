@@ -55,7 +55,7 @@ The standard arithmetic functions are available:
   - `ROUND(1234.56, -1)` → `1230.0`
 
   **Type behavior:**
-  - For numeric types (`INTEGER`, `DOUBLE`): `s` can be a literal or column value. Returns `DOUBLE`.
+  - For numeric types (`INTEGER`, `DOUBLE`): `s` can be a literal or column value.
   - For `DECIMAL` types: `s` must be a literal constant. Returns `DECIMAL` with the specified scale.
   - To use a non-constant scale with `DECIMAL`, cast to `DOUBLE` first: `ROUND(val::DOUBLE, scale_column)`
 
