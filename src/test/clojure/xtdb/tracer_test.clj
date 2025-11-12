@@ -8,13 +8,41 @@
            (io.opentelemetry.sdk.trace.data SpanData)
            (io.opentelemetry.sdk.trace.export SimpleSpanProcessor SpanExporter)))
 
+(defn span-attributes->map [^Attributes attributes]
+  (->> (.asMap attributes)
+       (map (fn [[^AttributeKey k v]] [(.getKey k) v])) 
+       (remove (fn [[k _]] (re-find #"time" k))) ;; remove any timing-related keys
+       (into {})))
+
+(defn span-data->res [^SpanData span]
+  {:name (.getName span)
+   :attributes (span-attributes->map (.getAttributes span))
+   :parent-id (.getParentSpanId span)
+   :span-id (.getSpanId span)
+   :start-nanos (.getStartEpochNanos span)})
+
 (defn- test-span-exporter [!spans]
   (reify SpanExporter
     (export [_ span-data]
-            (swap! !spans concat span-data)
-            (CompletableResultCode/ofSuccess))
+      (swap! !spans concat (mapv span-data->res span-data))
+      (CompletableResultCode/ofSuccess))
     (flush [_] (CompletableResultCode/ofSuccess))
     (shutdown [_] (CompletableResultCode/ofSuccess))))
+
+(defn build-span-tree [spans]
+  ;; Group spans by parent span ID
+  (let [spans-by-parent (group-by :parent-id spans)]
+
+    (letfn [(attach-children [span]
+              ;; Recursively attach children, sorted by start time
+              (let [child-spans (sort-by :start-nanos (spans-by-parent (:span-id span)))
+                    children (mapv attach-children child-spans)]
+                (-> span
+                    (dissoc :span-id :parent-id :start-nanos)
+                    (assoc :children children))))]
+
+      ;; Start from root spans (those with no parent)
+      (mapv attach-children (sort-by :start-nanos (spans-by-parent "0000000000000000"))))))
 
 (t/deftest test-query-creates-span
   (t/testing "running a query creates a pgwire.query span"
@@ -24,20 +52,26 @@
       (with-open [node (xtn/start-node
                         {:tracer {:enabled? true
                                   :service-name "xtdb-test"
-                                  :span-processor span-processor}})] 
-        
-        (xt/q node "SELECT 1")
+                                  :span-processor span-processor}})]
 
+        (xt/q node "SELECT 1")
         ;; Give spans a moment to be exported
         (Thread/sleep 100)
 
-        (let [current-spans @!spans
-              ^SpanData span (first current-spans)
-              ^Attributes span-attributes (.getAttributes span)
-              ^AttributeKey attribute-key (AttributeKey/stringKey "db.statement") ]
-          (t/is (= 1 (count current-spans)))
-          (t/is (= "pgwire.query" (.getName span))) 
-          (t/is (= "SELECT 1" (.get span-attributes attribute-key))))))))
+        (t/is (= [{:name "pgwire.query"
+                   :attributes {"db.statement" "SELECT 1"}
+                   :children
+                   [{:name "query.cursor.project"
+                     :attributes {"cursor.page_count" "1"
+                                  "cursor.row_count" "1"
+                                  "cursor.type" "project"}
+                     :children []}
+                    {:name "query.cursor.table"
+                     :attributes {"cursor.page_count" "1"
+                                  "cursor.row_count" "1"
+                                  "cursor.type" "table"}
+                     :children []}]}]
+                 (build-span-tree @!spans)))))))
 
 (t/deftest ensure-pgwire-simple-query-behaves-with-traces
   (let [!spans (atom [])
@@ -50,16 +84,23 @@
                 pgw-test/*server* node]
         (with-open [conn (pgw-test/jdbc-conn {"preferQueryMode" "simple"})
                     stmt (.createStatement conn)
-                    rs (.executeQuery stmt "SELECT 1 as a")]
-          (t/is (= [{"a" 1}] (pgw-test/rs->maps rs)))
+                    rs (.executeQuery stmt "SELECT 1")]
+          (t/is (= [{"_column_1" 1}] (pgw-test/rs->maps rs)))
           
           ;; Give spans a moment to be exported
           (Thread/sleep 100)
           
-          (let [current-spans @!spans
-                ^SpanData span (first current-spans)
-                ^Attributes span-attributes (.getAttributes span)
-                ^AttributeKey attribute-key (AttributeKey/stringKey "db.statement")]
-            (t/is (= 1 (count current-spans)))
-            (t/is (= "pgwire.query" (.getName span)))
-            (t/is (= "SELECT 1 as a" (.get span-attributes attribute-key)))))))))
+          (t/is (= [{:name "pgwire.query"
+                     :attributes {"db.statement" "SELECT 1"}
+                     :children
+                     [{:name "query.cursor.project"
+                       :attributes {"cursor.page_count" "1"
+                                    "cursor.row_count" "1"
+                                    "cursor.type" "project"}
+                       :children []}
+                      {:name "query.cursor.table"
+                       :attributes {"cursor.page_count" "1"
+                                    "cursor.row_count" "1"
+                                    "cursor.type" "table"}
+                       :children []}]}]
+                   (build-span-tree @!spans))))))))
