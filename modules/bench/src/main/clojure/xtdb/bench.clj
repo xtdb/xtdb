@@ -231,7 +231,6 @@
 
         :pool (let [{:keys [^Duration duration ^Duration think ^Duration join-wait thread-count pooled-task]} task
                     think-ms (.toMillis (or think Duration/ZERO))
-                    sleep (if (pos? think-ms) #(Thread/sleep think-ms) (constantly nil))
                     f (compile-task pooled-task)
 
                     executor (Executors/newFixedThreadPool thread-count (util/->prefix-thread-factory "xtdb-benchmark"))
@@ -240,8 +239,12 @@
                                   (loop [wait-until (+ (current-timestamp-ms worker) (.toMillis duration))]
                                     (f worker)
                                     (when (< (current-timestamp-ms worker) wait-until)
-                                      (sleep)
-                                      (recur wait-until))))
+                                      ;; Sleep only the remaining time (or think time, whichever is less)
+                                      (let [remaining-ms (- wait-until (current-timestamp-ms worker))
+                                            sleep-ms (min think-ms remaining-ms)]
+                                        (when (pos? sleep-ms)
+                                          (Thread/sleep sleep-ms))
+                                        (recur wait-until)))))
 
                     start-thread (fn [root-worker _i]
                                    (let [bindings (get-thread-bindings)
@@ -256,11 +259,10 @@
                   ;; Launch threads, collect Futures so we can collect any exceptions after termination
                   (let [futures (mapv #(start-thread worker %) (range thread-count))]
                     (Thread/sleep (.toMillis duration))
+                    ;; Graceful shutdown - threads will exit naturally when deadline is reached
                     (.shutdown executor)
                     (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
-                      (.shutdownNow executor)
-                      (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
-                        (throw (ex-info "Pool threads did not stop within join-wait" {:task task, :executor executor}))))
+                      (throw (ex-info "Pool threads did not stop within join-wait" {:task task, :executor executor})))
                     ;; Propagate any worker exceptions to the main thread
                     (doseq [f futures]
                       (try
@@ -268,10 +270,7 @@
                         (catch ExecutionException e
                           (let [cause (.getCause e)]
                             (log/error cause "Benchmark worker failed in :pool" {:task task})
-                            (throw (ex-info "Benchmark worker failed" {:task task} cause))))
-                        (catch InterruptedException e
-                          (log/error e "Interrupted while awaiting worker completion in :pool" {:task task})
-                          (throw (ex-info "Interrupted while awaiting worker completion" {:task task} e))))))))
+                            (throw (ex-info "Benchmark worker failed" {:task task} cause)))))))))
 
         :concurrently (let [{:keys [^Duration duration, ^Duration join-wait, thread-tasks]} task
                             thread-task-fns (mapv compile-task thread-tasks)
@@ -289,11 +288,10 @@
                           ;; Launch threads, collect Futures so we can collect any exceptions after termination
                           (let [futures (mapv #(start-thread worker %1 %2) (range (count thread-task-fns)) thread-task-fns)]
                             (Thread/sleep (.toMillis duration))
+                            ;; Graceful shutdown - threads should complete their tasks naturally
                             (.shutdown executor)
                             (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
-                              (.shutdownNow executor)
-                              (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
-                                (throw (ex-info "Task threads did not stop within join-wait" {:task task, :executor executor}))))
+                              (throw (ex-info "Task threads did not stop within join-wait" {:task task, :executor executor})))
                             ;; Propagate any worker exceptions to the main thread
                             (doseq [f futures]
                               (try
@@ -301,10 +299,7 @@
                                 (catch ExecutionException e
                                   (let [cause (.getCause e)]
                                     (log/error cause "Benchmark worker failed in :concurrently" {:task task})
-                                    (throw (ex-info "Benchmark worker failed" {:task task} cause))))
-                                (catch InterruptedException e
-                                  (log/error e "Interrupted while awaiting worker completion in :concurrently" {:task task})
-                                  (throw (ex-info "Interrupted while awaiting worker completion" {:task task} e))))))))
+                                    (throw (ex-info "Benchmark worker failed" {:task task} cause)))))))))
 
         :pick-weighted (let [{:keys [choices]} task
                              sample-fn (weighted-sample-fn (mapv (fn [[weight task]] [(compile-task task) weight]) choices))]
@@ -319,14 +314,17 @@
                                 job-task]} task
                         f (compile-task job-task)
                         duration-ms (.toMillis (or duration Duration/ZERO))
-                        freq-ms (.toMillis (or freq Duration/ZERO))
-                        sleep (if (pos? freq-ms) #(Thread/sleep freq-ms) (constantly nil))]
+                        freq-ms (.toMillis (or freq Duration/ZERO))]
                     (fn run-freq-job [worker]
                       (loop [wait-until (+ (current-timestamp-ms worker) duration-ms)]
                         (f worker)
                         (when (< (current-timestamp-ms worker) wait-until)
-                          (sleep)
-                          (recur wait-until))))))
+                          ;; Sleep only the remaining time (or freq time, whichever is less)
+                          (let [remaining-ms (- wait-until (current-timestamp-ms worker))
+                                sleep-ms (min freq-ms remaining-ms)]
+                            (when (pos? sleep-ms)
+                              (Thread/sleep sleep-ms))
+                            (recur wait-until)))))))
 
       (wrap-task task)))
 
