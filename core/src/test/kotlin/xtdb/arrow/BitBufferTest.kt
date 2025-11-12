@@ -1,6 +1,7 @@
 package xtdb.arrow
 
 import io.kotest.core.tuple
+import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.arbitrary
@@ -96,6 +97,20 @@ class BitBufferTest {
                         dest.asBooleans shouldBe expected.asBooleans
                     }
                 }
+            }
+        }
+    }
+
+    @Test
+    fun testWriteOnes(al: BufferAllocator) = runTest {
+        checkAll(Arb.list(Arb.boolean(), 0..32), Arb.nonNegativeInt(128)) { prefixBits, onesCount ->
+            BitBuffer(al).use { buf ->
+                prefixBits.forEach { buf.writeBoolean(it) }
+                buf.writeOnes(onesCount)
+
+                val actual = buf.asBooleans
+                actual.take(prefixBits.size) shouldBe prefixBits
+                actual.drop(prefixBits.size).should { l -> l.all { it } }
             }
         }
     }

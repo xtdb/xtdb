@@ -72,6 +72,48 @@ internal class BitBuffer private constructor(
 
     fun writeBoolean(bool: Boolean) = writeBit(if (bool) 1 else 0)
 
+    fun writeOnes(len: Int) {
+        ensureWritable(len)
+
+        var bitsRemaining = len
+        val destBuf = buf
+        var writerBitIndex = this.writerBitIndex
+
+        // Handle partial first byte if not aligned
+        if (writerBitIndex % 8 != 0) {
+            val bitsInFirstByte = minOf(8 - (writerBitIndex % 8), bitsRemaining)
+            var tailByte = destBuf.getByte((writerBitIndex / 8).toLong()).toInt()
+
+            for (i in 0 until bitsInFirstByte) {
+                val bitIdx = (writerBitIndex + i) % 8
+                tailByte = tailByte or (1 shl bitIdx)
+            }
+
+            destBuf.setByte((writerBitIndex / 8).toLong(), tailByte)
+            writerBitIndex += bitsInFirstByte
+            bitsRemaining -= bitsInFirstByte
+        }
+
+        val fullBytes = bitsRemaining / 8
+        if (fullBytes > 0) {
+            val byteOffset = (writerBitIndex / 8).toLong()
+            destBuf.setOne(byteOffset, fullBytes.toLong())
+            writerBitIndex += fullBytes * 8
+            bitsRemaining -= fullBytes * 8
+        }
+
+        if (bitsRemaining > 0) {
+            var tailByte = 0
+            for (i in 0 until bitsRemaining) {
+                tailByte = tailByte or (1 shl i)
+            }
+            destBuf.setByte((writerBitIndex / 8).toLong(), tailByte)
+            writerBitIndex += bitsRemaining
+        }
+
+        this.writerBitIndex = writerBitIndex
+    }
+
     fun writeBits(src: BitBuffer, sel: VectorIndirection) {
         ensureWritable(sel.valueCount())
         val srcRdr = src.valueReader()
