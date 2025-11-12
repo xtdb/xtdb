@@ -1227,7 +1227,7 @@
   (swap! conn-state update-in [:session :characteristics] (fnil into {}) session-characteristics)
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
 
-(defn- cmd-exec-dml [{:keys [conn-state tx-error-counter] :as conn} {:keys [dml-type query args param-oids]}]
+(defn- cmd-exec-dml [{:keys [node conn-state tx-error-counter default-db] :as conn} {:keys [dml-type query args param-oids]}]
   (when (or (not= (count param-oids) (count args))
             (some (fn [idx]
                     (and (zero? (nth param-oids idx))
@@ -1236,6 +1236,26 @@
     (metrics/inc-counter! tx-error-counter)
     (throw (err/incorrect ::missing-arg-types "Missing types for args - client must specify types for all non-null params in DML statements"
                           {:query query, :param-oids param-oids})))
+
+  ;; Extract warnings during interactive sessions (typically non-parameterized statements)
+  (when (empty? param-oids)
+    (try
+      (let [^PreparedQuery pq (with-auth-check conn
+                                (xtp/prepare-sql node
+                                                 (antlr/parse-statement query)
+                                                 {:default-db default-db}))]
+
+        ;; Send any warnings to the client
+        (when-let [warnings (.getWarnings pq)]
+          (doseq [warning warnings]
+            (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning))))))
+
+      (catch IllegalArgumentException e
+        (log/debug e "Error planning DML statement for warnings"))
+      (catch RuntimeException e
+        (log/debug e "Error planning DML statement for warnings"))
+      (catch Throwable e
+        (log/debug e "Error planning DML statement for warnings"))))
 
   (when-not (:transaction @conn-state)
     (cmd-begin conn {:implicit? true, :access-mode :read-write} {}))

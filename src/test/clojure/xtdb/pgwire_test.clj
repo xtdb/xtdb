@@ -3008,3 +3008,13 @@ ORDER BY 1,2;")
     (t/is (thrown-with-msg? PSQLException #"Cannot put documents with columns.*_system_from"
                             (jdbc/execute! conn ["INSERT INTO docs RECORDS ?"
                                                  {"_id" 2, "_system_from" #inst "2024-01-01T00:00:00Z"}])))))
+
+(t/deftest test-column-not-found-warning-in-dml-4531
+  (t/testing "INSERT with double-quoted column refs should warn - #4531"
+    (with-open [conn (jdbc-conn)
+                stmt (.createStatement conn)]
+      (.execute stmt "INSERT INTO customer RECORDS {_id: 3, address: {country: \"FI\", street: \"Street 7\", postal: \"123456\"}, name: \"Some Name\"}")
+      (let [warnings (stmt->warnings stmt)]
+        (t/is (seq warnings) "Expected warnings for column references (double-quoted strings) not found")
+        (t/is (some #(re-find #"Column not found" (.getMessage ^SQLWarning %)) warnings)
+              "Should have column-not-found warnings for FI, Street 7, 123456, and Some Name")))))
