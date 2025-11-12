@@ -62,3 +62,29 @@
         (t/is (= 5 (count tx-payloads)))
         (t/is (= [:put :put :put :put :delete :erase] (map :op docs-payloads)))
         (t/is (= [:put] (map :op other-payloads)))))))
+
+(t/deftest ^:integration test-tx-sink-restart-behaviour
+  (util/with-tmp-dirs #{node-dir}
+    (let [log-topic (str "xtdb.kafka-test." (random-uuid))
+          output-topic (str "xtdb.kafka-test." (random-uuid))
+          node-opts (merge tu/*node-opts*
+                           {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
+                            :log [:kafka {:cluster :my-kafka :topic log-topic}]
+                            :storage [:local {:path (.resolve node-dir "storage")}]
+                            :compactor {:threads 0}
+                            :tx-sink {:enable true
+                                      :output-log [:kafka {:cluster :my-kafka, :topic output-topic}]
+                                      :format :transit+json}})]
+      (with-open [node (xtn/start-node node-opts)]
+        (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
+        (let [msgs (consume-messages *bootstrap-servers* output-topic)]
+          (t/is (= 1 (count msgs)))
+          ;; NOTE: No flush here, so offset isn't be committed yet
+          ,))
+      ;; Restart node
+      (with-open [node (xtn/start-node node-opts)]
+        ;; Flush block to ensure node has processed all messages
+        (tu/flush-block! node)
+        (let [msgs (consume-messages *bootstrap-servers* output-topic)]
+          ; above + duplicate = 2
+          (t/is (= 2 (count msgs))))))))
