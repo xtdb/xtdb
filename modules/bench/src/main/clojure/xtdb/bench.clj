@@ -23,6 +23,14 @@
            (java.util.concurrent.atomic AtomicLong)
            (oshi SystemInfo)))
 
+(extend-protocol json/JSONWriter
+  Duration
+  (-write [^Duration duration out _options]
+    (let [^Appendable out out]
+      (.append out \")
+      (.append out (.toString duration))
+      (.append out \"))))
+
 (defn wrap-in-catch [f]
   (fn [& args]
     (try
