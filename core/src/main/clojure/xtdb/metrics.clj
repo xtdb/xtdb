@@ -55,8 +55,11 @@
 (defn add-allocator-gauge [reg meter-name ^BufferAllocator allocator]
   (add-gauge reg meter-name (fn [] (.getAllocatedMemory allocator)) {:unit "bytes"}))
 
-(defn start-span ^Span [^Tracer tracer span-name attributes]
-  (let [span (-> (.nextSpan tracer)
+(defn start-span ^Span [^Tracer tracer ^String span-name {:keys [^Span parent-span attributes]}]
+  (let [span-builder (if parent-span
+                       (.nextSpan tracer parent-span)
+                       (.nextSpan tracer))
+        span (-> span-builder
                  (.name span-name)
                  (.start))]
     (doseq [[k v] attributes]
@@ -66,11 +69,12 @@
 (defn end-span [^Span span]
   (.end span))
 
-(defmacro with-span [tracer span-name attributes & body]
+(defmacro with-span [tracer span-name opts & body]
   `(if-let [tracer# ~tracer]
-     (let [span# (start-span tracer# ~span-name ~attributes)]
+     (let [span# (start-span tracer# ~span-name ~opts)]
        (try
-         ~@body
+         (with-open [_# (.withSpan tracer# span#)]
+           ~@body)
          (finally
            (end-span span#))))
      (do ~@body)))

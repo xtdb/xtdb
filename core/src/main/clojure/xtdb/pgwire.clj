@@ -1155,7 +1155,7 @@
 
     ;; Create query span at bind time for query/show-variable statements and store in conn-state
     (when (and query-tracer (#{:query :show-variable} (:statement-type stmt)))
-      (let [query-span (metrics/start-span query-tracer "pgwire.query" {:db.statement (:query stmt)})]
+      (let [query-span (metrics/start-span query-tracer "pgwire.query" {:attributes {:db.statement (:query stmt)}})]
         (swap! conn-state assoc :query-span query-span)))
 
     (let [bound-stmt (bind-stmt conn stmt)]
@@ -1457,7 +1457,7 @@
             (throw (pgio/err-protocol-violation "Parameters not allowed in simple queries")))
 
           (let [query-span (when (and query-tracer (#{:query :show-variable} statement-type))
-                             (metrics/start-span query-tracer "pgwire.query" {:db.statement (:query stmt)}))
+                             (metrics/start-span query-tracer "pgwire.query" {:attributes {:db.statement (:query stmt)}}))
                 _ (swap! conn-state assoc :query-span query-span)
                 portal (bind-stmt conn prepared-stmt)]
             (try
