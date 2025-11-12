@@ -40,11 +40,12 @@
   (case fmt
     :transit+json xtdb.serde/write-transit))
 
-(defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format enable]}]
+(defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format enable db-name]}]
   (.txSink config
            (cond-> (TxSinkConfig.)
              (some? enable) (.enable enable)
              (some? output-log) (.outputLog (log/->log-factory (first output-log) (second output-log)))
+             (some? db-name) (.dbName db-name)
              (some? format) (.format (str (symbol format))))))
 
 (defmethod ig/expand-key ::for-db [k {:keys [base ^TxSinkConfig tx-sink-conf db-name]}]
@@ -69,7 +70,9 @@
            (.appendMessage output-log)))))
 
 (defmethod ig/init-key ::for-db [_ {:keys [^TxSinkConfig tx-sink-conf output-log db-name]}]
-  (when (and tx-sink-conf (.getEnable tx-sink-conf))
+  (when (and tx-sink-conf
+             (.getEnable tx-sink-conf)
+             (= db-name (.getDbName tx-sink-conf)))
     (map->TxSink {:output-log output-log
                   :encode-as-bytes (->encode-fn (keyword (.getFormat tx-sink-conf)))
                   :db-name db-name})))

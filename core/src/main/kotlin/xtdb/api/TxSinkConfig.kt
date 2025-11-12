@@ -5,6 +5,7 @@ import xtdb.api.log.Log
 
 @Serializable
 data class TxSinkConfig(
+    var dbName: String = "xtdb",
     var format: String = "transit+json",
     var outputLog: Log.Factory = Log.inMemoryLog,
 ) {
@@ -12,6 +13,7 @@ data class TxSinkConfig(
     var enable: Boolean = false
 
     fun enable(enable: Boolean = true) = apply { this.enable = enable }
+    fun dbName(dbName: String) = apply { this.dbName = dbName }
     fun format(format: String) = apply { this.format = format }
     fun outputLog(log: Log.Factory) = apply { this.outputLog = log }
 }

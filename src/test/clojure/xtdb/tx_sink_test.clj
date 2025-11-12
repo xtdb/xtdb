@@ -22,12 +22,14 @@
     store))
 
 (defn decode-record [msg] (-> msg Log$Record/.getMessage Log$Message/.encode xtdb.serde/read-transit))
-(defn get-output-log [node]
-  (let [^Database$Catalog db-cat (util/component node :xtdb/db-catalog)]
-    (-> db-cat
-        (.databaseOrNull "xtdb")
-        (.getTxSink)
-        :output-log)))
+(defn get-output-log
+  ([node] (get-output-log node "xtdb"))
+  ([node db-name]
+   (let [^Database$Catalog db-cat (util/component node :xtdb/db-catalog)]
+     (-> db-cat
+         (.databaseOrNull db-name)
+         (.getTxSink)
+         :output-log))))
 
 (t/deftest test-tx-sink-output
   (with-open [node (xtn/start-node (merge tu/*node-opts*
@@ -117,3 +119,22 @@
     (t/is (thrown? java.lang.IllegalStateException
                    "tx sink not initialised"
                    (get-output-log node)))))
+
+(t/deftest test-tx-sink-multi-db
+  (with-open [node (xtn/start-node {:tx-sink {:enable true
+                                              :db-name "secondary"
+                                              :output-log [:in-memory {}]
+                                              :format :transit+json}})]
+    (t/testing "not enabled for primary db"
+      (t/is (thrown? java.lang.IllegalStateException
+                     "tx sink not initialised"
+                     (get-output-log node))))
+    (t/testing "enabled for secondary db"
+      (jdbc/execute! node [(format "ATTACH DATABASE secondary WITH $$log: !InMemory$$")])
+      (let [secondary (.build (-> (.createConnectionBuilder node)
+                                  (.database "secondary")))
+            output-log ^Log (get-output-log node "secondary")
+            store (recording-subscriber output-log)]
+        (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
+        (jdbc/execute! secondary ["INSERT INTO docs RECORDS {_id: 1}"])
+        (t/is (= 1 (count @store)))))))
