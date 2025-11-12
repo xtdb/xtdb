@@ -3018,3 +3018,25 @@ ORDER BY 1,2;")
         (t/is (seq warnings) "Expected warnings for column references (double-quoted strings) not found")
         (t/is (some #(re-find #"Column not found" (.getMessage ^SQLWarning %)) warnings)
               "Should have column-not-found warnings for FI, Street 7, 123456, and Some Name")))))
+
+(t/deftest test-failed-transaction-blocks-dml-4071
+  (t/testing "DML in failed transaction should error, not show success - #4071"
+    (with-open [conn (jdbc-conn)
+                stmt (.createStatement conn)]
+      (.execute stmt "BEGIN")
+
+      (t/testing "First DML fails with syntax error"
+        (is (thrown-with-msg? PSQLException #"ERROR"
+                              (.execute stmt "INSERT INTO foo RECORDS {_id: 1, invalid syntax here}"))))
+
+      (t/testing "Subsequent DML should fail with 'transaction aborted' error"
+        (let [ex (is (thrown? PSQLException
+                              (.execute stmt "INSERT INTO foo RECORDS {_id: 2, name: 'test'}")))]
+          (is (re-find #"current transaction is aborted" (.getMessage ex))
+              "Should indicate transaction is aborted")
+          (is (re-find #"commands ignored until ROLLBACK is received" (.getMessage ex))
+              "Should tell user to rollback")))
+
+      (t/testing "After ROLLBACK, DML should work again"
+        (.execute stmt "ROLLBACK")
+        (.execute stmt "INSERT INTO foo RECORDS {_id: 3, name: 'works now'}")))))

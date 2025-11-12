@@ -1228,6 +1228,9 @@
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
 
 (defn- cmd-exec-dml [{:keys [node conn-state tx-error-counter default-db] :as conn} {:keys [dml-type query args param-oids]}]
+  (when (get-in @conn-state [:transaction :failed])
+    (throw (pgio/err-protocol-violation "current transaction is aborted, commands ignored until ROLLBACK is received")))
+
   (when (or (not= (count param-oids) (count args))
             (some (fn [idx]
                     (and (zero? (nth param-oids idx))
