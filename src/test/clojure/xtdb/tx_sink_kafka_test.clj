@@ -4,7 +4,8 @@
             [xtdb.serde :as serde]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.tx-sink.main :as tx-sink])
   (:import (org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer)
            org.testcontainers.kafka.ConfluentKafkaContainer
            org.testcontainers.utility.DockerImageName))
@@ -87,4 +88,30 @@
         (tu/flush-block! node)
         (let [msgs (consume-messages *bootstrap-servers* output-topic)]
           ; above + duplicate = 2
+          (t/is (= 2 (count msgs))))))))
+
+(t/deftest ^:integration test-tx-sink-main-test
+  ;; Tests that tx-sink tails the main node
+  (util/with-tmp-dirs #{node-dir}
+    (let [log-topic (str "xtdb.kafka-test." (random-uuid))
+          output-topic (str "xtdb.kafka-test." (random-uuid))
+          node-opts (merge tu/*node-opts*
+                           {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
+                            :log [:kafka {:cluster :my-kafka :topic log-topic}]
+                            :storage [:local {:path (.resolve node-dir "storage")}]
+                            :compactor {:threads 0}})]
+      (with-open [node (xtn/start-node node-opts)]
+        (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
+        (let [msgs (consume-messages *bootstrap-servers* output-topic)]
+          (t/is (= 0 (count msgs))))
+        (with-open [_tx-sink-node (tx-sink/open! (merge node-opts
+                                                        {:tx-sink {:output-log [:kafka {:cluster :my-kafka, :topic output-topic}]
+                                                                   :format :transit+json}}))]
+          (let [msgs (consume-messages *bootstrap-servers* output-topic)]
+            (t/is (= 1 (count msgs))))
+          (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
+          (let [msgs (consume-messages *bootstrap-servers* output-topic)]
+            (t/is (= 2 (count msgs)))))
+        (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
+        (let [msgs (consume-messages *bootstrap-servers* output-topic)]
           (t/is (= 2 (count msgs))))))))
