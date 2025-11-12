@@ -13,5 +13,6 @@
                 "modules/aws/src/main/clojure" "modules/aws/src/main/java"
                 "modules/bench/src/main/clojure"
 
+                "src/testFixtures/clojure"
                 "src/test/clojure" "src/dev/clojure"]
  :paths-ignore-regex ["dev/*"]}
