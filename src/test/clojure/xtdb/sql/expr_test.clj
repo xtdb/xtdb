@@ -292,7 +292,7 @@
     (t/is (= [{:result -1230M}] (xt/q tu/*node* "SELECT ROUND(-1234.56::DECIMAL, -1) AS result")))
     (t/is (= [{:result -1200M}] (xt/q tu/*node* "SELECT ROUND(-1234.56::DECIMAL, -2) AS result")))))
 
-#_(t/deftest test-round-overflow
+(t/deftest test-round-overflow
   (t/testing "ROUND with literal scale that would cause overflow throws exception"
     (t/is (thrown-with-msg? Exception #"overflow"
                             (xt/q tu/*node* "SELECT ROUND(1e308, 200) AS result")))

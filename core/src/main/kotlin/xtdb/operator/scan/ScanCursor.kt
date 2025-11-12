@@ -46,9 +46,8 @@ class ScanCursor(
     private val bufferedRels: Queue<RelationReader> = LinkedList()
 
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
-        bufferedRels.poll()?.let {
+        bufferedRels.poll()?.use {
             c.accept(it)
-            it.close()
             return true
         }
 
@@ -112,9 +111,8 @@ class ScanCursor(
                     .safeMap { it.openSlice(al) }
                     .also { bufferedRels.addAll(it) }
 
-                bufferedRels.poll()?.let {
+                bufferedRels.poll()?.use {
                     c.accept(it)
-                    it.close()
                     return true
                 }
             }
