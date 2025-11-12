@@ -76,8 +76,14 @@ class FixedSizeListVector private constructor(
             elVector is NullVector && elVector.valueCount == 0 ->
                 Field("\$data\$", fieldType, emptyList()).openVector(al).also { elVector = it }
 
-            else -> TODO("promote elVector")
+            else -> elVector.maybePromote(al, fieldType).also { elVector = it }
         }
+
+    fun maybePromoteElement(targetFieldType: FieldType) {
+        if (elVector.field.fieldType != targetFieldType) {
+            elVector = elVector.maybePromote(al, targetFieldType)
+        }
+    }
 
     override fun getListCount(idx: Int) = listSize
     override fun getListStartIndex(idx: Int) = idx * listSize
