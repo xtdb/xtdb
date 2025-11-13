@@ -83,8 +83,8 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
 
         private class TracingCursor(
             private val inner: ICursor,
-            private val tracer: Tracer,
-            private val parentSpan: Span,
+            private val tracer: Tracer?,
+            private val parentSpan: Span?,
             private val clock: InstantSource = InstantSource.system()
         ) : ICursor by inner {
             private var pageCount: Int = 0;
@@ -99,10 +99,12 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
                 if (!started) {
                     started = true
                     startTime = clock.instant()
-                    span = tracer.nextSpan(parentSpan)!!
-                        .name("query.cursor.${inner.cursorType}")
-                        .tag("cursor.type", inner.cursorType)
-                        .start()
+                    if (tracer != null && parentSpan != null) {
+                        span = tracer.nextSpan(parentSpan)!!
+                            .name("query.cursor.${inner.cursorType}")
+                            .tag("cursor.type", inner.cursorType)
+                            .start()
+                    }
                 }
                 val pageStart = clock.instant()
 
@@ -118,15 +120,17 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             }
 
             override fun close() {
-                span!!.tag("cursor.total_time_ms", totalTime.toMillis().toString())
-                timeToFirstPage?.let { ttfp ->
-                    span!!.tag("cursor.time_to_first_page_ms", ttfp.toMillis().toString())
-                }
-                span!!.tag("cursor.page_count", pageCount.toString())
-                span!!.tag("cursor.row_count", rowCount.toString())
                 inner.close()
-                val endTime = startTime.plus(totalTime)
-                span!!.end(endTime.asMicros, java.util.concurrent.TimeUnit.MICROSECONDS)
+                span?.let { s ->
+                    s.tag("cursor.total_time_ms", totalTime.toMillis().toString())
+                    timeToFirstPage?.let { ttfp ->
+                        s.tag("cursor.time_to_first_page_ms", ttfp.toMillis().toString())
+                    }
+                    s.tag("cursor.page_count", pageCount.toString())
+                    s.tag("cursor.row_count", rowCount.toString())
+                    val endTime = startTime.plus(totalTime)
+                    s.end(endTime.asMicros, java.util.concurrent.TimeUnit.MICROSECONDS)
+                }
             }
 
             @Suppress("RedundantOverride")
