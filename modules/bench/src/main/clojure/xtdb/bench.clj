@@ -31,6 +31,27 @@
       (.append out (.toString duration))
       (.append out \"))))
 
+(def ^:private timeout-sentinel ::benchmark-timeout)
+
+(defn- normalize-timeout ^Duration [^Duration duration]
+  (when (and duration (pos? (.toMillis duration)))
+    duration))
+
+(defn- run-with-timeout [f ^Duration timeout]
+  (let [timeout (normalize-timeout timeout)
+        timeout-ms (some-> timeout .toMillis)]
+    (if (and timeout-ms (pos? timeout-ms))
+      (let [fut (future (f))
+            result (deref fut timeout-ms timeout-sentinel)]
+        (if (= timeout-sentinel result)
+          (do
+            (future-cancel fut)
+            (log/warn "Benchmark exceeded timeout, cancelling" {:timeout timeout})
+            (throw (ex-info (format "Benchmark exceeded timeout (%s)" timeout)
+                            {:xtdb.bench/timeout timeout})))
+          result))
+      (f))))
+
 (defn wrap-in-catch [f]
   (fn [& args]
     (try
@@ -309,22 +330,24 @@
 
       (wrap-task task)))
 
-(defn compile-benchmark [{:keys [bench-log-file title seed ->state parameters], :or {seed 0}, :as benchmark}]
+(defn compile-benchmark [{:keys [bench-log-file title seed ->state parameters timeout], :or {seed 0}, :as benchmark}]
   (let [fns (mapv compile-task (:tasks benchmark))]
     (fn run-benchmark [node]
-      (util/with-open [bench-log-wrt (when bench-log-file (io/writer bench-log-file))]
-        (let [worker (into (->Worker node (Random. seed) (Clock/systemUTC) (random-uuid) (System/getProperty "user.name") bench-log-wrt)
-                           (cond
-                             (vector? ->state) (apply (first ->state) (rest ->state))
-                             (fn? ->state) (->state)))
-              start-ms (System/currentTimeMillis)]
-          (doseq [f fns]
-            (f worker))
+      (letfn [(execute []
+                (util/with-open [bench-log-wrt (when bench-log-file (io/writer bench-log-file))]
+                  (let [worker (into (->Worker node (Random. seed) (Clock/systemUTC) (random-uuid) (System/getProperty "user.name") bench-log-wrt)
+                                     (cond
+                                       (vector? ->state) (apply (first ->state) (rest ->state))
+                                       (fn? ->state) (->state)))
+                        start-ms (System/currentTimeMillis)]
+                    (doseq [f fns]
+                      (f worker))
 
-          (log-report worker {:benchmark title
-                              :parameters parameters
-                              :system (get-system-info)
-                              :time-taken-ms (- (System/currentTimeMillis) start-ms)}))))))
+                    (log-report worker {:benchmark title
+                                        :parameters parameters
+                                        :system (get-system-info)
+                                        :time-taken-ms (- (System/currentTimeMillis) start-ms)}))))]
+        (run-with-timeout execute timeout)))))
 
 (defn sync-node
   ([node] (xt-log/sync-node node))
@@ -356,9 +379,10 @@
     benchmark-type)
   :default ::default)
 
-(defn run-benchmark [benchmark {:keys [node-dir no-load? config-file bench-log-file]}]
+(defn run-benchmark [benchmark {:keys [node-dir no-load? config-file bench-log-file timeout] :as _opts}]
   (let [benchmark-fn (compile-benchmark (-> benchmark
-                                            (assoc :bench-log-file bench-log-file)))]
+                                            (assoc :bench-log-file bench-log-file)
+                                            (assoc :timeout timeout)))]
     (if config-file
       (do
         (log/info "Running node from config file:" config-file)
@@ -385,6 +409,9 @@
   (when (.exists f)
     f))
 
+(defn- parse-duration-arg [s]
+  (Duration/parse s))
+
 (def ^:private default-cli-flags
   [[nil "--node-dir NODE_DIR"
     "Directory to run the node in - will clear before running the benchmark unless `--no-load` is provided."
@@ -400,7 +427,13 @@
                #(contains? #{"yaml"} (util/file-extension %)) "Config file must be .yaml"]]
    [nil "--bench-log-file BENCH_LOG_FILE" "Log file that saves the benchmark results in JSON format"
     :id :bench-log-file
-    :parse-fn io/file]])
+    :parse-fn io/file]
+
+   [nil "--timeout DURATION"
+    "Maximum wall-clock runtime before aborting the benchmark (ISO-8601). If omitted, no timeout is applied."
+    :id :timeout
+    :parse-fn parse-duration-arg
+    :validate [#(not (neg? (.toMillis ^Duration %))) "Timeout must be >= PT0S"]]])
 
 (defn trigger-cleanup [benchmark-type success?]
   (when-let [pat (System/getenv "GITHUB_PAT")]

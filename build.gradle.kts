@@ -628,7 +628,8 @@ fun createBench(benchName: String, properties: Map<String, String>) {
         val extraProps = properties + mapOf(
             "dir" to "--node-dir",
             "configFile" to "--config-file",
-            "benchLogFile" to "--bench-log-file"
+            "benchLogFile" to "--bench-log-file",
+            "timeout" to "--timeout",
         )
 
         extraProps.forEach { (k, v) ->
