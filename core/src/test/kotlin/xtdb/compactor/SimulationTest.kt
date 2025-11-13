@@ -378,16 +378,14 @@ class SimulationTest : SimulationTestBase() {
 
         compactor.openForDatabase(db).use {
             addTries(docsTable, l0tries.toList())
-            do {
-                currentTries = trieCatalog.listAllTrieKeys(docsTable)
-                it.compactAll()
-            } while( currentTries.size != trieCatalog.listAllTrieKeys(docsTable).size)
+            it.compactAll()
+            val allTries = trieCatalog.listAllTrieKeys(docsTable)
+            Assertions.assertEquals(100, allTries.prefix("l00-rc-").size)
+            Assertions.assertEquals(100, allTries.prefix("l01-rc-").size)
+            Assertions.assertEquals(8, allTries.prefix("l02-rc-").size)
         }
 
-        Assertions.assertEquals(
-            208,
-            trieCatalog.listAllTrieKeys(docsTable).size
-        )
+
     }
 
     @RepeatedTest(testIterations)
@@ -397,15 +395,10 @@ class SimulationTest : SimulationTestBase() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
 
-        val l1Tries = listOf(
-            buildTrieDetails(docsTable.tableName, "l01-rc-b00", defaultFileTarget),
-            buildTrieDetails(docsTable.tableName, "l01-rc-b01", defaultFileTarget),
-            buildTrieDetails(docsTable.tableName, "l01-rc-b02", defaultFileTarget),
-            buildTrieDetails(docsTable.tableName, "l01-rc-b03", defaultFileTarget)
-        )
+        val l1Tries = L1TrieKeys.take(4).map { buildTrieDetails(docsTable.tableName, it, defaultFileTarget) }
 
         compactor.openForDatabase(db).use {
-            addTries(docsTable, l1Tries)
+            addTries(docsTable, l1Tries.toList())
 
             it.compactAll()
 
@@ -428,12 +421,7 @@ class SimulationTest : SimulationTestBase() {
         val rand = Random(currentSeed)
 
         // Create 4 full L1C tries
-        val l1Tries = listOf(
-            buildTrieDetails(docsTable.tableName, "l01-rc-b00", defaultFileTarget),
-            buildTrieDetails(docsTable.tableName, "l01-rc-b01", defaultFileTarget),
-            buildTrieDetails(docsTable.tableName, "l01-rc-b02", defaultFileTarget),
-            buildTrieDetails(docsTable.tableName, "l01-rc-b03", defaultFileTarget)
-        )
+        val l1Tries = L1TrieKeys.take(4).map { buildTrieDetails(docsTable.tableName, it, defaultFileTarget) }
 
         // Randomly select which L2 partitions already exist (1-3 partitions)
         val numExistingPartitions = rand.nextInt(1, 4) // 1, 2, or 3
@@ -446,34 +434,19 @@ class SimulationTest : SimulationTestBase() {
         val missingPartitions = (0..3).filterNot { it in existingPartitions }
 
         compactor.openForDatabase(db).use {
-            addTries(docsTable, l1Tries + existingL2Tries)
+            addTries(docsTable, l1Tries.toList() + existingL2Tries)
 
             it.compactAll()
 
-            val allTries = trieCatalog.listAllTrieKeys(docsTable).toSet()
-
-            // Verify all L1 tries are present
-            Assertions.assertTrue(allTries.containsAll(l1Tries.map { it.trieKey }))
-
-            // Verify existing L2 partitions are still present
-            existingPartitions.forEach { partition ->
-                Assertions.assertTrue(
-                    allTries.contains("l02-rc-p$partition-b03"),
-                    "Existing L2 partition $partition should still be present"
-                )
-            }
-
-            // Verify missing L2 partitions were created
-            missingPartitions.forEach { partition ->
-                Assertions.assertTrue(
-                    allTries.contains("l02-rc-p$partition-b03"),
-                    "Missing L2 partition $partition should be created"
-                )
-            }
-
-            // Verify we have exactly the expected tries: 4 L1s + 4 L2s
-            Assertions.assertEquals(8, allTries.size,
-                "Should have 4 L1C tries and 4 L2C partitions")
+            val allTries = trieCatalog.listAllTrieKeys(docsTable)
+            Assertions.assertEquals(
+                setOf("l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03"),
+                allTries.prefix("l01-").toSet()
+            )
+            Assertions.assertEquals(
+                setOf("l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03"),
+                allTries.prefix("l02-").toSet()
+            )
         }
     }
 
