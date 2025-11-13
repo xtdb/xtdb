@@ -48,8 +48,8 @@
         (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
         (tu/finish-block! node)
 
-        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4427)
-                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4581)]
+        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4425)
+                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4579)]
                  (.listAllObjects bp (table-cat/->table-block-dir #xt/table foo))))
 
         (let [{hlls1 :hlls :as _table-block1} (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b00.binpb"))
@@ -59,18 +59,14 @@
                                                   TableBlock/parseFrom
                                                   table-cat/<-table-block)
 
-              partitions (:partitions table-block2)
-
-              current-tries (->> partitions
+              current-tries (->> table-block2
+                                 :partitions
                                  (mapcat :tries)
                                  (map trie-details->edn)
                                  ;; they are sorted by block index descending
                                  reverse)
               trie-metas (map :trie-metadata current-tries)
               [trie1-bloom _trie2-bloom] (map :iid-bloom trie-metas)]
-
-          (t/is (= 1 (-> partitions first :max-block-idx)))
-
           (t/is (= [{:table #xt/table foo,
                      :trie-key "l00-rc-b00",
                      :data-file-size 1966}

@@ -76,7 +76,10 @@
         p (range cat/branch-factor)
         :let [out-level (inc level)
               out-part (conj part p)
-              {lnp1-block-idx :max-block-idx} (get table-tries [out-level recency out-part])
+              {level-above-live :live level-above-nascent :nascent} (get table-tries [out-level recency out-part])
+              {lnp1-live-block-idx :block-idx} (first level-above-live)
+              {lnp1-nascent-block-idx :block-idx} (first level-above-nascent)
+              lnp1-block-idx (or lnp1-nascent-block-idx lnp1-live-block-idx)
 
               in-files (-> live-files
                            (cond->> lnp1-block-idx (drop-while #(<= (:block-idx %) lnp1-block-idx)))

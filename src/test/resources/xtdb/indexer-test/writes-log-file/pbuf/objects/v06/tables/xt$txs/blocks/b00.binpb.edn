@@ -23,5 +23,4 @@
       :min-system-from #xt/instant "2020-01-01T00:00:00Z",
       :max-system-from #xt/instant "2020-01-03T00:00:00Z",
       :row-count 3,
-      :iid-bloom [1421692163 15]}}],
-   :max-block-idx 0}]}
+      :iid-bloom [1421692163 15]}}]}]}

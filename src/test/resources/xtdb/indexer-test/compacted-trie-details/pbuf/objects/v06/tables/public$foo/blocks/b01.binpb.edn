@@ -28,5 +28,4 @@
       :min-system-from #xt/instant "2020-01-01T00:00:00Z",
       :max-system-from #xt/instant "2020-01-01T00:00:00Z",
       :row-count 2,
-      :iid-bloom [1320799995 10]}}],
-   :max-block-idx 1}]}
+      :iid-bloom [1320799995 10]}}]}]}
