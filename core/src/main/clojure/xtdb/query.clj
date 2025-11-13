@@ -311,7 +311,6 @@
   IQuerySource
   (prepareQuery [this query db-cat query-opts]
     (let [parsed-query (parse-query query)
-
           {:keys [default-tz] :as query-opts} (-> query-opts
                                                   (update :default-tz (fnil identity expr/*default-tz*)))]
       (letfn [(open-snaps []
@@ -353,7 +352,7 @@
 
             (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
-            (openQuery [_ {:keys [args current-time snapshot-token snapshot-time default-tz close-args? await-token tracer query-span]
+            (openQuery [_ {:keys [args current-time snapshot-token snapshot-time default-tz close-args? await-token tracer query-text]
                            :or {default-tz default-tz
                                 close-args? true}}]
               (util/with-close-on-catch [^BufferAllocator allocator (if allocator
@@ -374,7 +373,12 @@
                       current-time (or (some-> (or (:current-time planned-query) current-time)
                                                (expr->value {:args args})
                                                (time/->instant {:default-tz default-tz}))
-                                       (expr/current-time))]
+                                       (expr/current-time))
+                      query-span (when tracer
+                                   (metrics/start-span tracer "xtdb.query" {:attributes {:query.text query-text}}))
+                      closeable-query-span (when query-span
+                                             (reify AutoCloseable
+                                               (close [_] (.end query-span))))]
 
                   (when (seq (:warnings planned-query))
                     (.increment query-warning-counter))
@@ -400,7 +404,8 @@
                           (-> (PagesCursor. allocator nil [explain-plan])
                               (wrap-result-fields (explain-plan-fields explain-plan))
                               (wrap-closeables ref-ctr (cond-> [snaps allocator]
-                                                         close-args? (cons args)))))
+                                                         close-args? (cons args)
+                                                         closeable-query-span (cons closeable-query-span)))))
 
                         (let [cursor (-> (->cursor {:allocator allocator,
                                                     :snaps snaps
@@ -420,13 +425,15 @@
                               (-> (PagesCursor. allocator nil [(explain-analyze-results cursor)])
                                   (wrap-result-fields explain-analyze-fields)
                                   (wrap-closeables ref-ctr (cond->> [snaps allocator]
-                                                             close-args? (cons args))))
+                                                             close-args? (cons args)
+                                                             closeable-query-span (cons closeable-query-span))))
                               (finally
                                 (util/close cursor)))
 
                             (-> cursor
                                 (wrap-closeables ref-ctr (cond->> [snaps allocator]
-                                                           close-args? (cons args))))))))
+                                                           close-args? (cons args)
+                                                           closeable-query-span (cons closeable-query-span))))))))
 
                     (catch Throwable t
                       (.release ref-ctr)

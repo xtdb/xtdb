@@ -10,7 +10,7 @@
 
 (defn span-attributes->map [^Attributes attributes]
   (->> (.asMap attributes)
-       (map (fn [[^AttributeKey k v]] [(.getKey k) v])) 
+       (map (fn [[^AttributeKey k v]] [(.getKey k) v]))
        (remove (fn [[k _]] (re-find #"time" k))) ;; remove any timing-related keys
        (into {})))
 
@@ -58,8 +58,8 @@
         ;; Give spans a moment to be exported
         (Thread/sleep 100)
 
-        (t/is (= [{:name "pgwire.query"
-                   :attributes {"db.statement" "SELECT 1"}
+        (t/is (= [{:name "xtdb.query"
+                   :attributes {"query.text" "SELECT 1"}
                    :children
                    [{:name "query.cursor.project"
                      :attributes {"cursor.page_count" "1"
@@ -86,12 +86,12 @@
                     stmt (.createStatement conn)
                     rs (.executeQuery stmt "SELECT 1")]
           (t/is (= [{"_column_1" 1}] (pgw-test/rs->maps rs)))
-          
+
           ;; Give spans a moment to be exported
           (Thread/sleep 100)
-          
-          (t/is (= [{:name "pgwire.query"
-                     :attributes {"db.statement" "SELECT 1"}
+
+          (t/is (= [{:name "xtdb.query"
+                     :attributes {"query.text" "SELECT 1"}
                      :children
                      [{:name "query.cursor.project"
                        :attributes {"cursor.page_count" "1"

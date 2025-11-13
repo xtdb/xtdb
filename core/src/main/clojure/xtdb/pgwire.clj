@@ -35,7 +35,7 @@
            [java.time Clock Duration ZoneId]
            [java.util.concurrent ExecutorService Executors Future$State FutureTask TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext]
-           (org.antlr.v4.runtime ParserRuleContext)
+           (org.antlr.v4.runtime ParserRuleContext) 
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
@@ -1037,7 +1037,7 @@
           result-formats)))
 
 (defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator query-tracer] :as conn} {:keys [statement-type ^PreparedQuery prepared-query args result-format] :as stmt}]
-  (let [{:keys [session transaction await-token query-span]} @conn-state
+  (let [{:keys [session transaction await-token]} @conn-state
         {:keys [^Clock clock], session-params :parameters} session
         await-token (:await-token transaction await-token)
 
@@ -1048,15 +1048,14 @@
                                       (.instant clock))
                     :default-tz (or (:default-tz transaction) (.getZone clock))
                     :await-token await-token
-                    :tracer query-tracer
-                    :query-span query-span}
+                    :tracer query-tracer}
 
         xt-args (xtify-args conn args stmt)]
 
     (letfn [(->cursor ^xtdb.IResultCursor [xt-args] 
               (with-auth-check conn
                 (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
-                  (.openQuery prepared-query (assoc query-opts :args args-rel)))))
+                  (.openQuery prepared-query (assoc query-opts :args args-rel :query-text (:query stmt))))))
 
             (->pg-cols [prepared-pg-cols ^IResultCursor cursor]
               (let [resolved-pg-cols (mapv pg-types/field->pg-col (.getResultFields cursor))]
@@ -1121,7 +1120,7 @@
                      (let [^RelationReader args-rel (aget !args 0)]
                        (case (:statement-type inner)
                          :query (with-auth-check conn
-                                  (util/with-close-on-catch [inner-cursor (.openQuery inner-pq (assoc query-opts :args args-rel))]
+                                  (util/with-close-on-catch [inner-cursor (.openQuery inner-pq (assoc query-opts :args args-rel :query-text (:query stmt)))]
                                     (-> inner
                                         (assoc :cursor inner-cursor
                                                :pg-cols (-> (->pg-cols (:pg-cols inner) inner-cursor)
@@ -1144,7 +1143,7 @@
 (defn unnamed-portal? [portal-name]
   (= "" portal-name))
 
-(defmethod handle-msg* :msg-bind [{:keys [conn-state query-tracer] :as conn} {:keys [portal-name stmt-name] :as bind-msg}]
+(defmethod handle-msg* :msg-bind [{:keys [conn-state] :as conn} {:keys [portal-name stmt-name] :as bind-msg}]
   (swap! conn-state assoc :protocol :extended)
   (let [stmt (into (or (get-in @conn-state [:prepared-statements stmt-name])
                        (throw (pgio/err-protocol-violation "no prepared statement")))
@@ -1154,11 +1153,6 @@
 
     (when (get-in @conn-state [:portals portal-name])
       (throw (pgio/err-protocol-violation "Named portals must be explicit closed before they can be redefined")))
-
-    ;; Create query span at bind time for query/show-variable statements and store in conn-state
-    (when (and query-tracer (#{:query :show-variable} (:statement-type stmt)))
-      (let [query-span (metrics/start-span query-tracer "pgwire.query" {:attributes {:db.statement (:query stmt)}})]
-        (swap! conn-state assoc :query-span query-span)))
 
     (let [bound-stmt (bind-stmt conn stmt)]
       (swap! conn-state
@@ -1414,13 +1408,7 @@
               (cmd-commit conn)
               (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "COMMIT"}))
 
-    (:query :show-variable) (let [query-span (:query-span @conn-state)]
-                              (try
-                                (metrics/record-callable! query-timer (cmd-exec-query conn portal))
-                                (finally
-                                  (when query-span
-                                    (metrics/end-span query-span)
-                                    (swap! conn-state dissoc :query-span)))))
+    (:query :show-variable) (metrics/record-callable! query-timer (cmd-exec-query conn portal))
     :prepare (cmd-prepare conn portal)
     :dml (cmd-exec-dml conn portal)
 
@@ -1465,7 +1453,7 @@
     (execute-portal conn (cond-> portal
                            (not (zero? limit)) (assoc :limit limit)))))
 
-(defmethod handle-msg* :msg-simple-query [{:keys [conn-state query-tracer] :as conn} {:keys [query]}]
+(defmethod handle-msg* :msg-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
   (swap! conn-state assoc :protocol :simple)
 
   (close-portal conn "")
@@ -1481,10 +1469,7 @@
           (when (and (seq param-oids) (not= statement-type :show-variable))
             (throw (pgio/err-protocol-violation "Parameters not allowed in simple queries")))
 
-          (let [query-span (when (and query-tracer (#{:query :show-variable} statement-type))
-                             (metrics/start-span query-tracer "pgwire.query" {:attributes {:db.statement (:query stmt)}}))
-                _ (swap! conn-state assoc :query-span query-span)
-                portal (bind-stmt conn prepared-stmt)]
+          (let [portal (bind-stmt conn prepared-stmt)]
             (try
               (when (or (contains? #{:query :canned-response :show-variable} statement-type)
                         (and (= :execute statement-type)
