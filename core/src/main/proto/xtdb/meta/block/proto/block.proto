@@ -13,7 +13,6 @@ message Partition {
   int64 recency = 2;
   bytes part = 3;
   repeated xtdb.log.proto.TrieDetails tries = 4;
-  int64 max_block_index = 5;
 }
 
 message TableBlock {

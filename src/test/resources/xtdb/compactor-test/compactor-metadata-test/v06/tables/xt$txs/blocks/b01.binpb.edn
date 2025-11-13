@@ -26,8 +26,7 @@
       :iid-bloom [1432977773 5]}}
     {:trie-key "l00-rc-b00",
      :data-file-size 2798,
-     :trie-metadata nil}],
-   :max-block-idx 1}
+     :trie-metadata nil}]}
   {:level 1,
    :part [],
    :tries
@@ -41,5 +40,4 @@
       :min-system-from #xt/instant "2020-01-01T00:00:00Z",
       :max-system-from #xt/instant "2020-01-01T00:00:00Z",
       :row-count 1,
-      :iid-bloom [341758827 5]}}],
-   :max-block-idx 0}]}
+      :iid-bloom [341758827 5]}}]}]}
