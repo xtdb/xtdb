@@ -91,6 +91,7 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             private var rowCount: Long = 0;
             private var started = false
             private var startTime = clock.instant()
+            private var endTime = clock.instant()
             private var timeToFirstPage: Duration? = null
             private var totalTime: Duration = Duration.ZERO
             private var span: Span? = null
@@ -115,7 +116,9 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
                     pageCount++
                     c.accept(rel)
                 }.also {
-                    totalTime += Duration.between(pageStart, clock.instant())
+                    val pageEnd = clock.instant()
+                    totalTime += Duration.between(pageStart, pageEnd)
+                    endTime = pageEnd
                 }
             }
 
@@ -128,7 +131,6 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
                     }
                     s.tag("cursor.page_count", pageCount.toString())
                     s.tag("cursor.row_count", rowCount.toString())
-                    val endTime = startTime.plus(totalTime)
                     s.end(endTime.asMicros, java.util.concurrent.TimeUnit.MICROSECONDS)
                 }
             }
