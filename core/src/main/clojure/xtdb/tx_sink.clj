@@ -53,7 +53,8 @@
       :output-log (ig/ref ::output-log)
       :db-name db-name}
    ::output-log {:tx-sink-conf tx-sink-conf
-                 :base base}})
+                 :base base
+                 :db-name db-name}})
 
 (defrecord TxSink [^Log output-log encode-as-bytes db-name]
   Indexer$TxSink
@@ -77,9 +78,11 @@
                   :encode-as-bytes (->encode-fn (keyword (.getFormat tx-sink-conf)))
                   :db-name db-name})))
 
-(defmethod ig/init-key ::output-log [_ {:keys [^TxSinkConfig tx-sink-conf]
+(defmethod ig/init-key ::output-log [_ {:keys [^TxSinkConfig tx-sink-conf db-name]
                                         {:keys [log-clusters]} :base}]
-  (when (and tx-sink-conf (.getEnable tx-sink-conf))
+  (when (and tx-sink-conf
+             (.getEnable tx-sink-conf)
+             (= db-name (.getDbName tx-sink-conf)))
     (.openLog (.getOutputLog tx-sink-conf) log-clusters)))
 
 (defmethod ig/halt-key! ::output-log [_ output-log]
