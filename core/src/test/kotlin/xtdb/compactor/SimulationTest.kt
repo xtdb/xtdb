@@ -246,6 +246,16 @@ private val L0TrieKeys = sequence {
     }
 }
 
+private val L1TrieKeys = sequence {
+    var blockIndex = 0
+    while (true) {
+        yield("l01-rc-b" + blockIndex.asLexHex)
+        blockIndex++
+    }
+}
+
+fun List<TrieKey>.prefix(levelPrefix: String) = this.filter { it.startsWith(levelPrefix) }
+
 @ExtendWith(DriverConfigExtension::class)
 class SimulationTest : SimulationTestBase() {
     var driverConfig: DriverConfig = DriverConfig()
