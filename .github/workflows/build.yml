@@ -36,7 +36,7 @@ jobs:
 
       - name: Test
         run: ./gradlew test
-        timeout-minutes: 10
+        timeout-minutes: 15
 
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@e08919a3b1fb83a78393dfb775a9c37f17d8eea6 # v6.0.1
