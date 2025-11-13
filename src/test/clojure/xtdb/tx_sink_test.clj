@@ -33,28 +33,29 @@
       (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1, :value "test"}]])
       (t/is (= 1 (count (.getMessages output-log))))
       (let [msg (-> (.getMessages output-log) first decode-record)]
-        (t/is (= (util/->clj {:transaction {:id (serde/->TxKey 0 (.toInstant #inst "2020"))}
-                              :source {:db "xtdb"}
-                              :payloads [{:db "xtdb"
-                                          :schema "public"
-                                          :table "docs"
-                                          :op :put
-                                          :iid (util/->iid :doc1)
-                                          :system-from #xt/zdt "2020-01-01T00:00[UTC]"
-                                          :valid-from  #xt/zdt "2020-01-01T00:00[UTC]"
-                                          :valid-to nil
-                                          :payload {"_id" :doc1, "value" "test"}}
-                                         {:db "xtdb"
-                                          :schema "xt"
-                                          :table "txs"
-                                          :op :put
-                                          :iid (util/->iid 0)
-                                          :system-from #xt/zdt "2020-01-01T00:00[UTC]"
-                                          :valid-from  #xt/zdt "2020-01-01T00:00[UTC]"
-                                          :valid-to nil
-                                          :payload {"_id" 0
-                                                    "system_time" #xt/zdt "2020-01-01T00:00[UTC]"
-                                                    "committed" true}}]})
+        (t/is (= (util/->clj
+                   {:transaction {:id (serde/->TxKey 0 (.toInstant #inst "2020"))}
+                    :source {:db "xtdb"}
+                    :tables [{:db "xtdb"
+                              :schema "public"
+                              :table "docs"
+                              :ops [{:op :put
+                                     :iid (util/->iid :doc1)
+                                     :system-from #xt/zdt "2020-01-01T00:00[UTC]"
+                                     :valid-from  #xt/zdt "2020-01-01T00:00[UTC]"
+                                     :valid-to nil
+                                     :payload {"_id" :doc1, "value" "test"}}]}
+                             {:db "xtdb"
+                              :schema "xt"
+                              :table "txs"
+                              :ops [{:op :put
+                                     :iid (util/->iid 0)
+                                     :system-from #xt/zdt "2020-01-01T00:00[UTC]"
+                                     :valid-from  #xt/zdt "2020-01-01T00:00[UTC]"
+                                     :valid-to nil
+                                     :payload {"_id" 0
+                                               "system_time" #xt/zdt "2020-01-01T00:00[UTC]"
+                                               "committed" true}}]}]})
                  (util/->clj msg))))
 
       (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1, a: 1, b: {c: [1, 2, 3], d: 'test'}}, {_id: 2, a: 2}, {_id: 3, a: 3}"])
@@ -65,13 +66,14 @@
 
       (t/is (= 6 (count (.getMessages output-log))))
       (let [msgs (->> (.getMessages output-log) (map decode-record))
-            payloads (mapcat :payloads msgs)
+            payloads (mapcat :tables msgs)
             tx-payloads (filter #(= (:table %) "txs") payloads)
             docs-payloads (filter #(= (:table %) "docs") payloads)
             other-payloads (filter #(= (:table %) "other") payloads)]
         (t/is (= 6 (count tx-payloads)))
-        (t/is (= [:put :put :put :put :put :delete :erase] (map :op docs-payloads)))
-        (t/is (= [:put] (map :op other-payloads)))))))
+        (t/is (= [:put :put :put :put :put :delete :erase]
+                 (->> docs-payloads (mapcat :ops) (map :op))))
+        (t/is (= [:put] (->> other-payloads (mapcat :ops) (map :op))))))))
 
 (t/deftest test-tx-sink-output-with-tx
   (with-open [node (xtn/start-node (merge tu/*node-opts*
@@ -92,13 +94,14 @@
 
       (t/is (= 1 (count (.getMessages output-log))))
       (let [msgs (->> (.getMessages output-log) (map decode-record))
-            payloads (mapcat :payloads msgs)
+            payloads (mapcat :tables msgs)
             tx-payloads (filter #(= (:table %) "txs") payloads)
             docs-payloads (filter #(= (:table %) "docs") payloads)
             other-payloads (filter #(= (:table %) "other") payloads)]
         (t/is (= 1 (count tx-payloads)))
-        (t/is (= [:put :put :put :put :delete :erase] (map :op docs-payloads)))
-        (t/is (= [:put] (map :op other-payloads)))))))
+        (t/is (= [:put :put :put :put :delete :erase]
+                 (->> docs-payloads (mapcat :ops) (map :op))))
+        (t/is (= [:put] (->> other-payloads (mapcat :ops) (map :op))))))))
 
 (t/deftest test-tx-sink-disabled
   (with-open [node (xtn/start-node (merge tu/*node-opts*

@@ -20,21 +20,21 @@
         valid-to-vec (.vectorFor live-relation "_valid_to")
         op-vec (.vectorFor live-relation "op")
         put-vec (.vectorFor op-vec "put")]
-    (doall
-      (for [i (range start-pos pos)]
-        (let [leg (.getLeg op-vec i)
-              put? (= leg "put")
-              data (when put? (.getObject put-vec i))]
-          (cond-> {:db (.getDbName table)
-                   :schema (.getSchemaName table)
-                   :table (.getTableName table)
-                   :op (keyword leg)
-                   :iid (.getObject iid-vec i)
-                   :system-from (.getObject system-from-vec i)
-                   :valid-from (.getObject valid-from-vec i)
-                   :valid-to (when-not (= Long/MAX_VALUE (.getLong valid-to-vec i))
-                               (.getObject valid-to-vec i))}
-            put? (assoc :payload data)))))))
+    {:db (.getDbName table)
+     :schema (.getSchemaName table)
+     :table (.getTableName table)
+     :ops (into []
+            (for [i (range start-pos pos)]
+              (let [leg (.getLeg op-vec i)
+                    put? (= leg "put")
+                    data (when put? (.getObject put-vec i))]
+                (cond-> {:op (keyword leg)
+                         :iid (.getObject iid-vec i)
+                         :system-from (.getObject system-from-vec i)
+                         :valid-from (.getObject valid-from-vec i)
+                         :valid-to (when-not (= Long/MAX_VALUE (.getLong valid-to-vec i))
+                                     (.getObject valid-to-vec i))}
+                  put? (assoc :payload data)))))}))
 
 (defn ->encode-fn [fmt]
   (case fmt
@@ -63,9 +63,9 @@
       (->> {:transaction {:id tx-key}
             :source {;:version "1.0.0" ;; TODO
                      :db db-name}
-            :payloads (->> (.getLiveTables live-idx-snap)
-                           (mapcat #(read-table-rows % live-idx-tx))
-                           (into []))}
+            :tables (->> (.getLiveTables live-idx-snap)
+                         (map #(read-table-rows % live-idx-tx))
+                         (into []))}
            encode-as-bytes
            Log$Message$Tx.
            (.appendMessage output-log)))))

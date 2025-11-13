@@ -55,14 +55,15 @@
       ;; Consume off the topic
       (let [msgs (->> (consume-messages *bootstrap-servers* output-topic)
                       (map serde/read-transit))
-            payloads (mapcat :payloads msgs)
+            payloads (mapcat :tables msgs)
             tx-payloads (filter #(= (:table %) "txs") payloads)
             docs-payloads (filter #(= (:table %) "docs") payloads)
             other-payloads (filter #(= (:table %) "other") payloads)]
         (t/is (= 5 (count msgs)))
         (t/is (= 5 (count tx-payloads)))
-        (t/is (= [:put :put :put :put :delete :erase] (map :op docs-payloads)))
-        (t/is (= [:put] (map :op other-payloads)))))))
+        (t/is (= [:put :put :put :put :delete :erase]
+                 (->> docs-payloads (mapcat :ops) (map :op))))
+        (t/is (= [:put] (->> other-payloads (mapcat :ops) (map :op))))))))
 
 (t/deftest ^:integration test-tx-sink-restart-behaviour
   (util/with-tmp-dirs #{node-dir}
