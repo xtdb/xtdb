@@ -32,6 +32,7 @@
            (org.testcontainers.containers GenericContainer)
            (xtdb ICursor PagesCursor)
            (xtdb.api TransactionKey)
+           (xtdb.test.log RecordingLog$Factory)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector VectorType)
            xtdb.database.Database$Catalog
@@ -393,3 +394,7 @@
 (defn read-files-from-bp-path [node ^Path path]
   (->> (.listAllObjects (.getBufferPool (db/primary-db node)) (util/->path path))
        (mapv (comp str #(.getFileName ^Path %) :key os/<-StoredObject))))
+
+(defmethod xt-log/->log-factory ::recording [_ {:keys [instant-src]}]
+  (cond-> (RecordingLog$Factory.)
+    instant-src (.instantSource instant-src)))
