@@ -63,5 +63,4 @@
                                 (update :pushdown-iids update-keys #(get col-name-reverse-mapping %)))]
                    (cond-> (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
                              (RenameCursor. in-cursor col-name-mapping))
-                     explain-analyze? (ICursor/wrapExplainAnalyze)
-                     (and tracer query-span) (ICursor/wrapTracing tracer query-span))))}))
+                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))

@@ -45,55 +45,19 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
 
     companion object {
 
-        private class ExplainAnalyzeCursor(
-            private val inner: ICursor,
-            private val clock: InstantSource = InstantSource.system()
-        ) : ICursor by inner, ExplainAnalyze {
-            override var pageCount: Int = 0; private set
-            override var rowCount: Long = 0; private set
-
-            override var timeToFirstPage: Duration? = null; private set
-            override var totalTime: Duration = Duration.ZERO; private set
-
-            override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
-                val pageStart = clock.instant()
-
-                return inner.tryAdvance { rel ->
-                    val pageTime = Duration.between(pageStart, clock.instant())
-
-                    timeToFirstPage = timeToFirstPage ?: pageTime
-
-                    rowCount += rel.rowCount
-                    pageCount++
-
-                    c.accept(rel)
-                }.also {
-                    totalTime += Duration.between(pageStart, clock.instant())
-                }
-            }
-
-            override val explainAnalyze get() = this
-
-            @Suppress("RedundantOverride") // otherwise `ICursor by inner` also complains
-            override fun forEachRemaining(action: Consumer<in RelationReader>?) = super.forEachRemaining(action)
-            override fun getExactSizeIfKnown(): Long = inner.exactSizeIfKnown
-            override fun hasCharacteristics(characteristics: Int): Boolean = inner.hasCharacteristics(characteristics)
-            override fun getComparator(): Comparator<in RelationReader>? = inner.comparator
-        }
-
         private class TracingCursor(
             private val inner: ICursor,
             private val tracer: Tracer?,
             private val parentSpan: Span?,
             private val clock: InstantSource = InstantSource.system()
-        ) : ICursor by inner {
-            private var pageCount: Int = 0;
-            private var rowCount: Long = 0;
+        ) : ICursor by inner, ExplainAnalyze {
+            override var pageCount: Int = 0; private set
+            override var rowCount: Long = 0; private set
             private var started = false
             private var startTime = clock.instant()
             private var endTime = clock.instant()
-            private var timeToFirstPage: Duration? = null
-            private var totalTime: Duration = Duration.ZERO
+            override var timeToFirstPage: Duration? = null; private set
+            override var totalTime: Duration = Duration.ZERO; private set
             private var span: Span? = null
 
             override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
@@ -135,6 +99,8 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
                 }
             }
 
+            override val explainAnalyze get() = this
+
             @Suppress("RedundantOverride")
             override fun forEachRemaining(action: Consumer<in RelationReader>?) = super.forEachRemaining(action)
             override fun getExactSizeIfKnown(): Long = inner.exactSizeIfKnown
@@ -143,9 +109,6 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
         }
 
         @JvmStatic
-        fun ICursor.wrapExplainAnalyze(): ICursor = ExplainAnalyzeCursor(this)
-
-        @JvmStatic
-        fun ICursor.wrapTracing(tracer: Tracer, span: Span): ICursor = TracingCursor(this, tracer, span)
+        fun ICursor.wrapTracing(tracer: Tracer?, span: Span?): ICursor = TracingCursor(this, tracer, span)
     }
 }

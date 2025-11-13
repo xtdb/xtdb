@@ -85,8 +85,7 @@
            :stats (:stats emitted-child-relation)
            :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts} in-cursor]
                        (cond-> (->project-cursor opts in-cursor projection-specs)
-                         explain-analyze? (ICursor/wrapExplainAnalyze)
-                         (and tracer query-span) (ICursor/wrapTracing tracer query-span)))})))))
+                         (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))
 
 (defmethod lp/emit-expr :map [op args]
   (lp/emit-expr (assoc op :op :project :opts {:append-columns? true}) args))

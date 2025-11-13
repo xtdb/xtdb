@@ -86,5 +86,4 @@
                                                                          {:build-fields inner-fields
                                                                           :key-col-names (set (keys inner-fields))
                                                                           :nil-keys-equal? true}))
-                                  explain-analyze? (ICursor/wrapExplainAnalyze)
-                                  (and tracer query-span) (ICursor/wrapTracing tracer query-span)))})))
+                                  (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))

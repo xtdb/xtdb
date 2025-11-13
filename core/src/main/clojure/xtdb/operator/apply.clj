@@ -99,8 +99,7 @@
                                                                          (.accept c (vr/rel-reader [match-vec]))))))
 
                                            (close [_] (.close dep-cursor)))
-                                   explain-analyze? (ICursor/wrapExplainAnalyze) 
-                                   (and tracer query-span) (ICursor/wrapTracing tracer query-span)))))
+                                   (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))))
 
                            [:otherwise _] ->dependent-cursor)]
 
@@ -117,5 +116,4 @@
                                                                                                                          (.select (int-array [idx]))
                                                                                                                          (.withName (str dk)))))
                                                                                                            1))))))))
-                         explain-analyze? (ICursor/wrapExplainAnalyze)
-                         (and tracer query-span) (ICursor/wrapTracing tracer query-span))))}))))
+                         (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))))

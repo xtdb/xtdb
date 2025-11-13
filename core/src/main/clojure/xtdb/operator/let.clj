@@ -25,8 +25,7 @@
                                                     factory (LetCursorFactory. allocator bound-cursor)
                                                     body-cursor (->body-cursor (assoc-in opts [:let-bindings binding] factory))]
                            (.wrapBodyCursor factory body-cursor))
-                   explain-analyze? (ICursor/wrapExplainAnalyze)
-                   (and tracer query-span) (ICursor/wrapTracing tracer query-span)))}))
+                   (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))
 
 (s/def ::relation simple-symbol?)
 (s/def ::col-names (s/coll-of ::lp/column :kind vector?))
@@ -58,5 +57,4 @@
                                                                                 :available available}))))]
 
                    (cond-> (.open cursor-factory)
-                     explain-analyze? (ICursor/wrapExplainAnalyze)
-                     (and tracer query-span) (ICursor/wrapTracing tracer query-span))))}))
+                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))

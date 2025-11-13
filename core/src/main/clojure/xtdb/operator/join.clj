@@ -153,8 +153,7 @@
        :fields (merge left-fields right-fields)
        :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
                    (cond-> (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil)
-                     explain-analyze? (ICursor/wrapExplainAnalyze)
-                     (and tracer query-span) (ICursor/wrapTracing tracer query-span)))})))
+                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))
 
 (defmethod lp/emit-expr :cross-join [join-expr args]
   (emit-cross-join (emit-join-children join-expr args)))
@@ -424,8 +423,7 @@
                                                                           ::semi-join JoinType/SEMI
                                                                           ::anti-semi-join JoinType/ANTI
                                                                           ::single-join JoinType/SINGLE)))
-                                                   explain-analyze? (ICursor/wrapExplainAnalyze)
-                                                   (and tracer query-span) (ICursor/wrapTracing tracer query-span))
+                                                   (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))
                                                  output-projections)))))}))
 
 (defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]

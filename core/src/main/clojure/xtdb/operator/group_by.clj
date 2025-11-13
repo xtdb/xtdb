@@ -635,5 +635,4 @@
                                                  (->group-mapper allocator (select-keys fields group-cols))
                                                  (vec agg-specs)
                                                  false))
-                         explain-analyze? (ICursor/wrapExplainAnalyze)
-                         (and tracer query-span) (ICursor/wrapTracing tracer query-span)))})))))
+                         (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))

@@ -115,5 +115,4 @@
                                     (cond-> (UnnestCursor. allocator in-cursor
                                                            (str from-col) (types/field-with-name unnest-field (str to-col))
                                                            (some-> ordinality-column str))
-                                      explain-analyze? (ICursor/wrapExplainAnalyze)
-                         (and tracer query-span) (ICursor/wrapTracing tracer query-span)))})))))
+                                      (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))

@@ -80,5 +80,4 @@
                                          :param (read-param args limit-arg)
                                          nil Long/MAX_VALUE)
                                        0)
-                     explain-analyze? (ICursor/wrapExplainAnalyze)
-                     (and tracer query-span) (ICursor/wrapTracing tracer query-span)))})))
+                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))

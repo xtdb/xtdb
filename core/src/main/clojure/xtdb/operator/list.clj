@@ -63,5 +63,4 @@
      :->cursor (fn [{:keys [allocator ^RelationReader args explain-analyze? tracer query-span]}]
                  (cond-> (ListCursor. allocator (->list-expr schema args) named-field
                                       *batch-size* 0)
-                   explain-analyze? (ICursor/wrapExplainAnalyze)
-                   (and tracer query-span) (ICursor/wrapTracing tracer query-span)))}))
+                   (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))

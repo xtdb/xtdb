@@ -73,8 +73,7 @@
                      :fields (union-fields left-fields right-fields)
                      :->cursor (fn [{:keys [explain-analyze? tracer query-span]} left-cursor right-cursor]
                                  (cond-> (UnionAllCursor. left-cursor right-cursor)
-                                   explain-analyze? (ICursor/wrapExplainAnalyze)
-                                   (and tracer query-span) (ICursor/wrapTracing tracer query-span)))})))
+                                   (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))
 
 (deftype IntersectionCursor [^ICursor left-cursor, ^ICursor right-cursor
                              ^BuildSide build-side, key-col-names
@@ -139,8 +138,7 @@
                                                                   (join/->cmp-factory {:fields right-fields
                                                                                        :key-col-names key-col-names})
                                                                   false false)
-                                       explain-analyze? (ICursor/wrapExplainAnalyze)
-                                       (and tracer query-span) (ICursor/wrapTracing tracer query-span))))}))))
+                                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))))
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
@@ -160,5 +158,4 @@
                                                                   (join/->cmp-factory {:fields right-fields
                                                                                        :key-col-names key-col-names})
                                                                   true false)
-                                       explain-analyze? (ICursor/wrapExplainAnalyze)
-                                       (and tracer query-span) (ICursor/wrapTracing tracer query-span))))}))))
+                                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))))

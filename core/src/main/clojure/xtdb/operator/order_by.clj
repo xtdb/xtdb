@@ -273,5 +273,4 @@
        :fields fields
        :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                    (cond-> (OrderByCursor. allocator in-cursor (rename-fields fields) order-specs false nil nil nil nil)
-                     explain-analyze? (ICursor/wrapExplainAnalyze)
-                     (and tracer query-span) (ICursor/wrapTracing tracer query-span)))})))
+                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))
