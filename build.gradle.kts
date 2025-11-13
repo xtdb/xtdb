@@ -427,6 +427,11 @@ dependencies {
     testFixturesImplementation(libs.testcontainers)
     testFixturesImplementation(libs.honeysql)
 
+    val testFixturesSourceSet = sourceSets.testFixtures.get()
+    devImplementation(testFixturesSourceSet.clojure.sourceDirectories)
+    devImplementation(testFixturesSourceSet.output)
+
+
     api(libs.slf4j.api)
     api(libs.logback.classic)
     api(libs.clojure.tools.logging)
