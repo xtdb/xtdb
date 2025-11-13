@@ -163,7 +163,7 @@
                                                      [to-column (pr-str window-agg)]))))}
            :fields out-fields
 
-           :->cursor (fn [{:keys [allocator explain-analyze?]} in-cursor]
+           :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                        (cond-> (util/with-close-on-catch [window-fn-specs (LinkedList.)]
                                  (doseq [^IWindowFnSpecFactory factory window-fn-factories]
                                    (.add window-fn-specs (.build factory allocator)))
@@ -173,4 +173,4 @@
                                                   order-specs
                                                   (vec window-fn-specs)
                                                   false))
-                         explain-analyze? (ICursor/wrapExplainAnalyze)))})))))
+                         (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))

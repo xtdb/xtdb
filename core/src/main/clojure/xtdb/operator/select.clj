@@ -25,7 +25,7 @@
          :children [inner-rel]
          :explain  {:predicate (pr-str predicate)}
          :fields inner-fields
-         :->cursor (fn [{:keys [allocator args schema explain-analyze?]} in-cursor]
+         :->cursor (fn [{:keys [allocator args schema explain-analyze? tracer query-span]} in-cursor]
                      (cond-> (-> (SelectCursor. allocator in-cursor selector schema args)
                                  (coalesce/->coalescing-cursor allocator))
-                       explain-analyze? (ICursor/wrapExplainAnalyze)))}))))
+                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))

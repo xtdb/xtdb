@@ -187,9 +187,9 @@
      :children []
      :fields fields
      :stats stats
-     :->cursor (fn [{:keys [allocator explain-analyze?]}]
+     :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]}]
                  (cond-> (->cursor allocator schema pages)
-                   explain-analyze? (ICursor/wrapExplainAnalyze)))}))
+                   (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))
 
 
 (defmethod lp/ra-expr :prn [_]
@@ -203,7 +203,7 @@
        :stats (:stats inner-rel)
        :children [inner-rel]
        :fields inner-fields
-       :->cursor (fn [{:keys [explain-analyze?]}, ^ICursor in-cursor]
+       :->cursor (fn [{:keys [explain-analyze? tracer query-span]}, ^ICursor in-cursor]
                    (cond-> (reify ICursor
                              (getCursorType [_] "prn")
                              (getChildCursors [_] [in-cursor])
@@ -214,7 +214,7 @@
                                               (println (.getCursorType in-cursor) ":")
                                               (clojure.pprint/pprint (util/->clj (.getAsMaps rel)))
                                               (.accept c rel)))))
-                     explain-analyze? (ICursor/wrapExplainAnalyze)))})))
+                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))
 
 (defn <-cursor
   ([^ICursor cursor] (<-cursor cursor #xt/key-fn :kebab-case-keyword))

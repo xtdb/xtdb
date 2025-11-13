@@ -60,7 +60,7 @@
     {:op :list
      :children []
      :fields (restrict-cols fields list-expr)
-     :->cursor (fn [{:keys [allocator ^RelationReader args explain-analyze?]}]
+     :->cursor (fn [{:keys [allocator ^RelationReader args explain-analyze? tracer query-span]}]
                  (cond-> (ListCursor. allocator (->list-expr schema args) named-field
                                       *batch-size* 0)
-                   explain-analyze? (ICursor/wrapExplainAnalyze)))}))
+                   (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))
