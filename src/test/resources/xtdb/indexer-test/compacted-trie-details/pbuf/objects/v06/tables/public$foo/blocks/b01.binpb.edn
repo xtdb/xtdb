@@ -1,5 +1,5 @@
 {:row-count 4,
- :fields {"a" #xt/field ["a" :utf8], "_id" #xt/field ["_id" :i64]},
+ :fields {"a" #xt/field {"a" :utf8}, "_id" #xt/field {"_id" :i64}},
  :hlls
  {"_id" [1375436314 4.007832904843586],
   "a" [2130024660 4.007832904843586]},

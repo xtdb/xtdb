@@ -51,11 +51,11 @@
   ;; => <FieldType #xt.arrow/type :union null>
 
   ;; Fields are essentially FieldType + naming + potential child Fields
-  #xt/field ["my-int" :i64 :?]
+  #xt/field {"my-int" [:? :i64]}
   ;; => <Field "my-int" #xt.arrow/type :i64 null>
 
   ;; See how we are specifying a child here.
-  #xt/field ["my-union" :union ["my-int" :i64 :?]]
+  #xt/field {"my-union" [:union {"my-int" [:? :i64]}]}
   ;; => <Field "my-union" #xt.arrow/type :union null <Field "my-int" #xt.arrow/type :i64 null>>
 
   ;; We (XTDB) have two use cases when working with Arrow data. Given a fixed schema we want to write to
@@ -73,7 +73,7 @@
   ;; From a Field you can simply create a vector
 
   (with-open [allocator (RootAllocator.)
-              my-int-vec (Vector/open allocator #xt/field ["my-int" :i64])]
+              my-int-vec (Vector/open allocator #xt/field {"my-int" :i64})]
     (.writeObject my-int-vec 42))
 
   ;; Let's also now see how you can write to nested types. In the following we creating a struct vector where
@@ -82,8 +82,8 @@
 
   ;; When asking for a writer for field `foo` you are going to get a writer with the specified type back.
   (with-open [allocator (RootAllocator.)
-              struct-vec (Vector/open allocator #xt/field ["my-struct" :struct ["foo" :i64]])]
-    (t/is (= #xt/field ["foo" :i64]
+              struct-vec (Vector/open allocator #xt/field {"my-struct" [:struct {"foo" :i64}]})]
+    (t/is (= #xt/field {"foo" :i64}
              (-> struct-vec
                  (.vectorFor "foo")
                  (.getField)))))
@@ -91,16 +91,16 @@
   ;; You can also ask for a writer specifying a field type. In this case it works as the writer matches the
   ;; previously specified field type.
   (with-open [allocator (RootAllocator.)
-              struct-vec (Vector/open allocator #xt/field ["my-struct" :struct ["foo" :i64]])]
-    (t/is (= #xt/field ["foo" :i64]
+              struct-vec (Vector/open allocator #xt/field {"my-struct" [:struct {"foo" :i64}]})]
+    (t/is (= #xt/field {"foo" :i64}
              (-> struct-vec
                  (.vectorFor "foo" (FieldType/notNullable #xt.arrow/type :i64))
                  (.getField)))))
 
   ;; You can also create a struct key by providing a field-type
   (with-open [allocator (RootAllocator.)
-              struct-vec (Vector/open allocator #xt/field ["my-struct" :struct])]
-    (t/is (= #xt/field ["bar" :utf8]
+              struct-vec (Vector/open allocator #xt/field {"my-struct" :struct})]
+    (t/is (= #xt/field {"bar" :utf8}
              (-> struct-vec
                  (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :utf8))
                  (.getField)))))
@@ -163,7 +163,7 @@
   ;; Let's now look at the readers and row-copiers. A simple example:
 
   (with-open [allocator (RootAllocator.)
-              my-int-vec (Vector/open allocator #xt/field ["my-int" :i64])]
+              my-int-vec (Vector/open allocator #xt/field {"my-int" :i64})]
     ;; writing into the vec
     (.writeLong my-int-vec 42)
 
@@ -201,7 +201,7 @@
       (.copyRow copier2 0))
 
     ;; checkout of the field type of that column
-    (t/is (= #xt/field ["my-column" :union ["i64" :i64], ["utf8" :utf8]]
+    (t/is (= #xt/field {"my-column" [:union {"i64" :i64} {"utf8" :utf8}]}
              (.getField (.vectorFor rel "my-column"))))
 
     (t/is (= [{:my-column 42} {:my-column "forty-two"}]

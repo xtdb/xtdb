@@ -1,5 +1,5 @@
 {:row-count 3,
- :fields {"_id" #xt/field ["_id" :uuid], "b" #xt/field ["b" :i64]},
+ :fields {"_id" #xt/field {"_id" :uuid}, "b" #xt/field {"b" :i64}},
  :hlls
  {"_id" [350460640 1.0004885993744506],
   "b" [267952670 2.001955671862574]},

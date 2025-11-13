@@ -52,10 +52,10 @@
                        util/->path)]
     (with-open [al (RootAllocator.)
                 rel (Relation. al
-                               (Schema. [#xt/field ["_id" :utf8]
-                                         #xt/field ["a_long" :i64]
-                                         #xt/field ["a_double" :f64]
-                                         #xt/field ["an_inst" [:timestamp-tz :micro "UTC"]]]))
+                               (Schema. [#xt/field {"_id" :utf8}
+                                         #xt/field {"a_long" :i64}
+                                         #xt/field {"a_double" :f64}
+                                         #xt/field {"an_inst" [:timestamp-tz :micro "UTC"]}]))
                 ch (util/->file-channel arrow-path util/write-truncate-open-opts)
                 unl (.startUnload rel ch ArrowUnloader$Mode/FILE)]
       (doseq [page example-data]

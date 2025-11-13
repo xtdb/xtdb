@@ -38,7 +38,7 @@
 (t/deftest test-simple-projection
   (with-open [in-rel (tu/open-rel (->data-vecs))]
     (letfn [(project [form]
-              (let [input-types {:vec-fields {'a #xt/field ["a" :f64], 'b #xt/field ["b" :f64], 'd #xt/field ["d" :i64]}, :param-fields {}}
+              (let [input-types {:vec-fields {'a #xt/field {"a" :f64}, 'b #xt/field {"b" :f64}, 'd #xt/field {"d" :i64}}, :param-fields {}}
                     expr (expr/form->expr form input-types)]
                 (with-open [project-col (.project (expr/->expression-projection-spec "c" expr input-types)
                                                   tu/*allocator* in-rel
@@ -88,12 +88,12 @@
                                     tu/*allocator* in-rel {} arg-rel)))))]
 
       (t/testing "selector"
-        (t/is (= 500 (select-relation '(>= a 500) '{a #xt/field ["a" :f64]} {})))
-        (t/is (= 500 (select-relation '(>= e "0500") '{e #xt/field ["e" :utf8]} {}))))
+        (t/is (= 500 (select-relation '(>= a 500) '{a #xt/field {"a" :f64}} {})))
+        (t/is (= 500 (select-relation '(>= e "0500") '{e #xt/field {"e" :utf8}} {}))))
 
       (t/testing "parameter"
-        (t/is (= 500 (select-relation '(>= a ?a) '{a #xt/field ["a" :f64]} {:a 500})))
-        (t/is (= 500 (select-relation '(>= e ?e) '{e #xt/field ["e" :utf8]} {:e "0500"})))))))
+        (t/is (= 500 (select-relation '(>= a ?a) '{a #xt/field {"a" :f64}} {:a 500})))
+        (t/is (= 500 (select-relation '(>= e ?e) '{e #xt/field {"e" :utf8}} {:e "0500"})))))))
 
 (t/deftest nil-selection-doesnt-yield-the-row
   (t/is (= 0
@@ -2057,7 +2057,7 @@
                                                    {:with-types? true})]
               {:res (:res (first res))
                :type (get types 'res)}))]
-    (let [exp {:res nil, :type #xt/type [:null :?]}]
+    (let [exp {:res nil, :type #xt/type [:? :null]}]
       (t/is (= exp (test-null-cast :i32)))
       (t/is (= exp (test-null-cast :i64)))
       (t/is (= exp (test-null-cast :utf8)))

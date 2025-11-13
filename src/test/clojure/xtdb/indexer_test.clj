@@ -231,25 +231,25 @@
 
         (let [db (db/primary-db node)
               tc (.getTableCatalog db)]
-          (t/is (= #xt/field ["_id" :union ["utf8" :utf8] ["keyword" :keyword] ["i64" :i64]]
+          (t/is (= #xt/field {"_id" [:union {"utf8" :utf8} {"keyword" :keyword} {"i64" :i64}]}
                    (.getField tc #xt/table xt_docs "_id")))
 
-          (t/is (= #xt/field ["list" :list :?
-                              ["$data$" :union
-                               ["f64" :f64]
-                               ["utf8" :utf8]
-                               ["timestamp-tz-micro-utc" [:timestamp-tz :micro "UTC"]]
-                               ["bool" :bool]]]
+          (t/is (= #xt/field {"list" [:? :list
+                                      {"$data$" [:union
+                                                 {"f64" :f64}
+                                                 {"utf8" :utf8}
+                                                 {"timestamp-tz-micro-utc" [:timestamp-tz :micro "UTC"]}
+                                                 {"bool" :bool}]}]}
                    (.getField tc #xt/table xt_docs "list")))
 
-          (t/is (= #xt/field ["struct" :struct :?
-                              ["a" :union
-                               ["i64" :i64]
-                               ["bool" :bool]]
-                              ["b" :union
-                               ["utf8" :utf8]
-                               ;; TODO these shouldn't be optional strings, really. #4988
-                               ["struct" :struct ["c" :utf8 :?] ["d" :utf8 :?]]]]
+          (t/is (= #xt/field {"struct" [:? :struct
+                                        {"a" [:union
+                                              {"i64" :i64}
+                                              {"bool" :bool}]}
+                                        {"b" [:union
+                                              {"utf8" :utf8}
+                                              ;; TODO these shouldn't be optional strings, really. #4988
+                                              {"struct" [:struct {"c" [:? :utf8]} {"d" [:? :utf8]}]}]}]}
                    (.getField tc #xt/table xt_docs "struct"))))))))
 
 (t/deftest drops-nils-on-round-trip

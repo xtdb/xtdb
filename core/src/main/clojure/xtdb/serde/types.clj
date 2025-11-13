@@ -1,10 +1,11 @@
 (ns xtdb.serde.types
-  (:require [clojure.pprint :as pp])
+  (:require [clojure.pprint :as pp]
+            [xtdb.error :as err])
   (:import (java.io Writer)
            [java.util List]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
-           xtdb.arrow.VectorType
+           (xtdb.arrow ArrowTypes VectorType)
            (xtdb.vector.extensions IntervalMDMType KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (defprotocol FromArrowType
@@ -93,7 +94,9 @@
   (<-arrow-type [arrow-type]
     (let [time-unit (time-unit->kw (.getUnit arrow-type))]
       (if-let [tz (.getTimezone arrow-type)]
-        [:timestamp-tz time-unit tz]
+        (if (and (= :micro time-unit) (= "UTC" tz))
+          :instant
+          [:timestamp-tz time-unit tz])
         [:timestamp-local time-unit])))
 
   ArrowType$Date (<-arrow-type [arrow-type] [:date (date-unit->kw (.getUnit arrow-type))])
@@ -120,7 +123,9 @@
   TransitType (<-arrow-type [_] :transit))
 
 (defn ->arrow-type ^org.apache.arrow.vector.types.pojo.ArrowType [col-type]
-  (case col-type
+  (case (if (keyword? col-type)
+          col-type
+          (first col-type))
     :null ArrowType$Null/INSTANCE
     :bool ArrowType$Bool/INSTANCE
 
@@ -134,7 +139,7 @@
     :utf8 (.getType Types$MinorType/VARCHAR)
     :varbinary (.getType Types$MinorType/VARBINARY)
 
-    :temporal (.getArrowType VectorType/TEMPORAL)
+    :instant (.getArrowType VectorType/INSTANT)
     :tstz-range TsTzRangeType/INSTANCE
     :keyword KeywordType/INSTANCE
     :regclass RegClassType/INSTANCE
@@ -149,59 +154,68 @@
     :union (.getType Types$MinorType/DENSEUNION)
     :sparse-union (.getType Types$MinorType/UNION)
 
-    (case (first col-type)
-      :struct ArrowType$Struct/INSTANCE
-      :list ArrowType$List/INSTANCE
-      :set SetType/INSTANCE
-      :map (let [[_ {:keys [sorted?]}] col-type]
-             (ArrowType$Map. (boolean sorted?)))
-      :union (.getType Types$MinorType/DENSEUNION)
-      :sparse-union (.getType Types$MinorType/UNION)
+    :map (let [[_ {:keys [sorted?]}] col-type]
+           (ArrowType$Map. (boolean sorted?)))
 
-      :date (let [[_ date-unit] col-type]
-              (ArrowType$Date. (kw->date-unit date-unit)))
+    :date (let [[_ date-unit] col-type]
+            (ArrowType$Date. (kw->date-unit date-unit)))
 
-      :decimal (let [[_ precision scale bitwidth] col-type]
-                 (ArrowType$Decimal/createDecimal precision scale (int bitwidth)))
+    :decimal (let [[_ precision scale bitwidth] col-type]
+               (ArrowType$Decimal/createDecimal precision scale (int bitwidth)))
 
-      :timestamp-tz (let [[_ time-unit tz] col-type]
-                      (ArrowType$Timestamp. (kw->time-unit time-unit) tz))
+    :timestamp-tz (let [[_ time-unit tz] col-type]
+                    (ArrowType$Timestamp. (kw->time-unit time-unit) tz))
 
-      :timestamp-local (let [[_ time-unit] col-type]
-                         (ArrowType$Timestamp. (kw->time-unit time-unit) nil))
+    :timestamp-local (let [[_ time-unit] col-type]
+                       (ArrowType$Timestamp. (kw->time-unit time-unit) nil))
 
-      :time-local (let [[_ time-unit] col-type]
-                    (ArrowType$Time. (kw->time-unit time-unit)
-                                     (case time-unit (:second :milli) 32, (:micro :nano) 64)))
+    :time-local (let [[_ time-unit] col-type]
+                  (ArrowType$Time. (kw->time-unit time-unit)
+                                   (case time-unit (:second :milli) 32, (:micro :nano) 64)))
 
-      :duration (let [[_ time-unit] col-type]
-                  (ArrowType$Duration. (kw->time-unit time-unit)))
+    :duration (let [[_ time-unit] col-type]
+                (ArrowType$Duration. (kw->time-unit time-unit)))
 
-      :interval (let [[_ interval-unit] col-type]
-                  (if (= :month-day-micro interval-unit)
-                    IntervalMDMType/INSTANCE
-                    (ArrowType$Interval. (kw->interval-unit interval-unit))))
+    :interval (let [[_ interval-unit] col-type]
+                (if (= :month-day-micro interval-unit)
+                  IntervalMDMType/INSTANCE
+                  (ArrowType$Interval. (kw->interval-unit interval-unit))))
 
-      :fixed-size-list (let [[_ list-size] col-type]
-                         (ArrowType$FixedSizeList. list-size))
+    :fixed-size-list (let [[_ list-size] col-type]
+                       (ArrowType$FixedSizeList. list-size))
 
-      :fixed-size-binary (let [[_ byte-width] col-type]
-                           (ArrowType$FixedSizeBinary. byte-width)))))
+    :fixed-size-binary (let [[_ byte-width] col-type]
+                         (ArrowType$FixedSizeBinary. byte-width))))
 
-(defn render-field [^Field field]
-  (into (cond-> [(.getName field) (<-arrow-type (.getType field))]
-          (.isNullable field) (conj :?))
-        (map render-field)
-        (.getChildren field)))
+(declare render-field)
 
-(defn render-type [^VectorType type]
-  (let [rendered (into (cond-> [(<-arrow-type (.getArrowType type))]
-                         (.isNullable type) (conj :?))
-                       (map render-field)
-                       (.getChildren type))]
-    (if (= 1 (count rendered))
-      (first rendered)
-      rendered)))
+(defn render-type
+  ([^VectorType type]
+   (render-type (.getArrowType type) (.isNullable type) (.getChildren type)))
+
+  ([arrow-type nullable? children]
+   (let [arrow-type-spec (<-arrow-type arrow-type)]
+     (if (and (not nullable?) (empty? children))
+       arrow-type-spec
+       
+       (as-> [] type-spec
+         (cond-> type-spec nullable? (conj :?))
+         (if (keyword? arrow-type-spec)
+           (conj type-spec arrow-type-spec)
+           (into type-spec arrow-type-spec))
+         (into type-spec (map #(render-field % arrow-type-spec) children)))))))
+
+(defn render-field
+  ([field] (render-field field nil))
+  ([^Field field ctx]
+   (let [field-name (.getName field)
+         type-spec (render-type (VectorType/fromField field))]
+     (if (or (and (= ctx :union)
+                  (= field-name (ArrowTypes/toLeg (.getType field))))
+             (and (= ctx :list)
+                  (= "$data$" field-name)))
+       type-spec
+       {field-name type-spec}))))
 
 (defmethod print-dup Field [f, ^Writer w]
   (.write w "#xt/field ")
@@ -210,17 +224,25 @@
 (defmethod print-method Field [f w]
   (print-dup f w))
 
-(defn ->field ^org.apache.arrow.vector.types.pojo.Field [field-spec]
-  (if (instance? Field field-spec)
-    field-spec
+(declare ^xtdb.arrow.VectorType ->type)
 
-    (let [[field-name arrow-type & more-opts] field-spec
-          [nullable? children] (if (= :? (first more-opts))
-                                 [true (rest more-opts)]
-                                 [false more-opts])]
-      (Field. field-name
-              (FieldType. nullable? (->arrow-type arrow-type) nil nil)
-              (mapv ->field children)))))
+(defn- ->field* ^org.apache.arrow.vector.types.pojo.Field [field-spec ctx]
+   (cond
+    (instance? Field field-spec) field-spec
+
+    (and (map? field-spec) (= 1 (count field-spec)))
+    (let [[field-name type-spec] (first field-spec)]
+      (VectorType/field field-name (->type type-spec)))
+
+    :else (case ctx
+            :union (.getAsLegField (->type field-spec))
+            :list (VectorType/field "$data$" (->type field-spec))
+
+            (throw (err/incorrect :invalid-field (str "invalid field spec: " (pr-str field-spec))
+                                  {:field-spec field-spec})))))
+
+(defn ->field ^org.apache.arrow.vector.types.pojo.Field [field-spec]
+  (->field* field-spec nil))
 
 (defmethod print-dup Schema [^Schema s, ^Writer w]
   (.write w "#xt/schema ")
@@ -250,28 +272,20 @@
     (instance? VectorType type-spec) type-spec
     (keyword? type-spec) (VectorType. (->arrow-type type-spec) false ^List (vector))
 
-    :else (let [[arrow-type & more-opts] type-spec
-                [arrow-type more-opts] (case arrow-type
-                                         ;; TODO to be finished, need to reduce duplication here with what's above
-                                         :timestamp-tz (let [[_ time-unit tz & rest-opts] type-spec]
-                                                         [[:timestamp-tz time-unit tz] rest-opts])
-                                         :duration (let [[_ time-unit & rest-opts] type-spec]
-                                                     [[:duration time-unit] rest-opts])
-                                         :interval (let [[_ interval-unit & rest-opts] type-spec]
-                                                     [[:interval interval-unit] rest-opts])
-                                         :timestamp-local (let [[_ time-unit & rest-opts] type-spec]
-                                                            [[:timestamp-local time-unit] rest-opts])
-                                         :fixed-size-list (let [[_ list-size & rest-opts] type-spec]
-                                                            [[:fixed-size-list list-size] rest-opts])
-                                         :fixed-size-binary (let [[_ byte-width & rest-opts] type-spec]
-                                                              [[:fixed-size-binary byte-width] rest-opts])
-                                         [arrow-type more-opts])
-                [nullable? children] (if (= :? (first more-opts))
-                                       [true (rest more-opts)]
-                                       [false more-opts])]
-            (VectorType. (->arrow-type arrow-type)
-                         ^boolean nullable?
-                         ^List (mapv ->field children)))))
+    :else (let [[first-elem & more-opts] type-spec
+                [nullable? more-opts] (if (= :? first-elem)
+                                        [true more-opts]
+                                        [false (cons first-elem more-opts)])
+                [arrow-type-head & more-opts] more-opts]
+            (case arrow-type-head
+              (:union :set :list :struct :sparse-union)
+              (VectorType. (->arrow-type arrow-type-head)
+                           nullable?
+                           ^List (mapv #(->field* % arrow-type-head) more-opts))
+
+              (VectorType. (->arrow-type (cons arrow-type-head more-opts))
+                           nullable?
+                           ^List (vector))))))
 
 (defmethod print-dup ArrowType [arrow-type, ^Writer w]
   (.write w "#xt.arrow/type ")

@@ -1,28 +1,25 @@
 {:schema
- #xt/schema (["tx-ops"
-              :list
-              ["$data$"
-               :union
-               ["put-docs"
-                :struct
-                ["iids" :list ["$data$" [:fixed-size-binary 16]]]
-                ["documents"
-                 :union
-                 ["public/foo"
-                  :list
-                  ["$data$"
-                   :struct
-                   ["_id" :union ["keyword" :keyword] ["utf8" :utf8]]
-                   ["a" :i64 :?]
-                   ["b" :i64 :?]]]
-                 ["public/bar"
-                  :list
-                  ["$data$" :struct ["_id" :i64] ["c" :i64]]]]
-                ["_valid_from" [:timestamp-tz :micro "UTC"] :?]
-                ["_valid_to" [:timestamp-tz :micro "UTC"] :?]]]]
-             ["system-time" [:timestamp-tz :micro "UTC"] :?]
-             ["default-tz" :utf8 :?]
-             ["user" :utf8 :?]),
+ #xt/schema ({"tx-ops"
+              [:list
+               [:union
+                {"put-docs"
+                 [:struct
+                  {"iids" [:list [:fixed-size-binary 16]]}
+                  {"documents"
+                   [:union
+                    {"public/foo"
+                     [:list
+                      [:struct
+                       {"_id" [:union :keyword :utf8]}
+                       {"a" [:? :i64]}
+                       {"b" [:? :i64]}]]}
+                    {"public/bar"
+                     [:list [:struct {"_id" :i64} {"c" :i64}]]}]}
+                  {"_valid_from" [:? :instant]}
+                  {"_valid_to" [:? :instant]}]}]]}
+             {"system-time" [:? :instant]}
+             {"default-tz" [:? :utf8]}
+             {"user" [:? :utf8]}),
  :data
  [{:tx-ops
    [#xt/tagged [:put-docs

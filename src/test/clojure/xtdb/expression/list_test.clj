@@ -20,32 +20,32 @@
                         (util/with-open [out-vec (Vector/open tu/*allocator* field)]
                                         (.writeTo res out-vec 0 (.getSize res))
                                         (vec (.getAsList out-vec))))}))]
-    (t/is (= {:field #xt/field ["$data$" :i64]
+    (t/is (= {:field #xt/field {"$data$" :i64}
               :size 10
               :value [1 2 3 4 5 6 7 8 9 10]}
              (run-test '(generate_series 1 11 1) {}))
           "happy case with generate_series")
 
-    (t/is (= {:field #xt/field ["null" :null :?]
+    (t/is (= {:field #xt/field {"null" [:? :null]}
               :size nil
               :value nil}
              (run-test '(get_field 1) {}))
           "expr that returns nil")
 
-    (t/is (= {:field #xt/field ["null" :null :?]
+    (t/is (= {:field #xt/field {"null" [:? :null]}
               :size nil
               :value nil}
              (run-test '(+ 1 1) {}))
           "expr that doesn't return a list")
 
-    (t/is (= {:field #xt/field ["null" :null :?]
+    (t/is (= {:field #xt/field {"null" [:? :null]}
               :size nil
               :value nil}
              (run-test '(if true (+ 1 1) [1 2]) {}))
           "expr that might return a list (and doesn't)")
 
     ;; FIXME: Unnest returns the wrong type when something _might_ return a list
-    #_(t/is (= {:field #xt/field ["i64" :i64]
+    #_(t/is (= {:field #xt/field {"i64" :i64}
               :size 2
               :value [1 2]}
              (run-test '(if false (+ 1 1) [1 2]) {}))

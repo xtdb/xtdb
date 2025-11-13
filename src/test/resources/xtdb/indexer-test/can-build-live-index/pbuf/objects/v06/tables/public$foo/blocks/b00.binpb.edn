@@ -1,8 +1,8 @@
 {:row-count 5,
  :fields
- {"_id" #xt/field ["_id" :i64],
-  "bar" #xt/field ["bar" :i64],
-  "toto" #xt/field ["toto" :utf8 :?]},
+ {"_id" #xt/field {"_id" :i64},
+  "bar" #xt/field {"bar" :i64},
+  "toto" #xt/field {"toto" [:? :utf8]}},
  :hlls
  {"_id" [-179776705 2.001955671862574],
   "bar" [-179776705 2.001955671862574],

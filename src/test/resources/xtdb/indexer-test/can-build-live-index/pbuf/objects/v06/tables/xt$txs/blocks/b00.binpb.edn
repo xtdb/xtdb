@@ -1,9 +1,9 @@
 {:row-count 6,
  :fields
- {"_id" #xt/field ["_id" :i64],
-  "system_time" #xt/field ["system_time" [:timestamp-tz :micro "UTC"]],
-  "committed" #xt/field ["committed" :bool],
-  "error" #xt/field ["error" :transit :?]},
+ {"_id" #xt/field {"_id" :i64},
+  "system_time" #xt/field {"system_time" :instant},
+  "committed" #xt/field {"committed" :bool},
+  "error" #xt/field {"error" [:? :transit]}},
  :hlls
  {"_id" [2079448697 6.01764709272061],
   "system_time" [-2034527697 6.01764709272061],

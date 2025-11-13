@@ -227,7 +227,7 @@
 
 (t/deftest test-mark-equi-join
   (t/is (= {:res [{{:a 12, :m true} 2, {:a 0, :m false} 1} {{:a 100, :m true} 1}]
-            :types '{a #xt/type :i64, m #xt/type [:bool :?]}}
+            :types '{a #xt/type :i64, m #xt/type [:? :bool]}}
            (-> (tu/query-ra [:mark-join '{m [{a b}]}
                              [::tu/pages
                               [[{:a 12}, {:a 12}, {:a 0}]
@@ -348,7 +348,7 @@
 (t/deftest test-left-equi-join
   (t/is (= {:res [{{:a 12, :b 12, :c 2} 1, {:a 12, :b 12, :c 0} 1, {:a 0} 1}
                   {{:a 12, :b 12, :c 2} 1, {:a 100, :b 100, :c 3} 1, {:a 12, :b 12, :c 0} 1}]
-            :types '{a #xt/type :i64, b #xt/type [:i64 :?], c #xt/type [:i64 :?]}}
+            :types '{a #xt/type :i64, b #xt/type [:? :i64], c #xt/type [:? :i64]}}
            (-> (tu/query-ra [:left-outer-join '[{a b}]
                              [::tu/pages
                               [[{:a 12}, {:a 0}]
@@ -362,7 +362,7 @@
   (t/testing "empty input"
     (t/is (= {:res [#{{:a 12}, {:a 0}}
                     #{{:a 100}}]
-              :types '{a #xt/type :i64, b #xt/type [:i64 :?]}}
+              :types '{a #xt/type :i64, b #xt/type [:? :i64]}}
              (-> (tu/query-ra [:left-outer-join '[{a b}]
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
@@ -372,7 +372,7 @@
                  (update :res (partial mapv set)))))
 
     (t/is (= {:res []
-              :types '{a #xt/type :i64, b #xt/type [:i64 :?]}}
+              :types '{a #xt/type :i64, b #xt/type [:? :i64]}}
              (tu/query-ra [:left-outer-join '[{a b}]
                            [::tu/pages '{a #xt/type :i64} []]
                            [::tu/pages
@@ -382,7 +382,7 @@
 
     (t/is (= {:res [#{{:a 12}, {:a 0}}
                     #{{:a 100}}]
-              :types '{a #xt/type :i64, b #xt/type [:i64 :?]}}
+              :types '{a #xt/type :i64, b #xt/type [:? :i64]}}
              (-> (tu/query-ra [:left-outer-join '[{a b}]
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
@@ -457,7 +457,7 @@
     (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:b 2, :c 1} 1}
                     {{:a 12, :b 12, :c 2} 2, {:a 100, :b 100, :c 3} 1}
                     {{:a 0} 1}]
-              :types '{a #xt/type [:i64 :?], b #xt/type [:i64 :?], c #xt/type [:i64 :?]}}
+              :types '{a #xt/type [:? :i64], b #xt/type [:? :i64], c #xt/type [:? :i64]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
@@ -471,7 +471,7 @@
     (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a 12, :b 12, :c 2} 2, {:b 2, :c 1} 1}
                     {{:a 100, :b 100, :c 3} 1}
                     {{:a 0} 1}]
-              :types '{a #xt/type [:i64 :?], b #xt/type [:i64 :?], c #xt/type [:i64 :?]}}
+              :types '{a #xt/type [:? :i64], b #xt/type [:? :i64], c #xt/type [:? :i64]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
@@ -485,7 +485,7 @@
   (t/testing "all matched"
     (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a 100, :b 100, :c 3} 1}
                     {{:a 12, :b 12, :c 2} 2}]
-              :types '{a #xt/type [:i64 :?], b #xt/type [:i64 :?], c #xt/type [:i64 :?]}}
+              :types '{a #xt/type [:? :i64], b #xt/type [:? :i64], c #xt/type [:? :i64]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/pages
                                 [[{:a 12}]
@@ -498,7 +498,7 @@
 
     (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a 12, :b 12, :c 2} 2}
                     {{:a 100, :b 100, :c 3} 1}]
-              :types '{a #xt/type [:i64 :?], b #xt/type [:i64 :?], c #xt/type [:i64 :?]}}
+              :types '{a #xt/type [:? :i64], b #xt/type [:? :i64], c #xt/type [:? :i64]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/pages
                                 [[{:a 12}]
@@ -511,7 +511,7 @@
 
   (t/testing "empty input"
     (t/is (= {:res [{{:a 0} 1, {:a 100} 1, {:a 12} 1}]
-              :types '{a #xt/type [:i64 :?], b #xt/type [:i64 :?]}}
+              :types '{a #xt/type [:? :i64], b #xt/type [:? :i64]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
@@ -522,7 +522,7 @@
 
     (t/is (= {:res [{{:b 12} 1, {:b 2} 1}
                     {{:b 100} 1, {:b 0} 1}]
-              :types '{a #xt/type [:i64 :?], b #xt/type [:i64 :?]}}
+              :types '{a #xt/type [:? :i64], b #xt/type [:? :i64]}}
              (-> (tu/query-ra [:full-outer-join '[{a b}]
                                [::tu/pages '{a #xt/type :i64} []]
                                [::tu/pages
@@ -1078,8 +1078,8 @@
   (t/testing "polymorphic types on both sides - all matching"
     (t/is (= {:res [[{:a 1 :b 1} {:a "2" :b "2"}]],
               :types
-              '{a #xt/type [:union ["utf8" :utf8] ["i64" :i64] ["null" :null :?]]
-                b #xt/type [:union ["utf8" :utf8] ["i64" :i64] ["null" :null :?]]}}
+              '{a #xt/type [:union :utf8 :i64 [:? :null]]
+                b #xt/type [:union :utf8 :i64 [:? :null]]}}
              (tu/query-ra [:full-outer-join '[{a b}]
                            [::tu/pages
                             [[{:a 1}, {:a "2"}]]]
@@ -1090,8 +1090,8 @@
   (t/testing "polymorphic types on both sides - some unmatching"
     (t/is (= {:res [[{:b 1, :a 1} {:b "3"}] [{:a "2"}]],
               :types
-              '{a #xt/type [:union ["utf8" :utf8] ["i64" :i64] ["null" :null :?]]
-                b #xt/type [:union ["utf8" :utf8] ["i64" :i64] ["null" :null :?]]}}
+              '{a #xt/type [:union :utf8 :i64 [:? :null]]
+                b #xt/type [:union :utf8 :i64 [:? :null]]}}
              (tu/query-ra [:full-outer-join '[{a b}]
                            [::tu/pages
                             [[{:a 1}, {:a "2"}]]]
@@ -1102,8 +1102,8 @@
   (t/testing "polymorphic types on both sides - all unmatching"
     (t/is (= {:res [[{:b 3} {:b "4"}] [{:a 1} {:a "2"}]],
               :types
-              '{a #xt/type [:union ["utf8" :utf8] ["i64" :i64] ["null" :null :?]]
-                b #xt/type [:union ["utf8" :utf8] ["i64" :i64] ["null" :null :?]]}}
+              '{a #xt/type [:union :utf8 :i64 [:? :null]]
+                b #xt/type [:union :utf8 :i64 [:? :null]]}}
              (tu/query-ra [:full-outer-join '[{a b}]
                            [::tu/pages
                             [[{:a 1}, {:a "2"}]]]

@@ -1,5 +1,5 @@
 {:row-count 2,
- :fields {"_id" #xt/field ["_id" :i64]},
+ :fields {"_id" #xt/field {"_id" :i64}},
  :hlls {"_id" [-179776705 2.001955671862574]},
  :partitions
  [{:level 0,

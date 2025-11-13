@@ -53,8 +53,8 @@
 
         (util/with-open [args (tu/open-args {:ordinal 1})]
           (t/testing "only needs to scan block 1, page 1"
-            (let [lit-sel (expr.meta/->metadata-selector tu/*allocator* '(> ordinal 1) '{ordinal #xt/field ["ordinal" :i64]} vw/empty-args)
-                  param-sel (expr.meta/->metadata-selector tu/*allocator* '(> ordinal ?ordinal) '{ordinal #xt/field ["ordinal" :i64]} args)]
+            (let [lit-sel (expr.meta/->metadata-selector tu/*allocator* '(> ordinal 1) '{ordinal #xt/field {"ordinal" :i64}} vw/empty-args)
+                  param-sel (expr.meta/->metadata-selector tu/*allocator* '(> ordinal ?ordinal) '{ordinal #xt/field {"ordinal" :i64}} args)]
               (t/testing "L0 files have min-max metadata, so we have to match them"
                 (with-page-metadata node (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))
                   (fn [^PageMetadata page-metadata]
@@ -107,8 +107,8 @@
 
       (t/testing "only needs to scan block 1, page 1"
         (util/with-open [args (tu/open-args {:name "Ivan"})]
-          (let [lit-sel (expr.meta/->metadata-selector tu/*allocator* '(= name "Ivan") '{name #xt/field ["name" :utf8]} vw/empty-args)
-                param-sel (expr.meta/->metadata-selector tu/*allocator* '(= name ?name) '{name #xt/field ["name" :utf8]} args)]
+          (let [lit-sel (expr.meta/->metadata-selector tu/*allocator* '(= name "Ivan") '{name #xt/field {"name" :utf8}} vw/empty-args)
+                param-sel (expr.meta/->metadata-selector tu/*allocator* '(= name ?name) '{name #xt/field {"name" :utf8}} args)]
             (t/testing "L0 has no bloom filter metadata -> always match"
               (with-page-metadata node (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))
                 (fn [^PageMetadata page-metadata]
@@ -313,7 +313,7 @@
 (t/deftest test-left-outer-join-with-composite-types-2393
   (t/is (= {:res [{{:a 12, :b 12, :c {:foo 1}} 1, {:a 12, :b 12, :c {:foo 2}} 1, {:a 0} 1}
                   {{:a 12, :b 12, :c {:foo 1}} 1, {:a 12, :b 12, :c {:foo 2}} 1, {:a 100, :b 100, :c {:foo 2}} 1}]
-            :types '{a #xt/type :i64, c #xt/type [:struct :? ["foo" :i64]], b #xt/type [:i64 :?]}}
+            :types '{a #xt/type :i64, c #xt/type [:? :struct {"foo" :i64}], b #xt/type [:? :i64]}}
            (-> (tu/query-ra [:left-outer-join '[{a b}]
                              [::tu/pages
                               [[{:a 12}, {:a 0}]
@@ -327,7 +327,7 @@
 
   (t/is (= {:res [{{:a 12, :c [1], :b 12} 1, {:a 12, :c [2], :b 12} 1, {:a 0} 1}
                   {{:a 12, :c [1], :b 12} 1, {:a 12, :c [2], :b 12} 1, {:a 100, :c [4], :b 100} 1}]
-            :types '{a #xt/type :i64, b #xt/type [:i64 :?], c #xt/type [:list :? ["$data$" :i64]]}}
+            :types '{a #xt/type :i64, b #xt/type [:? :i64], c #xt/type [:? :list :i64]}}
            (-> (tu/query-ra [:left-outer-join '[{a b}]
                              [::tu/pages
                               [[{:a 12}, {:a 0}]
@@ -378,7 +378,7 @@
         (t/is (= #{{:xt/id "xtdb-db"} {:xt/id :new-db}} (set res)))
 
         ;; these two are equivalent - for some reason CI gives different ordering
-        (t/is (or (= '{_id #xt/type [:union ["utf8" :utf8] ["keyword" :keyword]]}
+        (t/is (or (= '{_id #xt/type [:union :utf8 :keyword]}
                      types)
-                  (= '{_id #xt/type [:union ["keyword" :keyword] ["utf8" :utf8]]}
+                  (= '{_id #xt/type [:union :keyword :utf8]}
                      types)))))))

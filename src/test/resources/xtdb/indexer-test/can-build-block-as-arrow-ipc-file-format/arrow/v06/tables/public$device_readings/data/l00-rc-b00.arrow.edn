@@ -1,28 +1,28 @@
 {:schema
- #xt/schema (["_iid" [:fixed-size-binary 16]]
-             ["_system_from" [:timestamp-tz :micro "UTC"]]
-             ["_valid_from" [:timestamp-tz :micro "UTC"]]
-             ["_valid_to" [:timestamp-tz :micro "UTC"]]
-             ["op"
-              :union
-              ["delete" :null :?]
-              ["erase" :null :?]
-              ["put"
-               :struct
-               ["cpu_avg_15min" :f64]
-               ["device_id" :utf8]
-               ["rssi" :f64]
-               ["cpu_avg_5min" :f64]
-               ["battery_status" :utf8]
-               ["ssid" :utf8]
-               ["time" [:timestamp-tz :micro "UTC"]]
-               ["battery_level" :f64]
-               ["bssid" :utf8]
-               ["battery_temperature" :f64]
-               ["cpu_avg_1min" :f64]
-               ["_id" :utf8]
-               ["mem_free" :f64]
-               ["mem_used" :f64]]]),
+ #xt/schema ({"_iid" [:fixed-size-binary 16]}
+             {"_system_from" :instant}
+             {"_valid_from" :instant}
+             {"_valid_to" :instant}
+             {"op"
+              [:union
+               {"delete" [:? :null]}
+               {"erase" [:? :null]}
+               {"put"
+                [:struct
+                 {"cpu_avg_15min" :f64}
+                 {"device_id" :utf8}
+                 {"rssi" :f64}
+                 {"cpu_avg_5min" :f64}
+                 {"battery_status" :utf8}
+                 {"ssid" :utf8}
+                 {"time" :instant}
+                 {"battery_level" :f64}
+                 {"bssid" :utf8}
+                 {"battery_temperature" :f64}
+                 {"cpu_avg_1min" :f64}
+                 {"_id" :utf8}
+                 {"mem_free" :f64}
+                 {"mem_used" :f64}]}]}),
  :batches
  ([{:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",

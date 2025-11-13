@@ -50,9 +50,9 @@
   (Field. field-name field-type children))
 
 (def temporal-col-type [:timestamp-tz :micro "UTC"])
-(def temporal-type (st/->type [[:timestamp-tz :micro "UTC"]]))
+(def temporal-type (st/->type [:timestamp-tz :micro "UTC"]))
 (def nullable-temporal-col-type [:union #{:null temporal-col-type}])
-(def nullable-temporal-type (st/->type [[:timestamp-tz :micro "UTC"] :?]))
+(def nullable-temporal-type (st/->type [:? :timestamp-tz :micro "UTC"]))
 (def temporal-arrow-type (st/->arrow-type [:timestamp-tz :micro "UTC"]))
 (def nullable-temporal-field-type (FieldType/nullable temporal-arrow-type))
 
@@ -164,7 +164,7 @@
     (-> (transduce (comp (remove nil?) (distinct)) (completing merge-col-type*) {} col-types)
         (map->col-type))))
 
-(def ^Field null-field (st/->field ["null" :null]))
+(def ^Field null-field (st/->field {"null" :null}))
 
 (defn merge-types ^xtdb.arrow.VectorType [& types]
   (MergeTypes/mergeTypes (vec types)))

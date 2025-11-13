@@ -685,17 +685,17 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                             [:put-docs :unrelated-table {:xt/id 1 :a "a-string"}]])
 
   (let [pq (xtp/prepare-sql tu/*node* "SELECT foo.*, ? FROM foo" {:default-db "xtdb"})
-        column-fields [#xt/field ["_id" :i64]
-                       #xt/field ["a" :utf8]
-                       #xt/field ["b" :i64]]]
+        column-fields [#xt/field {"_id" :i64}
+                       #xt/field {"a" :utf8}
+                       #xt/field {"b" :i64}]]
 
-    (t/is (= (conj column-fields #xt/field ["_column_2" :i64])
-             (.getColumnFields pq [#xt/field ["?_0" :i64]]))
+    (t/is (= (conj column-fields #xt/field {"_column_2" :i64})
+             (.getColumnFields pq [#xt/field {"?_0" :i64}]))
           "param type is assumed to be nullable")
 
     (with-open [cursor (.openQuery pq {:args (tu/open-args [42])})]
 
-      (t/is (= (conj column-fields #xt/field ["_column_2" :i64])
+      (t/is (= (conj column-fields #xt/field {"_column_2" :i64})
                (.getResultFields cursor))
             "now param value has been supplied we know its type is non-null")
 
@@ -705,7 +705,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (t/testing "preparedQuery rebound with different param types"
       (with-open [cursor (.openQuery pq {:args (tu/open-args ["fish"])})]
 
-        (t/is (= (conj column-fields #xt/field ["_column_2" :utf8])
+        (t/is (= (conj column-fields #xt/field {"_column_2" :utf8})
                  (.getResultFields cursor))
               "now param value has been supplied we know its type is non-null")
 
@@ -1118,8 +1118,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
     (t/is (= {:res [{:xt/id 2, :foo "foo"} {:xt/id 3, :bar "bar"}],
               :types '{_id #xt/type :i64
-                       bar #xt/type [:utf8 :?]
-                       foo #xt/type [:utf8 :?]}}
+                       bar #xt/type [:? :utf8]
+                       foo #xt/type [:? :utf8]}}
              (tu/query-ra '[:order-by [[_id]]
                             [:scan {:table #xt/table device} [_id foo bar]]]
                           {:node tu/*node*

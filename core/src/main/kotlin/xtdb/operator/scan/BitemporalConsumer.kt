@@ -35,7 +35,7 @@ class BitemporalConsumer private constructor(
             ): RelBuilder =
                 mutableListOf<VectorWriter>().closeAllOnCatch { temporalVecs ->
                     fun openTemporalVec(name: String, nullable: Boolean): VectorWriter {
-                        val vec = Vector.open(al, name ofType maybe(VectorType.TEMPORAL, nullable))
+                        val vec = Vector.open(al, name ofType maybe(VectorType.INSTANT, nullable))
                         temporalVecs.add(vec)
                         return vec
                     }

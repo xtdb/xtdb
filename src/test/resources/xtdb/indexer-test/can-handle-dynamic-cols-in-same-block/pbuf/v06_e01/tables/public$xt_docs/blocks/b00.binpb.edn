@@ -1,11 +1,10 @@
 {:row-count 6,
  :fields
- {"_id"
-  #xt/field ["_id" :union ["utf8" :utf8] ["i64" :i64] ["keyword" :keyword]],
+ {"_id" #xt/field {"_id" [:union :utf8 :i64 :keyword]},
   "list"
-  #xt/field ["list" :list :? ["$data$" :union ["f64" :f64] ["utf8" :utf8] ["timestamp-tz-micro-utc" [:timestamp-tz :micro "UTC"]] ["bool" :bool]]],
+  #xt/field {"list" [:? :list [:union :f64 :utf8 :instant :bool]]},
   "struct"
-  #xt/field ["struct" :struct :? ["a" :union ["i64" :i64] ["bool" :bool]] ["b" :utf8 :?] ["c" :utf8 :?]]},
+  #xt/field {"struct" [:? :struct {"a" [:union :i64 :bool]} {"b" [:? :utf8]} {"c" [:? :utf8]}]}},
  :hlls
  {"_id" [-1707429676 6.01764709272061],
   "list" [-791736731 3.004403133222472],

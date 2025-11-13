@@ -31,10 +31,10 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
-  (Schema. [(serde.types/->field ["tx-ops" :list ["$data$" :union]])
-            (serde.types/->field ["system-time" :temporal :?])
-            (serde.types/->field ["default-tz" :utf8])
-            (serde.types/->field ["user" :utf8 :?])]))
+  (Schema. [(serde.types/->field {"tx-ops" [:list :union]})
+            (serde.types/->field {"system-time" [:? :instant]})
+            (serde.types/->field {"default-tz" [:utf8]})
+            (serde.types/->field {"user" [:? :utf8]})]))
 
 (def ^:private forbidden-schemas #{"xt" "information_schema" "pg_catalog"})
 

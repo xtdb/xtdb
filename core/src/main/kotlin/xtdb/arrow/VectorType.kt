@@ -84,7 +84,7 @@ data class VectorType(
         val UTF8 = VectorType(MinorType.VARCHAR.type)
 
         @JvmField
-        val TEMPORAL = VectorType(ArrowType.Timestamp(MICROSECOND, "UTC"))
+        val INSTANT = VectorType(ArrowType.Timestamp(MICROSECOND, "UTC"))
 
         @JvmField
         val IID = VectorType(ArrowType.FixedSizeBinary(16))
@@ -207,8 +207,8 @@ data class VectorType(
 
                 is ZonedDateTime -> VectorType(ArrowType.Timestamp(MICROSECOND, zone.toString()))
                 is OffsetDateTime -> VectorType(ArrowType.Timestamp(MICROSECOND, offset.toString()))
-                is Instant -> TEMPORAL
-                is Date -> TEMPORAL
+                is Instant -> INSTANT
+                is Date -> INSTANT
                 is LocalDateTime -> TIMESTAMP_MICRO
                 is LocalDate -> DATE_DAY
                 is LocalTime -> TIME_NANO

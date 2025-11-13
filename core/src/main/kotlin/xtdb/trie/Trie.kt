@@ -9,7 +9,7 @@ import xtdb.table.TableRef
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.IID
 import xtdb.arrow.VectorType.Companion.NULL
-import xtdb.arrow.VectorType.Companion.TEMPORAL
+import xtdb.arrow.VectorType.Companion.INSTANT
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.schema
 import xtdb.arrow.withName
@@ -110,9 +110,9 @@ object Trie {
     fun dataRelSchema(putDocField: Field?): Schema =
         schema(
             "_iid" ofType IID,
-            "_system_from" ofType TEMPORAL,
-            "_valid_from" ofType TEMPORAL,
-            "_valid_to" ofType TEMPORAL,
+            "_system_from" ofType INSTANT,
+            "_valid_from" ofType INSTANT,
+            "_valid_to" ofType INSTANT,
             "op" ofType VectorType.unionOf(
                 *(listOfNotNull(
                     putDocField?.withName("put"),

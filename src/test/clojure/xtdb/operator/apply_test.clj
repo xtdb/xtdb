@@ -42,7 +42,7 @@
   (t/is (= {:res [{:c-id "c1", :c-name "Alan", :match true}
                   {:c-id "c2", :c-name "Bob", :match true}
                   {:c-id "c3", :c-name "Charlie", :match false}]
-            :types '{c_id #xt/type :utf8, c_name #xt/type :utf8, match #xt/type [:bool :?]}}
+            :types '{c_id #xt/type :utf8, c_name #xt/type :utf8, match #xt/type [:? :bool]}}
            (-> (tu/query-ra [:apply '{:mark-join {match (= ?c_id o_customer_id)}} '{c_id ?c_id}
                              [::tu/pages
                               [[{:c_id "c1", :c_name "Alan"}
@@ -56,7 +56,7 @@
                             {:with-types? true}))))
 
   (t/is (= {:res [{:x 0}]
-            :types '{x #xt/type :i64, match #xt/type [:bool :?]}}
+            :types '{x #xt/type :i64, match #xt/type [:? :bool]}}
            (-> (tu/query-ra '[:apply {:mark-join {match (= 4 y)}} {}
                               [:table [{x 0}]]
                               [:table [{y nil}]]]
@@ -102,7 +102,7 @@
                           {:args {:x []}})))))
 
 (t/deftest test-apply-empty-rel-bug-237
-  (t/is (= {:res [{}], :types '{x3 #xt/type [:i64 :?]}}
+  (t/is (= {:res [{}], :types '{x3 #xt/type [:? :i64]}}
            (-> (tu/query-ra
                 '[:group-by [{x3 (sum x2)}]
                   [:apply :cross-join {}

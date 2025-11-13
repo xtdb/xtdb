@@ -33,10 +33,10 @@
   (for [[^TableRef table cols] schema-info
         :let [cols (into (when-not (and (contains? #{"pg_catalog" "information_schema" "xt"} (.getSchemaName table))
                                         (not= 'xt/txs (table/ref->schema+table table)))
-                           {"_valid_from" #xt/field ["_valid_from" :temporal]
-                            "_valid_to" #xt/field ["_valid_to" :temporal :?]
-                            "_system_from" #xt/field ["_system_from" :temporal]
-                            "_system_to" #xt/field ["_system_to" :temporal :?]})
+                           {"_valid_from" #xt/field {"_valid_from" :instant}
+                            "_valid_to" #xt/field {"_valid_to" [:? :instant]}
+                            "_system_from" #xt/field {"_system_from" :instant}
+                            "_system_to" #xt/field {"_system_to" [:? :instant]}})
                          cols)
               {xt-cols true, user-cols false} (group-by (comp #(str/starts-with? % "_") key) cols)
               cols (concat (sort-by key xt-cols)

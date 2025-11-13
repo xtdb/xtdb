@@ -27,10 +27,10 @@
                       {stddev-pop (stddev-pop b)}
                       {stddev-samp (stddev-samp b)}]
           expected-col-types '{a #xt/type :i64, cnt #xt/type :i64
-                               sum #xt/type [:i64 :?], avg #xt/type [:f64 :?]
-                               min #xt/type [:i64 :?], max #xt/type [:i64 :?]
-                               var-pop #xt/type [:f64 :?], stddev-pop #xt/type [:f64 :?]
-                               var-samp #xt/type [:f64 :?], stddev-samp #xt/type [:f64 :?]}]
+                               sum #xt/type [:? :i64], avg #xt/type [:? :f64]
+                               min #xt/type [:? :i64], max #xt/type [:? :i64]
+                               var-pop #xt/type [:? :f64], stddev-pop #xt/type [:? :f64]
+                               var-samp #xt/type [:? :f64], stddev-samp #xt/type [:? :f64]}]
 
       (t/is (= {:res #{{:a 1, :sum 140, :avg 35.0, :cnt 4 :min 10 :max 60,
                         :var-pop 425.0, :stddev-pop 20.615528128088304
@@ -66,7 +66,7 @@
                                             {var-samp (var-samp b)}
                                             {stddev-pop (stddev-pop b)}
                                             {stddev-samp (stddev-samp b)}]
-                                [::tu/pages '{a #xt/type :i64, b #xt/type [:union ["null" :null] ["i64" :i64]]}
+                                [::tu/pages '{a #xt/type :i64, b #xt/type [:union :null :i64]}
                                  [[{:a 1 :b 20}
                                    {:a 1 :b 10}
                                    {:a 2 :b 30}
@@ -140,42 +140,42 @@
 (t/deftest test-row-count
   (t/is (= [{:n 0}]
            (tu/query-ra '[:group-by [{n (row-count)}]
-                          [::tu/pages {a #xt/type [:i64 :?]}
+                          [::tu/pages {a #xt/type [:? :i64]}
                            []]])))
 
   (t/is (= [{:n 2}]
            (tu/query-ra '[:group-by [{n (row_count)}]
-                          [::tu/pages {a #xt/type [:i64 :?]}
+                          [::tu/pages {a #xt/type [:? :i64]}
                            [[{:a nil}
                              {:a 1}]]]])))
 
   (t/is (= [{:a 1, :n 1}, {:a 2, :n 2}]
            (tu/query-ra '[:group-by [a {n (row-count)}]
-                          [::tu/pages {a #xt/type :i64, b #xt/type [:i64 :?]}
+                          [::tu/pages {a #xt/type :i64, b #xt/type [:? :i64]}
                            [[{:a 1, :b nil}
                              {:a 2, :b 1}
                              {:a 2, :b nil}]]]])))
 
   (t/is (= []
            (tu/query-ra '[:group-by [a {bs (row-count)}]
-                          [::tu/pages {a #xt/type :i64, b #xt/type [:i64 :?]}
+                          [::tu/pages {a #xt/type :i64, b #xt/type [:? :i64]}
                            []]]))
         "empty if there's a grouping key"))
 
 (t/deftest test-count-empty-null-behaviour
   (t/is (= [{:n 0}]
            (tu/query-ra '[:group-by [{n (count a)}]
-                          [::tu/pages {a #xt/type [:i64 :?]}
+                          [::tu/pages {a #xt/type [:? :i64]}
                            []]])))
 
   (t/is (= [{:n 0}]
            (tu/query-ra '[:group-by [{n (count a)}]
-                          [::tu/pages {a #xt/type [:i64 :?]}
+                          [::tu/pages {a #xt/type [:? :i64]}
                            [[{:a nil}]]]])))
 
   (t/is (= [{:n 1}]
            (tu/query-ra '[:group-by [{n (count a)}]
-                          [::tu/pages {a #xt/type [:i64 :?]}
+                          [::tu/pages {a #xt/type [:? :i64]}
                            [[{:a nil}
                              {:a 1}]]]])))
 
@@ -188,7 +188,7 @@
 
   (t/is (= []
            (tu/query-ra '[:group-by [a {bs (count b)}]
-                          [::tu/pages {a #xt/type :i64, b #xt/type [:i64 :?]}
+                          [::tu/pages {a #xt/type :i64, b #xt/type [:? :i64]}
                            []]]))
         "empty if there's a grouping key"))
 
@@ -401,7 +401,7 @@
                    {:k "tn", :all-vs true, :any-vs true}
                    {:k "tf", :all-vs false, :any-vs true}
                    {:k "tfn", :all-vs false, :any-vs true}}
-            :types '{k #xt/type :utf8, all-vs #xt/type [:bool :?], any-vs #xt/type [:bool :?]}}
+            :types '{k #xt/type :utf8, all-vs #xt/type [:? :bool], any-vs #xt/type [:? :bool]}}
 
            (-> (tu/query-ra [:group-by '[k {all-vs (bool-and v)} {any-vs (bool-or v)}]
                              [::tu/pages
@@ -416,12 +416,12 @@
 
   (t/is (= []
            (tu/query-ra [:group-by '[k {all-vs (bool-and v)} {any-vs (bool-or v)}]
-                         [::tu/pages '{k #xt/type :utf8, v #xt/type [:bool :?]}
+                         [::tu/pages '{k #xt/type :utf8, v #xt/type [:? :bool]}
                           []]])))
 
   (t/is (= [{}]
            (tu/query-ra [:group-by '[{all-vs (bool-and v)} {any-vs (bool-or v)}]
-                         [::tu/pages '{v #xt/type [:bool :?]}
+                         [::tu/pages '{v #xt/type [:? :bool]}
                           []]])))
 
   (t/is (= [{}]
@@ -443,10 +443,10 @@
 
             :types '{k #xt/type :keyword,
                      cnt #xt/type :i64, cnt-distinct #xt/type :i64,
-                     sum #xt/type [:i64 :?], sum-distinct #xt/type [:i64 :?],
-                     avg #xt/type [:f64 :?], avg-distinct #xt/type [:f64 :?],
-                     array-agg #xt/type [:list ["$data$" :i64]],
-                     array-agg-distinct #xt/type [:list ["$data$" :i64]]}}
+                     sum #xt/type [:? :i64], sum-distinct #xt/type [:? :i64],
+                     avg #xt/type [:? :f64], avg-distinct #xt/type [:? :f64],
+                     array-agg #xt/type [:list :i64],
+                     array-agg-distinct #xt/type [:list :i64]}}
 
            (util/->clj (-> (tu/query-ra [:group-by '[k
                                                      {cnt (count v)}
@@ -470,7 +470,7 @@
 
 (t/deftest test-group-by-with-nils-coerce-to-boolean-npe-regress
   (t/is (= {:res #{{:a 42} {}}
-            :types '{a #xt/type [:i64 :?]}}
+            :types '{a #xt/type [:? :i64]}}
            (-> (tu/query-ra '[:group-by [a]
                               [:table [{:a 42, :b 42}, {:a nil, :b 42}, {:a nil, :b 42}]]]
                             {:with-types? true})
@@ -478,7 +478,7 @@
 
 (t/deftest test-group-by-groups-nils
   (t/is (= {:res #{{:b 1, :n 85}}
-            :types '{a #xt/type [:null :?], b #xt/type :i64, n #xt/type [:i64 :?]}}
+            :types '{a #xt/type [:? :null], b #xt/type :i64, n #xt/type [:? :i64]}}
            (-> (tu/query-ra '[:group-by [a b {n (sum c)}]
                               [:table [{:a nil, :b 1, :c 42}
                                        {:a nil, :b 1, :c 43}]]]

@@ -248,14 +248,14 @@
 (def ^:private explain-analyze-fields
   ;; for some reason we're not able to use the reader macro here.
   ;; it's a bug with either Clojure AOT or Gradle Clojurephant, not sure which.
-  [(serde-types/->field ["depth" :utf8])
-   (serde-types/->field ["op" :keyword])
+  [(serde-types/->field {"depth" :utf8})
+   (serde-types/->field {"op" :keyword})
 
-   (serde-types/->field ["total_time" [:duration :micro]])
-   (serde-types/->field ["time_to_first_page" [:duration :micro]])
+   (serde-types/->field {"total_time" [:duration :micro]})
+   (serde-types/->field {"time_to_first_page" [:duration :micro]})
 
-   (serde-types/->field ["page_count" :i64])
-   (serde-types/->field ["row_count" :i64])])
+   (serde-types/->field {"page_count" :i64})
+   (serde-types/->field {"row_count" :i64})])
 
 (defn- explain-analyze-results [^IResultCursor cursor]
   (letfn [(->results [^ICursor cursor, depth]

@@ -1,35 +1,22 @@
 {:schema
- #xt/schema (["_iid" [:fixed-size-binary 16]]
-             ["_system_from" [:timestamp-tz :micro "UTC"]]
-             ["_valid_from" [:timestamp-tz :micro "UTC"]]
-             ["_valid_to" [:timestamp-tz :micro "UTC"]]
-             ["op"
-              :union
-              ["delete" :null :?]
-              ["erase" :null :?]
-              ["put"
-               :struct
-               ["_id"
-                :union
-                ["utf8" :utf8]
-                ["i64" :i64]
-                ["keyword" :keyword]]
-               ["list"
-                :list
-                :?
-                ["$data$"
-                 :union
-                 ["f64" :f64]
-                 ["utf8" :utf8]
-                 ["timestamp-tz-micro-utc"
-                  [:timestamp-tz :micro "UTC"]]
-                 ["bool" :bool]]]
-               ["struct"
-                :struct
-                :?
-                ["a" :union ["i64" :i64] ["bool" :bool]]
-                ["b" :utf8 :?]
-                ["c" :utf8 :?]]]]),
+ #xt/schema ({"_iid" [:fixed-size-binary 16]}
+             {"_system_from" :instant}
+             {"_valid_from" :instant}
+             {"_valid_to" :instant}
+             {"op"
+              [:union
+               {"delete" [:? :null]}
+               {"erase" [:? :null]}
+               {"put"
+                [:struct
+                 {"_id" [:union :utf8 :i64 :keyword]}
+                 {"list" [:? :list [:union :f64 :utf8 :instant :bool]]}
+                 {"struct"
+                  [:?
+                   :struct
+                   {"a" [:union :i64 :bool]}
+                   {"b" [:? :utf8]}
+                   {"c" [:? :utf8]}]}]}]}),
  :batches
  ([{:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",

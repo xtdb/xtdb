@@ -1,13 +1,13 @@
 {:schema
- #xt/schema (["_iid" [:fixed-size-binary 16]]
-             ["_system_from" [:timestamp-tz :micro "UTC"]]
-             ["_valid_from" [:timestamp-tz :micro "UTC"]]
-             ["_valid_to" [:timestamp-tz :micro "UTC"]]
-             ["op"
-              :union
-              ["put" :struct ["_id" :i64] ["reading" :i64]]
-              ["delete" :null :?]
-              ["erase" :null :?]]),
+ #xt/schema ({"_iid" [:fixed-size-binary 16]}
+             {"_system_from" :instant}
+             {"_valid_from" :instant}
+             {"_valid_to" :instant}
+             {"op"
+              [:union
+               {"put" [:struct {"_id" :i64} {"reading" :i64}]}
+               {"delete" [:? :null]}
+               {"erase" [:? :null]}]}),
  :batches
  ([{:xt/system-from #xt/zdt "2020-01-09T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-09T00:00Z[UTC]",
