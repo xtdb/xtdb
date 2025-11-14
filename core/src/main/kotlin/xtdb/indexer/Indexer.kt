@@ -4,8 +4,8 @@ import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.log.MessageId
 import xtdb.arrow.VectorReader
-import xtdb.block.proto.TxKey
 import xtdb.database.Database
+import xtdb.indexer.LiveIndex
 import java.time.Instant
 import java.time.ZoneId
 
@@ -20,5 +20,9 @@ interface Indexer : AutoCloseable {
         fun addTxRow(txKey: TransactionKey, error: Throwable?)
     }
 
-    fun openForDatabase(db: Database): ForDatabase
+    interface TxSink {
+        fun onCommit(txKey: TransactionKey, liveIdxTx: LiveIndex.Tx)
+    }
+
+    fun openForDatabase(db: Database, txSink: TxSink?): ForDatabase
 }

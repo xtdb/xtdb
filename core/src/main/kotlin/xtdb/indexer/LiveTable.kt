@@ -78,7 +78,7 @@ constructor(
         val docWriter: VectorWriter by lazy { putVec }
         val liveRelation: RelationWriter = this@LiveTable.liveRelation
 
-        private val startPos = liveRelation.rowCount
+        val startPos = liveRelation.rowCount
 
         fun logPut(iid: ByteBuffer, validFrom: Long, validTo: Long, writeDocFun: Runnable) {
             val pos = liveRelation.rowCount
