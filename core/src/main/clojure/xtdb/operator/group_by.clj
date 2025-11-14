@@ -14,9 +14,10 @@
            (java.util ArrayList LinkedList List Spliterator)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo ArrowType$Duration Field FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType$Duration Field)
            (xtdb ICursor)
-           (xtdb.arrow IntVector ListVector LongVector RelationReader Vector VectorReader VectorWriter)
+           (xtdb.arrow RelationReader LongVector Vector VectorReader VectorWriter)
+           (xtdb.arrow.agg GroupMapper GroupMapper$Mapper GroupMapper$Null)
            (xtdb.expression.map RelationMapBuilder)
            xtdb.operator.distinct.DistinctRelationMap))
 
@@ -38,56 +39,13 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface IGroupMapper
-  (^xtdb.arrow.VectorReader groupMapping [^xtdb.arrow.RelationReader inRelation])
-  (^xtdb.arrow.RelationReader finish []))
-
-(deftype NullGroupMapper [^VectorWriter group-mapping]
-  IGroupMapper
-  (groupMapping [_ in-rel]
-    (.clear group-mapping)
-    (let [row-count (.getRowCount in-rel)]
-      (dotimes [_ row-count]
-        (.writeInt group-mapping 0))
-      group-mapping))
-
-  (finish [_] (vr/rel-reader [] 1))
-
-  Closeable
-  (close [_]
-    (.close group-mapping)))
-
-(deftype GroupMapper [^BufferAllocator al
-                      ^List group-col-names
-                      ^DistinctRelationMap rel-map
-                      ^VectorWriter group-mapping]
-  IGroupMapper
-  (groupMapping [_ in-rel]
-    (.clear group-mapping)
-    (let [row-count (.getRowCount in-rel)
-          builder (.buildFromRelation rel-map in-rel)]
-      (dotimes [idx row-count]
-        (.writeInt group-mapping (DistinctRelationMap/insertedIdx (.addIfNotPresent builder idx))))
-
-      group-mapping))
-
-  (finish [_] (.getBuiltRelation rel-map))
-
-  Closeable
-  (close [_]
-    (util/close group-mapping)
-    (util/close rel-map)))
-
 (defn ->group-mapper [^BufferAllocator allocator, group-fields]
-  (let [gm-vec (IntVector/open allocator "group-mapping" false)]
-    (if-let [group-col-names (not-empty (set (keys group-fields)))]
-      (GroupMapper. allocator group-col-names
-                    (distinct/->relation-map allocator {:build-fields group-fields
-                                                        :build-key-col-names (vec group-col-names)
-                                                        :nil-keys-equal? true})
-                    gm-vec)
-      (NullGroupMapper. gm-vec))))
+  (if-let [group-col-names (not-empty (set (keys group-fields)))]
+    (GroupMapper$Mapper. allocator
+                         (distinct/->relation-map allocator {:build-fields group-fields
+                                                             :build-key-col-names (vec group-col-names)
+                                                             :nil-keys-equal? true}))
+    (GroupMapper$Null. allocator)))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IAggregateSpec
@@ -189,7 +147,7 @@
                                ~(-> group-mapping-sym (expr/with-tag VectorReader))]
                             (let [~@(expr/batch-bindings emitted-expr)]
                               (dotimes [~expr/idx-sym (.getRowCount ~expr/rel-sym)]
-                                (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
+                                (let [~group-idx-sym (.getInt ~group-mapping-sym ~expr/idx-sym)]
                                   (.ensureCapacity ~acc-sym (inc ~group-idx-sym))
 
                                   ~(continue (fn [acc-type acc-code]
@@ -443,8 +401,7 @@
               (let [distinct-idxs (.toArray (.build distinct-idxs))]
                 (.aggregate agg-spec
                             (.select in-rel distinct-idxs)
-                            (-> group-mapping
-                                (.select distinct-idxs))))))
+                            (.select group-mapping distinct-idxs)))))
 
           (finish [_] (.finish agg-spec))
 
@@ -558,7 +515,7 @@
 
 (deftype GroupByCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
-                        ^IGroupMapper group-mapper
+                        ^GroupMapper group-mapper
                         ^List aggregate-specs
                         ^:unsynchronized-mutable ^boolean done?]
   ICursor

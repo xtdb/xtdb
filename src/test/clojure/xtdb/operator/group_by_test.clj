@@ -6,7 +6,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
-  (:import [xtdb.arrow IntVector Vector]))
+  (:import [xtdb.arrow Vector]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -120,8 +120,7 @@
           "aggregate without group")))
 
 (t/deftest test-promoting-sum
-  (with-open [group-mapping (doto (IntVector/open tu/*allocator* "gm" false)
-                              (.writeAll (map int [0 0 0])))
+  (with-open [gm (tu/open-vec #xt/field {"gm" :i32} (map int [0 0 0]))
               v0 (tu/open-rel {:v [1 2 3]})
               v1 (tu/open-rel {:v [1 2.0 3]})]
     (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v, :from-type [:union #{:i64 :f64}]
@@ -130,8 +129,8 @@
       (t/is (= [:union #{:null :f64}] (types/field->col-type (.getField sum-factory))))
       (try
 
-        (.aggregate sum-spec v0 group-mapping)
-        (.aggregate sum-spec v1 group-mapping)
+        (.aggregate sum-spec v0 gm)
+        (.aggregate sum-spec v1 gm)
         (with-open [res (.finish sum-spec)]
           (t/is (= [12.0] (.getAsList res))))
         (finally
@@ -322,14 +321,9 @@
                                             {:a 12}]]]))))
 
 (t/deftest test-array-agg
-  (with-open [gm0 (doto (IntVector/open tu/*allocator* "gm0" false)
-                    (.writeAll (map int [0 1 0])))
-
+  (with-open [gm0 (tu/open-vec #xt/field {"gm0" :i32} (map int [0 1 0]))
+              gm1 (tu/open-vec #xt/field {"gm1" :i32} (map int [1 2 0]))
               k0 (Vector/fromList tu/*allocator* "k" [1 2 3])
-
-              gm1 (doto (IntVector/open tu/*allocator* "gm1" false)
-                    (.writeAll (map int [1 2 0])))
-
               k1 (Vector/fromList tu/*allocator* "k" [4 5 6])]
 
     (let [agg-factory (group-by/->aggregate-factory {:f :array-agg, :from-name 'k, :from-type :i64
