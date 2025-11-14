@@ -4,7 +4,8 @@
             [xtdb.node :as xtn]
             xtdb.node.impl
             xtdb.serde
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.time :as time])
   (:import (xtdb.api TxSinkConfig Xtdb Xtdb$Config)
            (xtdb.api.log Log Log$Message$Tx)
            (xtdb.indexer Indexer$TxSink LiveIndex$Tx)
@@ -30,9 +31,9 @@
                     data (when put? (.getObject put-vec i))]
                 (cond-> {:op (keyword leg)
                          :iid (.getObject iid-vec i)
-                         :valid-from (.getObject valid-from-vec i)
+                         :valid-from (time/->instant (.getObject valid-from-vec i))
                          :valid-to (when-not (= Long/MAX_VALUE (.getLong valid-to-vec i))
-                                     (.getObject valid-to-vec i))}
+                                     (time/->instant (.getObject valid-to-vec i)))}
                   put? (assoc :doc data)))))}))
 
 (defn ->encode-fn [fmt]
@@ -65,7 +66,7 @@
                                  start-pos (.getStartPos live-table)
                                  live-relation (.getLiveRelation live-table)
                                  system-from-vec (.vectorFor live-relation "_system_from")]
-                             (.getObject system-from-vec start-pos))
+                             (time/->instant (.getObject system-from-vec start-pos)))
               :source {;:version "1.0.0" ;; TODO
                        :db db-name}
               :tables (->> live-tables
