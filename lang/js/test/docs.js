@@ -1,13 +1,9 @@
-import * as xtdbFixture from "./xtdb-fixture.js";
 import postgres from "postgres";
+import * as uuid from "uuid";
 import transit from "transit-js";
 import assert from "assert";
 
 describe("code examples", function () {
-  before(xtdbFixture.setup);
-  beforeEach(xtdbFixture.useNewDatabase);
-  after(xtdbFixture.teardown);
-
   const OID = {
     boolean: 16,
     int64: 20,
@@ -18,9 +14,9 @@ describe("code examples", function () {
   };
 
   const commonPostgresOptions = () => ({
-    host: process.env.XTDB_HOST || "localhost",
-    port: parseInt(process.env.XTDB_PG_PORT || "5432"),
-    database: process.env.XTDB_PG_DATABASE,
+    host: process.env.PG_HOST || "localhost",
+    port: process.env.PG_PORT || 5439,
+    database: uuid.v4().toString(),
   });
 
   it("example 1", async () => {
