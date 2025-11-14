@@ -11,7 +11,7 @@ class FloatVector private constructor(
     override val al: BufferAllocator,
     override var name: String, override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
-) : FixedWidthVector(), MetadataFlavour.Number {
+) : NumericVector(), MetadataFlavour.Number {
 
     override val byteWidth = Float.SIZE_BYTES
     override val arrowType: ArrowType = MinorType.FLOAT4.type
@@ -20,7 +20,15 @@ class FloatVector private constructor(
             : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override fun getFloat(idx: Int) = getFloat0(idx)
-    override fun writeFloat(v: Float) = writeFloat0(v)
+
+    override fun writeFloat(v: Float) {
+        writeNotNull()
+        dataBuffer.writeFloat(v)
+    }
+
+    override fun getAsFloat(idx: Int) = getFloat(idx)
+    override fun getAsDouble(idx: Int) = getFloat(idx).toDouble()
+
     override fun getDouble(idx: Int) = getFloat(idx).toDouble()
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getFloat(idx)

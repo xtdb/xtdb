@@ -11,7 +11,7 @@ class ByteVector private constructor(
     override val al: BufferAllocator,
     override var name: String, override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
-) : FixedWidthVector(), MetadataFlavour.Number {
+) : IntegerVector(), MetadataFlavour.Number {
 
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean
@@ -22,6 +22,11 @@ class ByteVector private constructor(
 
     override fun getByte(idx: Int) = getByte0(idx)
     override fun writeByte(v: Byte) = writeByte0(v)
+
+    override fun getAsInt(idx: Int) = getByte(idx).toInt()
+    override fun getAsLong(idx: Int) = getByte(idx).toLong()
+    override fun getAsFloat(idx: Int) = getByte(idx).toFloat()
+    override fun getAsDouble(idx: Int) = getByte(idx).toDouble()
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getByte(idx)
 

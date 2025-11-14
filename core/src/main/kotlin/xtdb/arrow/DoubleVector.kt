@@ -12,7 +12,7 @@ class DoubleVector private constructor(
     override val al: BufferAllocator,
     override var name: String, override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
-) : FixedWidthVector(), MetadataFlavour.Number {
+) : NumericVector(), MetadataFlavour.Number {
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
             : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
@@ -22,6 +22,9 @@ class DoubleVector private constructor(
 
     override fun getDouble(idx: Int) = getDouble0(idx)
     override fun writeDouble(v: Double) = writeDouble0(v)
+
+    override fun getAsFloat(idx: Int) = getDouble(idx).toFloat()
+    override fun getAsDouble(idx: Int) = getDouble(idx)
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getDouble(idx)
 

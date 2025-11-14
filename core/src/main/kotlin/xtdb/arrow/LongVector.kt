@@ -11,7 +11,7 @@ class LongVector private constructor(
     override val al: BufferAllocator,
     override var name: String, override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
-) : FixedWidthVector(), MetadataFlavour.Number {
+) : IntegerVector(), MetadataFlavour.Number {
 
     constructor(al: BufferAllocator, name: String, nullable: Boolean)
             : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
@@ -21,6 +21,11 @@ class LongVector private constructor(
 
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(v: Long) = writeLong0(v)
+
+    override fun getAsInt(idx: Int) = getLong(idx).toInt()
+    override fun getAsLong(idx: Int) = getLong(idx)
+    override fun getAsFloat(idx: Int) = getLong(idx).toFloat()
+    override fun getAsDouble(idx: Int) = getLong(idx).toDouble()
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getLong(idx)
 

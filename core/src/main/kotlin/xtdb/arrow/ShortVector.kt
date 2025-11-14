@@ -11,7 +11,7 @@ class ShortVector private constructor(
     override val al: BufferAllocator,
     override var name: String, override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
-) : FixedWidthVector(), MetadataFlavour.Number {
+) : IntegerVector(), MetadataFlavour.Number {
 
     override val arrowType: ArrowType = MinorType.SMALLINT.type
     override val byteWidth = Short.SIZE_BYTES
@@ -23,6 +23,11 @@ class ShortVector private constructor(
     override fun writeShort(v: Short) = writeShort0(v)
     override fun getInt(idx: Int) = getShort(idx).toInt()
     override fun getLong(idx: Int) = getShort(idx).toLong()
+
+    override fun getAsInt(idx: Int) = getShort(idx).toInt()
+    override fun getAsLong(idx: Int) = getShort(idx).toLong()
+    override fun getAsFloat(idx: Int) = getShort(idx).toFloat()
+    override fun getAsDouble(idx: Int) = getShort(idx).toDouble()
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getShort(idx)
 
