@@ -44,7 +44,7 @@
                                      :system-from #xt/zdt "2020-01-01T00:00[UTC]"
                                      :valid-from  #xt/zdt "2020-01-01T00:00[UTC]"
                                      :valid-to nil
-                                     :payload {"_id" :doc1, "value" "test"}}]}
+                                     :doc {"_id" :doc1, "value" "test"}}]}
                              {:db "xtdb"
                               :schema "xt"
                               :table "txs"
@@ -53,9 +53,9 @@
                                      :system-from #xt/zdt "2020-01-01T00:00[UTC]"
                                      :valid-from  #xt/zdt "2020-01-01T00:00[UTC]"
                                      :valid-to nil
-                                     :payload {"_id" 0
-                                               "system_time" #xt/zdt "2020-01-01T00:00[UTC]"
-                                               "committed" true}}]}]})
+                                     :doc {"_id" 0
+                                           "system_time" #xt/zdt "2020-01-01T00:00[UTC]"
+                                           "committed" true}}]}]})
                  (util/->clj msg))))
 
       (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1, a: 1, b: {c: [1, 2, 3], d: 'test'}}, {_id: 2, a: 2}, {_id: 3, a: 3}"])

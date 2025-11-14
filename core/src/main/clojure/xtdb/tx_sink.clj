@@ -34,7 +34,7 @@
                          :valid-from (.getObject valid-from-vec i)
                          :valid-to (when-not (= Long/MAX_VALUE (.getLong valid-to-vec i))
                                      (.getObject valid-to-vec i))}
-                  put? (assoc :payload data)))))}))
+                  put? (assoc :doc data)))))}))
 
 (defn ->encode-fn [fmt]
   (case fmt
