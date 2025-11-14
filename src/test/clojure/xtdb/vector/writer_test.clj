@@ -11,7 +11,7 @@
 
 (deftest adding-legs-to-dense-union
   (with-open [duv (DenseUnionVector. tu/*allocator* "my-duv")]
-    (t/is (= #xt/field {"my-duv" [:union {"i64" :i64}]}
+    (t/is (= #xt/field {"my-duv" [:union :i64]}
 
              (-> duv
                  (doto (.writeObject 42))
@@ -21,10 +21,7 @@
     (let [my-list-wtr (.vectorFor duv "list" (FieldType/notNullable #xt.arrow/type :list))
           my-set-wtr (.vectorFor duv "set" (FieldType/notNullable #xt.arrow/type :set))]
 
-      (t/is (= #xt/field {"my-duv" [:union
-                                     {"list" [:list {"$data$" :null}]}
-                                     {"set" [:set {"$data$" :null}]}]}
-
+      (t/is (= #xt/field {"my-duv" [:union [:list :null] [:set :null]]}
                (.getField duv))
 
             "vectorFor creates lists/sets with uninitialized data vectors")
@@ -33,30 +30,26 @@
 
       (.getListElements my-set-wtr (.getFieldType #xt/type :f64))
 
-      (t/is (= #xt/field {"my-duv" [:union
-                                     {"list" [:list {"$data$" :i64}]}
-                                     {"set" [:set {"$data$" :f64}]}]}
+      (t/is (= #xt/field {"my-duv" [:union [:list :i64] [:set :f64]]}
                (.getField duv)))
 
       (.getListElements my-list-wtr (.getFieldType #xt/type :f64))
 
-      (t/is (= #xt/field {"my-duv" [:union
-                                     {"list" [:list {"$data$" [:union {"i64" :i64} {"f64" :f64}]}]}
-                                     {"set" [:set {"$data$" :f64}]}]}
+      (t/is (= #xt/field {"my-duv" [:union [:list [:union :i64 :f64]] [:set :f64]]}
                (.getField duv)))))
 
   (with-open [duv (DenseUnionVector. tu/*allocator* "my-duv")]
     (let [my-struct-wtr (.vectorFor duv "struct" (FieldType/notNullable #xt.arrow/type :struct))]
-      (t/is (= #xt/field {"my-duv" [:union {"struct" :struct}]}
+      (t/is (= #xt/field {"my-duv" [:union :struct]}
                (.getField duv)))
 
       (let [a-wtr (.vectorFor my-struct-wtr "a" (FieldType/notNullable #xt.arrow/type :union))]
-        (t/is (= #xt/field {"my-duv" [:union {"struct" [:struct {"a" :union}]}]}
+        (t/is (= #xt/field {"my-duv" [:union [:struct {"a" :union}]]}
                  (.getField duv)))
 
         (.vectorFor a-wtr "i64" (FieldType/notNullable (.getType Types$MinorType/BIGINT)))
 
-        (t/is (= #xt/field {"my-duv" [:union {"struct" [:struct {"a" [:union {"i64" :i64}]}]}]}
+        (t/is (= #xt/field {"my-duv" [:union [:struct {"a" [:union :i64]}]]}
                  (.getField duv)))
 
         (-> (.vectorFor my-struct-wtr "b" (FieldType/notNullable #xt.arrow/type :union))
@@ -74,23 +67,23 @@
 (deftest list-writer-data-vec-transition
   (with-open [list-vec (ListVector. tu/*allocator* "my-list" false)]
     (t/testing "null vector initially"
-      (t/is (= #xt/field {"my-list" [:list {"$data$" [:? :null]}]}
+      (t/is (= #xt/field {"my-list" [:list [:? :null]]}
                (.getField list-vec)))
 
-      (t/is (= #xt/field {"my-list" [:list {"$data$" [:? :null]}]}
+      (t/is (= #xt/field {"my-list" [:list [:? :null]]}
                (-> list-vec
                    (doto (.getListElements))
                    (.getField)))
             "call getListElements initializes it with a null vector")
 
-      (t/is (= #xt/field {"my-list" [:list {"$data$" :i64}]}
+      (t/is (= #xt/field {"my-list" [:list :i64]}
                (-> list-vec
                    (doto (.getListElements (FieldType/notNullable #xt.arrow/type :i64)))
                    (.getField)))
             "asking for an i64 with an empty data vec swaps for a mono")))
 
   (with-open [list-vec (ListVector. tu/*allocator* "my-list" false)]
-    (t/is (= #xt/field {"my-list" [:list {"$data$" :i64}]}
+    (t/is (= #xt/field {"my-list" [:list :i64]}
              (-> list-vec
                  (doto (.getListElements (FieldType/notNullable #xt.arrow/type :i64)))
                  (doto (.getListElements (FieldType/notNullable #xt.arrow/type :i64)))
@@ -103,15 +96,15 @@
                  (.getField)))
           "nested field correct")
 
-    (t/is (= #xt/field {"my-list" [:list {"$data$" [:union {"i64" :i64} {"f64" :f64}]}]}
+    (t/is (= #xt/field {"my-list" [:list [:union :i64 :f64]]}
              (-> list-vec
                  (doto (.getListElements (FieldType/notNullable #xt.arrow/type :f64)))
                  (.getField)))
           "asking for an f64 promotes"))
 
-  (with-open [list-vec (Vector/open tu/*allocator* #xt/field {"my-list" [:list {"$data$" :i64}]})]
+  (with-open [list-vec (Vector/open tu/*allocator* #xt/field {"my-list" [:list :i64]})]
     (t/testing "already initialized arrow vector"
-      (t/is (= #xt/field {"my-list" [:list {"$data$" :i64}]}
+      (t/is (= #xt/field {"my-list" [:list :i64]}
                (-> list-vec
                    (.getField))))
 
@@ -127,7 +120,7 @@
                    (.getField)))
             "can ask for :i64")
 
-      (t/is (= #xt/field {"my-list" [:list {"$data$" [:union {"i64" :i64} {"f64" :f64}]}]}
+      (t/is (= #xt/field {"my-list" [:list [:union :i64 :f64]]}
                (-> list-vec
                    (doto (.getListElements (FieldType/notNullable #xt.arrow/type :f64)))
                    (.getField)))
@@ -166,7 +159,7 @@
                  (.vectorFor "bar")
                  (.getField))))
 
-    (t/is (= #xt/field {"my-struct" [:struct {"foo" :f64} {"bar" [:union {"i64" :i64} {"f64" :f64}]}]}
+    (t/is (= #xt/field {"my-struct" [:struct {"foo" :f64} {"bar" [:union :i64 :f64]}]}
              (-> struct-vec
                  (doto (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :f64)))
                  (.getField)))))
@@ -187,7 +180,7 @@
                  (.getField)))
           "call to vectorFor with correct field should not throw")
 
-    (t/is (= #xt/field {"my-struct" [:struct {"baz" [:union {"i64" :i64} {"f64" :f64}]}]}
+    (t/is (= #xt/field {"my-struct" [:struct {"baz" [:union :i64 :f64]}]}
              (-> struct-vec
                  (doto (.vectorFor "baz" (FieldType/notNullable #xt.arrow/type :f64)))
                  (.getField)))
@@ -205,7 +198,7 @@
                  (.vectorFor "my-union" (FieldType/notNullable #xt.arrow/type :union))
                  (.getField))))
 
-    (t/is (= #xt/field {"my-union" [:union {"i64" :i64}]}
+    (t/is (= #xt/field {"my-union" [:union :i64]}
              (-> rel
                  (.vectorFor "my-union" (FieldType/notNullable #xt.arrow/type :i64))
                  (.getField))))
@@ -216,7 +209,7 @@
                  (.vectorFor "my-i64" (FieldType/notNullable #xt.arrow/type :i64))
                  (.getField))))
 
-    (t/is (= #xt/field {"my-i64" [:union {"i64" :i64} {"f64" :f64}]}
+    (t/is (= #xt/field {"my-i64" [:union :i64 :f64]}
              (-> rel
                  (.vectorFor "my-i64" (FieldType/notNullable #xt.arrow/type :f64))
                  (.getField)))))

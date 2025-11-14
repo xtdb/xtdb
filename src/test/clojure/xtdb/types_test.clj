@@ -81,11 +81,11 @@
   (t/is (= (types/col-type->field :utf8)
            (types/merge-fields (types/col-type->field :utf8) (types/col-type->field :utf8))))
 
-  (t/is (= #xt/field {"a" [:union {"utf8" :utf8} {"i64" :i64}]}
+  (t/is (= #xt/field {"a" [:union :utf8 :i64]}
            (types/merge-fields #xt/field {"a" :utf8} #xt/field {"a" :i64})))
 
-  (t/is (= #xt/field {"union" [:union {"utf8" :utf8} {"i64" :i64} {"f64" :f64}]}
-           (types/merge-fields #xt/field {"union" [:union {"utf8" :utf8} {"i64" :i64}]}
+  (t/is (= #xt/field {"union" [:union :utf8 :i64 :f64]}
+           (types/merge-fields #xt/field {"union" [:union :utf8 :i64]}
                                #xt/field {"f64" :f64})))
 
   (t/testing "merges list types"
@@ -97,7 +97,7 @@
              (types/merge-fields (types/col-type->field [:list :utf8])
                                  (types/col-type->field [:list :i64]))))
 
-    (t/is (= #xt/field {"list" [:list {"$data$" [:? :i64]}]}
+    (t/is (= #xt/field {"list" [:list [:? :i64]]}
              (types/merge-fields (types/col-type->field [:list :null])
                                  (types/col-type->field [:list :i64])))))
 
@@ -111,8 +111,8 @@
              (types/merge-fields (types/col-type->field '[:struct {a :utf8, b :utf8}])
                                  (types/col-type->field '[:struct {a :utf8, b :i64}]))))
 
-    (t/is (= #xt/field {"struct" [:? :struct {"a" :utf8} {"b" [:union {"utf8" :utf8} {"i64" :i64}]}]}
-             (types/merge-fields #xt/field {"struct" [:union {"null" [:? :null]} {"struct" [:struct {"a" :utf8} {"b" :utf8}]}]}
+    (t/is (= #xt/field {"struct" [:? :struct {"a" :utf8} {"b" [:union :utf8 :i64]}]}
+             (types/merge-fields #xt/field {"struct" [:union [:? :null] [:struct {"a" :utf8} {"b" :utf8}]]}
                                  #xt/field {"struct" [:struct {"a" :utf8} {"b" :i64}]})))
 
     (let [struct0 (types/col-type->field '[:struct {a :utf8, b :utf8}])
@@ -122,8 +122,8 @@
                                                  c [:union #{:i64 :null}]}])
                (types/merge-fields struct0 struct1))))
 
-    (t/is (= #xt/field {"union" [:union {"f64" :f64} {"struct" [:struct {"a" [:union {"i64" :i64} {"utf8" :utf8}]}]}]}
-             (types/merge-fields #xt/field {"union" [:union {"f64" :f64} {"struct" [:struct {"a" :i64}]}]}
+    (t/is (= #xt/field {"union" [:union :f64 {"struct" [:struct {"a" [:union :i64 :utf8]}]}]}
+             (types/merge-fields #xt/field {"union" [:union :f64 {"struct" [:struct {"a" :i64}]}]}
                                  #xt/field {"struct" [:struct {"a" :utf8}]})))
 
     (t/is (= #xt/field {"struct" [:struct
@@ -146,18 +146,18 @@
     (t/is (= #xt/field {"a" [:? :i64]}
              (types/merge-fields #xt/field {"a" :null} #xt/field {"a" :i64})))
 
-    (t/is (= #xt/field {"a" [:union {"f64" :f64} {"i64" :i64} {"null" [:? :null]}]}
+    (t/is (= #xt/field {"a" [:union :f64 :i64 [:? :null]]}
              (types/merge-fields #xt/field {"a" :f64}
                                  #xt/field {"a" [:? :null]}
                                  #xt/field {"a" :i64})))
 
     (t/testing "nulls kept within the legs they were originally in"
-      (t/is (= #xt/field {"a" [:union {"f64" :f64} {"i64" [:? :i64]}]}
+      (t/is (= #xt/field {"a" [:union :f64 [:? :i64]]}
                (types/merge-fields #xt/field {"a" :f64}
                                    #xt/field {"a" [:? :i64]})))
 
-      (t/is (= #xt/field {"union" [:union {"f64" :f64} {"f32" :f32} {"i64" [:? :i64]}]}
-               (types/merge-fields #xt/field {"union" [:union {"f64" :f64} {"f32" :f32}]}
+      (t/is (= #xt/field {"union" [:union :f64 :f32 [:? :i64]]}
+               (types/merge-fields #xt/field {"union" [:union :f64 :f32]}
                                    #xt/field {"union" [:? :i64]}))
             "other unions flattened")))
 
@@ -168,7 +168,7 @@
     (t/is (= (types/col-type->field [:set :i64])
              (types/merge-fields (types/col-type->field [:set :i64]) (types/col-type->field [:set :i64]))))
 
-    (t/is (= #xt/field {"set" [:set {"$data$" [:union {"utf8" :utf8} {"i64" :i64}]}]}
+    (t/is (= #xt/field {"set" [:set [:union :utf8 :i64]]}
              (types/merge-fields (types/col-type->field [:set :utf8]) (types/col-type->field [:set :i64])))))
 
   (t/testing "no struct squashing"
@@ -176,10 +176,8 @@
              (types/merge-fields #xt/field {"struct" [:struct {"foo" [:struct {"bibble" :bool}]}]})))
 
     (t/is (= #xt/field {"struct" [:struct
-                                   {"foo" [:union
-                                           {"utf8" :utf8}
-                                           {"struct" [:struct {"bibble" :bool}]}]}
-                                   {"bar" [:? :i64]}]}
+                                  {"foo" [:union :utf8 [:struct {"bibble" :bool}]]}
+                                  {"bar" [:? :i64]}]}
 
              (types/merge-fields #xt/field {"struct" [:struct {"foo" [:struct {"bibble" :bool}]}]}
                                  #xt/field {"struct" [:struct {"foo" :utf8} {"bar" :i64}]})))))
@@ -188,9 +186,9 @@
   (t/testing "merge fields with empty list children shouldn't throw NPE"
     (let [set-field #xt/field {"a" [:? :set]}
           list-field #xt/field {"b" [:? :list]}]
-      (t/is (= #xt/field {"a" [:? :set {"$data$" [:? :null]}]}
+      (t/is (= #xt/field {"a" [:? :set [:? :null]]}
                (types/merge-fields nil set-field)))
-      (t/is (= #xt/field {"b" [:? :list {"$data$" [:? :null]}]}
+      (t/is (= #xt/field {"b" [:? :list [:? :null]]}
                (types/merge-fields nil list-field))))))
 
 (t/deftest field->col-type-error-on-empty-list-4774

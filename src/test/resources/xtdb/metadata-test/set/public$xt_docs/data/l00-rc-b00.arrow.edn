@@ -10,7 +10,7 @@
                {"put"
                 [:struct
                  {"_id" :utf8}
-                 {"colours" [:set {"$data$" :utf8}]}]}]}),
+                 {"colours" [:set :utf8]}]}]}),
  :batches
  ([{:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",

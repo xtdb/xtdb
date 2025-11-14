@@ -8,7 +8,7 @@
                {"put"
                 [:struct
                  {"_id" :utf8}
-                 {"colours" [:set {"$data$" :utf8}]}]}
+                 {"colours" [:set :utf8]}]}
                {"delete" [:? :null]}
                {"erase" [:? :null]}]}),
  :batches

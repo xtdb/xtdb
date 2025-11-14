@@ -240,7 +240,7 @@
                     #xt.arrow/type :uuid uuid-gen
                     #xt.arrow/type :uri uri-gen
                     #xt.arrow/type :bool bool-gen
-                    #xt.arrow/type [:timestamp-tz :micro "UTC"] instant-gen
+                    #xt.arrow/type :instant instant-gen
                     #xt.arrow/type [:date :day] local-date-gen
                     #xt.arrow/type [:time-local :nano] local-time-gen
                     #xt.arrow/type :list (gen/vector (vec-type->value-generator (first (.getChildren vec-type))) 0 10)

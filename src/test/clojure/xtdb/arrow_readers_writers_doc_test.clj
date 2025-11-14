@@ -201,7 +201,7 @@
       (.copyRow copier2 0))
 
     ;; checkout of the field type of that column
-    (t/is (= #xt/field {"my-column" [:union {"i64" :i64} {"utf8" :utf8}]}
+    (t/is (= #xt/field {"my-column" [:union :i64 :utf8]}
              (.getField (.vectorFor rel "my-column"))))
 
     (t/is (= [{:my-column 42} {:my-column "forty-two"}]
