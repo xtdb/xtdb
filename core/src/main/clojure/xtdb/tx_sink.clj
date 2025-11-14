@@ -59,20 +59,20 @@
   (onCommit [_ tx-key live-idx-tx]
     (util/with-open [live-idx-snap (.openSnapshot live-idx-tx)]
       (let [live-tables (.getLiveTables live-idx-snap)]
-        (->> {:transaction {:id tx-key}
-              :system-time (let [live-table (.liveTable live-idx-tx (first live-tables))
-                                 start-pos (.getStartPos live-table)
-                                 live-relation (.getLiveRelation live-table)
-                                 system-from-vec (.vectorFor live-relation "_system_from")]
-                             (time/->instant (.getObject system-from-vec start-pos)))
-              :source {;:version "1.0.0" ;; TODO
-                       :db db-name}
-              :tables (->> live-tables
-                           (map #(read-table-rows % live-idx-tx))
-                           (into []))}
-             encode-as-bytes
-             Log$Message$Tx.
-             (.appendMessage output-log))))))
+        (.appendMessage output-log
+                        (-> {:transaction {:id tx-key}
+                             :system-time (let [live-table (.liveTable live-idx-tx (first live-tables))
+                                                start-pos (.getStartPos live-table)
+                                                live-relation (.getLiveRelation live-table)
+                                                system-from-vec (.vectorFor live-relation "_system_from")]
+                                            (time/->instant (.getObject system-from-vec start-pos)))
+                             :source {;:version "1.0.0" ;; TODO
+                                      :db db-name}
+                             :tables (->> live-tables
+                                          (map #(read-table-rows % live-idx-tx))
+                                          (into []))}
+                            encode-as-bytes
+                            Log$Message$Tx.))))))
 
 (defmethod ig/init-key ::for-db [_ {:keys [^TxSinkConfig tx-sink-conf output-log db-name]}]
   (when (and tx-sink-conf
