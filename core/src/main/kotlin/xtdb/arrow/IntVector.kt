@@ -1,15 +1,12 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.BitVectorHelper
-import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import xtdb.util.closeOnCatch
-
-internal val I32 = MinorType.INT.type
 
 class IntVector private constructor(
     override val al: BufferAllocator,
@@ -17,7 +14,7 @@ class IntVector private constructor(
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : FixedWidthVector(), MetadataFlavour.Number {
 
-    override val arrowType: ArrowType = I32
+    override val arrowType: ArrowType = I32.arrowType
     override val byteWidth = Int.SIZE_BYTES
 
     companion object {

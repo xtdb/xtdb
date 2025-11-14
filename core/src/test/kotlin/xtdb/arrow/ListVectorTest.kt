@@ -8,6 +8,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.arrow.VectorType.Companion.asListOf
+import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.arrow.VectorType.Companion.unionOf
 
 class ListVectorTest {
 
@@ -25,24 +28,13 @@ class ListVectorTest {
 
     @Test
     fun `promotes el-vector`() {
-        ListVector(allocator, "list", false, NullVector("\$data\$")).use { listVec ->
+        ListVector(allocator, "list", false, NullVector($$"$data$")).use { listVec ->
             listVec.writeObject(listOf(1, 2, 3))
             listVec.writeObject(listOf(4, 5, "6"))
             assertEquals(listOf(listOf(1, 2, 3), listOf(4, 5, "6")), listVec.asList)
 
             assertEquals(
-                Field(
-                    "list", FieldType(false, LIST, null),
-                    listOf(
-                        Field(
-                            "\$data\$", FieldType(false, VectorType.UNION_TYPE, null),
-                            listOf(
-                                Field("i32", FieldType(false, I32, null), null),
-                                Field("utf8", FieldType(false, UTF8_TYPE, null), null)
-                            )
-                        )
-                    )
-                ),
+                "list" asListOf unionOf("i32" ofType VectorType.I32, "utf8" ofType VectorType.UTF8),
                 listVec.field
             )
         }

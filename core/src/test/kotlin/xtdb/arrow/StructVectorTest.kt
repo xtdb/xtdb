@@ -10,6 +10,12 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.arrow.Relation.Companion.loader
+import xtdb.arrow.VectorType.Companion.I32
+import xtdb.arrow.VectorType.Companion.UTF8
+import xtdb.arrow.VectorType.Companion.asStructOf
+import xtdb.arrow.VectorType.Companion.maybe
+import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.arrow.VectorType.Companion.structOf
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 
@@ -236,10 +242,7 @@ class StructVectorTest {
             assertEquals(els, structVec.asList)
 
             assertEquals(
-                Field("struct", FieldType(false, STRUCT, null), listOf(
-                    Field("i32", FieldType(true, I32, null), emptyList()),
-                    Field("utf8", FieldType(true, UTF8_TYPE, null), emptyList())
-                )),
+                "struct".asStructOf("i32" ofType maybe(I32), "utf8" ofType maybe(UTF8)),
                 structVec.field
             )
         }
@@ -257,10 +260,7 @@ class StructVectorTest {
             )
 
             assertEquals(
-                Field("struct", FieldType(true, STRUCT, null), listOf(
-                    Field("i32", FieldType(false, I32, null), emptyList()),
-                    Field("utf8", FieldType(false, UTF8_TYPE, null), emptyList())
-                )),
+                "struct" ofType maybe(structOf("i32" ofType I32, "utf8" ofType UTF8)),
                 structVec.field
             )
         }
@@ -277,7 +277,7 @@ class StructVectorTest {
             assertEquals(
                 Field("struct", FieldType(false, STRUCT, null), listOf(
                     Field("a", FieldType(false, VectorType.UNION_TYPE, null), listOf(
-                        Field("i32", FieldType(false, I32, null), emptyList()),
+                        Field("i32", FieldType(false, VectorType.I32.arrowType, null), emptyList()),
                         Field("utf8", FieldType(false, UTF8_TYPE, null), emptyList())
                     ))
                 )),

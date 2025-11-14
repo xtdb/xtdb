@@ -4,10 +4,9 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorType.Companion.F64
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
-
-val F64: ArrowType = MinorType.FLOAT8.type
 
 class DoubleVector private constructor(
     override val al: BufferAllocator,
@@ -19,7 +18,7 @@ class DoubleVector private constructor(
             : this(al, name, 0, if (nullable) BitBuffer(al) else null, ExtensibleBuffer(al))
 
     override val byteWidth = Double.SIZE_BYTES
-    override val arrowType: ArrowType = F64
+    override val arrowType: ArrowType = F64.arrowType
 
     override fun getDouble(idx: Int) = getDouble0(idx)
     override fun writeDouble(v: Double) = writeDouble0(v)

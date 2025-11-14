@@ -1,7 +1,6 @@
 package xtdb.storage
 
 import kotlinx.coroutines.test.runTest
-import com.google.protobuf.Any as ProtoAny
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
@@ -18,15 +17,16 @@ import xtdb.api.storage.SimulatedObjectStore
 import xtdb.api.storage.Storage.remote
 import xtdb.api.storage.StoreOperation.COMPLETE
 import xtdb.api.storage.StoreOperation.UPLOAD
-import xtdb.arrow.I32
 import xtdb.arrow.Relation
+import xtdb.arrow.VectorType.Companion.I32
+import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.arrow.schema
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.test.AllocatorResolver
-import xtdb.arrow.VectorType
-import xtdb.arrow.VectorType.Companion.ofType
 import java.nio.file.Path
 import kotlin.io.path.listDirectoryEntries
+import com.google.protobuf.Any as ProtoAny
 
 @ExtendWith(AllocatorResolver::class)
 class RemoteStorageTest : StorageTest() {
@@ -63,7 +63,7 @@ class RemoteStorageTest : StorageTest() {
     @Test
     fun arrowIpcTest(al: BufferAllocator) = runTest {
         val path = Path.of("aw")
-        Relation(al, "a" ofType VectorType.I32).use { relation ->
+        Relation(al, "a" ofType I32).use { relation ->
             remoteBufferPool.openArrowWriter(path, relation).use { writer ->
                 val v = relation["a"]
                 for (i in 0 until 10) v.writeInt(i)
@@ -84,7 +84,8 @@ class RemoteStorageTest : StorageTest() {
     fun bufferPoolClearsUpArrowWriterTempFiles(al: BufferAllocator) {
         val rootPath = remoteBufferPool.diskCache.rootPath
         val tmpDir = rootPath.resolve(".tmp")
-        val schema = Schema(listOf(Field("a", FieldType(false, I32, null), null)))
+        val schema = schema("a" ofType I32)
+
         Relation(al, schema).use { relation ->
             remoteBufferPool.openArrowWriter(Path.of("aw"), relation).use { writer ->
                 val v = relation["a"]
