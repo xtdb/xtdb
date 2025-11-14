@@ -22,6 +22,8 @@
     "mocha": "^10.7.3",
     "mocha-junit-reporter": "^2.2.1",
     "postgres": "^3.4.7",
+    "prettier": "^3.6.2",
+    "testcontainers": "^11.6.0",
     "transit-js": "^0.8.874",
     "uuid": "^10.0.0"
   }
