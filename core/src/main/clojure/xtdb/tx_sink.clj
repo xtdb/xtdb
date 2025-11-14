@@ -26,15 +26,13 @@
      :table (.getTableName table)
      :ops (into []
             (for [i (range start-pos pos)]
-              (let [leg (.getLeg op-vec i)
-                    put? (= leg "put")
-                    data (when put? (.getObject put-vec i))]
+              (let [leg (.getLeg op-vec i)]
                 (cond-> {:op (keyword leg)
                          :iid (.getObject iid-vec i)
                          :valid-from (time/->instant (.getObject valid-from-vec i))
                          :valid-to (when-not (= Long/MAX_VALUE (.getLong valid-to-vec i))
                                      (time/->instant (.getObject valid-to-vec i)))}
-                  put? (assoc :doc data)))))}))
+                  (= leg "put") (assoc :doc (.getObject put-vec i))))))}))
 
 (defn ->encode-fn [fmt]
   (case fmt
