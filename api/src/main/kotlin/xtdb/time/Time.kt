@@ -2,6 +2,7 @@
 
 package xtdb.time
 
+import org.apache.arrow.vector.types.TimeUnit
 import xtdb.types.ZonedDateTimeRange
 import java.lang.Math.multiplyExact
 import java.time.*
@@ -35,6 +36,13 @@ internal val Int.nanoPartToMicros get() = this / (NANO_HZ / MICRO_HZ)
 internal val Long.millisToNanosPart get() = multiplyExact(this % MILLI_HZ, (NANO_HZ / MILLI_HZ))
 internal val Long.microsToNanosPart get() = multiplyExact(this % MICRO_HZ, (NANO_HZ / MICRO_HZ))
 internal val Long.nanosToNanosPart get() = this % NANO_HZ
+
+val TimeUnit.hz get() = when (this) {
+    TimeUnit.SECOND -> 1
+    TimeUnit.MILLISECOND -> MILLI_HZ
+    TimeUnit.MICROSECOND -> MICRO_HZ
+    TimeUnit.NANOSECOND -> NANO_HZ
+}
 
 private val OFFSET_AND_ZONE_FORMATTER = DateTimeFormatterBuilder()
     .optionalStart()

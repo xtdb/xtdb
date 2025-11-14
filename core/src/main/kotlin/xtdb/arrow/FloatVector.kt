@@ -29,6 +29,11 @@ class FloatVector private constructor(
     override fun getAsFloat(idx: Int) = getFloat(idx)
     override fun getAsDouble(idx: Int) = getFloat(idx).toDouble()
 
+    fun increment(idx: Int, v: Float) {
+        ensureCapacity(idx + 1)
+        setFloat(idx, if (isNull(idx)) v else getFloat(idx) + v)
+    }
+
     override fun getDouble(idx: Int) = getFloat(idx).toDouble()
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getFloat(idx)
@@ -45,4 +50,5 @@ class FloatVector private constructor(
 
     override fun openSlice(al: BufferAllocator) =
         FloatVector(al, name, valueCount, validityBuffer?.openSlice(al), dataBuffer.openSlice(al))
+
 }

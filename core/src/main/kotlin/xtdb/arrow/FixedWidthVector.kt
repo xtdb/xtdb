@@ -49,7 +49,10 @@ sealed class FixedWidthVector : Vector() {
         writeUndefined()
     }
 
-    protected fun setNotNull(idx: Int) = validityBuffer?.setBit(idx, 1)
+    protected fun setNotNull(idx: Int) {
+        validityBuffer?.setBit(idx, 1)
+    }
+
     protected fun writeNotNull() {
         validityBuffer?.writeBit(valueCount, 1)
         valueCount++
@@ -134,11 +137,6 @@ sealed class FixedWidthVector : Vector() {
     protected fun getFloat0(idx: Int) =
         if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")
         else dataBuffer.getFloat(idx)
-
-    protected fun writeFloat0(value: Float) {
-        dataBuffer.writeFloat(value)
-        writeNotNull()
-    }
 
     protected fun getDouble0(idx: Int) =
         if (NULL_CHECKS && isNull(idx)) throw NullPointerException("null at index $idx")

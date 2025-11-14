@@ -17,7 +17,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Duration Field)
            (xtdb ICursor)
            (xtdb.arrow RelationReader Vector VectorReader VectorWriter)
-           (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount)
+           (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount Sum)
            (xtdb.expression.map RelationMapBuilder)
            xtdb.operator.distinct.DistinctRelationMap))
 
@@ -128,25 +128,13 @@
 (defn- ->projector ^xtdb.operator.ProjectionSpec [col-name form input-types]
   (expr/->expression-projection-spec col-name (expr/form->expr form input-types) input-types))
 
-(defmethod ->aggregate-factory :sum [{:keys [from-name from-type] :as agg-opts}]
-  (let [to-type (->> (types/flatten-union-types from-type)
-                     ;; Support both numeric types and duration types
-                     (filter (comp #(or (isa? types/col-type-hierarchy % :num)
-                                        (isa? types/col-type-hierarchy % :duration)) 
-                                   types/col-type-head))
-                     (types/least-upper-bound))]
-    (reducing-agg-factory (into agg-opts
-                                {:to-type to-type
-                                 :val-expr {:op :call, :f :cast, :target-type to-type
-                                            :args [{:op :variable, :variable from-name}]}
-                                 :step-expr {:op :call, :f :+,
-                                             :args [{:op :local, :local acc-local}
-                                                    {:op :local, :local val-local}]}}))))
+(defmethod ->aggregate-factory :sum [{:keys [from-name from-field to-name zero-row?]}]
+  (Sum. (str from-name) (types/->type (or from-field :null)) (str to-name) zero-row?))
 
-(defmethod ->aggregate-factory :avg [{:keys [from-name from-type to-name zero-row?]}]
-  (let [sum-agg (->aggregate-factory {:f :sum, :from-name from-name, :from-type from-type,
+(defmethod ->aggregate-factory :avg [{:keys [from-name from-type from-field to-name zero-row?]}]
+  (let [sum-agg (->aggregate-factory {:f :sum, :from-name from-name, :from-type from-type, :from-field from-field
                                       :to-name 'sum, :zero-row? zero-row?})
-        count-agg (->aggregate-factory {:f :count, :from-name from-name, :from-type from-type,
+        count-agg (->aggregate-factory {:f :count, :from-name from-name, :from-type from-type, :from-field from-field
                                         :to-name 'cnt, :zero-row? zero-row?})
         input-types {:vec-fields {'sum (.getField sum-agg)
                                   'cnt (.getField count-agg)}}
@@ -178,17 +166,17 @@
               (util/close sum-agg)
               (util/close count-agg))))))))
 
-(defn- ->variance-agg-factory [variance-op {:keys [from-name from-type to-name zero-row?]}]
-  (let [countx-agg (->aggregate-factory {:f :count, :from-name from-name, :from-type from-type
+(defn- ->variance-agg-factory [variance-op {:keys [from-name from-type from-field to-name zero-row?]}]
+  (let [countx-agg (->aggregate-factory {:f :count, :from-name from-name, :from-type from-type, :from-field from-field
                                          :to-name 'countx, :zero-row? zero-row?})
 
-        sumx-agg (->aggregate-factory {:f :sum, :from-name from-name, :from-type from-type
+        sumx-agg (->aggregate-factory {:f :sum, :from-name from-name, :from-type from-type, :from-field from-field
                                        :to-name 'sumx, :zero-row? zero-row?})
 
         x2-projecter (->projector 'x2 (list '* from-name from-name)
                                   {:vec-fields {from-name (types/col-type->field from-name from-type)}})
 
-        sumx2-agg (->aggregate-factory {:f :sum, :from-name 'x2, :from-type (types/field->col-type (.getField x2-projecter))
+        sumx2-agg (->aggregate-factory {:f :sum, :from-name 'x2, :from-type (types/field->col-type (.getField x2-projecter)), :from-field (.getField x2-projecter)
                                         :to-name 'sumx2, :zero-row? zero-row?})
 
         finish-projecter (->projector to-name (case variance-op
@@ -240,8 +228,8 @@
 (defmethod ->aggregate-factory :var_pop [agg-opts] (->variance-agg-factory :var-pop agg-opts))
 (defmethod ->aggregate-factory :var_samp [agg-opts] (->variance-agg-factory :var-samp agg-opts))
 
-(defn- ->stddev-agg-factory [variance-op {:keys [from-name from-type to-name zero-row?]}]
-  (let [variance-agg (->aggregate-factory {:f variance-op, :from-name from-name, :from-type from-type
+(defn- ->stddev-agg-factory [variance-op {:keys [from-name from-type from-field to-name zero-row?]}]
+  (let [variance-agg (->aggregate-factory {:f variance-op, :from-name from-name, :from-type from-type, :from-field from-field
                                            :to-name 'variance, :zero-row? zero-row?})
         finish-projecter (->projector to-name '(sqrt variance)
                                       {:vec-fields {'variance (.getField variance-agg)}})]
@@ -506,11 +494,12 @@
                                                              (select-keys agg-opts [:f])
 
                                                              [:unary agg-opts]
-                                                             (let [{:keys [f from-column]} agg-opts]
+                                                             (let [{:keys [f from-column]} agg-opts
+                                                                   from-field (get fields from-column types/null-field)]
                                                                {:f f
                                                                 :from-name from-column
-                                                                :from-type (-> (get fields from-column types/null-field)
-                                                                               types/field->col-type)}))))))]
+                                                                :from-field from-field
+                                                                :from-type (types/field->col-type from-field)}))))))]
           {:op :group-by
            :children [inner-rel]
            :explain {:group-by (mapv str group-cols)

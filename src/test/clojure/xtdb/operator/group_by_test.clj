@@ -16,7 +16,7 @@
                               [::tu/pages '{a #xt/type :i64, b #xt/type :i64} batches]]
                              {:with-types? true})
                 (update :res set)))]
-
+    
     (let [agg-specs '[{sum (sum b)}
                       {avg (avg b)}
                       {cnt (count b)}
@@ -66,7 +66,7 @@
                                             {var-samp (var-samp b)}
                                             {stddev-pop (stddev-pop b)}
                                             {stddev-samp (stddev-samp b)}]
-                                [::tu/pages '{a #xt/type :i64, b #xt/type [:union :null :i64]}
+                                [::tu/pages '{a #xt/type :i64, b #xt/type [:? :i64]}
                                  [[{:a 1 :b 20}
                                    {:a 1 :b 10}
                                    {:a 2 :b 30}
@@ -123,10 +123,11 @@
   (with-open [gm (tu/open-vec #xt/field {"gm" :i32} (map int [0 0 0]))
               v0 (tu/open-rel {:v [1 2 3]})
               v1 (tu/open-rel {:v [1 2.0 3]})]
-    (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v, :from-type [:union #{:i64 :f64}]
+    (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v, :from-type [:union #{:i64 :f64}],
+                                                     :from-field #xt/field {"v" [:union #{:i64 :f64}]}
                                                      :to-name 'vsum, :zero-row? true})
           sum-spec (.build sum-factory tu/*allocator*)]
-      (t/is (= [:union #{:null :f64}] (types/field->col-type (.getField sum-factory))))
+      (t/is (= #xt/field {"vsum" [:? :f64]} (.getField sum-factory)))
       (try
 
         (.aggregate sum-spec v0 gm)

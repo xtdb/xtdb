@@ -44,6 +44,11 @@ class IntVector private constructor(
     override fun getAsFloat(idx: Int) = getInt(idx).toFloat()
     override fun getAsDouble(idx: Int) = getInt(idx).toDouble()
 
+    fun increment(idx: Int, v: Int) {
+        ensureCapacity(idx + 1)
+        setInt(idx, if (isNull(idx)) v else getInt(idx) + v)
+    }
+
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getInt(idx)
 
     override fun writeObject0(value: Any) {
