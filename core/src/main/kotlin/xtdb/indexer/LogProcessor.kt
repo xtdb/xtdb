@@ -24,11 +24,14 @@ import xtdb.table.TableRef
 import xtdb.util.MsgIdUtil.msgIdToEpoch
 import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.util.MsgIdUtil.offsetToMsgId
+import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
+import xtdb.util.asPath
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
 import xtdb.util.warn
+import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
 import java.time.Instant
@@ -153,6 +156,12 @@ class LogProcessor(
                     is Message.Tx -> {
                         val result = if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
                             LOG.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
+                            
+                            // Store skipped transaction to object store
+                            val skippedTxPath = "skipped-txs/${msgId.asLexDec}".asPath
+                            db.bufferPool.putObject(skippedTxPath, ByteBuffer.wrap(msg.payload))
+                            LOG.debug("Stored skipped transaction to $skippedTxPath")
+                            
                             // use abort flow in indexTx
                             indexer.indexTx(
                                 msgId, record.logTimestamp,
