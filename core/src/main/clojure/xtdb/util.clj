@@ -187,6 +187,13 @@
   (let [s (format "%x" l)]
     (format "%x%s" (dec (count s)) s)))
 
+(defn ->lex-dec-string
+  "Turn a long into a lexicographically-sortable decimal string by prepending the length"
+  [^long l]
+
+  (let [s (str l)]
+    (str (dec (count s)) s)))
+
 ;;; Common specs
 
 (defn ->path ^Path [path-ish]

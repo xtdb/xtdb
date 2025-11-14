@@ -165,4 +165,14 @@ object StringUtil {
         }
 
     val String.fromLexHex: Long get() = substring(1).toLong(16)
+
+    val Int.asLexDec: String get() = toLong().asLexDec
+
+    val Long.asLexDec: String
+        get() {
+            val body = this.toString()
+            return "${(body.length - 1)}$body"
+        }
+
+    val String.fromLexDec: Long get() = substring(1).toLong()
 }
