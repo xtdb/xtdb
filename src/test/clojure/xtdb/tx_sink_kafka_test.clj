@@ -28,14 +28,11 @@
                "key.deserializer" "org.apache.kafka.common.serialization.ByteArrayDeserializer"
                "value.deserializer" "org.apache.kafka.common.serialization.ByteArrayDeserializer"
                "auto.offset.reset" "earliest"}
-        ^KafkaConsumer consumer (KafkaConsumer. ^java.util.Map props)
         ^java.util.Collection topics [topic]]
-    (try
+    (with-open [consumer (KafkaConsumer. ^java.util.Map props)]
       (.subscribe consumer topics)
       (let [records (.poll consumer (java.time.Duration/ofSeconds 5))]
-        (mapv (fn [^ConsumerRecord record] (.value record)) records))
-      (finally
-        (.close consumer)))))
+        (mapv (fn [^ConsumerRecord record] (.value record)) records)))))
 
 (t/deftest ^:integration test-tx-sink-kafka-log
   (let [output-topic (str "xtdb.kafka-test." (random-uuid))]
