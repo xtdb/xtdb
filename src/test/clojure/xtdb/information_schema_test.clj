@@ -5,13 +5,10 @@
             [xtdb.api :as xt]
             [xtdb.authn :as authn]
             [xtdb.compactor :as c]
-            [xtdb.db-catalog :as db]
             [xtdb.information-schema :as i-s]
-            [xtdb.pgwire :as pgw]
             [xtdb.pgwire-test :as pgw-test]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.time :as time])
   (:import [xtdb.api SimpleResult]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
@@ -27,16 +24,16 @@
                     [xtdb public/baseball col1 :i64]
                     [xtdb public/baseball col2 :i64]
                     [xtdb public/beanie _id :keyword]
-                    [xtdb public/beanie col1 [:union #{:utf8 :i64}]]
+                    [xtdb public/beanie col1 [:union :utf8 :i64]]
                     [xtdb xt/txs _id :i64]
                     [xtdb xt/txs committed :bool]
-                    [xtdb xt/txs error [:union #{:null :transit}]]
-                    [xtdb xt/txs system_time [:timestamp-tz :micro "UTC"]]}
+                    [xtdb xt/txs error [:? :transit]]
+                    [xtdb xt/txs system_time :instant]}
                  (for [table '[public/baseball public/beanie xt/txs]
-                       [col data-type] '[[_system_from [:timestamp-tz :micro "UTC"]]
-                                         [_system_to [:union #{[:timestamp-tz :micro "UTC"] :null}]]
-                                         [_valid_from [:timestamp-tz :micro "UTC"]]
-                                         [_valid_to [:union #{[:timestamp-tz :micro "UTC"] :null}]]]]
+                       [col data-type] '[[_system_from :instant]
+                                         [_system_to [:? :instant]]
+                                         [_valid_from :instant]
+                                         [_valid_to [:? :instant]]]]
                    ['xtdb table col data-type]))
            (into #{} (map (juxt (comp symbol :table-catalog)
                                 (fn [{:keys [table-schema table-name]}]

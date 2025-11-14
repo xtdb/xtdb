@@ -4,6 +4,7 @@
             [xtdb.authn.crypt :as authn.crypt]
             [xtdb.metadata]
             [xtdb.pgwire.types :as pg-types]
+            [xtdb.serde.types :as st]
             [xtdb.table :as table]
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as trie-cat]
@@ -19,7 +20,7 @@
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb ICursor)
            xtdb.api.query.IKeyFn
-           (xtdb.arrow Relation RelationReader VectorReader VectorWriter)
+           (xtdb.arrow Relation RelationReader VectorType VectorReader VectorWriter)
            xtdb.database.Database
            (xtdb.indexer Snapshot)
            xtdb.operator.SelectionSpec
@@ -29,14 +30,21 @@
 (defn name->oid [s]
   (Math/abs ^Integer (hash s)))
 
+  (defn- map->fields [m]
+    (into {} (map (fn [[col-name col-type]]
+                    [col-name (-> (types/->type col-type)
+                                  (types/->field (str col-name)))]))
+          m))
+
 (defn schema-info->col-rows [schema-info]
   (for [[^TableRef table cols] schema-info
         :let [cols (into (when-not (and (contains? #{"pg_catalog" "information_schema" "xt"} (.getSchemaName table))
                                         (not= 'xt/txs (table/ref->schema+table table)))
-                           {"_valid_from" #xt/field {"_valid_from" :instant}
-                            "_valid_to" #xt/field {"_valid_to" [:? :instant]}
-                            "_system_from" #xt/field {"_system_from" :instant}
-                            "_system_to" #xt/field {"_system_to" [:? :instant]}})
+                           (-> '{"_valid_from" :instant
+                                 "_valid_to" [:? :instant]
+                                 "_system_from" :instant
+                                 "_system_to" [:? :instant]}
+                               map->fields))
                          cols)
               {xt-cols true, user-cols false} (group-by (comp #(str/starts-with? % "_") key) cols)
               cols (concat (sort-by key xt-cols)
@@ -48,86 +56,81 @@
     {:idx (inc idx) ;; no guarantee of stability of idx for a given col
      :table table
      :name name
-     :field col-field
-     :type (types/field->col-type col-field)}))
+     :field col-field}))
 
 (do
   (def info-tables
-    '{information_schema/tables {table_catalog :utf8, table_schema :utf8, table_name :utf8, table_type :utf8}
-      information_schema/columns {table_catalog :utf8, table_schema :utf8, table_name :utf8, column_name :utf8, data_type :utf8}
-      information_schema/schemata {catalog_name :utf8, schema_name :utf8, schema_owner :utf8}})
+    (-> '{information_schema/tables {table_catalog :utf8, table_schema :utf8, table_name :utf8, table_type :utf8}
+          information_schema/columns {table_catalog :utf8, table_schema :utf8, table_name :utf8, column_name :utf8, data_type :utf8}
+          information_schema/schemata {catalog_name :utf8, schema_name :utf8, schema_owner :utf8}}
+        (update-vals map->fields)))
 
   (def ^:private pg-catalog-tables
-    '{pg_catalog/pg_tables {schemaname :utf8, tablename :utf8, tableowner :utf8, tablespace :null}
-      pg_catalog/pg_type {oid :i32, typname :utf8, typnamespace :i32, typowner :i32
-                          typcategory :utf8, typtype :utf8, typbasetype :i32, typnotnull :bool, typtypmod :i32
-                          typsend :utf8, typreceive :utf8, typinput :utf8, typoutput :utf8
-                          typrelid :i32, typelem :i32, typarray :i32}
-      pg_catalog/pg_class {oid :i32, relname :utf8, relnamespace :i32, relkind :utf8, relam :i32, relchecks :i32
-                           relhasindex :bool, relhasrules :bool, relhastriggers :bool, relrowsecurity :bool
-                           relforcerowsecurity :bool, relispartition :bool, reltablespace :i32, reloftype :i32
-                           relpersistence :utf8, relreplident :utf8, reltoastrelid :i32}
-      pg_catalog/pg_description {objoid :i32, classoid :i32, objsubid :i16, description :utf8}
-      pg_catalog/pg_views {schemaname :utf8, viewname :utf8, viewowner :utf8}
-      pg_catalog/pg_matviews {schemaname :utf8, matviewname :utf8, matviewowner :utf8}
-      pg_catalog/pg_attribute {attrelid :i32, attname :utf8, atttypid :i32
-                               attlen :i32, attnum :i32
-                               attisdropped :bool, attnotnull :bool
-                               atttypmod :i32, attidentity :utf8, attgenerated :utf8}
-      pg_catalog/pg_namespace {oid :i32, nspname :utf8, nspowner :i32, nspacl :null}
-      pg_catalog/pg_proc {oid :i32, proname :utf8, pronamespace :i32}
-      pg_catalog/pg_database {oid :i32, datname :utf8, datallowconn :bool, datistemplate :bool}
+    (-> '{pg_catalog/pg_tables {schemaname :utf8, tablename :utf8, tableowner :utf8, tablespace :null}
+          pg_catalog/pg_type {oid :i32, typname :utf8, typnamespace :i32, typowner :i32
+                              typcategory :utf8, typtype :utf8, typbasetype :i32, typnotnull :bool, typtypmod :i32
+                              typsend :utf8, typreceive :utf8, typinput :utf8, typoutput :utf8
+                              typrelid :i32, typelem :i32, typarray :i32}
+          pg_catalog/pg_class {oid :i32, relname :utf8, relnamespace :i32, relkind :utf8, relam :i32, relchecks :i32
+                               relhasindex :bool, relhasrules :bool, relhastriggers :bool, relrowsecurity :bool
+                               relforcerowsecurity :bool, relispartition :bool, reltablespace :i32, reloftype :i32
+                               relpersistence :utf8, relreplident :utf8, reltoastrelid :i32}
+          pg_catalog/pg_description {objoid :i32, classoid :i32, objsubid :i16, description :utf8}
+          pg_catalog/pg_views {schemaname :utf8, viewname :utf8, viewowner :utf8}
+          pg_catalog/pg_matviews {schemaname :utf8, matviewname :utf8, matviewowner :utf8}
+          pg_catalog/pg_attribute {attrelid :i32, attname :utf8, atttypid :i32
+                                   attlen :i32, attnum :i32
+                                   attisdropped :bool, attnotnull :bool
+                                   atttypmod :i32, attidentity :utf8, attgenerated :utf8}
+          pg_catalog/pg_namespace {oid :i32, nspname :utf8, nspowner :i32, nspacl :null}
+          pg_catalog/pg_proc {oid :i32, proname :utf8, pronamespace :i32}
+          pg_catalog/pg_database {oid :i32, datname :utf8, datallowconn :bool, datistemplate :bool}
 
-      pg_catalog/pg_stat_user_tables {relid :i32
-                                      schemaname :utf8
-                                      relname :utf8
-                                      n_live_tup :i64}
+          pg_catalog/pg_stat_user_tables {relid :i32
+                                          schemaname :utf8
+                                          relname :utf8
+                                          n_live_tup :i64}
 
-      pg_catalog/pg_settings {name :utf8, setting :utf8}
+          pg_catalog/pg_settings {name :utf8, setting :utf8}
 
-      pg_catalog/pg_range {rngtypid :i32, rngsubtype :i32, rngmultitypid :i32
-                           rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}
-      pg_catalog/pg_am {oid :i32, amname :utf8, amhandler :utf8, amtype :utf8}})
+          pg_catalog/pg_range {rngtypid :i32, rngsubtype :i32, rngmultitypid :i32
+                               rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}
+          pg_catalog/pg_am {oid :i32, amname :utf8, amhandler :utf8, amtype :utf8}}
+        (update-vals map->fields)))
 
   (def ^:private pg-catalog-template-tables
-    '{pg_catalog/pg_user {username :utf8 usesuper :bool passwd [:union #{:utf8 :null}]}})
+    (-> '{pg_catalog/pg_user {username :utf8 usesuper :bool passwd [:? :utf8]}}
+        (update-vals map->fields)))
 
   (def ^:private xt-derived-tables
-    '{xt/trie_stats {schema_name :utf8, table_name :utf8, trie_key :utf8, level :i32, recency [:union #{:null [:date :day]}],
-                     trie_state :utf8, data_file_size :i64, row_count [:union #{:null :i64}], temporal_metadata [:union #{:null [:struct {}]}]}
+    (-> '{xt/trie_stats {schema_name :utf8, table_name :utf8, trie_key :utf8, level :i32, recency [:? :date :day],
+                         trie_state :utf8, data_file_size :i64, row_count [:? :i64], temporal_metadata [:? :struct]}
 
-      xt/live_tables {schema_name :utf8, table_name :utf8, row_count :i64}
+          xt/live_tables {schema_name :utf8, table_name :utf8, row_count :i64}
 
-      xt/live_columns {schema_name :utf8, table_name :utf8, col_name :utf8, col_type :utf8}
+          xt/live_columns {schema_name :utf8, table_name :utf8, col_name :utf8, col_type :utf8}
 
-      xt/metrics_timers {name :utf8, tags [:struct {}]
-                         count :i64,
-                         mean_time [:union #{:null [:duration :nano]}],
-                         p75_time [:union #{:null [:duration :nano]}]
-                         p95_time [:union #{:null [:duration :nano]}]
-                         p99_time [:union #{:null [:duration :nano]}]
-                         p999_time [:union #{:null [:duration :nano]}]
-                         max_time [:union #{:null [:duration :nano]}]}
+          xt/metrics_timers {name :utf8, tags :struct
+                             count :i64,
+                             mean_time [:? :duration :nano],
+                             p75_time [:? :duration :nano]
+                             p95_time [:? :duration :nano]
+                             p99_time [:? :duration :nano]
+                             p999_time [:? :duration :nano]
+                             max_time [:? :duration :nano]}
 
-      xt/metrics_gauges {name :utf8, tags [:struct {}], value :f64}
-      xt/metrics_counters {name :utf8, tags [:struct {}], count :f64}})
+          xt/metrics_gauges {name :utf8, tags :struct, value :f64}
+          xt/metrics_counters {name :utf8, tags :struct, count :f64}}
+        (update-vals map->fields)))
 
   (def derived-tables
-    (-> (merge info-tables pg-catalog-tables xt-derived-tables)
-        (update-vals (fn [col-types]
-                       (->> (for [[col-name col-type] col-types]
-                              [col-name (types/col-type->field col-name col-type)])
-                            (into {}))))))
+    (merge info-tables pg-catalog-tables xt-derived-tables))
 
   (defn derived-table [table-ref]
     (get derived-tables (table/ref->schema+table table-ref)))
 
   (def template-tables
-    (-> pg-catalog-template-tables
-        (update-vals (fn [col-types]
-                       (->> (for [[col-name col-type] col-types]
-                              [col-name (types/col-type->field col-name col-type)])
-                            (into {}))))))
+    pg-catalog-template-tables)
 
   (defn template-table [table-ref]
     (get template-tables (table/ref->schema+table table-ref)))
@@ -140,8 +143,8 @@
   (defn table-info [default-db]
     (.get table-info-cache default-db
           (fn [db-name]
-            (->> (for [[table col-types] (merge derived-tables template-tables)]
-                   [(table/->ref db-name table) (set (keys col-types))])
+            (->> (for [[table fields] (merge derived-tables template-tables)]
+                   [(table/->ref db-name table) (set (keys fields))])
                  (into {})))))
 
   (def ^:private ^Cache table-chains-cache
@@ -162,11 +165,7 @@
                                         (= 'pg_catalog schema-name) (conj [[table-name] table]))))))))))
 
   (def meta-table-schemas
-    (-> (merge info-tables pg-catalog-tables pg-catalog-template-tables)
-        (update-vals (fn [col-name->type]
-                       (-> col-name->type
-                           (update-keys str)
-                           (update-vals #(types/col-type->field %)))))))
+    (merge info-tables pg-catalog-tables pg-catalog-template-tables))
 
   (def ^:private views
     (-> (set (keys meta-table-schemas))
@@ -181,15 +180,15 @@
          (mapv (fn [schema-name]
                  (-> {:schema-name schema-name}
                      (assoc :nspowner (name->oid "xtdb"))
-                     (assoc :oid (name->oid schema-name))))))))
+                     (assoc :oid (name->oid schema-name)))))))
 
-(defn schemas [db-name]
-  ;; TODO add other user schemas
-  (->> (conj internal-schemas "public")
-       (mapv (fn [schema-name]
-               {:catalog-name db-name
-                :schema-name schema-name
-                :schema-owner "xtdb"}))))
+  (defn schemas [db-name]
+    ;; TODO add other user schemas
+    (->> (conj internal-schemas "public")
+         (mapv (fn [schema-name]
+                 {:catalog-name db-name
+                  :schema-name schema-name
+                  :schema-owner "xtdb"})))))
 
 (defn tables [schema-info]
   (for [^TableRef table (keys schema-info)]
@@ -257,23 +256,23 @@
      :rngsubdiff rngsubdiff}))
 
 (defn columns [col-rows]
-  (for [{:keys [^TableRef table, type], col-name :name} col-rows]
+  (for [{:keys [^TableRef table, field], col-name :name} col-rows]
     {:table-catalog (.getDbName table)
      :table-name (.getTableName table)
      :table-schema (.getSchemaName table)
-     :column-name (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) col-name)
-     :data-type (pr-str type)}))
+     :column-name (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (str col-name))
+     :data-type (pr-str (st/render-type (VectorType/fromField field)))}))
 
 (defn pg-attribute [col-rows]
   (for [{:keys [idx table name field]} col-rows
         :let [{:keys [oid typlen]} (-> field
-                                       (types/field-with-name name)
+                                       (types/field-with-name (str name))
                                        (pg-types/field->pg-col)
                                        :pg-type
                                        (->> (get (-> pg-types/pg-types
                                                      (assoc :default (get pg-types/pg-types :json))))))]]
     {:attrelid (name->oid (table/ref->schema+table table))
-     :attname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) name)
+     :attname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (str name))
      :atttypid (int oid)
      :attlen (int (or typlen -1))
      :attnum (int idx)
@@ -290,25 +289,14 @@
      :nspowner nspowner
      :nspacl nil}))
 
-(def pg-ams [{:oid 2
-              :amname "heap"
-              :amhandler "heap_tableam_handler"
-              :amtype "t"}
-             {:oid 403
-              :amname "btree"
-              :amhandler "bthandler"
-              :amtype "i"}
-             {:oid 405
-              :amname "hash"
-              :amhandler "hashhandler"
-              :amtype "i"}])
+(def pg-ams
+  [{:oid 2, :amname "heap", :amhandler "heap_tableam_handler", :amtype "t"}
+   {:oid 403, :amname "btree", :amhandler "bthandler", :amtype "i"}
+   {:oid 405, :amname "hash", :amhandler "hashhandler", :amtype "i"}])
 
 (defn pg-am []
   (for [{:keys [oid amname amhandler amtype]} pg-ams]
-    {:oid (int oid)
-     :amname amname
-     :amhandler amhandler
-     :amtype amtype}))
+    {:oid (int oid), :amname amname, :amhandler amhandler, :amtype amtype}))
 
 (do ; to eval them both
   (def procs
@@ -321,9 +309,7 @@
 
 (defn pg-proc []
   (for [{:keys [oid proname pronamespace]} (vals procs)]
-    {:oid oid
-     :proname proname
-     :pronamespace pronamespace}))
+    {:oid oid, :proname proname, :pronamespace pronamespace}))
 
 (defn pg-database [db-name]
   ;; TODO get all databases here
@@ -346,10 +332,12 @@
      :setting setting}))
 
 (def ^:private pg-user-field
-  (types/col-type->field "put" [:struct '{_id :utf8
-                                          username :utf8
-                                          usesuper :bool
-                                          passwd [:union #{:utf8 :null}]}]))
+  (-> #xt/type [:struct
+                {"_id" :utf8}
+                {"username" :utf8}
+                {"usesuper" :bool}
+                {"passwd" [:? :utf8]}]
+      (types/->field "put")))
 
 (def ^:private initial-user-data
   [{:_id "xtdb", :username "xtdb", :usesuper true, :passwd (authn.crypt/encrypt-pw "xtdb")}])

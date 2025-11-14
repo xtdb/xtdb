@@ -212,7 +212,7 @@
          type-spec (render-type (VectorType/fromField field))]
      (if (or (and (= ctx :union)
                   (= field-name (ArrowTypes/toLeg (.getType field))))
-             (and (= ctx :list)
+             (and (or (= ctx :list) (= ctx :set))
                   (= "$data$" field-name)))
        type-spec
        {field-name type-spec}))))
@@ -236,7 +236,7 @@
 
     :else (case ctx
             :union (.getAsLegField (->type field-spec))
-            :list (VectorType/field "$data$" (->type field-spec))
+            (:set :list) (VectorType/field "$data$" (->type field-spec))
 
             (throw (err/incorrect :invalid-field (str "invalid field spec: " (pr-str field-spec))
                                   {:field-spec field-spec})))))

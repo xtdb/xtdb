@@ -116,7 +116,7 @@ describe("connects to XT", function() {
 
       res = await conn`select * from information_schema.columns WHERE table_name = 'tagged_nums' AND column_name = 'nest'`
       const type = res[0].data_type;
-      assert.equal('[:struct {a :i64, b :i64, c :f64, d :f64}]', type, `data_type is actually ${type}`);
+      assert.equal('[:struct {"a" :i64} {"b" :i64} {"c" :f64} {"d" :f64}]', type, `data_type is actually ${type}`);
     } finally {
       await conn.release()
     }

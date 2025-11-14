@@ -2362,10 +2362,10 @@ UNION ALL
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 'foo'}"]])
 
   (t/is (= '#{[xtdb public/foo _id :i64]
-              [xtdb public/foo _system_from [:timestamp-tz :micro "UTC"]]
-              [xtdb public/foo _system_to [:union #{[:timestamp-tz :micro "UTC"] :null}]]
-              [xtdb public/foo _valid_from [:timestamp-tz :micro "UTC"]]
-              [xtdb public/foo _valid_to [:union #{[:timestamp-tz :micro "UTC"] :null}]]
+              [xtdb public/foo _system_from :instant]
+              [xtdb public/foo _system_to [:? :instant]]
+              [xtdb public/foo _valid_from :instant]
+              [xtdb public/foo _valid_to [:? :instant]]
               [xtdb public/foo x :utf8]}
 
            (->> (jdbc/execute! tu/*node*
