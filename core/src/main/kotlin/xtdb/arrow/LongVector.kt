@@ -27,6 +27,11 @@ class LongVector private constructor(
     override fun getAsFloat(idx: Int) = getLong(idx).toFloat()
     override fun getAsDouble(idx: Int) = getLong(idx).toDouble()
 
+    fun increment(idx: Int, v: Long) {
+        ensureCapacity(idx + 1)
+        setLong(idx, if (isNull(idx)) v else getLong(idx) + v)
+    }
+
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getLong(idx)
 
     override fun writeObject0(value: Any) {

@@ -270,6 +270,7 @@
 (defn ->type ^xtdb.arrow.VectorType [type-spec]
   (cond
     (instance? VectorType type-spec) type-spec
+    (instance? Field type-spec) (VectorType/fromField type-spec)
     (keyword? type-spec) (VectorType. (->arrow-type type-spec) false ^List (vector))
 
     :else (let [[first-elem & more-opts] type-spec

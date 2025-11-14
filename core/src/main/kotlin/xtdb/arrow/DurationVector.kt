@@ -5,10 +5,12 @@ import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.TimeUnit.*
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.time.MICRO_HZ
 import xtdb.time.MILLI_HZ
 import xtdb.time.NANO_HZ
+import xtdb.time.hz
 import xtdb.util.Hasher
 import java.time.Duration
 import java.time.temporal.ChronoUnit
@@ -37,6 +39,11 @@ class DurationVector private constructor(
     override fun getLong(idx: Int) = getLong0(idx)
     override fun writeLong(v: Long) = writeLong0(v)
 
+    fun increment(idx: Int, v: Long) {
+        ensureCapacity(idx + 1)
+        setLong(idx, if (isNull(idx)) v else getLong(idx) + v)
+    }
+
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = unit.toDuration(getLong(idx))
 
     override fun writeObject0(value: Any) = when (value) {
@@ -45,6 +52,17 @@ class DurationVector private constructor(
     }
 
     override fun writeValue0(v: ValueReader) = writeLong(v.readLong())
+
+    override fun sumInto(outVec: Vector): VectorSummer {
+        check(outVec is DurationVector) { "Cannot sum DurationVector into ${outVec.arrowType}" }
+        check(outVec.unit >= unit) {
+            "Cannot sum DurationVector with unit $unit into DurationVector with unit ${outVec.unit}"
+        }
+
+        val multiplier = outVec.unit.hz / unit.hz
+
+        return VectorSummer { idx, groupIdx -> outVec.increment(groupIdx, getLong(idx) * multiplier) }
+    }
 
     override fun getMetaDouble(idx: Int) =
         when (unit) {

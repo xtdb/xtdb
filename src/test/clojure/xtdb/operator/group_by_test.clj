@@ -6,7 +6,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
-  (:import [xtdb.arrow IntVector Vector]))
+  (:import [xtdb.arrow Vector]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -16,7 +16,7 @@
                               [::tu/pages '{a #xt/type :i64, b #xt/type :i64} batches]]
                              {:with-types? true})
                 (update :res set)))]
-
+    
     (let [agg-specs '[{sum (sum b)}
                       {avg (avg b)}
                       {cnt (count b)}
@@ -66,7 +66,7 @@
                                             {var-samp (var-samp b)}
                                             {stddev-pop (stddev-pop b)}
                                             {stddev-samp (stddev-samp b)}]
-                                [::tu/pages '{a #xt/type :i64, b #xt/type [:union :null :i64]}
+                                [::tu/pages '{a #xt/type :i64, b #xt/type [:? :i64]}
                                  [[{:a 1 :b 20}
                                    {:a 1 :b 10}
                                    {:a 2 :b 30}
@@ -120,19 +120,19 @@
           "aggregate without group")))
 
 (t/deftest test-promoting-sum
-  (with-open [group-mapping (doto (IntVector/open tu/*allocator* "gm" false)
-                              (.writeAll (map int [0 0 0])))
+  (with-open [gm (tu/open-vec #xt/field {"gm" :i32} (map int [0 0 0]))
               v0 (tu/open-rel {:v [1 2 3]})
               v1 (tu/open-rel {:v [1 2.0 3]})]
-    (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v, :from-type [:union #{:i64 :f64}]
+    (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v, :from-type [:union #{:i64 :f64}],
+                                                     :from-field #xt/field {"v" [:union #{:i64 :f64}]}
                                                      :to-name 'vsum, :zero-row? true})
           sum-spec (.build sum-factory tu/*allocator*)]
-      (t/is (= [:union #{:null :f64}] (types/field->col-type (.getField sum-factory))))
+      (t/is (= #xt/field {"vsum" [:? :f64]} (.getField sum-factory)))
       (try
 
-        (.aggregate sum-spec v0 group-mapping)
-        (.aggregate sum-spec v1 group-mapping)
-        (with-open [res (.finish sum-spec)]
+        (.aggregate sum-spec v0 gm)
+        (.aggregate sum-spec v1 gm)
+        (with-open [res (.openFinishedVector sum-spec)]
           (t/is (= [12.0] (.getAsList res))))
         (finally
           (util/try-close sum-spec))))))
@@ -322,14 +322,9 @@
                                             {:a 12}]]]))))
 
 (t/deftest test-array-agg
-  (with-open [gm0 (doto (IntVector/open tu/*allocator* "gm0" false)
-                    (.writeAll (map int [0 1 0])))
-
+  (with-open [gm0 (tu/open-vec #xt/field {"gm0" :i32} (map int [0 1 0]))
+              gm1 (tu/open-vec #xt/field {"gm1" :i32} (map int [1 2 0]))
               k0 (Vector/fromList tu/*allocator* "k" [1 2 3])
-
-              gm1 (doto (IntVector/open tu/*allocator* "gm1" false)
-                    (.writeAll (map int [1 2 0])))
-
               k1 (Vector/fromList tu/*allocator* "k" [4 5 6])]
 
     (let [agg-factory (group-by/->aggregate-factory {:f :array-agg, :from-name 'k, :from-type :i64
@@ -340,7 +335,7 @@
         (.aggregate agg-spec (vr/rel-reader [k0]) gm0)
         (.aggregate agg-spec (vr/rel-reader [k1]) gm1)
 
-        (with-open [res (.finish agg-spec)]
+        (with-open [res (.openFinishedVector agg-spec)]
           (t/is (= [[1 3 6] [2 4] [5]] (.getAsList res))))))))
 
 (t/deftest test-array-agg-of-empty-rel-returns-empty-array-3819

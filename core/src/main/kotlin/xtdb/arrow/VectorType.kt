@@ -46,6 +46,10 @@ data class VectorType(
 
     val asLegField get() = Field(arrowType.toLeg(), fieldType, children)
 
+    // NOTE: the col-types version of this expands nulls out into the list; this keeps them within the individual types
+    // not sure which I want yet.
+    val unionLegs get() = if (arrowType is ArrowType.Union) children.map { it.asType } else listOf(this)
+
     companion object {
 
         fun maybe(type: VectorType, nullable: Boolean = true) = type.copy(nullable = nullable)

@@ -1,5 +1,6 @@
 package xtdb.arrow
 
+import clojure.core.Vec
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
@@ -8,6 +9,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import org.apache.arrow.vector.NullVector as ArrowNullVector
@@ -50,6 +52,8 @@ class NullVector(
     override val metadataFlavours get() = emptyList<MetadataFlavour>()
 
     override fun hashCode0(idx: Int, hasher: Hasher) = error("hashCode0 called on NullVector")
+
+    override fun sumInto(outVec: Vector) = VectorSummer { _, _ -> }
 
     override fun maybePromote(al: BufferAllocator, target: FieldType): Vector =
         if (target.type == arrowType) this

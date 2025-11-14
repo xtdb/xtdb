@@ -7,6 +7,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorIndirection.Companion.selection
+import xtdb.arrow.agg.VectorSummer
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
@@ -87,6 +88,11 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
                         inner.pos = sel[value]
                 }
         }
+    }
+
+    override fun sumInto(outVec: Vector): VectorSummer {
+        val inner = inner.sumInto(outVec)
+        return VectorSummer { idx, groupIdx -> inner.sumRow(sel[idx], groupIdx) }
     }
 
     override fun close() = inner.close()

@@ -17,7 +17,7 @@
            (org.apache.arrow.vector.types.pojo Field)
            (xtdb ICursor)
            (xtdb.arrow IntVector LongVector RelationReader Relation)
-           (xtdb.operator.group_by IGroupMapper)))
+           (xtdb.arrow.agg GroupMapper)))
 
 (s/def ::window-name symbol?)
 
@@ -95,7 +95,7 @@
 (deftype WindowFnCursor [^BufferAllocator allocator
                          ^ICursor in-cursor
                          ^IPersistentMap static-fields
-                         ^IGroupMapper group-mapper
+                         ^GroupMapper group-mapper
                          order-specs
                          ^List window-specs
                          ^:unsynchronized-mutable ^boolean done?]

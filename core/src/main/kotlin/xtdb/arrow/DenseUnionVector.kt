@@ -9,6 +9,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.TaggedValue
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Unsupported
 import xtdb.kw
@@ -354,6 +355,15 @@ class DenseUnionVector private constructor(
 
             else -> super.rowCopier(dest)
         }
+
+    override fun sumInto(outVec: Vector) = object : VectorSummer {
+        val legSummers = legVectors.map { it.sumInto(outVec) }
+
+        override fun sumRow(idx: Int, groupIdx: Int) {
+            legSummers[getTypeId(idx).toInt()]
+                .sumRow(getOffset(idx), groupIdx)
+        }
+    }
 
     override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))

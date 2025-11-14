@@ -26,6 +26,11 @@ class DoubleVector private constructor(
     override fun getAsFloat(idx: Int) = getDouble(idx).toFloat()
     override fun getAsDouble(idx: Int) = getDouble(idx)
 
+    fun increment(idx: Int, v: Double) {
+        ensureCapacity(idx + 1)
+        setDouble(idx, if (isNull(idx)) v else getDouble(idx) + v)
+    }
+
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getDouble(idx)
 
     override fun writeObject0(value: Any) {

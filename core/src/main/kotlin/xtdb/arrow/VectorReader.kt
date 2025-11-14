@@ -11,6 +11,7 @@ import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.VectorIndirection.Companion.slice
 import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import xtdb.util.closeOnCatch
@@ -128,4 +129,6 @@ interface VectorReader : ILookup, AutoCloseable {
 
     override fun valAt(key: Any?): Any? = valAt(key, null)
     override fun valAt(key: Any?, notFound: Any?) = this.vectorForOrNull(key as String) ?: notFound
+
+    fun sumInto(outVec: Vector): VectorSummer = unsupported("sumInto")
 }
