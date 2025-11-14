@@ -2,8 +2,8 @@
   (:require [integrant.core :as ig]
             [xtdb.log :as log]
             [xtdb.node :as xtn]
-            [xtdb.util :as util]
-            xtdb.serde)
+            xtdb.serde
+            [xtdb.util :as util])
   (:import (xtdb.api TxSinkConfig Xtdb$Config)
            (xtdb.api.log Log Log$Message$Tx)
            (xtdb.indexer Indexer$TxSink LiveIndex$Tx)
@@ -15,7 +15,6 @@
         live-relation (.getLiveRelation live-table)
         pos (.getRowCount live-relation)
         iid-vec (.vectorFor live-relation "_iid")
-        system-from-vec (.vectorFor live-relation "_system_from")
         valid-from-vec (.vectorFor live-relation "_valid_from")
         valid-to-vec (.vectorFor live-relation "_valid_to")
         op-vec (.vectorFor live-relation "op")
@@ -30,7 +29,6 @@
                     data (when put? (.getObject put-vec i))]
                 (cond-> {:op (keyword leg)
                          :iid (.getObject iid-vec i)
-                         :system-from (.getObject system-from-vec i)
                          :valid-from (.getObject valid-from-vec i)
                          :valid-to (when-not (= Long/MAX_VALUE (.getLong valid-to-vec i))
                                      (.getObject valid-to-vec i))}
@@ -60,15 +58,21 @@
   Indexer$TxSink
   (onCommit [_ tx-key live-idx-tx]
     (util/with-open [live-idx-snap (.openSnapshot live-idx-tx)]
-      (->> {:transaction {:id tx-key}
-            :source {;:version "1.0.0" ;; TODO
-                     :db db-name}
-            :tables (->> (.getLiveTables live-idx-snap)
-                         (map #(read-table-rows % live-idx-tx))
-                         (into []))}
-           encode-as-bytes
-           Log$Message$Tx.
-           (.appendMessage output-log)))))
+      (let [live-tables (.getLiveTables live-idx-snap)]
+        (->> {:transaction {:id tx-key}
+              :system-time (let [live-table (.liveTable live-idx-tx (first live-tables))
+                                 start-pos (.getStartPos live-table)
+                                 live-relation (.getLiveRelation live-table)
+                                 system-from-vec (.vectorFor live-relation "_system_from")]
+                             (.getObject system-from-vec start-pos))
+              :source {;:version "1.0.0" ;; TODO
+                       :db db-name}
+              :tables (->> live-tables
+                           (map #(read-table-rows % live-idx-tx))
+                           (into []))}
+             encode-as-bytes
+             Log$Message$Tx.
+             (.appendMessage output-log))))))
 
 (defmethod ig/init-key ::for-db [_ {:keys [^TxSinkConfig tx-sink-conf output-log db-name]}]
   (when (and tx-sink-conf

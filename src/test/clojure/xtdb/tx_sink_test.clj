@@ -35,13 +35,13 @@
       (let [msg (-> (.getMessages output-log) first decode-record)]
         (t/is (= (util/->clj
                    {:transaction {:id (serde/->TxKey 0 (.toInstant #inst "2020"))}
+                    :system-time #xt/zdt "2020-01-01T00:00[UTC]"
                     :source {:db "xtdb"}
                     :tables [{:db "xtdb"
                               :schema "public"
                               :table "docs"
                               :ops [{:op :put
                                      :iid (util/->iid :doc1)
-                                     :system-from #xt/zdt "2020-01-01T00:00[UTC]"
                                      :valid-from  #xt/zdt "2020-01-01T00:00[UTC]"
                                      :valid-to nil
                                      :doc {"_id" :doc1, "value" "test"}}]}
@@ -50,7 +50,6 @@
                               :table "txs"
                               :ops [{:op :put
                                      :iid (util/->iid 0)
-                                     :system-from #xt/zdt "2020-01-01T00:00[UTC]"
                                      :valid-from  #xt/zdt "2020-01-01T00:00[UTC]"
                                      :valid-to nil
                                      :doc {"_id" 0
