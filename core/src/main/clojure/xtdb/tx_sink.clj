@@ -2,9 +2,10 @@
   (:require [integrant.core :as ig]
             [xtdb.log :as log]
             [xtdb.node :as xtn]
+            xtdb.node.impl
             xtdb.serde
             [xtdb.util :as util])
-  (:import (xtdb.api TxSinkConfig Xtdb$Config)
+  (:import (xtdb.api TxSinkConfig Xtdb Xtdb$Config)
            (xtdb.api.log Log Log$Message$Tx)
            (xtdb.indexer Indexer$TxSink LiveIndex$Tx)
            (xtdb.table TableRef)))
@@ -91,3 +92,10 @@
 
 (defmethod ig/halt-key! ::output-log [_ output-log]
   (util/close output-log))
+
+(defn open! ^Xtdb [node-opts]
+  (let [config (doto (xtn/->config node-opts)
+                 (-> (.getCompactor) (.threads 0))
+                 (.setServer nil)
+                 (some-> (.getTxSink) (.enable true)))]
+    (.open config)))

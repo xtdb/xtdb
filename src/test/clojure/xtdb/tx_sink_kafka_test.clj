@@ -5,7 +5,7 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [xtdb.tx-sink.main :as tx-sink])
+            [xtdb.tx-sink :as tx-sink])
   (:import (org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer)
            org.testcontainers.kafka.ConfluentKafkaContainer
            org.testcontainers.utility.DockerImageName))
