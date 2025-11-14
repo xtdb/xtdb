@@ -131,7 +131,7 @@
 
         (.aggregate sum-spec v0 gm)
         (.aggregate sum-spec v1 gm)
-        (with-open [res (.finish sum-spec)]
+        (with-open [res (.openFinishedVector sum-spec)]
           (t/is (= [12.0] (.getAsList res))))
         (finally
           (util/try-close sum-spec))))))
@@ -334,7 +334,7 @@
         (.aggregate agg-spec (vr/rel-reader [k0]) gm0)
         (.aggregate agg-spec (vr/rel-reader [k1]) gm1)
 
-        (with-open [res (.finish agg-spec)]
+        (with-open [res (.openFinishedVector agg-spec)]
           (t/is (= [[1 3 6] [2 4] [5]] (.getAsList res))))))))
 
 (t/deftest test-array-agg-of-empty-rel-returns-empty-array-3819

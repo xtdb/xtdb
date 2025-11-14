@@ -16,8 +16,8 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo ArrowType$Duration Field)
            (xtdb ICursor)
-           (xtdb.arrow RelationReader LongVector Vector VectorReader VectorWriter)
-           (xtdb.arrow.agg GroupMapper GroupMapper$Mapper GroupMapper$Null)
+           (xtdb.arrow RelationReader Vector VectorReader VectorWriter)
+           (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount)
            (xtdb.expression.map RelationMapBuilder)
            xtdb.operator.distinct.DistinctRelationMap))
 
@@ -47,75 +47,16 @@
                                                              :nil-keys-equal? true}))
     (GroupMapper$Null. allocator)))
 
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface IAggregateSpec
-  (^void aggregate [^xtdb.arrow.RelationReader inRelation,
-                    ^xtdb.arrow.VectorReader groupMapping])
-  (^xtdb.arrow.VectorReader finish []))
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface IAggregateSpecFactory
-  (getField [])
-  (^xtdb.operator.group_by.IAggregateSpec build [^org.apache.arrow.memory.BufferAllocator allocator]))
-
 #_{:clj-kondo/ignore [:unused-binding]}
-(defmulti ^xtdb.operator.group_by.IAggregateSpecFactory ->aggregate-factory
+(defmulti ^AggregateSpec$Factory ->aggregate-factory
   (fn [{:keys [f from-name from-type to-name zero-row?]}]
     (expr/normalise-fn-name f)))
 
 (defmethod ->aggregate-factory :row_count [{:keys [to-name zero-row?]}]
-  (reify IAggregateSpecFactory
-    (getField [_] (types/col-type->field to-name :i64))
-
-    (build [_ al]
-      (let [out-vec (LongVector. al (str to-name) false)]
-        (reify
-          IAggregateSpec
-          (aggregate [_ in-rel group-mapping]
-            (dotimes [idx (.getRowCount in-rel)]
-              (let [group-idx (.getInt group-mapping idx)]
-                (when (<= (.getValueCount out-vec) group-idx)
-                  (.setLong out-vec group-idx 0))
-
-                (.setLong out-vec group-idx (inc (.getLong out-vec group-idx))))))
-
-          (finish [_]
-            (when (and zero-row? (zero? (.getValueCount out-vec)))
-              (.setLong out-vec 0 0))
-            (.openSlice out-vec al))
-
-          Closeable
-          (close [_] (.close out-vec)))))))
+  (RowCount. (str to-name) zero-row?))
 
 (defmethod ->aggregate-factory :count [{:keys [from-name to-name zero-row?]}]
-  (reify IAggregateSpecFactory
-    (getField [_] (types/col-type->field to-name :i64))
-
-    (build [_ al]
-      (let [out-vec (LongVector. al (str to-name) false)]
-        (reify
-          IAggregateSpec
-          (aggregate [_ in-rel group-mapping]
-            (let [in-col (.vectorForOrNull in-rel (str from-name))]
-              (dotimes [idx (.getRowCount in-rel)]
-                (let [group-idx (.getInt group-mapping idx)]
-                  (when (<= (.getValueCount out-vec) group-idx)
-                    (.set out-vec group-idx 0))
-
-                  (when-not (.isNull in-col idx)
-                    (.setLong out-vec group-idx
-                              (inc (if-not (.isNull out-vec group-idx)
-                                     (.getLong out-vec group-idx)
-                                     0))))))))
-
-          (finish [_]
-            (when (and zero-row? (zero? (.getValueCount out-vec)))
-              (.writeLong out-vec 0))
-
-            (.openSlice out-vec al))
-
-          Closeable
-          (close [_] (.close out-vec)))))))
+  (Count. (str from-name) (str to-name) zero-row?))
 
 (def ^:private acc-sym (gensym 'acc))
 (def ^:private group-idx-sym (gensym 'group_idx))
@@ -160,13 +101,13 @@
 (defn- reducing-agg-factory [{:keys [to-name to-type zero-row?] :as agg-opts}]
   (let [to-type [:union (conj #{:null} to-type)]
         to-field (types/col-type->field to-name to-type)]
-    (reify IAggregateSpecFactory
+    (reify AggregateSpec$Factory
       (getField [_] to-field)
 
       (build [_ al]
         (let [out-vec (Vector/open al to-field)]
           (reify
-            IAggregateSpec
+            AggregateSpec
             (aggregate [_ in-rel group-mapping]
               (let [input-opts {:var->col-type (->> in-rel
                                                     (into {acc-sym to-type}
@@ -175,7 +116,7 @@
                     {:keys [eval-agg]} (emit-agg agg-opts input-opts)]
                 (eval-agg out-vec in-rel group-mapping)))
 
-            (finish [_]
+            (openFinishedVector [_]
               (when (and zero-row? (zero? (.getValueCount out-vec)))
                 (.writeNull out-vec))
 
@@ -215,21 +156,21 @@
                       '(/ sum cnt) ; integer division for durations
                       '(/ (double sum) cnt))
         projecter (->projector to-name avg-formula input-types)]
-    (reify IAggregateSpecFactory
+    (reify AggregateSpec$Factory
       (getField [_] (.getField projecter))
 
       (build [_ al]
         (let [sum-agg (.build sum-agg al)
               count-agg (.build count-agg al)]
           (reify
-            IAggregateSpec
+            AggregateSpec
             (aggregate [_ in-rel group-mapping]
               (.aggregate sum-agg in-rel group-mapping)
               (.aggregate count-agg in-rel group-mapping))
 
-            (finish [_]
-              (with-open [sum (.finish sum-agg)
-                          count (.finish count-agg)]
+            (openFinishedVector [_]
+              (with-open [sum (.openFinishedVector sum-agg)
+                          count (.openFinishedVector count-agg)]
                 (.project projecter al (vr/rel-reader [sum count]) {} vw/empty-args)))
 
             Closeable
@@ -265,7 +206,7 @@
                                                     'sumx2 (.getField sumx2-agg)
                                                     'countx (.getField countx-agg)}})]
 
-    (reify IAggregateSpecFactory
+    (reify AggregateSpec$Factory
       (getField [_] (.getField finish-projecter))
 
       (build [_ al]
@@ -273,7 +214,7 @@
               sumx2-agg (.build sumx2-agg al)
               countx-agg (.build countx-agg al)]
           (reify
-            IAggregateSpec
+            AggregateSpec
             (aggregate [_ in-rel group-mapping]
               (let [in-vec (.vectorForOrNull in-rel (str from-name))]
                 (with-open [x2 (.project x2-projecter al (vr/rel-reader [in-vec]) {} vw/empty-args)]
@@ -281,10 +222,10 @@
                   (.aggregate sumx2-agg (vr/rel-reader [x2]) group-mapping)
                   (.aggregate countx-agg in-rel group-mapping))))
 
-            (finish [_]
-              (with-open [sumx (.finish sumx-agg)
-                          sumx2 (.finish sumx2-agg)
-                          countx (.finish countx-agg)]
+            (openFinishedVector [_]
+              (with-open [sumx (.openFinishedVector sumx-agg)
+                          sumx2 (.openFinishedVector sumx2-agg)
+                          countx (.openFinishedVector countx-agg)]
                 (.project finish-projecter al
                           (vr/rel-reader [sumx sumx2 countx])
                           {}
@@ -304,18 +245,18 @@
                                            :to-name 'variance, :zero-row? zero-row?})
         finish-projecter (->projector to-name '(sqrt variance)
                                       {:vec-fields {'variance (.getField variance-agg)}})]
-    (reify IAggregateSpecFactory
+    (reify AggregateSpec$Factory
       (getField [_] (.getField finish-projecter))
 
       (build [_ al]
         (let [variance-agg (.build variance-agg al)]
           (reify
-            IAggregateSpec
+            AggregateSpec
             (aggregate [_ in-rel group-mapping]
               (.aggregate variance-agg in-rel group-mapping))
 
-            (finish [_]
-              (with-open [variance (.finish variance-agg)]
+            (openFinishedVector [_]
+              (with-open [variance (.openFinishedVector variance-agg)]
                 (.project finish-projecter al (vr/rel-reader [variance]) {} vw/empty-args)))
 
             Closeable
@@ -369,15 +310,15 @@
 (defmethod ->aggregate-factory :max_all [agg-opts] (min-max-factory :> agg-opts))
 (defmethod ->aggregate-factory :max_distinct [agg-opts] (min-max-factory :> agg-opts))
 
-(defn- wrap-distinct [^IAggregateSpecFactory agg-factory, from-name, from-type]
-  (reify IAggregateSpecFactory
+(defn- wrap-distinct [^AggregateSpec$Factory agg-factory, from-name, from-type]
+  (reify AggregateSpec$Factory
     (getField [_] (.getField agg-factory))
 
     (build [_ al]
       (let [agg-spec (.build agg-factory al)
             rel-maps (ArrayList.)]
         (reify
-          IAggregateSpec
+          AggregateSpec
           (aggregate [_ in-rel group-mapping]
             (let [in-vec (.vectorForOrNull in-rel (str from-name))
                   builders (ArrayList. (.size rel-maps))
@@ -403,7 +344,7 @@
                             (.select in-rel distinct-idxs)
                             (.select group-mapping distinct-idxs)))))
 
-          (finish [_] (.finish agg-spec))
+          (openFinishedVector [_] (.openFinishedVector agg-spec))
 
           Closeable
           (close [_]
@@ -437,7 +378,7 @@
                                 ^:unsynchronized-mutable ^long base-idx
                                 ^List group-idxmaps
                                 on-empty]
-  IAggregateSpec
+  AggregateSpec
   (aggregate [this in-rel group-mapping]
     (let [in-vec (.vectorForOrNull in-rel (str from-name))
           row-count (.getValueCount in-vec)]
@@ -452,7 +393,7 @@
 
       (set! (.base-idx this) (+ base-idx row-count))))
 
-  (finish [_]
+  (openFinishedVector [_]
     (util/with-close-on-catch [out-vec (Vector/open allocator (types/col-type->field to-name to-type))]
       (let [el-writer (.getListElements out-vec)
             row-copier (.rowCopier acc-col el-writer)]
@@ -479,7 +420,7 @@
   (let [to-type (if zero-row?
                   [:union #{:null [:list from-type]}]
                   [:list from-type])]
-    (reify IAggregateSpecFactory
+    (reify AggregateSpec$Factory
       (getField [_] (types/col-type->field to-name to-type))
 
       (build [_ al]
@@ -493,7 +434,7 @@
 
 (defmethod ->aggregate-factory :vec_agg [{:keys [from-name from-type to-name zero-row?]}]
   (let [to-type [:list from-type]]
-    (reify IAggregateSpecFactory
+    (reify AggregateSpec$Factory
       (getField [_] (types/col-type->field to-name to-type))
 
       (build [_ al]
@@ -530,10 +471,10 @@
        (.forEachRemaining in-cursor
                           (fn [^RelationReader in-rel]
                             (let [group-mapping (.groupMapping group-mapper in-rel)]
-                              (doseq [^IAggregateSpec agg-spec aggregate-specs]
+                              (doseq [^AggregateSpec agg-spec aggregate-specs]
                                 (.aggregate agg-spec in-rel group-mapping)))))
 
-       (util/with-open [agg-cols (map #(.finish ^IAggregateSpec %) aggregate-specs)]
+       (util/with-open [agg-cols (map #(.openFinishedVector ^AggregateSpec %) aggregate-specs)]
          (let [gm-rel (.finish group-mapper)
                ^RelationReader out-rel (vr/rel-reader (concat (.getVectors gm-rel) agg-cols)
                                                       (.getRowCount gm-rel))]
@@ -581,11 +522,11 @@
                               (into {} (map (juxt identity fields))))
                          (->> agg-factories
                               (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
-                                                  #(.getField ^IAggregateSpecFactory %))))))
+                                                  #(.getField ^AggregateSpec$Factory %))))))
 
            :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                        (cond-> (util/with-close-on-catch [agg-specs (LinkedList.)]
-                                 (doseq [^IAggregateSpecFactory factory agg-factories]
+                                 (doseq [^AggregateSpec$Factory factory agg-factories]
                                    (.add agg-specs (.build factory allocator)))
 
                                  (GroupByCursor. allocator in-cursor
