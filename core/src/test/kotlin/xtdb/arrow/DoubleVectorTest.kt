@@ -7,9 +7,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.arrow.VectorType.Companion.F64
-import xtdb.arrow.VectorType.Companion.ofType
-import kotlin.use
 
 class DoubleVectorTest {
     private lateinit var allocator: BufferAllocator
@@ -86,6 +83,78 @@ class DoubleVectorTest {
                     assertEquals(25.0, resultVec.getDouble(0), 0.0001)
                     assertTrue(resultVec.isNull(1))
                 }
+            }
+        }
+    }
+
+    @Test
+    fun `squareInto squares values`() {
+        DoubleVector(allocator, "input", false).use { inVec ->
+            DoubleVector(allocator, "result", false).use { resultVec ->
+                inVec.writeDouble(2.0)
+                inVec.writeDouble(3.0)
+                inVec.writeDouble(5.0)
+
+                inVec.squareInto(resultVec)
+
+                assertEquals(3, resultVec.valueCount)
+                assertEquals(4.0, resultVec.getDouble(0), 0.0001)
+                assertEquals(9.0, resultVec.getDouble(1), 0.0001)
+                assertEquals(25.0, resultVec.getDouble(2), 0.0001)
+            }
+        }
+    }
+
+    @Test
+    fun `squareInto handles nulls`() {
+        DoubleVector(allocator, "input", true).use { inVec ->
+            DoubleVector(allocator, "result", true).use { resultVec ->
+                inVec.writeDouble(2.0)
+                inVec.writeNull()
+                inVec.writeDouble(5.0)
+
+                inVec.squareInto(resultVec)
+
+                assertEquals(3, resultVec.valueCount)
+                assertEquals(4.0, resultVec.getDouble(0), 0.0001)
+                assertTrue(resultVec.isNull(1))
+                assertEquals(25.0, resultVec.getDouble(2), 0.0001)
+            }
+        }
+    }
+
+    @Test
+    fun `sqrtInto takes square root of values`() {
+        DoubleVector(allocator, "input", false).use { inVec ->
+            DoubleVector(allocator, "result", false).use { resultVec ->
+                inVec.writeDouble(4.0)
+                inVec.writeDouble(9.0)
+                inVec.writeDouble(25.0)
+
+                inVec.sqrtInto(resultVec)
+
+                assertEquals(3, resultVec.valueCount)
+                assertEquals(2.0, resultVec.getDouble(0), 0.0001)
+                assertEquals(3.0, resultVec.getDouble(1), 0.0001)
+                assertEquals(5.0, resultVec.getDouble(2), 0.0001)
+            }
+        }
+    }
+
+    @Test
+    fun `sqrtInto handles nulls`() {
+        DoubleVector(allocator, "input", true).use { inVec ->
+            DoubleVector(allocator, "result", true).use { resultVec ->
+                inVec.writeDouble(4.0)
+                inVec.writeNull()
+                inVec.writeDouble(25.0)
+
+                inVec.sqrtInto(resultVec)
+
+                assertEquals(3, resultVec.valueCount)
+                assertEquals(2.0, resultVec.getDouble(0), 0.0001)
+                assertTrue(resultVec.isNull(1))
+                assertEquals(5.0, resultVec.getDouble(2), 0.0001)
             }
         }
     }

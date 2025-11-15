@@ -44,6 +44,32 @@ class DoubleVector private constructor(
         return outVec
     }
 
+    fun squareInto(outVec: DoubleVector): DoubleVector {
+        repeat(valueCount) { idx ->
+            if (isNull(idx)) {
+                outVec.writeNull()
+            } else {
+                val value = getDouble(idx)
+                outVec.writeDouble(value * value)
+            }
+        }
+
+        return outVec
+    }
+
+    fun sqrtInto(outVec: DoubleVector): DoubleVector {
+        repeat(valueCount) { idx ->
+            if (isNull(idx)) {
+                outVec.writeNull()
+            } else {
+                val value = getDouble(idx)
+                outVec.writeDouble(kotlin.math.sqrt(value))
+            }
+        }
+
+        return outVec
+    }
+
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getDouble(idx)
 
     override fun writeObject0(value: Any) {
