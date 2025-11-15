@@ -32,5 +32,6 @@ private fun leastUpperBound2(left: ArrowType, right: ArrowType): ArrowType? = wh
     else -> null
 }
 
+@JvmName("of")
 fun leastUpperBound(types: Collection<ArrowType>): ArrowType? =
     types.reduceOrNull { l, r -> leastUpperBound2(l, r) ?: return null }

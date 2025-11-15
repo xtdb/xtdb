@@ -83,8 +83,8 @@ sealed class Vector : VectorReader, VectorWriter {
      * Returns null for any element where the divisor is zero (to avoid NaN).
      */
     open fun divideInto(divisorVec: Vector, outVec: Vector): Vector = unsupported("divideInto")
-    open fun squareInto(outVec: Vector): Vector = unsupported("squareInto")
-    open fun sqrtInto(outVec: Vector): Vector = unsupported("sqrtInto")
+    override fun squareInto(outVec: Vector): Vector = unsupported("squareInto")
+    override fun sqrtInto(outVec: Vector): Vector = unsupported("sqrtInto")
 
     abstract override fun openSlice(al: BufferAllocator): Vector
     override fun openDirectSlice(al: BufferAllocator) = openSlice(al)

@@ -53,7 +53,9 @@ class NullVector(
 
     override fun hashCode0(idx: Int, hasher: Hasher) = error("hashCode0 called on NullVector")
 
-    override fun sumInto(outVec: Vector) = VectorSummer { _, _ -> }
+    override fun sumInto(outVec: Vector) = VectorSummer { _, groupIdx ->
+        outVec.ensureCapacity(groupIdx + 1)
+    }
 
     override fun maybePromote(al: BufferAllocator, target: FieldType): Vector =
         if (target.type == arrowType) this

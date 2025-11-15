@@ -1,8 +1,6 @@
 (ns xtdb.vector.writer-test
   (:require [clojure.test :as t :refer [deftest]]
-            [xtdb.test-util :as tu]
-            [xtdb.types :as types]
-            [xtdb.vector.writer :as vw])
+            [xtdb.test-util :as tu])
   (:import (org.apache.arrow.vector.types Types$MinorType)
            (org.apache.arrow.vector.types.pojo FieldType)
            (xtdb.arrow DenseUnionVector ListVector StructVector Vector)))

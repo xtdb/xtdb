@@ -13,11 +13,13 @@ sealed class IntegerVector : NumericVector() {
             is ShortVector -> TODO("sumInto ShortVector not implemented")
 
             is IntVector -> VectorSummer { idx, groupIdx ->
+                outVec.ensureCapacity(groupIdx + 1)
                 if (!isNull(idx))
                     outVec.increment(groupIdx, getAsInt(idx))
             }
 
             is LongVector -> VectorSummer { idx, groupIdx ->
+                outVec.ensureCapacity(groupIdx + 1)
                 if (!isNull(idx))
                     outVec.increment(groupIdx, getAsLong(idx))
             }

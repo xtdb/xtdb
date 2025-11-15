@@ -49,6 +49,16 @@ class IntVector private constructor(
         setInt(idx, if (isNull(idx)) v else getInt(idx) + v)
     }
 
+    override fun squareInto(outVec: Vector): Vector {
+        check(outVec is DoubleVector) { "Cannot square IntVector into ${outVec.arrowType}" }
+
+        repeat(valueCount) { idx ->
+            if (isNull(idx)) outVec.writeNull() else getInt(idx).toDouble().let { outVec.writeDouble(it * it) }
+        }
+
+        return outVec
+    }
+
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getInt(idx)
 
     override fun writeObject0(value: Any) {

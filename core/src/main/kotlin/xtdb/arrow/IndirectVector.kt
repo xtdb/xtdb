@@ -95,5 +95,9 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
         return VectorSummer { idx, groupIdx -> inner.sumRow(sel[idx], groupIdx) }
     }
 
+    override fun squareInto(outVec: Vector): VectorReader = IndirectVector(inner.squareInto(outVec), sel)
+
+    override fun sqrtInto(outVec: Vector): VectorReader = IndirectVector(inner.sqrtInto(outVec), sel)
+
     override fun close() = inner.close()
 }
