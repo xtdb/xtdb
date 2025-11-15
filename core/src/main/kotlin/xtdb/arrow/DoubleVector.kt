@@ -1,7 +1,6 @@
 package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Companion.F64
@@ -29,6 +28,46 @@ class DoubleVector private constructor(
     fun increment(idx: Int, v: Double) {
         ensureCapacity(idx + 1)
         setDouble(idx, if (isNull(idx)) v else getDouble(idx) + v)
+    }
+
+    fun divideInto(divisorVec: VectorReader, outVec: DoubleVector): DoubleVector {
+        repeat(valueCount) { idx ->
+            if (isNull(idx) || divisorVec.isNull(idx)) {
+                outVec.writeNull()
+            } else {
+                val dividend = getDouble(idx)
+                val divisor = divisorVec.getLong(idx).toDouble()
+                outVec.writeDouble(dividend / divisor)
+            }
+        }
+
+        return outVec
+    }
+
+    fun squareInto(outVec: DoubleVector): DoubleVector {
+        repeat(valueCount) { idx ->
+            if (isNull(idx)) {
+                outVec.writeNull()
+            } else {
+                val value = getDouble(idx)
+                outVec.writeDouble(value * value)
+            }
+        }
+
+        return outVec
+    }
+
+    fun sqrtInto(outVec: DoubleVector): DoubleVector {
+        repeat(valueCount) { idx ->
+            if (isNull(idx)) {
+                outVec.writeNull()
+            } else {
+                val value = getDouble(idx)
+                outVec.writeDouble(kotlin.math.sqrt(value))
+            }
+        }
+
+        return outVec
     }
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getDouble(idx)
