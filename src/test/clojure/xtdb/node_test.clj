@@ -867,6 +867,31 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
                      (set (xt/q node "SELECT * from xt_docs"))))))))))
 
+(t/deftest test-skipped-tx-stored-in-object-store
+  (let [!skiptxid (atom nil)]
+    (util/with-tmp-dirs #{path}
+      (t/testing "Skip a transaction and verify it's stored in object store"
+        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                          :storage [:local {:path (str path "/storage")}]})]
+          (t/testing "Send three transactions, capturing middle tx id"
+            (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
+            (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
+              (reset! !skiptxid tx-id))
+            (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]])))
+
+        (t/testing "Restart node with tx to skip"
+          (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                            :storage [:local {:path (str path "/storage")}]
+                                            :indexer {:skip-txs [@!skiptxid]}})]
+            (xt-log/sync-node node)
+            
+            (t/testing "Verify skipped transaction is stored in object store"
+              (let [buffer-pool (.getBufferPool (db/primary-db node))
+                    skipped-tx-path (util/->path (format "skipped-txs/%s" (util/->lex-dec-string @!skiptxid)))
+                    stored-objects (.listAllObjects buffer-pool (util/->path "skipped-txs"))]
+                (t/is (seq stored-objects) "skipped-txs directory should contain files")
+                (t/is (some #(= skipped-tx-path (.getKey %)) stored-objects)
+                      "Skipped transaction should be stored in object store")))))))))
 
 (t/deftest test-skip-txes-latest-submitted-tx-id
   (let [!skiptxid (atom nil)]
