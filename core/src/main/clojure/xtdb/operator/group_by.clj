@@ -8,18 +8,18 @@
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.reader :as vr])
   (:import (java.io Closeable)
            (java.util ArrayList LinkedList List Spliterator)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo ArrowType$Duration Field)
+           (org.apache.arrow.vector.types.pojo Field)
            (xtdb ICursor)
-           (xtdb.arrow RelationReader Vector VectorReader VectorWriter)
-           (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount Sum)
+           (xtdb.arrow RelationReader Vector VectorReader VectorType VectorWriter)
+           (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Average Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount StdDevPop StdDevSamp Sum VariancePop VarianceSamp)
            (xtdb.expression.map RelationMapBuilder)
-           xtdb.operator.distinct.DistinctRelationMap))
+           xtdb.operator.distinct.DistinctRelationMap
+           (xtdb.types LeastUpperBound)))
 
 (s/def ::aggregate-expr
   (s/or :nullary (s/cat :f simple-symbol?)
@@ -125,137 +125,23 @@
             Closeable
             (close [_] (.close out-vec))))))))
 
-(defn- ->projector ^xtdb.operator.ProjectionSpec [col-name form input-types]
-  (expr/->expression-projection-spec col-name (expr/form->expr form input-types) input-types))
-
 (defmethod ->aggregate-factory :sum [{:keys [from-name from-field to-name zero-row?]}]
-  (Sum. (str from-name) (types/->type (or from-field :null)) (str to-name) zero-row?))
+  (Sum. (str from-name) (str to-name) (Sum/outType (types/->type (or from-field :null))) zero-row?))
 
-(defmethod ->aggregate-factory :avg [{:keys [from-name from-type from-field to-name zero-row?]}]
-  (let [sum-agg (->aggregate-factory {:f :sum, :from-name from-name, :from-type from-type, :from-field from-field
-                                      :to-name 'sum, :zero-row? zero-row?})
-        count-agg (->aggregate-factory {:f :count, :from-name from-name, :from-type from-type, :from-field from-field
-                                        :to-name 'cnt, :zero-row? zero-row?})
-        input-types {:vec-fields {'sum (.getField sum-agg)
-                                  'cnt (.getField count-agg)}}
-        ^Field sum-field (.getField sum-agg)
+(defmethod ->aggregate-factory :avg [{:keys [from-name from-field to-name zero-row?]}]
+  (Average. (str from-name) (types/->type (or from-field :null)) (str to-name) zero-row?))
 
-        avg-formula (if (instance? ArrowType$Duration (.getType sum-field))
-                      '(/ sum cnt) ; integer division for durations
-                      '(/ (double sum) cnt))
-        projecter (->projector to-name avg-formula input-types)]
-    (reify AggregateSpec$Factory
-      (getField [_] (.getField projecter))
+(defmethod ->aggregate-factory :var_pop [{:keys [from-name to-name zero-row?]}]
+  (VariancePop. (str from-name) (str to-name) zero-row?))
 
-      (build [_ al]
-        (let [sum-agg (.build sum-agg al)
-              count-agg (.build count-agg al)]
-          (reify
-            AggregateSpec
-            (aggregate [_ in-rel group-mapping]
-              (.aggregate sum-agg in-rel group-mapping)
-              (.aggregate count-agg in-rel group-mapping))
+(defmethod ->aggregate-factory :var_samp [{:keys [from-name to-name zero-row?]}]
+  (VarianceSamp. (str from-name) (str to-name) zero-row?))
 
-            (openFinishedVector [_]
-              (with-open [sum (.openFinishedVector sum-agg)
-                          count (.openFinishedVector count-agg)]
-                (.project projecter al (vr/rel-reader [sum count]) {} vw/empty-args)))
+(defmethod ->aggregate-factory :stddev_pop [{:keys [from-name to-name zero-row?]}]
+  (StdDevPop. (str from-name) (str to-name) zero-row?))
 
-            Closeable
-            (close [_]
-              (util/close sum-agg)
-              (util/close count-agg))))))))
-
-(defn- ->variance-agg-factory [variance-op {:keys [from-name from-type from-field to-name zero-row?]}]
-  (let [countx-agg (->aggregate-factory {:f :count, :from-name from-name, :from-type from-type, :from-field from-field
-                                         :to-name 'countx, :zero-row? zero-row?})
-
-        sumx-agg (->aggregate-factory {:f :sum, :from-name from-name, :from-type from-type, :from-field from-field
-                                       :to-name 'sumx, :zero-row? zero-row?})
-
-        x2-projecter (->projector 'x2 (list '* from-name from-name)
-                                  {:vec-fields {from-name (types/col-type->field from-name from-type)}})
-
-        sumx2-agg (->aggregate-factory {:f :sum, :from-name 'x2, :from-type (types/field->col-type (.getField x2-projecter)), :from-field (.getField x2-projecter)
-                                        :to-name 'sumx2, :zero-row? zero-row?})
-
-        finish-projecter (->projector to-name (case variance-op
-                                                :var-pop '(if (> countx 0)
-                                                            (/ (- sumx2
-                                                                  (/ (* sumx sumx) (double countx)))
-                                                               (double countx))
-                                                            nil)
-                                                :var-samp '(if (> countx 1)
-                                                             (/ (- sumx2
-                                                                   (/ (* sumx sumx) (double countx)))
-                                                                (double (- countx 1)))
-                                                             nil))
-                                      {:vec-fields {'sumx (.getField sumx-agg)
-                                                    'sumx2 (.getField sumx2-agg)
-                                                    'countx (.getField countx-agg)}})]
-
-    (reify AggregateSpec$Factory
-      (getField [_] (.getField finish-projecter))
-
-      (build [_ al]
-        (let [sumx-agg (.build sumx-agg al)
-              sumx2-agg (.build sumx2-agg al)
-              countx-agg (.build countx-agg al)]
-          (reify
-            AggregateSpec
-            (aggregate [_ in-rel group-mapping]
-              (let [in-vec (.vectorForOrNull in-rel (str from-name))]
-                (with-open [x2 (.project x2-projecter al (vr/rel-reader [in-vec]) {} vw/empty-args)]
-                  (.aggregate sumx-agg in-rel group-mapping)
-                  (.aggregate sumx2-agg (vr/rel-reader [x2]) group-mapping)
-                  (.aggregate countx-agg in-rel group-mapping))))
-
-            (openFinishedVector [_]
-              (with-open [sumx (.openFinishedVector sumx-agg)
-                          sumx2 (.openFinishedVector sumx2-agg)
-                          countx (.openFinishedVector countx-agg)]
-                (.project finish-projecter al
-                          (vr/rel-reader [sumx sumx2 countx])
-                          {}
-                          vw/empty-args)))
-
-            Closeable
-            (close [_]
-              (util/close sumx-agg)
-              (util/close sumx2-agg)
-              (util/close countx-agg))))))))
-
-(defmethod ->aggregate-factory :var_pop [agg-opts] (->variance-agg-factory :var-pop agg-opts))
-(defmethod ->aggregate-factory :var_samp [agg-opts] (->variance-agg-factory :var-samp agg-opts))
-
-(defn- ->stddev-agg-factory [variance-op {:keys [from-name from-type from-field to-name zero-row?]}]
-  (let [variance-agg (->aggregate-factory {:f variance-op, :from-name from-name, :from-type from-type, :from-field from-field
-                                           :to-name 'variance, :zero-row? zero-row?})
-        finish-projecter (->projector to-name '(sqrt variance)
-                                      {:vec-fields {'variance (.getField variance-agg)}})]
-    (reify AggregateSpec$Factory
-      (getField [_] (.getField finish-projecter))
-
-      (build [_ al]
-        (let [variance-agg (.build variance-agg al)]
-          (reify
-            AggregateSpec
-            (aggregate [_ in-rel group-mapping]
-              (.aggregate variance-agg in-rel group-mapping))
-
-            (openFinishedVector [_]
-              (with-open [variance (.openFinishedVector variance-agg)]
-                (.project finish-projecter al (vr/rel-reader [variance]) {} vw/empty-args)))
-
-            Closeable
-            (close [_]
-              (util/close variance-agg))))))))
-
-(defmethod ->aggregate-factory :stddev_pop [agg-opts]
-  (->stddev-agg-factory :var-pop agg-opts))
-
-(defmethod ->aggregate-factory :stddev_samp [agg-opts]
-  (->stddev-agg-factory :var-samp agg-opts))
+(defmethod ->aggregate-factory :stddev_samp [{:keys [from-name to-name zero-row?]}]
+  (StdDevSamp. (str from-name) (str to-name) zero-row?))
 
 (defn- assert-supported-min-max-types [from-types to-type]
   ;; TODO variable-width types - it's reasonable to want (e.g.) `(min <string-col>)`

@@ -131,4 +131,6 @@ interface VectorReader : ILookup, AutoCloseable {
     override fun valAt(key: Any?, notFound: Any?) = this.vectorForOrNull(key as String) ?: notFound
 
     fun sumInto(outVec: Vector): VectorSummer = unsupported("sumInto")
+    fun squareInto(outVec: Vector): VectorReader = unsupported("squareInto")
+    fun sqrtInto(outVec: Vector): VectorReader = unsupported("sqrtInto")
 }

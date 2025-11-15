@@ -5,7 +5,6 @@ import org.apache.arrow.vector.types.pojo.Field
 import xtdb.arrow.FieldName
 import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector
-import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.arrow.VectorType.Companion.ofType
 
@@ -27,7 +26,7 @@ class RowCount(outColName: FieldName, val hasZeroRow: Boolean) : AggregateSpec.F
                 }
             }
 
-            override fun openFinishedVector(): VectorReader {
+            override fun openFinishedVector(): Vector {
                 if (hasZeroRow && outVec.valueCount == 0)
                     outVec.writeLong(0L)
 

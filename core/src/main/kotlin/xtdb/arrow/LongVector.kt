@@ -32,6 +32,15 @@ class LongVector private constructor(
         setLong(idx, if (isNull(idx)) v else getLong(idx) + v)
     }
 
+    override fun squareInto(outVec: Vector): Vector {
+        check(outVec is DoubleVector) { "Cannot square LongVector into ${outVec.arrowType}" }
+        repeat(valueCount) { idx ->
+            if (isNull(idx)) outVec.writeNull() else getAsDouble(idx).let { outVec.writeDouble(it * it) }
+        }
+
+        return outVec
+    }
+
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getLong(idx)
 
     override fun writeObject0(value: Any) {

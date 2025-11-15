@@ -10,11 +10,13 @@ sealed class NumericVector : FixedWidthVector() {
     override fun sumInto(outVec: Vector): VectorSummer =
         when (outVec) {
             is FloatVector -> VectorSummer { idx, groupIdx ->
+                outVec.ensureCapacity(groupIdx + 1)
                 if (!isNull(idx))
                     outVec.increment(groupIdx, getAsFloat(idx))
             }
 
             is DoubleVector -> VectorSummer { idx, groupIdx ->
+                outVec.ensureCapacity(groupIdx + 1)
                 if (!isNull(idx))
                     outVec.increment(groupIdx, getAsDouble(idx))
             }

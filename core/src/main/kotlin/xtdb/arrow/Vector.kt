@@ -78,6 +78,14 @@ sealed class Vector : VectorReader, VectorWriter {
     final override fun hashCode(idx: Int, hasher: Hasher) =
         if (isNull(idx)) ArrowBufPointer.NULL_HASH_CODE else hashCode0(idx, hasher)
 
+    /**
+     * Divides this vector by [divisorVec] and writes the result into [outVec].
+     * Returns null for any element where the divisor is zero (to avoid NaN).
+     */
+    open fun divideInto(divisorVec: Vector, outVec: Vector): Vector = unsupported("divideInto")
+    override fun squareInto(outVec: Vector): Vector = unsupported("squareInto")
+    override fun sqrtInto(outVec: Vector): Vector = unsupported("sqrtInto")
+
     abstract override fun openSlice(al: BufferAllocator): Vector
     override fun openDirectSlice(al: BufferAllocator) = openSlice(al)
 

@@ -53,6 +53,23 @@ class DurationVector private constructor(
 
     override fun writeValue0(v: ValueReader) = writeLong(v.readLong())
 
+    override fun divideInto(divisorVec: Vector, outVec: Vector): Vector {
+        check(divisorVec is IntegerVector) { "Cannot divide DurationVector by ${divisorVec.arrowType}" }
+        check(outVec is DurationVector) { "Cannot divide DurationVector into ${outVec.arrowType}" }
+
+        repeat(valueCount) { idx ->
+            if (isNull(idx) || divisorVec.isNull(idx)) {
+                outVec.writeNull()
+            } else {
+                val dividend = getLong(idx)
+                val divisor = divisorVec.getAsLong(idx)
+                if (divisor == 0L) outVec.writeNull() else outVec.writeLong(dividend / divisor)
+            }
+        }
+
+        return outVec
+    }
+
     override fun sumInto(outVec: Vector): VectorSummer {
         check(outVec is DurationVector) { "Cannot sum DurationVector into ${outVec.arrowType}" }
         check(outVec.unit >= unit) {

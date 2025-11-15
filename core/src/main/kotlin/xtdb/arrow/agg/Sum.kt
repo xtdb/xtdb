@@ -10,13 +10,17 @@ import xtdb.error.Incorrect
 import xtdb.types.leastUpperBound
 
 class Sum(
-    val fromName: FieldName, fromType: VectorType, toName: FieldName, val hasZeroRow: Boolean
+    val fromName: FieldName, toName: FieldName, toType: VectorType, val hasZeroRow: Boolean
 ) : AggregateSpec.Factory {
 
-    private val lub: ArrowType = leastUpperBound(fromType.unionLegs.map { it.arrowType })
-        ?: throw Incorrect("Cannot compute SUM over type $fromType")
+    override val field: Field = toName ofType toType
 
-    override val field: Field = toName.ofType(maybe(lub))
+    companion object {
+        @JvmStatic
+        fun outType(fromType: VectorType) =
+            maybe(leastUpperBound(fromType.unionLegs.map { it.arrowType })
+                ?: throw Incorrect("Cannot compute SUM over type $fromType"))
+    }
 
     override fun build(al: BufferAllocator) = object : AggregateSpec {
         private val outVec = Vector.open(al, field)
@@ -27,7 +31,7 @@ class Sum(
             repeat(inRel.rowCount) { idx -> summer.sumRow(idx, groupMapping.getInt(idx)) }
         }
 
-        override fun openFinishedVector(): VectorReader {
+        override fun openFinishedVector(): Vector {
             if (hasZeroRow && outVec.valueCount == 0)
                 outVec.writeNull()
 
