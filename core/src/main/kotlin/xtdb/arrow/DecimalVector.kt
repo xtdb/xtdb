@@ -5,6 +5,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.Decimal
 import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
+import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Unsupported
 import xtdb.util.Hasher
@@ -17,7 +18,7 @@ class DecimalVector private constructor(
     override var name: String, override var valueCount: Int,
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer,
     private val decimalType: Decimal
-) : FixedWidthVector(), MetadataFlavour.Number {
+) : NumericVector(), MetadataFlavour.Number {
 
     companion object {
         private val BIT_WIDTHS = setOf(32, 64, 128, 256)
@@ -38,8 +39,19 @@ class DecimalVector private constructor(
 
     override val arrowType: ArrowType = Decimal(precision, scale, bitWidth)
 
-    override fun getObject0(idx: Int, keyFn: IKeyFn<*>): BigDecimal =
-        dataBuffer.readBigDecimal(idx, scale, byteWidth)
+    fun getDecimal(idx: Int) = dataBuffer.readBigDecimal(idx, scale, byteWidth)
+
+    override fun getAsFloat(idx: Int): Float = getDecimal(idx).toFloat()
+    override fun getAsDouble(idx: Int): Double = getDecimal(idx).toDouble()
+
+    fun increment(idx: Int, v: BigDecimal) {
+        ensureCapacity(idx + 1)
+        setNotNull(idx)
+        val result = if (isNull(idx)) v else getDecimal(idx).add(v)
+        dataBuffer.setBigDecimal(idx, result, byteWidth)
+    }
+
+    override fun getObject0(idx: Int, keyFn: IKeyFn<*>): BigDecimal = getDecimal(idx)
 
     override fun writeObject0(value: Any) {
         if (value is BigDecimal) {
@@ -58,6 +70,15 @@ class DecimalVector private constructor(
     }
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
+
+    override fun sumInto(outVec: Vector): VectorSummer {
+        if (outVec !is DecimalVector) return super.sumInto(outVec)
+
+        return VectorSummer { idx, groupIdx ->
+            outVec.ensureCapacity(groupIdx + 1)
+            outVec.increment(groupIdx, if (isNull(idx)) BigDecimal.ZERO else getDecimal(idx))
+        }
+    }
 
     override fun getMetaDouble(idx: Int): Double = getObject0(idx, KEBAB_CASE_KEYWORD).toDouble()
 

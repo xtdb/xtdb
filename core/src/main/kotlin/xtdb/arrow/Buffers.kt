@@ -148,6 +148,10 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
         buf.writerIndex(buf.writerIndex() + byteWidth)
     }
 
+    fun setBigDecimal(idx: Int, value: BigDecimal, byteWidth: Int) {
+        DecimalUtility.writeBigDecimalToArrowBuf(value, buf, idx, byteWidth)
+    }
+
     fun readBigDecimal(idx: Int, scale: Int, byteWidth: Int): BigDecimal =
         DecimalUtility.getBigDecimalFromArrowBuf(buf, idx, scale, byteWidth)
 

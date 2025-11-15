@@ -12,7 +12,7 @@ import xtdb.util.closeOnCatch
 class Average(val fromName: FieldName, fromType: VectorType, toName: FieldName, val hasZeroRow: Boolean) : AggregateSpec.Factory {
 
     private val sumOutType = Sum.outType(fromType).let { when(it.arrowType) {
-        is ArrowType.Int, is ArrowType.FloatingPoint, is ArrowType.Null -> F64
+        is ArrowType.Int, is ArrowType.FloatingPoint, is ArrowType.Decimal, is ArrowType.Null -> F64
         is ArrowType.Duration -> it
         else -> throw IllegalArgumentException("Cannot compute AVERAGE over type $fromType")
     } }
