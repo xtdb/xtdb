@@ -40,8 +40,13 @@
     {:benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
-(defn parse-tpch-log
-  [log-file-path]
+(defmulti parse-log (fn [benchmark-type _log-file-path] benchmark-type))
+
+(defmethod parse-log ::default [benchmark-type _log-file-path]
+  (throw (ex-info (format "Unsupported benchmark type: %s" benchmark-type)
+                  {:benchmark-type benchmark-type})))
+
+(defmethod parse-log "tpch" [_benchmark-type log-file-path]
   (let [content (slurp log-file-path)
         lines (str/split-lines content)
         stage-lines (filter #(str/starts-with? % "{\"stage\":") lines)
@@ -64,8 +69,7 @@
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
-(defn parse-yakbench-log
-  [log-file-path]
+(defmethod parse-log "yakbench" [_benchmark-type log-file-path]
   (let [content (slurp log-file-path)
         lines (str/split-lines content)
         profiles-line (first (filter #(str/includes? % "\"profiles\":") lines))
@@ -78,7 +82,7 @@
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
-(defn parse-readings-log
+(defn parse-log "readings" [_benchmark-type log-file-path]
   [log-file-path]
   (let [content (slurp log-file-path)
         lines (str/split-lines content)
@@ -99,6 +103,17 @@
     {:all-stages stages
      :query-stages query-stages
      :ingest-stages (filterv #(contains? #{"ingest" "sync" "compact"} (name (:stage %))) stages)
+
+(defmethod parse-log "auctionmark" [_benchmark-type log-file-path]
+  (let [content (slurp log-file-path)
+        lines (str/split-lines content)
+        auctionmark-line (first (filter #(str/includes? % "\"auctionmark\":") lines))
+        auctionmark (when auctionmark-line
+                      (try
+                        (json/parse-string auctionmark-line true)
+                        (catch Exception _ nil)))
+        {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-line lines)]
+    {:auctionmark auctionmark
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
@@ -238,6 +253,14 @@
          "\n\n"
          (rows->string [:query :time-taken-ms :duration :percent-of-total] rows))))
 
+(defmethod summary->table "auctionmark" [summary]
+  (let [{:keys [benchmark-total-time-ms]} summary]
+    (format "Total benchmark time: %s (%s)"
+            (or (format-duration :millis benchmark-total-time-ms) "N/A")
+            (if benchmark-total-time-ms
+              (java.time.Duration/ofMillis benchmark-total-time-ms)
+              "N/A"))))
+
 (defn wrap-slack-code [& strings]
   (str "```\n" (str/join strings) "\n```"))
 
@@ -267,6 +290,15 @@
      "\n\n"
      (wrap-slack-code
       (rows->string [:query :duration] rows)))))
+
+(defmethod summary->slack "auctionmark" [summary]
+  (let [{:keys [benchmark-total-time-ms]} summary]
+    (format "Total benchmark time: %s (%s)"
+            (or (format-duration :millis benchmark-total-time-ms) "N/A")
+            (if benchmark-total-time-ms
+              (java.time.Duration/ofMillis benchmark-total-time-ms)
+              "N/A"))))
+
 
 (defn github-table
   "Generate a GitHub-flavored markdown table from columns and rows.
@@ -337,14 +369,17 @@
          "\n\n"
          (totals->string total-ms (:benchmark-total-time-ms summary)))))
 
+(defmethod summary->github-markdown "auctionmark" [summary]
+  (let [{:keys [benchmark-total-time-ms]} summary]
+    (format "Total benchmark time: %s (%s)"
+            (or (format-duration :millis benchmark-total-time-ms) "N/A")
+            (if benchmark-total-time-ms
+              (java.time.Duration/ofMillis benchmark-total-time-ms)
+              "N/A"))))
+
 (defn load-summary
   [benchmark-type log-file-path]
-  (-> (case benchmark-type
-        "tpch" (parse-tpch-log log-file-path)
-        "yakbench" (parse-yakbench-log log-file-path)
-        "readings" (parse-readings-log log-file-path)
-        (throw (ex-info (format "Unsupported benchmark type: %s" benchmark-type)
-                        {:benchmark-type benchmark-type})))
+  (-> (parse-log benchmark-type log-file-path)
       (assoc :benchmark-type benchmark-type)))
 
 (def supported-formats #{:table :slack :github})
@@ -383,6 +418,7 @@
                       {:arguments args})))
     (let [summary (load-summary benchmark-type log-file-path)]
       (case (:benchmark-type summary)
+        "auctionmark" nil
         "tpch" (when (empty? (:query-stages summary))
                  (throw (ex-info "No query stages found in log file"
                                  {:benchmark-type "tpch"
