@@ -594,8 +594,8 @@ class MultiDbSimulationTest {
             createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
         }
 
-        dbs = List(numberOfSystems) {
-            MockDb("xtdb", trieCatalogs[it] )
+        dbs = List(numberOfSystems) { i ->
+            MockDb("xtdb-$i", trieCatalogs[i] )
         }
     }
 
