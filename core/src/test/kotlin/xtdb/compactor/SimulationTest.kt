@@ -3,6 +3,7 @@ package xtdb.compactor
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
+import kotlinx.coroutines.flow.MutableSharedFlow
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.extension.BeforeEachCallback
@@ -87,7 +88,7 @@ class MockDriver(
     private val baseTime = config.baseTime
     private val blocksPerWeek = config.blocksPerWeek
     val trieKeyToFileSize = mutableMapOf<TrieKey, Long>()
-    val channel = Channel<AppendMessage>(UNLIMITED)
+    val sharedFlow = MutableSharedFlow<AppendMessage>(extraBufferCapacity = Int.MAX_VALUE)
     var nextSystemId = 0
 
     override fun create(db: IDatabase) = ForDatabase(db, nextSystemId++)
@@ -96,7 +97,7 @@ class MockDriver(
         val trieCatalog = db.trieCatalog
 
         val job = CoroutineScope(dispatcher).launch {
-            for (msg in channel) {
+            sharedFlow.collect { msg ->
                 msg.triesAdded.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
                     trieCatalog.addTries(TableRef.parse(db.name, tableName), tries, msg.msgTimestamp)
                 }
@@ -187,7 +188,7 @@ class MockDriver(
 
         override suspend fun appendMessage(triesAdded: TriesAdded): Log.MessageMetadata {
             val logTimestamp = Instant.now()
-            channel.send(AppendMessage(triesAdded, logTimestamp, systemId))
+            sharedFlow.emit(AppendMessage(triesAdded, logTimestamp, systemId))
             return Log.MessageMetadata(logOffset++, logTimestamp)
         }
 
@@ -638,7 +639,7 @@ class MultiDbSimulationTest {
         )
     }
 
-    @RepeatedTest(testIterations)
+    @RepeatedTest(10)
     @WithDriverConfig(temporalSplitting = BOTH)
     fun biggerMultiCompactorRun() {
         val docsTable = TableRef("xtdb", "public", "docs")
