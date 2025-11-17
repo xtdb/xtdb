@@ -9,6 +9,8 @@ import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
 import xtdb.DeterministicDispatcher
+import xtdb.SeedExceptionWrapper
+import xtdb.SeedExtension
 import xtdb.SimulationTestBase
 import xtdb.WithSeed
 import xtdb.api.log.Log
@@ -269,6 +271,9 @@ class SimulationTest : SimulationTestBase() {
     override fun setUpSimulation() {
         super.setUpSimulation()
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
+        currentSeed = explicitSeed ?: Random.nextInt()
+        rand = Random(currentSeed)
+        dispatcher = DeterministicDispatcher(rand)
         mockDriver = MockDriver(dispatcher, currentSeed, driverConfig)
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
         compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2, dispatcher)
@@ -563,6 +568,7 @@ class MultiDbSimulationTest {
     var explicitSeed: Int? = null
     var driverConfig: DriverConfig = DriverConfig()
     var numberOfSystems: Int = 2
+    private lateinit var rand: Random
     private lateinit var mockDriver: MockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
     private lateinit var compactors: List<Compactor.Impl>
@@ -574,7 +580,8 @@ class MultiDbSimulationTest {
     fun setUp() {
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
         currentSeed = explicitSeed ?: Random.nextInt()
-        dispatcher = DeterministicDispatcher(currentSeed)
+        rand = Random(currentSeed)
+        dispatcher = DeterministicDispatcher(rand)
         mockDriver = MockDriver(dispatcher, currentSeed, driverConfig)
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
 

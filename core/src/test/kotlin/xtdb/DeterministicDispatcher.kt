@@ -2,14 +2,16 @@ package xtdb
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Runnable
+import org.testcontainers.shaded.org.bouncycastle.asn1.cmp.Challenge
 import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 
-class DeterministicDispatcher(seed: Int) : CoroutineDispatcher() {
+class DeterministicDispatcher(private val rand: Random) : CoroutineDispatcher() {
+
+    constructor(seed: Int) : this(Random(seed))
 
     private data class DispatchJob(val context: CoroutineContext, val block: Runnable)
 
-    private val rand = Random(seed)
 
     private val jobs = mutableSetOf<DispatchJob>()
 
