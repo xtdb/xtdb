@@ -1,17 +1,12 @@
 package xtdb.compactor
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
-import xtdb.DeterministicDispatcher
-import xtdb.SeedExceptionWrapper
-import xtdb.SeedExtension
 import xtdb.SimulationTestBase
 import xtdb.WithSeed
 import xtdb.api.log.Log
@@ -48,7 +43,6 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
-import kotlin.use
 
 class MockDb(override val name: DatabaseName, override val trieCatalog: TrieCatalog) : IDatabase {
     override val allocator: BufferAllocator get() = unsupported("allocator")
@@ -561,26 +555,21 @@ class NumberOfSystemsExtension : BeforeEachCallback {
     }
 }
 
-@ExtendWith(SeedExceptionWrapper::class, SeedExtension::class, DriverConfigExtension::class, NumberOfSystemsExtension::class)
-class MultiDbSimulationTest {
-    var currentSeed: Int = 0
-    var explicitSeed: Int? = null
+@ExtendWith(DriverConfigExtension::class, NumberOfSystemsExtension::class)
+class MultiDbSimulationTest : SimulationTestBase() {
     var driverConfig: DriverConfig = DriverConfig()
     var numberOfSystems: Int = 2
-    private lateinit var rand: Random
     private lateinit var mockDriver: MockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
     private lateinit var compactors: List<Compactor.Impl>
     private lateinit var trieCatalogs: List<TrieCatalog>
     private lateinit var dbs: List<MockDb>
-    private lateinit var dispatcher: CoroutineDispatcher
+    private var compactCompletions: List<CompletableDeferred<Unit>> = listOf()
 
     @BeforeEach
     fun setUp() {
+        super.setUpSimulation()
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
-        currentSeed = explicitSeed ?: Random.nextInt()
-        rand = Random(currentSeed)
-        dispatcher = DeterministicDispatcher(rand)
         mockDriver = MockDriver(dispatcher, currentSeed, driverConfig)
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
 
@@ -593,14 +582,14 @@ class MultiDbSimulationTest {
         }
 
         dbs = List(numberOfSystems) { i ->
-            MockDb("xtdb-$i", trieCatalogs[i] )
+            MockDb("xtdb-$i", trieCatalogs[i])
         }
     }
 
     @AfterEach
     fun tearDown() {
         driverConfig = DriverConfig()
-        explicitSeed = null
+        super.tearDownSimulation()
     }
 
     private fun addL0s(tableRef: TableRef, l0s: List<TrieDetails>) {
@@ -619,10 +608,11 @@ class MultiDbSimulationTest {
 
         compactors.zip(dbs).safeMap { (compactor, db) ->
             compactor.openForDatabase(db)
-        }.useAll {
-            for (db in it.shuffled(rand))
-                db.compactAll()
+        }.useAll { dbs ->
+            compactCompletions = dbs.shuffled(rand).map { db -> db.startCompaction() }
         }
+
+        runBlocking { compactCompletions.awaitAll() }
 
         val trieKeys = trieCatalogs.map { it.listAllTrieKeys(docsTable) }.distinct()
 
@@ -644,17 +634,19 @@ class MultiDbSimulationTest {
 
         addL0s(docsTable, l0tries.toList())
 
-        var currentTries: List<List<TrieKey>>
-
         compactors.zip(dbs).safeMap { (compactor, db) ->
             compactor.openForDatabase(db)
         }.useAll { dbs ->
-
-            do {
-                currentTries = trieCatalogs.map { it.listAllTrieKeys(docsTable) }
-                dbs.random(rand).compactAll()
-            } while (currentTries != trieCatalogs.map { it.listAllTrieKeys(docsTable) } )
+            compactCompletions = dbs.shuffled(rand).map { db -> db.startCompaction() }
         }
-    }
 
+        runBlocking { compactCompletions.awaitAll() }
+
+        val trieKeys = trieCatalogs.map { it.listAllTrieKeys(docsTable) }
+
+        Assertions.assertEquals(
+            1,
+            trieKeys.map { it.size }.distinct().size,
+        )
+    }
 }

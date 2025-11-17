@@ -2,7 +2,6 @@ package xtdb
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Runnable
-import org.testcontainers.shaded.org.bouncycastle.asn1.cmp.Challenge
 import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 
