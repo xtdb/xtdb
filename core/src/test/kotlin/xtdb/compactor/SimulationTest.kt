@@ -38,6 +38,7 @@ import xtdb.util.logger
 import xtdb.util.requiringResolve
 import xtdb.util.safeMap
 import xtdb.util.useAll
+import xtdb.util.debug
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -92,9 +93,13 @@ class MockDriver(
 
         val job = CoroutineScope(dispatcher).launch {
             sharedFlow.collect { msg ->
+                val trieKeys = msg.triesAdded.tries.map { it.trieKey }
+                LOGGER.debug("[channel msg received] systemId=$systemId received ${trieKeys.size} tries: $trieKeys")
+                yield() // force suspension mid-message processing
                 msg.triesAdded.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
                     trieCatalog.addTries(TableRef.parse(db.name, tableName), tries, msg.msgTimestamp)
                 }
+                LOGGER.debug("[channel msg processed] systemId=$systemId added ${trieKeys.size} tries to catalog: $trieKeys")
             }
         }
 
@@ -119,10 +124,12 @@ class MockDriver(
         }
 
         override suspend fun executeJob(job: Job): TriesAdded {
+            LOGGER.debug("[executeJob started] systemId=$systemId table=${job.table.tableName} job.trieKeys=${job.trieKeys} job.outputTrieKey=${job.outputTrieKey}")
+            yield() // Force suspension after executeJob has started
             val trieKey = job.outputTrieKey
             val trieDetailsBuilder = TrieDetails.newBuilder()
                 .setTableName(job.table.tableName)
-            if (trieKey.level == 1L) {
+            val result = if (trieKey.level == 1L) {
                 val addedTries = mutableListOf<TrieDetails>()
                 val size = job.trieKeys.sumOf { trieKeyToFileSize[it]!! }
                 val rand = trieKeyRand(trieKey)
@@ -163,9 +170,9 @@ class MockDriver(
                         )
                     }
                 }
-                return TriesAdded(Storage.VERSION, 0, addedTries)
+                TriesAdded(Storage.VERSION, 0, addedTries)
             } else {
-                return TriesAdded(
+                TriesAdded(
                     Storage.VERSION, 0,
                     listOf(
                         TrieDetails.newBuilder()
@@ -176,13 +183,19 @@ class MockDriver(
                     )
                 )
             }
+            yield() // Force suspension before returning result
+            LOGGER.debug("[executeJob completed] systemId=$systemId table=${job.table.tableName} job.outputTrieKey=${job.outputTrieKey}")
+            return result
         }
 
         var logOffset = 0L
 
         override suspend fun appendMessage(triesAdded: TriesAdded): Log.MessageMetadata {
+            LOGGER.debug("[appendMessage started] systemId=$systemId offset=$logOffset tries=${triesAdded.tries.map { it.trieKey }}")
+            yield() // Force suspension after appendMessage started
             val logTimestamp = Instant.now()
             sharedFlow.emit(AppendMessage(triesAdded, logTimestamp, systemId))
+            LOGGER.debug("[appendMessage completed] systemId=$systemId offset=$logOffset sent to channel")
             return Log.MessageMetadata(logOffset++, logTimestamp)
         }
 
