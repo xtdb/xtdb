@@ -507,6 +507,7 @@
       :else (let [main-thread (Thread/currentThread)]
               (-> (Runtime/getRuntime)
                   (.addShutdownHook (Thread. (fn []
+                                               (log/info "Received shutdown signal, initiating graceful shutdown...")
                                                (let [shutdown-ms 10000]
                                                  (.interrupt main-thread)
                                                  (.join main-thread shutdown-ms)
