@@ -273,9 +273,6 @@ class SimulationTest : SimulationTestBase() {
     override fun setUpSimulation() {
         super.setUpSimulation()
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
-        currentSeed = explicitSeed ?: Random.nextInt()
-        rand = Random(currentSeed)
-        dispatcher = DeterministicDispatcher(rand)
         mockDriver = MockDriver(dispatcher, currentSeed, driverConfig)
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
         compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2, dispatcher)
