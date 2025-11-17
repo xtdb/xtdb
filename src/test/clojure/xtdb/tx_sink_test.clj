@@ -80,7 +80,7 @@
                                                      :output-log [::tu/recording {}]
                                                      :format :transit+json}}))]
     (let [^RecordingLog output-log (get-output-log node)]
-      ;; TODO: Remove once #ticket-to-be-created is solved
+      ;; TODO: Remove once #5012 is solved
       (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
       (.clear (.getMessages output-log))
 
