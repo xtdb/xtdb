@@ -47,6 +47,7 @@ interface Compactor : AutoCloseable {
     interface ForDatabase : AutoCloseable {
         fun signalBlock()
         fun compactAll(timeout: Duration? = null)
+        fun startCompaction(): CompletableDeferred<Unit>
     }
 
     fun openForDatabase(db: IDatabase): ForDatabase
@@ -260,6 +261,14 @@ interface Compactor : AutoCloseable {
                 }
             }
 
+            override fun startCompaction(): CompletableDeferred<Unit> {
+                val compactAllPromise = CompletableDeferred<Unit>().also { this.compactAllPromise = it }
+                scope.launch {
+                    wakeupCh.send(Unit)
+                }
+                return compactAllPromise
+            }
+
             override fun close() {
 
                 runBlocking {
@@ -282,6 +291,7 @@ interface Compactor : AutoCloseable {
             override fun openForDatabase(db: IDatabase) = object : ForDatabase {
                 override fun signalBlock() = Unit
                 override fun compactAll(timeout: Duration?) = Unit
+                override fun startCompaction() = CompletableDeferred<Unit>().apply { complete(Unit) }
 
                 override fun close() = Unit
             }
