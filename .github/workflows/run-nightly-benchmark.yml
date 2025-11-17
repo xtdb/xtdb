@@ -167,6 +167,13 @@ jobs:
           echo "Workflow cancellation requested due to existing deployment. Stopping job."
           exit 0
 
+      - name: Clear Bench State
+        if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
+        continue-on-error: true
+        run: |
+          echo "Ensuring clean state before starting benchmark..."
+          ./modules/bench/cloud/clear-bench.sh azure || true
+
       - name: Install Monitoring Stack
         if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
         continue-on-error: true
