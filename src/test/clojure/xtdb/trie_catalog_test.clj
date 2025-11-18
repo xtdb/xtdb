@@ -448,9 +448,45 @@
 
       (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat #xt/table foo)
                                            #xt/instant "2025-01-01T00:00:00Z")
-                        (into (sorted-set) (map :trie-key))))))
+                        (into (sorted-set) (map :trie-key))))))))
 
-    ))
+(t/deftest trie-catalog-init-with-first-empty-partition-5017
+  (t/testing "First empty partition"
+    (let [->trie-details (partial trie/->trie-details #xt/table foo)
+          table-blocks {:partitions
+                        ;; Assumption being here there is a level above that covers L1, but it's not relevant for this test
+                        ;; It's important that this partition comes first
+                        [{:level 1 :recency nil :part []
+                          :max-block-idx 0
+                          :tries []}
+                         {:level 0 :recency nil :part []
+                          :max-block-idx 1
+                          :tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10 :state :live})
+                                  (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})]}]}
+          cat (cat/trie-catalog-init {#xt/table foo table-blocks})]
+
+      (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
+               (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+                    (into (sorted-set) (map :trie-key)))))
+
+      (t/is (= #{} (->> (cat/garbage-tries (cat/trie-state cat #xt/table foo)
+                                           #xt/instant "2025-01-01T00:00:00Z")
+                        (into (sorted-set) (map :trie-key)))))))
+
+  ;; This shouldn't happen in practice, as there is always at least one trie if there is a block
+  (t/testing "No trie-details"
+    (let [no-table-blocks {:partitions
+                           [{:level 1 :recency nil :part []
+                             :max-block-idx 0
+                             :tries []}
+                            {:level 0 :recency nil :part []
+                             :max-block-idx 1
+                             :tries []}]}
+          cat (cat/trie-catalog-init {#xt/table foo no-table-blocks})]
+
+      (t/is (= #{}
+               (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+                    (into (sorted-set) (map :trie-key))))))))
 
 (t/deftest handles-l1h-l1c-ordering-4301
   ;; L1H and L1C are in different partitions, so (strictly speaking) we should handle these out of order

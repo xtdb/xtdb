@@ -399,8 +399,14 @@
                          (update-vals (fn [trie-list] (sort-by :block-idx #(compare %2 %1) trie-list)))
                          (assoc :max-block-idx max-block-idx)))))
 
+
 (defn trie-catalog-init [table->table-block]
-  (if (->> (vals table->table-block) (map (comp first :tries first :partitions)) (every? new-trie-details?))
+  ;; We need to check one trie-details message from every table as table block files might come from different nodes. #4664
+  ;; Partitions can be empty, so we need to get the first non-empty. #5017
+  (if (->> (vals table->table-block)
+           (map (comp first :tries first (partial drop-while (comp empty? :tries)) :partitions))
+           (filter some?) ;; all empty partitions, should not happen in practice
+           (every? new-trie-details?))
     (let [!table-cats (ConcurrentHashMap.)]
       (doseq [[table {:keys [partitions]}] table->table-block
               :let [partitions (update-vals partitions #(update % :tries (partial map trie/<-trie-details)))
