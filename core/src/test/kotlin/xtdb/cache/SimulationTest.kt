@@ -3,13 +3,15 @@ package xtdb.cache
 import io.kotest.assertions.throwables.shouldThrow
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.OutOfMemoryException
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.*
+import org.junit.jupiter.api.Assertions.assertEquals
 import xtdb.SimulationTestBase
-import xtdb.WithSeed
 import xtdb.cache.MemoryCache.Slice
 import xtdb.symbol
 import xtdb.util.logger
@@ -21,7 +23,6 @@ import java.lang.foreign.ValueLayout.JAVA_BYTE
 import java.nio.file.Path
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
-import kotlin.random.Random
 
 private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
 
@@ -30,11 +31,11 @@ private const val testIterations = 100
 private const val logLevel = "TRACE"
 
 private val LOGGER = SimulationTest::class.logger
+
 class SimulationTest : SimulationTestBase() {
     private lateinit var allocator: BufferAllocator
 
-    class TestPathLoader(val seed: Int) : MemoryCache.PathLoader {
-        private val rand = Random(seed)
+    class TestPathLoader : MemoryCache.PathLoader {
         private val loadCounts = mutableMapOf<Path, Int>()
 
         override fun load(path: Path, slice: Slice, arena: Arena): MemorySegment {
@@ -61,8 +62,8 @@ class SimulationTest : SimulationTestBase() {
 
     @RepeatedTest(testIterations)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `deterministic single fetch and evict`()  = runTest {
-        val loader = TestPathLoader(currentSeed)
+    fun `deterministic single fetch and evict`() = runTest {
+        val loader = TestPathLoader()
         MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
             val sliceSize = rand.nextLong(1L, 250L)
             val path = Path.of("test/$sliceSize")
@@ -71,20 +72,20 @@ class SimulationTest : SimulationTestBase() {
 
             cache.get(path, Slice(0, sliceSize)) { it to onEvict }.use { buf ->
                 Assertions.assertNotNull(buf)
-                Assertions.assertEquals(sliceSize, buf.readableBytes())
-                Assertions.assertEquals(MemoryCache.Stats(sliceSize, 250L - sliceSize), cache.stats0)
+                assertEquals(sliceSize, buf.readableBytes())
+                assertEquals(MemoryCache.Stats(sliceSize, 250L - sliceSize), cache.stats0)
             }
 
             Assertions.assertTrue(evicted)
-            Assertions.assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
-            Assertions.assertEquals(1, loader.getLoadCount(path))
+            assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
+            assertEquals(1, loader.getLoadCount(path))
         }
     }
 
     @RepeatedTest(testIterations)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun `deterministic reuse of same path-slice`() = runTest {
-        val loader = TestPathLoader(currentSeed)
+        val loader = TestPathLoader()
         MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
             val sliceSize = rand.nextLong(1L, 250L)
             val path = Path.of("test/$sliceSize")
@@ -92,19 +93,19 @@ class SimulationTest : SimulationTestBase() {
 
             // Nested fetches of same path-slice should reuse
             cache.get(path, slice) { it to null }.use {
-                Assertions.assertEquals(sliceSize, cache.stats0.usedBytes)
+                assertEquals(sliceSize, cache.stats0.usedBytes)
 
                 cache.get(path, slice) { it to null }.use {
                     // Should reuse, not double-count
-                    Assertions.assertEquals(sliceSize, cache.stats0.usedBytes)
+                    assertEquals(sliceSize, cache.stats0.usedBytes)
 
                     cache.get(path, slice) { it to null }.use {
-                        Assertions.assertEquals(sliceSize, cache.stats0.usedBytes)
+                        assertEquals(sliceSize, cache.stats0.usedBytes)
                     }
                 }
             }
 
-            Assertions.assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
+            assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
         }
     }
 
@@ -118,7 +119,7 @@ class SimulationTest : SimulationTestBase() {
     @RepeatedTest(testIterations)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun `deterministic oom handling`() = runTest {
-        val loader = TestPathLoader(currentSeed)
+        val loader = TestPathLoader()
         MemoryCache(allocator, 100, loader, dispatcher).use { cache ->
             val tooBigSlice = rand.nextLong(101L, 200L)
             val smallSlice = rand.nextLong(1L, 50L)
@@ -131,7 +132,7 @@ class SimulationTest : SimulationTestBase() {
 
             // Cache should still be functional
             cache.get(Path.of("small/$smallSlice"), Slice(0, smallSlice)) { it to null }.use { buf ->
-                Assertions.assertEquals(smallSlice, buf.readableBytes())
+                assertEquals(smallSlice, buf.readableBytes())
             }
         }
     }
@@ -139,7 +140,7 @@ class SimulationTest : SimulationTestBase() {
     @RepeatedTest(testIterations)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun `deterministic concurrent fetch of same path-slice`() = runTest {
-        val loader = TestPathLoader(currentSeed)
+        val loader = TestPathLoader()
         MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
             val sliceSize = rand.nextLong(1L, 250L)
             val path = Path.of("test/$sliceSize")
@@ -147,28 +148,29 @@ class SimulationTest : SimulationTestBase() {
             val concurrentFetches = rand.nextInt(2, 10)
 
             // Launch multiple concurrent fetches of the same path-slice
-            val deferreds = (1..concurrentFetches).mapIndexed { i, _ ->
-                async(dispatcher) {
-                    cache.get(path, slice) { it to null }.use { buf ->
-                        LOGGER.trace("Fetched buf $buf in concurrent fetch #${i}")
-                        Assertions.assertEquals(sliceSize, buf.readableBytes())
-                        // Read the first byte to verify content
-                        buf.getByte(0)
+            val deferreds = async(dispatcher) {
+                (1..concurrentFetches).mapIndexed { i, _ ->
+                    async(dispatcher) {
+                        cache.get(path, slice) { it to null }.use { buf ->
+                            LOGGER.trace("Fetched buf $buf in concurrent fetch #${i}")
+                            assertEquals(sliceSize, buf.readableBytes())
+                            // Read the first byte to verify content
+                            yield()
+                            buf.getByte(0)
+                        }
                     }
                 }
-            }
+            }.await()
 
             // Wait for all fetches to complete
             val results = deferreds.awaitAll()
 
             // Verify all fetches got the same data
-            Assertions.assertEquals(concurrentFetches, results.size)
-            results.zipWithNext().forEach { (first, second) ->
-                Assertions.assertEquals(first, second, "All concurrent fetches should return the same data")
-            }
+            assertEquals(concurrentFetches, results.size)
+            assertEquals(results.first().let { fst -> List(results.size) { fst } }, results)
 
             // After all fetches complete and buffers are released, cache should be empty
-            Assertions.assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
+            assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
         }
     }
 }

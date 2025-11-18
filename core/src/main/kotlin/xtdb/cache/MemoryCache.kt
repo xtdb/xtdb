@@ -11,12 +11,7 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.ForeignAllocation
 import xtdb.cache.MemoryCache.PathSlice
-import xtdb.util.closeOnCatch
-import xtdb.util.debug
-import xtdb.util.logger
-import xtdb.util.maxDirectMemory
-import xtdb.util.openReadableChannel
-import xtdb.util.trace
+import xtdb.util.*
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.nio.channels.ClosedByInterruptException
@@ -26,7 +21,9 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.path.fileSize
 
 private typealias FetchReqs = MutableMap<PathSlice, MutableSet<CompletableDeferred<ArrowBuf>>>
+
 private val LOGGER = MemoryCache::class.logger
+
 /**
  * NOTE: the allocation count metrics in the provided `allocator` WILL NOT be accurate
  *   - we allocate a buffer in here for every _usage_, and don't take shared memory into account.
@@ -78,12 +75,11 @@ class MemoryCache @JvmOverloads internal constructor(
         }
     }
 
-    private fun getOpenSlice(pathSlice: PathSlice) =
+    private suspend fun getOpenSlice(pathSlice: PathSlice) =
         openSlices[pathSlice]?.let { buf ->
             try {
-                // this isn't fool-proof, but until we have https://github.com/apache/arrow-java/issues/906
-                // it's the best we can do
-                buf.takeIf { it.refCnt() > 0 }?.also { it.referenceManager.retain() }
+                if (dispatcher != Dispatchers.IO) yield()
+                buf.also { it.referenceManager.retain() }
             } catch (_: IllegalArgumentException) {
                 null
             }
@@ -93,14 +89,17 @@ class MemoryCache @JvmOverloads internal constructor(
     private val scope = CoroutineScope(SupervisorJob(fetchParentJob) + dispatcher)
 
     private sealed interface FetchChEvent {
-        fun handle(fetchReqs: FetchReqs)
+        suspend fun handle(fetchReqs: FetchReqs)
     }
 
     private inner class FetchReq(
         val pathSlice: PathSlice, val fetch: Fetch, val res: CompletableDeferred<ArrowBuf>
     ) : FetchChEvent {
-        override fun handle(fetchReqs: FetchReqs) {
-            val openSlice = getOpenSlice(pathSlice)
+        override suspend fun handle(fetchReqs: FetchReqs) {
+            val openSlice =
+                runCatching { getOpenSlice(pathSlice) }
+                    .onFailure { res.completeExceptionally(it) }
+                    .getOrThrow()
 
             if (openSlice != null) {
                 LOGGER.trace("FetchReq: Fast path cache hit for $pathSlice")
@@ -134,7 +133,7 @@ class MemoryCache @JvmOverloads internal constructor(
     private inner class FetchDone(
         val pathSlice: PathSlice, val localPath: Path, val onEvict: AutoCloseable?
     ) : FetchChEvent {
-        override fun handle(fetchReqs: FetchReqs) {
+        override suspend fun handle(fetchReqs: FetchReqs) {
             val reqs = fetchReqs.remove(pathSlice).orEmpty()
             LOGGER.trace("FetchDone: Completing $pathSlice for ${reqs?.size ?: 0} awaiter(s)")
 
@@ -170,7 +169,7 @@ class MemoryCache @JvmOverloads internal constructor(
                         LOGGER.trace("FetchDone: Loaded $pathSlice into memory for ${reqs.size} awaiter(s)")
                         openSlices[pathSlice] = buf
                         // (size - 1) because we already have refCount 1 from allocation
-                        (reqs.size - 1).takeIf { it > 0 }?.let{ buf.referenceManager.retain(it) }
+                        (reqs.size - 1).takeIf { it > 0 }?.let { buf.referenceManager.retain(it) }
                         reqs.forEach {
                             if (!it.complete(buf)) buf.referenceManager.release()
                         }
@@ -220,7 +219,7 @@ class MemoryCache @JvmOverloads internal constructor(
             res.await()
         } catch (e: Throwable) {
             res.cancel()
-            if (res.isCompleted) {
+            if (res.isCompleted && !res.isCancelled) {
                 val completedBuf = res.getCompleted()
                 LOGGER.trace("get: Buffer was completed before cancel, releasing (refCnt=${completedBuf.refCnt()})")
                 completedBuf.referenceManager.release()
