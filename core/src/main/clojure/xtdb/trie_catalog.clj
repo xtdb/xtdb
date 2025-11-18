@@ -390,7 +390,7 @@
          rest)))))
 
 (defn new-partition? [partition]
-  (contains? partition :max-block-idx))
+  (some? (:max-block-idx partition)))
 
 (defn partition->entry [{:keys [level recency part tries max-block-idx] :as _partition}]
   (MapEntry/create [level recency part]
