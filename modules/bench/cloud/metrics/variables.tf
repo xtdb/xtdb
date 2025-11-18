@@ -4,35 +4,13 @@ variable "location" {
 }
 
 variable "resource_group_name" {
-  description = "Resource group name"
+  description = "Resource group name (where cluster LAW resides)"
   type        = string
 }
 
-variable "workspace_name" {
-  description = "Log Analytics workspace name"
+variable "cluster_law_name" {
+  description = "Name of the existing cluster Log Analytics Workspace"
   type        = string
-}
-
-variable "table_name" {
-  description = "Log Analytics custom table name (must end with _CL)"
-  type        = string
-  default     = "XTDBBenchmark_CL"
-}
-
-variable "dce_name" {
-  description = "Data Collection Endpoint name"
-  type        = string
-}
-
-variable "dcr_name" {
-  description = "Data Collection Rule name"
-  type        = string
-}
-
-variable "sender_principal_id" {
-  description = "Object ID of the principal to grant 'Monitoring Data Collection Rule Data Sender' on the DCR"
-  type        = string
-  default     = ""
 }
 
 # Action Group (Slack) configuration

@@ -70,3 +70,11 @@ resource "azurerm_federated_identity_credential" "xtdb_identity_federation" {
 output "user_assigned_identity_client_id" {
   value = module.xtdb_azure_bench.user_assigned_managed_identity_client_id
 }
+
+output "log_analytics_workspace_id" {
+  value = module.xtdb_azure_bench.log_analytics_workspace_id
+}
+
+output "resource_group_name" {
+  value = module.xtdb_azure_bench.resource_group_name
+}

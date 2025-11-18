@@ -4,8 +4,8 @@ terraform {
   backend "azurerm" {
     resource_group_name  = "xtdb-bench-terraform-state"
     storage_account_name = "xtdbbenchstate"
-    container_name      = "benchmark-metrics-tfstate"
-    key                 = "benchmark-metrics.terraform.tfstate"
+    container_name       = "benchmark-metrics-tfstate"
+    key                  = "benchmark-metrics.terraform.tfstate"
   }
 
   required_providers {
@@ -27,123 +27,29 @@ provider "azurerm" {
 
 provider "azapi" {}
 
-locals {
-  stream_name = "Custom-${var.table_name}"
-}
-
 # Optional subscription context
 data "azurerm_client_config" "current" {}
 
-# Resource Group (optional)
-resource "azurerm_resource_group" "rg" {
-  name     = var.resource_group_name
-  location = var.location
-}
-
-# Log Analytics Workspace
-resource "azurerm_log_analytics_workspace" "law" {
-  name                = var.workspace_name
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  sku                 = "PerGB2018"
-  retention_in_days   = 30
-  depends_on = [
-    azurerm_resource_group.rg
-  ]
-}
-
-# Custom table for benchmarks (AzureRM v4)
-resource "azurerm_log_analytics_workspace_table" "bench" {
-  name                    = var.table_name
-  workspace_id            = azurerm_log_analytics_workspace.law.id
-  retention_in_days       = 30
-  total_retention_in_days = 90
-}
-
-# Data Collection Endpoint (DCE)
-resource "azurerm_monitor_data_collection_endpoint" "dce" {
-  name                = var.dce_name
-  location            = var.location
+# Use the existing cluster LAW from cloud-benchmark-resources
+data "azurerm_log_analytics_workspace" "cluster_law" {
+  name                = var.cluster_law_name
   resource_group_name = var.resource_group_name
 }
 
-# Data Collection Rule (DCR)
-resource "azurerm_monitor_data_collection_rule" "dcr" {
-  name                        = var.dcr_name
-  location                    = var.location
-  resource_group_name         = var.resource_group_name
-  data_collection_endpoint_id = azurerm_monitor_data_collection_endpoint.dce.id
-
-  destinations {
-    log_analytics {
-      name                  = "laDest"
-      workspace_resource_id = azurerm_log_analytics_workspace.law.id
-    }
-  }
-
-  data_flow {
-    streams      = [local.stream_name]
-    destinations = ["laDest"]
-    output_stream = local.stream_name
-    transform_kql = <<-KQL
-      source | project TimeGenerated=todatetime(ts), run_id=tostring(run_id), git_sha=tostring(git_sha), repo=tostring(repo), benchmark=tostring(benchmark), step=tostring(step), node_id=tostring(node_id), metric=tostring(metric), value=todouble(value), unit=tostring(unit), ts=todatetime(ts), params=todynamic(params)
-    KQL
-  }
-
-  # Associate the stream with the LA table
-  stream_declaration {
-    stream_name = local.stream_name
-    column {
-      name = "run_id"
-      type = "string"
-    }
-    column {
-      name = "git_sha"
-      type = "string"
-    }
-    column {
-      name = "repo"
-      type = "string"
-    }
-    column {
-      name = "benchmark"
-      type = "string"
-    }
-    column {
-      name = "step"
-      type = "string"
-    }
-    column {
-      name = "node_id"
-      type = "string"
-    }
-    column {
-      name = "metric"
-      type = "string"
-    }
-    column {
-      name = "value"
-      type = "real"
-    }
-    column {
-      name = "unit"
-      type = "string"
-    }
-    column {
-      name = "ts"
-      type = "datetime"
-    }
-    column {
-      name = "params"
-      type = "dynamic"
-    }
-  }
+# Get existing resource group for creating new resources
+data "azurerm_resource_group" "rg" {
+  name = var.resource_group_name
 }
 
-resource "azurerm_role_assignment" "dcr_sender" {
-  scope                = azurerm_monitor_data_collection_rule.dcr.id
-  role_definition_name = "Monitoring Metrics Publisher"
-  principal_id         = var.sender_principal_id
+# Common KQL function to parse benchmark JSON logs from ContainerLog
+locals {
+  # Base query to extract benchmark metrics from container logs
+  benchmark_logs_base = <<-KQL
+    ContainerLog
+    | where LogEntry has "benchmark" and LogEntry has "step" and LogEntry has "metric"
+    | extend log = parse_json(LogEntry)
+    | where isnotnull(log.benchmark) and isnotnull(log.step) and isnotnull(log.metric)
+  KQL
 }
 
 # Logic App: Relay Azure Monitor alerts to Slack (Incoming Webhook)
@@ -177,21 +83,21 @@ resource "azurerm_logic_app_action_http" "bench_alert_post_to_slack" {
   body = jsonencode({
     attachments = [
       {
-        color       = "#D32F2F"
-        title       = "@{coalesce(triggerBody()?['data']?['essentials']?['alertRule'], 'Alert')}"
-        title_link  = "@{concat('https://portal.azure.com/#blade/Microsoft_Azure_Monitoring/AlertDetailsTemplateBlade/alertId/', uriComponent(triggerBody()?['data']?['essentials']?['alertId']))}"
-        text        = "${var.slack_subteam_id != "" ? "<!subteam^${var.slack_subteam_id}|${var.slack_subteam_label}> " : ""}@{concat('*Severity:* ', coalesce(string(triggerBody()?['data']?['essentials']?['severity']), 'N/A'), '\n', '*Description:* ', coalesce(triggerBody()?['data']?['essentials']?['description'], ''), '\n', '*Target:* ', coalesce(triggerBody()?['data']?['essentials']?['alertTargetIDs'][0], ''))}"
-        mrkdwn_in   = ["text"]
+        color      = "#D32F2F"
+        title      = "@{coalesce(triggerBody()?['data']?['essentials']?['alertRule'], 'Alert')}"
+        title_link = "@{concat('https://portal.azure.com/#blade/Microsoft_Azure_Monitoring/AlertDetailsTemplateBlade/alertId/', uriComponent(triggerBody()?['data']?['essentials']?['alertId']))}"
+        text       = "${var.slack_subteam_id != "" ? "<!subteam^${var.slack_subteam_id}|${var.slack_subteam_label}> " : ""}@{concat('*Severity:* ', coalesce(string(triggerBody()?['data']?['essentials']?['severity']), 'N/A'), '\n', '*Description:* ', coalesce(triggerBody()?['data']?['essentials']?['description'], ''), '\n', '*Target:* ', coalesce(triggerBody()?['data']?['essentials']?['alertTargetIDs'][0], ''))}"
+        mrkdwn_in  = ["text"]
       }
     ]
   })
 }
 
 resource "azapi_resource_action" "bench_alert_relay_cb" {
-  type        = "Microsoft.Logic/workflows/triggers@2019-05-01"
-  resource_id = "${azurerm_logic_app_workflow.bench_alert_relay.id}/triggers/${azurerm_logic_app_trigger_http_request.bench_alert_trigger.name}"
-  action      = "listCallbackUrl"
-  method      = "POST"
+  type                   = "Microsoft.Logic/workflows/triggers@2019-05-01"
+  resource_id            = "${azurerm_logic_app_workflow.bench_alert_relay.id}/triggers/${azurerm_logic_app_trigger_http_request.bench_alert_trigger.name}"
+  action                 = "listCallbackUrl"
+  method                 = "POST"
   response_export_values = ["value"]
 }
 
@@ -214,7 +120,7 @@ resource "azapi_resource" "bench_anomaly" {
   type      = "Microsoft.Logic/workflows@2019-05-01"
   name      = var.anomaly_logic_app_name
   location  = var.location
-  parent_id = azurerm_resource_group.rg.id
+  parent_id = data.azurerm_resource_group.rg.id
 
   identity {
     type = "SystemAssigned"
@@ -222,14 +128,14 @@ resource "azapi_resource" "bench_anomaly" {
 
   body = {
     properties = {
-      state      = var.anomaly_alert_enabled ? "Enabled" : "Disabled"
+      state = var.anomaly_alert_enabled ? "Enabled" : "Disabled"
       definition = {
         "$schema"        = "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#"
         "contentVersion" = "1.0.0.0"
         "parameters"     = {}
         "triggers" = {
           "recurrence" = {
-            "type"       = "Recurrence"
+            "type" = "Recurrence"
             "recurrence" = {
               "frequency" = var.anomaly_schedule_frequency
               "interval"  = var.anomaly_schedule_interval
@@ -242,10 +148,10 @@ resource "azapi_resource" "bench_anomaly" {
         }
         "actions" = {
           "QueryLogs" = {
-            "type"   = "Http"
+            "type" = "Http"
             "inputs" = {
               "method" = "POST"
-              "uri"    = "https://api.loganalytics.io/v1/workspaces/${azurerm_log_analytics_workspace.law.workspace_id}/query"
+              "uri"    = "https://api.loganalytics.io/v1/workspaces/${data.azurerm_log_analytics_workspace.cluster_law.workspace_id}/query"
               "authentication" = {
                 "type"     = "ManagedServiceIdentity"
                 "audience" = "https://api.loganalytics.io/"
@@ -257,31 +163,32 @@ resource "azapi_resource" "bench_anomaly" {
                 "timespan" = var.anomaly_timespan
                 "query"    = <<-KQL
                   let N = toint(${var.anomaly_baseline_n});
+                  let benchmarkLogs =
+                      ContainerLog
+                      | where LogEntry startswith "{" and LogEntry has "benchmark"
+                      | extend log = parse_json(LogEntry)
+                      | where isnotnull(log.benchmark)
+                      | extend benchmark = tostring(log.benchmark),
+                               duration_ms = todouble(log['time-taken-ms']),
+                               run_id = "TODO",
+                               scale_factor = todouble(log.parameters['scale-factor'])
+                      | where benchmark == "TPC-H (OLAP)" and scale_factor == ${var.anomaly_scale_factor};
                   let latestBenchmark =
-                      ${var.table_name}
-                      | where step == "overall" and metric == "duration_ms"
-                      | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.anomaly_scale_factor}
-                      | where repo == "${var.anomaly_repo}"
+                      benchmarkLogs
                       | summarize arg_max(TimeGenerated, *)
-                      | extend current_ms = todouble(value), k = 1;
+                      | extend current_ms = todouble(duration_ms), k = 1;
                   let previousBenchmark =
-                      ${var.table_name}
-                      | where step == "overall" and metric == "duration_ms"
-                      | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.anomaly_scale_factor}
-                      | where repo == "${var.anomaly_repo}"
+                      benchmarkLogs
                       | where TimeGenerated < toscalar(latestBenchmark | project TimeGenerated)
                       | top 1 by TimeGenerated desc
-                      | project prev_ms = todouble(value), k = 1;
+                      | project prev_ms = todouble(duration_ms), k = 1;
                   let prevN =
-                      ${var.table_name}
-                      | where step == "overall" and metric == "duration_ms"
-                      | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.anomaly_scale_factor}
-                      | where repo == "${var.anomaly_repo}"
+                      benchmarkLogs
                       | order by TimeGenerated desc
                       | top N+1 by TimeGenerated desc
                       | top N by TimeGenerated asc
-                      | project value = todouble(value), TimeGenerated;
-                  let baseline = prevN | summarize baseline_mean = avg(value), baseline_std = stdev(value) | extend k = 1;
+                      | project duration_ms = todouble(duration_ms), TimeGenerated;
+                  let baseline = prevN | summarize baseline_mean = avg(duration_ms), baseline_std = stdev(duration_ms) | extend k = 1;
                   latestBenchmark
                     | join kind=inner baseline on k
                     | join kind=leftouter previousBenchmark on k
@@ -292,14 +199,14 @@ resource "azapi_resource" "bench_anomaly" {
                              fast_violation = current_ms < threshold_value_fast,
                              prev_diff_ratio = iif(isnotnull(prev_ms) and prev_ms > 0, abs(current_ms - prev_ms) / prev_ms, real(null))
                     | extend new_normal_candidate = isnotnull(prev_diff_ratio) and prev_diff_ratio <= ${var.anomaly_new_normal_relative_threshold}
-                    | where (slow_violation or fast_violation) and not(new_normal_candidate)
-                    | project run_id = tostring(run_id), slow_violation, fast_violation, TimeGenerated, current_ms, baseline_mean, baseline_std, prev_ms, prev_diff_ratio
+                    | where (slow_violation or fast_violation) // TEMP and not(new_normal_candidate)
+                    | project run_id, slow_violation, fast_violation, TimeGenerated, current_ms, baseline_mean, baseline_std, prev_ms, prev_diff_ratio
                 KQL
               }
             }
           }
           "IfAnomaly" = {
-            "type"       = "If"
+            "type" = "If"
             "expression" = {
               "and" = [
                 {
@@ -321,7 +228,7 @@ resource "azapi_resource" "bench_anomaly" {
             }
             "actions" = {
               "PostAnomalyToSlack" = {
-                "type"   = "Http"
+                "type" = "Http"
                 "inputs" = {
                   "method" = "POST"
                   "uri"    = var.slack_webhook_url
@@ -331,9 +238,9 @@ resource "azapi_resource" "bench_anomaly" {
                   "body" = {
                     "attachments" = [
                       {
-                        "color" = "#D32F2F"
-                        "title" = "@{concat('Benchmark anomaly: TPCH ', if(equals(first(body('QueryLogs')?['tables'][0]?['rows'])[1], true), 'ran slower', 'ran faster'))}"
-                        "text"  = "${var.slack_subteam_id != "" ? "<!subteam^${var.slack_subteam_id}|${var.slack_subteam_label}> " : ""}@{concat('*Scale factor:* ', string(${var.anomaly_scale_factor}), '\n', '*Condition:* ± ', string(${var.anomaly_sigma}), 'σ over last ', '${var.anomaly_baseline_n} runs', '\n', '*Run:* https://github.com/${var.anomaly_repo}/actions/runs/', string(first(body('QueryLogs')?['tables'][0]?['rows'])[0]))}"
+                        "color"     = "#D32F2F"
+                        "title"     = "@{concat('Benchmark anomaly: TPCH ', if(equals(first(body('QueryLogs')?['tables'][0]?['rows'])[1], true), 'ran slower', 'ran faster'))}"
+                        "text"      = "${var.slack_subteam_id != "" ? "<!subteam^${var.slack_subteam_id}|${var.slack_subteam_label}> " : ""}@{concat('*Scale factor:* ', string(${var.anomaly_scale_factor}), '\n', '*Condition:* ± ', string(${var.anomaly_sigma}), 'σ over last ', '${var.anomaly_baseline_n} runs', '\n', '*Run:* https://github.com/${var.anomaly_repo}/actions/runs/', string(first(body('QueryLogs')?['tables'][0]?['rows'])[0]))}"
                         "mrkdwn_in" = ["text"]
                       }
                     ]
@@ -352,7 +259,7 @@ resource "azapi_resource" "bench_anomaly" {
 
 
 resource "azurerm_role_assignment" "bench_anomaly_la_reader" {
-  scope                = azurerm_log_analytics_workspace.law.id
+  scope                = data.azurerm_log_analytics_workspace.cluster_law.id
   role_definition_name = "Log Analytics Reader"
   principal_id         = azapi_resource.bench_anomaly.output.identity.principalId
 }
@@ -368,14 +275,17 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "bench_missing_ingesti
   evaluation_frequency = var.missing_alert_evaluation_frequency
   window_duration      = var.missing_alert_window_duration
 
-  scopes = [azurerm_log_analytics_workspace.law.id]
+  scopes = [data.azurerm_log_analytics_workspace.cluster_law.id]
 
   criteria {
-    query = <<-KQL
-      ${var.table_name}
-      | where step == "overall" and metric == "duration_ms"
-      | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.anomaly_scale_factor}
-      | where repo == "${var.anomaly_repo}"
+    query                   = <<-KQL
+      ContainerLog
+      | where LogEntry startswith "{" and LogEntry has "benchmark"
+      | extend log = parse_json(LogEntry)
+      | where isnotnull(log.benchmark)
+      | extend benchmark = tostring(log.benchmark),
+               scale_factor = todouble(log.parameters['scale-factor'])
+      | where benchmark == "TPC-H (OLAP)" and scale_factor == ${var.anomaly_scale_factor}
       | summarize c = count()
       | where c == 0
       | project trigger = 1
@@ -384,7 +294,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "bench_missing_ingesti
     operator                = "GreaterThan"
     threshold               = 0
     failing_periods {
-      number_of_evaluation_periods            = 1
+      number_of_evaluation_periods             = 1
       minimum_failing_periods_to_trigger_alert = 1
     }
   }
@@ -425,10 +335,10 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
                   isOptional = true
                 },
                 {
-                  name       = "Scope"
+                  name = "Scope"
                   value = {
                     resourceIds = [
-                      "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourcegroups/xtdb-benchmark-metrics/providers/microsoft.operationalinsights/workspaces/xtdb-benchmark-metrics"
+                      data.azurerm_log_analytics_workspace.cluster_law.id
                     ]
                   }
                   isOptional = true
@@ -459,12 +369,16 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
                 {
                   name       = "Query"
                   value      = <<-KQL
-                    XTDBBenchmark_CL
-                    | where step == "overall" and metric == "duration_ms"
-                    | where benchmark == "tpch" and toreal(params.scaleFactor) == ${var.anomaly_scale_factor}
-                    | where repo == "${var.anomaly_repo}"
+                    ContainerLog
+                    | where LogEntry startswith "{" and LogEntry has "benchmark"
+                    | extend log = parse_json(LogEntry)
+                    | where isnotnull(log.benchmark)
+                    | extend benchmark = tostring(log.benchmark),
+                             duration_ms = todouble(log['time-taken-ms']),
+                             scale_factor = todouble(log.parameters['scale-factor'])
+                    | where benchmark == "TPC-H (OLAP)" and scale_factor == ${var.anomaly_scale_factor}
                     | top ${var.anomaly_baseline_n} by TimeGenerated desc
-                    | extend duration_minutes = todouble(value) / 60000
+                    | extend duration_minutes = todouble(duration_ms) / 60000
                     | order by TimeGenerated asc
                     | project TimeGenerated, duration_minutes
                   KQL
@@ -487,7 +401,7 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
                 },
                 {
                   name       = "PartSubTitle"
-                  value      = "xtdb-benchmark-metrics"
+                  value      = var.cluster_law_name
                   isOptional = true
                 },
                 {
