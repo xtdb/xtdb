@@ -51,10 +51,12 @@ image:
   pullPolicy: Always
   tag: "latest"
 
-# Git metadata for tracking benchmark versions (stored in annotations)
+# Git metadata for tracking benchmark versions (stored in annotations and env vars)
 git:
   sha: ""
   branch: ""
+  repo: "xtdb/xtdb"
+  runId: ""
 
 resources:
   limits:

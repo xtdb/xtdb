@@ -392,6 +392,7 @@
   (log/info {:scale-factor scale-factor :seed seed :no-load? no-load?})
 
   {:title "Yakbench"
+   :benchmark-type :yakbench
    :seed seed
    :parameters {:scale-factor scale-factor :seed seed :no-load? no-load?}
    :->state #(do {:!state (atom {})})

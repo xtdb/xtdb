@@ -20,6 +20,7 @@
 
 (defmethod b/->benchmark :tsbs-iot [_ {:keys [seed txs-file], :or {seed 0}, :as opts}]
   {:title "TSBS IoT"
+   :benchmark-type :tsbs-iot
    :seed seed,
    :tasks [{:t :do
             :stage :ingest

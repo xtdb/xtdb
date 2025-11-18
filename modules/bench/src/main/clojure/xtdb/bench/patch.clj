@@ -41,7 +41,7 @@
 
 (defn patch-non-existing-docs-stage [{:keys [patch-count]}]
   {:t :do
-   :stage :patch-non-existing-docs  
+   :stage :patch-non-existing-docs
    :tasks [{:t :call
             :f (fn [{:keys [node] :as worker}]
                  (log/info "Patching" patch-count "non-existing documents...")
@@ -58,18 +58,19 @@
   [["-d" "--doc-count DOC_COUNT" "Number of initial documents to load"
     :parse-fn parse-long
     :default 500000]
-   
+
    ["-p" "--patch-count PATCH_COUNT" "Number of patches to perform in each stage"
     :parse-fn parse-long
     :default 10]
-   
+
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :patch [_ {:keys [doc-count patch-count seed no-load?]
                                     :or {doc-count 500000 patch-count 10 seed 0} :as opts}]
   (log/info {:doc-count doc-count :patch-count patch-count :seed seed})
-  
+
   {:title "PATCH Performance Benchmark"
+   :benchmark-type :patch
    :seed seed
    :tasks [{:t :do
             :stage :ingest
@@ -87,7 +88,7 @@
                                                                                   :data (b/random-str worker 100 500)}])
                                                                (range 0 1000))))
                                     (log/info "Inserted" doc-count "documents"))}])
-                           
+
                            [{:t :do
                              :stage :sync
                              :tasks [{:t :call :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofMinutes 10)))}]}
@@ -97,7 +98,7 @@
                             {:t :do
                              :stage :compact
                              :tasks [{:t :call :f (fn [{:keys [node]}] (b/compact! node))}]}])}
-           
-           (patch-existing-docs-stage opts) 
+
+           (patch-existing-docs-stage opts)
            (patch-multiple-existing-docs-stage opts)
            (patch-non-existing-docs-stage opts)]})

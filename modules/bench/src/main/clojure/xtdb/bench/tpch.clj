@@ -43,7 +43,9 @@
                                    :or {scale-factor 0.01, seed 0}}]
   (log/info {:scale-factor scale-factor :seed seed :no-load? no-load?})
 
-  {:title "TPC-H (OLAP)", :seed seed
+  {:title "TPC-H (OLAP)"
+   :benchmark-type :tpch
+   :seed seed
    :parameters {:scale-factor scale-factor :seed seed :no-load? no-load?}
    :->state #(do {:!state (atom {})})
    :tasks [{:t :do

@@ -330,7 +330,21 @@
 
       (wrap-task task)))
 
-(defn compile-benchmark [{:keys [bench-log-file title seed ->state parameters timeout], :or {seed 0}, :as benchmark}]
+(defn- get-env [k]
+  (let [v (System/getenv k)]
+    (when-not (str/blank? v) v)))
+
+(defn- get-run-context []
+  (->> {"GIT_SHA" :git-sha
+        "GIT_BRANCH" :git-branch
+        "GITHUB_REPOSITORY" :github-repo
+        "GITHUB_RUN_ID" :github-run-id}
+       (keep (fn [[env-key map-key]]
+               (when-let [v (get-env env-key)]
+                 [map-key v])))
+       (into {})))
+
+(defn compile-benchmark [{:keys [bench-log-file title benchmark-type seed ->state parameters timeout], :or {seed 0}, :as benchmark}]
   (let [fns (mapv compile-task (:tasks benchmark))]
     (fn run-benchmark [node]
       (letfn [(execute []
@@ -339,14 +353,29 @@
                                      (cond
                                        (vector? ->state) (apply (first ->state) (rest ->state))
                                        (fn? ->state) (->state)))
-                        start-ms (System/currentTimeMillis)]
+                        start-ms (System/currentTimeMillis)
+                        run-context (get-run-context)
+                        system-info (get-system-info)]
+                    (log-report worker (merge {:benchmark title
+                                               :benchmark-type benchmark-type
+                                               :stage "init"
+                                               :parameters parameters
+                                               :system system-info}
+                                              run-context
+                                              (when timeout {:timeout timeout})))
+
                     (doseq [f fns]
                       (f worker))
 
-                    (log-report worker {:benchmark title
-                                        :parameters parameters
-                                        :system (get-system-info)
-                                        :time-taken-ms (- (System/currentTimeMillis) start-ms)}))))]
+                    (let [total-ms (- (System/currentTimeMillis) start-ms)]
+                      (log-report worker (merge {:benchmark title
+                                                 :benchmark-type benchmark-type
+                                                 :stage "summary"
+                                                 :parameters parameters
+                                                 :system system-info
+                                                 :time-taken-ms total-ms}
+                                                run-context
+                                                (when timeout {:timeout timeout})))))))]
         (run-with-timeout execute timeout)))))
 
 (defn sync-node
@@ -441,7 +470,7 @@
       (let [node-id (System/getenv "XTDB_NODE_ID")]
         (http/post "https://api.github.com/repos/xtdb/xtdb/actions/workflows/nightly-benchmark-cleanup.yml/dispatches"
                    {:headers {"Accept" "application/vnd.github+json"
-                            "Authorization" (str "Bearer " pat)}
+                              "Authorization" (str "Bearer " pat)}
                     :content-type :json
                     :body (json/write-str {"ref" "main"
                                            "inputs" {"benchType" (name benchmark-type)

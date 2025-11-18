@@ -441,6 +441,7 @@
   (let [^Duration duration (cond-> duration (string? duration) Duration/parse)]
     (log/info {:scale-factor scale-factor :no-load? no-load? :only-load? only-load? :duration duration :seed seed})
     {:title "Auction Mark OLTP"
+     :benchmark-type :auctionmark
      :seed seed
      :parameters {:scale-factor scale-factor
                   :no-load? no-load?

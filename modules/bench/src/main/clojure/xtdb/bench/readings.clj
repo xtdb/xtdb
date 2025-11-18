@@ -107,6 +107,7 @@
 (defmethod b/->benchmark :readings [_ {:keys [readings devices seed no-load?] :or {seed 0}}]
   (log/info {:readings readings :devices devices :seed seed :no-load? no-load?})
   {:title "Readings benchmarks"
+   :benchmark-type :readings
    :seed seed
    :parameters {:readings readings :devices devices :seed seed :no-load? no-load?}
    :->state #(do {:!state (atom {})})

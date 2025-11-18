@@ -83,6 +83,18 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            {{- if .Values.git.sha }}
+            - name: GIT_SHA
+              value: {{ .Values.git.sha | quote }}
+            {{- end }}
+            {{- if .Values.git.branch }}
+            - name: GIT_BRANCH
+              value: {{ .Values.git.branch | quote }}
+            {{- end }}
+            - name: GITHUB_REPOSITORY
+              value: {{ .Values.git.repo | default "xtdb/xtdb" | quote }}
+            - name: GITHUB_RUN_ID
+              value: {{ .Values.git.runId | default "" | quote }}
           args:
             - auctionmark
             - -f

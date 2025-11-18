@@ -31,6 +31,21 @@ on:
         required: false
         default: ''
         type: string
+      duration:
+        description: 'Duration for benchmarks that support it (e.g. PT30M for AuctionMark)'
+        required: false
+        default: ''
+        type: string
+      threads:
+        description: 'Thread count for benchmarks that support it'
+        required: false
+        default: ''
+        type: string
+      node_count:
+        description: 'Node count for benchmarks that support it'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   id-token: write
@@ -179,21 +194,42 @@ jobs:
           IMAGE_OWNER: ${{ inputs.image_owner || github.repository_owner }}
           GIT_SHA: ${{ github.sha }}
           GIT_BRANCH: ${{ inputs.branch }}
+          GIT_REPO: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          DURATION: ${{ inputs.duration }}
+          THREADS: ${{ inputs.threads }}
+          NODE_COUNT: ${{ inputs.node_count }}
         run: |
           helm dependency update ./modules/bench/cloud/helm
-          helm upgrade --install "xtdb-benchmark" ./modules/bench/cloud/helm \
-            --namespace "cloud-benchmark" \
-            --create-namespace \
-            -f ./modules/bench/cloud/azure/values.yaml \
-            --set "benchType=${BENCH_TYPE}" \
-            --set "${BENCH_TYPE}.scaleFactor=${SCALE_FACTOR}" \
-            --set "image.repository=ghcr.io/${IMAGE_OWNER}/xtdb-bench" \
-            --set "image.tag=${IMAGE_TAG}" \
-            --set "git.sha=${GIT_SHA}" \
-            --set "git.branch=${GIT_BRANCH}" \
-            --set "providerConfig.existingSecret=xtdb-bench-secrets" \
-            --set "providerConfig.env.AZURE_USER_MANAGED_IDENTITY_CLIENT_ID=${{ secrets.BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID }}" \
+          HELM_ARGS=(
+            --namespace "cloud-benchmark"
+            --create-namespace
+            -f ./modules/bench/cloud/azure/values.yaml
+            --set "benchType=${BENCH_TYPE}"
+            --set "${BENCH_TYPE}.scaleFactor=${SCALE_FACTOR}"
+            --set "image.repository=ghcr.io/${IMAGE_OWNER}/xtdb-bench"
+            --set "image.tag=${IMAGE_TAG}"
+            --set "git.sha=${GIT_SHA}"
+            --set "git.branch=${GIT_BRANCH}"
+            --set "git.repo=${GIT_REPO}"
+            --set "git.runId=${GITHUB_RUN_ID}"
+            --set "providerConfig.existingSecret=xtdb-bench-secrets"
+            --set "providerConfig.env.AZURE_USER_MANAGED_IDENTITY_CLIENT_ID=${{ secrets.BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID }}"
             --set "providerConfig.serviceAccountAnnotations.azure\.workload\.identity/client-id=${{ secrets.BENCHMARK_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID }}"
+          )
+
+          # Add optional parameters if provided
+          if [ -n "$DURATION" ]; then
+            HELM_ARGS+=(--set "${BENCH_TYPE}.duration=${DURATION}")
+          fi
+          if [ -n "$THREADS" ]; then
+            HELM_ARGS+=(--set "${BENCH_TYPE}.threads=${THREADS}")
+          fi
+          if [ -n "$NODE_COUNT" ]; then
+            HELM_ARGS+=(--set "${BENCH_TYPE}.nodeCount=${NODE_COUNT}")
+          fi
+
+          helm upgrade --install "xtdb-benchmark" ./modules/bench/cloud/helm "${HELM_ARGS[@]}"
 
       - name: Check for Immediate Benchmark Failure
         id: immediate-check
@@ -338,6 +374,9 @@ jobs:
         env:
           SLACK_LABEL: ${{ env.SLACK_LABEL }}
           SCALE_FACTOR: ${{ env.SCALE_FACTOR }}
+          DURATION: ${{ inputs.duration }}
+          THREADS: ${{ inputs.threads }}
+          NODE_COUNT: ${{ inputs.node_count }}
           GIT_SHA: ${{ github.sha }}
           GIT_BRANCH: ${{ inputs.branch }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
@@ -352,6 +391,15 @@ jobs:
           # Strip ghcr.io/ prefix for display
           IMAGE_DISPLAY="${IMAGE#ghcr.io/}"
           IMAGE_INFO="Image: <https://github.com/${IMAGE_OWNER}/xtdb-bench/pkgs/container/xtdb-bench|\`${IMAGE_DISPLAY}\`>"
+
+          # Build config info
+          CONFIG_PARTS=("Scale Factor: ${SCALE_FACTOR}")
+          [ -n "$DURATION" ] && CONFIG_PARTS+=("Duration: ${DURATION}")
+          [ -n "$THREADS" ] && CONFIG_PARTS+=("Threads: ${THREADS}")
+          [ -n "$NODE_COUNT" ] && CONFIG_PARTS+=("Nodes: ${NODE_COUNT}")
+          # Join with " | "
+          CONFIG_INFO=$(printf " | %s" "${CONFIG_PARTS[@]}")
+          CONFIG_INFO="${CONFIG_INFO:3}" # Strip leading " | "
 
           if [ "${{ steps.check-deployment.outcome }}" = "success" ] && [ "${{ steps.inspect-deployment.outputs.deployment_status }}" = "in_progress" ]; then
             {
@@ -386,7 +434,7 @@ jobs:
           else
             {
               echo 'msg<<EOF_MSG'
-              echo "${SLACK_LABEL} Benchmark (Scale Factor: ${SCALE_FACTOR}) started"
+              echo "${SLACK_LABEL} Benchmark (${CONFIG_INFO}) started"
               echo "${GIT_INFO}"
               echo "${IMAGE_INFO}"
               echo 'EOF_MSG'
