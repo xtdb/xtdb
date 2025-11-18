@@ -209,11 +209,19 @@
 
 (t/deftest test-parse-limit-test
   (t/is (= '(limit 10)
-           (roundtrip-q-tail '(limit 10)))))
+           (roundtrip-q-tail '(limit 10))))
+
+  (t/is (= '(fn [n] (-> (from #xt/table :foo [a]) (limit ?_0)))
+           (roundtrip-q '(fn [n] (-> (from :foo [a]) (limit n)))))
+        "limit with parameter"))
 
 (t/deftest test-parse-offset-test
   (t/is (= '(offset 5)
-           (roundtrip-q-tail '(offset 5)))))
+           (roundtrip-q-tail '(offset 5))))
+
+  (t/is (= '(fn [n] (-> (from #xt/table :foo [a]) (offset ?_0)))
+           (roundtrip-q '(fn [n] (-> (from :foo [a]) (offset n)))))
+        "offset with parameter"))
 
 (t/deftest test-parse-params
   (let [q '(where (= $bar foo))]

@@ -2358,3 +2358,96 @@
                                                       (with {:foo inner})))
                                                 (+ 1 (q (rel [{:bar 1}] [bar])))])}))))
         "inner paramter with subquery"))
+
+(deftest test-limit
+  (t/testing "literal values"
+    (t/is (= [{:x 1} {:x 2}]
+             (xt/q tu/*node* '(-> (rel [{:x 1} {:x 2} {:x 3}] [x])
+                                  (limit 2))))
+          "limit with positive integer")
+
+    (t/is (= []
+             (xt/q tu/*node* '(-> (rel [{:x 1} {:x 2} {:x 3}] [x])
+                                  (limit 0))))
+          "limit 0 returns empty")
+
+    (t/is (= [{:x 1} {:x 2} {:x 3}]
+             (xt/q tu/*node* '(-> (rel [{:x 1} {:x 2} {:x 3}] [x])
+                                  (limit 100))))
+          "limit larger than dataset"))
+
+  (t/testing "parameters"
+    (t/is (= [{:x 1} {:x 2}]
+             (xt/q tu/*node* ['(fn [n]
+                                   (-> (rel [{:x 1} {:x 2} {:x 3}] [x])
+                                       (limit n))) 2]))
+          "limit with parameter"))
+
+  (t/testing "error cases"
+    (t/is (thrown-with-msg?
+           Exception
+           #"Limit must be a non-negative integer literal or parameter"
+           (xt/q tu/*node* '(-> (rel [{:x 1} {:x 2} {:x 3}] [x])
+                                (limit (+ 1 1)))))
+          "limit with expression")
+
+    (t/is (thrown-with-msg?
+           Exception
+           #"Limit must be a non-negative integer literal or parameter"
+           (xt/q tu/*node* '(-> (rel [{:x 1} {:x 2} {:x 3}] [x])
+                                (limit x))))
+          "limit with logic var")))
+
+(deftest test-offset
+  (t/testing "literal values"
+    (t/is (= [{:x 2} {:x 3}]
+             (xt/q tu/*node* '(-> (rel [{:x 1} {:x 2} {:x 3}] [x])
+                                  (offset 1))))
+          "offset with positive integer")
+
+    (t/is (= [{:x 1} {:x 2} {:x 3}]
+             (xt/q tu/*node* '(-> (rel [{:x 1} {:x 2} {:x 3}] [x])
+                                  (offset 0))))
+          "offset 0 returns all")
+
+    (t/is (= []
+             (xt/q tu/*node* '(-> (rel [{:x 1} {:x 2} {:x 3}] [x])
+                                  (offset 100))))
+          "offset larger than dataset"))
+
+  (t/testing "parameters"
+    (t/is (= [{:x 2} {:x 3}]
+             (xt/q tu/*node* ['(fn [n]
+                                   (-> (rel [{:x 1} {:x 2} {:x 3}] [x])
+                                       (offset n))) 1]))
+          "offset with parameter"))
+
+  (t/testing "error cases"
+    (t/is (thrown-with-msg?
+           Exception
+           #"Offset must be a non-negative integer literal or parameter"
+           (xt/q tu/*node* '(-> (rel [{:x 1} {:x 2} {:x 3}] [x])
+                                (offset (+ 1 1)))))
+          "offset with expression")
+
+    (t/is (thrown-with-msg?
+           Exception
+           #"Offset must be a non-negative integer literal or parameter"
+           (xt/q tu/*node* '(-> (rel [{:x 1} {:x 2} {:x 3}] [x])
+                                (offset x))))
+          "offset with logic var")))
+
+(deftest test-limit-offset-combined
+  (t/is (= [{:x 2}]
+           (xt/q tu/*node* ['(fn [skip take]
+                                 (-> (rel [{:x 1} {:x 2} {:x 3}] [x])
+                                     (offset skip)
+                                     (limit take))) 1 1]))
+        "pagination with parameters")
+
+  (t/is (= [{:x 2}]
+           (xt/q tu/*node* '(-> (rel [{:x 1} {:x 2} {:x 3}] [x])
+                                (offset 1)
+                                (limit 1))))
+        "pagination with literals"))
+

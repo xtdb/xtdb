@@ -539,21 +539,21 @@
 
 (defrecord Limit [limit]
   XtqlQuery$QueryTail
-  UnparseQueryTail (unparse-query-tail [_] (list 'limit limit)))
+  UnparseQueryTail (unparse-query-tail [_] (list 'limit (unparse limit))))
 
-(defmethod parse-query-tail 'limit [[_ length :as this] _env]
+(defmethod parse-query-tail 'limit [[_ length :as this] env]
   (when-not (= 2 (count this))
     (throw (err/illegal-arg :xtql/limit {:limit this :message "Limit can only take a single value"})))
-  (->Limit length))
+  (->Limit (parse-expr length env)))
 
 (defrecord Offset [offset]
   XtqlQuery$QueryTail
-  UnparseQueryTail (unparse-query-tail [_] (list 'offset offset)))
+  UnparseQueryTail (unparse-query-tail [_] (list 'offset (unparse offset))))
 
-(defmethod parse-query-tail 'offset [[_ length :as this] _env]
+(defmethod parse-query-tail 'offset [[_ length :as this] env]
   (when-not (= 2 (count this))
     (throw (err/illegal-arg :xtql/offset {:offset this :message "Offset can only take a single value"})))
-  (->Offset length))
+  (->Offset (parse-expr length env)))
 
 (defrecord DocsRelation [documents bindings]
   XtqlQuery

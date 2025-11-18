@@ -878,12 +878,24 @@
 
   Limit
   (plan-query-tail [{:keys [limit]} {:keys [ra-plan provided-vars]}]
-    {:ra-plan [:top {:limit limit} ra-plan]
+    (when-not (or (instance? Expr$Long limit)
+                  (instance? Expr$Param limit))
+      (throw (err/incorrect
+              :xtql/invalid-limit
+              "Limit must be a non-negative integer literal or parameter"
+              {:limit (str limit)})))
+    {:ra-plan [:top {:limit (plan-expr limit)} ra-plan]
      :provided-vars provided-vars})
 
   Offset
   (plan-query-tail [{:keys [offset]} {:keys [ra-plan provided-vars]}]
-    {:ra-plan [:top {:skip offset} ra-plan]
+    (when-not (or (instance? Expr$Long offset)
+                  (instance? Expr$Param offset))
+      (throw (err/incorrect
+              :xtql/invalid-offset
+              "Offset must be a non-negative integer literal or parameter"
+              {:offset (str offset)})))
+    {:ra-plan [:top {:skip (plan-expr offset)} ra-plan]
      :provided-vars provided-vars}))
 
 (defn compile-query* [query {:keys [table-info]}]
