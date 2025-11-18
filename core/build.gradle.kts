@@ -40,6 +40,8 @@ dependencies {
     api(libs.arrow.vector)
     api(libs.arrow.memory.netty)
     api(libs.netty.common)
+    api(libs.arrow.adbc)
+    api(libs.arrow.adbc.driver.manager)
 
     api(libs.roaring.bitmap)
 

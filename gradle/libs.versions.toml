@@ -33,6 +33,7 @@ arrow-memory-netty = { group = "org.apache.arrow", name = "arrow-memory-netty", 
 arrow-compression = { group = "org.apache.arrow", name = "arrow-compression", version.ref = "arrow" }
 arrow-vector = { group = "org.apache.arrow", name = "arrow-vector", version.ref = "arrow" }
 arrow-adbc = { group = "org.apache.arrow.adbc", name = "adbc-core", version.ref = "arrow-adbc" }
+arrow-adbc-driver-manager = { group = "org.apache.arrow.adbc", name = "adbc-driver-manager", version.ref = "arrow-adbc" }
 arrow-adbc-fsql = { group = "org.apache.arrow.adbc", name = "adbc-driver-flight-sql", version.ref = "arrow-adbc" }
 netty-common = { group = "io.netty", name = "netty-common", version.ref = "netty" }
 

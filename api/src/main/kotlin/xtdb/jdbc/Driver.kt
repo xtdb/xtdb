@@ -1,7 +1,8 @@
 package xtdb.jdbc
 
 import org.postgresql.jdbc.PgConnection
-import java.sql.*
+import java.sql.Connection
+import java.sql.DriverManager
 import java.util.*
 
 class Driver : org.postgresql.Driver() {

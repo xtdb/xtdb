@@ -6,13 +6,13 @@
             [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.garbage-collector]
-            [xtdb.tracer]
             [xtdb.log :as xt-log]
             [xtdb.metrics :as metrics]
             [xtdb.protocols :as xtp]
             [xtdb.query :as q]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
+            [xtdb.tracer]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw]
             [xtdb.xtql :as xtql])
@@ -22,6 +22,7 @@
            (java.util HashMap)
            [java.util.concurrent.atomic AtomicReference]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
+           (xtdb.adbc XtdbConnection XtdbConnection$Node)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$XtdbInternal)
            xtdb.api.module.XtdbModule$Factory
@@ -76,6 +77,20 @@
     (let [server (util/component this :xtdb.pgwire/server)
           ^DataSource data-source (or (:read-write server) (:read-only server))]
       (.createConnectionBuilder data-source)))
+
+  (connect [this-node]
+    (XtdbConnection.
+     (reify XtdbConnection$Node
+       (getAllocator [_] allocator)
+       (executeSqlTx [_ sql]
+         (xtp/execute-tx this-node [sql]
+                         ;; TODO multi-db?
+                         {:default-db "xtdb"}))
+
+       (openSqlQuery [_ sql]
+         (let [query-opts (-> {} (with-query-opts-defaults this-node))]
+           (-> (xtp/prepare-sql this-node sql query-opts)
+               (.openQuery query-opts)))))))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))

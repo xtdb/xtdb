@@ -5,6 +5,7 @@ package xtdb.api
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
+import org.apache.arrow.adbc.core.AdbcDatabase
 import xtdb.ZoneIdSerde
 import xtdb.api.Authenticator.Factory.UserTable
 import xtdb.api.log.Log
@@ -24,7 +25,7 @@ import java.time.ZoneOffset
 import java.util.UUID.randomUUID
 import kotlin.io.path.extension
 
-interface Xtdb : DataSource, AutoCloseable {
+interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     val serverPort: Int
     val serverReadOnlyPort: Int
