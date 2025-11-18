@@ -24,8 +24,9 @@
 
 (defmethod ig/init-key :xtdb/garbage-collector [_ {:keys [^Database$Catalog db-cat, enabled? blocks-to-keep garbage-lifetime approx-run-interval]}]
   ;; TODO multi-db
-  (cond-> (GarbageCollector. (.getPrimary db-cat) blocks-to-keep garbage-lifetime approx-run-interval)
-    enabled? (.start)))
+  (let [gc (GarbageCollector. (.getPrimary db-cat) blocks-to-keep garbage-lifetime approx-run-interval)]
+    (when enabled? (.start gc))
+    gc))
 
 (defmethod ig/halt-key! :xtdb/garbage-collector [_ ^GarbageCollector gc]
   (when gc
