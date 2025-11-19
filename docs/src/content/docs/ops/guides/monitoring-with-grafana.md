@@ -48,3 +48,39 @@ Focuses on individual XTDB nodes, showing metrics such as resource usage, perfor
 ![Node Debugging Dashboard](/images/docs/node-debugging.png)
 
 Download the JSON template: [here](https://github.com/xtdb/xtdb/blob/main/monitoring/public-dashboards/xtdb-node-debugging.json).
+
+## Distributed Tracing with Tempo
+
+XTDB supports distributed tracing using OpenTelemetry, which can be visualized in Grafana using [Grafana Tempo](https://grafana.com/oss/tempo/) as the tracing backend.
+
+### Prerequisites
+
+You will need:
+
+- A running Tempo instance configured to receive OTLP traces
+- Tempo configured as a data source in Grafana
+- XTDB node configured with tracing enabled
+
+Refer to the [Tempo documentation](https://grafana.com/docs/tempo/latest/getting-started/) for setup instructions.
+
+### Configuring XTDB for Tracing
+
+To enable tracing in your XTDB node, add the following to your node configuration:
+
+``` yaml
+tracer:
+  enabled: true
+  endpoint: "http://localhost:4318/v1/traces"
+  serviceName: "xtdb-dev"
+```
+
+See the [Tracing configuration reference](../config/monitoring#tracing) for more details.
+
+### Viewing Traces in Grafana
+
+Once XTDB is configured and sending traces to Tempo:
+
+1. In Grafana, navigate to `Explore`.
+2. Select the Tempo data source.
+3. Use the query builder to search for traces by service name, operation, or other attributes.
+4. Click on individual traces to view detailed span information showing query execution, transaction processing, and internal operations.

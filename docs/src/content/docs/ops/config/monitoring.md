@@ -57,3 +57,33 @@ XTDB nodes can be configured to report metrics to the following cloud-based moni
 XTDB provides [pre-built Grafana dashboards](https://github.com/xtdb/xtdb/tree/main/monitoring/public-dashboards) for monitoring the health and performance of XTDB clusters and individual nodes.
 
 For more information on how to set these up on Grafana, see the ["Monitoring XTDB with Grafana"](../guides/monitoring-with-grafana) guide.
+
+## Tracing
+
+XTDB supports distributed tracing using OpenTelemetry, enabling detailed observability into query execution, transaction processing, and internal operations.
+
+Traces are sent via the OTLP (OpenTelemetry Protocol) HTTP endpoint to your tracing backend (e.g., Grafana Tempo, Jaeger, Zipkin).
+
+Tracing is disabled by default.
+
+### Configuration
+
+``` yaml
+tracer:
+  # -- required
+
+  # Enable OpenTelemetry tracing.
+  enabled: true
+
+  # OTLP HTTP endpoint for sending traces.
+  # (Can be set as an !Env value)
+  endpoint: "http://localhost:4318/v1/traces"
+
+  # -- optional
+
+  # Service name identifier for traces.
+  # (Can be set as an !Env value)
+  # serviceName: "xtdb"
+```
+
+For more information on viewing and analyzing traces with Grafana, see the ["Monitoring XTDB with Grafana"](../guides/monitoring-with-grafana#distributed-tracing-with-tempo) guide.
