@@ -51,7 +51,7 @@
 
       ;; Consume off the topic
       (let [msgs (->> (consume-messages *bootstrap-servers* output-topic)
-                      (map serde/read-transit))
+                      (map #(serde/read-transit % :json)))
             payloads (mapcat :tables msgs)
             tx-payloads (filter #(= (:table %) "txs") payloads)
             docs-payloads (filter #(= (:table %) "docs") payloads)

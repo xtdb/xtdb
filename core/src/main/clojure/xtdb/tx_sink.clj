@@ -36,7 +36,8 @@
 
 (defn ->encode-fn [fmt]
   (case fmt
-    :transit+json xtdb.serde/write-transit))
+    :transit+json #(xtdb.serde/write-transit % :json)
+    :transit+msgpack #(xtdb.serde/write-transit % :msgpack)))
 
 (defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format enable db-name]}]
   (.txSink config

@@ -12,7 +12,7 @@
 
 (t/use-fixtures :each tu/with-mock-clock)
 
-(defn decode-record [msg] (-> msg Log$Message/.encode xtdb.serde/read-transit))
+(defn decode-record [msg] (-> msg Log$Message/.encode (xtdb.serde/read-transit :json)))
 (defn get-output-log
   ([node] (get-output-log node "xtdb"))
   ([node db-name]
