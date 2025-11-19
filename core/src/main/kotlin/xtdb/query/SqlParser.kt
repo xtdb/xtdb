@@ -39,9 +39,12 @@ private fun <T> String.parseWithFallback(parseAction: (Sql) -> T): T {
     parser.removeErrorListeners()
     parser.errorHandler = BailErrorStrategy()
     parser.interpreter.predictionMode = PredictionMode.SLL
+    if (SqlParserProfiler.isEnabled()) parser.setProfile(true)
 
     return try {
-        parseAction(parser)
+        val result = parseAction(parser)
+        SqlParserProfiler.accumulate(parser)
+        result
     } catch (e: ParseCancellationException) {
         // SLL failed due to ambiguity, retry with full LL mode using same parser state
         tokens.seek(0)
@@ -50,7 +53,9 @@ private fun <T> String.parseWithFallback(parseAction: (Sql) -> T): T {
         parser.errorHandler = DefaultErrorStrategy()
         parser.interpreter.predictionMode = PredictionMode.LL
 
-        parseAction(parser)
+        val result = parseAction(parser)
+        SqlParserProfiler.accumulate(parser)
+        result
     }
 }
 
@@ -73,3 +78,7 @@ private val multiQueryCache =
 fun String.parseStatement() = singleQueryCache[this]
 
 fun String.parseMultiStatement() = multiQueryCache[this]
+
+fun dumpAggregatedProfiling() = SqlParserProfiler.dump()
+
+fun resetProfilingStats() = SqlParserProfiler.reset()
