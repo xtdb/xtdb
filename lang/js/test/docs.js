@@ -3,6 +3,12 @@ import * as uuid from "uuid";
 import transit from "transit-js";
 import assert from "assert";
 
+let sql;
+
+afterEach(async () => {
+  if (sql) await sql.end()
+})
+
 describe("code examples", function () {
   const OID = {
     boolean: 16,
@@ -20,7 +26,7 @@ describe("code examples", function () {
   });
 
   it("example 1", async () => {
-    const sql = postgres(commonPostgresOptions());
+    sql = postgres(commonPostgresOptions());
 
     await sql`
       INSERT INTO users (_id, name) VALUES
@@ -44,7 +50,7 @@ describe("code examples", function () {
     const transitReader = transit.reader("json");
     const transitWriter = transit.writer("json");
 
-    const sql = postgres({
+    sql = postgres({
       ...commonPostgresOptions(),
 
       connection: {
