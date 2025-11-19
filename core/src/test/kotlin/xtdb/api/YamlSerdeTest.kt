@@ -13,6 +13,7 @@ import xtdb.api.Authenticator.MethodRule
 import xtdb.api.log.KafkaCluster
 import xtdb.api.log.LocalLog.Factory
 import xtdb.api.log.Log.Companion.inMemoryLog
+import xtdb.api.metrics.TracerConfig
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage.InMemoryStorageFactory
 import xtdb.api.storage.Storage.LocalStorageFactory
@@ -439,5 +440,29 @@ class YamlSerdeTest {
                 """.trimIndent()
             ).server
         )
+    }
+
+    @Test
+    fun testTracer() {
+        mockkObject(EnvironmentVariableProvider)
+        every { EnvironmentVariableProvider.getEnvVariable("XTDB_OTEL_HTTP_ENDPOINT") } returns "http://otelhost:4318/v1/traces"
+
+        val input = """
+        tracer:
+            enabled: true
+            endpoint: !Env XTDB_OTEL_HTTP_ENDPOINT
+            serviceName: xtdb-service
+        """.trimIndent()
+
+        assertEquals(
+            TracerConfig(
+                enabled = true,
+                endpoint = "http://otelhost:4318/v1/traces",
+                serviceName = "xtdb-service"
+            ),
+            nodeConfig(input).tracer
+        )
+
+        unmockkObject(EnvironmentVariableProvider)
     }
 }

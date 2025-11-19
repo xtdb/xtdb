@@ -1,8 +1,14 @@
+@file:UseSerializers(StringWithEnvVarSerde::class)
+
 package xtdb.api.metrics
 
 import io.opentelemetry.sdk.trace.SpanProcessor
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
+import kotlinx.serialization.UseSerializers
+import xtdb.DurationSerde
+import xtdb.api.IntWithEnvVarSerde
+import xtdb.api.StringWithEnvVarSerde
 
 @Serializable
 data class TracerConfig(
