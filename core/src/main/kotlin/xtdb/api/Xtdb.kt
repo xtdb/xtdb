@@ -6,7 +6,9 @@ import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import org.apache.arrow.adbc.core.AdbcDatabase
+import org.apache.arrow.memory.BufferAllocator
 import xtdb.ZoneIdSerde
+import xtdb.antlr.Sql
 import xtdb.api.Authenticator.Factory.UserTable
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
@@ -17,6 +19,7 @@ import xtdb.api.storage.Storage
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.Database
+import xtdb.query.PreparedQuery
 import xtdb.util.requiringResolve
 import java.nio.file.Files
 import java.nio.file.Path
@@ -26,6 +29,8 @@ import java.util.UUID.randomUUID
 import kotlin.io.path.extension
 
 interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
+
+    val allocator: BufferAllocator
 
     val serverPort: Int
     val serverReadOnlyPort: Int
@@ -38,6 +43,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     fun <T : XtdbModule> module(type: Class<T>): T?
 
     fun addMeterRegistry(meterRegistry: MeterRegistry)
+
+    fun prepareSql(sql: String, opts: Any?): PreparedQuery
+    fun prepareSql(sql: Sql.DirectlyExecutableStatementContext, opts: Any?): PreparedQuery
 
     @Serializable
     data class Config(

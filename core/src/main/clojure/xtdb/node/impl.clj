@@ -82,6 +82,8 @@
                  system, close-fn,
                  query-timer, ^Counter query-error-counter, ^Counter tx-error-counter]
   Xtdb
+  (getAllocator [_] allocator)
+
   (getServerPort [this]
     (get-in (util/component this :xtdb.pgwire/server) [:read-write :port] -1))
 
@@ -122,6 +124,14 @@
   (module [_ clazz]
     (->> (vals (:xtdb/modules system))
          (some #(when (instance? clazz %) %))))
+
+  (^PreparedQuery prepareSql [this ^String sql query-opts]
+    (.prepareSql this (antlr/parse-statement sql) query-opts))
+
+  (^PreparedQuery prepareSql [this ^Sql$DirectlyExecutableStatementContext ast query-opts]
+    (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+      (.awaitAll db-cat await-token tx-timeout)
+      (.prepareQuery q-src ast db-cat query-opts)))
 
   Xtdb$XtdbInternal
   (getDbCatalog [_] db-cat)
@@ -201,17 +211,14 @@
 
   xtp/PLocalNode
   (prepare-sql [this query query-opts]
-    (let [ast (cond
-                (instance? Sql$DirectlyExecutableStatementContext query) query
-                (string? query) (antlr/parse-statement query)
-                :else (throw (err/illegal-arg :xtdb/unsupported-query-type
-                                              {::err/message (format "Unsupported SQL query type: %s" (type query))})))
+    (cond
+      (instance? Sql$DirectlyExecutableStatementContext query)
+      (.prepareSql this ^Sql$DirectlyExecutableStatementContext query query-opts)
 
-          {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+      (string? query)
+      (.prepareSql this ^String query query-opts)
 
-      (.awaitAll db-cat await-token tx-timeout)
-
-      (.prepareQuery q-src ast db-cat query-opts)))
+      :else (throw (err/incorrect :xtdb/unsupported-query-type (format "Unsupported SQL query type: %s" (type query))))))
 
   (prepare-ra [this plan query-opts]
     (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
