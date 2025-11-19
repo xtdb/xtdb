@@ -178,7 +178,7 @@
 (defn- tx-sink! [args]
   (let [{{:keys [file]} :options} (-> (parse-args args tx-sink-cli-spec)
                                       (handling-arg-errors-or-help))]
-    (util/with-open [_node ((requiring-resolve 'xtdb.tx-sink.main/open!) (file->node-opts file))]
+    (util/with-open [_node ((requiring-resolve 'xtdb.tx-sink/open!) (file->node-opts file))]
       (log/info "Tx Sink node started")
       @(shutdown-hook-promise))))
 
