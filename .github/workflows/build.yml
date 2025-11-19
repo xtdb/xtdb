@@ -172,23 +172,23 @@ jobs:
         run: ./gradlew slt-test
         timeout-minutes: 20
 
-  # FIXME #4598
-  # slt-2:
-  #   name: SLT 2
-  #   runs-on: ubuntu-latest
+  slt-2:
+    name: SLT 2
+    runs-on: ubuntu-latest
 
-  #   steps:
-  #     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-  #     - name: Set up JDK 21
-  #       uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
-  #       with:
-  #         java-version: '21'
-  #         distribution: 'temurin'
-  #     - name: Setup Gradle
-  #       uses: gradle/actions/setup-gradle@4d9f0ba0025fe599b4ebab900eb7f3a1d93ef4c2 # v5.0.0
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - name: Set up JDK 21
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@4d9f0ba0025fe599b4ebab900eb7f3a1d93ef4c2 # v5.0.0
 
-  #     - name: SLT 2
-  #       timeout-minutes: 40
+      - name: SLT 2
+        run: ./gradlew slt-test-2
+        timeout-minutes: 40
 
   property-test:
     uses: ./.github/workflows/property-test.yml
