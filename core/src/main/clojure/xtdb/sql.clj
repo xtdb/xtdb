@@ -1142,7 +1142,8 @@
   SqlVisitor
   (visitSearchCondition [this ctx] (list* 'and (mapv (partial accept-visitor this) (.expr ctx))))
   (visitExprPrimary1 [this ctx] (-> (.exprPrimary ctx) (.accept this)))
-  (visitNumericExpr0 [this ctx] (-> (.numericExpr ctx) (.accept this)))
+  (visitPredicateExpr [this ctx] (-> (.predicate ctx) (.accept this)))
+  (visitNumericExprPredicate [this ctx] (-> (.numericExpr ctx) (.accept this)))
   (visitWrappedExpr [this ctx] (-> (.expr ctx) (.accept this)))
 
   (visitLiteralExpr [this ctx] (-> (.literal ctx) (.accept this)))
@@ -1314,7 +1315,7 @@
 
   (visitIsBooleanValueExpr [this ctx]
     (let [boolean-value (-> (.booleanValue ctx) (.getText) (str/upper-case))
-          expr (-> (.expr ctx) (.accept this))
+          expr (-> (.numericExpr ctx) (.accept this))
           boolean-fn (case boolean-value
                        "TRUE" (list 'true? expr)
                        "FALSE" (list 'false? expr)
@@ -1360,17 +1361,17 @@
   (visitComparisonPredicate [this ctx]
     (list ((some-fn {'!= '<>} identity)
            (symbol (.getText (.compOp ctx))))
-          (-> (.expr ctx 0) (.accept this))
-          (-> (.expr ctx 1) (.accept this))))
+          (-> (.numericExpr ctx 0) (.accept this))
+          (-> (.numericExpr ctx 1) (.accept this))))
 
   (visitComparisonPredicatePart2 [{:keys [pt1] :as this} ctx]
     (list ((some-fn {'!= '<>} identity)
            (symbol (.getText (.compOp ctx))))
           pt1
-          (-> (.expr ctx) (.accept (dissoc this :pt1)))))
+          (-> (.numericExpr ctx) (.accept (dissoc this :pt1)))))
 
   (visitNullPredicate [this ctx]
-    (let [expr (list 'nil? (-> (.expr ctx) (.accept this)))]
+    (let [expr (list 'nil? (-> (.numericExpr ctx) (.accept this)))]
       (if (.NOT ctx)
         (list 'not expr)
         expr)))
@@ -1399,15 +1400,15 @@
                                (.ASYMMETRIC ctx) 'between
                                :else 'between)
                              pt1
-                             (-> (.expr ctx 0) (.accept this))
-                             (-> (.expr ctx 1) (.accept this)))]
+                             (-> (.numericExpr ctx 0) (.accept this))
+                             (-> (.numericExpr ctx 1) (.accept this)))]
       (if (.NOT ctx)
         (list 'not between-expr)
         between-expr)))
 
   (visitLikePredicate [this ctx]
     (let [like-expr (list 'like
-                          (-> (.expr ctx) (.accept this))
+                          (-> (.numericExpr ctx) (.accept this))
                           (-> (.likePattern ctx) (.accept this)))]
       (if (.NOT ctx)
         (list 'not like-expr)
@@ -1420,7 +1421,7 @@
         (list 'like pt1 cp))))
 
   (visitLikeRegexPredicate [this ctx]
-    (let [like-expr (list 'like-regex (.accept (.expr ctx) this)
+    (let [like-expr (list 'like-regex (.accept (.numericExpr ctx) this)
                           (-> (.xqueryPattern ctx) (.accept this))
                           (or (some-> (.xqueryOptionFlag ctx) (.accept this)) ""))]
       (if (.NOT ctx)
@@ -1437,7 +1438,7 @@
 
   (visitPostgresRegexPredicate [this ctx]
     (let [pro (-> (.postgresRegexOperator ctx) (.getText))
-          expr (list 'like-regex (.accept (.expr ctx) this)
+          expr (list 'like-regex (.accept (.numericExpr ctx) this)
                      (-> (.xqueryPattern ctx) (.accept this))
                      (if (#{"~*" "!~*"} pro) "i" ""))]
       (if (#{"!~" "!~*"} pro)
@@ -1482,8 +1483,8 @@
       (list 'uri-fragment url)))
 
   (visitPeriodOverlapsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (and (< (lower ~p1) (coalesce (upper ~p2) xtdb/end-of-time))
             (> (coalesce (upper ~p1) xtdb/end-of-time) (lower ~p2))))))
@@ -1499,105 +1500,105 @@
                   exprs))))))
 
   (visitPeriodEqualsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (and (= (lower ~p1) (lower ~p2))
             (null-eq (upper ~p1) (upper ~p2))))))
 
   (visitPeriodContainsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template (contains? ~p1 ~p2))))
 
   (visitPeriodPrecedesPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (<= (coalesce (upper ~p1) xtdb/end-of-time) (lower ~p2)))))
 
   (visitPeriodSucceedsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (>= (lower ~p1) (coalesce (upper ~p2) xtdb/end-of-time)))))
 
   (visitPeriodImmediatelyPrecedesPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (= (coalesce (upper ~p1) xtdb/end-of-time) (lower ~p2)))))
 
   (visitPeriodImmediatelySucceedsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (= (lower ~p1) (coalesce (upper ~p2) xtdb/end-of-time)))))
 
   (visitPeriodStrictlyPrecedesPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (< (coalesce (upper ~p1) xtdb/end-of-time) (lower ~p2)))))
 
   (visitPeriodStrictlySucceedsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (> (lower ~p1) (coalesce (upper ~p2) xtdb/end-of-time)))))
 
   (visitPeriodStrictlyContainsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (and (< (lower ~p1) (lower ~p2))
             (> (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
 
   (visitPeriodStrictlyOverlapsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (and (> (lower ~p1) (lower ~p2))
             (< (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
 
   (visitPeriodLagsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (and (>= (lower ~p1) (lower ~p2))
             (> (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
 
   (visitPeriodStrictlyLagsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (and (> (lower ~p1) (lower ~p2))
             (> (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
 
   (visitPeriodImmediatelyLagsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (and (= (lower ~p1) (lower ~p2))
             (> (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
 
   (visitPeriodLeadsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (and (< (lower ~p1) (lower ~p2))
             (<= (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
 
   (visitPeriodStrictlyLeadsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (and (< (lower ~p1) (lower ~p2))
             (< (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
 
   (visitPeriodImmediatelyLeadsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.numericExpr ctx 0) (.accept this))
+          p2 (-> (.numericExpr ctx 1) (.accept this))]
       (xt/template
        (and (< (lower ~p1) (lower ~p2))
             (= (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
@@ -1896,7 +1897,7 @@
                        ("some" "any") :any)
           op (symbol (.getText (.compOp ctx)))]
       (.accept (.quantifiedComparisonPredicatePart3 ctx)
-               (assoc this :qc-pt2 {:expr (.accept (.expr ctx) this)
+               (assoc this :qc-pt2 {:expr (.accept (.numericExpr ctx) this)
                                     :op (cond-> op
                                           (= quantifier :all) negate-op)
                                     :quantifier quantifier}))))
@@ -1924,7 +1925,7 @@
 
           ;; HACK: removing the scope. will unblock #3539,
           ;; but I wasn't sure of the semantics in the general case
-          expr (.accept (.expr ctx) (assoc this :scope nil))
+          expr (.accept (.numericExpr ctx) (assoc this :scope nil))
 
           expr-sym (->col-sym (str "_qc_expr_" (swap! !id-count inc)))
           query-plan (->QueryExpr [:table {expr-sym expr}]
@@ -1947,7 +1948,7 @@
       (cond->> (plan-sq sq-ctx env scope !subqs
                         {:sq-type :quantified-comparison
                          :assert-single-col? true
-                         :expr (.accept (.expr ctx) this)
+                         :expr (.accept (.numericExpr ctx) this)
                          :op '=})
         (boolean (.NOT ctx)) (list 'not))))
 
