@@ -48,7 +48,7 @@ locals {
     ContainerLog
     | where LogEntry has "benchmark" and LogEntry has "step" and LogEntry has "metric"
     | extend log = parse_json(LogEntry)
-    | where isnotnull(log.benchmark) and isnotnull(log.step) and isnotnull(log.metric)
+    | where isnotnull(log.benchmark) and isnotnull(log.step) and isnotnull(log.metric) and log.stage != "init"
   KQL
 }
 
@@ -167,7 +167,7 @@ resource "azapi_resource" "bench_anomaly" {
                       ContainerLog
                       | where LogEntry startswith "{" and LogEntry has "benchmark"
                       | extend log = parse_json(LogEntry)
-                      | where isnotnull(log.benchmark)
+                      | where isnotnull(log.benchmark) and log.stage != "init"
                       | extend benchmark = tostring(log.benchmark),
                                duration_ms = todouble(log['time-taken-ms']),
                                run_id = "TODO",
@@ -262,6 +262,7 @@ resource "azurerm_role_assignment" "bench_anomaly_la_reader" {
   scope                = data.azurerm_log_analytics_workspace.cluster_law.id
   role_definition_name = "Log Analytics Reader"
   principal_id         = azapi_resource.bench_anomaly.output.identity.principalId
+  skip_service_principal_aad_check = true
 }
 
 # Scheduled query alert: missing ingestion (no TPC-H runs at the given scale factor within the window)
@@ -282,7 +283,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "bench_missing_ingesti
       ContainerLog
       | where LogEntry startswith "{" and LogEntry has "benchmark"
       | extend log = parse_json(LogEntry)
-      | where isnotnull(log.benchmark)
+      | where isnotnull(log.benchmark) and log.stage != "init"
       | extend benchmark = tostring(log.benchmark),
                scale_factor = todouble(log.parameters['scale-factor'])
       | where benchmark == "TPC-H (OLAP)" and scale_factor == ${var.anomaly_scale_factor}
@@ -372,7 +373,7 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
                     ContainerLog
                     | where LogEntry startswith "{" and LogEntry has "benchmark"
                     | extend log = parse_json(LogEntry)
-                    | where isnotnull(log.benchmark)
+                    | where isnotnull(log.benchmark) and log.stage != "init"
                     | extend benchmark = tostring(log.benchmark),
                              duration_ms = todouble(log['time-taken-ms']),
                              scale_factor = todouble(log.parameters['scale-factor'])
