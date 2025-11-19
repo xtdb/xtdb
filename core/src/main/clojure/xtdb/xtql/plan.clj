@@ -2,7 +2,6 @@
   (:require [clojure.set :as set]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
-            [xtdb.logical-plan :as lp]
             [xtdb.operator.group-by :as group-by]
             xtdb.tx-ops
             [xtdb.util :as util]
@@ -898,18 +897,8 @@
     {:ra-plan [:top {:skip (plan-expr offset)} ra-plan]
      :provided-vars provided-vars}))
 
-(defn compile-query* [query {:keys [table-info]}]
+(defn compile-query [query {:keys [table-info]}]
   (binding [*gensym* (util/seeded-gensym "_" 0)
             *table-info* table-info]
     (plan-query query)))
 
-(defn compile-query [query opts]
-  (let [{:keys [ra-plan]} (compile-query* query opts)]
-
-    (-> ra-plan
-        #_(doto clojure.pprint/pprint)
-        #_(->> (binding [*print-meta* true]))
-        (lp/rewrite-plan {})
-        #_(doto clojure.pprint/pprint)
-        #_(->> (binding [*print-meta* true]))
-        (doto (lp/validate-plan)))))

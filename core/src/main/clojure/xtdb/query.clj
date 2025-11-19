@@ -172,8 +172,6 @@
     (vector? query) query
     (string? query) (antlr/parse-statement query)
     (instance? Sql$DirectlyExecutableStatementContext query) query
-    (seq? query) (xtql/parse-query query)
-    (instance? Query query) query
 
     :else (throw (err/incorrect :unknown-query-type "Unknown query type"
                                 {:query query, :type (type query)}))))
@@ -182,7 +180,6 @@
   (cond
     (vector? parsed-query) parsed-query
     (instance? Sql$DirectlyExecutableStatementContext parsed-query) (sql/plan parsed-query query-opts)
-    (instance? Query parsed-query) (xtql.plan/compile-query parsed-query query-opts)
 
     :else (throw (err/fault :unknown-query-type "Unknown query type"
                             {:query parsed-query, :type (class parsed-query)}))))

@@ -2562,7 +2562,7 @@
     (let [{:keys [ra-plan]} (-> (edn/read-string {:readers *data-readers*}
                                                  (.accept (.xtqlQuery ctx) string-literal-visitor))
                                 (xtql/parse-query env)
-                                (xtql.plan/compile-query* {:table-info (:table-info env)}))]
+                                (xtql.plan/compile-query {:table-info (:table-info env)}))]
 
       (->QueryExpr ra-plan (mapv symbol (lp/relation-columns ra-plan)))))
 

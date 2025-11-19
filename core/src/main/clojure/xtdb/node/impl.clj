@@ -14,8 +14,7 @@
             [xtdb.time :as time]
             [xtdb.tracer]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [xtdb.xtql :as xtql])
+            [xtdb.vector.writer :as vw])
   (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
            io.micrometer.core.instrument.Counter
            (java.io Closeable Writer)
@@ -26,7 +25,6 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$XtdbInternal)
            xtdb.api.module.XtdbModule$Factory
-           (xtdb.api.query XtqlQuery)
            (xtdb.database Database$Catalog)
            xtdb.error.Anomaly
            (xtdb.query IQuerySource PreparedQuery)))
@@ -149,16 +147,6 @@
             (.increment query-error-counter))
           (throw e)))))
 
-  (open-xtql-query [this query query-opts]
-    (let [query-opts (-> query-opts (with-query-opts-defaults this))]
-      (try
-        (-> (xtp/prepare-xtql this query query-opts)
-            (then-execute-prepared-query allocator query-opts {:query-timer query-timer :query-error-counter query-error-counter}))
-        (catch Exception e
-          (when query-error-counter
-            (.increment query-error-counter))
-          (throw e)))))
-
   (attach-db [this db-name db-config]
     (let [primary-db (.getPrimary db-cat)
           msg-id (xt-log/send-attach-db! primary-db db-name db-config)]
@@ -242,18 +230,6 @@
                                               {::err/message (format "Unsupported SQL query type: %s" (type query))})))
 
           {:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-
-      (.awaitAll db-cat await-token tx-timeout)
-
-      (.prepareQuery q-src ast db-cat query-opts)))
-
-  (prepare-xtql [this query query-opts]
-    (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))
-          ast (cond
-                (sequential? query) (xtql/parse-query query query-opts)
-                (instance? XtqlQuery query) query
-                :else (throw (err/illegal-arg :xtdb/unsupported-query-type
-                                              {::err/message (format "Unsupported XTQL query type: %s" (type query))})))]
 
       (.awaitAll db-cat await-token tx-timeout)
 
