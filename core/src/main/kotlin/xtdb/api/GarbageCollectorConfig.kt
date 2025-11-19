@@ -7,7 +7,7 @@ import java.time.Duration
 
 @Serializable
 data class GarbageCollectorConfig(
-    var enabled: Boolean = true,
+    var enabled: Boolean = false,
     var blocksToKeep: Int = 10,
     var garbageLifetime: Duration = Duration.ofHours(24),
     var approxRunInterval: Duration = Duration.ofMinutes(10),
