@@ -223,3 +223,18 @@ Main article: [Google Cloud Storage](/ops/google-cloud#storage)
                             ;; :prefix "my-xtdb-node"
                            }]}]}
 ```
+
+## Tracing
+
+Main article: [Tracing](/ops/config/monitoring#tracing)
+
+``` clojure
+{:tracer {;; -- required
+          :enabled? true
+          :endpoint "http://localhost:4318/v1/traces"
+
+          ;; -- optional
+
+          ;; :service-name "xtdb"
+        }}
+```
