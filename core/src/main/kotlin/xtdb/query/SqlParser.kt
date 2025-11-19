@@ -5,6 +5,8 @@ package xtdb.query
 import com.github.benmanes.caffeine.cache.CacheLoader
 import com.github.benmanes.caffeine.cache.Caffeine
 import org.antlr.v4.runtime.*
+import org.antlr.v4.runtime.atn.PredictionMode
+import org.antlr.v4.runtime.misc.ParseCancellationException
 import xtdb.antlr.Sql
 import xtdb.antlr.SqlLexer
 import xtdb.error.Incorrect
@@ -28,33 +30,44 @@ private fun Recognizer<*, *>.addThrowingErrorListener() = apply {
     })
 }
 
-private fun String.toAntlrParser() =
-    SqlLexer(CharStreams.fromString(this))
-        .also { it.addThrowingErrorListener() }
-        .let { CommonTokenStream(it) }
-        .let { Sql(it) }
-        .also { it.addThrowingErrorListener() }
+private fun <T> String.parseWithFallback(parseAction: (Sql) -> T): T {
+    val lexer = SqlLexer(CharStreams.fromString(this)).also { it.addThrowingErrorListener() }
+    val tokens = CommonTokenStream(lexer)
+    val parser = Sql(tokens)
 
-fun String.parseExpr(): Sql.ExprContext =
-    toAntlrParser().expr()
+    // Try SLL mode first (fast speculative parsing)
+    parser.removeErrorListeners()
+    parser.errorHandler = BailErrorStrategy()
+    parser.interpreter.predictionMode = PredictionMode.SLL
 
-fun String.parseWhere(): Sql.SearchConditionContext =
-    toAntlrParser().whereClause().searchCondition()
+    return try {
+        parseAction(parser)
+    } catch (e: ParseCancellationException) {
+        // SLL failed due to ambiguity, retry with full LL mode using same parser state
+        tokens.seek(0)
+        parser.reset()
+        parser.addThrowingErrorListener()
+        parser.errorHandler = DefaultErrorStrategy()
+        parser.interpreter.predictionMode = PredictionMode.LL
+
+        parseAction(parser)
+    }
+}
+
+fun String.parseExpr(): Sql.ExprContext = parseWithFallback { it.expr() }
+
+fun String.parseWhere(): Sql.SearchConditionContext = parseWithFallback { it.whereClause().searchCondition() }
 
 private val singleQueryCache =
     Caffeine.newBuilder().maximumSize(4096)
         .build(CacheLoader<String, Sql.DirectlyExecutableStatementContext> { sql ->
-            sql.toAntlrParser()
-                .directSqlStatement()
-                .directlyExecutableStatement()
+            sql.parseWithFallback { it.directSqlStatement().directlyExecutableStatement() }
         })
 
 private val multiQueryCache =
     Caffeine.newBuilder().maximumSize(4096)
         .build(CacheLoader<String, List<Sql.DirectlyExecutableStatementContext>> { sql ->
-            sql.toAntlrParser()
-                .multiSqlStatement()
-                .directlyExecutableStatement()
+            sql.parseWithFallback { it.multiSqlStatement().directlyExecutableStatement() }
         })
 
 fun String.parseStatement() = singleQueryCache[this]
