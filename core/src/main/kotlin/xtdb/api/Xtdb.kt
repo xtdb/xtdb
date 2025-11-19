@@ -36,6 +36,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     val serverReadOnlyPort: Int
 
     interface CompactorNode : AutoCloseable
+
     interface XtdbInternal : Xtdb {
         val dbCatalog: Database.Catalog
     }
@@ -119,13 +120,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     }
 
     companion object {
-        internal interface XtdbInternal {
-            val dbCatalog: Database.Catalog
-        }
-
-        @JvmStatic
-        fun configure() = Config()
-
         @JvmStatic
         fun readConfig(path: Path): Config {
             if (path.extension != "yaml") {
