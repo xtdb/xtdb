@@ -78,6 +78,30 @@
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
+(defn parse-readings-log
+  [log-file-path]
+  (let [content (slurp log-file-path)
+        lines (str/split-lines content)
+        stage-lines (filter #(str/starts-with? % "{\"stage\":") lines)
+        stages (mapv (fn [line]
+                       (try
+                         (json/parse-string line true)
+                         (catch Exception e
+                           (throw (ex-info (str "Failed to parse JSON line: " line)
+                                           {:line line :error (.getMessage e)})))))
+                     stage-lines)
+        query-stages (filterv (fn [stage]
+                                (let [stage-name (name (:stage stage))]
+                                  (or (str/starts-with? stage-name "query-recent-interval-")
+                                      (str/starts-with? stage-name "query-offset-"))))
+                              stages)
+        {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-line lines)]
+    {:all-stages stages
+     :query-stages query-stages
+     :ingest-stages (filterv #(contains? #{"ingest" "sync" "compact"} (name (:stage %))) stages)
+     :benchmark-total-time-ms benchmark-total-time-ms
+     :benchmark-summary benchmark-summary}))
+
 (defn tpch-stage->query-row
   [idx {:keys [stage time-taken-ms]}]
   (when-let [[_ hot-cold query-num name] (re-find #"^((?:hot|cold))-queries-q(\d+)-(.*)$" stage)]
@@ -142,6 +166,44 @@
     {:rows rows-with-percent
      :total-ms (* total-nanos 1e-6)}))
 
+(defn readings-stage->query-row
+  [idx {:keys [stage time-taken-ms]}]
+  (let [stage-name (name stage)
+        friendly-name (cond
+                        (str/starts-with? stage-name "query-recent-interval-")
+                        (str "Recent " (title-case (subs stage-name (count "query-recent-interval-"))))
+
+                        (str/starts-with? stage-name "query-offset-")
+                        (let [[_ offset-len period interval] (re-find #"^query-offset-(\d+)-(.*?)-interval-(.*)$" stage-name)]
+                          (str "Offset " offset-len " " (title-case period) " " (title-case interval)))
+
+                        :else (title-case stage-name))
+        duration-pt (format-duration :millis time-taken-ms)]
+    {:query-order idx
+     :query friendly-name
+     :stage stage-name
+     :time-taken-ms time-taken-ms
+     :duration duration-pt}))
+
+(defn readings-summary->query-rows
+  [summary]
+  (let [rows (->> (:query-stages summary)
+                  (map-indexed readings-stage->query-row)
+                  (sort-by :query-order)
+                  vec)
+        total-ms (reduce + (map :time-taken-ms rows))
+        rows-with-percent (mapv (fn [row]
+                                  (let [ms (:time-taken-ms row)
+                                        pct (if (pos? total-ms)
+                                              (* 100.0 (/ ms total-ms))
+                                              0.0)]
+                                    (-> row
+                                        (assoc :percent-of-total (format "%.2f%%" pct))
+                                        (dissoc :query-order))))
+                                rows)]
+    {:rows rows-with-percent
+     :total-ms total-ms}))
+
 (defn totals->string [query-ms benchmark-ms]
   (str (format "Total query time: %s (%s)"
                (or (format-duration :millis query-ms) "N/A")
@@ -170,6 +232,12 @@
          "\n\n"
          (rows->string [:query :n :p50 :p90 :p99 :mean :percent-of-total] rows))))
 
+(defmethod summary->table "readings" [summary]
+  (let [{:keys [rows total-ms]} (readings-summary->query-rows summary)]
+    (str (totals->string total-ms (:benchmark-total-time-ms summary))
+         "\n\n"
+         (rows->string [:query :time-taken-ms :duration :percent-of-total] rows))))
+
 (defn wrap-slack-code [& strings]
   (str "```\n" (str/join strings) "\n```"))
 
@@ -191,6 +259,14 @@
      "\n\n"
      (wrap-slack-code
       (rows->string [:query :p50 :p99 :mean] rows)))))
+
+(defmethod summary->slack "readings" [summary]
+  (let [{:keys [rows total-ms]} (readings-summary->query-rows summary)]
+    (str
+     (totals->string total-ms (:benchmark-total-time-ms summary))
+     "\n\n"
+     (wrap-slack-code
+      (rows->string [:query :duration] rows)))))
 
 (defn github-table
   "Generate a GitHub-flavored markdown table from columns and rows.
@@ -251,11 +327,22 @@
          "\n\n"
          (totals->string total-ms (:benchmark-total-time-ms summary)))))
 
+(defmethod summary->github-markdown "readings" [summary]
+  (let [{:keys [rows total-ms]} (readings-summary->query-rows summary)
+        columns [{:key :query :header "Query"}
+                 {:key :time-taken-ms :header "Time (ms)"}
+                 {:key :duration :header "Duration"}
+                 {:key :percent-of-total :header "% of total"}]]
+    (str (github-table columns rows)
+         "\n\n"
+         (totals->string total-ms (:benchmark-total-time-ms summary)))))
+
 (defn load-summary
   [benchmark-type log-file-path]
   (-> (case benchmark-type
         "tpch" (parse-tpch-log log-file-path)
         "yakbench" (parse-yakbench-log log-file-path)
+        "readings" (parse-readings-log log-file-path)
         (throw (ex-info (format "Unsupported benchmark type: %s" benchmark-type)
                         {:benchmark-type benchmark-type})))
       (assoc :benchmark-type benchmark-type)))
@@ -304,6 +391,10 @@
                              (empty? (:profiles summary)))
                      (throw (ex-info "No profile data found in log file"
                                      {:benchmark-type "yakbench"
+                                      :log-file log-file-path})))
+        "readings" (when (empty? (:query-stages summary))
+                     (throw (ex-info "No query stages found in log file"
+                                     {:benchmark-type "readings"
                                       :log-file log-file-path}))))
       (render-summary summary {:format format}))))
 

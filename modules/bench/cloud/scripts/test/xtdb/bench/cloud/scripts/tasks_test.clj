@@ -314,7 +314,109 @@
                               #"No profile data found"
                               (tasks/summarize-log ["yakbench" (.getPath temp-file)])))
         (finally
+          (.delete temp-file)))))
+
+  (testing "summarize-log with empty readings query stages throws error"
+    (let [temp-file (java.io.File/createTempFile "test" ".log")]
+      (try
+        (spit temp-file "{\"stage\":\"ingest\",\"time-taken-ms\":1000}")
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"No query stages found"
+                              (tasks/summarize-log ["readings" (.getPath temp-file)])))
+        (finally
           (.delete temp-file))))))
+
+(deftest parse-readings-log-test
+  (testing "parsing a valid readings log"
+    (let [temp-file (java.io.File/createTempFile "readings-test" ".log")]
+      (try
+        (spit temp-file
+              (str/join "\n"
+                        ["{\"stage\":\"ingest\",\"time-taken-ms\":100}"
+                         "{\"stage\":\"sync\",\"time-taken-ms\":50}"
+                         "{\"stage\":\"compact\",\"time-taken-ms\":25}"
+                         "{\"stage\":\"query-recent-interval-day\",\"time-taken-ms\":1500}"
+                         "{\"stage\":\"query-recent-interval-week\",\"time-taken-ms\":2000}"
+                         "{\"stage\":\"query-offset-1-year-interval-day\",\"time-taken-ms\":1800}"
+                         "{\"benchmark\":\"readings\",\"time-taken-ms\":10000}"]))
+        (let [result (tasks/parse-readings-log (.getPath temp-file))]
+          (is (= 6 (count (:all-stages result))))
+          (is (= 3 (count (:query-stages result))))
+          (is (= 3 (count (:ingest-stages result))))
+          (is (= 10000 (:benchmark-total-time-ms result)))
+          (is (= "query-recent-interval-day" (name (:stage (first (:query-stages result)))))))
+        (finally
+          (.delete temp-file))))))
+
+(deftest readings-stage->query-row-test
+  (testing "recent interval query stage"
+    (let [stage {:stage :query-recent-interval-day :time-taken-ms 1500}
+          result (tasks/readings-stage->query-row 0 stage)]
+      (is (= "Recent Day" (:query result)))
+      (is (= 1500 (:time-taken-ms result)))
+      (is (= "query-recent-interval-day" (:stage result)))))
+
+  (testing "offset query stage"
+    (let [stage {:stage :query-offset-1-year-interval-week :time-taken-ms 2000}
+          result (tasks/readings-stage->query-row 1 stage)]
+      (is (= "Offset 1 Year Week" (:query result)))
+      (is (= 2000 (:time-taken-ms result))))))
+
+(deftest readings-summary->query-rows-test
+  (testing "calculating query rows with percentages"
+    (let [summary {:query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}
+                                  {:stage :query-recent-interval-week :time-taken-ms 3000}]}
+          result (tasks/readings-summary->query-rows summary)
+          rows (:rows result)
+          total (:total-ms result)]
+      (is (= 4000 total))
+      (is (= 2 (count rows)))
+      (is (= "25.00%" (:percent-of-total (first rows))))
+      (is (= "75.00%" (:percent-of-total (second rows))))))
+
+  (testing "empty query stages"
+    (let [summary {:query-stages []}
+          result (tasks/readings-summary->query-rows summary)]
+      (is (= 0 (:total-ms result)))
+      (is (empty? (:rows result))))))
+
+(deftest summary->table-readings-test
+  (testing "readings table format"
+    (let [summary {:benchmark-type "readings"
+                   :query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}
+                                  {:stage :query-offset-1-year-interval-month :time-taken-ms 2000}]
+                   :benchmark-total-time-ms 5000}
+          result (tasks/summary->table summary)]
+      (is (string? result))
+      (is (str/includes? result "Recent Day"))
+      (is (str/includes? result "Offset 1 Year Month"))
+      (is (str/includes? result "Total query time"))
+      (is (str/includes? result "Total benchmark time")))))
+
+(deftest summary->slack-readings-test
+  (testing "readings slack format wrapped in code blocks"
+    (let [summary {:benchmark-type "readings"
+                   :query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}]
+                   :benchmark-total-time-ms 5000}
+          result (tasks/summary->slack summary)]
+      (is (str/includes? result "```"))
+      (is (str/ends-with? result "```"))
+      (is (str/includes? result "Recent Day"))
+      (is (str/includes? result "Total query time"))
+      (is (str/includes? result "Total benchmark time")))))
+
+(deftest summary->github-markdown-readings-test
+  (testing "readings github markdown format"
+    (let [summary {:benchmark-type "readings"
+                   :query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}
+                                  {:stage :query-recent-interval-week :time-taken-ms 2000}]
+                   :benchmark-total-time-ms 5000}
+          result (tasks/summary->github-markdown summary)]
+      (is (str/includes? result "| Query | Time (ms) |"))
+      (is (str/includes? result "|"))
+      (is (str/includes? result "| Recent Day |"))
+      (is (str/includes? result "Total query time"))
+      (is (str/includes? result "Total benchmark time")))))
 
 (deftest github-table-separator-test
   (testing "separator line has at least 3 dashes per column"
