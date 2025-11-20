@@ -408,7 +408,7 @@
     benchmark-type)
   :default ::default)
 
-(defn run-benchmark [benchmark {:keys [node-dir no-load? config-file bench-log-file timeout] :as _opts}]
+(defn run-benchmark [benchmark {:keys [node-dir no-load? config-file bench-log-file timeout tracing-endpoint] :as _opts}]
   (let [benchmark-fn (compile-benchmark (-> benchmark
                                             (assoc :bench-log-file bench-log-file)
                                             (assoc :timeout timeout)))]
@@ -418,8 +418,11 @@
         (with-open [node (xtn/start-node config-file)]
           (benchmark-fn node)))
       (letfn [(run [node-dir]
-                (with-open [node (tu/->local-node {:node-dir node-dir
-                                                   :instant-src (InstantSource/system)})]
+                (with-open [node (tu/->local-node (cond-> {:node-dir node-dir
+                                                           :instant-src (InstantSource/system)}
+                                                    tracing-endpoint (assoc :tracer {:enabled? true
+                                                                                     :endpoint tracing-endpoint
+                                                                                     :service-name "xtdb-bench"})))]
                   (binding [tu/*allocator* (util/component node :xtdb/allocator)
                             *registry* (util/component node :xtdb.metrics/registry)]
                     (benchmark-fn node))))]
@@ -462,7 +465,11 @@
     "Maximum wall-clock runtime before aborting the benchmark (ISO-8601). If omitted, no timeout is applied."
     :id :timeout
     :parse-fn parse-duration-arg
-    :validate [#(not (neg? (.toMillis ^Duration %))) "Timeout must be >= PT0S"]]])
+    :validate [#(not (neg? (.toMillis ^Duration %))) "Timeout must be >= PT0S"]]
+
+   [nil "--tracing-endpoint ENDPOINT"
+    "OTLP HTTP endpoint for sending traces (e.g., http://localhost:4318/v1/traces). Only used when no config file is provided."
+    :id :tracing-endpoint]])
 
 (defn trigger-cleanup [benchmark-type success?]
   (when-let [pat (System/getenv "GITHUB_PAT")]
