@@ -1,0 +1,41 @@
+name: Nightly Benchmark Readings
+run-name: "Readings (Devices: ${{ inputs.readings_device_count || '10000' }}, Readings: ${{ inputs.reading_count || '1000' }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      readings_device_count:
+        description: 'Device Count'
+        required: false
+        default: '10000'
+        type: string
+      reading_count:
+        description: 'Reading Count'
+        required: false
+        default: '1000'
+        type: string
+  schedule:
+    - cron: '30 3 * * *' 
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+  packages: write
+
+concurrency:
+  group: nightly-benchmark-readings
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    if: ${{ github.event_name != 'schedule' || github.repository == 'xtdb/xtdb' }}
+    uses: ./.github/workflows/run-nightly-benchmark.yml
+    with:
+      bench_type: readings
+      job_display_name: Readings
+      branch: ${{ github.ref_name }}
+      timeout_minutes: 90
+      readings_device_count: ${{ inputs.readings_device_count || '10000' }}
+      reading_count: ${{ inputs.reading_count || '1000' }}
+    secrets: inherit

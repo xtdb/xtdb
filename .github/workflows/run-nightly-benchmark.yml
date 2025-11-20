@@ -46,6 +46,16 @@ on:
         required: false
         default: ''
         type: string
+      readings_device_count:
+        description: 'Device count for readings benchmark'
+        required: false
+        default: ''
+        type: string
+      reading_count:
+        description: 'Reading count for readings benchmark'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   id-token: write
@@ -206,6 +216,8 @@ jobs:
           DURATION: ${{ inputs.duration }}
           THREADS: ${{ inputs.threads }}
           NODE_COUNT: ${{ inputs.node_count }}
+          READINGS_DEVICE_COUNT: ${{ inputs.readings_device_count }}
+          READING_COUNT: ${{ inputs.reading_count }}
         run: |
           helm dependency update ./modules/bench/cloud/helm
           HELM_ARGS=(
@@ -234,6 +246,12 @@ jobs:
           fi
           if [ -n "$NODE_COUNT" ]; then
             HELM_ARGS+=(--set "${BENCH_TYPE}.nodeCount=${NODE_COUNT}")
+          fi
+          if [ -n "$READINGS_DEVICE_COUNT" ]; then
+            HELM_ARGS+=(--set "${BENCH_TYPE}.devices=${READINGS_DEVICE_COUNT}")
+          fi
+          if [ -n "$READING_COUNT" ]; then
+            HELM_ARGS+=(--set "${BENCH_TYPE}.readings=${READING_COUNT}")
           fi
 
           helm upgrade --install "xtdb-benchmark" ./modules/bench/cloud/helm "${HELM_ARGS[@]}"
@@ -384,6 +402,8 @@ jobs:
           DURATION: ${{ inputs.duration }}
           THREADS: ${{ inputs.threads }}
           NODE_COUNT: ${{ inputs.node_count }}
+          READINGS_DEVICE_COUNT: ${{ inputs.readings_device_count }}
+          READING_COUNT: ${{ inputs.reading_count }}
           GIT_SHA: ${{ github.sha }}
           GIT_BRANCH: ${{ inputs.branch }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
@@ -404,6 +424,8 @@ jobs:
           [ -n "$DURATION" ] && CONFIG_PARTS+=("Duration: ${DURATION}")
           [ -n "$THREADS" ] && CONFIG_PARTS+=("Threads: ${THREADS}")
           [ -n "$NODE_COUNT" ] && CONFIG_PARTS+=("Nodes: ${NODE_COUNT}")
+          [ -n "$READINGS_DEVICE_COUNT" ] && CONFIG_PARTS+=("Devices: ${READINGS_DEVICE_COUNT}")
+          [ -n "$READING_COUNT" ] && CONFIG_PARTS+=("Readings: ${READING_COUNT}")
           # Join with " | "
           CONFIG_INFO=$(printf " | %s" "${CONFIG_PARTS[@]}")
           CONFIG_INFO="${CONFIG_INFO:3}" # Strip leading " | "
