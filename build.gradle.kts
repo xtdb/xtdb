@@ -559,7 +559,7 @@ fun createSltTask(
     tasks.register(taskName, JavaExec::class) {
         classpath = sourceSets.test.get().runtimeClasspath
         mainClass.set("clojure.main")
-        jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+        jvmArgs(defaultJvmArgs + twelveGBJvmArgs)
         this.args = listOf(
             "-m", "xtdb.sql.logic-test.runner",
             "--verify",
