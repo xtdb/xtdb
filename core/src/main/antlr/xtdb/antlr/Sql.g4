@@ -201,38 +201,52 @@ fieldDefinition : fieldName=identifier dataType ;
 /// §6.3 <value expression primary>
 
 expr
-    : expr 'IS' NOT? booleanValue #IsBooleanValueExpr
-    | expr compOp expr # ComparisonPredicate
+    : orExpr
+    ;
+
+orExpr
+    : andExpr ( 'OR' andExpr )*
+    ;
+
+andExpr
+    : notExpr ( 'AND' notExpr )*
+    ;
+
+notExpr
+    : 'NOT' notExpr #UnaryNotExpr
+    | predicateExpr #NotExprDelegate
+    ;
+
+predicateExpr
+    : predicateExpr 'IS' NOT? booleanValue #IsBooleanValueExpr
+    | predicateExpr compOp predicateExpr # ComparisonPredicate
     | numericExpr NOT? 'BETWEEN' (ASYMMETRIC | SYMMETRIC)? numericExpr 'AND' numericExpr # BetweenPredicate
-    | expr NOT? 'IN' inPredicateValue # InPredicate
-    | expr 'NOT'? 'LIKE' likePattern=exprPrimary ('ESCAPE' likeEscape=exprPrimary)? # LikePredicate
-    | expr 'NOT'? 'LIKE_REGEX' xqueryPattern=exprPrimary ('FLAG' xqueryOptionFlag=exprPrimary)? # LikeRegexPredicate
-    | expr postgresRegexOperator xqueryPattern=exprPrimary # PostgresRegexPredicate
-    | expr 'IS' 'NOT'? 'NULL' # NullPredicate
+    | predicateExpr NOT? 'IN' inPredicateValue # InPredicate
+    | predicateExpr 'NOT'? 'LIKE' likePattern=exprPrimary ('ESCAPE' likeEscape=exprPrimary)? # LikePredicate
+    | predicateExpr 'NOT'? 'LIKE_REGEX' xqueryPattern=exprPrimary ('FLAG' xqueryOptionFlag=exprPrimary)? # LikeRegexPredicate
+    | predicateExpr postgresRegexOperator xqueryPattern=exprPrimary # PostgresRegexPredicate
+    | predicateExpr 'IS' 'NOT'? 'NULL' # NullPredicate
 
     // period predicates
-    | expr 'OVERLAPS' expr # PeriodOverlapsPredicate
-    | expr 'STRICTLY' 'OVERLAPS' expr # PeriodStrictlyOverlapsPredicate
-    | expr 'EQUALS' expr # PeriodEqualsPredicate
-    | expr 'CONTAINS' expr # PeriodContainsPredicate
-    | expr 'STRICTLY' 'CONTAINS' expr # PeriodStrictlyContainsPredicate
-    | expr 'PRECEDES' expr # PeriodPrecedesPredicate
-    | expr 'STRICTLY' 'PRECEDES' expr # PeriodStrictlyPrecedesPredicate
-    | expr 'IMMEDIATELY' 'PRECEDES' expr # PeriodImmediatelyPrecedesPredicate
-    | expr 'SUCCEEDS' expr # PeriodSucceedsPredicate
-    | expr 'STRICTLY' 'SUCCEEDS' expr # PeriodStrictlySucceedsPredicate
-    | expr 'IMMEDIATELY' 'SUCCEEDS' expr # PeriodImmediatelySucceedsPredicate
-    | expr 'LAGS' expr # PeriodLagsPredicate
-    | expr 'STRICTLY' 'LAGS' expr # PeriodStrictlyLagsPredicate
-    | expr 'IMMEDIATELY' 'LAGS' expr # PeriodImmediatelyLagsPredicate
-    | expr 'LEADS' expr # PeriodLeadsPredicate
-    | expr 'STRICTLY' 'LEADS' expr # PeriodStrictlyLeadsPredicate
-    | expr 'IMMEDIATELY' 'LEADS' expr # PeriodImmediatelyLeadsPredicate
+    | predicateExpr 'OVERLAPS' predicateExpr # PeriodOverlapsPredicate
+    | predicateExpr 'STRICTLY' 'OVERLAPS' predicateExpr # PeriodStrictlyOverlapsPredicate
+    | predicateExpr 'EQUALS' predicateExpr # PeriodEqualsPredicate
+    | predicateExpr 'CONTAINS' predicateExpr # PeriodContainsPredicate
+    | predicateExpr 'STRICTLY' 'CONTAINS' predicateExpr # PeriodStrictlyContainsPredicate
+    | predicateExpr 'PRECEDES' predicateExpr # PeriodPrecedesPredicate
+    | predicateExpr 'STRICTLY' 'PRECEDES' predicateExpr # PeriodStrictlyPrecedesPredicate
+    | predicateExpr 'IMMEDIATELY' 'PRECEDES' predicateExpr # PeriodImmediatelyPrecedesPredicate
+    | predicateExpr 'SUCCEEDS' predicateExpr # PeriodSucceedsPredicate
+    | predicateExpr 'STRICTLY' 'SUCCEEDS' predicateExpr # PeriodStrictlySucceedsPredicate
+    | predicateExpr 'IMMEDIATELY' 'SUCCEEDS' predicateExpr # PeriodImmediatelySucceedsPredicate
+    | predicateExpr 'LAGS' predicateExpr # PeriodLagsPredicate
+    | predicateExpr 'STRICTLY' 'LAGS' predicateExpr # PeriodStrictlyLagsPredicate
+    | predicateExpr 'IMMEDIATELY' 'LAGS' predicateExpr # PeriodImmediatelyLagsPredicate
+    | predicateExpr 'LEADS' predicateExpr # PeriodLeadsPredicate
+    | predicateExpr 'STRICTLY' 'LEADS' predicateExpr # PeriodStrictlyLeadsPredicate
+    | predicateExpr 'IMMEDIATELY' 'LEADS' predicateExpr # PeriodImmediatelyLeadsPredicate
 
-    | expr compOp quantifier quantifiedComparisonPredicatePart3 # QuantifiedComparisonPredicate
-    | 'NOT' expr #UnaryNotExpr
-    | expr 'AND' expr #AndExpr
-    | expr 'OR' expr #OrExpr
+    | predicateExpr compOp quantifier quantifiedComparisonPredicatePart3 # QuantifiedComparisonPredicate
 
     | numericExpr #NumericExpr0
     ;
