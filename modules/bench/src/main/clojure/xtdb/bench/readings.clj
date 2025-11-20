@@ -125,12 +125,15 @@
                                                :max-valid-time max-valid-time})))}]
 
                   ;; this accumulates over the most recent interval
-                  (for [interval [:now :day :week :month :quarter :year]]
+                  (for [interval [:now :hour :day :week :month :quarter :year]]
                     (->query-stage interval))
 
-                  ;; running the same queries but a year (valid-time) in the past
-                  (for [interval [:now :day :week :month :quarter :year]]
-                    (->query-stage interval :year)))})
+                  ;; running the same queries but a month (valid-time) in the past
+                  (for [interval [:now :hour :day :week :month :quarter :year]]
+                    (->query-stage interval :month))
+
+                  (for [interval [:now :hour :day :week :month :quarter :year]]
+                    (->query-stage interval :quarter)))})
 
 ;; not intended to be run as a test - more for ease of REPL dev
 (t/deftest ^:benchmark run-readings
