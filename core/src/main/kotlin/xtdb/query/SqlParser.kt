@@ -58,6 +58,8 @@ fun String.parseExpr(): Sql.ExprContext = parseWithFallback { it.expr() }
 
 fun String.parseWhere(): Sql.SearchConditionContext = parseWithFallback { it.whereClause().searchCondition() }
 
+// Estimated 400MB max size for each cache, given large SLT queries, observed during SLT between/10/ run.
+// with an inferred value of roughly 100KB per parsed query.
 private val singleQueryCache =
     Caffeine.newBuilder().maximumSize(4096)
         .build(CacheLoader<String, Sql.DirectlyExecutableStatementContext> { sql ->

@@ -455,6 +455,8 @@
              :metrics-registry (ig/ref :xtdb.metrics/registry)
              :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)})})
 
+;; Estimated 400MB max size given large SLT queries, observed during SLT between/10/ run.
+;; with an inferred value of roughly 100KB per parsed query.
 (defn ->query-source [{:keys [allocator metrics-registry] :as deps}]
   (let [ref-ctr (RefCounter.)
         allocator (util/->child-allocator allocator "query-source")
