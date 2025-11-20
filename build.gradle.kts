@@ -172,6 +172,7 @@ allprojects {
             testRuntimeOnly(libs.slf4j.jpl)
 
             testImplementation(libs.junit.jupiter.api)
+            testImplementation(libs.junit.jupiter.params)
             testRuntimeOnly(libs.junit.jupiter.engine)
             testRuntimeOnly(libs.junit.platform.launcher)
 
@@ -485,6 +486,7 @@ dependencies {
     testImplementation(kotlin("test-junit5"))
     testImplementation(libs.kotest)
     testImplementation(libs.kotest.props)
+    testImplementation(libs.junit.jupiter.params)
 
     // For Healthz Test
     testImplementation("clj-http", "clj-http","3.12.3")
