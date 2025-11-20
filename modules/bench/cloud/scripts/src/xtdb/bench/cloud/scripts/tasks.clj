@@ -1,5 +1,6 @@
 (ns xtdb.bench.cloud.scripts.tasks
   (:require [babashka.cli :as cli]
+            [babashka.process :as proc]
             [cheshire.core :as json]
             [clojure.pprint :as pprint]
             [clojure.string :as str]))
@@ -435,12 +436,266 @@
                                       :log-file log-file-path}))))
       (render-summary summary {:format format}))))
 
+(defn fetch-azure-benchmark-timeseries
+  "Fetch benchmark timeseries data from Azure Log Analytics.
+
+  opts: {:workspace-id \"<workspace-id>\"                         ; Log Analytics workspace ID (optional, will query Azure if not provided)
+         :resource-group \"cloud-benchmark-resources\"            ; Azure resource group (default)
+         :workspace-name \"xtdb-bench-cluster-law\"               ; Log Analytics workspace name (default)
+         :table-name \"ContainerLogV2\"                           ; Log Analytics table name (default: ContainerLogV2)
+         :log-field \"LogMessage\"                                ; Field containing log messages (default: LogMessage for ContainerLogV2, use LogEntry for ContainerLog)
+         :benchmark \"TPC-H (OLAP)\"                              ; benchmark name (default)
+         :scale-factor 1                                          ; scale factor (default: 1)
+         :limit 30                                                ; max number of results (default: 30)
+         :metric \"time-taken-ms\"                                 ; metric to extract (default: \"time-taken-ms\")
+         :unit :millis}                                           ; unit for conversion (default: :millis)
+
+  Returns data in the format expected by plot-timeseries:
+  [{:timestamp \"2025-01-15T10:30:00Z\" :value 1234.5} ...]"
+  [{:keys [workspace-id resource-group workspace-name table-name log-field benchmark scale-factor limit metric unit]
+    :or {resource-group "cloud-benchmark-resources"
+         workspace-name "xtdb-bench-cluster-law"
+         table-name "ContainerLog"
+         log-field "LogEntry"
+         benchmark "TPC-H (OLAP)"
+         scale-factor 1
+         limit 30
+         metric "time-taken-ms"
+         unit :millis}}]
+  (let [;; Get workspace customer ID (GUID) from Azure if not provided
+        workspace-id (or workspace-id
+                         (let [result (proc/shell {:out :string}
+                                                  "az" "monitor" "log-analytics" "workspace" "show"
+                                                  "--resource-group" resource-group
+                                                  "--workspace-name" workspace-name
+                                                  "--query" "customerId"
+                                                  "--output" "tsv")]
+                           (str/trim (:out result))))
+
+        ;; Construct the Kusto query
+        query (format "%s
+  | where %s startswith \"{\" and %s has \"benchmark\"
+  | extend log = parse_json(%s)
+  | where isnotnull(log.benchmark) and (isnull(log.stage) or log.stage != \"init\")
+  | extend
+      benchmark = tostring(log.benchmark),
+      metric_value = todouble(log['%s']),
+      scale_factor = todouble(log.parameters['scale-factor'])
+  | where benchmark == \"%s\" and scale_factor == %s and isnotnull(metric_value)
+  | top %d by TimeGenerated desc
+  | order by TimeGenerated asc
+  | project TimeGenerated, metric_value"
+                      table-name
+                      log-field
+                      log-field
+                      log-field
+                      metric
+                      benchmark
+                      scale-factor
+                      limit)
+
+        ;; Run az CLI command
+        result (proc/shell {:out :string}
+                           "az" "monitor" "log-analytics" "query"
+                           "--workspace" workspace-id
+                           "--analytics-query" query
+                           "--output" "json")
+
+        ;; Parse JSON response
+        rows (json/parse-string (:out result) true)]
+
+    ;; Check if we got any data
+    (when (empty? rows)
+      (throw (ex-info "No benchmark data found in Log Analytics"
+                      {:benchmark benchmark
+                       :scale-factor scale-factor
+                       :metric metric
+                       :table-name table-name
+                       :workspace-id workspace-id})))
+
+    ;; Convert to timeseries format
+    (mapv (fn [{:keys [TimeGenerated metric_value]}]
+            {:timestamp TimeGenerated
+             :value metric_value})
+          rows)))
+
+(defn plot-timeseries-vega
+  "Plot a timeseries line chart and save to SVG using Vega-Lite.
+
+  Requires vega-cli to be installed:
+    npm install -g vega vega-lite vega-cli
+
+  data: sequence of maps with :timestamp and :value keys
+        e.g., [{:timestamp \"2025-01-15T10:30:00Z\" :value 1234.5}
+               {:timestamp \"2025-01-16T11:00:00Z\" :value 1150.2}]
+
+  opts: {:output-path \"chart.svg\"       ; where to save
+         :title \"Benchmark Performance\"  ; chart title
+         :x-label \"Date\"                 ; x-axis label (default: \"Time\")
+         :y-label \"Duration (ms)\"        ; y-axis label (default: \"Value\")
+         :width 800                       ; image width (default: 800)
+         :height 600}                     ; image height (default: 600)"
+  [data {:keys [output-path title x-label y-label width height]
+         :or {x-label "Time"
+              y-label "Value"
+              width 800
+              height 600}}]
+  (let [;; Transform data for Vega-Lite (timestamp as string, value as number)
+        ;; Ensure values are coerced to doubles
+        vega-data (mapv (fn [{:keys [timestamp value]}]
+                          {:timestamp timestamp :value (double value)})
+                        data)
+
+        ;; Calculate y-axis range (min - 2, max + 2 for padding)
+        values (map :value vega-data)
+        y-min (- (apply min values) 2.0)
+        y-max (+ (apply max values) 2.0)
+
+        ;; Create Vega-Lite spec
+        vega-spec {:$schema "https://vega.github.io/schema/vega-lite/v5.json"
+                   :title title
+                   :width width
+                   :height height
+                   :data {:values vega-data}
+                   :mark {:type "line" :point true}
+                   :encoding {:x {:field "timestamp"
+                                  :type "temporal"
+                                  :title x-label
+                                  :axis {:labelAngle -45}}
+                              :y {:field "value"
+                                  :type "quantitative"
+                                  :title y-label
+                                  :scale {:domain [y-min y-max]
+                                          :reverse false}}}}
+
+        ;; Write spec to temporary file
+        temp-spec-file (str (java.io.File/createTempFile "vega-spec" ".json"))
+        _ (spit temp-spec-file (json/generate-string vega-spec))]
+
+    ;; Convert to SVG using vl2svg
+    (proc/shell "vl2svg" temp-spec-file output-path)
+
+    ;; Clean up temp file
+    (.delete (java.io.File. temp-spec-file))))
+
+(defn plot-timeseries
+  "Plot a timeseries line chart and save to SVG using Vega-Lite.
+
+  Requires vega-cli to be installed:
+    npm install -g vega vega-lite vega-cli
+
+  data: sequence of maps with :timestamp and :value keys
+        e.g., [{:timestamp \"2025-01-15T10:30:00Z\" :value 1234.5}
+               {:timestamp \"2025-01-16T11:00:00Z\" :value 1150.2}]
+
+  opts: {:output-path \"chart.svg\"       ; where to save
+         :title \"Benchmark Performance\"  ; chart title
+         :x-label \"Date\"                 ; x-axis label (default: \"Time\")
+         :y-label \"Duration (ms)\"        ; y-axis label (default: \"Value\")
+         :width 800                       ; image width (default: 800)
+         :height 600}                     ; image height (default: 600)"
+  [data {:keys [output-path title x-label y-label width height]
+         :or {x-label "Time"
+              y-label "Value"
+              width 800
+              height 600}}]
+  (let [;; Transform data for Vega-Lite (timestamp as string, value as number)
+        ;; Ensure values are coerced to doubles
+        vega-data (mapv (fn [{:keys [timestamp value]}]
+                          {:timestamp timestamp :value (double value)})
+                        data)
+
+        ;; Calculate y-axis range (min - 2, max + 2 for padding)
+        values (map :value vega-data)
+        y-min (- (apply min values) 2.0)
+        y-max (+ (apply max values) 2.0)
+
+        ;; Create Vega-Lite spec
+        vega-spec {:$schema "https://vega.github.io/schema/vega-lite/v5.json"
+                   :title title
+                   :width width
+                   :height height
+                   :data {:values vega-data}
+                   :mark {:type "line" :point true}
+                   :encoding {:x {:field "timestamp"
+                                  :type "temporal"
+                                  :title x-label
+                                  :axis {:labelAngle -45}}
+                              :y {:field "value"
+                                  :type "quantitative"
+                                  :title y-label
+                                  :scale {:domain [y-min y-max]
+                                          :reverse false}}}}
+
+        ;; Write spec to temporary file
+        temp-spec-file (str (java.io.File/createTempFile "vega-spec" ".json"))
+        _ (spit temp-spec-file (json/generate-string vega-spec))]
+
+    ;; Convert to SVG using vl2svg
+    (proc/shell "vl2svg" temp-spec-file output-path)
+
+    ;; Clean up temp file
+    (.delete (java.io.File. temp-spec-file))))
+
+(defmulti plot-benchmark-timeseries
+  "Plot a benchmark timeseries chart from Azure Log Analytics.
+
+  benchmark-type: benchmark type (e.g., \"tpch\", \"yakbench\", \"auctionmark\")
+
+  Fetches benchmark data and plots it to an SVG file.
+  Uses default parameters suitable for the specified benchmark type."
+  (fn [benchmark-type] benchmark-type))
+
+(defmethod plot-benchmark-timeseries "tpch" [_benchmark-type]
+  (let [data-ms (fetch-azure-benchmark-timeseries {:benchmark "TPC-H (OLAP)"})
+        ;; Convert milliseconds to minutes
+        data (mapv (fn [{:keys [timestamp value]}]
+                     (let [num-value (if (string? value)
+                                       (Double/parseDouble value)
+                                       (double value))]
+                       {:timestamp timestamp
+                        :value (/ num-value 60000.0)}))
+                   data-ms)
+        output-path "tpch-benchmark-timeseries.svg"
+        title "TPC-H Benchmark Performance"]
+    (plot-timeseries data {:output-path output-path
+                          :title title
+                          :x-label "Time"
+                          :y-label "Duration (minutes)"})
+    (println "Generated chart:" output-path)
+    output-path))
+
+(defmethod plot-benchmark-timeseries "yakbench" [_benchmark-type]
+  (let [data (fetch-azure-benchmark-timeseries {:benchmark "yakbench"})
+        output-path "yakbench-benchmark-timeseries.svg"
+        title "Yakbench Benchmark Performance"]
+    (plot-timeseries data {:output-path output-path
+                          :title title
+                          :x-label "Time"
+                          :y-label "Duration (ms)"})))
+
+(defmethod plot-benchmark-timeseries "auctionmark" [_benchmark-type]
+  (let [data (fetch-azure-benchmark-timeseries {:benchmark "auctionmark"})
+        output-path "auctionmark-benchmark-timeseries.svg"
+        title "Auctionmark Benchmark Performance"]
+    (plot-timeseries data {:output-path output-path
+                          :title title
+                          :x-label "Time"
+                          :y-label "Duration (ms)"})))
+
+(defmethod plot-benchmark-timeseries :default [benchmark-type]
+  (throw (ex-info (format "Unsupported benchmark type for timeseries plotting: %s" benchmark-type)
+                  {:benchmark-type benchmark-type})))
+
 (defn help []
   (println "Usage: bb <command> [args...]")
   (println)
   (println "Commands:")
   (println "  summarize-log [--format table|slack|github] <benchmark-type> <log-file>")
   (println "      Print a benchmark summary. Default format is 'table'.")
+  (println "  plot-benchmark-timeseries <benchmark-type>")
+  (println "      Plot a benchmark timeseries chart from Azure Log Analytics.")
+  (println "      Supported benchmark types: tpch, yakbench, auctionmark")
   (println "  help")
   (println "      Show this help message"))
 
@@ -455,6 +710,16 @@
             (print output)
             (flush))
 
+          "plot-benchmark-timeseries"
+          (let [[benchmark-type & extra] rest-args]
+            (when (seq extra)
+              (throw (ex-info "Too many positional arguments supplied."
+                              {:arguments rest-args})))
+            (when-not benchmark-type
+              (throw (ex-info "Benchmark type is required."
+                              {:arguments rest-args})))
+            (plot-benchmark-timeseries benchmark-type))
+
           (do
             (println (str "Unknown command: " command))
             (help)))
@@ -462,6 +727,8 @@
           (println "Error:" (.getMessage e))
           (when-let [data (ex-data e)]
             (println "Details:" data))
+          (println "\nStack trace:")
+          (.printStackTrace e)
           (System/exit 1))))))
 
 (when (= *file* (System/getProperty "babashka.file"))

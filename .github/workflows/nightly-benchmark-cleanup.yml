@@ -548,6 +548,34 @@ jobs:
             echo "Monitoring stack not found; skipping."
           fi
 
+      - name: Generate TPC-H Timeseries Chart
+        id: timeseries-chart
+        if: steps.check-deployment.outcome == 'success' && inputs.benchType == 'tpch' && steps.derive.outputs.bench_status == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          # Install vega tools for chart generation
+          npm install -g vega vega-lite vega-cli
+          # Install rsvg-convert for SVG to PNG conversion (for Slack)
+          sudo apt-get update && sudo apt-get install -y librsvg2-bin
+
+          ./modules/bench/cloud/scripts/tasks plot-benchmark-timeseries tpch
+
+          if [ -f tpch-benchmark-timeseries.svg ]; then
+            echo "Generated TPC-H timeseries chart"
+            echo "has_chart=true" >> "$GITHUB_OUTPUT"
+            # Convert to PNG for Slack - use zoom to scale up while preserving aspect ratio
+            rsvg-convert --zoom=2 tpch-benchmark-timeseries.svg -o tpch-benchmark-timeseries.png
+          fi
+
+      - name: Upload TPC-H Timeseries Chart
+        if: steps.check-deployment.outcome == 'success' && inputs.benchType == 'tpch' && hashFiles('tpch-benchmark-timeseries.svg') != ''
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: tpch-timeseries-${{ steps.timestamp.outputs.value }}
+          path: tpch-benchmark-timeseries.svg
+          retention-days: 30
+
       - name: Write Job Summary
         if: always()
         run: |
@@ -606,8 +634,9 @@ jobs:
 
           log_path="$(pwd)/benchmark.log"
           summary="$(./modules/bench/cloud/scripts/tasks summarize-log --format github "${{ inputs.benchType }}" "$log_path")"
-          echo "## Query summary:" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Query Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "$summary" >> "$GITHUB_STEP_SUMMARY"
+
 
       - name: Compose Slack Message
         id: compose
@@ -618,14 +647,23 @@ jobs:
           [ "$type" = "readings" ] && type="Readings"
           [ "$type" = "yakbench" ] && type="Yakbench"
 
+          status="${{ steps.derive.outputs.bench_status || inputs.status }}"
+          if [ "$status" = "success" ]; then
+            status_emoji=":white_check_mark:"
+            status_text="Passed"
+          else
+            status_emoji=":x:"
+            status_text="Failed"
+          fi
+
           log_path="$(pwd)/benchmark.log"
           summary="$(./modules/bench/cloud/scripts/tasks summarize-log --format slack "${{ inputs.benchType }}" "$log_path")"
 
-          # Build base message without summary
+          # Build base message
           if [ -n "${{ steps.logs.outputs.time_taken_iso }}" ]; then
-            base="$type Benchmark completed in ${{ steps.logs.outputs.time_taken_iso }} — {status_message}"
+            base="*${type} Benchmark* completed in ${{ steps.logs.outputs.time_taken_iso }} — ${status_emoji} ${status_text}"
           else
-            base="$type Benchmark completed — {status_message}"
+            base="*${type} Benchmark* completed — ${status_emoji} ${status_text}"
           fi
 
           IMAGE="${{ steps.image-info.outputs.image || '' }}"
@@ -685,13 +723,58 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Prepare Slack Message
+        if: steps.check-deployment.outcome == 'success'
+        run: |
+          jq -n --arg channel "$SLACK_CHANNEL" --arg text "$SLACK_MESSAGE" \
+            '{channel: $channel, text: $text}' > slack-message.json
+        env:
+          SLACK_CHANNEL: ${{ secrets.BENCHMARK_SLACK_CHANNEL_ID }}
+          SLACK_MESSAGE: ${{ steps.compose.outputs.msg }}
 
       - name: Post Slack Notification
-        uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2 # v2
         if: steps.check-deployment.outcome == 'success'
+        uses: slackapi/slack-github-action@485a9d42d3a73031f12ec201c457e2162c45d02d # v2.0.0
         with:
-          status: ${{ steps.derive.outputs.bench_status || inputs.status }}
-          notification_title: "*${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType }} Benchmark*"
-          message_format: ${{ steps.compose.outputs.msg }}
+          method: chat.postMessage
+          token: ${{ secrets.BENCHMARK_SLACK_BOT_TOKEN }}
+          payload-file-path: ./slack-message.json
+
+      - name: Post TPC-H Timeseries Chart to Slack
+        if: steps.timeseries-chart.outputs.has_chart == 'true' && hashFiles('tpch-benchmark-timeseries.png') != ''
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.BENCHMARK_SLACK_WEBHOOK_URL }}
+          SLACK_BOT_TOKEN: ${{ secrets.BENCHMARK_SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL: ${{ secrets.BENCHMARK_SLACK_CHANNEL_ID }}
+        run: |
+          set -euo pipefail
+          FILE_PATH="tpch-benchmark-timeseries.png"
+          FILE_SIZE=$(stat -c%s "$FILE_PATH" 2>/dev/null || stat -f%z "$FILE_PATH")
+
+          # Step 1: Get upload URL (using form data)
+          UPLOAD_RESPONSE=$(curl -s \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            -F "filename=tpch-benchmark-timeseries.png" \
+            -F "length=${FILE_SIZE}" \
+            https://slack.com/api/files.getUploadURLExternal)
+
+          UPLOAD_URL=$(echo "$UPLOAD_RESPONSE" | jq -r '.upload_url')
+          FILE_ID=$(echo "$UPLOAD_RESPONSE" | jq -r '.file_id')
+
+          if [ "$UPLOAD_URL" = "null" ] || [ -z "$UPLOAD_URL" ]; then
+            echo "Failed to get upload URL: $UPLOAD_RESPONSE"
+            exit 1
+          fi
+
+          # Step 2: Upload file to the URL
+          curl -s -X POST \
+            -F "file=@${FILE_PATH}" \
+            "$UPLOAD_URL"
+
+          # Step 3: Complete the upload (using form data)
+          FILES_JSON="[{\"id\":\"${FILE_ID}\",\"title\":\"TPC-H Performance Trend\"}]"
+          curl -s \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            -F "files=${FILES_JSON}" \
+            -F "channel_id=${SLACK_CHANNEL}" \
+            -F "initial_comment=📈 TPC-H Benchmark Performance Trend (last 30 runs)" \
+            https://slack.com/api/files.completeUploadExternal

@@ -2,6 +2,8 @@
 
  :paths ["src" "test"]
 
+ :deps {}
+
  :tasks
  {:requires [[xtdb.bench.cloud.scripts.tasks :as tasks]]
 
@@ -9,6 +11,9 @@
                  :task (do
                          (print (tasks/summarize-log *command-line-args*))
                          (flush))}
+  plot-benchmark-timeseries
+  {:doc "Fetches benchmark time series data from Azure and renders a plot (requires Python/matplotlib, plus cljplot as a dependency)"
+   :task (tasks/plot-benchmark-timeseries (first *command-line-args*))}
 
   test {:doc "Run the test suite"
         :requires [[clojure.test :as t]

@@ -436,7 +436,7 @@ jobs:
           if [ "${{ steps.check-deployment.outcome }}" = "success" ] && [ "${{ steps.inspect-deployment.outputs.deployment_status }}" = "in_progress" ]; then
             {
               echo 'msg<<EOF_MSG'
-              echo ":information_source: ${SLACK_LABEL} Benchmark skipped — existing deployment found"
+              echo "*${SLACK_LABEL} Benchmark* :information_source: Skipped — existing deployment found"
               echo "${GIT_INFO}"
               echo "${IMAGE_INFO}"
               echo 'EOF_MSG'
@@ -447,7 +447,7 @@ jobs:
             MSG_FILE="$RUNNER_TEMP/slack-immediate-failure.txt"
             : > "$MSG_FILE"
             {
-              printf ':x: %s Benchmark failed during startup (pod: `%s`).\n' "${SLACK_LABEL}" "${POD_NAME:-unknown}"
+              printf '*%s Benchmark* :x: Failed during startup (pod: `%s`)\n' "${SLACK_LABEL}" "${POD_NAME:-unknown}"
               echo "${GIT_INFO}"
               echo "${IMAGE_INFO}"
               if [ -n "$LOG_PATH" ] && [ -f "$LOG_PATH" ]; then
@@ -466,19 +466,26 @@ jobs:
           else
             {
               echo 'msg<<EOF_MSG'
-              echo "${SLACK_LABEL} Benchmark (${CONFIG_INFO}) started"
+              echo "*${SLACK_LABEL} Benchmark* :rocket: Started (${CONFIG_INFO})"
               echo "${GIT_INFO}"
               echo "${IMAGE_INFO}"
               echo 'EOF_MSG'
             } >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Post Slack Notification
-        uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2 # v2
+      - name: Prepare Slack Message
         if: always()
-        with:
-          status: ${{ job.status }}
-          notification_title: "*${{ inputs.job_display_name }} Benchmark*"
-          message_format: "${{ steps.compose.outputs.msg }}"
+        run: |
+          jq -n --arg channel "$SLACK_CHANNEL" --arg text "$SLACK_MESSAGE" \
+            '{channel: $channel, text: $text}' > slack-message.json
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.BENCHMARK_SLACK_WEBHOOK_URL }}
+          SLACK_CHANNEL: ${{ secrets.BENCHMARK_SLACK_CHANNEL_ID }}
+          SLACK_MESSAGE: ${{ steps.compose.outputs.msg }}
+
+      - name: Post Slack Notification
+        if: always()
+        uses: slackapi/slack-github-action@485a9d42d3a73031f12ec201c457e2162c45d02d # v2.0.0
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.BENCHMARK_SLACK_BOT_TOKEN }}
+          payload-file-path: ./slack-message.json
