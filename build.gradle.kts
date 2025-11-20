@@ -630,6 +630,7 @@ fun createBench(benchName: String, properties: Map<String, String>) {
             "configFile" to "--config-file",
             "benchLogFile" to "--bench-log-file",
             "timeout" to "--timeout",
+            "tracingEndpoint" to "--tracing-endpoint",
         )
 
         extraProps.forEach { (k, v) ->

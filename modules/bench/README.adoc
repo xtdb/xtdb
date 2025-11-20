@@ -37,6 +37,14 @@ You can run the benchmarks with a custom node config by passing `-PconfigFile pa
 
 `./gradlew auctionmark -PconfigFile=custom-config.yaml -Pduration=PT30S -Pthreads=8 -PscaleFactor=0.1`
 
+=== Running with tracing enabled
+
+You can enable distributed tracing by passing a tracing endpoint. This allows you to send traces to an OpenTelemetry-compatible backend (e.g., Grafana Tempo, Jaeger).
+
+`./gradlew tpch -PtracingEndpoint=http://localhost:4318/v1/traces -PscaleFactor=0.01`
+
+Note: The `--tracing-endpoint` flag is only used when no custom config file is provided. If you're using a custom config file, configure tracing in the YAML file instead (see the link:../../docs/src/content/docs/ops/config/monitoring.md[monitoring documentation]).
+
 == XTDB Bench Docker Image
 
 The xtdb-bench Docker image is automatically built and pushed to GitHub Container Registry (GHCR) against the main branch every night. (tagged with `nightly`)
@@ -100,6 +108,19 @@ docker run --rm ghcr.io/xtdb/xtdb-bench:nightly auctionmark \
 ----
 
 Included within the xtdb-bench are a number of config files for different cloud providers - see those under `cloud/config/`.
+
+==== Running with tracing enabled
+
+You can enable distributed tracing by passing the `--tracing-endpoint` flag. This allows you to send traces to an OpenTelemetry-compatible backend (e.g., Grafana Tempo, Jaeger).
+
+[source,bash]
+----
+docker run --rm ghcr.io/xtdb/xtdb-bench:nightly tpch \
+  --tracing-endpoint http://tempo:4318/v1/traces \
+  --scale-factor 0.01
+----
+
+Note: The `--tracing-endpoint` flag is only used when no custom config file is provided. If you're using a custom config file, configure tracing in the YAML file instead.
 
 == Prometheus and Grafana
 

@@ -270,7 +270,7 @@
 (defn ->local-node ^xtdb.api.Xtdb [{:keys [^Path node-dir ^String buffers-dir
                                            rows-per-block log-limit page-limit instant-src
                                            compactor-threads healthz-port gc? blocks-to-keep garbage-lifetime
-                                           instant-source-for-non-tx-msgs? storage-epoch default-tz]
+                                           instant-source-for-non-tx-msgs? storage-epoch default-tz tracer]
                                     :or {buffers-dir "objects"
                                          healthz-port 8080
                                          instant-source-for-non-tx-msgs? false
@@ -292,7 +292,8 @@
                       (not (nil? gc?)) (assoc :garbage-collector
                                               (cond-> {:enabled? gc?}
                                                 blocks-to-keep (assoc :blocks-to-keep blocks-to-keep)
-                                                garbage-lifetime (assoc :garbage-lifetime garbage-lifetime)))))))
+                                                garbage-lifetime (assoc :garbage-lifetime garbage-lifetime)))
+                      tracer (assoc :tracer tracer)))))
 
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]
