@@ -205,7 +205,21 @@ allprojects {
                 forkOptions.run {
                     val jvmArgs = defaultJvmArgs.toMutableList()
 
-                    // memoryMaximumSize = "4g"
+                    when {
+                        project.hasProperty("twelveGBJvm") -> {
+                            memoryMaximumSize = "5g"
+                            memoryInitialSize = "5g"
+                            jvmArgs += "-XX:MaxDirectMemorySize=6g"
+                            jvmArgs += "-XX:MaxMetaspaceSize=1g"
+                        }
+                        project.hasProperty("sixGBJvm") -> {
+                            memoryMaximumSize = "2g"
+                            memoryInitialSize = "2g"
+                            jvmArgs += "-XX:MaxDirectMemorySize=3g"
+                            jvmArgs += "-XX:MaxMetaspaceSize=1g"
+                        }
+
+                    }
 
                     if (project.hasProperty("yourkit")) {
                         jvmArgs += "-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so=app_name=xtdb"
@@ -226,10 +240,6 @@ allprojects {
 
                     if (project.hasProperty("enableAssertions")) {
                         jvmArgs += "-enableassertions"
-                    }
-
-                    if (project.hasProperty("twelveGBJvm")) {
-                        jvmArgs += twelveGBJvmArgs
                     }
 
                     if (project.hasProperty("replPort"))
