@@ -110,6 +110,7 @@ class MemoryCache @JvmOverloads internal constructor(
                 LOGGER.trace("FetchReq: Fast path cache hit for $pathSlice")
                 res.complete(openSlice)
             } else {
+                yieldIfSimulation() // interleave between openSlice check and compute
                 val path = pathSlice.path
                 fetchReqs.compute(pathSlice) { _, awaiters ->
                     if (awaiters != null) {
@@ -173,6 +174,7 @@ class MemoryCache @JvmOverloads internal constructor(
                     } else {
                         LOGGER.trace("FetchDone: Loaded $pathSlice into memory for ${reqs.size} awaiter(s)")
                         openSlices[pathSlice] = buf
+                        yieldIfSimulation() // interleave between put and completing awaiters
                         // (size - 1) because we already have refCount 1 from allocation
                         (reqs.size - 1).takeIf { it > 0 }?.let { buf.referenceManager.retain(it) }
                         reqs.forEach {
@@ -216,6 +218,8 @@ class MemoryCache @JvmOverloads internal constructor(
             LOGGER.trace("get: Fast path cache hit for $pathSlice")
             return it
         }
+
+        yieldIfSimulation() // interleave between cache check and fetch request
 
         val res = CompletableDeferred<ArrowBuf>()
         fetchCh.send(FetchReq(pathSlice, fetch, res))
