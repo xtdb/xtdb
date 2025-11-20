@@ -12,7 +12,7 @@ on:
       reading_count:
         description: 'Reading Count'
         required: false
-        default: '1000'
+        default: '100000'
         type: string
   schedule:
     - cron: '30 3 * * *' 
