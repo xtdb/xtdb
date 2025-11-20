@@ -34,6 +34,7 @@ providerConfig:
 
     diskCache:
       path: /var/lib/xtdb/buffers/disk-cache
+      maxSizeBytes: 140000000000
 
     healthz:
       host: '*'
