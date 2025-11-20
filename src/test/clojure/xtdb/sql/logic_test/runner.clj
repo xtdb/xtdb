@@ -475,7 +475,21 @@
 
   (sort-by val (update-vals (group-by #(subs % 0 20) (map key @error-counts-by-message)) count))
 
-  (time (-main  "--verify" "--db" "xtdb" "src/test/resources/xtdb/sql/logic_test/sqlite_test/random/groupby/slt_good_1.test"))
+  (time (-main  "--verify" "--db" "xtdb" "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/in/10/slt_good_0.test"
+                "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/between/1/slt_good_0.test",
+                "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/commute/10/slt_good_0.test",
+                "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/in/10/slt_good_0.test",
+                "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/orderby/10/slt_good_0.test",
+                "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/orderby_nosort/10/slt_good_0.test",
+                "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/random/10/slt_good_0.test"))
+  
+  ;; From REPL with -PprofileParser
+  (require '[xtdb.antlr :as antlr])
+  ;; Run your queries...
+  (antlr/dump-aggregated-profiling)
+  ;; See profiling output in logs
+  (antlr/reset-profiling-stats)
+
 
   (time (-main "--verify" "--db" "sqlite" "src/test/resources/xtdb/sql/logic_test/sqlite_test/select4.test"))
 

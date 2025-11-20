@@ -232,6 +232,10 @@ allprojects {
                         jvmArgs += twelveGBJvmArgs
                     }
 
+                    if (project.hasProperty("profileParser")) {
+                        jvmArgs += "-Dxtdb.sql.parser.profile=true"
+                    }
+
                     if (project.hasProperty("replPort"))
                         port.set(project.property("replPort").toString().toInt())
 
