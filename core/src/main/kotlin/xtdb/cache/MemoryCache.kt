@@ -40,6 +40,11 @@ class MemoryCache @JvmOverloads internal constructor(
 
     private val openSlices = ConcurrentHashMap<PathSlice, ArrowBuf>()
 
+    // For testing
+    private suspend fun yieldIfSimulation() {
+        if (dispatcher != Dispatchers.IO) yield()
+    }
+
     data class Slice(val offset: Long, val length: Long) {
         companion object {
             fun from(path: Path) = Slice(0, path.fileSize())
@@ -78,7 +83,7 @@ class MemoryCache @JvmOverloads internal constructor(
     private suspend fun getOpenSlice(pathSlice: PathSlice) =
         openSlices[pathSlice]?.let { buf ->
             try {
-                if (dispatcher != Dispatchers.IO) yield()
+                yieldIfSimulation() // interleave between lookup and retain
                 buf.also { it.referenceManager.retain() }
             } catch (_: IllegalArgumentException) {
                 null
