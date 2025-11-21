@@ -141,6 +141,18 @@
 
     `(do ~@body)))
 
+(defn safe-mapv [f coll]
+  (loop [!res (transient [])
+         coll coll]
+    (if-let [[x & xs] (seq coll)]
+      (recur (try
+               (conj! !res (f x))
+               (catch Throwable t
+                 (run! close (rseq (persistent! !res)))
+                 (throw t)))
+             xs)
+      (persistent! !res))))
+
 (defn uuid->bytes ^bytes [^UUID uuid]
   (let [bb (doto (ByteBuffer/allocate 16)
              (.putLong (.getMostSignificantBits uuid))

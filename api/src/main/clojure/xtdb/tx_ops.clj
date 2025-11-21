@@ -2,8 +2,7 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.time :as time])
-  (:import [java.nio ByteBuffer]
-           xtdb.util.NormalForm))
+  (:import xtdb.util.NormalForm))
 
 (defmulti parse-tx-op
   (fn [tx-op]
@@ -30,7 +29,7 @@
   (throw (err/illegal-arg :xtql/unknown-tx-op {:op op})))
 
 (defrecord Sql [sql arg-rows])
-(defrecord SqlByteArgs [sql ^ByteBuffer arg-bytes]) ; used in FlightSQL, LSP doesn't spot it
+(defrecord SqlByteArgs [sql ^bytes arg-bytes]) ; used in FlightSQL, LSP doesn't spot it
 (defrecord PutDocs [table-name docs valid-from valid-to])
 (defrecord PatchDocs [table-name docs valid-from valid-to])
 (defrecord DeleteDocs [table-name doc-ids valid-from valid-to])

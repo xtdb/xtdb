@@ -23,11 +23,14 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.adbc XtdbConnection XtdbConnection$Node)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$XtdbInternal)
+           (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$ExecutedTx Xtdb$SubmittedTx Xtdb$XtdbInternal)
+           (xtdb.api.log Log$Message$Tx Log$MessageMetadata)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database Database$Catalog)
            xtdb.error.Anomaly
-           (xtdb.query IQuerySource PreparedQuery)))
+           (xtdb.query IQuerySource PreparedQuery)
+           (xtdb.tx TxWriter)
+           (xtdb.util MsgIdUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -99,10 +102,7 @@
     (XtdbConnection.
      (reify XtdbConnection$Node
        (getAllocator [_] allocator)
-       (executeSqlTx [_ sql]
-         (xtp/execute-tx this-node [sql]
-                         ;; TODO multi-db?
-                         {:default-db "xtdb"}))
+       (executeTx [_ db-name ops opts] (.executeTx this-node db-name ops opts))
 
        (openSqlQuery [_ sql]
          (let [query-opts (-> {} (with-query-opts-defaults this-node))]
@@ -132,6 +132,28 @@
     (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (.awaitAll db-cat await-token tx-timeout)
       (.prepareQuery q-src ast db-cat query-opts)))
+
+  (submitTx [_ db-name tx-ops tx-opts]
+    (try
+      (let [^Database db (or (.databaseOrNull db-cat db-name)
+                             (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" db-name)
+                                                   {:db-name db-name})))
+            log (.getLog db)
+            tx-opts (.withFallbackTz tx-opts default-tz)]
+        (util/rethrowing-cause
+         (let [tx-msg (Log$Message$Tx. (TxWriter/serializeTxOps tx-ops allocator tx-opts))
+               ^Log$MessageMetadata message-meta @(.appendMessage log tx-msg)]
+           (Xtdb$SubmittedTx. (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset message-meta))))))
+      (catch Anomaly e
+        (when tx-error-counter
+          (.increment tx-error-counter))
+        (throw e))))
+
+  (executeTx [this db-name tx-ops tx-opts]
+    (let [tx-id (.getTxId (.submitTx this db-name tx-ops tx-opts))
+          db (.databaseOrNull db-cat db-name)
+          {:keys [tx-id system-time committed? error]} (await-msg-result this db tx-id)]
+      (Xtdb$ExecutedTx. tx-id system-time committed? error)))
 
   Xtdb$XtdbInternal
   (getDbCatalog [_] db-cat)

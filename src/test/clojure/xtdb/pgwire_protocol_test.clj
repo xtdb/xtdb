@@ -67,14 +67,14 @@
   (^java.lang.AutoCloseable [frontend startup-opts authn-rules]
    (let [authn (authn/->UserTableAuthn authn-rules
                                        (util/component tu/*node* :xtdb.query/query-source)
-                                       (db/<-node tu/*node*)) 
+                                       (db/<-node tu/*node*))
          conn (pgwire/map->Connection {:server {:server-state (atom {:parameters {"server_encoding" "UTF8"
                                                                                   "client_encoding" "UTF8"
                                                                                   "DateStyle" "ISO"
                                                                                   "IntervalStyle" "ISO_8601"}})
                                                 :node tu/*node*
                                                 :authn authn}
-                                       :allocator tu/*allocator*
+                                       :allocator (util/->child-allocator tu/*allocator* "pgwire-test-conn")
                                        :frontend frontend
                                        :cid -1
                                        :!closing? (atom false)

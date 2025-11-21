@@ -10,6 +10,8 @@ data class TableRef(val dbName: DatabaseName, val schemaName: SchemaName = "publ
 
     val sym: Symbol get() = Symbol.intern(schemaName, tableName)
 
+    val schemaAndTable get() = "$schemaName/$tableName"
+
     companion object {
         @JvmStatic
         fun parse(dbName: DatabaseName, str: String): TableRef {

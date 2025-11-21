@@ -30,7 +30,7 @@
                                                 (cond-> tx-op
                                                   (not (record? tx-op)) tx-ops/parse-tx-op))
                                               ;; TODO test multi-db
-                                              (merge {:default-db "xtdb"} opts))]
+                                              (merge {:default-db "xtdb", :default-tz #xt/zone "Europe/London"} opts))]
 
 
        (with-open [rel (Relation/openFromArrowStream tu/*allocator* actual-bytes)]

@@ -21,6 +21,7 @@
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
             [xtdb.time :as time]
+            [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
@@ -35,17 +36,20 @@
            [java.time Clock Duration ZoneId]
            [java.util.concurrent ExecutorService Executors Future$State FutureTask TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext]
-           (org.antlr.v4.runtime ParserRuleContext) 
+           (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
-           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb$Config)
+           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config)
            xtdb.api.module.XtdbModule
+           (xtdb.arrow Relation)
            xtdb.arrow.RelationReader
            xtdb.database.Database$Config
            (xtdb.error Incorrect Interrupted)
            xtdb.IResultCursor
-           (xtdb.query PreparedQuery)))
+           (xtdb.query PreparedQuery)
+           (xtdb.tx TxOp$PutDocs TxOp$Sql TxOpts)
+           (xtdb.tx_ops PutDocs Sql)))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
@@ -535,8 +539,7 @@
                                            (->> (into {} (filter (comp some? val))))))
                                  (assoc :await-token await-token))))))))))
 
-
-(defn cmd-commit [{:keys [node conn-state default-db] :as conn}]
+(defn cmd-commit [{:keys [^Xtdb node conn-state default-db ^BufferAllocator allocator, tx-error-counter] :as conn}]
   (let [{:keys [transaction session]} @conn-state
         {:keys [failed dml-buf system-time access-mode default-tz async?]} transaction
         {:keys [parameters]} session]
@@ -546,19 +549,33 @@
 
       (try
         (when (= :read-write access-mode)
-          (let [tx-opts {:default-tz default-tz
-                         :system-time (some-> system-time (time/->instant {:default-tz default-tz}))
-                         :authn {:user (get parameters "user")}
-                         :default-db default-db}]
-            (if async?
-              (let [tx-id (with-auth-check conn (xtp/submit-tx node dml-buf tx-opts))]
-                (swap! conn-state assoc :await-token (xtp/await-token node), :latest-submitted-tx {:tx-id tx-id}))
+          (let [tx-opts (TxOpts. default-tz
+                                 (some-> system-time (time/->instant {:default-tz default-tz}))
+                                 (get parameters "user"))]
+            (util/with-open [tx-ops (->> dml-buf
+                                         (mapcat (fn [op]
+                                                   (or (when (instance? Sql op)
+                                                         (let [{:keys [sql arg-rows]} op]
+                                                           (seq (sql/sql->static-ops sql arg-rows))))
+                                                       [op])))
+                                         (util/safe-mapv #(xt-log/open-tx-op % allocator {:default-tz default-tz})))]
+              (if async?
+                (let [tx-id (with-auth-check conn (.submitTx node default-db tx-ops tx-opts))]
+                  (swap! conn-state assoc :await-token (xtp/await-token node), :latest-submitted-tx {:tx-id (.getTxId tx-id)}))
 
-              (let [{:keys [error] :as tx} (with-auth-check conn (xtp/execute-tx node dml-buf tx-opts))]
-                (swap! conn-state assoc :await-token (xtp/await-token node), :latest-submitted-tx tx)
+                (let [tx (with-auth-check conn (.executeTx node default-db tx-ops tx-opts))]
+                  (swap! conn-state assoc
+                         :await-token (xtp/await-token node),
+                         :latest-submitted-tx {:tx-id (.getTxId tx)
+                                               :system-time (.getSystemTime tx)
+                                               :committed? (.getCommitted tx)
+                                               :error (.getError tx)})
 
-                (when error
-                  (throw error))))))
+                  (when-let [error (.getError tx)]
+                    (throw error)))))))
+        (catch Throwable t
+          (metrics/inc-counter! tx-error-counter)
+          (throw t))
         (finally
           (swap! conn-state dissoc :transaction)
           (close-all-portals conn))))))
@@ -1261,11 +1278,12 @@
 
   (swap! conn-state update-in [:transaction :dml-buf]
          (fnil (fn [dml-ops]
-                 (or (when-let [[_sql last-query :as last-op] (peek dml-ops)]
-                       (when (= last-query query)
+                 (or (when-let [^Sql last-op (peek dml-ops)]
+                       (when (and (instance? Sql last-op)
+                                  (= (:sql last-op) query))
                          (conj (pop dml-ops)
-                               (conj last-op args))))
-                     (conj dml-ops [:sql query args])))
+                               (tx-ops/->Sql query (conj (or (:arg-rows last-op) []) args)))))
+                     (conj dml-ops (tx-ops/->Sql query [args]))))
                []))
 
   (pgio/cmd-write-msg conn pgio/msg-command-complete
@@ -1535,8 +1553,7 @@
                                    (fn [{:keys [copy], :as conn-state}]
                                      (-> conn-state
                                          (update-in [:transaction :dml-buf] (fnil conj [])
-                                                    (into [:put-docs (keyword (:table-name copy))]
-                                                          docs))
+                                                    (tx-ops/->PutDocs (:table-name copy) docs nil nil))
                                          (dissoc :copy))))
 
                             (when started-tx?

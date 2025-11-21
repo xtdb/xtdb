@@ -3169,7 +3169,7 @@
                                #(get % "_valid_to")))
 
                (into [] (map (fn [[[vf vt] rows]]
-                               (tx-ops/->PutDocs (str table) (mapv #(dissoc % "_valid_from" "_valid_to") rows)
+                               (tx-ops/->PutDocs table (mapv #(dissoc % "_valid_from" "_valid_to") rows)
                                                  vf vt)))))))))
 
   (visitInsertFromSubquery [_ _])

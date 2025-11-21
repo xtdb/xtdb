@@ -5,35 +5,26 @@
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
-            [xtdb.serde.types :as serde.types]
-            [xtdb.sql :as sql]
             [xtdb.table :as table]
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
-            [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (java.time Duration Instant)
-           (java.util HashMap)
+           (java.util HashMap List)
            java.util.concurrent.TimeUnit
            org.apache.arrow.memory.BufferAllocator
-           (org.apache.arrow.vector.types.pojo FieldType Schema)
            (xtdb.api IndexerConfig TransactionKey Xtdb$Config)
            (xtdb.api.log Log Log$Cluster$Factory Log$Factory Log$Message$Tx Log$MessageMetadata)
-           (xtdb.arrow Relation VectorWriter)
+           (xtdb.arrow Relation Vector)
            xtdb.catalog.BlockCatalog
            (xtdb.database Database Database$Catalog)
            xtdb.indexer.LogProcessor
            xtdb.table.TableRef
-           (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs Sql)
+           (xtdb.tx TxOp$DeleteDocs TxOp$EraseDocs TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts TxWriter)
+           (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs Sql SqlByteArgs)
            (xtdb.util MsgIdUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
-  (Schema. [(serde.types/->field {"tx-ops" [:list :union]})
-            (serde.types/->field {"system-time" [:? :instant]})
-            (serde.types/->field {"default-tz" [:utf8]})
-            (serde.types/->field {"user" [:? :utf8]})]))
 
 (def ^:private forbidden-schemas #{"xt" "information_schema" "pg_catalog"})
 
@@ -44,174 +35,55 @@
   (err/incorrect :xtdb/forbidden-table (format "Cannot write to table: %s" (table/ref->schema+table table))
                  {:table table}))
 
-(defn encode-sql-args [^BufferAllocator allocator, arg-rows]
-  (if (apply not= (map count arg-rows))
-    (throw (err/illegal-arg :sql/arg-rows-different-lengths
-                            {::err/message "All SQL arg-rows must have the same number of columns"
-                             :arg-rows arg-rows}))
+(defprotocol OpenTxOp
+  (open-tx-op [tx-op al opts]))
 
-    (util/with-open [rel (Relation/openFromRows allocator
-                                                (for [arg-row arg-rows]
-                                                  (into {}
-                                                        (map-indexed (fn [idx v] [(str "?_" idx) v]))
-                                                        arg-row)))]
-      (.getAsArrowStream rel))))
+(extend-protocol OpenTxOp
+  Sql
+  (open-tx-op [{:keys [sql arg-rows]} al _opts]
+    (TxOp$Sql. sql (when (seq arg-rows)
+                     (Relation/openFromRows al
+                                            (for [arg-row arg-rows]
+                                              (into {}
+                                                    (map-indexed (fn [idx v] [(str "?_" idx) v]))
+                                                    arg-row))))))
 
-(defn- ->sql-writer [^VectorWriter op-writer, ^BufferAllocator allocator]
-  (let [sql-writer (.vectorFor op-writer "sql" (FieldType/notNullable #xt.arrow/type :struct))
-        query-writer (.vectorFor sql-writer "query" (FieldType/notNullable #xt.arrow/type :utf8))
-        args-writer (.vectorFor sql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
-    (fn write-sql! [{:keys [sql arg-rows]}]
-      (.writeObject query-writer sql)
+  SqlByteArgs
+  (open-tx-op [{:keys [sql arg-bytes]} al _opts]
+    (TxOp$Sql. sql (when arg-bytes
+                     (Relation/openFromArrowStream al arg-bytes))))
 
-      (when (not-empty arg-rows)
-        (.writeObject args-writer (encode-sql-args allocator arg-rows)))
+  PutDocs
+  (open-tx-op [{:keys [table-name docs valid-from valid-to]} al opts]
+    (doseq [doc docs]
+      (when-not (or (:xt/id doc) (get doc "_id"))
+        (throw (err/incorrect :missing-id "missing '_id'" {:doc doc}))))
 
-      (.endStruct sql-writer))))
+    (TxOp$PutDocs. (or (namespace table-name) "public") (name table-name)
+                   (some-> valid-from (time/->instant opts)) (some-> valid-to (time/->instant opts))
+                   (Relation/openFromRows al docs)))
 
-(defn- ->sql-byte-args-writer [^VectorWriter op-writer]
-  (let [sql-writer (.vectorFor op-writer "sql" (FieldType/notNullable #xt.arrow/type :struct))
-        query-writer (.vectorFor sql-writer "query" (FieldType/notNullable #xt.arrow/type :utf8))
-        args-writer (.vectorFor sql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
-    (fn write-sql! [{:keys [sql arg-bytes]}]
-      (.writeObject query-writer sql)
+  PatchDocs
+  (open-tx-op [{:keys [table-name docs valid-from valid-to]} al opts]
+    (TxOp$PatchDocs. (or (namespace table-name) "public") (name table-name)
+                     (some-> valid-from (time/->instant opts)) (some-> valid-to (time/->instant opts))
+                     (Relation/openFromRows al docs)))
 
-      (when arg-bytes
-        (.writeObject args-writer arg-bytes))
+  DeleteDocs
+  (open-tx-op [{:keys [table-name doc-ids valid-from valid-to]} al opts]
+    (TxOp$DeleteDocs. (or (namespace table-name) "public") (name table-name)
+                      (some-> valid-from (time/->instant opts)) (some-> valid-to (time/->instant opts))
+                      (.monoReader (Vector/fromList al "_id" ^List doc-ids))))
 
-      (.endStruct sql-writer))))
-
-(defn- ->docs-op-writer [db-name, ^VectorWriter op-writer]
-  (let [iids-writer (.vectorFor op-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
-        iid-writer (some-> iids-writer
-                           (.getListElements (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
-        doc-writer (.vectorFor op-writer "documents" (FieldType/notNullable #xt.arrow/type :union))
-        valid-from-writer (.vectorFor op-writer "_valid_from" types/nullable-temporal-field-type)
-        valid-to-writer (.vectorFor op-writer "_valid_to" types/nullable-temporal-field-type)
-        table-doc-writers (HashMap.)]
-    (fn write-put! [{:keys [table-name docs valid-from valid-to]} opts]
-      (let [table (table/->ref db-name table-name)]
-        (when (forbidden-table? table) (throw (forbidden-table-ex table)))
-
-        (let [^VectorWriter table-doc-writer
-              (.computeIfAbsent table-doc-writers table
-                                (fn [table]
-                                  (doto (.vectorFor doc-writer (str (table/ref->schema+table table)) (FieldType/notNullable #xt.arrow/type :list))
-                                    (.getListElements (FieldType/notNullable #xt.arrow/type :struct)))))]
-
-          (.writeObject table-doc-writer docs)
-
-          (doseq [doc docs
-                  :let [eid (val (or (->> doc
-                                          (some (fn [e]
-                                                  (let [k (key e)]
-                                                    (when (.equals "_id" (cond-> k
-                                                                           (keyword? k) util/->normal-form-str))
-                                                      e)))))
-                                     (throw (err/illegal-arg :missing-id {:doc doc}))))]]
-            (.writeBytes iid-writer (util/->iid eid)))
-          (.endList iids-writer))
-
-        (.writeObject valid-from-writer (time/->instant valid-from opts))
-        (.writeObject valid-to-writer (time/->instant valid-to opts))
-
-        (.endStruct op-writer)))))
-
-(defn- ->put-writer [db-name, ^VectorWriter op-writer]
-  (->docs-op-writer db-name (.vectorFor op-writer "put-docs" (FieldType/notNullable #xt.arrow/type :struct))))
-
-(defn- ->patch-writer [db-name, ^VectorWriter op-writer]
-  (->docs-op-writer db-name (.vectorFor op-writer "patch-docs" (FieldType/notNullable #xt.arrow/type :struct))))
-
-(defn- ->delete-writer [db-name, ^VectorWriter op-writer]
-  (let [delete-writer (.vectorFor op-writer "delete-docs" (FieldType/notNullable #xt.arrow/type :struct))
-        table-writer (.vectorFor delete-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
-        iids-writer (.vectorFor delete-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
-        iid-writer (some-> iids-writer
-                           (.getListElements (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))
-        valid-from-writer (.vectorFor delete-writer "_valid_from" types/nullable-temporal-field-type)
-        valid-to-writer (.vectorFor delete-writer "_valid_to" types/nullable-temporal-field-type)]
-    (fn write-delete! [{:keys [table-name doc-ids valid-from valid-to]}]
-      (let [table (table/->ref db-name table-name)]
-        (when (forbidden-table? table) (throw (forbidden-table-ex table)))
-        (when (seq doc-ids)
-          (.writeObject table-writer (str (table/ref->schema+table table)))
-
-          (doseq [doc-id doc-ids]
-            (.writeObject iid-writer (util/->iid doc-id)))
-          (.endList iids-writer)
-
-          (.writeObject valid-from-writer valid-from)
-          (.writeObject valid-to-writer valid-to)
-
-          (.endStruct delete-writer))))))
-
-(defn- ->erase-writer [db-name, ^VectorWriter op-writer]
-  (let [erase-writer (.vectorFor op-writer "erase-docs" (FieldType/notNullable #xt.arrow/type :struct))
-        table-writer (.vectorFor erase-writer "table" (FieldType/notNullable #xt.arrow/type :utf8))
-        iids-writer (.vectorFor erase-writer "iids" (FieldType/notNullable #xt.arrow/type :list))
-        iid-writer (some-> iids-writer
-                           (.getListElements (FieldType/notNullable #xt.arrow/type [:fixed-size-binary 16])))]
-    (fn [{:keys [table-name doc-ids]}]
-      (let [table (table/->ref db-name table-name)]
-        (when (forbidden-table? table) (throw (forbidden-table-ex table)))
-        (when (seq doc-ids)
-          (.writeObject table-writer (str (table/ref->schema+table table)))
-
-          (doseq [doc-id doc-ids]
-            (.writeObject iid-writer (util/->iid doc-id)))
-          (.endList iids-writer)
-
-          (.endStruct erase-writer))))))
-
-(defn write-tx-ops! [^BufferAllocator allocator, ^VectorWriter op-writer, tx-ops, {:keys [default-db default-tz]}]
-  (let [!write-sql! (delay (->sql-writer op-writer allocator))
-        !write-sql-byte-args! (delay (->sql-byte-args-writer op-writer))
-        !write-put! (delay (->put-writer default-db op-writer))
-        !write-patch! (delay (->patch-writer default-db op-writer))
-        !write-delete! (delay (->delete-writer default-db op-writer))
-        !write-erase! (delay (->erase-writer default-db op-writer))]
-
-    (doseq [tx-op tx-ops]
-      (condp instance? tx-op
-        Sql (let [{:keys [sql arg-rows]} tx-op]
-              (if-let [put-docs-ops (sql/sql->static-ops sql arg-rows)]
-                (doseq [op put-docs-ops]
-                  (@!write-put! op {:default-tz default-tz}))
-
-                (@!write-sql! tx-op)))
-
-        SqlByteArgs (@!write-sql-byte-args! tx-op)
-        PutDocs (@!write-put! tx-op {:default-tz default-tz})
-        PatchDocs (@!write-patch! tx-op {:default-tz default-tz})
-        DeleteDocs (@!write-delete! tx-op)
-        EraseDocs (@!write-erase! tx-op)
-        (throw (err/illegal-arg :invalid-tx-op {:tx-op tx-op}))))))
+  EraseDocs
+  (open-tx-op [{:keys [table-name doc-ids]} al _opts]
+    (TxOp$EraseDocs. (or (namespace table-name) "public") (name table-name)
+                     (.monoReader (Vector/fromList al "_id" ^List doc-ids)))))
 
 (defn serialize-tx-ops ^bytes [^BufferAllocator allocator tx-ops
-                               {:keys [^Instant system-time, default-tz], {:keys [user]} :authn, :as opts}]
-  (with-open [rel (Relation. allocator tx-schema)]
-    (let [ops-list-writer (.get rel "tx-ops")
-
-          default-tz-writer (.get rel "default-tz")
-          user-writer (.get rel "user")]
-
-      (when system-time
-        (.writeObject (.get rel "system-time") (-> (time/->zdt system-time)
-                                                   (.withZoneSameInstant time/utc))))
-
-      (when user
-        (.writeObject user-writer user))
-
-      (when default-tz
-        (.writeObject default-tz-writer (str default-tz)))
-
-      (write-tx-ops! allocator (.getListElements ops-list-writer) tx-ops opts)
-      (.endList ops-list-writer)
-
-      (.endRow rel)
-
-      (.getAsArrowStream rel))))
+                               {:keys [^Instant system-time, default-tz], {:keys [user]} :authn :as opts}]
+  (util/with-open [ops (util/safe-mapv #(open-tx-op % allocator opts) tx-ops)]
+    (TxWriter/serializeTxOps ops allocator (TxOpts. default-tz (time/->instant system-time) user))))
 
 (defmulti ->log-cluster-factory
   (fn [k _opts]

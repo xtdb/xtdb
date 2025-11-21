@@ -9,6 +9,11 @@ import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.IResultCursor
+import xtdb.api.Xtdb
+import xtdb.database.DatabaseName
+import xtdb.tx.TxOp
+import xtdb.tx.TxOpts
+import xtdb.util.useAll
 
 class XtdbConnection(private val node: Node) : AdbcConnection {
     override fun createStatement() = object : AdbcStatement {
@@ -42,7 +47,10 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
 
         override fun executeUpdate(): UpdateResult {
-            node.executeSqlTx(this.sql ?: error("SQL query not set"))
+            listOf(TxOp.Sql(sql ?: error("SQL query not set"))).useAll { ops ->
+                // TODO multi-db
+                node.executeTx("xtdb", ops)
+            }
             return UpdateResult(-1)
         }
 
@@ -55,7 +63,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
     interface Node {
         val allocator: BufferAllocator
-        fun executeSqlTx(sql: String)
+        fun executeTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts = TxOpts()): Xtdb.ExecutedTx
         fun openSqlQuery(sql: String): IResultCursor
     }
 

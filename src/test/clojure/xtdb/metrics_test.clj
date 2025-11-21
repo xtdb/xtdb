@@ -55,7 +55,7 @@
 
     (t/is (= 0.0 (.count ^Counter (.counter (.find registry "query.error")))))
     (t/is (= 0.0 (.count ^Counter (.counter (.find registry "query.warning")))))
-    (t/is (= 4.0 (.count ^Counter (.counter (.find registry "tx.error")))))))
+    (t/is (= 5.0 (.count ^Counter (.counter (.find registry "tx.error")))))))
 
 (t/deftest test-transaction-exception-counter-on-submit-tx
   (let [node (xtn/start-node tu/*node-opts*)

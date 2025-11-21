@@ -12,6 +12,7 @@ import xtdb.antlr.Sql
 import xtdb.api.Authenticator.Factory.UserTable
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
+import xtdb.api.log.MessageId
 import xtdb.api.metrics.HealthzConfig
 import xtdb.api.metrics.TracerConfig
 import xtdb.api.module.XtdbModule
@@ -19,10 +20,14 @@ import xtdb.api.storage.Storage
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.Database
+import xtdb.database.DatabaseName
 import xtdb.query.PreparedQuery
+import xtdb.tx.TxOp
+import xtdb.tx.TxOpts
 import xtdb.util.requiringResolve
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.UUID.randomUUID
@@ -47,6 +52,14 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     fun prepareSql(sql: String, opts: Any?): PreparedQuery
     fun prepareSql(sql: Sql.DirectlyExecutableStatementContext, opts: Any?): PreparedQuery
+
+    data class SubmittedTx(val txId: MessageId)
+
+    fun submitTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts): SubmittedTx
+
+    data class ExecutedTx(val txId: MessageId, val systemTime: Instant, val committed: Boolean, val error: Throwable?)
+
+    fun executeTx(dbName: DatabaseName, ops: List<TxOp>, opts: Any?): ExecutedTx
 
     @Serializable
     data class Config(

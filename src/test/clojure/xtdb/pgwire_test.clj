@@ -723,8 +723,8 @@
      (fn [send read]
        (testing "error query"
          (send "INSERT INTO foo (id, a) VALUES (1, 2);\n")
-         (is (= ["ERROR:  Illegal argument: 'missing-id'"
-                 "DETAIL:  {\"doc\":{\"id\":1,\"a\":2},\"category\":\"cognitect.anomalies\\/incorrect\",\"code\":\"missing-id\",\"message\":\"Illegal argument: 'missing-id'\"}"]
+         (is (= ["ERROR:  missing '_id'"
+                 "DETAIL:  {\"doc\":{\"id\":1,\"a\":2},\"category\":\"cognitect.anomalies\\/incorrect\",\"code\":\"missing-id\",\"message\":\"missing '_id'\"}"]
                 (read :stderr)))
          ;; to drain the standard stream
          (read))
@@ -1207,7 +1207,7 @@
     (with-open [conn (jdbc-conn)]
       (q conn ["BEGIN READ WRITE"])
       (q conn ["INSERT INTO foo (a) values (42)"])
-      (is (thrown-with-msg? PSQLException #"missing-id" (q conn ["COMMIT"]))))))
+      (is (thrown-with-msg? PSQLException #"missing '_id'" (q conn ["COMMIT"]))))))
 
 (when (psql-available?)
   (deftest psql-analyzer-error-test
@@ -1229,7 +1229,7 @@
        (send "COMMIT;\n")
        (let [error (read :stderr)]
          (is (not= :timeout error))
-         (is (= "ERROR:  Illegal argument: 'missing-id'"
+         (is (= "ERROR:  missing '_id'"
                 (first error))))
 
        (send "ROLLBACK;\n")
@@ -1738,16 +1738,19 @@
       (jdbc/execute! tx ["INSERT INTO foo RECORDS {_id: ?, a: ?}" 3, "three"])
       (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" {:xt/id 4, :a "four"}])
 
-      ;; HACK.
-      (t/is (= [[:sql "INSERT INTO foo RECORDS $1"
-                 [{:_id 1, :a "one"}]
-                 [{:_id 2, :a "two"}]]
-                [:sql "INSERT INTO foo RECORDS {_id: $1, a: $2}" [3 "three"]]
-                [:sql "INSERT INTO foo RECORDS $1" [{:_id 4, :a "four"}]]]
+      ;; HACK - leaning into internal state
+      (t/is (= [{:sql "INSERT INTO foo RECORDS $1",          
+                 :arg-rows [[{:_id 1, :a "one"}]
+                            [{:_id 2, :a "two"}]]}
+                {:sql "INSERT INTO foo RECORDS {_id: $1, a: $2}",
+                 :arg-rows [[3 "three"]]}
+                {:sql "INSERT INTO foo RECORDS $1",
+                 :arg-rows [[{:_id 4, :a "four"}]]}]
                (-> @(:server-state *server*)
                    (get-in [:connections 1 :conn-state])
                    deref
-                   (get-in [:transaction :dml-buf])))))
+                   (get-in [:transaction :dml-buf])
+                   (->> (mapv (partial into {})))))))
 
     (t/is (= [{:xt/id 1, :a "one"}
               {:xt/id 2, :a "two"}
@@ -2091,7 +2094,7 @@ ORDER BY t.oid DESC LIMIT 1"
 (deftest test-missing-id-pg-wire-3768
   (with-open [conn (jdbc-conn)
               stmt (.prepareStatement conn "INSERT INTO foo (notid) VALUES (1)")]
-    (t/is (is (thrown-with-msg? PSQLException #"Illegal argument: 'missing-id'" (.execute stmt))))
+    (t/is (is (thrown-with-msg? PSQLException #"missing '_id'" (.execute stmt))))
     (t/is (= [] (jdbc/execute! conn ["SELECT * FROM foo"])))))
 
 (deftest test-primitive-array

@@ -66,7 +66,7 @@
 
     (vec rows)))
 
-(defn- flight-stream->bytes ^ByteBuffer [allocator ^FlightStream flight-stream]
+(defn- flight-stream->bytes ^bytes [allocator ^FlightStream flight-stream]
   (let [root (.getRoot flight-stream)
         root-unl (VectorUnloader. root)]
     (with-open [out (ByteArrayOutputStream.)
@@ -82,7 +82,7 @@
         (.writePage unl))
       (.end unl)
 
-      (ByteBuffer/wrap (.toByteArray out)))))
+      (.toByteArray out))))
 
 (defn- ->fsql-producer [{:keys [allocator node, ^IQuerySource q-src, db-cat, ^Map fsql-txs, ^Map stmts, ^Map tickets]}]
   (letfn [(exec-dml [dml fsql-tx-id]
@@ -93,7 +93,11 @@
                                          (update fsql-tx :dml conj dml))))
                 (throw (UnsupportedOperationException. "unknown tx")))
 
-              (xtp/execute-tx node [dml] {:default-db "xtdb"}))) ; TODO multi-db
+              (try
+                (xtp/execute-tx node [dml] {:default-db "xtdb"})
+                (catch Throwable t
+                  (log/warn t "bang")
+                  (throw t))))) ; TODO multi-db
 
           (handle-get-stream [^IResultCursor cursor, ^FlightProducer$ServerStreamListener listener]
             (try

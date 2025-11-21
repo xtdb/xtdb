@@ -35,10 +35,11 @@
                   {"_valid_from" [:? :instant]}
                   {"_valid_to" [:? :instant]}]}]]}
              {"system-time" [:? :instant]}
-             {"default-tz" [:? :utf8]}
+             {"default-tz" :utf8}
              {"user" [:? :utf8]}),
  :data
- [{:tx-ops
+ [{:default-tz "Europe/London",
+   :tx-ops
    [#xt/tagged [:put-docs
                 {:iids [#bytes "ef4f71005524e9af20ffaca545cde6e1"],
                  :documents

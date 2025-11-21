@@ -2133,38 +2133,38 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
     (t/is (nil? (sql/sql->static-ops "INSERT INTO baz (bar) SELECT bar FROM foo" nil))
           "excludes insert-from-subquery"))
 
-  (t/is (= [(tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 1, "v" 2}]})]
+  (t/is (= [(tx-ops/map->PutDocs {:table-name 'public/foo, :docs [{"_id" 1, "v" 2}]})]
            (sql/sql->static-ops "INSERT INTO foo (_id, v) VALUES (1, 2)" nil)))
 
   (t/is (nil? (sql/sql->static-ops "INSERT INTO foo (_id, v) VALUES (1, 2 + 3)" nil))
         "excludes expressions")
 
-  (t/is (= [(tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 1} {"_id" 2}]
+  (t/is (= [(tx-ops/map->PutDocs {:table-name 'public/foo, :docs [{"_id" 1} {"_id" 2}]
                                   :valid-from #xt/date "2020-08-01"})
-            (tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 3}]
+            (tx-ops/map->PutDocs {:table-name 'public/foo, :docs [{"_id" 3}]
                                   :valid-from #xt/date "2021-01-01"})]
 
            (sql/sql->static-ops "INSERT INTO foo (_id, _valid_from) VALUES (1, DATE '2020-08-01'), (2, DATE '2020-08-01'), (3, DATE '2021-01-01')" nil))
         "groups by valid-from")
 
   (t/testing "with args"
-    (t/is (= [(tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 1} {"_id" 3}]
+    (t/is (= [(tx-ops/map->PutDocs {:table-name 'public/foo, :docs [{"_id" 1} {"_id" 3}]
                                     :valid-from #xt/date "2020-01-01"})
-              (tx-ops/map->PutDocs {:table-name "public/foo", :docs [{"_id" 2} {"_id" 4}]
+              (tx-ops/map->PutDocs {:table-name 'public/foo, :docs [{"_id" 2} {"_id" 4}]
                                     :valid-from #xt/date "2020-01-02"})]
 
              (sql/sql->static-ops "INSERT INTO foo (_id, _valid_from) VALUES (?, DATE '2020-01-01'), (?, DATE '2020-01-02')"
                                   [[1 2] [3 4]]))))
 
   (t/testing "insert records"
-    (t/is (= [(tx-ops/map->PutDocs {:table-name "public/bar", :docs [{"_id" 0, "value" "hola"} {"_id" 1, "value" "mundo"}],
+    (t/is (= [(tx-ops/map->PutDocs {:table-name 'public/bar, :docs [{"_id" 0, "value" "hola"} {"_id" 1, "value" "mundo"}],
                                     :valid-from nil, :valid-to nil})]
              (sql/sql->static-ops "INSERT INTO bar RECORDS $1"
                                   [[{"_id" 0, "value" "hola"}]
                                    [{"_id" 1, "value" "mundo"}]])))))
 
 (t/deftest test-sql->static-ops-decimals-4483
-  (t/is (= [(tx-ops/map->PutDocs {:table-name "public/foo",
+  (t/is (= [(tx-ops/map->PutDocs {:table-name 'public/foo,
                                   :docs [{"xt/id" 1, "dec" 1.01M} {"xt/id" 2, "dec" 1.012M}],
                                   :valid-from nil, :valid-to nil})]
            (sql/sql->static-ops "INSERT INTO foo RECORDS ?"
@@ -2290,7 +2290,7 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
 
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 2}"]])
 
-  (t/is (anomalous? [:incorrect nil #"missing-id"]
+  (t/is (anomalous? [:incorrect :missing-id]
                     (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {id: 1, x: 2}"]])))
 
   (t/is (= [{:x 2, :xt/id 1}]
@@ -2309,7 +2309,7 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
   (t/is (= [{:xt/id 2, :x 3} {:xt/id 3, :x 4.0} {:xt/id 4, :x 5} {:xt/id 5, :x 6.0} {:xt/id 7, :x "8"}]
            (xt/q tu/*node* "SELECT * FROM bar ORDER BY _id")))
 
-  (t/is (anomalous? [:incorrect nil #"missing-id"]
+  (t/is (anomalous? [:incorrect :missing-id]
                     (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS ?"
                                                [{:id 2, :x 3}]]]))))
 
@@ -2479,13 +2479,13 @@ UNION ALL
 
 (t/deftest can-not-write-to-reserved-tables
   (t/testing "submit side"
-    (t/is (anomalous? [:incorrect nil #"Cannot write to table: xt/txs"]
+    (t/is (anomalous? [:incorrect nil #"Cannot write to table: xt.txs"]
                       (xt/submit-tx tu/*node* [[:put-docs :xt/txs {:xt/id 1}]])))
 
-    (t/is (anomalous? [:incorrect nil #"Cannot write to table: xt/txs"]
+    (t/is (anomalous? [:incorrect nil #"Cannot write to table: xt.txs"]
                       (xt/execute-tx tu/*node* ["INSERT INTO xt.txs(_id, system_time, committed, error) VALUES(1, 2, 3, 4)"])))
 
-    (t/is (anomalous? [:incorrect nil #"Cannot write to table: pg_catalog/pg_user"]
+    (t/is (anomalous? [:incorrect nil #"Cannot write to table: pg_catalog.pg_user"]
                       (xt/execute-tx tu/*node* ["INSERT INTO pg_catalog.pg_user(_id, system_time, committed, error) VALUES(1, 2, 3, 4)"]))))
 
   ;; just to have something in tx.txs before the check below
