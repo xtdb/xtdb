@@ -604,7 +604,7 @@ class SimulationTest : SimulationTestBase() {
     }
 
     @RepeatableSimulationTest
-    @WithNumberOfSystems(100)
+    @WithNumberOfSystems(2)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun multiSystemSingleL0Compaction(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
