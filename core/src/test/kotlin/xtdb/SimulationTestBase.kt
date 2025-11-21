@@ -2,12 +2,17 @@ package xtdb
 
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.api.extension.TestExecutionExceptionHandler
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.Arguments
+import org.junit.jupiter.params.provider.MethodSource
 import xtdb.util.logger
 import xtdb.util.warn
+import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
 @Target(AnnotationTarget.FUNCTION)
@@ -58,5 +63,18 @@ abstract class SimulationTestBase {
     @AfterEach
     open fun tearDownSimulation() {
         explicitSeed = null
+    }
+
+    companion object SimulationIterations {
+        /**
+         * Returns iteration numbers for simulation tests.
+         * Override using:
+         *   -Dxtdb.simulation-test-iterations=N
+         */
+        private val testIterations: Int =
+            System.getProperty("xtdb.simulation-test-iterations", "100").toInt()
+
+        @JvmStatic
+        fun iterationSource(): List<Arguments> = (1..testIterations).map { Arguments.of(it) }
     }
 }
