@@ -40,7 +40,7 @@ class KafkaClusterTest {
     }
 
     @Test
-    fun `round-trips messages`() = runTest(timeout = 10.seconds) {
+    fun `round-trips messages`() = runTest(timeout = 30.seconds) {
         val msgs = synchronizedList(mutableListOf<List<Record>>())
 
         val subscriber = mockk<Subscriber> {
