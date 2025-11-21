@@ -26,7 +26,7 @@ import kotlin.time.Duration.Companion.seconds
 @Tag("integration")
 class BlobStorageTest : ObjectStoreTest() {
     companion object {
-        private val container = GenericContainer("mcr.microsoft.com/azure-storage/azurite")
+        private val container = GenericContainer("mcr.microsoft.com/azure-storage/azurite:3.35.0")
             .withExposedPorts(10000)
 
         @JvmStatic
