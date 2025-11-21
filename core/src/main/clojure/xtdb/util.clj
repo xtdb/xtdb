@@ -6,8 +6,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [clojure.walk :as walk]
-            [integrant.core :as ig]
-            [xtdb.error :as err])
+            [integrant.core :as ig])
   (:import [clojure.lang Keyword MapEntry Symbol]
            io.netty.util.internal.PlatformDependent
            (java.io File Writer)
@@ -17,13 +16,12 @@
            (java.nio.channels ClosedByInterruptException ClosedByInterruptException FileChannel FileChannel$MapMode)
            (java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption)
            java.nio.file.attribute.FileAttribute
-           [java.security MessageDigest]
-           (java.util Arrays Collection Collections LinkedHashMap Map Set UUID WeakHashMap)
+           (java.util Collection Collections LinkedHashMap Map Set UUID WeakHashMap)
            (java.util.concurrent ExecutionException Executors ThreadFactory)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb Bytes TaggedValue)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
-           xtdb.util.NormalForm))
+           (xtdb.util Iid NormalForm)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -165,25 +163,8 @@
     (.flip bb)
     ba))
 
-(def ^:private ^java.lang.ThreadLocal !msg-digest
-  (ThreadLocal/withInitial
-   (fn []
-     (MessageDigest/getInstance "SHA-256"))))
-
 (defn ->iid ^bytes [eid]
-  (if (uuid? eid)
-    (uuid->bytes eid)
-    (let [^bytes eid-bytes (cond
-                             (string? eid) (.getBytes (str "s" eid))
-                             (keyword? eid) (.getBytes (str "k" eid))
-                             (integer? eid) (.getBytes (str "i" eid))
-                             :else (let [id-type (some-> (class eid) .getName symbol)]
-                                     (throw (err/incorrect :xtdb/invalid-id
-                                                           (format "Invalid ID type: %s" id-type)
-                                                           {:type id-type, :eid eid}))))]
-      (-> ^MessageDigest (.get !msg-digest)
-          (.digest eid-bytes)
-          (Arrays/copyOfRange 0 16)))))
+  (Iid/getAsIid eid))
 
 (def valid-iid? (some-fn uuid? string? keyword? integer?))
 
