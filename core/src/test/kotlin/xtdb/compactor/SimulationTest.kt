@@ -217,7 +217,7 @@ private fun buildTrieDetails(tableName: String, trieKey: String, dataFileSize: L
         .build()
 
 // Settings used by all tests in this class
-private const val logLevel = "DEBUG"
+private const val logLevel = "INFO"
 
 // Clojure interop to get at internal functions
 private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
