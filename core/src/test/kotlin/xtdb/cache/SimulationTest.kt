@@ -1,10 +1,8 @@
 package xtdb.cache
 
 import io.kotest.assertions.throwables.shouldThrow
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.yield
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.OutOfMemoryException
 import org.apache.arrow.memory.RootAllocator
@@ -177,6 +175,84 @@ class SimulationTest : SimulationTestBase() {
 
             // After all fetches complete and buffers are released, cache should be empty
             assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
+        }
+    }
+
+    @RepeatableSimulationTest
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    fun `deterministic concurrent different slices of same path`() = runTest {
+        val loader = TestPathLoader()
+        val concurrentFetches = rand.nextInt(2, 10)
+        MemoryCache(allocator, 1000L, loader, dispatcher).use { cache ->
+            val path = Path.of("test/file")
+
+            val deferreds = async(dispatcher) {
+                (0 until concurrentFetches).map { i ->
+                    async(dispatcher) {
+                        val slice = Slice(i * 50L, 50)
+                        cache.get(path, slice) { it to null }.use { buf ->
+                            LOGGER.trace("Fetched slice $i: offset=${i * 50}, buf=$buf")
+                            yield()
+                            buf.getByte(0)
+                        }
+                    }
+                }
+            }.await()
+
+            val results = deferreds.awaitAll()
+
+            assertEquals(concurrentFetches, results.size)
+            assertEquals(results.first().let { fst -> List(results.size) { fst } }, results)
+            assertEquals(MemoryCache.Stats(0L, 1000L), cache.stats0)
+        }
+    }
+
+    @RepeatableSimulationTest
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    fun `deterministic concurrent fetches with some OOMs`() = runTest {
+        val loader = TestPathLoader()
+        MemoryCache(allocator, 100L, loader, dispatcher).use { cache ->
+            val concurrentFetches = rand.nextInt(4, 10)
+
+            // Mix of small (will succeed) and big (will OOM) fetches
+            // Small = 10 bytes, Big = 150 bytes (cache is 100)
+            val deferreds = async(dispatcher) {
+                (0 until concurrentFetches).map { i ->
+                    async(dispatcher) {
+                        val size = if (i % 2 == 0) 10L else 150L
+                        val path = Path.of("test/$i")
+                        val slice = Slice(0, size)
+
+                        runCatching {
+                            cache.get(path, slice) { it to null }.use { buf ->
+                                LOGGER.trace("Fetch $i (size=$size): got buf $buf")
+                                yield()
+                                buf.getByte(0)
+                            }
+                        }
+                    }
+                }
+            }.await()
+
+            val results = deferreds.awaitAll()
+
+            // Check that small ones succeeded and big ones failed
+            results.forEachIndexed { i, result ->
+                if (i % 2 == 0) {
+                    Assertions.assertTrue(result.isSuccess, "Small fetch $i should succeed")
+                    Assertions.assertEquals(1L, result.getOrNull()?.toLong())
+                } else {
+                    Assertions.assertTrue(result.isFailure, "Big fetch $i should fail with OOM")
+                    Assertions.assertTrue(result.exceptionOrNull() is OutOfMemoryException)
+                }
+            }
+
+            // Cache should still be functional
+            val finalResult = cache.get(Path.of("final/10"), Slice(0, 10)) { it to null }.use { buf ->
+                buf.getByte(0)
+            }
+
+            assertEquals(MemoryCache.Stats(0L, 100L), cache.stats0)
         }
     }
 }
