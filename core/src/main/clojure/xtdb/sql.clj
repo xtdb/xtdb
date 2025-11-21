@@ -1314,7 +1314,7 @@
 
   (visitIsBooleanValueExpr [this ctx]
     (let [boolean-value (-> (.booleanValue ctx) (.getText) (str/upper-case))
-          expr (-> (.expr ctx) (.accept this))
+          expr (-> (.predicateExpr ctx) (.accept this))
           boolean-fn (case boolean-value
                        "TRUE" (list 'true? expr)
                        "FALSE" (list 'false? expr)
@@ -1346,22 +1346,36 @@
             nve)))
 
   (visitOrExpr [this ctx]
-    (list 'or
-          (-> (.expr ctx 0) (.accept this))
-          (-> (.expr ctx 1) (.accept this))))
+    (let [and-exprs (.andExpr ctx)]
+      (if (= 1 (count and-exprs))
+        ;; Single andExpr, just visit it
+        (-> (first and-exprs) (.accept this))
+        ;; Multiple andExprs joined by OR
+        (reduce (fn [acc and-expr]
+                  (list 'or acc (-> and-expr (.accept this))))
+                (-> (first and-exprs) (.accept this))
+                (rest and-exprs)))))
 
   (visitAndExpr [this ctx]
-    (list 'and
-          (-> (.expr ctx 0) (.accept this))
-          (-> (.expr ctx 1) (.accept this))))
+    (let [not-exprs (.notExpr ctx)]
+      (if (= 1 (count not-exprs))
+        ;; Single notExpr, just visit it
+        (-> (first not-exprs) (.accept this))
+        ;; Multiple notExprs joined by AND
+        (reduce (fn [acc not-expr]
+                  (list 'and acc (-> not-expr (.accept this))))
+                (-> (first not-exprs) (.accept this))
+                (rest not-exprs)))))
 
-  (visitUnaryNotExpr [this ctx] (list 'not (-> (.expr ctx) (.accept this))))
+  (visitUnaryNotExpr [this ctx] (list 'not (-> (.notExpr ctx) (.accept this))))
+
+  (visitNotExprDelegate [this ctx] (-> (.predicateExpr ctx) (.accept this)))
 
   (visitComparisonPredicate [this ctx]
     (list ((some-fn {'!= '<>} identity)
            (symbol (.getText (.compOp ctx))))
-          (-> (.expr ctx 0) (.accept this))
-          (-> (.expr ctx 1) (.accept this))))
+          (-> (.predicateExpr ctx 0) (.accept this))
+          (-> (.predicateExpr ctx 1) (.accept this))))
 
   (visitComparisonPredicatePart2 [{:keys [pt1] :as this} ctx]
     (list ((some-fn {'!= '<>} identity)
@@ -1370,7 +1384,7 @@
           (-> (.expr ctx) (.accept (dissoc this :pt1)))))
 
   (visitNullPredicate [this ctx]
-    (let [expr (list 'nil? (-> (.expr ctx) (.accept this)))]
+    (let [expr (list 'nil? (-> (.predicateExpr ctx) (.accept this)))]
       (if (.NOT ctx)
         (list 'not expr)
         expr)))
@@ -1407,7 +1421,7 @@
 
   (visitLikePredicate [this ctx]
     (let [like-expr (list 'like
-                          (-> (.expr ctx) (.accept this))
+                          (-> (.predicateExpr ctx) (.accept this))
                           (-> (.likePattern ctx) (.accept this)))]
       (if (.NOT ctx)
         (list 'not like-expr)
@@ -1420,7 +1434,7 @@
         (list 'like pt1 cp))))
 
   (visitLikeRegexPredicate [this ctx]
-    (let [like-expr (list 'like-regex (.accept (.expr ctx) this)
+    (let [like-expr (list 'like-regex (.accept (.predicateExpr ctx) this)
                           (-> (.xqueryPattern ctx) (.accept this))
                           (or (some-> (.xqueryOptionFlag ctx) (.accept this)) ""))]
       (if (.NOT ctx)
@@ -1437,7 +1451,7 @@
 
   (visitPostgresRegexPredicate [this ctx]
     (let [pro (-> (.postgresRegexOperator ctx) (.getText))
-          expr (list 'like-regex (.accept (.expr ctx) this)
+          expr (list 'like-regex (.accept (.predicateExpr ctx) this)
                      (-> (.xqueryPattern ctx) (.accept this))
                      (if (#{"~*" "!~*"} pro) "i" ""))]
       (if (#{"!~" "!~*"} pro)
@@ -1482,8 +1496,8 @@
       (list 'uri-fragment url)))
 
   (visitPeriodOverlapsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.predicateExpr ctx 0) (.accept this))
+          p2 (-> (.predicateExpr ctx 1) (.accept this))]
       (xt/template
        (and (< (lower ~p1) (coalesce (upper ~p2) xtdb/end-of-time))
             (> (coalesce (upper ~p1) xtdb/end-of-time) (lower ~p2))))))
@@ -1499,15 +1513,15 @@
                   exprs))))))
 
   (visitPeriodEqualsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.predicateExpr ctx 0) (.accept this))
+          p2 (-> (.predicateExpr ctx 1) (.accept this))]
       (xt/template
        (and (= (lower ~p1) (lower ~p2))
             (null-eq (upper ~p1) (upper ~p2))))))
 
   (visitPeriodContainsPredicate [this ctx]
-    (let [p1 (-> (.expr ctx 0) (.accept this))
-          p2 (-> (.expr ctx 1) (.accept this))]
+    (let [p1 (-> (.predicateExpr ctx 0) (.accept this))
+          p2 (-> (.predicateExpr ctx 1) (.accept this))]
       (xt/template (contains? ~p1 ~p2))))
 
   (visitPeriodPrecedesPredicate [this ctx]
@@ -1896,7 +1910,7 @@
                        ("some" "any") :any)
           op (symbol (.getText (.compOp ctx)))]
       (.accept (.quantifiedComparisonPredicatePart3 ctx)
-               (assoc this :qc-pt2 {:expr (.accept (.expr ctx) this)
+               (assoc this :qc-pt2 {:expr (.accept (.predicateExpr ctx) this)
                                     :op (cond-> op
                                           (= quantifier :all) negate-op)
                                     :quantifier quantifier}))))
@@ -1947,7 +1961,7 @@
       (cond->> (plan-sq sq-ctx env scope !subqs
                         {:sq-type :quantified-comparison
                          :assert-single-col? true
-                         :expr (.accept (.expr ctx) this)
+                         :expr (.accept (.predicateExpr ctx) this)
                          :op '=})
         (boolean (.NOT ctx)) (list 'not))))
 
