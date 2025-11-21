@@ -33,7 +33,7 @@ class MinioTest : S3Test() {
 
     companion object {
         private var wasRunning = false
-        private val container = MinIOContainer("minio/minio")
+        private val container = MinIOContainer("minio/minio:RELEASE.2025-09-07T16-13-09Z")
 
         @JvmStatic
         @BeforeAll
