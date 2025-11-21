@@ -7,6 +7,8 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.MethodSource
 import xtdb.SimulationTestBase
 import xtdb.WithSeed
 import xtdb.api.log.Log
@@ -216,7 +218,6 @@ private fun buildTrieDetails(tableName: String, trieKey: String, dataFileSize: L
 
 // Settings used by all tests in this class
 private const val logLevel = "DEBUG"
-private const val testIterations = 100
 
 // Clojure interop to get at internal functions
 private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
@@ -230,6 +231,10 @@ annotation class WithDriverConfig(
     val baseTime: String = "2020-01-01T00:00:00Z",
     val blocksPerWeek: Long = 14
 )
+
+@ParameterizedTest(name = "[iteration {0}]")
+@MethodSource("xtdb.SimulationTestBase#iterationSource")
+annotation class RepeatableSimulationTest
 
 class DriverConfigExtension : BeforeEachCallback {
     override fun beforeEach(context: ExtensionContext) {
@@ -301,9 +306,9 @@ class SimulationTest : SimulationTestBase() {
     }
 
 
-    @RepeatedTest(testIterations)
+    @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun singleL0Compaction() {
+    fun singleL0Compaction(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
 
@@ -321,12 +326,12 @@ class SimulationTest : SimulationTestBase() {
     @Test
     @WithSeed(-1748393987)
     fun singleL0CompactionNotHanging() {
-        singleL0Compaction()
+        singleL0Compaction(0)
     }
 
-    @RepeatedTest(testIterations)
+    @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun multipleL0ToL1Compaction() {
+    fun multipleL0ToL1Compaction(iteration: Int) {
         val table = TableRef("xtdb", "public", "docs")
 
 
@@ -376,7 +381,7 @@ class SimulationTest : SimulationTestBase() {
     @Test
     @WithSeed(-1754611144)
     fun multipleL0ToL1CompactionIssue() {
-        multipleL0ToL1Compaction()
+        multipleL0ToL1Compaction(0)
     }
 
     @Test
@@ -398,10 +403,10 @@ class SimulationTest : SimulationTestBase() {
     }
 
 
-    @RepeatedTest(testIterations)
+    @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     @WithDriverConfig(temporalSplitting = CURRENT)
-    fun l1cToL2cCompaction() {
+    fun l1cToL2cCompaction(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
 
@@ -422,10 +427,10 @@ class SimulationTest : SimulationTestBase() {
         }
     }
 
-    @RepeatedTest(testIterations)
+    @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     @WithDriverConfig(temporalSplitting = CURRENT)
-    fun l1cToL2cWithPartialL2() {
+    fun l1cToL2cWithPartialL2(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val rand = Random(currentSeed)
@@ -460,10 +465,10 @@ class SimulationTest : SimulationTestBase() {
         }
     }
 
-    @RepeatedTest(testIterations)
+    @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     @WithDriverConfig(temporalSplitting = CURRENT)
-    fun l2cGapFillingAndL3cCompaction() {
+    fun l2cGapFillingAndL3cCompaction(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
 
@@ -510,10 +515,10 @@ class SimulationTest : SimulationTestBase() {
         }
     }
 
-    @RepeatedTest(testIterations)
+    @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     @WithDriverConfig(temporalSplitting = CURRENT)
-    fun concurrentTableCompaction() {
+    fun concurrentTableCompaction(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val usersTable = TableRef("xtdb", "public", "users")
         val ordersTable = TableRef("xtdb", "public", "orders")
@@ -612,8 +617,9 @@ class MultiDbSimulationTest : SimulationTestBase() {
         dbs.forEach { db ->  db.trieCatalog.addTries(tableRef, l0s, Instant.now()) }
     }
 
-    @Test
-    fun singleL0Compaction() {
+    @RepeatableSimulationTest
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    fun singleL0Compaction(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
 
@@ -640,6 +646,7 @@ class MultiDbSimulationTest : SimulationTestBase() {
     }
 
     @RepeatedTest(10)
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
     @WithDriverConfig(temporalSplitting = BOTH)
     fun biggerMultiCompactorRun() {
         val docsTable = TableRef("xtdb", "public", "docs")
