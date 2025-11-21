@@ -661,8 +661,12 @@
       (when (psql-available?)
         (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "\\conninfo" "xtdb")]
           (is (= 0 exit))
-          (is (str/includes? out "You are connected"))
-          (is (str/includes? out "SSL connection (protocol: TLSv1.3")))))))
+          ;; psql 18 changed the output format of \conninfo
+          (is (or (str/includes? out "You are connected")
+                  (str/includes? out "Connection Information")))
+
+          (is (or (str/includes? out "SSL connection (protocol: TLSv1.3")
+                  (str/includes? out "SSL Connection       | true"))))))))
 
 (when (psql-available?)
   (deftest psql-interactive-test
