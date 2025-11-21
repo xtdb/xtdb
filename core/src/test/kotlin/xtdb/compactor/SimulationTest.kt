@@ -276,34 +276,45 @@ fun List<TrieKey>.prefix(levelPrefix: String) = this.filter { it.startsWith(leve
 @ExtendWith(DriverConfigExtension::class)
 class SimulationTest : SimulationTestBase() {
     var driverConfig: DriverConfig = DriverConfig()
+    var numberOfSystems: Int = 1
     private lateinit var mockDriver: MockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
-    private lateinit var compactor: Compactor.Impl
-    private lateinit var trieCatalog: TrieCatalog
-    private lateinit var db: MockDb
+    private lateinit var compactors: List<Compactor.Impl>
+    private lateinit var trieCatalogs: List<TrieCatalog>
+    private lateinit var dbs: List<MockDb>
+    private var compactCompletions: List<CompletableDeferred<Unit>> = listOf()
 
     @BeforeEach
-    override fun setUpSimulation() {
+    fun setUp() {
         super.setUpSimulation()
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
         mockDriver = MockDriver(dispatcher, currentSeed, driverConfig)
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
-        compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2, dispatcher)
-        trieCatalog = createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
-        db = MockDb("xtdb", trieCatalog)
+
+        compactors = List(numberOfSystems) {
+            Compactor.Impl(mockDriver, null, jobCalculator, false, 2, dispatcher)
+        }
+
+        trieCatalogs = List(numberOfSystems) {
+            createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
+        }
+
+        dbs = List(numberOfSystems) { i ->
+            MockDb("xtdb-$i", trieCatalogs[i])
+        }
     }
 
     @AfterEach
-    override fun tearDownSimulation() {
+    fun tearDown() {
         driverConfig = DriverConfig()
         super.tearDownSimulation()
     }
 
-    private fun addTries(tableRef: TableRef, tries: List<TrieDetails>) {
-        tries.forEach {
+    private fun addL0s(tableRef: TableRef, l0s: List<TrieDetails>) {
+        l0s.forEach {
             mockDriver.trieKeyToFileSize[it.trieKey.toString()] = it.dataFileSize
         }
-        trieCatalog.addTries(tableRef, tries, Instant.now())
+        dbs.forEach { db ->  db.trieCatalog.addTries(tableRef, l0s, Instant.now()) }
     }
 
 
@@ -312,9 +323,12 @@ class SimulationTest : SimulationTestBase() {
     fun singleL0Compaction(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
+        val compactor = compactors[0]
+        val trieCatalog = trieCatalogs[0]
+        val db = dbs[0]
 
         compactor.openForDatabase(db).use {
-            addTries(docsTable, listOf(l0Trie))
+            addL0s(docsTable, listOf(l0Trie))
             it.compactAll()
         }
 
@@ -334,11 +348,13 @@ class SimulationTest : SimulationTestBase() {
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun multipleL0ToL1Compaction(iteration: Int) {
         val table = TableRef("xtdb", "public", "docs")
-
+        val compactor = compactors[0]
+        val trieCatalog = trieCatalogs[0]
+        val db = dbs[0]
 
         compactor.openForDatabase(db).use {
             // Round 1: Add 3 L0 tries and compact
-            addTries(
+            addL0s(
                 table,
                 listOf(
                     buildTrieDetails(table.tableName, "l00-rc-b00", 10 * 1024),
@@ -358,7 +374,7 @@ class SimulationTest : SimulationTestBase() {
             )
 
             // Round 2: Add 3 more L0 tries and compact
-            addTries(
+            addL0s(
                 table,
                 listOf(
                     buildTrieDetails(table.tableName, "l00-rc-b03", 10 * 1024),
@@ -392,9 +408,12 @@ class SimulationTest : SimulationTestBase() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0tries = L0TrieKeys.take(100).map { buildTrieDetails(docsTable.tableName, it, 10L * 1024L * 1024L) }
         var currentTries: List<TrieKey>
+        val compactor = compactors[0]
+        val trieCatalog = trieCatalogs[0]
+        val db = dbs[0]
 
         compactor.openForDatabase(db).use {
-            addTries(docsTable, l0tries.toList())
+            addL0s(docsTable, l0tries.toList())
             it.compactAll()
             val allTries = trieCatalog.listAllTrieKeys(docsTable)
             Assertions.assertEquals(100, allTries.prefix("l00-rc-").size)
@@ -410,11 +429,14 @@ class SimulationTest : SimulationTestBase() {
     fun l1cToL2cCompaction(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
+        val compactor = compactors[0]
+        val trieCatalog = trieCatalogs[0]
+        val db = dbs[0]
 
         val l1Tries = L1TrieKeys.take(4).map { buildTrieDetails(docsTable.tableName, it, defaultFileTarget) }
 
         compactor.openForDatabase(db).use {
-            addTries(docsTable, l1Tries.toList())
+            addL0s(docsTable, l1Tries.toList())
 
             it.compactAll()
 
@@ -435,6 +457,9 @@ class SimulationTest : SimulationTestBase() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val rand = Random(currentSeed)
+        val compactor = compactors[0]
+        val trieCatalog = trieCatalogs[0]
+        val db = dbs[0]
 
         // Create 4 full L1C tries
         val l1Tries = L1TrieKeys.take(4).map { buildTrieDetails(docsTable.tableName, it, defaultFileTarget) }
@@ -450,7 +475,7 @@ class SimulationTest : SimulationTestBase() {
         val missingPartitions = (0..3).filterNot { it in existingPartitions }
 
         compactor.openForDatabase(db).use {
-            addTries(docsTable, l1Tries.toList() + existingL2Tries)
+            addL0s(docsTable, l1Tries.toList() + existingL2Tries)
 
             it.compactAll()
 
@@ -472,6 +497,9 @@ class SimulationTest : SimulationTestBase() {
     fun l2cGapFillingAndL3cCompaction(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
+        val compactor = compactors[0]
+        val trieCatalog = trieCatalogs[0]
+        val db = dbs[0]
 
         // Create a complex scenario with interleaved L1C and L2C tries
         // Simulates the "up to L3" test from compactor_test.clj
@@ -495,7 +523,7 @@ class SimulationTest : SimulationTestBase() {
         l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p3-b07", defaultFileTarget))
 
         compactor.openForDatabase(db).use {
-            addTries(docsTable, l1Tries.toList() + l2tries)
+            addL0s(docsTable, l1Tries.toList() + l2tries)
 
             it.compactAll()
 
@@ -524,6 +552,9 @@ class SimulationTest : SimulationTestBase() {
         val usersTable = TableRef("xtdb", "public", "users")
         val ordersTable = TableRef("xtdb", "public", "orders")
         val l0FileSize = 100L * 1024L * 1024L
+        val compactor = compactors[0]
+        val trieCatalog = trieCatalogs[0]
+        val db = dbs[0]
 
         // Start from L0 files to test the full compaction pipeline with multiple tables
         val docsTries = L0TrieKeys.take(16).map { buildTrieDetails(docsTable.tableName, it, l0FileSize) }
@@ -531,9 +562,9 @@ class SimulationTest : SimulationTestBase() {
         val ordersTries = L0TrieKeys.take(16).map { buildTrieDetails(ordersTable.tableName, it, l0FileSize) }
 
         compactor.openForDatabase(db).use {
-            addTries(docsTable, docsTries.toList())
-            addTries(usersTable, usersTries.toList())
-            addTries(ordersTable, ordersTries.toList())
+            addL0s(docsTable, docsTries.toList())
+            addL0s(usersTable, usersTries.toList())
+            addL0s(ordersTable, ordersTries.toList())
             it.compactAll()
 
             val docsKeys = trieCatalog.listAllTrieKeys(docsTable)
