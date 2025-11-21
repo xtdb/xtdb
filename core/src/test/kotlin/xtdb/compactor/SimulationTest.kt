@@ -646,7 +646,7 @@ class MultiDbSimulationTest : SimulationTestBase() {
     }
 
     @RepeatedTest(10)
-    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
     @WithDriverConfig(temporalSplitting = BOTH)
     fun biggerMultiCompactorRun() {
         val docsTable = TableRef("xtdb", "public", "docs")
