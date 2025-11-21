@@ -35,6 +35,7 @@ private val LOGGER = SimulationTest::class.logger
 @MethodSource("xtdb.SimulationTestBase#iterationSource")
 annotation class RepeatableSimulationTest
 
+@Tag("property")
 class SimulationTest : SimulationTestBase() {
     private lateinit var allocator: BufferAllocator
 

@@ -195,6 +195,7 @@ jobs:
     secrets: inherit
     with:
       iteration_count: "100"
+      simulation_iteration_count: "100"
     permissions:
       contents: read
       checks: write

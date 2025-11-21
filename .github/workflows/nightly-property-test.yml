@@ -12,6 +12,7 @@ jobs:
     secrets: inherit
     with:
       iteration_count: "500"
+      simulation_iteration_count: "1000"
     permissions:
       contents: read
       checks: write
@@ -26,7 +27,7 @@ jobs:
         with:
           status: success
           notification_title: "*Nightly Property Test* has {status_message}:"
-          message_format: "{emoji} `nightly-property-test` job has {status_message} with 500 iterations"
+          message_format: "{emoji} `nightly-property-test` job has {status_message} (500 property / 1000 simulation iterations)"
           notify_when: "success"
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

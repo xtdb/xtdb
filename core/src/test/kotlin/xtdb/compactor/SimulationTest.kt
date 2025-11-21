@@ -272,6 +272,7 @@ private val L1TrieKeys = sequence {
 
 fun List<TrieKey>.prefix(levelPrefix: String) = this.filter { it.startsWith(levelPrefix) }
 
+@Tag("property")
 @ExtendWith(DriverConfigExtension::class)
 class SimulationTest : SimulationTestBase() {
     var driverConfig: DriverConfig = DriverConfig()
@@ -573,6 +574,7 @@ class NumberOfSystemsExtension : BeforeEachCallback {
     }
 }
 
+@Tag("property")
 @ExtendWith(DriverConfigExtension::class, NumberOfSystemsExtension::class)
 class MultiDbSimulationTest : SimulationTestBase() {
     var driverConfig: DriverConfig = DriverConfig()
