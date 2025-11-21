@@ -7,9 +7,7 @@
             [xtdb.error :as err]
             [xtdb.mirrors.time-literals :as tl]
             [xtdb.table :as table]
-            [xtdb.time :as time]
-            [xtdb.tx-ops :as tx-ops]
-            [xtdb.xtql :as xtql])
+            [xtdb.time :as time])
   (:import clojure.lang.Keyword
            [java.io ByteArrayInputStream ByteArrayOutputStream Writer]
            (java.net URI)
@@ -17,20 +15,15 @@
            java.nio.charset.StandardCharsets
            (java.nio.file Path Paths)
            (java.time Duration Period)
-           [java.util Arrays Collection List Map]
            [org.apache.arrow.vector PeriodDuration]
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Field FieldType Schema)
            [org.apache.commons.codec.binary Hex]
            (org.postgresql.util PGobject PSQLException)
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
-           (xtdb.api.query Binding IKeyFn IKeyFn$KeyFn XtqlQuery)
-           (xtdb.api.tx TxOp$Sql TxOps)
+           (xtdb.api.query IKeyFn IKeyFn$KeyFn)
            xtdb.TaggedValue
            (xtdb.time Interval)
-           (xtdb.tx_ops DeleteDocs EraseDocs PutDocs)
            (xtdb.types ClojureForm ZonedDateTimeRange)
-           xtdb.util.NormalForm
-           (xtdb.xtql Aggregate DocsRelation From Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline Return Unify UnionAll Where With Without)))
+           xtdb.util.NormalForm))
 
 (defrecord TxKey [tx-id system-time]
   TransactionKey
@@ -97,28 +90,6 @@
 
 (defn uri-reader [uri] (URI. uri))
 
-(defn- render-binding [binding]
-  (xtql/unparse-binding identity identity binding))
-
-(defn- render-query [^XtqlQuery query]
-  (xtql/unparse-query query))
-
-(defn- xtql-query-reader [q-edn]
-  (xtql/parse-query q-edn))
-
-(defn- render-sql-op [^TxOp$Sql op]
-  {:sql (.sql op), :arg-rows (.argRows op)})
-
-(defn sql-op-reader [{:keys [sql ^List arg-rows]}]
-  (-> (TxOps/sql sql)
-      (.argRows arg-rows)))
-
-(defmethod print-dup TxOp$Sql [op ^Writer w]
-  (.write w (format "#xt.tx/sql %s" (pr-str (render-sql-op op)))))
-
-(defmethod print-method TxOp$Sql [op ^Writer w]
-  (print-dup op w))
-
 (defn write-key-fn [^IKeyFn$KeyFn key-fn]
   (-> (.name key-fn)
       (str/lower-case)
@@ -147,25 +118,6 @@
 
 (defmethod print-method TxKey [tx-key w]
   (print-dup tx-key w))
-
-(defn tx-result-read-fn [{:keys [committed?] :as tx-res}]
-  (if committed?
-    (map->TxCommitted tx-res)
-    (map->TxAborted tx-res)))
-
-(defmethod print-dup TxCommitted [tx-result ^Writer w]
-  (.write w "#xt/tx-result ")
-  (print-method (into {} tx-result) w))
-
-(defmethod print-method TxCommitted [tx-result ^Writer w]
-  (print-dup tx-result w))
-
-(defmethod print-dup TxAborted [tx-result ^Writer w]
-  (.write w "#xt/tx-result ")
-  (print-method (into {} tx-result) w))
-
-(defmethod print-method TxAborted [tx-result ^Writer w]
-  (print-dup tx-result w))
 
 (defn iae-reader [[k message data cause]]
   (err/illegal-arg k (-> (or data {}) (assoc ::err/message message )) cause))
@@ -224,17 +176,10 @@
 
             "xtdb/clj-form" (transit/read-handler ClojureForm/new)
             "xtdb/tx-key" (transit/read-handler map->TxKey)
-            "xtdb/tx-result" (transit/read-handler tx-result-read-fn)
             "xtdb/key-fn" (transit/read-handler read-key-fn)
             "xtdb/period-duration" period-duration-reader
             "xtdb/interval" (transit/read-handler interval-reader)
             "xtdb/tstz-range" (transit/read-handler tstz-range-reader)
-            "xtdb.query/xtql" (transit/read-handler xtql-query-reader)
-            "xtdb.tx/sql" (transit/read-handler sql-op-reader)
-            "xtdb.tx/xtql" (transit/read-handler tx-ops/parse-tx-op)
-            "xtdb.tx/put-docs" (transit/read-handler tx-ops/map->PutDocs)
-            "xtdb.tx/delete-docs" (transit/read-handler tx-ops/map->DeleteDocs)
-            "xtdb.tx/erase-docs" (transit/read-handler tx-ops/map->EraseDocs)
             "f64" (transit/read-handler double)
             "f32" (transit/read-handler float)
             "i64" (transit/read-handler long)
@@ -263,8 +208,6 @@
          err/transit-writers
          table/transit-write-handlers
          {TxKey (transit/write-handler "xtdb/tx-key" #(into {} %))
-          TxCommitted (transit/write-handler "xtdb/tx-result" #(into {} %))
-          TxAborted (transit/write-handler "xtdb/tx-result" #(into {} %))
           clojure.lang.ExceptionInfo (transit/write-handler "xtdb/exception-info" (juxt ex-message ex-data))
           IKeyFn$KeyFn (transit/write-handler "xtdb/key-fn" write-key-fn)
 
@@ -274,32 +217,7 @@
 
           ZonedDateTimeRange (transit/write-handler "xtdb/tstz-range" render-tstz-range)
           ByteBuffer (transit/write-handler "xtdb/byte-array" #(str "0x" (Hex/encodeHexString (bb->ba %))))
-          Path (transit/write-handler "xtdb/path" #(str %))
-
-          Binding (transit/write-handler "xtdb.query/binding" render-binding)
-          XtqlQuery (transit/write-handler "xtdb.query/xtql" render-query)
-          Pipeline (transit/write-handler "xtdb.query/xtql" render-query)
-          From (transit/write-handler "xtdb.query/xtql" render-query)
-          Where (transit/write-handler "xtdb.query/xtql" render-query)
-          With (transit/write-handler "xtdb.query/xtql" render-query)
-          Join (transit/write-handler "xtdb.query/xtql" render-query)
-          LeftJoin (transit/write-handler "xtdb.query/xtql" render-query)
-          Without (transit/write-handler "xtdb.query/xtql" render-query)
-          Return (transit/write-handler "xtdb.query/xtql" render-query)
-          UnionAll (transit/write-handler "xtdb.query/xtql" render-query)
-          OrderBy (transit/write-handler "xtdb.query/xtql" render-query)
-          Limit (transit/write-handler "xtdb.query/xtql" render-query)
-          Offset (transit/write-handler "xtdb.query/xtql" render-query)
-          DocsRelation (transit/write-handler "xtdb.query/xtql" render-query)
-          ParamRelation (transit/write-handler "xtdb.query/xtql" render-query)
-          Aggregate (transit/write-handler "xtdb.query/xtql" render-query)
-          Unify (transit/write-handler "xtdb.query/xtql" render-query)
-
-          TxOp$Sql (transit/write-handler "xtdb.tx/sql" render-sql-op)
-
-          PutDocs (transit/write-handler "xtdb.tx/put-docs" (partial into {}))
-          DeleteDocs (transit/write-handler "xtdb.tx/delete-docs" (partial into {}))
-          EraseDocs (transit/write-handler "xtdb.tx/erase-docs" (partial into {}))}))
+          Path (transit/write-handler "xtdb/path" #(str %))}))
 
 (def transit-write-handler-map
   (transit/write-handler-map transit-write-handlers))

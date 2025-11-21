@@ -19,13 +19,12 @@
            (org.apache.arrow.vector.types.pojo FieldType Schema)
            (xtdb.api IndexerConfig TransactionKey Xtdb$Config)
            (xtdb.api.log Log Log$Cluster$Factory Log$Factory Log$Message$Tx Log$MessageMetadata)
-           (xtdb.api.tx TxOp TxOp$Sql)
            (xtdb.arrow Relation VectorWriter)
            xtdb.catalog.BlockCatalog
            (xtdb.database Database Database$Catalog)
            xtdb.indexer.LogProcessor
            xtdb.table.TableRef
-           (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs)
+           (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs SqlByteArgs Sql)
            (xtdb.util MsgIdUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -62,12 +61,11 @@
   (let [sql-writer (.vectorFor op-writer "sql" (FieldType/notNullable #xt.arrow/type :struct))
         query-writer (.vectorFor sql-writer "query" (FieldType/notNullable #xt.arrow/type :utf8))
         args-writer (.vectorFor sql-writer "args" (FieldType/nullable #xt.arrow/type :varbinary))]
-    (fn write-sql! [^TxOp$Sql op]
-      (let [sql (.sql op)]
-        (.writeObject query-writer sql)
+    (fn write-sql! [{:keys [sql arg-rows]}]
+      (.writeObject query-writer sql)
 
-        (when-let [arg-rows (not-empty (.argRows op))]
-          (.writeObject args-writer (encode-sql-args allocator arg-rows))))
+      (when (not-empty arg-rows)
+        (.writeObject args-writer (encode-sql-args allocator arg-rows)))
 
       (.endStruct sql-writer))))
 
@@ -176,12 +174,12 @@
 
     (doseq [tx-op tx-ops]
       (condp instance? tx-op
-        TxOp$Sql (let [^TxOp$Sql tx-op tx-op]
-                   (if-let [put-docs-ops (sql/sql->static-ops (.sql tx-op) (.argRows tx-op))]
-                     (doseq [op put-docs-ops]
-                       (@!write-put! op {:default-tz default-tz}))
+        Sql (let [{:keys [sql arg-rows]} tx-op]
+              (if-let [put-docs-ops (sql/sql->static-ops sql arg-rows)]
+                (doseq [op put-docs-ops]
+                  (@!write-put! op {:default-tz default-tz}))
 
-                     (@!write-sql! tx-op)))
+                (@!write-sql! tx-op)))
 
         SqlByteArgs (@!write-sql-byte-args! tx-op)
         PutDocs (@!write-put! tx-op {:default-tz default-tz})
@@ -322,7 +320,7 @@
   (->> tx-ops
        (mapv (fn [tx-op]
                (cond-> tx-op
-                 (not (instance? TxOp tx-op)) tx-ops/parse-tx-op)))))
+                 (not (record? tx-op)) tx-ops/parse-tx-op)))))
 
 (defn submit-tx ^long
   [{:keys [^BufferAllocator allocator, ^Database$Catalog db-cat, default-tz]} tx-ops {:keys [default-db, system-time] :as opts}]

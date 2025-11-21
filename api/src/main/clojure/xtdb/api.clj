@@ -22,8 +22,7 @@
            (java.sql BatchUpdateException Connection)
            [java.util.concurrent.atomic AtomicReference]
            (xtdb.api DataSource DataSource$ConnectionBuilder TransactionKey)
-           (xtdb.api.tx TxOp TxOp$Sql)
-           (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs)
+           (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs Sql)
            xtdb.types.ClojureForm
            xtdb.util.NormalForm))
 
@@ -231,16 +230,15 @@
                                                    (namespace table-name) (name table-name))])]
         (jdbc/execute-batch! stmt (mapv vector doc-ids)))))
 
-  TxOp$Sql
-  (execute-op! [op conn]
-    (let [sql (.sql op), arg-rows (.argRows op)]
-      (err/wrap-anomaly {:sql sql, :arg-rows arg-rows}
-        (cond
-          (nil? arg-rows) (jdbc/execute! conn [sql])
-          (empty? arg-rows) nil
-          (= 1 (count arg-rows)) (jdbc/execute! conn (into [sql] (first arg-rows)))
-          :else (with-open [stmt (jdbc/prepare conn [sql])]
-                  (jdbc/execute-batch! stmt arg-rows)))))))
+  Sql
+  (execute-op! [{:keys [sql arg-rows]} conn]
+    (err/wrap-anomaly {:sql sql, :arg-rows arg-rows}
+      (cond
+        (nil? arg-rows) (jdbc/execute! conn [sql])
+        (empty? arg-rows) nil
+        (= 1 (count arg-rows)) (jdbc/execute! conn (into [sql] (first arg-rows)))
+        :else (with-open [stmt (jdbc/prepare conn [sql])]
+                (jdbc/execute-batch! stmt arg-rows))))))
 
 (defn- submit-tx* [conn tx-ops tx-opts]
   (try
@@ -249,7 +247,7 @@
       (try
         (doseq [tx-op tx-ops
                 :let [tx-op (cond-> tx-op
-                              (not (instance? TxOp tx-op)) tx-ops/parse-tx-op)]]
+                              (not (record? tx-op)) tx-ops/parse-tx-op)]]
           (xtp/execute-op! tx-op conn))
         (catch BatchUpdateException e
           (throw (ex-cause e))))

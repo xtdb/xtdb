@@ -1,10 +1,10 @@
 (ns xtdb.log-test
-  (:require [clojure.java.io :as io] 
+  (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.arrow-edn-test :as aet] 
+            [xtdb.arrow-edn-test :as aet]
             [xtdb.log :as log]
-            [xtdb.node :as xtn] 
+            [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -12,7 +12,6 @@
             [xtdb.util :as util])
   (:import [java.time Instant]
            [xtdb.api.log Log]
-           [xtdb.api.tx TxOp]
            xtdb.arrow.Relation
            [xtdb.util MsgIdUtil]))
 
@@ -29,7 +28,7 @@
            actual-bytes (log/serialize-tx-ops tu/*allocator*
                                               (for [tx-op tx-ops]
                                                 (cond-> tx-op
-                                                  (not (instance? TxOp tx-op)) tx-ops/parse-tx-op))
+                                                  (not (record? tx-op)) tx-ops/parse-tx-op))
                                               ;; TODO test multi-db
                                               (merge {:default-db "xtdb"} opts))]
 

@@ -4,8 +4,6 @@
 ;; https://github.com/henryw374/time-literals
 
 {xt/tx-key xtdb.serde/map->TxKey
- xt/tx-result xtdb.serde/tx-result-read-fn
- xt/tx-opts xtdb.serde/tx-opts-read-fn
  xt/clj-form xtdb.api/->ClojureForm
  xt/illegal-arg xtdb.serde/iae-reader
  xt/runtime-err xtdb.serde/runex-reader
@@ -18,10 +16,6 @@
  xt/interval xtdb.serde/interval-reader
  xt/tstz-range xtdb.serde/tstz-range-reader
  xt/uri xtdb.serde/uri-reader
-
- xt.tx/sql xtdb.serde/sql-op-reader
- xt.tx/xtql xtdb.serde/xtql-reader
- xt/tx-op xtdb.tx-ops/parse-tx-op
 
  xt/period xtdb.mirrors.time-literals/period
  xt/local-date xtdb.mirrors.time-literals/date

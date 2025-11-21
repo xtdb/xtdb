@@ -2,10 +2,7 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.time :as time])
-  (:import [java.io Writer]
-           [java.nio ByteBuffer]
-           [java.util List]
-           (xtdb.api.tx TxOp TxOps)
+  (:import [java.nio ByteBuffer]
            xtdb.util.NormalForm))
 
 (defmulti parse-tx-op
@@ -32,60 +29,12 @@
 (defmethod parse-tx-op ::default [[op]]
   (throw (err/illegal-arg :xtql/unknown-tx-op {:op op})))
 
-(defprotocol Unparse
-  (unparse-tx-op [this]))
-
-(defmethod print-dup TxOp [op ^Writer w]
-  (.write w (format "#xt/tx-op %s" (pr-str (unparse-tx-op op)))))
-
-(defmethod print-method TxOp [op ^Writer w]
-  (print-dup op w))
-
-(doseq [m [print-dup print-method]
-        c [java.util.Map clojure.lang.IPersistentCollection clojure.lang.IRecord]]
-  (prefer-method m TxOp c))
-
-(defrecord PutDocs [table-name docs valid-from valid-to]
-  TxOp
-  Unparse
-  (unparse-tx-op [_]
-    (into [:put-docs (if (or valid-from valid-to)
-                       {:into table-name
-                        :valid-from valid-from
-                        :valid-to valid-to}
-                       table-name)]
-          docs)))
-
-(defrecord PatchDocs [table-name docs valid-from valid-to]
-  TxOp
-  Unparse
-  (unparse-tx-op [_]
-    (into [:patch-docs (if (or valid-from valid-to)
-                         {:into table-name
-                          :valid-from valid-from
-                          :valid-to valid-to}
-                         table-name)]
-          docs)))
-
-(defrecord DeleteDocs [table-name doc-ids valid-from valid-to]
-  TxOp
-  Unparse
-  (unparse-tx-op [_]
-    (into [:delete-docs (if (or valid-from valid-to)
-                          {:from table-name
-                           :valid-from valid-from
-                           :valid-to valid-to}
-                          table-name)]
-          doc-ids)))
-
-(defrecord EraseDocs [table-name doc-ids]
-  TxOp
-  Unparse
-  (unparse-tx-op [_]
-    (into [:erase-docs table-name] doc-ids)))
-
-(defrecord SqlByteArgs [sql ^ByteBuffer arg-bytes]
-  TxOp)
+(defrecord Sql [sql arg-rows])
+(defrecord SqlByteArgs [sql ^ByteBuffer arg-bytes]) ; used in FlightSQL, LSP doesn't spot it
+(defrecord PutDocs [table-name docs valid-from valid-to])
+(defrecord PatchDocs [table-name docs valid-from valid-to])
+(defrecord DeleteDocs [table-name doc-ids valid-from valid-to])
+(defrecord EraseDocs [table-name doc-ids])
 
 (def ^:private eid? (some-fn uuid? integer? string? keyword?))
 
@@ -118,8 +67,7 @@
                             {::err/message "Expected SQL query",
                              :sql sql}))
 
-    (cond-> (TxOps/sql sql)
-      (seq arg-rows) (.argRows ^List (vec arg-rows)))))
+    (->Sql sql (when (seq arg-rows) (vec arg-rows)))))
 
 (defmethod parse-tx-op :sql-str [sql]
   (parse-tx-op [:sql sql]))
