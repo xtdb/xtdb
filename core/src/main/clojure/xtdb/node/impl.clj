@@ -113,6 +113,7 @@
     (XtdbConnection.
      (reify XtdbConnection$Node
        (getAllocator [_] allocator)
+       (submitTx [_ db-name ops opts] (.submitTx this-node db-name ops opts))
        (executeTx [_ db-name ops opts] (.executeTx this-node db-name ops opts))
 
        (openSqlQuery [_ sql]

@@ -29,6 +29,7 @@
       (util/delete-dir node-dir)
       (with-open [node (tu/->local-node {:node-dir node-dir})]
         (case method
+          :rels (tpch/submit-rels! node scale-factor)
           :docs (tpch/submit-docs! node scale-factor)
           :dml (tpch/submit-dml! node scale-factor))
 
@@ -94,7 +95,7 @@
     (t/run-test test-001-ra)))
 
 (t/deftest ^:integration test-01-ra
-  (with-tpch-data {:method :docs, :scale-factor 0.01
+  (with-tpch-data {:method :rels, :scale-factor 0.01
                    :node-dir (util/->path "target/tpch-queries-ra-sf-01")}
     (fn []
       (dorun

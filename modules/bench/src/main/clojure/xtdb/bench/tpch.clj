@@ -5,8 +5,7 @@
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]
-            [xtdb.operator.join :as join])
+            [xtdb.util :as util])
   (:import (java.time Duration)))
 
 (def ^:dynamic *qs*
@@ -51,8 +50,8 @@
    :tasks [{:t :do
             :stage :ingest
             :tasks (when-not no-load?
-                     [{:t :call, :stage :submit-docs
-                       :f (fn [{:keys [node]}] (tpch/submit-docs! node scale-factor))}
+                     [{:t :call, :stage :submit-rels
+                       :f (fn [{:keys [node]}] (tpch/submit-rels! node scale-factor))}
 
                       {:t :call, :stage :sync,
                        :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofHours 5)))}

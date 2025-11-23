@@ -7,7 +7,12 @@
   (:import clojure.lang.MapEntry
            (io.airlift.tpch TpchColumn TpchColumnType$Base TpchEntity TpchTable)
            [java.nio ByteBuffer]
-           (java.time LocalDate)))
+           (java.time LocalDate)
+           org.apache.arrow.adbc.core.BulkIngestMode
+           org.apache.arrow.memory.BufferAllocator
+           xtdb.api.Xtdb
+           (xtdb.arrow Relation VectorType VectorWriter)
+           xtdb.adbc.XtdbConnection))
 
 ;; 0.05 = 7500 customers, 75000 orders, 299814 lineitems, 10000 part, 40000 partsupp, 500 supplier, 25 nation, 5 region
 
@@ -21,26 +26,22 @@
    :nation [:n_nationkey]
    :region [:r_regionkey]})
 
-(defn- ->cell-reader [^TpchColumn col]
-  (comp (let [k (keyword (.getColumnName col))]
-          (fn ->map-entry [v]
-            (MapEntry/create k v)))
-
-        (condp = (.getBase (.getType col))
-          TpchColumnType$Base/IDENTIFIER (let [col-part (str (str/replace (.getColumnName col) #".+_" "") "_")]
-                                           (fn [^TpchEntity e]
-                                             (-> (str col-part (.getIdentifier col e))
-                                                 util/->iid
-                                                 ByteBuffer/wrap
-                                                 util/byte-buffer->uuid)))
-          TpchColumnType$Base/INTEGER (fn [^TpchEntity e]
-                                        (long (.getInteger col e)))
-          TpchColumnType$Base/VARCHAR (fn [^TpchEntity e]
-                                        (.getString col e))
-          TpchColumnType$Base/DOUBLE (fn [^TpchEntity e]
-                                       (.getDouble col e))
-          TpchColumnType$Base/DATE (fn [^TpchEntity e]
-                                     (LocalDate/ofEpochDay (.getDate col e))))))
+(defn- cell-reader [^TpchColumn col]
+  (condp = (.getBase (.getType col))
+    TpchColumnType$Base/IDENTIFIER (let [col-part (str (str/replace (.getColumnName col) #".+_" "") "_")]
+                                     (fn [^TpchEntity e]
+                                       (-> (str col-part (.getIdentifier col e))
+                                           util/->iid
+                                           ByteBuffer/wrap
+                                           util/byte-buffer->uuid)))
+    TpchColumnType$Base/INTEGER (fn [^TpchEntity e]
+                                  (long (.getInteger col e)))
+    TpchColumnType$Base/VARCHAR (fn [^TpchEntity e]
+                                  (.getString col e))
+    TpchColumnType$Base/DOUBLE (fn [^TpchEntity e]
+                                 (.getDouble col e))
+    TpchColumnType$Base/DATE (fn [^TpchEntity e]
+                               (LocalDate/ofEpochDay (.getDate col e)))))
 
 (defn- doc->id [doc pk-cols]
   (if (= 1 (count pk-cols))
@@ -49,7 +50,12 @@
       eid)))
 
 (defn- tpch-table->docs [^TpchTable table scale-factor]
-  (let [cell-readers (mapv ->cell-reader (.getColumns table))
+  (let [cell-readers (mapv (fn [^TpchColumn col]
+                             (let [k (keyword (.getColumnName col))
+                                   cell-reader (cell-reader col)]
+                               (fn [^TpchEntity e]
+                                 (MapEntry/create k (cell-reader e)))))
+                           (.getColumns table))
         table-name (keyword (.getTableName table))
         pk-cols (get table->pkey table-name)]
     (for [^TpchEntity e (.createGenerator table scale-factor 1 1)]
@@ -70,6 +76,86 @@
       (log/debug "Transacted" doc-count (.getTableName table))))
   (log/info "Transacted TPC-H tables..."))
 
+(defn- iid-getter [^TpchColumn col]
+  (let [col-part (str (str/replace (.getColumnName col) #".+_" "") "_")]
+    (fn [^TpchEntity e]
+      (-> (str col-part (.getIdentifier col e))
+          util/->iid
+          ByteBuffer/wrap
+          util/byte-buffer->uuid))))
+
+(defn- cell-writer [^TpchColumn col]
+  (condp = (.getBase (.getType col))
+    TpchColumnType$Base/IDENTIFIER [#xt/type :uuid
+                                    (let [get-iid (iid-getter col)]
+                                      (fn [^VectorWriter out-col, ^TpchEntity e]
+                                        (.writeObject out-col (get-iid e))))]
+    TpchColumnType$Base/INTEGER [#xt/type :i64
+                                 (fn [^VectorWriter out-col, ^TpchEntity e]
+                                   (.writeLong out-col (.getInteger col e)))]
+    TpchColumnType$Base/VARCHAR [#xt/type :utf8
+                                 (fn [^VectorWriter out-col, ^TpchEntity e]
+                                   (.writeObject out-col (.getString col e)))]
+    TpchColumnType$Base/DOUBLE [#xt/type :f64
+                                (fn [^VectorWriter out-col, ^TpchEntity e]
+                                  (.writeDouble out-col (.getDouble col e)))]
+    TpchColumnType$Base/DATE [#xt/type [:date :day]
+                              (fn [^VectorWriter out-col, ^TpchEntity e]
+                                (.writeInt out-col (.getDate col e)))]))
+
+(defn- write-col! [^Relation rel, ^TpchColumn col, entities]
+  (let [col-name (.getColumnName col)
+        [^VectorType vec-type, write-cell!] (cell-writer col)
+        out-col (.vectorFor rel col-name (.getFieldType vec-type))]
+    (doseq [^TpchEntity e entities]
+      (write-cell! out-col e))))
+
+(defn- write-pk-col! [^Relation rel, ^TpchTable table, entities]
+  (let [out-col (.vectorFor rel "_id" (.getFieldType #xt/type :uuid))
+        pk-cols (table->pkey (keyword (.getTableName table)))]
+    (if (= 1 (count pk-cols))
+      (let [pk-col (.getColumn table (name (first pk-cols)))
+            get-iid (iid-getter pk-col)]
+        (doseq [entity entities]
+          (.writeObject out-col (get-iid entity))))
+
+      (let [pk-readers (->> pk-cols
+                            (mapv (comp cell-reader
+                                        (fn [k] (.getColumn table (name k))))))]
+        (doseq [entity entities]
+          (.writeObject out-col (->> (map #(% entity) pk-readers)
+                                     (str/join "___")
+                                     util/->iid
+                                     (ByteBuffer/wrap)
+                                     util/byte-buffer->uuid)))))))
+
+(defn- open-rel ^xtdb.arrow.Relation [^BufferAllocator al, ^TpchTable table, entities]
+  (util/with-close-on-catch [rel (Relation. al)]
+    (write-pk-col! rel table entities)
+
+    (doseq [^TpchColumn col (.getColumns table)]
+      (write-col! rel col entities))
+    
+    (.setRowCount rel (count entities))
+    rel))
+
+(defn submit-rels! [^Xtdb node scale-factor]
+  (log/info "Transacting TPC-H tables...")
+  (with-open [^XtdbConnection conn (.connect node)]
+    (doseq [^TpchTable table (TpchTable/getTables)
+            :let [table-name (.getTableName table)]]
+      (let [doc-count (->> (.createGenerator table scale-factor 1 1)
+                           (partition-all 1000)
+                           (pmap (fn [batch]
+                                   (with-open [stmt (.bulkIngest conn table-name BulkIngestMode/CREATE_APPEND)
+                                               rel (open-rel (.getAllocator node) table batch)]
+                                     (.bind stmt rel)
+                                     (.getAffectedRows (.executeUpdate stmt)))))
+                           (apply +))]
+        (log/debug "Transacted" doc-count table-name))))
+
+  (log/info "Transacted TPC-H tables..."))
+
 (defn- tpch-table->dml [^TpchTable table]
   (format "INSERT INTO %s (%s) VALUES (%s)"
           (.getTableName table)
@@ -81,7 +167,12 @@
 
 (defn- tpch-table->dml-params [^TpchTable table, scale-factor]
   (let [table-name (.getTableName table)
-        cell-readers (mapv ->cell-reader (.getColumns table))
+        cell-readers (mapv (fn [^TpchColumn col]
+                             (let [k (keyword (.getColumnName col))
+                                   cell-reader (cell-reader col)]
+                               (fn [^TpchEntity e]
+                                 (MapEntry/create k (cell-reader e)))))
+                           (.getColumns table))
         pk-cols (get table->pkey (keyword table-name))]
     (for [^TpchEntity e (.createGenerator table scale-factor 1 1)
           :let [doc (map #(% e) cell-readers)]]

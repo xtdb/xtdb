@@ -115,6 +115,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
     interface Node {
         val allocator: BufferAllocator
+        fun submitTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts = TxOpts()): Xtdb.SubmittedTx
         fun executeTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts = TxOpts()): Xtdb.ExecutedTx
         fun openSqlQuery(sql: String): IResultCursor
     }
