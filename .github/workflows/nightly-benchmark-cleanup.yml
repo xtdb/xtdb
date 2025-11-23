@@ -95,14 +95,16 @@ jobs:
           JOB="${{ inputs.benchType }}"
           NS="cloud-benchmark"
 
-          # If all benchmark pods are already in a terminal error state, don't block waiting
+          # Check current pod states for informational purposes
           sel='-l app.kubernetes.io/name=xtdb,app.kubernetes.io/component=benchmark'
           failed_cnt=$(kubectl get pods -n "$NS" $sel --field-selector=status.phase=Failed --no-headers 2>/dev/null | wc -l | tr -d ' ')
+          succeeded_cnt=$(kubectl get pods -n "$NS" $sel --field-selector=status.phase=Succeeded --no-headers 2>/dev/null | wc -l | tr -d ' ')
           nonterminal_cnt=$(kubectl get pods -n "$NS" $sel --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null | wc -l | tr -d ' ')
-          if [ "${nonterminal_cnt:-0}" = "0" ] && [ "${failed_cnt:-0}" -gt 0 ]; then
-            echo "All benchmark pods are in Failed state; skipping waits."
-          else
-          # Wait for the benchmark Job (tpch/auctionmark/readings/yakbench) to complete if present
+
+          echo "Current pod state: ${succeeded_cnt:-0} succeeded, ${failed_cnt:-0} failed, ${nonterminal_cnt:-0} non-terminal"
+
+          # Always wait for the benchmark Job to reach a terminal state
+          # This ensures we don't prematurely cleanup while the job is still running
           if kubectl get job "$JOB" -n "$NS" >/dev/null 2>&1; then
             echo "Polling job/$JOB until Complete or Failed..."
             # Poll up to ~2h (720 * 10s)
@@ -148,6 +150,14 @@ jobs:
             echo "Waiting for benchmark pods to complete... ($i) remaining=$remaining"
             sleep 4
           done
+
+          # Final verification that all pods are in terminal state
+          final_nonterminal=$(kubectl get pods -n "$NS" $sel --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null | wc -l | tr -d ' ')
+          if [ "${final_nonterminal:-0}" != "0" ]; then
+            echo "WARNING: ${final_nonterminal} pods are still not in terminal state after waiting"
+            kubectl get pods -n "$NS" $sel --no-headers
+          else
+            echo "Verified: All benchmark pods are in terminal state"
           fi
 
       - name: Determine Benchmark Status
