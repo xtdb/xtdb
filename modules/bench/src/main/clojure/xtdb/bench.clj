@@ -23,6 +23,9 @@
            (java.util.concurrent.atomic AtomicLong)
            (oshi SystemInfo)))
 
+;; Track whether we're in shutdown mode to suppress error logging during cleanup
+(defonce ^:private shutting-down? (atom false))
+
 (extend-protocol json/JSONWriter
   Duration
   (-write [^Duration duration out _options]
@@ -413,17 +416,27 @@
     (if config-file
       (do
         (log/info "Running node from config file:" config-file)
-        (with-open [node (xtn/start-node config-file)]
-          (benchmark-fn node)))
+        (try
+          (with-open [node (xtn/start-node config-file)]
+            (benchmark-fn node))
+          (catch Throwable t
+            (if @shutting-down?
+              (log/warn t "Error during shutdown (ignored):")
+              (throw t)))))
       (letfn [(run [node-dir]
-                (with-open [node (tu/->local-node (cond-> {:node-dir node-dir
-                                                           :instant-src (InstantSource/system)}
-                                                    tracing-endpoint (assoc :tracer {:enabled? true
-                                                                                     :endpoint tracing-endpoint
-                                                                                     :service-name "xtdb-bench"})))]
-                  (binding [tu/*allocator* (util/component node :xtdb/allocator)
-                            *registry* (util/component node :xtdb.metrics/registry)]
-                    (benchmark-fn node))))]
+                (try
+                  (with-open [node (tu/->local-node (cond-> {:node-dir node-dir
+                                                             :instant-src (InstantSource/system)}
+                                                      tracing-endpoint (assoc :tracer {:enabled? true
+                                                                                       :endpoint tracing-endpoint
+                                                                                       :service-name "xtdb-bench"})))]
+                    (binding [tu/*allocator* (util/component node :xtdb/allocator)
+                              *registry* (util/component node :xtdb.metrics/registry)]
+                      (benchmark-fn node)))
+                  (catch Throwable t
+                    (if @shutting-down?
+                      (log/warn t "Error during shutdown (ignored):")
+                      (throw t)))))]
         (if node-dir
           (do
             (log/info "Using node dir:" (str node-dir))
@@ -473,7 +486,7 @@
   (when-let [pat (System/getenv "GITHUB_PAT")]
     (try
       (let [node-id (System/getenv "XTDB_NODE_ID")]
-        (http/post "https://api.github.com/repos/xtdb/xtdb/actions/workflows/nightly-benchmark-cleanup.yml/dispatches"
+        (http/post "https://api.github.com/repos/tggreene/xtdb/actions/workflows/nightly-benchmark-cleanup.yml/dispatches"
                    {:headers {"Accept" "application/vnd.github+json"
                               "Authorization" (str "Bearer " pat)}
                     :content-type :json
@@ -513,6 +526,7 @@
               (-> (Runtime/getRuntime)
                   (.addShutdownHook (Thread. (fn []
                                                (log/info "Received shutdown signal, initiating graceful shutdown...")
+                                               (reset! shutting-down? true)
                                                (let [shutdown-ms 10000]
                                                  (.interrupt main-thread)
                                                  (.join main-thread shutdown-ms)
@@ -528,14 +542,19 @@
                   (run-benchmark (->benchmark benchmark-type options) options)
                   (reset! ok? true)
                   (catch Throwable t
-                    (when (instance? InterruptedException t)
-                      (.interrupt (Thread/currentThread)))
-                    (log/error "Benchmark failed:" (or (ex-message t) (.getMessage t)))
-                    (throw t))
+                    (if @shutting-down?
+                      (log/warn t "Error during shutdown (ignored):")
+                      (do
+                        (when (instance? InterruptedException t)
+                          (.interrupt (Thread/currentThread)))
+                        (log/error t "Benchmark failed:")
+                        (throw t))))
                   (finally
+                    ;; Mark as shutting down for cleanup phase
+                    (reset! shutting-down? true)
                     (try
                       (trigger-cleanup benchmark-type @ok?)
                       (catch Throwable u
-                        (log/error "Cleanup trigger failed:" (.getMessage u))))))))))
+                        (log/warn u "Cleanup trigger failed (ignored):")))))))))
 
   (shutdown-agents))
