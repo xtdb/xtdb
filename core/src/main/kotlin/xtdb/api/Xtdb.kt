@@ -79,6 +79,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var txSink: TxSinkConfig? = null,
         var nodeId: String = System.getenv("XTDB_NODE_ID") ?: randomUUID().toString().takeWhile { it != '-' }
     ) {
+        var allocator: BufferAllocator? = null
+
         private val modules: MutableList<XtdbModule.Factory> = mutableListOf()
 
         fun logClusters(clusters: Map<LogClusterAlias, Log.Cluster.Factory<*>>) = apply { logClusters += clusters }

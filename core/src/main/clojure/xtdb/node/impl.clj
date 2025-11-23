@@ -41,11 +41,22 @@
 
 (defmethod ig/init-key :xtdb/config [_ cfg] cfg)
 
-(defmethod ig/init-key :xtdb/allocator [_ _]
-  (RootAllocator. (long (* 0.9 (util/max-direct-memory)))))
+(defmethod ig/expand-key :xtdb/allocator [k ^Xtdb$Config config]
+  {k {:allocator (.getAllocator config)}})
 
-(defmethod ig/halt-key! :xtdb/allocator [_ ^BufferAllocator a]
-  (util/close a))
+(defmethod ig/init-key :xtdb/allocator [_ {:keys [allocator]}]
+  (if allocator
+    {:allocator allocator, :close? false}
+
+    {:allocator (RootAllocator. (long (* 0.9 (util/max-direct-memory))))
+     :close? true}))
+
+(defmethod ig/resolve-key :xtdb/allocator [_ {:keys [allocator]}]
+  allocator)
+
+(defmethod ig/halt-key! :xtdb/allocator [_ {:keys [allocator close?]}]
+  (when close?
+    (util/close allocator)))
 
 (defn- with-query-opts-defaults [query-opts {:keys [default-tz]}]
   (-> (into {:default-tz default-tz,
@@ -324,7 +335,7 @@
         tracer (.getTracer opts)]
     (-> {:xtdb/node {}
          :xtdb/config opts
-         :xtdb/allocator {}
+         :xtdb/allocator opts
          :xtdb/indexer {}
          :xtdb/information-schema {}
          :xtdb.operator.scan/scan-emitter {}

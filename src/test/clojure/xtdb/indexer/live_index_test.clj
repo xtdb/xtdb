@@ -23,7 +23,7 @@
   tu/with-node)
 
 (t/deftest test-block
-  (let [^BufferAllocator allocator (util/component tu/*node* :xtdb/allocator)
+  (let [^BufferAllocator allocator (.getAllocator tu/*node*)
         db (db/primary-db tu/*node*)
         buffer-pool (.getBufferPool db)
         live-index (.getLiveIndex db)

@@ -605,7 +605,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
 
       (binding [idx/*crash-log-clock* (InstantSource/fixed Instant/EPOCH)]
         (let [node-id "xtdb-foo-node"
-              ^BufferAllocator al (util/component node :xtdb/allocator)
+              ^BufferAllocator al (.getAllocator node)
               idxer (idx/<-node node)
               db (db/primary-db node)
               bp (.getBufferPool db)

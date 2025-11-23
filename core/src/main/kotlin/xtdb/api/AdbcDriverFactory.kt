@@ -14,11 +14,12 @@ class AdbcDriverFactory : AdbcDriverFactory {
 
         fun getDriver(allocator: BufferAllocator) = AdbcDriver { opts ->
             // TODO use this allocator rather than creating our own
-            Xtdb.openNode(
-                XTDB_CONFIG[opts]
-                    ?: XTDB_CONFIG_YAML[opts]?.let { nodeConfig(it) }
-                    ?: XTDB_CONFIG_FILE[opts]?.let { Xtdb.readConfig(it) }
-                    ?: Xtdb.Config())
+            val config = (XTDB_CONFIG[opts]
+                ?: XTDB_CONFIG_YAML[opts]?.let { nodeConfig(it) }
+                ?: XTDB_CONFIG_FILE[opts]?.let { Xtdb.readConfig(it) }
+                ?: Xtdb.Config())
+            config.allocator = allocator
+            Xtdb.openNode(config)
         }
     }
 
