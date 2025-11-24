@@ -268,7 +268,14 @@
                     ;; Graceful shutdown - threads will exit naturally when deadline is reached
                     (.shutdown executor)
                     (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
-                      (throw (ex-info "Pool threads did not stop within join-wait" {:task task, :executor executor})))
+                      ;; Force interrupt threads that didn't stop gracefully
+                      (log/warn "Pool threads did not stop within join-wait, forcing interruption")
+                      (.shutdownNow executor)
+                      ;; Give threads additional time to complete in-flight DB operations
+                      ;; DB I/O doesn't respect interruption, so we need to wait for operations to complete/fail
+                      (when-not (.awaitTermination executor 30 TimeUnit/SECONDS)
+                        (log/error "Pool threads still running after forced shutdown, giving up")
+                        (throw (ex-info "Pool threads did not stop within join-wait" {:task task, :executor executor}))))
                     ;; Propagate any worker exceptions to the main thread
                     (doseq [f futures]
                       (try
@@ -300,7 +307,14 @@
                             ;; Graceful shutdown - threads should complete their tasks naturally
                             (.shutdown executor)
                             (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
-                              (throw (ex-info "Task threads did not stop within join-wait" {:task task, :executor executor})))
+                              ;; Force interrupt threads that didn't stop gracefully
+                              (log/warn "Threads did not stop within join-wait, forcing interruption")
+                              (.shutdownNow executor)
+                              ;; Give threads additional time to complete in-flight DB operations
+                              ;; DB I/O doesn't respect interruption, so we need to wait for operations to complete/fail
+                              (when-not (.awaitTermination executor 30 TimeUnit/SECONDS)
+                                (log/error "Threads still running after forced shutdown, giving up")
+                                (throw (ex-info "Task threads did not stop within join-wait" {:task task, :executor executor}))))
                             ;; Propagate any worker exceptions to the main thread
                             (doseq [f futures]
                               (try
