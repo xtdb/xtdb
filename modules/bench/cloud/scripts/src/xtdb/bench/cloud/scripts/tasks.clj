@@ -28,9 +28,9 @@
        (map str/capitalize)
        (str/join " ")))
 
-(defn parse-benchmark-line
+(defn parse-benchmark-summary
   [log-lines]
-  (let [benchmark-line (first (filter #(str/includes? % "\"benchmark\":") log-lines))
+  (let [benchmark-line (first (filter #(str/includes? % "\"stage\":\"summary\"") log-lines))
         benchmark-summary (when benchmark-line
                             (try
                               (json/parse-string benchmark-line true)
@@ -57,7 +57,7 @@
                                   (or (str/starts-with? stage-name "hot-queries-q")
                                       (str/starts-with? stage-name "cold-queries-q"))))
                               stages)
-        {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-line lines)]
+        {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
     {:all-stages stages
      :query-stages query-stages
      :ingest-stages (filterv #(contains? #{"submit-docs" "sync" "finish-block" "compact" "ingest"} (:stage %)) stages)
@@ -73,7 +73,7 @@
                    (try
                      (:profiles (json/parse-string profiles-line true))
                      (catch Exception _ nil)))
-        {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-line lines)]
+        {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
     {:profiles profiles
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
@@ -95,7 +95,7 @@
                                   (or (str/starts-with? stage-name "query-recent-interval-")
                                       (str/starts-with? stage-name "query-offset-"))))
                               stages)
-        {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-line lines)]
+        {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
     {:all-stages stages
      :query-stages query-stages
      :ingest-stages (filterv #(contains? #{"ingest" "sync" "compact"} (name (:stage %))) stages)
