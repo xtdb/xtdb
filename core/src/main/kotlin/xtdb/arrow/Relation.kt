@@ -118,6 +118,17 @@ class Relation(
             return baos.toByteArray()
         }
 
+    val asArrowFile: ByteArray
+        get() {
+            val baos = ByteArrayOutputStream()
+            startUnload(Channels.newChannel(baos), FILE).use { unl ->
+                unl.writePage()
+                unl.end()
+            }
+
+            return baos.toByteArray()
+        }
+
     fun load(recordBatch: ArrowRecordBatch) {
         val nodes = recordBatch.nodes.toMutableList()
         val buffers = recordBatch.buffers.toMutableList()

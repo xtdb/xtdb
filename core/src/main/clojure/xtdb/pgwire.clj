@@ -42,14 +42,14 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config)
            xtdb.api.module.XtdbModule
-           (xtdb.arrow Relation)
+           (xtdb.arrow Relation Relation$ILoader)
            xtdb.arrow.RelationReader
            xtdb.database.Database$Config
            (xtdb.error Incorrect Interrupted)
            xtdb.IResultCursor
            (xtdb.query PreparedQuery)
-           (xtdb.tx TxOp$PutDocs TxOp$Sql TxOpts)
-           (xtdb.tx_ops PutDocs Sql)))
+           (xtdb.tx TxOpts)
+           (xtdb.tx_ops Sql)))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
@@ -543,7 +543,6 @@
   (let [{:keys [transaction session]} @conn-state
         {:keys [failed dml-buf system-time access-mode default-tz async?]} transaction
         {:keys [parameters]} session]
-
     (if failed
       (throw (pgio/err-protocol-violation "transaction failed"))
 
@@ -1433,7 +1432,9 @@
     :copy-in (let [format (case (:format portal)
                             "transit-json" :transit-json
                             "transit-msgpack" :transit-msgpack
-                            (throw (err/incorrect ::invalid-copy-format "COPY IN requires a valid format: 'transit-json' or 'transit-msgpack'"
+                            "arrow-file" :arrow-file
+                            "arrow-stream" :arrow-stream
+                            (throw (err/incorrect ::invalid-copy-format "COPY IN requires a valid format: 'arrow-file', 'arrow-stream', 'transit-json', 'transit-msgpack'"
                                                   {:format (:format portal)})))
                    {:keys [table-name]} portal
                    copy-file (doto (util/->temp-file "copy-in" "")
@@ -1450,7 +1451,7 @@
                (pgio/cmd-write-msg conn pgio/msg-copy-in-response
                                    (let [copy-format (case format
                                                        :transit-json :text
-                                                       :transit-msgpack :binary)]
+                                                       (:transit-msgpack :arrow-file :arrow-stream) :binary)]
                                      {:copy-format copy-format
                                       :column-formats [copy-format]})))
 
@@ -1479,7 +1480,8 @@
   (try
     (doseq [{:keys [statement-type] :as stmt} (parse-sql query)]
       (when-not (or (boolean (:transaction @conn-state))
-                    (= statement-type :show-variable))
+                    (= statement-type :show-variable)
+                    (= statement-type :copy-in))
         (cmd-begin conn {:implicit? true} {}))
 
       (try
@@ -1530,42 +1532,85 @@
                                             (throw (err/incorrect ::copy-not-in-progress "COPY IN not in progress, cannot write data")))]
     (.write write-ch (ByteBuffer/wrap data))))
 
+(defn- copy-transit-batch ^long [{:keys [conn-state] :as conn} {:keys [format, ^Path copy-file]}]
+  (let [started-tx? (when-not (:transaction @conn-state)
+                      (cmd-begin conn {:implicit? true, :access-mode :read-write} {})
+                      true)]
+    (try
+      (let [docs (with-open [is (io/input-stream (.toFile copy-file))]
+                   (vec (serde/transit-seq (transit/reader is
+                                                           (case format
+                                                             :transit-json :json
+                                                             :transit-msgpack :msgpack)
+                                                           {:handlers serde/transit-read-handler-map}))))]
+
+        (swap! conn-state
+               (fn [{:keys [copy], :as conn-state}]
+                 (-> conn-state
+                     (update-in [:transaction :dml-buf] (fnil conj [])
+                                (tx-ops/->PutDocs (:table-name copy) docs nil nil))
+                     (dissoc :copy))))
+
+        (when started-tx?
+          (cmd-commit conn))
+
+        (count docs))
+
+      (catch Throwable e
+        (when started-tx?
+          (cmd-rollback conn))
+        (throw e)))))
+
+(defn- copy-arrow-batches ^long [{:keys [^BufferAllocator allocator, conn-state] :as conn} {:keys [format, ^Path copy-file]}]
+  (let [!doc-count (atom 0)]
+    (util/with-open [^Relation$ILoader ldr (case format
+                                             :arrow-stream (Relation/streamLoader allocator copy-file)
+                                             :arrow-file (Relation/loader allocator copy-file))
+                     rel (Relation. allocator (.getSchema ldr))]
+      (letfn [(add-batch! []
+                (swap! conn-state
+                       (fn [{:keys [copy], :as conn-state}]
+                         (-> conn-state
+                             (update-in [:transaction :dml-buf] (fnil conj [])
+                                        (tx-ops/->PutRel (:table-name copy) (.getAsArrowStream rel)))))))]
+
+        (if-let [{:keys [access-mode]} (:transaction @conn-state)]
+          (do
+            (when (= access-mode :read-only)
+              (throw (err/incorrect :xtdb/copy-in-read-only-tx
+                                    "COPY is not allowed in a READ ONLY transaction")))
+            (swap! conn-state update-in [:transaction :access-mode] (fnil identity :read-write))
+
+            (while (.loadNextPage ldr rel)
+              (add-batch!)
+              (swap! !doc-count + (.getRowCount rel))))
+
+          ;; in arrow-file/arrow-stream, the input is naturally batched
+          ;; therefore, if there's no active tx, we create a transaction for each record-batch.
+          (while (.loadNextPage ldr rel)
+            (cmd-begin conn {:implicit? true, :access-mode :read-write} {})
+            (try
+              (add-batch!)
+              (cmd-commit conn)
+              (swap! !doc-count + (.getRowCount rel))
+              (catch Throwable t
+                (cmd-rollback conn)
+                (throw t)))))))
+    @!doc-count))
+
 (defmethod handle-msg* :msg-copy-done [{:keys [conn-state] :as conn} _msg]
-  (let [{:keys [^Path copy-file, ^FileChannel write-ch, format]} (or (:copy @conn-state)
-                                                                     (throw (err/incorrect ::copy-not-in-progress
-                                                                                           "COPY IN not in progress, cannot write data")))]
+  (let [{:keys [^Path copy-file, ^FileChannel write-ch, format] :as copy-stmt}
+        (or (:copy @conn-state)
+            (throw (err/incorrect ::copy-not-in-progress
+                                  "COPY IN not in progress, cannot write data")))]
     (try
       (err/wrap-anomaly {}
         (.close write-ch)
 
-        (let [started-tx? (when-not (:transaction @conn-state)
-                            (cmd-begin conn {:implicit? true, :access-mode :read-write} {})
-                            true)
-              doc-count (try
-                          (let [docs (with-open [is (io/input-stream (.toFile copy-file))]
-                                       (vec (serde/transit-seq (transit/reader is
-                                                                               (case format
-                                                                                 :transit-json :json
-                                                                                 :transit-msgpack :msgpack)
-                                                                               {:handlers serde/transit-read-handler-map}))))]
-
-                            (swap! conn-state
-                                   (fn [{:keys [copy], :as conn-state}]
-                                     (-> conn-state
-                                         (update-in [:transaction :dml-buf] (fnil conj [])
-                                                    (tx-ops/->PutDocs (:table-name copy) docs nil nil))
-                                         (dissoc :copy))))
-
-                            (when started-tx?
-                              (cmd-commit conn))
-
-                            (count docs))
-
-                          (catch Throwable e
-                            (when started-tx?
-                              (cmd-rollback conn))
-                            (throw e)))]
-
+        (let [doc-count (case format
+                          (:transit-json :transit-msgpack) (copy-transit-batch conn copy-stmt)
+                          (:arrow-file :arrow-stream) (copy-arrow-batches conn copy-stmt))]
+          
           (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str "COPY " doc-count)})))
 
       (catch Incorrect e
@@ -1578,6 +1623,8 @@
 
       (finally
         (util/delete-file copy-file)))
+
+    (swap! conn-state dissoc :copy)
 
     (cmd-send-ready conn)))
 

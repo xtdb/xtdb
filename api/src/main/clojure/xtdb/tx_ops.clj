@@ -31,6 +31,7 @@
 (defrecord Sql [sql arg-rows])
 (defrecord SqlByteArgs [sql ^bytes arg-bytes]) ; used in FlightSQL, LSP doesn't spot it
 (defrecord PutDocs [table-name docs valid-from valid-to])
+(defrecord PutRel [table-name ^bytes rel-bytes])
 (defrecord PatchDocs [table-name docs valid-from valid-to])
 (defrecord DeleteDocs [table-name doc-ids valid-from valid-to])
 (defrecord EraseDocs [table-name doc-ids])

@@ -21,7 +21,7 @@
            xtdb.indexer.LogProcessor
            xtdb.table.TableRef
            (xtdb.tx TxOp$DeleteDocs TxOp$EraseDocs TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts TxWriter)
-           (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs Sql SqlByteArgs)
+           (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs PutRel Sql SqlByteArgs)
            (xtdb.util MsgIdUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -63,6 +63,17 @@
                    (some-> valid-from (time/->instant opts)) (some-> valid-to (time/->instant opts))
                    (Relation/openFromRows al docs)))
 
+  PutRel
+  (open-tx-op [{:keys [table-name ^bytes rel-bytes]} ^BufferAllocator al, _opts]
+    ;; doesn't (yet?) support valid-from/to
+    (util/with-open [ldr (Relation/streamLoader al rel-bytes)]
+      (util/with-close-on-catch [rel (Relation. al (.getSchema ldr))]
+        (or (.loadNextPage ldr rel)
+            (throw (AssertionError. "No data in PutRel rel-bytes")))
+        (TxOp$PutDocs. (or (namespace table-name) "public") (name table-name)
+                       nil nil
+                       rel))))
+
   PatchDocs
   (open-tx-op [{:keys [table-name docs valid-from valid-to]} al opts]
     (TxOp$PatchDocs. (or (namespace table-name) "public") (name table-name)
@@ -70,15 +81,15 @@
                      (Relation/openFromRows al docs)))
 
   DeleteDocs
-  (open-tx-op [{:keys [table-name doc-ids valid-from valid-to]} al opts]
+  (open-tx-op [{:keys [table-name ^List doc-ids valid-from valid-to]} ^BufferAllocator al, opts]
     (TxOp$DeleteDocs. (or (namespace table-name) "public") (name table-name)
                       (some-> valid-from (time/->instant opts)) (some-> valid-to (time/->instant opts))
-                      (.monoReader (Vector/fromList al "_id" ^List doc-ids))))
+                      (Vector/fromList al "_id" doc-ids)))
 
   EraseDocs
-  (open-tx-op [{:keys [table-name doc-ids]} al _opts]
+  (open-tx-op [{:keys [table-name ^List doc-ids]} ^BufferAllocator al, _opts]
     (TxOp$EraseDocs. (or (namespace table-name) "public") (name table-name)
-                     (.monoReader (Vector/fromList al "_id" ^List doc-ids)))))
+                     (Vector/fromList al "_id" doc-ids))))
 
 (defn serialize-tx-ops ^bytes [^BufferAllocator allocator tx-ops
                                {:keys [^Instant system-time, default-tz], {:keys [user]} :authn :as opts}]
