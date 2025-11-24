@@ -82,8 +82,7 @@
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
-(defn parse-log "readings" [_benchmark-type log-file-path]
-  [log-file-path]
+(defmethod parse-log "readings" [_benchmark-type log-file-path]
   (let [content (slurp log-file-path)
         lines (str/split-lines content)
         stage-lines (filter #(str/starts-with? % "{\"stage\":") lines)
@@ -103,6 +102,8 @@
     {:all-stages stages
      :query-stages query-stages
      :ingest-stages (filterv #(contains? #{"ingest" "sync" "compact"} (name (:stage %))) stages)
+     :benchmark-total-time-ms benchmark-total-time-ms
+     :benchmark-summary benchmark-summary}))
 
 (defmethod parse-log "auctionmark" [_benchmark-type log-file-path]
   (let [content (slurp log-file-path)
