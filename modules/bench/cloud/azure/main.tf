@@ -51,7 +51,7 @@ module "xtdb_azure_bench" {
 
   ## Application Pool Config
   aks_application_pool_vm_size            = "Standard_D4pds_v6"
-  aks_application_pool_node_max_count     = 3
+  aks_application_pool_node_max_count     = 4
   aks_application_pool_node_min_count     = 0
   aks_application_pool_availability_zones = ["1", "2", "3"]
   aks_application_pool_os_disk_type       = "Ephemeral"
