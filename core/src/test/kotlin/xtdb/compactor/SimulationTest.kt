@@ -560,29 +560,30 @@ class SimulationTest : SimulationTestBase() {
         }
     }
 
-    @RepeatableSimulationTest
-    @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    @WithDriverConfig(temporalSplitting = CURRENT)
-    fun concurrentTableCompaction(iteration: Int) {
+    private fun runConcurrentTableCompaction() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val usersTable = TableRef("xtdb", "public", "users")
         val ordersTable = TableRef("xtdb", "public", "orders")
         val l0FileSize = 100L * 1024L * 1024L
-        val compactor = compactors[0]
-        val trieCatalog = trieCatalogs[0]
-        val db = dbs[0]
 
         // Start from L0 files to test the full compaction pipeline with multiple tables
         val docsTries = L0TrieKeys.take(16).map { buildTrieDetails(docsTable.tableName, it, l0FileSize) }
         val usersTries = L0TrieKeys.take(16).map { buildTrieDetails(usersTable.tableName, it, l0FileSize) }
         val ordersTries = L0TrieKeys.take(16).map { buildTrieDetails(ordersTable.tableName, it, l0FileSize) }
 
-        compactor.openForDatabase(db).use {
-            addL0s(docsTable, docsTries.toList())
-            addL0s(usersTable, usersTries.toList())
-            addL0s(ordersTable, ordersTries.toList())
-            it.compactAll()
+        addL0s(docsTable, docsTries.toList())
+        addL0s(usersTable, usersTries.toList())
+        addL0s(ordersTable, ordersTries.toList())
 
+        compactors.zip(dbs).safeMap { (compactor, db) ->
+            compactor.openForDatabase(db)
+        }.useAll { dbs ->
+            compactCompletions = dbs.shuffled(rand).map { db -> db.startCompaction() }
+        }
+        runBlocking { compactCompletions.awaitAll() }
+
+        // Verify all catalogs have the same results
+        trieCatalogs.map { trieCatalog ->
             val docsKeys = trieCatalog.listAllTrieKeys(docsTable)
             val usersKeys = trieCatalog.listAllTrieKeys(usersTable)
             val ordersKeys = trieCatalog.listAllTrieKeys(ordersTable)
@@ -590,17 +591,25 @@ class SimulationTest : SimulationTestBase() {
             Assertions.assertEquals(16, docsKeys.prefix("l01-rc-").size)
             Assertions.assertEquals(16, docsKeys.prefix("l02-rc-").size)
             Assertions.assertEquals(16, docsKeys.prefix("l03-rc-").size)
-            Assertions.assertEquals(
-                docsKeys.toSet(),
-                usersKeys.toSet(),
-                "Docs and Users tables should have identical trie keys"
-            )
-            Assertions.assertEquals(
-                docsKeys.toSet(),
-                ordersKeys.toSet(),
-                "Docs and Orders tables should have identical trie keys"
-            )
+            Assertions.assertEquals(docsKeys.toSet(), usersKeys.toSet(), "Docs and Users tables should have identical trie keys")
+            Assertions.assertEquals(docsKeys.toSet(), ordersKeys.toSet(), "Docs and Orders tables should have identical trie keys")
         }
+
+    }
+
+    @RepeatableSimulationTest
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @WithDriverConfig(temporalSplitting = CURRENT)
+    fun concurrentTableCompaction(iteration: Int) {
+        runConcurrentTableCompaction()
+    }
+
+    @RepeatableSimulationTest
+    @WithNumberOfSystems(2)
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @WithDriverConfig(temporalSplitting = CURRENT)
+    fun multiSystemConcurrentTableCompaction(iteration: Int) {
+        runConcurrentTableCompaction()
     }
 
     @RepeatableSimulationTest
