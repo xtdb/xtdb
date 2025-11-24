@@ -3,6 +3,7 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.future.future
@@ -20,6 +21,7 @@ import xtdb.database.proto.localLog
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
 import java.io.DataInputStream
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.channels.ClosedByInterruptException
@@ -238,11 +240,22 @@ class LocalLog(
                         }
                     }
                     .onCompletion { ch.close() }
+                    .catch {
+                        try {
+                            throw it
+                        } catch (_: ClosedByInterruptException) {
+                            throw CancellationException()
+                        } catch (_: InterruptedException) {
+                            throw CancellationException()
+                        }
+                    }
                     .collect()
             }
 
             while (true) {
-                val msg = withTimeoutOrNull(1.minutes) { ch.receive() }
+                val msg = withTimeoutOrNull(1.minutes) {
+                    ch.receiveCatching().let { if (it.isClosed) throw CancellationException() else it.getOrThrow()}
+                }
                 runInterruptible { subscriber.processRecords(listOfNotNull(msg)) }
             }
         }
