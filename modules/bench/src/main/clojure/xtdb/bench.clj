@@ -59,6 +59,9 @@
   (fn [& args]
     (try
       (apply f args)
+      (catch OutOfMemoryError oom
+        (log/error oom "OutOfMemoryError - forcing JVM exit")
+        (System/exit 1))
       (catch Throwable t
         (log/error t (str "Error while executing " f))
         (throw t)))))
@@ -272,6 +275,9 @@
                         @f ; will throw ExecutionException if the Runnable raised
                         (catch ExecutionException e
                           (let [cause (.getCause e)]
+                            (when (instance? OutOfMemoryError cause)
+                              (log/error cause "OutOfMemoryError in worker thread - forcing JVM exit")
+                              (System/exit 1))
                             (log/error cause "Benchmark worker failed in :pool" {:task task})
                             (throw (ex-info "Benchmark worker failed" {:task task} cause)))))))))
 
@@ -301,6 +307,9 @@
                                 @f ; will throw ExecutionException if the Runnable raised
                                 (catch ExecutionException e
                                   (let [cause (.getCause e)]
+                                    (when (instance? OutOfMemoryError cause)
+                                      (log/error cause "OutOfMemoryError in worker thread - forcing JVM exit")
+                                      (System/exit 1))
                                     (log/error cause "Benchmark worker failed in :concurrently" {:task task})
                                     (throw (ex-info "Benchmark worker failed" {:task task} cause)))))))))
 
