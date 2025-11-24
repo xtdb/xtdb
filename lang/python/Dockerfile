@@ -10,6 +10,6 @@ RUN pip install poetry
 COPY pyproject.toml .
 COPY poetry.lock .
 
-RUN poetry install
+RUN poetry install && poetry run pip install pyarrow
 
 COPY . .
