@@ -24,8 +24,9 @@ on:
         required: false
         default: '3'
         type: string
-  schedule:
-    - cron: '0 2 * * *'  # Run daily at 2am UTC
+  # Disabled for now
+  # schedule:
+  #   - cron: '30 5 * * *'  # Run daily at 05:30 UTC (after Readings finishes ~05:00)
 
 permissions:
   id-token: write
@@ -49,5 +50,5 @@ jobs:
       threads: ${{ inputs.threads || '8' }}
       node_count: ${{ inputs.node_count || '3' }}
       branch: ${{ github.ref_name }}
-      timeout_minutes: 150
+      timeout_minutes: 90
     secrets: inherit
