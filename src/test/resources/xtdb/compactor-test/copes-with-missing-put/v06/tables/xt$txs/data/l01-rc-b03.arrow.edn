@@ -14,16 +14,7 @@
                {"delete" [:? :null]}
                {"erase" [:? :null]}]}),
  :batches
- ([{:xt/system-from #xt/zdt "2020-01-04T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-01-04T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op
-    #xt/tagged [:put
-                {:xt/id 8364,
-                 :system-time #xt/zdt "2020-01-04T00:00Z[UTC]",
-                 :committed true}],
-    :xt/iid #bytes "631b9854cc1e97844d62427c18df8783"}
-   {:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
+ ([{:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
@@ -37,16 +28,25 @@
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 5798,
+                {:xt/id 5670,
                  :system-time #xt/zdt "2020-01-03T00:00Z[UTC]",
                  :committed true}],
-    :xt/iid #bytes "cce4aec8d0902ebff714c81673ec0056"}
+    :xt/iid #bytes "b513f7c6f9d796bb88975bd439329b52"}
    {:xt/system-from #xt/zdt "2020-01-02T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-02T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 3121,
+                {:xt/id 3049,
                  :system-time #xt/zdt "2020-01-02T00:00Z[UTC]",
                  :committed true}],
-    :xt/iid #bytes "f98e83a9d0947f405c88950e1b7a6e1b"}])}
+    :xt/iid #bytes "e1ade40ab4b7cd8159d2b36da7cc90f8"}
+   {:xt/system-from #xt/zdt "2020-01-04T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-01-04T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op
+    #xt/tagged [:put
+                {:xt/id 8188,
+                 :system-time #xt/zdt "2020-01-04T00:00Z[UTC]",
+                 :committed true}],
+    :xt/iid #bytes "f1e671e422b3cb8ddb678d69c5357a1b"}])}

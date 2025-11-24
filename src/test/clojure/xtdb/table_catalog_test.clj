@@ -73,10 +73,10 @@
 
           (t/is (= [{:table #xt/table foo,
                      :trie-key "l00-rc-b00",
-                     :data-file-size 1966}
+                     :data-file-size 1918}
                     {:table #xt/table foo,
                      :trie-key "l00-rc-b01",
-                     :data-file-size 1966}]
+                     :data-file-size 1918}]
                    (map #(dissoc % :trie-metadata) current-tries)))
 
           (t/is (= [{:min-valid-from #xt/instant "2020-01-01T00:00:00Z",

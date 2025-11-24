@@ -5,7 +5,7 @@
   "committed" #xt/field {"committed" :bool},
   "error" #xt/field {"error" [:? :transit]}},
  :hlls
- {"_id" [-1903792610 3.004403133222472],
+ {"_id" [1133729822 3.004403133222472],
   "system_time" [-1544051178 3.004403133222472],
   "committed" [1743138479 1.0004885993744506],
   "error" [-2042553016 2.001955671862574]},
@@ -14,7 +14,7 @@
    :part [],
    :tries
    [{:trie-key "l00-rc-b00",
-     :data-file-size 3102,
+     :data-file-size 3038,
      :trie-metadata
      {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
       :max-valid-from #xt/instant "2020-01-03T00:00:00Z",
@@ -23,5 +23,5 @@
       :min-system-from #xt/instant "2020-01-01T00:00:00Z",
       :max-system-from #xt/instant "2020-01-03T00:00:00Z",
       :row-count 3,
-      :iid-bloom [1421692163 15]}}],
+      :iid-bloom [-25939030 15]}}],
    :max-block-idx 0}]}

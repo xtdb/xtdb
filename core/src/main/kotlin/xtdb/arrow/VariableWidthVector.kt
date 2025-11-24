@@ -155,15 +155,11 @@ abstract class VariableWidthVector : Vector() {
         }
     }
 
-    override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
-        if (nullable) {
-            validityBuffer?.openUnloadedBuffer(buffers)
-        } else {
-            buffers.add(BitBuffer.openAllOnes(al, valueCount))
-        }
-        offsetBuffer.openUnloadedBuffer(buffers)
-        dataBuffer.openUnloadedBuffer(buffers)
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
+        if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(al.empty)
+        offsetBuffer.unloadBuffer(buffers)
+        dataBuffer.unloadBuffer(buffers)
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

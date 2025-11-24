@@ -16,24 +16,32 @@ import org.apache.arrow.vector.complex.FixedSizeListVector as ArrowFixedSizeList
 
 class FixedSizeListVector private constructor(
     private val al: BufferAllocator,
-    override var name: String, override var nullable: Boolean, private val listSize: Int,
-    private val validityBuffer: BitBuffer = BitBuffer(al),
+    override var name: String, private val listSize: Int,
+    private var validityBuffer: BitBuffer?,
     private var elVector: Vector,
     override var valueCount: Int = 0
 ) : Vector(), MetadataFlavour.List {
 
+    override var nullable: Boolean
+        get() = validityBuffer != null
+        set(value) {
+            if (value && validityBuffer == null)
+                BitBuffer(al).also { validityBuffer = it }.writeOnes(valueCount)
+        }
+
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean, listSize: Int, elVector: Vector, valueCount: Int = 0
-    ) : this(al, name, nullable, listSize, BitBuffer(al), elVector, valueCount)
+    ) : this(al, name, listSize, if (nullable) BitBuffer(al) else null, elVector, valueCount)
 
     override val arrowType = ArrowType.FixedSizeList(listSize)
 
     override val vectors get() = listOf(elVector)
 
-    override fun isNull(idx: Int) = !validityBuffer.getBoolean(idx)
+    override fun isNull(idx: Int) = nullable && !validityBuffer!!.getBoolean(idx)
 
     override fun writeUndefined() {
-        validityBuffer.writeBit(valueCount++, 0)
+        validityBuffer?.writeBit(valueCount, 0)
+        valueCount++
         repeat(listSize) { elVector.writeUndefined() }
     }
 
@@ -42,7 +50,10 @@ class FixedSizeListVector private constructor(
         writeUndefined()
     }
 
-    private fun writeNotNull() = validityBuffer.writeBit(valueCount++, 1)
+    private fun writeNotNull() {
+        validityBuffer?.writeBit(valueCount, 1)
+        valueCount++
+    }
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): List<*> {
         return (idx * listSize until (idx + 1) * listSize).map { elVector.getObject(it, keyFn) }
@@ -51,15 +62,15 @@ class FixedSizeListVector private constructor(
     override fun writeObject0(value: Any) = when (value) {
         is List<*> -> {
             require(value.size == listSize) { "invalid list size: expected $listSize, got ${value.size}" }
-            writeNotNull()
             value.forEach { elVector.writeObject(it) }
+            writeNotNull()
         }
 
         is ListValueReader -> {
             val valueSize = value.size()
             require(valueSize == listSize) { "invalid list size: expected $listSize, got $valueSize" }
-            writeNotNull()
             repeat(value.size()) { elVector.writeValue(value.nth(it)) }
+            writeNotNull()
         }
 
         else -> throw InvalidWriteObjectException(fieldType, value)
@@ -82,9 +93,7 @@ class FixedSizeListVector private constructor(
     override fun getListCount(idx: Int) = listSize
     override fun getListStartIndex(idx: Int) = idx * listSize
 
-    override fun endList() {
-        writeNotNull()
-    }
+    override fun endList() = writeNotNull()
 
     override fun valueReader(): ValueReader = object : ValueReader {
         override var pos = 0
@@ -132,44 +141,45 @@ class FixedSizeListVector private constructor(
         }
     }
 
-    override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
-        validityBuffer.openUnloadedBuffer(buffers)
-        elVector.openUnloadedPage(nodes, buffers)
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
+        if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(al.empty)
+        elVector.unloadPage(nodes, buffers)
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         val node = nodes.removeFirst()
         valueCount = node.length
 
-        validityBuffer.loadBuffer(buffers.removeFirst(), valueCount)
+        val validityBuf = buffers.removeFirst()
+        validityBuffer?.loadBuffer(validityBuf, valueCount)
         elVector.loadPage(nodes, buffers)
     }
 
     override fun loadFromArrow(vec: ValueVector) {
         require(vec is ArrowFixedSizeListVector)
 
-        validityBuffer.loadBuffer(vec.validityBuffer, vec.valueCount)
+        validityBuffer?.loadBuffer(vec.validityBuffer, vec.valueCount)
         elVector.loadFromArrow(vec.dataVector)
 
         valueCount = vec.valueCount
     }
 
     override fun clear() {
-        validityBuffer.clear()
+        validityBuffer?.clear()
         elVector.clear()
         valueCount = 0
     }
 
     override fun close() {
-        validityBuffer.close()
+        validityBuffer?.close()
         elVector.close()
     }
 
     override fun openSlice(al: BufferAllocator) =
-        validityBuffer.openSlice(al).closeOnCatch { validityBuffer ->
+        validityBuffer?.openSlice(al).closeOnCatch { validityBuffer ->
             elVector.openSlice(al).closeOnCatch { elVector ->
-                FixedSizeListVector(al, name, nullable, listSize, validityBuffer, elVector, valueCount)
+                FixedSizeListVector(al, name, listSize, validityBuffer, elVector, valueCount)
             }
         }
 }

@@ -407,10 +407,10 @@
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (t/is (= [{:schema-name "public", :table-name "foo", :trie-key "l00-rc-b00",
-             :level 0, :trie-state "garbage", :data-file-size 2014}
+             :level 0, :trie-state "garbage", :data-file-size 1966}
 
             {:schema-name "public", :table-name "foo", :trie-key "l01-r20200106-b00",
-             :level 1, :trie-state "live", :row-count 2, :data-file-size 2014, :recency #xt/date "2020-01-06",
+             :level 1, :trie-state "live", :row-count 2, :data-file-size 1966, :recency #xt/date "2020-01-06",
              :temporal-metadata {:min-valid-from (time/->zdt #inst "2020-01-01")
                                  :max-valid-from (time/->zdt #inst "2020-01-04")
                                  :min-valid-to (time/->zdt #inst "2020-01-02")
@@ -422,10 +422,10 @@
              :level 1, :trie-state "live", :data-file-size 1382}
 
             {:schema-name "xt", :table-name "txs", :trie-key "l00-rc-b00",
-             :level 0, :trie-state "garbage", :data-file-size 2798}
+             :level 0, :trie-state "garbage", :data-file-size 2734}
 
             {:schema-name "xt", :table-name "txs", :trie-key "l01-rc-b00",
-             :level 1, :trie-state "live", :row-count 1, :data-file-size 2806,
+             :level 1, :trie-state "live", :row-count 1, :data-file-size 2742,
              :temporal-metadata {:min-valid-from (time/->zdt #inst "2020-01-01")
                                  :max-valid-from (time/->zdt #inst "2020-01-01")
                                  :min-valid-to (time/->zdt time/end-of-time)

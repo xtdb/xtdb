@@ -8,7 +8,7 @@
    :part [],
    :tries
    [{:trie-key "l00-rc-b00",
-     :data-file-size 2494,
+     :data-file-size 2438,
      :trie-metadata
      {:min-valid-from #xt/instant "-290308-12-21T19:59:05.224192Z",
       :max-valid-from #xt/instant "2023-01-01T00:00:00Z",

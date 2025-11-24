@@ -80,7 +80,7 @@
 (def magic-last-tx-id
   "This value will change if you vary the structure of log entries, such
   as adding new legs to the tx-ops vector, as in memory the tx-id is a byte offset."
-  4769)
+  4545)
 
 (t/deftest can-build-block-as-arrow-ipc-file-format
   (binding [c/*ignore-signal-block?* true]

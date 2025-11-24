@@ -6,7 +6,7 @@
    :part [],
    :tries
    [{:trie-key "l00-rc-b00",
-     :data-file-size 1966,
+     :data-file-size 1918,
      :trie-metadata
      {:min-valid-from #xt/instant "2010-01-01T00:00:00Z",
       :max-valid-from #xt/instant "2010-01-01T00:00:00Z",

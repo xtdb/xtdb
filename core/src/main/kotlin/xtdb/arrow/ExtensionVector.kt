@@ -48,8 +48,8 @@ abstract class ExtensionVector : Vector() {
 
     override fun hashCode0(idx: Int, hasher: Hasher) = inner.hashCode0(idx, hasher)
 
-    override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
-        inner.openUnloadedPage(nodes, buffers)
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
+        inner.unloadPage(nodes, buffers)
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         inner.loadPage(nodes, buffers)

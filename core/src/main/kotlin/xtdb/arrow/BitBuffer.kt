@@ -3,7 +3,6 @@ package xtdb.arrow
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.BitVectorHelper
-import xtdb.util.closeOnCatch
 import kotlin.math.max
 
 internal class BitBuffer private constructor(
@@ -14,12 +13,6 @@ internal class BitBuffer private constructor(
 
     companion object {
         private fun bufferSize(bitCount: Int) = BitVectorHelper.getValidityBufferSize(bitCount).toLong()
-
-        fun openAllOnes(al: BufferAllocator, bitCount: Int): ArrowBuf =
-            al.buffer(bufferSize(bitCount)).closeOnCatch {
-                it.setOne(0, it.capacity())
-                it.writerIndex(it.capacity())
-            }
     }
 
     constructor(allocator: BufferAllocator) : this(allocator, allocator.empty, 0)
@@ -179,16 +172,27 @@ internal class BitBuffer private constructor(
         }
     }
 
-    internal fun openUnloadedBuffer(buffers: MutableList<ArrowBuf>) {
+    internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) {
         val writerByteIndex = bufferSize(writerBitIndex)
-        buffers.add(buf.readerIndex(0).writerIndex(writerByteIndex).also { it.referenceManager.retain() })
+        buffers.add(buf.readerIndex(0).writerIndex(writerByteIndex))
     }
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, bitCount: Int) {
         buf.close()
-        buf = arrowBuf.writerIndex(bufferSize(bitCount))
-            .let { it.referenceManager.transferOwnership(it, allocator).transferredBuffer }
-        writerBitIndex = bitCount
+
+        if (arrowBuf.capacity() == 0L) {
+            // vectors with no nulls are allowed to specify a zero-length validity buffer
+            // at the moment, we allocate one and fill it with ones,
+            // but we could optimise this away - i.e. only allocate when we need to write a zero
+            writerBitIndex = 0
+            buf = allocator.buffer(bufferSize(bitCount))
+            writeOnes(bitCount)
+        } else {
+            buf = arrowBuf.writerIndex(bufferSize(bitCount))
+                .let { it.referenceManager.transferOwnership(it, allocator).transferredBuffer }
+
+            writerBitIndex = bitCount
+        }
     }
 
     fun openSlice(al: BufferAllocator) =

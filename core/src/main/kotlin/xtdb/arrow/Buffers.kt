@@ -158,8 +158,8 @@ internal class ExtensibleBuffer private constructor(private val allocator: Buffe
     fun getPointer(idx: Int, len: Int, reuse: ArrowBufPointer? = null) =
         (reuse ?: ArrowBufPointer()).apply { set(this@ExtensibleBuffer.buf, idx.toLong(), len.toLong()) }
 
-    internal fun openUnloadedBuffer(buffers: MutableList<ArrowBuf>) =
-        buffers.add(buf.readerIndex(0).also { it.referenceManager.retain() })
+    internal fun unloadBuffer(buffers: MutableList<ArrowBuf>) =
+        buffers.add(buf.readerIndex(0))
 
     internal fun loadBuffer(arrowBuf: ArrowBuf, writerIndex: Long = arrowBuf.writerIndex()) {
         buf.close()

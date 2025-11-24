@@ -4,12 +4,7 @@ import io.kotest.core.tuple
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb
-import io.kotest.property.arbitrary.arbitrary
-import io.kotest.property.arbitrary.boolean
-import io.kotest.property.arbitrary.int
-import io.kotest.property.arbitrary.intArray
-import io.kotest.property.arbitrary.list
-import io.kotest.property.arbitrary.nonNegativeInt
+import io.kotest.property.arbitrary.*
 import io.kotest.property.checkAll
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.ArrowBuf
@@ -19,7 +14,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import xtdb.arrow.VectorIndirection.Companion.Selection
 import xtdb.test.AllocatorResolver
-import xtdb.util.useAll
 
 @ExtendWith(AllocatorResolver::class)
 class BitBufferTest {
@@ -59,15 +53,14 @@ class BitBufferTest {
             BitBuffer(al).use { srcBuf ->
                 srcBits.forEach { srcBuf.writeBoolean(it) }
 
-                mutableListOf<ArrowBuf>().useAll { unloaded ->
-                    srcBuf.openUnloadedBuffer(unloaded)
-                    BitBuffer(al).use { destBuf ->
-                        val unloadedBuf = unloaded.first()
-                        unloadedBuf.writerIndex() shouldBe divideBy8Ceil(srcBits.size)
-                        destBuf.loadBuffer(unloadedBuf, srcBits.size)
+                val unloaded = mutableListOf<ArrowBuf>()
+                srcBuf.unloadBuffer(unloaded)
+                BitBuffer(al).use { destBuf ->
+                    val unloadedBuf = unloaded.first()
+                    unloadedBuf.writerIndex() shouldBe divideBy8Ceil(srcBits.size)
+                    destBuf.loadBuffer(unloadedBuf, srcBits.size)
 
-                        destBuf.asBooleans shouldBe srcBits
-                    }
+                    destBuf.asBooleans shouldBe srcBits
                 }
             }
         }

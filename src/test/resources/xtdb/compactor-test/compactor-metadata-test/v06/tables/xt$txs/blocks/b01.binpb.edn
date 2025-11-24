@@ -5,7 +5,7 @@
   "system_time" #xt/field {"system_time" :instant},
   "_id" #xt/field {"_id" :i64}},
  :hlls
- {"_id" [-891643684 2.001955671862574],
+ {"_id" [-2077401314 2.001955671862574],
   "system_time" [2144534777 2.001955671862574],
   "committed" [1743138479 1.0004885993744506],
   "error" [1743287434 1.0004885993744506]},
@@ -14,7 +14,7 @@
    :part [],
    :tries
    [{:trie-key "l00-rc-b01",
-     :data-file-size 2798,
+     :data-file-size 2734,
      :trie-metadata
      {:min-valid-from #xt/instant "2020-01-02T00:00:00Z",
       :max-valid-from #xt/instant "2020-01-02T00:00:00Z",
@@ -23,16 +23,16 @@
       :min-system-from #xt/instant "2020-01-02T00:00:00Z",
       :max-system-from #xt/instant "2020-01-02T00:00:00Z",
       :row-count 1,
-      :iid-bloom [1432977773 5]}}
+      :iid-bloom [2066272728 5]}}
     {:trie-key "l00-rc-b00",
-     :data-file-size 2798,
+     :data-file-size 2734,
      :trie-metadata nil}],
    :max-block-idx 1}
   {:level 1,
    :part [],
    :tries
    [{:trie-key "l01-rc-b00",
-     :data-file-size 2806,
+     :data-file-size 2742,
      :trie-metadata
      {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
       :max-valid-from #xt/instant "2020-01-01T00:00:00Z",

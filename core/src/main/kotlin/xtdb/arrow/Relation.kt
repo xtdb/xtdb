@@ -7,7 +7,6 @@ import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.VectorSchemaRoot
-import org.apache.arrow.vector.compression.NoCompressionCodec
 import org.apache.arrow.vector.ipc.ReadChannel
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
@@ -70,11 +69,11 @@ class Relation(
 
     fun openArrowRecordBatch(): ArrowRecordBatch {
         val nodes = mutableListOf<ArrowFieldNode>()
-        return mutableListOf<ArrowBuf>().closeAllOnCatch { buffers ->
-            vecs.values.forEach { it.openUnloadedPage(nodes, buffers) }
+        val buffers = mutableListOf<ArrowBuf>()
+        for (v in vecs.values)
+            v.unloadPage(nodes, buffers)
 
-            ArrowRecordBatch(rowCount, nodes, buffers, NoCompressionCodec.DEFAULT_BODY_COMPRESSION, true, false)
-        }
+        return ArrowRecordBatch(rowCount, nodes, buffers)
     }
 
     fun openAsRoot(al: BufferAllocator): VectorSchemaRoot =

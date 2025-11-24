@@ -6,7 +6,7 @@
    :part [],
    :tries
    [{:trie-key "l00-rc-b01",
-     :data-file-size 1966,
+     :data-file-size 1918,
      :trie-metadata
      {:min-valid-from #xt/instant "2015-01-01T00:00:00Z",
       :max-valid-from #xt/instant "2015-01-01T00:00:00Z",
@@ -17,14 +17,14 @@
       :row-count 1,
       :iid-bloom [314116840 5]}}
     {:trie-key "l00-rc-b00",
-     :data-file-size 1966,
+     :data-file-size 1918,
      :trie-metadata nil}],
    :max-block-idx 1}
   {:level 1,
    :part [],
    :tries
    [{:trie-key "l01-r20110103-b00",
-     :data-file-size 1966,
+     :data-file-size 1918,
      :trie-metadata
      {:min-valid-from #xt/instant "2010-01-01T00:00:00Z",
       :max-valid-from #xt/instant "2010-01-01T00:00:00Z",

@@ -365,12 +365,12 @@ class DenseUnionVector private constructor(
         }
     }
 
-    override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
-        typeBuffer.openUnloadedBuffer(buffers)
-        offsetBuffer.openUnloadedBuffer(buffers)
+        typeBuffer.unloadBuffer(buffers)
+        offsetBuffer.unloadBuffer(buffers)
 
-        legVectors.forEach { it.openUnloadedPage(nodes, buffers) }
+        legVectors.forEach { it.unloadPage(nodes, buffers) }
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

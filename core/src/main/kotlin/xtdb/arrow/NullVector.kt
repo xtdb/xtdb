@@ -76,7 +76,7 @@ class NullVector(
 
     override fun rowCopier0(src: VectorReader) = RowCopier { writeNull() }
 
-    override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), valueCount.toLong()))
     }
 

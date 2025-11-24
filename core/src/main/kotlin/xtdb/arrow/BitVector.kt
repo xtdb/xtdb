@@ -93,14 +93,14 @@ class BitVector private constructor(
         }
     }
 
-    override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
-        nodes.add(ArrowFieldNode(valueCount.toLong(), -1))
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
+        nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
         if (nullable) {
-            validityBuffer?.openUnloadedBuffer(buffers)
+            validityBuffer?.unloadBuffer(buffers)
         } else {
-            buffers.add(BitBuffer.openAllOnes(al, valueCount))
+            buffers.add(al.empty)
         }
-        dataBuffer.openUnloadedBuffer(buffers)
+        dataBuffer.unloadBuffer(buffers)
     }
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

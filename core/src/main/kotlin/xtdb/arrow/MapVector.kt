@@ -95,8 +95,8 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
     override val mapValues get() = listElements.mapValues
     override fun getMapValues(fieldType: FieldType) = listElements.getMapValues(fieldType)
 
-    override fun openUnloadedPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
-        listVector.openUnloadedPage(nodes, buffers)
+    override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
+        listVector.unloadPage(nodes, buffers)
 
     override fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         listVector.loadPage(nodes, buffers)
