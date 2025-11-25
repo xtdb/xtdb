@@ -439,7 +439,7 @@
                                           :or {seed 0, threads 8, sync false
                                                duration "PT30S", scale-factor 0.1}}]
   (let [^Duration duration (cond-> duration (string? duration) Duration/parse)]
-    (log/info {:scale-factor scale-factor :no-load? no-load? :only-load? only-load? :duration duration :seed seed})
+    (log/info {:scale-factor scale-factor :no-load? no-load? :only-load? only-load? :duration duration :seed seed :threads threads :sync sync})
     {:title "Auction Mark OLTP"
      :benchmark-type :auctionmark
      :seed seed
