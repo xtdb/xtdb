@@ -689,7 +689,7 @@
                          (apply types/merge-col-types))]
 
     {:return-type return-type
-     :batch-bindings (->> (vals emitted-calls) (into [] (mapcat :batch-bindings)))
+     :children (vals emitted-calls)
      :continue (fn continue-call-expr [handle-emitted-expr]
                  (let [build-args-then-call
                        (reduce (fn step [build-next-arg {continue-this-arg :continue}]
@@ -727,7 +727,7 @@
           :concat (codegen-concat expr)
           (codegen-call* expr))
 
-        (assoc :children emitted-args)
+        (update :children (fnil into []) emitted-args)
         (wrap-boxed-poly-return opts))))
 
 (doseq [[f-kw cmp] [[:< #(do `(neg? ~%))]
@@ -1842,6 +1842,7 @@
                            (into {}))]
 
       {:return-type [:union #{:bool :null}]
+       :children (vals inner-calls)
        :continue-call (fn continue-list= [f [l-code r-code]]
                         (let [l-sym (gensym 'l), r-sym (gensym 'r)]
                           ;; this is essentially `(every? = ...)` but with 3VL

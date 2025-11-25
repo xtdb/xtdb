@@ -15,7 +15,6 @@
   (:import (java.nio ByteBuffer)
            (java.time Duration Instant InstantSource LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
-           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
            org.apache.arrow.vector.types.TimeUnit
            (xtdb.arrow RelationReader Vector VectorReader)
            (xtdb.time Interval)
@@ -2129,3 +2128,10 @@
                     [{:a1 1.0, :a2 2.4}
                      {:a1 1, :a2 nil}
                      {:a1 3, :a2 "3"}]))))
+
+(t/deftest list-equality-batch-bindings-5047
+  (t/is (false? (->> (tu/query-ra '[:project [{ret (= [#xt/instant "1970-01-01T00:00:00Z"]
+                                                      [#xt/ldt "1970-01-01T00:00"])}]
+                                    [:table [{}]]]
+                                  {:default-tz #xt/zone "America/New_York"})
+                     first :ret))))
