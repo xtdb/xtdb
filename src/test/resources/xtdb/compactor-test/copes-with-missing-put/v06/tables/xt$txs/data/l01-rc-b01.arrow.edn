@@ -10,6 +10,7 @@
                  {"_id" :i64}
                  {"system_time" :instant}
                  {"committed" :bool}
+                 {"user_metadata" [:? :struct]}
                  {"error" [:? :transit]}]}
                {"delete" [:? :null]}
                {"erase" [:? :null]}]}),
@@ -28,7 +29,7 @@
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 3049,
+                {:xt/id 3145,
                  :system-time #xt/zdt "2020-01-02T00:00Z[UTC]",
                  :committed true}],
-    :xt/iid #bytes "e1ade40ab4b7cd8159d2b36da7cc90f8"}])}
+    :xt/iid #bytes "e9206ee26cbad42925f0787581afe813"}])}

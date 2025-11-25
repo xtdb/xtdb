@@ -12,6 +12,7 @@
                  {"_id" :i64}
                  {"system_time" :instant}
                  {"committed" :bool}
+                 {"user_metadata" [:? :struct]}
                  {"error" [:? :transit]}]}]}),
  :batches
  ([{:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",

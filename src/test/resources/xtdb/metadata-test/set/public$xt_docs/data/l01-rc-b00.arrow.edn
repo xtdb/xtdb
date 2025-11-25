@@ -5,10 +5,7 @@
              {"_valid_to" :instant}
              {"op"
               [:union
-               {"put"
-                [:struct
-                 {"_id" :utf8}
-                 {"colours" [:set :utf8]}]}
+               {"put" [:struct {"_id" :utf8} {"colours" [:set :utf8]}]}
                {"delete" [:? :null]}
                {"erase" [:? :null]}]}),
  :batches

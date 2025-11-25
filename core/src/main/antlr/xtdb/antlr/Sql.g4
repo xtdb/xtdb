@@ -148,6 +148,7 @@ identifier
         | 'URI'
         | 'COPY' | 'FORMAT'
         | 'ATTACH' | 'DETACH' | 'DATABASE'
+        | METADATA
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier
@@ -828,6 +829,7 @@ readWriteTxOption
     : 'SYSTEM_TIME' '='? systemTime=expr # SystemTimeTxOption
     | ASYNC '='? async=literal # AsyncTxOption
     | txTzOption # TxTzOption1
+    | METADATA '='? metadata=expr # MetadataTxOption
     ;
 
 levelOfIsolation

@@ -156,7 +156,7 @@ class LogProcessor(
                             // use abort flow in indexTx
                             indexer.indexTx(
                                 msgId, record.logTimestamp,
-                                null, null, null, null
+                                null, null, null, null, null
                             )
                         } else {
                             msg.payload.asChannel.use { txOpsCh ->
@@ -172,10 +172,12 @@ class LogProcessor(
 
                                         val user = rel["user"].getObject(0) as String?
 
+                                        val userMetadata = rel.vectorForOrNull("user-metadata")?.getObject(0)
+
                                         indexer.indexTx(
                                             msgId, record.logTimestamp,
                                             rel["tx-ops"].listElements,
-                                            systemTime, defaultTz, user
+                                            systemTime, defaultTz, user, userMetadata
                                         )
                                     }
                                 }

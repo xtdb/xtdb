@@ -171,9 +171,10 @@
   ([node query opts]
    (into [] (plan-q node query opts))))
 
-(defn- begin-rw-sql [{:keys [system-time default-tz async?]}]
+(defn- begin-rw-sql [{:keys [system-time default-tz async? metadata]}]
   (let [kvs (->> [["TIMEZONE = ?" (some-> default-tz str)]
-                  ["SYSTEM_TIME = ?" system-time]]
+                  ["SYSTEM_TIME = ?" system-time]
+                  ["METADATA = ?" metadata]]
                  (into [] (filter (comp some? second))))]
     (into [(format "BEGIN READ WRITE WITH (%s, ASYNC = %s)"
                    (str/join ", " (map first kvs))
@@ -295,7 +296,12 @@
 
    - :default-tz
      overrides the default time zone for the transaction,
-     should be an instance of java.time.ZoneId"
+     should be an instance of java.time.ZoneId
+
+   - :metadata (v2.1+)
+     attaches arbitrary metadata to the transaction.
+     This is then added to the `xt.txs` table in the `user_metadata` column.
+     For example, you might use this to attach upstream request IDs, correlation IDs, or other data lineage information."
   ([connectable, tx-ops] (submit-tx connectable tx-ops {}))
 
   ([connectable, tx-ops tx-opts]
@@ -351,6 +357,11 @@
    - :default-tz
      overrides the default time zone for the transaction,
      should be an instance of java.time.ZoneId
+
+   - :metadata (v2.1+)
+     attaches arbitrary metadata to the transaction.
+     This is then added to the `xt.txs` table in the `user_metadata` column.
+     For example, you might use this to attach upstream request IDs, correlation IDs, or other data lineage information.
 
    - :authn
      a map of user and password if the node requires authentication"

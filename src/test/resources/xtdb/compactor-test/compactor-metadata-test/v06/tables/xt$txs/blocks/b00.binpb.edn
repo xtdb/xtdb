@@ -3,18 +3,20 @@
  {"_id" #xt/field {"_id" :i64},
   "system_time" #xt/field {"system_time" :instant},
   "committed" #xt/field {"committed" :bool},
+  "user_metadata" #xt/field {"user_metadata" [:? :struct]},
   "error" #xt/field {"error" [:? :transit]}},
  :hlls
  {"_id" [75145568 1.0004885993744506],
   "system_time" [-240381059 1.0004885993744506],
   "committed" [1743138479 1.0004885993744506],
+  "user_metadata" [1743287434 1.0004885993744506],
   "error" [1743287434 1.0004885993744506]},
  :partitions
  [{:level 0,
    :part [],
    :tries
    [{:trie-key "l00-rc-b00",
-     :data-file-size 2734,
+     :data-file-size 2894,
      :trie-metadata
      {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
       :max-valid-from #xt/instant "2020-01-01T00:00:00Z",

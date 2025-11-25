@@ -114,6 +114,14 @@
                           :default-tz #xt/zone "Europe/London"
                           :authn {:user "xtdb"}}))
 
+(t/deftest test-tx-metadata
+  (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/tx-metadata.arrow.edn")
+                         ["INSERT INTO transfers (_id, src, dest, value) VALUES (0, 'the bank', 'jms', 'a gajillion dollars')"]
+                         {:user-metadata {:source "mobile-app"
+                                          :tags ["high-value" "priority"]
+                                          :correlation-id "abc123"}
+                          :authn {:user "jms"}}))
+
 (t/deftest validate-offset-returns-proper-errors
   (letfn [(->simulated-log [epoch latest-submitted-offset]
             (reify Log

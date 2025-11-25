@@ -2,19 +2,21 @@
  :fields
  {"committed" #xt/field {"committed" :bool},
   "error" #xt/field {"error" [:? :transit]},
+  "user_metadata" #xt/field {"user_metadata" [:? :struct]},
   "system_time" #xt/field {"system_time" :instant},
   "_id" #xt/field {"_id" :i64}},
  :hlls
- {"_id" [-2077401314 2.001955671862574],
+ {"_id" [-44673762 2.001955671862574],
   "system_time" [2144534777 2.001955671862574],
   "committed" [1743138479 1.0004885993744506],
+  "user_metadata" [1743287434 1.0004885993744506],
   "error" [1743287434 1.0004885993744506]},
  :partitions
  [{:level 0,
    :part [],
    :tries
    [{:trie-key "l00-rc-b01",
-     :data-file-size 2734,
+     :data-file-size 2894,
      :trie-metadata
      {:min-valid-from #xt/instant "2020-01-02T00:00:00Z",
       :max-valid-from #xt/instant "2020-01-02T00:00:00Z",
@@ -23,16 +25,16 @@
       :min-system-from #xt/instant "2020-01-02T00:00:00Z",
       :max-system-from #xt/instant "2020-01-02T00:00:00Z",
       :row-count 1,
-      :iid-bloom [2066272728 5]}}
+      :iid-bloom [1119648682 5]}}
     {:trie-key "l00-rc-b00",
-     :data-file-size 2734,
+     :data-file-size 2894,
      :trie-metadata nil}],
    :max-block-idx 1}
   {:level 1,
    :part [],
    :tries
    [{:trie-key "l01-rc-b00",
-     :data-file-size 2742,
+     :data-file-size 2894,
      :trie-metadata
      {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
       :max-valid-from #xt/instant "2020-01-01T00:00:00Z",

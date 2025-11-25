@@ -14,7 +14,7 @@ interface Indexer : AutoCloseable {
     interface ForDatabase : AutoCloseable {
         fun indexTx(
             msgId: MessageId, msgTimestamp: Instant, txOps: VectorReader?,
-            systemTime: Instant?, defaultTz: ZoneId?, user: String?
+            systemTime: Instant?, defaultTz: ZoneId?, user: String?, userMetadata: Any?
         ): TransactionResult
 
         fun addTxRow(txKey: TransactionKey, error: Throwable?)

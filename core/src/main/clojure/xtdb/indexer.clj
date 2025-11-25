@@ -584,7 +584,7 @@
 
         nil))))
 
-(defn- add-tx-row! [db-name ^LiveIndex$Tx live-idx-tx, ^TransactionKey tx-key, ^Throwable t]
+(defn- add-tx-row! [db-name ^LiveIndex$Tx live-idx-tx, ^TransactionKey tx-key, ^Throwable t, user-metadata]
   (let [tx-id (.getTxId tx-key)
         system-time-µs (time/instant->micros (.getSystemTime tx-key))
 
@@ -601,6 +601,9 @@
 
                (doto (.vectorFor doc-writer "committed" (FieldType/notNullable #xt.arrow/type :bool))
                  (.writeBoolean (nil? t)))
+
+               (doto (.vectorFor doc-writer "user_metadata" (.getFieldType #xt/type [:? :struct]))
+                 (.writeObject user-metadata))
 
                (let [e-wtr (.vectorFor doc-writer "error" (FieldType/nullable #xt.arrow/type :transit))]
                  (if (nil? t)
@@ -633,7 +636,7 @@
     (util/close allocator))
 
   (indexTx [this msg-id msg-ts tx-ops-rdr
-            system-time default-tz _user]
+            system-time default-tz _user user-metadata]
     (let [db-name (.getName db)
           lc-tx (.getLatestCompletedTx live-index)
           default-system-time (or (when-let [lc-sys-time (some-> lc-tx (.getSystemTime))]
@@ -655,7 +658,7 @@
           (util/with-open [live-idx-tx (.startTx live-index tx-key)]
             (when tx-error-counter
               (.increment tx-error-counter))
-            (add-tx-row! db-name live-idx-tx tx-key err)
+            (add-tx-row! db-name live-idx-tx tx-key err user-metadata)
             (commit tx-key live-idx-tx tx-sink))
 
           (serde/->tx-aborted msg-id default-system-time err))
@@ -667,7 +670,7 @@
               (do
                 (.abort live-idx-tx)
                 (util/with-open [live-idx-tx (.startTx live-index tx-key)]
-                  (add-tx-row! db-name live-idx-tx tx-key skipped-exn)
+                  (add-tx-row! db-name live-idx-tx tx-key skipped-exn user-metadata)
                   (commit tx-key live-idx-tx tx-sink))
 
                 (serde/->tx-aborted msg-id system-time skipped-exn))
@@ -687,7 +690,8 @@
                              :default-tz default-tz
                              :tx-key tx-key
                              :indexer this
-                             :default-db (.getName db)}
+                             :default-db (.getName db)
+                             :user-metadata user-metadata}
 
                     !put-docs-idxer (delay (->put-docs-indexer live-index live-idx-tx tx-ops-rdr db system-time tx-opts))
                     !patch-docs-idxer (delay (->patch-docs-indexer live-index live-idx-tx tx-ops-rdr q-src db-cat system-time tx-opts))
@@ -724,19 +728,19 @@
                     (util/with-open [live-idx-tx (.startTx live-index tx-key)]
                       (when tx-error-counter
                         (.increment tx-error-counter))
-                      (add-tx-row! db-name live-idx-tx tx-key e)
+                      (add-tx-row! db-name live-idx-tx tx-key e user-metadata)
                       (commit tx-key live-idx-tx tx-sink))
 
                     (serde/->tx-aborted msg-id system-time e))
 
                   (do
-                    (add-tx-row! db-name live-idx-tx tx-key nil)
+                    (add-tx-row! db-name live-idx-tx tx-key nil user-metadata)
                     (commit tx-key live-idx-tx tx-sink)
                     (serde/->tx-committed msg-id system-time))))))))))
 
   (addTxRow [_ tx-key e]
     (util/with-open [live-idx-tx (.startTx live-index tx-key)]
-      (add-tx-row! (.getName db) live-idx-tx tx-key e)
+      (add-tx-row! (.getName db) live-idx-tx tx-key e {})
       (commit tx-key live-idx-tx tx-sink))))
 
 (defmethod ig/init-key :xtdb/indexer [_ {:keys [config, q-src, metrics-registry]}]

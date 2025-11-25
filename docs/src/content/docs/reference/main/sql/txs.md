@@ -161,10 +161,11 @@ const tz = rr.Sequence(rr.Choice(0, 'TIMEZONE', rr.Sequence('TIME', 'ZONE')), eq
 
 const ro = rr.Sequence("READ", "ONLY", '...')
 
-const rwOpts = rr.Choice(0, 
+const rwOpts = rr.Choice(0,
   rr.Skip(),
-  rr.Sequence('SYSTEM_TIME', eq, '<timestamp>'), 
+  rr.Sequence('SYSTEM_TIME', eq, '<timestamp>'),
   rr.Sequence('ASYNC', eq, '<boolean>'),
+  rr.Sequence('METADATA', eq, '<value>'),
   tz
 )
 
@@ -187,6 +188,9 @@ return rr.Diagram(rr.Choice(0, begin, 'COMMIT', 'ROLLBACK'))
     If not provided, it defaults to `false` - i.e. the connection will wait for the transaction to be indexed before returning.
   * `TIMEZONE` sets the time zone for the duration of the transaction, affecting any time zone-aware date/time literals and functions.
     If not provided, it defaults to the time-zone of the connection.
+  * `METADATA` (v2.1+) can provided to attach arbitrary metadata to the transaction.
+    This is then added to the `xt.txs` table in the `user_metadata` column.
+    For example, you might use this to attach upstream request IDs, correlation IDs, or other data lineage information.
 * N.B. `READ WRITE` is a misnomer in XTDB here - this is to align with standard SQL syntax.
   XTDB doesn't have interactive read-write transactions, so any attempt to (e.g.) `SELECT` in this transaction will error.
 * For read-only transactions, see the [query reference](/reference/main/sql/queries#begin--commit--rollback).

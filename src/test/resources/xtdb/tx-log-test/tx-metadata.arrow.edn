@@ -1,0 +1,26 @@
+{:schema
+ #xt/schema ({"tx-ops"
+              [:list
+               [:union
+                {"sql"
+                 [:struct {"query" :utf8} {"args" [:? :varbinary]}]}]]}
+             {"system-time" [:? :instant]}
+             {"default-tz" :utf8}
+             {"user" [:? :utf8]}
+             {"user-metadata"
+              [:?
+               :struct
+               {"source" :utf8}
+               {"tags" [:list :utf8]}
+               {"correlation_id" :utf8}]}),
+ :data
+ [{:user-metadata
+   {:source "mobile-app",
+    :tags ["high-value" "priority"],
+    :correlation-id "abc123"},
+   :default-tz "Europe/London",
+   :tx-ops
+   [#xt/tagged [:sql
+                {:query
+                 "INSERT INTO transfers (_id, src, dest, value) VALUES (0, 'the bank', 'jms', 'a gajillion dollars')"}]],
+   :user "jms"}]}

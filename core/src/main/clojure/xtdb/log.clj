@@ -92,9 +92,9 @@
                      (Vector/fromList al "_id" doc-ids))))
 
 (defn serialize-tx-ops ^bytes [^BufferAllocator allocator tx-ops
-                               {:keys [^Instant system-time, default-tz], {:keys [user]} :authn :as opts}]
+                               {:keys [^Instant system-time, default-tz user-metadata], {:keys [user]} :authn, :as opts}]
   (util/with-open [ops (util/safe-mapv #(open-tx-op % allocator opts) tx-ops)]
-    (TxWriter/serializeTxOps ops allocator (TxOpts. default-tz (time/->instant system-time) user))))
+    (TxWriter/serializeTxOps ops allocator (TxOpts. default-tz (time/->instant system-time) user user-metadata))))
 
 (defmulti ->log-cluster-factory
   (fn [k _opts]

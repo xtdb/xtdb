@@ -1291,3 +1291,35 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (xt/execute-tx tu/*node* [[:sql "DELETE FROM sqldocs WHERE _id = ?" [0] ["foo"] [:bar] [#uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3"]]])
     (xt/execute-tx tu/*node* [[:sql "ERASE FROM sqldocs WHERE _id = ?" [0] ["foo"] [:bar] [#uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3"]]])
     (t/is (empty? (xt/q tu/*node* "SELECT * FROM sqldocs")))))
+
+(t/deftest tx-user-metadata-4781
+  (with-open [conn (jdbc/get-connection tu/*node*)]
+    (t/testing "as a literal"
+      (jdbc/execute! conn ["BEGIN READ WRITE WITH (METADATA = {source: 'mobile-app', tags: ['tag1', 'tag2']})"])
+      (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (42)"])
+      (jdbc/execute! conn ["COMMIT"]))
+
+    (t/testing "as a param"
+      (jdbc/execute! conn ["BEGIN READ WRITE WITH (METADATA ?)" {:source "browser", :tags ["tag2" "tag3"]}])
+      (jdbc/execute! conn ["INSERT INTO foo (_id) VALUES (43)"])
+      (jdbc/execute! conn ["COMMIT"]))
+
+    (t/testing "via Clojure API"
+      (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 100}]]
+                     {:metadata {:source "clojure-api"
+                                 :tags ["api-test"]
+                                 :request-id "req-12345"}}))
+
+    (t/is (= [{:xt/id 42}, {:xt/id 43}, {:xt/id 100}]
+             (xt/q conn ["SELECT _id from foo ORDER BY _id"])))
+
+    (t/is (= [{:xt/id 0, :system-time #xt/zdt "2020-01-01T00:00Z[UTC]"
+               :committed true,
+               :user-metadata {:source "mobile-app", :tags ["tag1" "tag2"]}}
+              {:xt/id 1, :system-time #xt/zdt "2020-01-02T00:00Z[UTC]",
+               :committed true,
+               :user-metadata {:source "browser", :tags ["tag2" "tag3"]}}
+              {:xt/id 2, :system-time #xt/zdt "2020-01-03T00:00Z[UTC]"
+               :committed true,
+               :user-metadata {:source "clojure-api", :tags ["api-test"], :request-id "req-12345"}}]
+             (xt/q conn ["SELECT * FROM xt.txs ORDER BY _id"])))))

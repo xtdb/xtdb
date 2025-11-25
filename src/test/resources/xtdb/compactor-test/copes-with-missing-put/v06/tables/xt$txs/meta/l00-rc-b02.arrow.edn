@@ -18,6 +18,7 @@
                       [:? :struct {"min" :f64} {"max" :f64}]}
                      {"numbers" [:? :struct {"min" :f64} {"max" :f64}]}
                      {"bool" [:? :bool]}
+                     {"struct" [:? :list :i32]}
                      {"transit" [:? :bool]}]}]}]}]}),
  :batches
  ([{:nodes
@@ -29,7 +30,7 @@
                    :count 1,
                    :bytes
                    {:bloom
-                    #bytes "3a30000005000000070000000b0000000f000000130000001800000030000000320000003400000036000000380000000d9b4fb691d1d3ec1508"}}
+                    #bytes "3a3000000500000022000000280000002e000000350000003b00000030000000320000003400000036000000380000002a5c7998c8d41711664d"}}
                   {:col-name "_valid_from",
                    :root-col? true,
                    :count 1,
@@ -47,7 +48,7 @@
                   {:col-name "_id",
                    :root-col? true,
                    :count 1,
-                   :numbers {:min 5670.0, :max 5670.0}}
+                   :numbers {:min 5870.0, :max 5870.0}}
                   {:col-name "system_time",
                    :root-col? true,
                    :count 1,
@@ -56,6 +57,10 @@
                    :root-col? true,
                    :count 1,
                    :bool true}
+                  {:col-name "user_metadata",
+                   :root-col? true,
+                   :count 0,
+                   :struct []}
                   {:col-name "error",
                    :root-col? true,
                    :count 0,

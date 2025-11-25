@@ -36,7 +36,8 @@
                   {"_valid_to" [:? :instant]}]}]]}
              {"system-time" [:? :instant]}
              {"default-tz" :utf8}
-             {"user" [:? :utf8]}),
+             {"user" [:? :utf8]}
+             {"user-metadata" [:? :struct]}),
  :data
  [{:default-tz "Europe/London",
    :tx-ops

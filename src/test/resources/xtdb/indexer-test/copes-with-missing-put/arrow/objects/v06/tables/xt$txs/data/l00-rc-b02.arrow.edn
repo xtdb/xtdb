@@ -12,6 +12,7 @@
                  {"_id" :i64}
                  {"system_time" :instant}
                  {"committed" :bool}
+                 {"user_metadata" [:? :struct]}
                  {"error" [:? :transit]}]}]}),
  :batches
  ([{:xt/system-from #xt/zdt "2020-01-03T00:00Z[UTC]",
@@ -19,7 +20,7 @@
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 4825,
+                {:xt/id 5017,
                  :system-time #xt/zdt "2020-01-03T00:00Z[UTC]",
                  :committed true}],
-    :xt/iid #bytes "f80e6c8ae54b8e687b256f1db2ed470f"}])}
+    :xt/iid #bytes "82ed084591326f2c97e51cc438871a54"}])}

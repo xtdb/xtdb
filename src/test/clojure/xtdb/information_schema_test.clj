@@ -28,7 +28,8 @@
                     [xtdb xt/txs _id :i64]
                     [xtdb xt/txs committed :bool]
                     [xtdb xt/txs error [:? :transit]]
-                    [xtdb xt/txs system_time :instant]}
+                    [xtdb xt/txs system_time :instant]
+                    [xtdb xt/txs user_metadata [:? :struct]]}
                  (for [table '[public/baseball public/beanie xt/txs]
                        [col data-type] '[[_system_from :instant]
                                          [_system_to [:? :instant]]
@@ -422,10 +423,10 @@
              :level 1, :trie-state "live", :data-file-size 1382}
 
             {:schema-name "xt", :table-name "txs", :trie-key "l00-rc-b00",
-             :level 0, :trie-state "garbage", :data-file-size 2734}
+             :level 0, :trie-state "garbage", :data-file-size 2894}
 
             {:schema-name "xt", :table-name "txs", :trie-key "l01-rc-b00",
-             :level 1, :trie-state "live", :row-count 1, :data-file-size 2742,
+             :level 1, :trie-state "live", :row-count 1, :data-file-size 2894,
              :temporal-metadata {:min-valid-from (time/->zdt #inst "2020-01-01")
                                  :max-valid-from (time/->zdt #inst "2020-01-01")
                                  :min-valid-to (time/->zdt time/end-of-time)
@@ -452,7 +453,8 @@
             ["xt" "txs" "_id" :i64]
             ["xt" "txs" "committed" :bool]
             ["xt" "txs" "error" [:union #{:null :transit}]]
-            ["xt" "txs" "system_time" [:timestamp-tz :micro "UTC"]]]
+            ["xt" "txs" "system_time" [:timestamp-tz :micro "UTC"]]
+            ["xt" "txs" "user_metadata" [:union #{[:struct {}] :null}]]]
            (->> (xt/q tu/*node* "SELECT * FROM xt.live_columns ORDER BY schema_name, table_name, col_name")
                 (mapv (juxt :schema-name :table-name :col-name (comp read-string :col-type)))))))
 

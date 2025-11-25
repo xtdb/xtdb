@@ -536,12 +536,13 @@
                                            (update :current-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
                                            (update :snapshot-token #(some-> % (apply-args args)))
                                            (update :snapshot-time #(some-> % (apply-args args)))
+                                           (update :user-metadata #(some-> % (apply-args args)))
                                            (->> (into {} (filter (comp some? val))))))
                                  (assoc :await-token await-token))))))))))
 
 (defn cmd-commit [{:keys [^Xtdb node conn-state default-db ^BufferAllocator allocator, tx-error-counter] :as conn}]
   (let [{:keys [transaction session]} @conn-state
-        {:keys [failed dml-buf system-time access-mode default-tz async?]} transaction
+        {:keys [failed dml-buf system-time access-mode default-tz async? user-metadata]} transaction
         {:keys [parameters]} session]
     (if failed
       (throw (pgio/err-protocol-violation "transaction failed"))
@@ -550,7 +551,8 @@
         (when (= :read-write access-mode)
           (let [tx-opts (TxOpts. default-tz
                                  (some-> system-time (time/->instant {:default-tz default-tz}))
-                                 (get parameters "user"))]
+                                 (get parameters "user")
+                                 user-metadata)]
             (util/with-open [tx-ops (->> dml-buf
                                          (mapcat (fn [op]
                                                    (or (when (instance? Sql op)
@@ -796,6 +798,9 @@
 
                                         (visitClockTimeTxOption [_ ctx]
                                           {:current-time (sql/plan-expr (.clockTime ctx) env)})
+
+                                        (visitMetadataTxOption [_ ctx]
+                                          {:user-metadata (sql/plan-expr (.metadata ctx) env)})
 
                                         (visitCommitStatement [_ _] {:statement-type :commit})
                                         (visitRollbackStatement [_ _] {:statement-type :rollback})

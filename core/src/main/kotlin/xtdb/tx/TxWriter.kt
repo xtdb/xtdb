@@ -3,9 +3,7 @@
 package xtdb.tx
 
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.arrow.LIST
-import xtdb.arrow.Relation
-import xtdb.arrow.RelationAsStructReader
+import xtdb.arrow.*
 import xtdb.arrow.VectorType.Companion.IID
 import xtdb.arrow.VectorType.Companion.INSTANT
 import xtdb.arrow.VectorType.Companion.LIST_TYPE
@@ -18,8 +16,6 @@ import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.VectorType.Companion.structOf
 import xtdb.arrow.VectorType.Companion.unionOf
-import xtdb.arrow.VectorWriter
-import xtdb.arrow.schema
 import xtdb.error.Incorrect
 import xtdb.table.SchemaName
 import xtdb.table.TableName
@@ -31,7 +27,8 @@ private val txSchema = schema(
     "tx-ops" ofType listTypeOf(unionOf()),
     "system-time" ofType maybe(INSTANT),
     "default-tz" ofType UTF8,
-    "user" ofType maybe(UTF8)
+    "user" ofType maybe(UTF8),
+    "user-metadata" ofType maybe(STRUCT_TYPE)
 )
 
 private val FORBIDDEN_SCHEMAS = setOf("xt", "information_schema", "pg_catalog")
@@ -187,7 +184,10 @@ private class EraseDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.EraseDocs> {
     }
 }
 
-data class TxOpts(val defaultTz: ZoneId? = null, val systemTime: Instant? = null, val user: String? = null) {
+data class TxOpts(
+    val defaultTz: ZoneId? = null, val systemTime: Instant? = null,
+    val user: String? = null, val userMetadata: Map<*, *>? = null
+) {
     fun withFallbackTz(defaultTz: ZoneId?) = if (this.defaultTz != null) this else copy(defaultTz = defaultTz)
 }
 
@@ -223,6 +223,8 @@ fun List<TxOp>.toBytes(al: BufferAllocator, opts: TxOpts): ByteArray =
 
         val userVec = rel["user"]
         opts.user?.let { userVec.writeObject(it) } ?: userVec.writeNull()
+
+        rel["user-metadata"].writeObject(opts.userMetadata)
 
         rel.endRow()
 

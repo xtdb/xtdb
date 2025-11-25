@@ -10,6 +10,7 @@
                  {"_id" :i64}
                  {"system_time" :instant}
                  {"committed" :bool}
+                 {"user_metadata" [:? :struct]}
                  {"error" [:? :transit]}]}
                {"delete" [:? :null]}
                {"erase" [:? :null]}]}),
