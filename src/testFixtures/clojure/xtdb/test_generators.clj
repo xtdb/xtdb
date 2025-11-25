@@ -102,15 +102,17 @@
   ([] (recursive-value-gen {:exclude-gens #{}}))
   ([{:keys [exclude-gens]}]
    (let [filtered-simple-type-gen (remove exclude-gens simple-type-gens)
-         filtered-simple-gen (gen/one-of (vec filtered-simple-type-gen))]
+         filtered-simple-gen (gen/one-of (vec filtered-simple-type-gen))
+         exclude-set? (contains? exclude-gens set-gen)]
      (gen/recursive-gen
       (fn [inner-gen]
         (gen/frequency
-         [[8 filtered-simple-gen]
-          [2 (list-gen inner-gen)]
-          [2 (struct-gen inner-gen)]
-          [1 (set-gen inner-gen)]
-          [1 (union-gen inner-gen filtered-simple-gen)]]))
+          (remove nil?
+           [[8 filtered-simple-gen]
+            [2 (list-gen inner-gen)]
+            [2 (struct-gen inner-gen)]
+            (when-not exclude-set? [1 (set-gen inner-gen)])
+            [1 (union-gen inner-gen filtered-simple-gen)]])))
       filtered-simple-gen))))
 
 (def field-type-gen
