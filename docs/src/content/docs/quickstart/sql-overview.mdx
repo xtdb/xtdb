@@ -154,11 +154,11 @@ You can also observe the inferred schema using the SQL standard's `INFORMATION_S
 <TabbedExample>
   <Xtplay magicContext="my-context" slot="1">
     <Query q={`
-SELECT * FROM information_schema.columns`} />
+SELECT * FROM information_schema.columns WHERE table_name = 'people'`} />
   </Xtplay>
   <Card slot="2">
 ```sql
-user=> SELECT * FROM information_schema.columns;
+user=> SELECT * FROM information_schema.columns WHERE table_name = 'people';
  column_name |                                                                  data_type                                                                  | table_catalog | table_name | table_schema
 -------------+---------------------------------------------------------------------------------------------------------------------------------------------+---------------+------------+--------------
  system_time | [:timestamp-tz :micro "UTC"]                                                                                                                | xtdb          | txs        | xt
