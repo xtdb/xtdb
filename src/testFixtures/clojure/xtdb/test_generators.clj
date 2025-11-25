@@ -121,7 +121,8 @@
 (defn generate-record
   ([]
    (generate-record {}))
-  ([{:keys [potential-doc-ids]}]
+  ([{:keys [potential-doc-ids exclude-gens]
+     :or {exclude-gens #{}}}]
    (gen/let [id (if potential-doc-ids
                   (gen/elements potential-doc-ids)
                   (gen/one-of [i64-gen safe-keyword-gen uuid-gen]))
@@ -130,7 +131,7 @@
                          (gen/elements [:a :b :c :d :e :f :g :h :i :j])
                          {:num-elements num-fields
                           :max-tries 100})
-             field-values (gen/vector (recursive-value-gen) num-fields)]
+             field-values (gen/vector (recursive-value-gen {:exclude-gens exclude-gens}) num-fields)]
      (-> (zipmap field-keys field-values)
          (assoc :xt/id id)))))
 
