@@ -24,9 +24,8 @@ on:
         required: false
         default: '3'
         type: string
-  # Disabled for now
-  # schedule:
-  #   - cron: '30 5 * * *'  # Run daily at 05:30 UTC (after Readings finishes ~05:00)
+  schedule:
+    - cron: '30 5 * * *'  # Run daily at 05:30 UTC (after Readings finishes ~05:00)
 
 permissions:
   id-token: write
