@@ -3,6 +3,7 @@ package xtdb.aws
 import clojure.java.api.Clojure
 import io.minio.MakeBucketArgs
 import io.minio.MinioClient
+import kotlinx.coroutines.test.runTest
 import org.jetbrains.exposed.sql.Database.Companion.connect
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.AfterAll
@@ -62,7 +63,7 @@ class MinioTest : S3Test() {
     }.openObjectStore(Path("test-root"))
 
     @Test
-    fun writeBlock(@TempDir nodeDir: Path) {
+    fun writeBlock(@TempDir nodeDir: Path) = runTest {
         Clojure.`var`("clojure.core/require").invoke("xtdb.types".symbol)
 
         val xtdbLog = Log.localLog(nodeDir.resolve("xt-log"))

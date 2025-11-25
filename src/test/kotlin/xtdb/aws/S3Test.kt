@@ -1,5 +1,6 @@
 package xtdb.aws
 
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import xtdb.api.storage.ObjectStoreTest
@@ -22,7 +23,7 @@ open class S3Test : ObjectStoreTest() {
         s3(bucket).prefix(prefix).openObjectStore(Path("s3-test"))
 
     @Test
-    fun `test proto round trip`() {
+    fun `test proto round trip`() = runTest {
         val originalFactory = s3("test-bucket") {
             region("us-west-2")
             prefix("test/prefix".asPath)
