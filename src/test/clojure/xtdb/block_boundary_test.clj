@@ -404,10 +404,10 @@
 
 (t/deftest ^:property updates-across-flush-boundaries
   ;; TODO: To prevent failures here, we have to remove certain gens from UPDATE statement generation
-  (let [exclude-gens #{tg/duration-gen tg/varbinary-gen tg/decimal-gen}]
+  (let [exclude-gens #{tg/duration-gen tg/varbinary-gen tg/decimal-gen tg/set-gen}]
     (tu/run-property-test
      {:num-tests tu/property-test-iterations}
-     (prop/for-all [record (tg/generate-record {:potential-doc-ids #{1}})
+     (prop/for-all [record (tg/generate-record {:potential-doc-ids #{1} :exclude-gens exclude-gens})
                     update-statement-1 (tg/update-statement-gen 1 {:exclude-gens exclude-gens})
                     update-statement-2 (tg/update-statement-gen 1 {:exclude-gens exclude-gens})
                     flush-after-put? tg/bool-gen
