@@ -505,7 +505,7 @@
   (when-let [pat (System/getenv "GITHUB_PAT")]
     (try
       (let [node-id (System/getenv "XTDB_NODE_ID")]
-        (http/post "https://api.github.com/repos/tggreene/xtdb/actions/workflows/nightly-benchmark-cleanup.yml/dispatches"
+        (http/post "https://api.github.com/repos/xtdb/xtdb/actions/workflows/nightly-benchmark-cleanup.yml/dispatches"
                    {:headers {"Accept" "application/vnd.github+json"
                               "Authorization" (str "Bearer " pat)}
                     :content-type :json
