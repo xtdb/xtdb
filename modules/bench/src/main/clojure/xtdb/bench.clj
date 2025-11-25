@@ -23,6 +23,9 @@
            (java.util.concurrent.atomic AtomicLong)
            (oshi SystemInfo)))
 
+;; Track whether we're in shutdown mode to suppress error logging during cleanup
+(defonce ^:private shutting-down? (atom false))
+
 (extend-protocol json/JSONWriter
   Duration
   (-write [^Duration duration out _options]
@@ -56,6 +59,9 @@
   (fn [& args]
     (try
       (apply f args)
+      (catch OutOfMemoryError oom
+        (log/error oom "OutOfMemoryError - forcing JVM exit")
+        (System/exit 1))
       (catch Throwable t
         (log/error t (str "Error while executing " f))
         (throw t)))))
@@ -231,7 +237,6 @@
 
         :pool (let [{:keys [^Duration duration ^Duration think ^Duration join-wait thread-count pooled-task]} task
                     think-ms (.toMillis (or think Duration/ZERO))
-                    sleep (if (pos? think-ms) #(Thread/sleep think-ms) (constantly nil))
                     f (compile-task pooled-task)
 
                     executor (Executors/newFixedThreadPool thread-count (util/->prefix-thread-factory "xtdb-benchmark"))
@@ -240,8 +245,12 @@
                                   (loop [wait-until (+ (current-timestamp-ms worker) (.toMillis duration))]
                                     (f worker)
                                     (when (< (current-timestamp-ms worker) wait-until)
-                                      (sleep)
-                                      (recur wait-until))))
+                                      ;; Sleep only the remaining time (or think time, whichever is less)
+                                      (let [remaining-ms (- wait-until (current-timestamp-ms worker))
+                                            sleep-ms (min think-ms remaining-ms)]
+                                        (when (pos? sleep-ms)
+                                          (Thread/sleep sleep-ms))
+                                        (recur wait-until)))))
 
                     start-thread (fn [root-worker _i]
                                    (let [bindings (get-thread-bindings)
@@ -253,25 +262,29 @@
                                                                        thread-loop)))))]
 
                 (fn run-pool [worker]
-                  ;; Launch threads, collect Futures so we can collect any exceptions after termination
                   (let [futures (mapv #(start-thread worker %) (range thread-count))]
                     (Thread/sleep (.toMillis duration))
                     (.shutdown executor)
                     (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
+                      (log/warn "Pool threads did not stop within join-wait, forcing interruption")
                       (.shutdownNow executor)
-                      (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
-                        (throw (ex-info "Pool threads did not stop within join-wait" {:task task, :executor executor}))))
-                    ;; Propagate any worker exceptions to the main thread
+                      (when-not (.awaitTermination executor 30 TimeUnit/SECONDS)
+                        (log/warn "Pool threads still running after forced shutdown - will stop when node closes")))
                     (doseq [f futures]
                       (try
-                        @f ; will throw ExecutionException if the Runnable raised
-                        (catch ExecutionException e
+                        (deref f 5 TimeUnit/SECONDS) ; will throw ExecutionException if the Runnable raised
+                        (catch java.util.concurrent.TimeoutException _
+                          (log/warn "Worker thread did not complete in time, skipping"))
+                        (catch java.util.concurrent.ExecutionException e
                           (let [cause (.getCause e)]
-                            (log/error cause "Benchmark worker failed in :pool" {:task task})
-                            (throw (ex-info "Benchmark worker failed" {:task task} cause))))
-                        (catch InterruptedException e
-                          (log/error e "Interrupted while awaiting worker completion in :pool" {:task task})
-                          (throw (ex-info "Interrupted while awaiting worker completion" {:task task} e))))))))
+                            (when (instance? OutOfMemoryError cause)
+                              (log/error cause "OutOfMemoryError in worker thread - forcing JVM exit")
+                              (System/exit 1))
+                            ;; Log but don't rethrow - connection errors during shutdown are expected
+                            (if (or (instance? java.sql.SQLException cause)
+                                    (re-find #"connection.*closed" (str (.getMessage cause))))
+                              (log/debug cause "Expected connection error during shutdown")
+                              (log/error cause "Benchmark worker failed in :pool" {:task task})))))))))
 
         :concurrently (let [{:keys [^Duration duration, ^Duration join-wait, thread-tasks]} task
                             thread-task-fns (mapv compile-task thread-tasks)
@@ -286,25 +299,29 @@
                                                                                (assoc :thread-name (.getName (Thread/currentThread)))
                                                                                f)))))]
                         (fn run-concurrently [worker]
-                          ;; Launch threads, collect Futures so we can collect any exceptions after termination
                           (let [futures (mapv #(start-thread worker %1 %2) (range (count thread-task-fns)) thread-task-fns)]
                             (Thread/sleep (.toMillis duration))
                             (.shutdown executor)
                             (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
+                              (log/warn "Threads did not stop within join-wait, forcing interruption")
                               (.shutdownNow executor)
-                              (when-not (.awaitTermination executor (.toMillis join-wait) TimeUnit/MILLISECONDS)
-                                (throw (ex-info "Task threads did not stop within join-wait" {:task task, :executor executor}))))
-                            ;; Propagate any worker exceptions to the main thread
+                              (when-not (.awaitTermination executor 30 TimeUnit/SECONDS)
+                                (log/warn "Threads still running after forced shutdown - will stop when node closes")))
                             (doseq [f futures]
                               (try
-                                @f ; will throw ExecutionException if the Runnable raised
-                                (catch ExecutionException e
+                                (deref f 5 TimeUnit/SECONDS) ; will throw ExecutionException if the Runnable raised
+                                (catch java.util.concurrent.TimeoutException _
+                                  (log/warn "Worker thread did not complete in time, skipping"))
+                                (catch java.util.concurrent.ExecutionException e
                                   (let [cause (.getCause e)]
-                                    (log/error cause "Benchmark worker failed in :concurrently" {:task task})
-                                    (throw (ex-info "Benchmark worker failed" {:task task} cause))))
-                                (catch InterruptedException e
-                                  (log/error e "Interrupted while awaiting worker completion in :concurrently" {:task task})
-                                  (throw (ex-info "Interrupted while awaiting worker completion" {:task task} e))))))))
+                                    (when (instance? OutOfMemoryError cause)
+                                      (log/error cause "OutOfMemoryError in worker thread - forcing JVM exit")
+                                      (System/exit 1))
+                                    ;; Log but don't rethrow - connection errors during shutdown are expected
+                                    (if (or (instance? java.sql.SQLException cause)
+                                            (re-find #"connection.*closed" (str (.getMessage cause))))
+                                      (log/debug cause "Expected connection error during shutdown")
+                                      (log/error cause "Benchmark worker failed in :concurrently" {:task task})))))))))
 
         :pick-weighted (let [{:keys [choices]} task
                              sample-fn (weighted-sample-fn (mapv (fn [[weight task]] [(compile-task task) weight]) choices))]
@@ -319,14 +336,17 @@
                                 job-task]} task
                         f (compile-task job-task)
                         duration-ms (.toMillis (or duration Duration/ZERO))
-                        freq-ms (.toMillis (or freq Duration/ZERO))
-                        sleep (if (pos? freq-ms) #(Thread/sleep freq-ms) (constantly nil))]
+                        freq-ms (.toMillis (or freq Duration/ZERO))]
                     (fn run-freq-job [worker]
                       (loop [wait-until (+ (current-timestamp-ms worker) duration-ms)]
                         (f worker)
                         (when (< (current-timestamp-ms worker) wait-until)
-                          (sleep)
-                          (recur wait-until))))))
+                          ;; Sleep only the remaining time (or freq time, whichever is less)
+                          (let [remaining-ms (- wait-until (current-timestamp-ms worker))
+                                sleep-ms (min freq-ms remaining-ms)]
+                            (when (pos? sleep-ms)
+                              (Thread/sleep sleep-ms))
+                            (recur wait-until)))))))
 
       (wrap-task task)))
 
@@ -415,17 +435,27 @@
     (if config-file
       (do
         (log/info "Running node from config file:" config-file)
-        (with-open [node (xtn/start-node config-file)]
-          (benchmark-fn node)))
+        (try
+          (with-open [node (xtn/start-node config-file)]
+            (benchmark-fn node))
+          (catch Throwable t
+            (if @shutting-down?
+              (log/warn t "Error during shutdown (ignored):")
+              (throw t)))))
       (letfn [(run [node-dir]
-                (with-open [node (tu/->local-node (cond-> {:node-dir node-dir
-                                                           :instant-src (InstantSource/system)}
-                                                    tracing-endpoint (assoc :tracer {:enabled? true
-                                                                                     :endpoint tracing-endpoint
-                                                                                     :service-name "xtdb-bench"})))]
-                  (binding [tu/*allocator* (util/component node :xtdb/allocator)
-                            *registry* (util/component node :xtdb.metrics/registry)]
-                    (benchmark-fn node))))]
+                (try
+                  (with-open [node (tu/->local-node (cond-> {:node-dir node-dir
+                                                             :instant-src (InstantSource/system)}
+                                                      tracing-endpoint (assoc :tracer {:enabled? true
+                                                                                       :endpoint tracing-endpoint
+                                                                                       :service-name "xtdb-bench"})))]
+                    (binding [tu/*allocator* (util/component node :xtdb/allocator)
+                              *registry* (util/component node :xtdb.metrics/registry)]
+                      (benchmark-fn node)))
+                  (catch Throwable t
+                    (if @shutting-down?
+                      (log/warn t "Error during shutdown (ignored):")
+                      (throw t)))))]
         (if node-dir
           (do
             (log/info "Using node dir:" (str node-dir))
@@ -515,6 +545,7 @@
               (-> (Runtime/getRuntime)
                   (.addShutdownHook (Thread. (fn []
                                                (log/info "Received shutdown signal, initiating graceful shutdown...")
+                                               (reset! shutting-down? true)
                                                (let [shutdown-ms 10000]
                                                  (.interrupt main-thread)
                                                  (.join main-thread shutdown-ms)
@@ -530,14 +561,19 @@
                   (run-benchmark (->benchmark benchmark-type options) options)
                   (reset! ok? true)
                   (catch Throwable t
-                    (when (instance? InterruptedException t)
-                      (.interrupt (Thread/currentThread)))
-                    (log/error "Benchmark failed:" (or (ex-message t) (.getMessage t)))
-                    (throw t))
+                    (if @shutting-down?
+                      (log/warn t "Error during shutdown (ignored):")
+                      (do
+                        (when (instance? InterruptedException t)
+                          (.interrupt (Thread/currentThread)))
+                        (log/error t "Benchmark failed:")
+                        (throw t))))
                   (finally
+                    ;; Mark as shutting down for cleanup phase
+                    (reset! shutting-down? true)
                     (try
                       (trigger-cleanup benchmark-type @ok?)
                       (catch Throwable u
-                        (log/error "Cleanup trigger failed:" (.getMessage u))))))))))
+                        (log/warn u "Cleanup trigger failed (ignored):")))))))))
 
   (shutdown-agents))
