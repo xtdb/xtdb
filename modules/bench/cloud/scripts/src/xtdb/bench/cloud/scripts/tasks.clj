@@ -42,7 +42,7 @@
 
 (defmulti parse-log (fn [benchmark-type _log-file-path] benchmark-type))
 
-(defmethod parse-log ::default [benchmark-type _log-file-path]
+(defmethod parse-log :default [benchmark-type _log-file-path]
   (throw (ex-info (format "Unsupported benchmark type: %s" benchmark-type)
                   {:benchmark-type benchmark-type})))
 
@@ -113,7 +113,7 @@
                       (try
                         (json/parse-string auctionmark-line true)
                         (catch Exception _ nil)))
-        {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-line lines)]
+        {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
     {:auctionmark auctionmark
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))

@@ -422,7 +422,7 @@ jobs:
           IMAGE_INFO="Image: <https://github.com/${IMAGE_OWNER}/xtdb-bench/pkgs/container/xtdb-bench|\`${IMAGE_DISPLAY}\`>"
 
           # Build config info
-          CONFIG_PARTS=""
+          CONFIG_PARTS=()
           [ -n "$SCALE_FACTOR" ] && CONFIG_PARTS+=("Scale Factor: ${SCALE_FACTOR}")
           [ -n "$DURATION" ] && CONFIG_PARTS+=("Duration: ${DURATION}")
           [ -n "$THREADS" ] && CONFIG_PARTS+=("Threads: ${THREADS}")

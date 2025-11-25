@@ -3,6 +3,39 @@
             [xtdb.bench.cloud.scripts.tasks :as tasks]
             [clojure.string :as str]))
 
+(deftest parse-benchmark-summary-test
+  (testing "extracts time-taken-ms from summary stage"
+    (let [lines ["{\"stage\":\"summary\",\"time-taken-ms\":12345}"]
+          result (tasks/parse-benchmark-summary lines)]
+      (is (= 12345 (:benchmark-total-time-ms result)))
+      (is (= "summary" (get-in result [:benchmark-summary :stage])))))
+
+  (testing "ignores init stage with benchmark key, picks summary stage"
+    (let [lines ["{\"stage\":\"init\",\"benchmark\":\"TPC-H (OLAP)\",\"system\":{\"jre\":\"Temurin-21\"}}"
+                 "{\"stage\":\"hot-queries-q1\",\"time-taken-ms\":1000}"
+                 "{\"stage\":\"summary\",\"time-taken-ms\":50000,\"benchmark\":\"TPC-H (OLAP)\"}"]
+          result (tasks/parse-benchmark-summary lines)]
+      (is (= 50000 (:benchmark-total-time-ms result)))
+      (is (= "summary" (get-in result [:benchmark-summary :stage])))))
+
+  (testing "returns nil when no summary stage exists"
+    (let [lines ["{\"stage\":\"init\",\"benchmark\":\"TPC-H (OLAP)\"}"
+                 "{\"stage\":\"hot-queries-q1\",\"time-taken-ms\":1000}"]
+          result (tasks/parse-benchmark-summary lines)]
+      (is (nil? (:benchmark-total-time-ms result)))
+      (is (nil? (:benchmark-summary result)))))
+
+  (testing "handles malformed JSON gracefully"
+    (let [lines ["{\"stage\":\"summary\",\"time-taken-ms\":invalid}"]
+          result (tasks/parse-benchmark-summary lines)]
+      (is (nil? (:benchmark-total-time-ms result)))
+      (is (nil? (:benchmark-summary result)))))
+
+  (testing "handles empty lines"
+    (let [result (tasks/parse-benchmark-summary [])]
+      (is (nil? (:benchmark-total-time-ms result)))
+      (is (nil? (:benchmark-summary result))))))
+
 (deftest format-duration-test
   (testing "format-duration with various units"
     (is (= "1.0h" (tasks/format-duration :nanos 3600e9)))
@@ -91,9 +124,9 @@
                          "{\"stage\":\"hot-queries-q1-pricing\",\"time-taken-ms\":1500}"
                          "{\"stage\":\"cold-queries-q2-min-cost\",\"time-taken-ms\":2500}"
                          "{\"stage\":\"sync\",\"time-taken-ms\":200}"
-                         "{\"benchmark\":\"tpch\",\"time-taken-ms\":10000}"]))
-        (let [result (tasks/parse-tpch-log (.getPath temp-file))]
-          (is (= 4 (count (:all-stages result))))
+                         "{\"stage\":\"summary\",\"time-taken-ms\":10000}"]))
+        (let [result (tasks/parse-log "tpch" (.getPath temp-file))]
+          (is (= 5 (count (:all-stages result))))
           (is (= 2 (count (:query-stages result))))
           (is (= 10000 (:benchmark-total-time-ms result)))
           (is (= "hot-queries-q1-pricing" (:stage (first (:query-stages result))))))
@@ -107,8 +140,8 @@
         (spit temp-file
               (str/join "\n"
                         ["{\"profiles\":{\"profile1\":[{\"id\":\"q1\",\"mean\":1000000,\"p50\":900000,\"p90\":1100000,\"p99\":1200000,\"n\":100}]}}"
-                         "{\"benchmark\":\"yakbench\",\"time-taken-ms\":5000}"]))
-        (let [result (tasks/parse-yakbench-log (.getPath temp-file))]
+                         "{\"stage\":\"summary\",\"time-taken-ms\":5000}"]))
+        (let [result (tasks/parse-log "yakbench" (.getPath temp-file))]
           (is (contains? (:profiles result) :profile1))
           (is (= 5000 (:benchmark-total-time-ms result)))
           (is (= "q1" (:id (first (:profile1 (:profiles result)))))))
@@ -241,7 +274,6 @@
       (is (= 2 (count rows)))
       (is (= "25.00%" (:percent-of-total (first rows))))
       (is (= "75.00%" (:percent-of-total (second rows))))
-      ;; total should be 4000000 nanos = 4000 micros = 4 ms
       (is (= 4.0 total-ms)))))
 
 (deftest render-summary-test
@@ -338,9 +370,9 @@
                          "{\"stage\":\"query-recent-interval-day\",\"time-taken-ms\":1500}"
                          "{\"stage\":\"query-recent-interval-week\",\"time-taken-ms\":2000}"
                          "{\"stage\":\"query-offset-1-year-interval-day\",\"time-taken-ms\":1800}"
-                         "{\"benchmark\":\"readings\",\"time-taken-ms\":10000}"]))
-        (let [result (tasks/parse-readings-log (.getPath temp-file))]
-          (is (= 6 (count (:all-stages result))))
+                         "{\"stage\":\"summary\",\"time-taken-ms\":10000}"]))
+        (let [result (tasks/parse-log "readings" (.getPath temp-file))]
+          (is (= 7 (count (:all-stages result))))
           (is (= 3 (count (:query-stages result))))
           (is (= 3 (count (:ingest-stages result))))
           (is (= 10000 (:benchmark-total-time-ms result)))
@@ -417,6 +449,87 @@
       (is (str/includes? result "| Recent Day |"))
       (is (str/includes? result "Total query time"))
       (is (str/includes? result "Total benchmark time")))))
+
+(deftest parse-auctionmark-log-test
+  (testing "parsing a valid auctionmark log"
+    (let [temp-file (java.io.File/createTempFile "auctionmark-test" ".log")]
+      (try
+        (spit temp-file
+              (str/join "\n"
+                        ["{\"auctionmark\":{\"throughput\":1234.5,\"latency-p99\":50}}"
+                         "{\"stage\":\"summary\",\"time-taken-ms\":60000}"]))
+        (let [result (tasks/parse-log "auctionmark" (.getPath temp-file))]
+          (is (= 1234.5 (get-in result [:auctionmark :auctionmark :throughput])))
+          (is (= 60000 (:benchmark-total-time-ms result))))
+        (finally
+          (.delete temp-file)))))
+
+  (testing "parsing auctionmark log without auctionmark data"
+    (let [temp-file (java.io.File/createTempFile "auctionmark-test" ".log")]
+      (try
+        (spit temp-file "{\"stage\":\"summary\",\"time-taken-ms\":30000}")
+        (let [result (tasks/parse-log "auctionmark" (.getPath temp-file))]
+          (is (nil? (:auctionmark result)))
+          (is (= 30000 (:benchmark-total-time-ms result))))
+        (finally
+          (.delete temp-file))))))
+
+(deftest summary->table-auctionmark-test
+  (testing "auctionmark table format with benchmark time"
+    (let [summary {:benchmark-type "auctionmark"
+                   :benchmark-total-time-ms 120000}
+          result (tasks/summary->table summary)]
+      (is (string? result))
+      (is (str/includes? result "Total benchmark time"))
+      (is (str/includes? result "2.0m"))))
+
+  (testing "auctionmark table format with nil benchmark time"
+    (let [summary {:benchmark-type "auctionmark"
+                   :benchmark-total-time-ms nil}
+          result (tasks/summary->table summary)]
+      (is (str/includes? result "N/A")))))
+
+(deftest summary->slack-auctionmark-test
+  (testing "auctionmark slack format"
+    (let [summary {:benchmark-type "auctionmark"
+                   :benchmark-total-time-ms 120000}
+          result (tasks/summary->slack summary)]
+      (is (string? result))
+      (is (str/includes? result "Total benchmark time"))
+      (is (str/includes? result "2.0m")))))
+
+(deftest summary->github-markdown-auctionmark-test
+  (testing "auctionmark github markdown format"
+    (let [summary {:benchmark-type "auctionmark"
+                   :benchmark-total-time-ms 120000}
+          result (tasks/summary->github-markdown summary)]
+      (is (string? result))
+      (is (str/includes? result "Total benchmark time"))
+      (is (str/includes? result "2.0m")))))
+
+(deftest summarize-log-auctionmark-test
+  (testing "summarize-log for auctionmark does not require auctionmark data"
+    (let [temp-file (java.io.File/createTempFile "auctionmark-test" ".log")]
+      (try
+        ;; auctionmark doesn't validate for empty data like other benchmarks
+        (spit temp-file "{\"stage\":\"summary\",\"time-taken-ms\":60000}")
+        (let [result (tasks/summarize-log ["auctionmark" (.getPath temp-file)])]
+          (is (string? result))
+          (is (str/includes? result "Total benchmark time")))
+        (finally
+          (.delete temp-file)))))
+
+  (testing "summarize-log for auctionmark with full data"
+    (let [temp-file (java.io.File/createTempFile "auctionmark-test" ".log")]
+      (try
+        (spit temp-file
+              (str/join "\n"
+                        ["{\"auctionmark\":{\"throughput\":500.0}}"
+                         "{\"stage\":\"summary\",\"time-taken-ms\":90000}"]))
+        (let [result (tasks/summarize-log ["auctionmark" (.getPath temp-file)])]
+          (is (str/includes? result "1.5m")))
+        (finally
+          (.delete temp-file))))))
 
 (deftest github-table-separator-test
   (testing "separator line has at least 3 dashes per column"
