@@ -199,7 +199,7 @@ These binding specs act as both 'join conditions' (if the logic variables are re
 - The 'join' operator performs an inner, or required, join with the sub-query - if a row from the outer query doesn't match, it won't be returned
 - The 'left-join' operator performs an outer, or optional, join with the sub-query - if a row from the outer query matches, it'll be returned; if it doesn't, it will still be returned, but with null values in the sub-query columns.
 
-Parameters in the sub-query can be fulfilled by passing a vector of arguments or, if the symbols all match, the arguments may be omitted - see the [argument specs](#argument-specs) section for more details.
+Parameters in the sub-query can be fulfilled by passing a vector of arguments or, if the symbols all match, the arguments may be omitted - see the [arguments](#arguments) section for more details.
 
     Join :: (join Subquery [BindSpec+])
     LeftJoin :: (left-join Subquery [BindSpec+])

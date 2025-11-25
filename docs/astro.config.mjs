@@ -26,7 +26,7 @@ export default defineConfig({
 
             social: [
                 { icon: 'github', label: 'GitHub', href: 'https://github.com/xtdb/xtdb' },
-                { icon: 'discord', label: 'Discord', href: 'https://discord.gg/xtdb' },
+                { icon: 'discord', label: 'Discord', href: 'https://github.com/orgs/xtdb/discussions/4385' },
             ],
 
             favicon: '/shared/favicon.svg',
