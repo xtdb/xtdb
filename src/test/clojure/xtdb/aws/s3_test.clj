@@ -71,10 +71,10 @@
                      (vec (.listAllObjects buffer-pool))))))))))
 
 (t/deftest ^:s3 multiple-node-list-test
-  (util/with-tmp-dirs #{local-disk-cache}
+  (util/with-tmp-dirs #{local-disk-cache-1 local-disk-cache-2}
     (let [prefix (random-uuid)]
-      (util/with-open [node-1 (start-kafka-node local-disk-cache prefix)
-                       node-2 (start-kafka-node local-disk-cache prefix)]
+      (util/with-open [node-1 (start-kafka-node local-disk-cache-1 prefix)
+                       node-2 (start-kafka-node local-disk-cache-2 prefix)]
         (let [^RemoteBufferPool buffer-pool-1 (.getBufferPool (db/primary-db node-1))
               ^RemoteBufferPool buffer-pool-2 (.getBufferPool (db/primary-db node-2))]
           (bp-test/put-edn buffer-pool-1 (util/->path "alice") :alice)
