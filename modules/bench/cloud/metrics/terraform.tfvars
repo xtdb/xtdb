@@ -11,20 +11,32 @@ action_group_short_name = "xtdbbench"
 slack_subteam_id    = "SR1A6EW21"
 slack_subteam_label = "@xtdb-team"
 
-# Anomaly detection parameters (used by Logic App)
-anomaly_logic_app_name     = "xtdb-benchmark-anomaly"
-anomaly_alert_enabled      = true
+# Shared anomaly detection parameters
 anomaly_repo               = "xtdb/xtdb"
 anomaly_schedule_frequency = "Day"
 anomaly_schedule_interval  = 1
 anomaly_baseline_n         = 30  # previous N runs for baseline
 anomaly_sigma              = 2.0 # 2σ threshold
-anomaly_scale_factor       = 1.0 # The scale factor to select on
 anomaly_timespan           = "P30D"
 
-missing_alert_evaluation_frequency = "P1D"
-missing_alert_window_duration      = "P2D"
-missing_alert_enabled              = true
-missing_alert_severity             = 2
+# TPC-H anomaly detection
+tpch_anomaly_logic_app_name = "xtdb-benchmark-tpch-anomaly"
+tpch_anomaly_alert_enabled  = true
+tpch_anomaly_scale_factor   = 1.0
+
+# Yakbench anomaly detection
+yakbench_anomaly_logic_app_name = "xtdb-benchmark-yakbench-anomaly"
+yakbench_anomaly_alert_enabled  = true
+yakbench_anomaly_scale_factor   = 1.0
+
+# Readings anomaly detection
+readings_anomaly_logic_app_name = "xtdb-benchmark-readings-anomaly"
+readings_anomaly_alert_enabled  = true
+readings_anomaly_devices        = 10000
+
+# AuctionMark anomaly detection (disabled - throughput metric not yet in data)
+auctionmark_anomaly_logic_app_name = "xtdb-benchmark-auctionmark-anomaly"
+auctionmark_anomaly_alert_enabled  = false
+auctionmark_anomaly_duration       = "PT30M"
 
 dashboard_name = "xtdb-benchmark-dashboard"

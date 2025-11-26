@@ -46,21 +46,27 @@ variable "slack_subteam_label" {
   default     = "@xtdb-team"
 }
 
-# Logic App anomaly detection
-variable "anomaly_logic_app_name" {
-  description = "Logic App name for scheduled anomaly detection"
+# TPC-H anomaly detection configuration
+variable "tpch_anomaly_logic_app_name" {
+  description = "Logic App name for scheduled TPC-H anomaly detection"
   type        = string
-  default     = "xtdb-bench-anomaly-schedule"
+  default     = "xtdb-bench-tpch-anomaly-schedule"
 }
 
-variable "anomaly_alert_enabled" {
-  description = "Whether the anomaly detection Logic App is enabled"
+variable "tpch_anomaly_alert_enabled" {
+  description = "Whether the TPC-H anomaly detection Logic App is enabled"
   type        = bool
   default     = true
 }
 
+variable "tpch_anomaly_scale_factor" {
+  description = "TPC-H scale factor to scope anomaly detection to (e.g., 0.5)"
+  type        = number
+  default     = 1.0
+}
+
 variable "anomaly_repo" {
-  description = "Repository (owner/name) to filter anomaly and missing-ingestion alerts on"
+  description = "Repository (owner/name) for run links in anomaly alerts"
   type        = string
   default     = "xtdb/xtdb"
 }
@@ -107,51 +113,71 @@ variable "anomaly_sigma" {
   default     = 2
 }
 
-variable "anomaly_scale_factor" {
-  description = "TPC-H scale factor to scope anomaly detection to (e.g., 0.5)"
-  type        = number
-  default     = 1.0
-}
-
 variable "anomaly_new_normal_relative_threshold" {
   description = "Relative threshold between the latest and previous run durations below which anomalies are suppressed as a new normal"
   type        = number
   default     = 0.05
 }
 
-# Missing ingestion alert configuration
-variable "missing_alert_name" {
-  description = "Name of the missing-ingestion scheduled query alert"
-  type        = string
-  default     = "xtdb-benchmark-missing-ingestion"
-}
-
-variable "missing_alert_severity" {
-  description = "Alert severity (0=Sev0, 4=Sev4) for missing-ingestion"
-  type        = number
-  default     = 2
-}
-
-variable "missing_alert_enabled" {
-  description = "Whether the missing-ingestion alert is enabled"
-  type        = bool
-  default     = true
-}
-
-variable "missing_alert_evaluation_frequency" {
-  description = "How often to evaluate the missing-ingestion alert (ISO 8601 duration, e.g. PT1H)"
-  type        = string
-  default     = "PT1H"
-}
-
-variable "missing_alert_window_duration" {
-  description = "Time window to check for missing-ingestion (ISO 8601 duration, e.g. P2D for 2 days)"
-  type        = string
-  default     = "P2D"
-}
-
 variable "dashboard_name" {
   description = "Name of the Azure Portal dashboard to create"
   type        = string
   default     = "xtdb-benchmark-dashboard"
+}
+
+# Yakbench anomaly detection configuration
+variable "yakbench_anomaly_logic_app_name" {
+  description = "Logic App name for scheduled Yakbench anomaly detection"
+  type        = string
+  default     = "xtdb-bench-yakbench-anomaly-schedule"
+}
+
+variable "yakbench_anomaly_alert_enabled" {
+  description = "Whether the Yakbench anomaly detection Logic App is enabled"
+  type        = bool
+  default     = true
+}
+
+variable "yakbench_anomaly_scale_factor" {
+  description = "Yakbench scale factor to scope anomaly detection to"
+  type        = number
+  default     = 1.0
+}
+
+# Readings anomaly detection configuration
+variable "readings_anomaly_logic_app_name" {
+  description = "Logic App name for scheduled Readings anomaly detection"
+  type        = string
+  default     = "xtdb-bench-readings-anomaly-schedule"
+}
+
+variable "readings_anomaly_alert_enabled" {
+  description = "Whether the Readings anomaly detection Logic App is enabled"
+  type        = bool
+  default     = true
+}
+
+variable "readings_anomaly_devices" {
+  description = "Readings devices count to scope anomaly detection to"
+  type        = number
+  default     = 10000
+}
+
+# AuctionMark anomaly detection configuration
+variable "auctionmark_anomaly_logic_app_name" {
+  description = "Logic App name for scheduled AuctionMark anomaly detection"
+  type        = string
+  default     = "xtdb-bench-auctionmark-anomaly-schedule"
+}
+
+variable "auctionmark_anomaly_alert_enabled" {
+  description = "Whether the AuctionMark anomaly detection Logic App is enabled"
+  type        = bool
+  default     = true
+}
+
+variable "auctionmark_anomaly_duration" {
+  description = "AuctionMark duration (ISO 8601, e.g. PT30M) to scope anomaly detection to"
+  type        = string
+  default     = "PT30M"
 }

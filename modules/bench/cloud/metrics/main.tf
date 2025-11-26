@@ -50,6 +50,113 @@ locals {
     | extend log = parse_json(LogEntry)
     | where isnotnull(log.benchmark) and isnotnull(log.step) and isnotnull(log.metric) and log.stage != "init"
   KQL
+
+  # Benchmark configurations for anomaly detection and dashboard
+  # param_path: path from log object to the filter parameter (e.g., "parameters['scale-factor']")
+  # metric_path: path to the metric being measured (default: 'time-taken-ms', auctionmark uses 'throughput')
+  # dashboard_idx: position index for 2x2 grid layout (0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right)
+  benchmarks = {
+    tpch = {
+      name            = "TPC-H (OLAP)"
+      display_name    = "TPC-H"
+      logic_app_name  = var.tpch_anomaly_logic_app_name
+      enabled         = var.tpch_anomaly_alert_enabled
+      param_name      = "scale-factor"
+      param_path      = "parameters['scale-factor']"
+      param_value     = var.tpch_anomaly_scale_factor
+      param_is_string = false
+      metric_path     = "'time-taken-ms'"
+      metric_name     = "duration_minutes"
+      dashboard_idx   = 0
+    }
+    yakbench = {
+      name            = "Yakbench"
+      display_name    = "Yakbench"
+      logic_app_name  = var.yakbench_anomaly_logic_app_name
+      enabled         = var.yakbench_anomaly_alert_enabled
+      param_name      = "scale-factor"
+      param_path      = "parameters['scale-factor']"
+      param_value     = var.yakbench_anomaly_scale_factor
+      param_is_string = false
+      metric_path     = "'time-taken-ms'"
+      metric_name     = "duration_minutes"
+      dashboard_idx   = 1
+    }
+    readings = {
+      name            = "Readings benchmarks"
+      display_name    = "Readings"
+      logic_app_name  = var.readings_anomaly_logic_app_name
+      enabled         = var.readings_anomaly_alert_enabled
+      param_name      = "devices"
+      param_path      = "parameters['devices']"
+      param_value     = var.readings_anomaly_devices
+      param_is_string = false
+      metric_path     = "'time-taken-ms'"
+      metric_name     = "duration_minutes"
+      dashboard_idx   = 2
+    }
+    auctionmark = {
+      name            = "Auction Mark OLTP"
+      display_name    = "AuctionMark"
+      logic_app_name  = var.auctionmark_anomaly_logic_app_name
+      enabled         = var.auctionmark_anomaly_alert_enabled
+      param_name      = "duration"
+      param_path      = "parameters['duration']"
+      param_value     = var.auctionmark_anomaly_duration
+      param_is_string = true
+      metric_path     = "'throughput'"
+      metric_name     = "throughput"
+      dashboard_idx   = 3
+    }
+  }
+
+  # Dashboard part positions (2x2 grid, 6 cols wide, 4 rows tall each)
+  dashboard_positions = {
+    0 = { x = 0, y = 0 }
+    1 = { x = 6, y = 0 }
+    2 = { x = 0, y = 4 }
+    3 = { x = 6, y = 4 }
+  }
+
+  # Filter expressions per benchmark (string params quoted, numeric params use todouble)
+  param_filter_expr = {
+    for key, bench in local.benchmarks : key => bench.param_is_string
+    ? "filter_param = tostring(log.${bench.param_path})\n                      | where benchmark == \"${bench.name}\" and filter_param == \"${bench.param_value}\""
+    : "filter_param = todouble(log.${bench.param_path})\n                      | where benchmark == \"${bench.name}\" and filter_param == ${bench.param_value}"
+  }
+
+  # Dashboard KQL queries per benchmark
+  # auctionmark uses string comparison (ISO duration), others use numeric comparison
+  dashboard_queries = {
+    for key, bench in local.benchmarks : key => bench.param_is_string ? trimspace(<<-KQL
+      ContainerLog
+      | where LogEntry startswith "{" and LogEntry has "benchmark"
+      | extend log = parse_json(LogEntry)
+      | where isnotnull(log.benchmark) and log.stage != "init"
+      | extend benchmark = tostring(log.benchmark),
+               filter_param = tostring(log.${bench.param_path}),
+               ${bench.metric_name} = todouble(log[${bench.metric_path}])
+      | where benchmark == "${bench.name}" and filter_param == "${bench.param_value}"
+      | top ${var.anomaly_baseline_n} by TimeGenerated desc
+      | order by TimeGenerated asc
+      | project TimeGenerated, ${bench.metric_name}
+    KQL
+    ) : trimspace(<<-KQL
+      ContainerLog
+      | where LogEntry startswith "{" and LogEntry has "benchmark"
+      | extend log = parse_json(LogEntry)
+      | where isnotnull(log.benchmark) and log.stage != "init"
+      | extend benchmark = tostring(log.benchmark),
+               filter_param = todouble(log.${bench.param_path}),
+               duration_ms = todouble(log[${bench.metric_path}])
+      | where benchmark == "${bench.name}" and filter_param == ${bench.param_value}
+      | top ${var.anomaly_baseline_n} by TimeGenerated desc
+      | extend duration_minutes = todouble(duration_ms) / 60000
+      | order by TimeGenerated asc
+      | project TimeGenerated, duration_minutes
+    KQL
+    )
+  }
 }
 
 # Logic App: Relay Azure Monitor alerts to Slack (Incoming Webhook)
@@ -117,8 +224,10 @@ resource "azurerm_monitor_action_group" "bench_slack" {
 
 # Logic App: Scheduled anomaly detection (2σ over P30D via Logs Query API)
 resource "azapi_resource" "bench_anomaly" {
+  for_each = local.benchmarks
+
   type      = "Microsoft.Logic/workflows@2019-05-01"
-  name      = var.anomaly_logic_app_name
+  name      = each.value.logic_app_name
   location  = var.location
   parent_id = data.azurerm_resource_group.rg.id
 
@@ -128,7 +237,7 @@ resource "azapi_resource" "bench_anomaly" {
 
   body = {
     properties = {
-      state = var.anomaly_alert_enabled ? "Enabled" : "Disabled"
+      state = each.value.enabled ? "Enabled" : "Disabled"
       definition = {
         "$schema"        = "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#"
         "contentVersion" = "1.0.0.0"
@@ -169,38 +278,37 @@ resource "azapi_resource" "bench_anomaly" {
                       | extend log = parse_json(LogEntry)
                       | where isnotnull(log.benchmark) and log.stage != "init"
                       | extend benchmark = tostring(log.benchmark),
-                               duration_ms = todouble(log['time-taken-ms']),
-                               run_id = "TODO",
-                               scale_factor = todouble(log.parameters['scale-factor'])
-                      | where benchmark == "TPC-H (OLAP)" and scale_factor == ${var.anomaly_scale_factor};
+                               metric_value = todouble(log[${each.value.metric_path}]),
+                               run_id = coalesce(tostring(log['github-run-id']), "n/a"),
+                               ${local.param_filter_expr[each.key]};
                   let latestBenchmark =
                       benchmarkLogs
                       | summarize arg_max(TimeGenerated, *)
-                      | extend current_ms = todouble(duration_ms), k = 1;
+                      | extend current_value = todouble(metric_value), k = 1;
                   let previousBenchmark =
                       benchmarkLogs
                       | where TimeGenerated < toscalar(latestBenchmark | project TimeGenerated)
                       | top 1 by TimeGenerated desc
-                      | project prev_ms = todouble(duration_ms), k = 1;
+                      | project prev_value = todouble(metric_value), k = 1;
                   let prevN =
                       benchmarkLogs
                       | order by TimeGenerated desc
                       | top N+1 by TimeGenerated desc
                       | top N by TimeGenerated asc
-                      | project duration_ms = todouble(duration_ms), TimeGenerated;
-                  let baseline = prevN | summarize baseline_mean = avg(duration_ms), baseline_std = stdev(duration_ms) | extend k = 1;
+                      | project metric_value = todouble(metric_value), TimeGenerated;
+                  let baseline = prevN | summarize baseline_mean = avg(metric_value), baseline_std = stdev(metric_value) | extend k = 1;
                   latestBenchmark
                     | join kind=inner baseline on k
                     | join kind=leftouter previousBenchmark on k
                     | where isnotnull(baseline_std) and baseline_std > 0
                     | extend threshold_value_slow = baseline_mean + (${var.anomaly_sigma} * baseline_std),
                              threshold_value_fast = baseline_mean - (${var.anomaly_sigma} * baseline_std)
-                    | extend slow_violation = current_ms > threshold_value_slow,
-                             fast_violation = current_ms < threshold_value_fast,
-                             prev_diff_ratio = iif(isnotnull(prev_ms) and prev_ms > 0, abs(current_ms - prev_ms) / prev_ms, real(null))
+                    | extend slow_violation = current_value > threshold_value_slow,
+                             fast_violation = current_value < threshold_value_fast,
+                             prev_diff_ratio = iif(isnotnull(prev_value) and prev_value > 0, abs(current_value - prev_value) / prev_value, real(null))
                     | extend new_normal_candidate = isnotnull(prev_diff_ratio) and prev_diff_ratio <= ${var.anomaly_new_normal_relative_threshold}
                     | where (slow_violation or fast_violation) // TEMP and not(new_normal_candidate)
-                    | project run_id, slow_violation, fast_violation, TimeGenerated, current_ms, baseline_mean, baseline_std, prev_ms, prev_diff_ratio
+                    | project run_id, slow_violation, fast_violation, TimeGenerated, current_value, baseline_mean, baseline_std, prev_value, prev_diff_ratio
                 KQL
               }
             }
@@ -239,8 +347,8 @@ resource "azapi_resource" "bench_anomaly" {
                     "attachments" = [
                       {
                         "color"     = "#D32F2F"
-                        "title"     = "@{concat('Benchmark anomaly: TPCH ', if(equals(first(body('QueryLogs')?['tables'][0]?['rows'])[1], true), 'ran slower', 'ran faster'))}"
-                        "text"      = "${var.slack_subteam_id != "" ? "<!subteam^${var.slack_subteam_id}|${var.slack_subteam_label}> " : ""}@{concat('*Scale factor:* ', string(${var.anomaly_scale_factor}), '\n', '*Condition:* ± ', string(${var.anomaly_sigma}), 'σ over last ', '${var.anomaly_baseline_n} runs', '\n', '*Run:* https://github.com/${var.anomaly_repo}/actions/runs/', string(first(body('QueryLogs')?['tables'][0]?['rows'])[0]))}"
+                        "title"     = "@{concat('Benchmark anomaly: ${each.value.display_name} ', if(equals(first(body('QueryLogs')?['tables'][0]?['rows'])[1], true), 'ran slower', 'ran faster'))}"
+                        "text"      = "${var.slack_subteam_id != "" ? "<!subteam^${var.slack_subteam_id}|${var.slack_subteam_label}> " : ""}@{concat('*${each.value.param_name}:* ', '${each.value.param_value}', '\n', '*Condition:* ± ', string(${var.anomaly_sigma}), 'σ over last ', '${var.anomaly_baseline_n} runs', '\n', '*Run:* https://github.com/${var.anomaly_repo}/actions/runs/', string(first(body('QueryLogs')?['tables'][0]?['rows'])[0]))}"
                         "mrkdwn_in" = ["text"]
                       }
                     ]
@@ -257,57 +365,16 @@ resource "azapi_resource" "bench_anomaly" {
   }
 }
 
-
 resource "azurerm_role_assignment" "bench_anomaly_la_reader" {
-  scope                = data.azurerm_log_analytics_workspace.cluster_law.id
-  role_definition_name = "Log Analytics Reader"
-  principal_id         = azapi_resource.bench_anomaly.output.identity.principalId
+  for_each = local.benchmarks
+
+  scope                            = data.azurerm_log_analytics_workspace.cluster_law.id
+  role_definition_name             = "Log Analytics Reader"
+  principal_id                     = azapi_resource.bench_anomaly[each.key].output.identity.principalId
   skip_service_principal_aad_check = true
 }
 
-# Scheduled query alert: missing ingestion (no TPC-H runs at the given scale factor within the window)
-resource "azurerm_monitor_scheduled_query_rules_alert_v2" "bench_missing_ingestion" {
-  name                = var.missing_alert_name
-  resource_group_name = var.resource_group_name
-  location            = var.location
-  severity            = var.missing_alert_severity
-  enabled             = var.missing_alert_enabled
-
-  evaluation_frequency = var.missing_alert_evaluation_frequency
-  window_duration      = var.missing_alert_window_duration
-
-  scopes = [data.azurerm_log_analytics_workspace.cluster_law.id]
-
-  criteria {
-    query                   = <<-KQL
-      ContainerLog
-      | where LogEntry startswith "{" and LogEntry has "benchmark"
-      | extend log = parse_json(LogEntry)
-      | where isnotnull(log.benchmark) and log.stage != "init"
-      | extend benchmark = tostring(log.benchmark),
-               scale_factor = todouble(log.parameters['scale-factor'])
-      | where benchmark == "TPC-H (OLAP)" and scale_factor == ${var.anomaly_scale_factor}
-      | summarize c = count()
-      | where c == 0
-      | project trigger = 1
-    KQL
-    time_aggregation_method = "Count"
-    operator                = "GreaterThan"
-    threshold               = 0
-    failing_periods {
-      number_of_evaluation_periods             = 1
-      minimum_failing_periods_to_trigger_alert = 1
-    }
-  }
-
-  action {
-    action_groups = [azurerm_monitor_action_group.bench_slack.id]
-  }
-
-  description = "Alert when no TPC-H scaleFactor=${var.anomaly_scale_factor} 'overall' rows are ingested within ${var.missing_alert_window_duration}"
-}
-
-# Azure Portal Dashboard: 10 most recent runs (line chart)
+# Azure Portal Dashboard: recent runs (line chart per benchmark)
 resource "azurerm_portal_dashboard" "bench_dashboard" {
   name                = var.dashboard_name
   resource_group_name = var.resource_group_name
@@ -318,106 +385,39 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
       "0" = {
         order = 0
         parts = {
-          "runs-timeseries" = {
+          for key, bench in local.benchmarks : "${key}-runs-timeseries" => {
             position = {
-              x       = 0
-              y       = 0
+              x       = local.dashboard_positions[bench.dashboard_idx].x
+              y       = local.dashboard_positions[bench.dashboard_idx].y
               colSpan = 6
               rowSpan = 4
             }
             metadata = {
               inputs = [
-                {
-                  name       = "resourceTypeMode"
-                  isOptional = true
-                },
-                {
-                  name       = "ComponentId"
-                  isOptional = true
-                },
+                { name = "resourceTypeMode", isOptional = true },
+                { name = "ComponentId", isOptional = true },
                 {
                   name = "Scope"
                   value = {
-                    resourceIds = [
-                      data.azurerm_log_analytics_workspace.cluster_law.id
-                    ]
+                    resourceIds = [data.azurerm_log_analytics_workspace.cluster_law.id]
                   }
                   isOptional = true
                 },
-                {
-                  name       = "PartId"
-                  value      = "158d931e-8294-47ce-8d13-c04026627f42"
-                  isOptional = true
-                },
-                {
-                  name       = "Version"
-                  value      = "2.0"
-                  isOptional = true
-                },
-                {
-                  name       = "TimeRange"
-                  value      = "P30D"
-                  isOptional = true
-                },
-                {
-                  name       = "DashboardId"
-                  isOptional = true
-                },
-                {
-                  name       = "DraftRequestParameters"
-                  isOptional = true
-                },
-                {
-                  name       = "Query"
-                  value      = <<-KQL
-                    ContainerLog
-                    | where LogEntry startswith "{" and LogEntry has "benchmark"
-                    | extend log = parse_json(LogEntry)
-                    | where isnotnull(log.benchmark) and log.stage != "init"
-                    | extend benchmark = tostring(log.benchmark),
-                             duration_ms = todouble(log['time-taken-ms']),
-                             scale_factor = todouble(log.parameters['scale-factor'])
-                    | where benchmark == "TPC-H (OLAP)" and scale_factor == ${var.anomaly_scale_factor}
-                    | top ${var.anomaly_baseline_n} by TimeGenerated desc
-                    | extend duration_minutes = todouble(duration_ms) / 60000
-                    | order by TimeGenerated asc
-                    | project TimeGenerated, duration_minutes
-                  KQL
-                  isOptional = true
-                },
-                {
-                  name       = "ControlType"
-                  value      = "FrameControlChart"
-                  isOptional = true
-                },
-                {
-                  name       = "SpecificChart"
-                  value      = "Line"
-                  isOptional = true
-                },
-                {
-                  name       = "PartTitle"
-                  value      = "Benchmark TPC-H Runs"
-                  isOptional = true
-                },
-                {
-                  name       = "PartSubTitle"
-                  value      = var.cluster_law_name
-                  isOptional = true
-                },
+                { name = "PartId", value = "${bench.dashboard_idx}58d931e-8294-47ce-8d13-c04026627f4${bench.dashboard_idx}", isOptional = true },
+                { name = "Version", value = "2.0", isOptional = true },
+                { name = "TimeRange", value = "P30D", isOptional = true },
+                { name = "DashboardId", isOptional = true },
+                { name = "DraftRequestParameters", isOptional = true },
+                { name = "Query", value = local.dashboard_queries[key], isOptional = true },
+                { name = "ControlType", value = "FrameControlChart", isOptional = true },
+                { name = "SpecificChart", value = "Line", isOptional = true },
+                { name = "PartTitle", value = "Benchmark ${bench.display_name} Runs", isOptional = true },
+                { name = "PartSubTitle", value = var.cluster_law_name, isOptional = true },
                 {
                   name = "Dimensions"
                   value = {
-                    xAxis = {
-                      name = "TimeGenerated"
-                      type = "datetime"
-                    }
-                    yAxis = [
-                      {
-                        name = "duration_minutes"
-                        type = "real"
-                      }
-                    ]
+                    xAxis       = { name = "TimeGenerated", type = "datetime" }
+                    yAxis       = [{ name = bench.metric_name, type = "real" }]
                     splitBy     = []
                     aggregation = "Sum"
                   }
@@ -431,11 +431,7 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
                   }
                   isOptional = true
                 },
-                {
-                  name       = "IsQueryContainTimeRange"
-                  value      = false
-                  isOptional = true
-                }
+                { name = "IsQueryContainTimeRange", value = false, isOptional = true }
               ]
               type     = "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart"
               settings = {}
@@ -447,26 +443,15 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
     metadata = {
       model = {
         timeRange = {
-          value = {
-            relative = "30d"
-          }
-          type = "MsPortalFx.Composition.Configuration.ValueTypes.TimeRange"
+          value = { relative = "30d" }
+          type  = "MsPortalFx.Composition.Configuration.ValueTypes.TimeRange"
         }
-        filterLocale = {
-          value = "en-us"
-        }
+        filterLocale = { value = "en-us" }
         filters = {
           value = {
             MsPortalFx_TimeRange = {
-              model = {
-                format      = "utc"
-                granularity = "auto"
-                relative    = "30d"
-              }
-              displayCache = {
-                name  = "UTC Time"
-                value = "Past 30 days"
-              }
+              model        = { format = "utc", granularity = "auto", relative = "30d" }
+              displayCache = { name = "UTC Time", value = "Past 30 days" }
               filteredPartIds = [
                 "StartboardPart-LogsDashboardPart-22bc70d2-f7ad-42ba-a586-df4ab8272012"
               ]
