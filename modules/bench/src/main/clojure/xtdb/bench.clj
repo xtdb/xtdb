@@ -13,7 +13,7 @@
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (com.google.common.collect MinMaxPriorityQueue)
-           (io.micrometer.core.instrument Timer)
+           (io.micrometer.core.instrument Meter Timer)
            (java.io File Writer)
            (java.lang.management ManagementFactory)
            (java.time Clock Duration InstantSource)
@@ -186,6 +186,25 @@
 (def ^:dynamic *registry* nil)
 
 (def percentiles [0.75 0.85 0.95 0.98 0.99 0.999])
+
+(defn- get-transaction-metrics
+  "Extract transaction metrics from the registry. Returns a map of transaction name to metrics.
+   Filters out internal metrics (those with dots in the name like jvm.gc.pause, query.timer, etc.)"
+  []
+  (when *registry*
+    (->> (.getMeters *registry*)
+         (filter #(instance? Timer %))
+         (keep (fn [^Timer timer]
+                 (let [id (.getId timer)
+                       name (.getName id)]
+                   ;; Only include benchmark transactions (no dots in name)
+                   ;; This excludes jvm.gc.pause, query.timer, compactor.job.timer, tx.op.timer, etc.
+                   (when-not (str/includes? name ".")
+                     [name {:count (.count timer)
+                            :total-time-ms (/ (.totalTime timer TimeUnit/MILLISECONDS) 1.0)
+                            :mean-ms (/ (.mean timer TimeUnit/MILLISECONDS) 1.0)
+                            :max-ms (/ (.max timer TimeUnit/MILLISECONDS) 1.0)}]))))
+         (into {}))))
 
 (defn wrap-stage [f {:keys [stage]}]
   (fn instrumented-stage [worker]
@@ -387,15 +406,25 @@
                     (doseq [f fns]
                       (f worker))
 
-                    (let [total-ms (- (System/currentTimeMillis) start-ms)]
-                      (log-report worker (merge {:benchmark title
-                                                 :benchmark-type benchmark-type
-                                                 :stage "summary"
-                                                 :parameters parameters
-                                                 :system system-info
-                                                 :time-taken-ms total-ms}
-                                                run-context
-                                                (when timeout {:timeout timeout})))))))]
+                    (let [total-ms (- (System/currentTimeMillis) start-ms)
+                          tx-metrics (get-transaction-metrics)
+                          tx-count (reduce + 0 (map :count (vals tx-metrics)))
+                          ;; Calculate throughput using configured duration if available
+                          duration-secs (when-let [^Duration d (:duration parameters)]
+                                          (/ (.toMillis d) 1000.0))
+                          throughput (when (and duration-secs (pos? duration-secs))
+                                       (/ tx-count duration-secs))]
+                      (log-report worker (cond-> {:benchmark title
+                                                  :benchmark-type benchmark-type
+                                                  :stage "summary"
+                                                  :parameters parameters
+                                                  :system system-info
+                                                  :time-taken-ms total-ms}
+                                           (pos? tx-count) (assoc :transaction-count tx-count
+                                                                  :transactions tx-metrics)
+                                           throughput (assoc :throughput throughput)
+                                           timeout (assoc :timeout timeout)
+                                           (seq run-context) (merge run-context)))))))]
         (run-with-timeout execute timeout)))))
 
 (defn sync-node
