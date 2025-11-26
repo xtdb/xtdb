@@ -41,6 +41,7 @@ import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.coroutines.CoroutineContext
 import kotlin.io.path.inputStream
 import kotlin.time.Duration.Companion.seconds
 import com.google.protobuf.Any as ProtoAny
@@ -110,9 +111,10 @@ private fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
 class KafkaCluster(
     val kafkaConfigMap: KafkaConfigMap,
     private val pollDuration: Duration,
+    coroutineContext: CoroutineContext = Dispatchers.Default
 ) : Cluster {
     val producer = kafkaConfigMap.openProducer()
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + coroutineContext)
 
     override fun close() {
         runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
@@ -126,11 +128,13 @@ class KafkaCluster(
         var pollDuration: Duration = Duration.ofSeconds(1),
         var propertiesMap: Map<String, String> = emptyMap(),
         var propertiesFile: Path? = null,
+        @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = Dispatchers.Default
     ) : Cluster.Factory<KafkaCluster> {
 
         fun pollDuration(pollDuration: Duration) = apply { this.pollDuration = pollDuration }
         fun propertiesMap(propertiesMap: Map<String, String>) = apply { this.propertiesMap = propertiesMap }
         fun propertiesFile(propertiesFile: Path) = apply { this.propertiesFile = propertiesFile }
+        fun coroutineContext(coroutineContext: CoroutineContext) = apply { this.coroutineContext = coroutineContext }
 
         private val Path.asPropertiesMap: Map<String, String>
             get() =
@@ -143,7 +147,7 @@ class KafkaCluster(
                 .plus(propertiesMap)
                 .plus(propertiesFile?.asPropertiesMap.orEmpty())
 
-        override fun open(): KafkaCluster = KafkaCluster(configMap, pollDuration)
+        override fun open(): KafkaCluster = KafkaCluster(configMap, pollDuration, coroutineContext)
     }
 
     private inner class KafkaLog(

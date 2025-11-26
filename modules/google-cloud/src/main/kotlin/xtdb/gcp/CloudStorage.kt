@@ -26,6 +26,7 @@ import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
 import com.google.protobuf.Any as ProtoAny
 
@@ -56,11 +57,12 @@ class CloudStorage(
     private val projectId: String,
     private val bucket: String,
     private val prefix: Path,
+    coroutineContext: CoroutineContext = Dispatchers.IO
 ) : ObjectStore {
 
     private val client = StorageOptions.newBuilder().run { setProjectId(projectId); build() }.service
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + coroutineContext)
 
     override fun getObject(k: Path) = scope.future {
         runInterruptible {
@@ -165,12 +167,15 @@ class CloudStorage(
         val projectId: String,
         val bucket: String,
         var prefix: Path? = null,
+        @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = Dispatchers.IO
     ) : ObjectStore.Factory {
 
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
 
+        fun coroutineContext(coroutineContext: CoroutineContext) = apply { this.coroutineContext = coroutineContext }
+
         override fun openObjectStore(storageRoot: Path) =
-            CloudStorage(projectId, bucket, prefix?.resolve(storageRoot) ?: storageRoot)
+            CloudStorage(projectId, bucket, prefix?.resolve(storageRoot) ?: storageRoot, coroutineContext)
 
         override val configProto: ProtoAny by lazy {
             ProtoAny.pack(gcsObjectStoreConfig {

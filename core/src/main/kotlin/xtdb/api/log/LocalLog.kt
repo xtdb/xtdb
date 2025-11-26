@@ -30,6 +30,7 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
 import java.time.Instant
 import java.time.InstantSource
+import kotlin.coroutines.CoroutineContext
 import kotlin.io.path.createParentDirectories
 import kotlin.io.path.exists
 import kotlin.time.Duration.Companion.minutes
@@ -41,8 +42,10 @@ class LocalLog(
     rootPath: Path,
     private val instantSource: InstantSource,
     override val epoch: Int,
-    val useInstantSourceForNonTx: Boolean
+    val useInstantSourceForNonTx: Boolean,
+    coroutineContext: CoroutineContext = Dispatchers.Default
 ) : Log {
+    private val scope = CoroutineScope(coroutineContext)
     companion object {
         private val Path.logFilePath get() = resolve("LOG")
 
@@ -103,8 +106,6 @@ class LocalLog(
                 .also { position(pos + messageSizeBytes(size)) }
         }
     }
-
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
 
     internal data class NewMessage(
         val message: Message,
@@ -289,16 +290,18 @@ class LocalLog(
         val path: Path,
         @Transient var instantSource: InstantSource = InstantSource.system(),
         var epoch: Int = 0,
-        var useInstantSourceForNonTx: Boolean = false
+        var useInstantSourceForNonTx: Boolean = false,
+        @Transient var coroutineContext: CoroutineContext = Dispatchers.Default
     ) : Log.Factory {
 
         @Suppress("unused")
         fun instantSource(instantSource: InstantSource) = apply { this.instantSource = instantSource }
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
         fun useInstantSourceForNonTx() = apply { this.useInstantSourceForNonTx = true }
+        fun coroutineContext(coroutineContext: CoroutineContext) = apply { this.coroutineContext = coroutineContext }
 
         override fun openLog(clusters: Map<LogClusterAlias, Cluster>) =
-            LocalLog(path, instantSource, epoch, useInstantSourceForNonTx)
+            LocalLog(path, instantSource, epoch, useInstantSourceForNonTx, coroutineContext)
 
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
             dbConfig.localLog = localLog {

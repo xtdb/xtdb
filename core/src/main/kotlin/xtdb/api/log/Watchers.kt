@@ -6,16 +6,19 @@ import kotlinx.coroutines.future.future
 import xtdb.api.TransactionResult
 import xtdb.api.log.Watchers.Event.*
 import java.util.concurrent.PriorityBlockingQueue
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
 
-class Watchers(currentMsgId: MessageId) : AutoCloseable {
+class Watchers @JvmOverloads constructor(
+    currentMsgId: MessageId,
+    coroutineContext: CoroutineContext = Dispatchers.Default
+) : AutoCloseable {
+    private val scope = CoroutineScope(coroutineContext)
     private class Watcher(val msgId: MessageId, val onDone: CompletableDeferred<TransactionResult?>)
 
     @Volatile
     var currentMsgId = currentMsgId
         private set
-
-    private val scope = CoroutineScope(Dispatchers.Default)
 
     var exception: IngestionStoppedException? = null
         private set

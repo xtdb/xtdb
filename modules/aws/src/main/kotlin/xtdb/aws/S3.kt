@@ -37,6 +37,7 @@ import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.function.Consumer
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -66,9 +67,10 @@ class S3(
     private val prefix: Path,
     private val configurator: S3Configurator,
     private val factory: Factory,
+    coroutineContext: CoroutineContext = Dispatchers.IO
 ) : ObjectStore, SupportsMultipart<CompletedPart> {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + coroutineContext)
 
     override fun close() {
         runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
@@ -261,6 +263,7 @@ class S3(
         @Serializable(StringWithEnvVarSerde::class) var endpoint: String? = null,
         var pathStyleAccessEnabled: Boolean = false,
         @Transient var s3Configurator: S3Configurator = S3Configurator.Default,
+        @Transient var coroutineContext: CoroutineContext = Dispatchers.IO
     ) : ObjectStore.Factory {
 
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
@@ -278,6 +281,8 @@ class S3(
         fun pathStyleAccessEnabled(enabled: Boolean) = apply { this.pathStyleAccessEnabled = enabled }
 
         fun s3Configurator(s3Configurator: S3Configurator) = apply { this.s3Configurator = s3Configurator }
+
+        fun coroutineContext(coroutineContext: CoroutineContext) = apply { this.coroutineContext = coroutineContext }
 
         override fun openObjectStore(storageRoot: Path): S3 {
             val client =
@@ -297,7 +302,7 @@ class S3(
                         s3Configurator.configureClient(this)
                     }.build()
 
-            return S3(client, bucket, prefix?.resolve(storageRoot) ?: storageRoot, s3Configurator, this)
+            return S3(client, bucket, prefix?.resolve(storageRoot) ?: storageRoot, s3Configurator, this, coroutineContext)
         }
 
         override val configProto by lazy {

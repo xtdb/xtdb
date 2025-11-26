@@ -24,7 +24,6 @@ class GarbageCollector @JvmOverloads constructor(
     private val coroutineCtx: CoroutineContext = Dispatchers.IO
 ) : Closeable {
     private val parentJob = Job()
-
     private val blockCatalog = db.blockCatalog
     private val trieCatalog = db.trieCatalog
     private val bufferPool = db.bufferPool
