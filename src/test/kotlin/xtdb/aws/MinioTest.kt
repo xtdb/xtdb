@@ -71,9 +71,9 @@ class MinioTest : S3Test() {
 
         Xtdb.openNode {
             diskCache(DiskCache.factory(nodeDir.resolve("disk-cache")))
-
             log(xtdbLog)
             storage(xtdbStorage)
+            compactor { threads(0) }
         }.use { node ->
             node.connection.use { conn ->
                 conn.createStatement().use { stmt ->
@@ -117,6 +117,7 @@ class MinioTest : S3Test() {
             diskCache(DiskCache.factory(nodeDir.resolve("disk-cache2")))
             log(xtdbLog)
             storage(xtdbStorage)
+            compactor { threads(0) }
         }.use { node ->
             val dbCatalog = (node as Xtdb.XtdbInternal).dbCatalog
 
