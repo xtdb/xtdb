@@ -1,9 +1,9 @@
 package xtdb.catalog
 
-import org.slf4j.LoggerFactory
 import xtdb.storage.BufferPool
 import xtdb.api.TransactionKey
 import xtdb.api.log.MessageId
+import xtdb.api.storage.ObjectStore
 import xtdb.block.proto.Block
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
@@ -15,13 +15,10 @@ import xtdb.time.microsAsInstant
 import xtdb.trie.BlockIndex
 import xtdb.trie.Trie.tablePath
 import xtdb.util.StringUtil.asLexHex
-import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import kotlin.io.path.extension
-
-private val LOGGER = LoggerFactory.getLogger(BlockCatalog::class.java)
 
 class BlockCatalog(private val dbName: DatabaseName, private val bp: BufferPool) {
 
@@ -33,7 +30,8 @@ class BlockCatalog(private val dbName: DatabaseName, private val bp: BufferPool)
             blocksPath.resolve("b${blockIndex.asLexHex}.binpb")
     }
 
-    private val allBlockFiles get() = bp.listAllObjects(blocksPath).filter { it.key.fileName.extension == "binpb" }
+    val allBlockFiles get() = bp.listAllObjects(blocksPath).filter { it.key.fileName.extension == "binpb" }
+    fun tableBlocks(table: TableRef) = bp.listAllObjects(table.tablePath.resolve(blocksPath))
 
     @Volatile
     private var latestBlock: Block? =
@@ -89,35 +87,4 @@ class BlockCatalog(private val dbName: DatabaseName, private val bp: BufferPool)
     val allTables: List<TableRef> get() = latestBlock?.tableNamesList.orEmpty().map { TableRef.parse(dbName, it) }
 
     val secondaryDatabases: Map<String, DatabaseConfig> get() = latestBlock?.secondaryDatabasesMap.orEmpty()
-
-    private fun Path.parseBlockIndex(): Long? =
-        Regex("b(\\p{XDigit}+)\\.binpb")
-            .matchEntire(fileName.toString())
-            ?.groups?.get(1)
-            ?.value?.fromLexHex
-
-    private fun deleteBlock(blockPath: Path) {
-        check(blockPath.parseBlockIndex() != currentBlockIndex) {
-            "Cannot delete current block $blockPath - aborting"
-        }
-        LOGGER.debug("Deleting block file {}", blockPath)
-        bp.deleteIfExists(blockPath)
-    }
-
-    private fun deleteOldestBlocks(path: Path, blocksToKeep: Int) {
-        val blocks = bp.listAllObjects(path).toList().dropLast(blocksToKeep)
-        LOGGER.debug("Deleting oldest ${blocks.size} block files")
-        blocks.forEach { block -> deleteBlock(block.key) }
-    }
-
-    fun garbageCollectBlocks(blocksToKeep: Int) {
-        LOGGER.debug("Garbage collecting blocks, keeping $blocksToKeep blocks")
-        deleteOldestBlocks(blocksPath, blocksToKeep)
-
-        allTables.shuffled().take(100).forEach { table ->
-            LOGGER.debug("Garbage collecting blocks for table {}, keeping {} blocks", table.sym, blocksToKeep)
-            val tableBlockPath = table.tablePath.resolve(blocksPath)
-            deleteOldestBlocks(tableBlockPath, blocksToKeep)
-        }
-    }
 }

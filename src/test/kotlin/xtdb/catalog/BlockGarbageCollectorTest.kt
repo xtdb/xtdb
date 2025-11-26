@@ -6,11 +6,12 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.io.TempDir
-import xtdb.storage.BufferPool
 import xtdb.api.storage.Storage
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
 import xtdb.cache.MemoryCache
+import xtdb.garbage_collector.BlockGarbageCollector
+import xtdb.storage.BufferPool
 import xtdb.test.AllocatorResolver
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.Trie.tablePath
@@ -22,7 +23,7 @@ import java.time.Instant
 import kotlin.test.assertEquals
 
 @ExtendWith(AllocatorResolver::class)
-class BlockCatalogTest {
+class BlockGarbageCollectorTest {
     private fun writeBlock(bufferPool: BufferPool, index: Long, tableNames: List<String>, basePaths: List<Path>) {
         val block = block {
             blockIndex = index
@@ -50,7 +51,6 @@ class BlockCatalogTest {
                 val table1BlockPath = "public/foo".tablePath.resolve(blocksPath)
                 val table2BlockPath = "public/bar".tablePath.resolve(blocksPath)
 
-                // Write 10 blocks
                 (1L..10L).forEach { index ->
                     writeBlock(
                         bufferPool, index, listOf("public/foo", "public/bar"),
@@ -58,24 +58,22 @@ class BlockCatalogTest {
                     )
                 }
 
-                // Validate 10 files exist for blocks and table blocks
                 assertBlockCount(bufferPool, blocksPath, 10)
                 assertBlockCount(bufferPool, table1BlockPath, 10)
                 assertBlockCount(bufferPool, table2BlockPath, 10)
 
-                // Create BlockCatalog instance
-                val catalog = BlockCatalog("xtdb",bufferPool)
+                val blockCat = BlockCatalog("xtdb", bufferPool)
+
+                val gc = BlockGarbageCollector(blockCat, bufferPool, blocksToKeep = 3)
 
                 // Validate that the latest block is correct
-                val latestBlockIndex = catalog.currentBlockIndex
+                val latestBlockIndex = blockCat.currentBlockIndex
                 assertEquals(10L, latestBlockIndex)
 
-                // Validate latest completed transaction
-                val latestCompletedTx = catalog.latestCompletedTx
+                val latestCompletedTx = blockCat.latestCompletedTx
                 assertEquals(10L, latestCompletedTx?.txId)
 
-                // Trigger block GC
-                catalog.garbageCollectBlocks(blocksToKeep = 3)
+                gc.garbageCollectBlocks()
 
                 // Validate that the oldest blocks are deleted, leaving only the latest 3 blocks
                 assertBlockCount(bufferPool, blocksPath, 3)
@@ -88,9 +86,7 @@ class BlockCatalogTest {
                 assertNotNull(latestBlockFile, "Expected latest block file to exist after GC, but it was deleted")
 
                 // Attempting to delete the current block should throw an exception
-                assertThrows<IllegalStateException> {
-                    catalog.garbageCollectBlocks(blocksToKeep = 0)
-                }
+                assertThrows<IllegalStateException> { gc.garbageCollectBlocks(0) }
 
                 // Latest block should still exist - in blocks and table blocks
                 assertBlockCount(bufferPool, blocksPath, 1)

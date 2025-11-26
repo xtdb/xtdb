@@ -1,6 +1,7 @@
 package xtdb.garbage_collector
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
 import org.slf4j.LoggerFactory
 import xtdb.database.Database
 import xtdb.time.microsAsInstant
@@ -9,43 +10,50 @@ import xtdb.trie.Trie.metaFilePath
 import java.io.Closeable
 import java.time.Duration
 import java.time.Instant
+import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.seconds
 
 private val LOGGER = LoggerFactory.getLogger(GarbageCollector::class.java)
 
-class GarbageCollector(
+class GarbageCollector @JvmOverloads constructor(
     db: Database,
     private val blocksToKeep: Int,
     private val garbageLifetime: Duration,
     private val approxRunInterval: Duration,
+    private val coroutineCtx: CoroutineContext = Dispatchers.IO
 ) : Closeable {
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private val parentJob = Job()
 
     private val blockCatalog = db.blockCatalog
     private val trieCatalog = db.trieCatalog
     private val bufferPool = db.bufferPool
 
-    // explicit function for testing
-    fun garbageCollect(garbageAsOf: Instant?) {
-        try {
-            LOGGER.debug("Starting block garbage collection")
-            blockCatalog.garbageCollectBlocks(blocksToKeep)
-            LOGGER.debug("Block garbage collection completed")
+    private val blockGc = BlockGarbageCollector(blockCatalog, bufferPool, blocksToKeep)
 
-            if (garbageAsOf != null) {
-                LOGGER.debug("Starting trie garbage collection")
-                val tableNames = blockCatalog.allTables.take(100)
-                for (tableName in tableNames) {
-                    val garbageTries = trieCatalog.garbageTries(tableName, garbageAsOf)
-                    for (garbageTrie in garbageTries) {
-                        bufferPool.deleteIfExists(tableName.metaFilePath(garbageTrie))
-                        bufferPool.deleteIfExists(tableName.dataFilePath(garbageTrie))
-                    }
-                    trieCatalog.deleteTries(tableName, garbageTries)
+    private fun defaultGarbageAsOf(): Instant? =
+        blockCatalog.blockFromLatest(blocksToKeep)
+            ?.let { it.latestCompletedTx.systemTime.microsAsInstant - garbageLifetime }
+
+    @JvmOverloads
+    fun garbageCollectTries(garbageAsOf: Instant? = defaultGarbageAsOf()) {
+        if (garbageAsOf == null) return
+
+        LOGGER.debug("Garbage collecting data older than {}", garbageAsOf)
+
+        try {
+            LOGGER.debug("Starting trie garbage collection")
+            val tableNames = blockCatalog.allTables.shuffled().take(100)
+
+            for (tableName in tableNames) {
+                val garbageTries = trieCatalog.garbageTries(tableName, garbageAsOf)
+                for (garbageTrie in garbageTries) {
+                    bufferPool.deleteIfExists(tableName.metaFilePath(garbageTrie))
+                    bufferPool.deleteIfExists(tableName.dataFilePath(garbageTrie))
                 }
-                LOGGER.debug("Trie garbage collection completed")
+                trieCatalog.deleteTries(tableName, garbageTries)
             }
+            LOGGER.debug("Trie garbage collection completed")
 
         } catch (e: Exception) {
             LOGGER.warn("Block garbage collection failed", e)
@@ -54,11 +62,13 @@ class GarbageCollector(
         }
     }
 
-    fun garbageCollectFromOldestToKeep() {
-        val oldestBlockToKeep = blockCatalog.blockFromLatest(blocksToKeep)
-        val gcCutOff = oldestBlockToKeep?.let { it.latestCompletedTx.systemTime.microsAsInstant - garbageLifetime }
-        LOGGER.debug("Garbage collecting data older than {}", gcCutOff)
-        garbageCollect(gcCutOff)
+    fun collectGarbage() {
+        LOGGER.debug("Starting block garbage collection")
+        blockGc.garbageCollectBlocks()
+        LOGGER.debug("Block garbage collection completed")
+
+        garbageCollectTries()
+        LOGGER.debug("Next GC run scheduled in ${approxRunInterval.toMillis()}ms")
     }
 
     fun start() {
@@ -67,18 +77,17 @@ class GarbageCollector(
             approxRunInterval, blocksToKeep
         )
 
-        scope.launch {
+        CoroutineScope(coroutineCtx + parentJob).launch {
             delay(Random.nextLong(approxRunInterval.toMillis()))
             while (isActive) {
-                garbageCollectFromOldestToKeep()
-                LOGGER.debug("Next GC run scheduled in ${approxRunInterval.toMillis()}ms")
+                collectGarbage()
                 delay(approxRunInterval.toMillis())
             }
         }
     }
 
     override fun close() {
-        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
+        runBlocking { withTimeout(5.seconds) { parentJob.cancelAndJoin() } }
         LOGGER.debug("GarbageCollector shut down")
     }
 }
