@@ -11,6 +11,13 @@ import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
 import xtdb.SimulationTestBase
+import xtdb.SimulationTestUtils.Companion.L0TrieKeys
+import xtdb.SimulationTestUtils.Companion.L1TrieKeys
+import xtdb.SimulationTestUtils.Companion.addTriesToBufferPool
+import xtdb.SimulationTestUtils.Companion.buildTrieDetails
+import xtdb.SimulationTestUtils.Companion.createJobCalculator
+import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.setLogLevel
 import xtdb.WithSeed
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
@@ -35,17 +42,12 @@ import xtdb.symbol
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.Trie
-import xtdb.trie.Trie.dataFilePath
-import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.TrieCatalog
 import xtdb.trie.TrieKey
-import xtdb.util.StringUtil.asLexHex
 import xtdb.util.logger
-import xtdb.util.requiringResolve
 import xtdb.util.safeMap
 import xtdb.util.useAll
 import xtdb.util.debug
-import java.nio.ByteBuffer
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -81,15 +83,6 @@ data class CompactorDriverConfig(
     val baseTime: Instant = Instant.parse("2020-01-01T00:00:00Z"),
     val blocksPerWeek: Long = 140
 )
-
-fun addTriesToBufferPool(bufferPool: BufferPool, tableRef: TableRef, tries: List<TrieDetails>) {
-    tries.forEach { trie ->
-        val trieKey = trie.trieKey
-        bufferPool.putObject(tableRef.dataFilePath(trieKey), ByteBuffer.allocate(1))
-        bufferPool.putObject(tableRef.metaFilePath(trieKey), ByteBuffer.allocate(1))
-    }
-
-}
 
 class CompactorMockDriver(
     val dispatcher: CoroutineDispatcher,
@@ -229,20 +222,8 @@ class CompactorMockDriver(
     }
 }
 
-private fun buildTrieDetails(tableName: String, trieKey: String, dataFileSize: Long = 1024L): TrieDetails =
-    TrieDetails.newBuilder()
-        .setTableName(tableName)
-        .setTrieKey(trieKey)
-        .setDataFileSize(dataFileSize)
-        .build()
-
 // Settings used by all tests in this class
 private const val logLevel = "INFO"
-
-// Clojure interop to get at internal functions
-private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
-private val createJobCalculator = requiringResolve("xtdb.compactor/->JobCalculator")
-private val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)
@@ -287,22 +268,6 @@ class NumberOfSystemsExtension : BeforeEachCallback {
         if (testInstance !is CompactorSimulationTest) return
 
         testInstance.numberOfSystems = annotation.numberOfSystems
-    }
-}
-
-private val L0TrieKeys = sequence {
-    var blockIndex = 0
-    while (true) {
-        yield("l00-rc-b" + blockIndex.asLexHex)
-        blockIndex++
-    }
-}
-
-private val L1TrieKeys = sequence {
-    var blockIndex = 0
-    while (true) {
-        yield("l01-rc-b" + blockIndex.asLexHex)
-        blockIndex++
     }
 }
 
