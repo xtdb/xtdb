@@ -60,7 +60,7 @@ class MockDb(override val name: DatabaseName, override val trieCatalog: TrieCata
     override val txSink: Indexer.TxSink get() = unsupported("txSink")
 }
 
-private val LOGGER = MockDriver::class.logger
+private val LOGGER = CompactorMockDriver::class.logger
 
 enum class TemporalSplitting {
     CURRENT,
@@ -74,7 +74,7 @@ data class DriverConfig(
     val blocksPerWeek: Long = 140
 )
 
-class MockDriver(
+class CompactorMockDriver(
     val dispatcher: CoroutineDispatcher,
     val baseSeed: Int,
     config: DriverConfig
@@ -242,7 +242,7 @@ class DriverConfigExtension : BeforeEachCallback {
             ?: return
 
         val testInstance = context.requiredTestInstance
-        if (testInstance !is SimulationTest) return
+        if (testInstance !is CompactorSimulationTest) return
 
         testInstance.driverConfig = with(annotation) {
             DriverConfig(
@@ -264,7 +264,7 @@ class NumberOfSystemsExtension : BeforeEachCallback {
             ?: return
 
         val testInstance = context.requiredTestInstance
-        if (testInstance !is SimulationTest) return
+        if (testInstance !is CompactorSimulationTest) return
 
         testInstance.numberOfSystems = annotation.numberOfSystems
     }
@@ -290,10 +290,10 @@ fun List<TrieKey>.prefix(levelPrefix: String) = this.filter { it.startsWith(leve
 
 @Tag("property")
 @ExtendWith(DriverConfigExtension::class, NumberOfSystemsExtension::class)
-class SimulationTest : SimulationTestBase() {
+class CompactorSimulationTest : SimulationTestBase() {
     var driverConfig: DriverConfig = DriverConfig()
     var numberOfSystems: Int = 1
-    private lateinit var mockDriver: MockDriver
+    private lateinit var mockDriver: CompactorMockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
     private lateinit var compactors: List<Compactor.Impl>
     private lateinit var trieCatalogs: List<TrieCatalog>
@@ -304,7 +304,7 @@ class SimulationTest : SimulationTestBase() {
     fun setUp() {
         super.setUpSimulation()
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
-        mockDriver = MockDriver(dispatcher, currentSeed, driverConfig)
+        mockDriver = CompactorMockDriver(dispatcher, currentSeed, driverConfig)
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
 
         compactors = List(numberOfSystems) {

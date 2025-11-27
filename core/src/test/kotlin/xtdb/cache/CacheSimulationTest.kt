@@ -27,14 +27,14 @@ private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
 
 private const val logLevel = "INFO"
 
-private val LOGGER = SimulationTest::class.logger
+private val LOGGER = CacheSimulationTest::class.logger
 
 @ParameterizedTest(name = "[iteration {0}]")
 @MethodSource("xtdb.SimulationTestBase#iterationSource")
 annotation class RepeatableSimulationTest
 
 @Tag("property")
-class SimulationTest : SimulationTestBase() {
+class CacheSimulationTest : SimulationTestBase() {
     private lateinit var allocator: BufferAllocator
 
     class TestPathLoader : MemoryCache.PathLoader {
