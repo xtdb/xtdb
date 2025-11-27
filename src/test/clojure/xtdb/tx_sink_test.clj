@@ -39,7 +39,7 @@
         (t/is (= (util/->clj
                    {:transaction {:id (serde/->TxKey 0 (.toInstant #inst "2020"))}
                     :system-time #xt/instant "2020-01-01T00:00Z"
-                    :source {:db "xtdb"}
+                    :source {:db "xtdb" :block-idx 0}
                     :tables [{:db "xtdb"
                               :schema "public"
                               :table "docs"
@@ -126,6 +126,20 @@
         (t/is (= [:put :put :put :put :delete :erase]
                  (->> docs-payloads (mapcat :ops) (map :op))))
         (t/is (= [:put] (->> other-payloads (mapcat :ops) (map :op))))))))
+
+(t/deftest test-tx-sink-block-idx-increments
+  (with-open [node (xtn/start-node (merge tu/*node-opts*
+                                          {:tx-sink {:enable true
+                                                     :output-log [::tu/recording {}]
+                                                     :format :transit+json}}))]
+    (let [^RecordingLog output-log (get-output-log node)]
+      (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1}]])
+      (t/is (= 0 (-> (.getMessages output-log) first decode-record :source :block-idx)))
+
+      (tu/finish-block! node)
+
+      (xt/execute-tx node [[:put-docs :docs {:xt/id :doc2}]])
+      (t/is (= 1 (-> (.getMessages output-log) last decode-record :source :block-idx))))))
 
 (t/deftest test-tx-sink-disabled
   (with-open [node (xtn/start-node tu/*node-opts*)]
