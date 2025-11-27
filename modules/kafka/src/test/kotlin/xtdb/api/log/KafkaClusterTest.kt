@@ -69,7 +69,7 @@ class KafkaClusterTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.subscribe(subscriber, 0).use { _ ->
+                        log.subscribe(subscriber, -1).use { _ ->
                             val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip().array()
                             log.appendMessage(Message.Tx(txPayload)).await()
 
