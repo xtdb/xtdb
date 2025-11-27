@@ -12,7 +12,10 @@
 
 (t/use-fixtures :each tu/with-mock-clock)
 
-(defn decode-record [msg] (-> msg Log$Message/.encode (xtdb.serde/read-transit :json)))
+(defn decode-record
+  ([msg] (decode-record msg :json))
+  ([msg fmt] (-> msg Log$Message/.encode (xtdb.serde/read-transit fmt))))
+
 (defn get-output-log
   ([node] (get-output-log node "xtdb"))
   ([node db-name]
@@ -73,6 +76,28 @@
         (t/is (= [:put :put :put :put :put :delete :erase]
                  (->> docs-payloads (mapcat :ops) (map :op))))
         (t/is (= [:put] (->> other-payloads (mapcat :ops) (map :op))))))))
+
+(t/deftest test-tx-sink-formats
+  (t/testing "transit+json"
+    (with-open [node (xtn/start-node (merge tu/*node-opts*
+                                            {:tx-sink {:enable true
+                                                       :output-log [::tu/recording {}]
+                                                       :format :transit+json}}))]
+      (let [^RecordingLog output-log (get-output-log node)]
+        (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1, :value "test"}]])
+        (let [msg (-> (.getMessages output-log) first (decode-record :json))]
+          (t/is (= #{:transaction :system-time :source :tables} (set (keys msg))))
+          (t/is (= "xtdb" (-> msg :source :db)))))))
+  (t/testing "transit+msgpack"
+    (with-open [node (xtn/start-node (merge tu/*node-opts*
+                                            {:tx-sink {:enable true
+                                                       :output-log [::tu/recording {}]
+                                                       :format :transit+msgpack}}))]
+      (let [^RecordingLog output-log (get-output-log node)]
+        (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1, :value "test"}]])
+        (let [msg (-> (.getMessages output-log) first (decode-record :msgpack))]
+          (t/is (= #{:transaction :system-time :source :tables} (set (keys msg))))
+          (t/is (= "xtdb" (-> msg :source :db))))))))
 
 (t/deftest test-tx-sink-output-with-tx
   (with-open [node (xtn/start-node (merge tu/*node-opts*
