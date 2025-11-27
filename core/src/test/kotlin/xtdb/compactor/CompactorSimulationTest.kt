@@ -3,6 +3,7 @@ package xtdb.compactor
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
@@ -29,10 +30,13 @@ import xtdb.indexer.LogProcessor
 import xtdb.log.proto.TrieDetails
 import xtdb.metadata.PageMetadata
 import xtdb.storage.BufferPool
+import xtdb.storage.MemoryStorage
 import xtdb.symbol
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.Trie
+import xtdb.trie.Trie.dataFilePath
+import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.TrieCatalog
 import xtdb.trie.TrieKey
 import xtdb.util.StringUtil.asLexHex
@@ -41,18 +45,22 @@ import xtdb.util.requiringResolve
 import xtdb.util.safeMap
 import xtdb.util.useAll
 import xtdb.util.debug
+import java.nio.ByteBuffer
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
-class MockDb(override val name: DatabaseName, override val trieCatalog: TrieCatalog) : IDatabase {
+class MockDb(
+    override val name: DatabaseName,
+    override val trieCatalog: TrieCatalog,
+    override val bufferPool: BufferPool
+) : IDatabase {
     override val allocator: BufferAllocator get() = unsupported("allocator")
     override val blockCatalog: BlockCatalog get() = unsupported("blockCatalog")
     override val tableCatalog: TableCatalog get() = unsupported("tableCatalog")
     override val log: Log get() = unsupported("log")
-    override val bufferPool: BufferPool get() = unsupported("bufferPool")
     override val metadataManager: PageMetadata.Factory get() = unsupported("metadataManager")
 
     override val logProcessor: LogProcessor get() = unsupported("logProcessor")
@@ -73,6 +81,15 @@ data class CompactorDriverConfig(
     val baseTime: Instant = Instant.parse("2020-01-01T00:00:00Z"),
     val blocksPerWeek: Long = 140
 )
+
+fun addTriesToBufferPool(bufferPool: BufferPool, tableRef: TableRef, tries: List<TrieDetails>) {
+    tries.forEach { trie ->
+        val trieKey = trie.trieKey
+        bufferPool.putObject(tableRef.dataFilePath(trieKey), ByteBuffer.allocate(1))
+        bufferPool.putObject(tableRef.metaFilePath(trieKey), ByteBuffer.allocate(1))
+    }
+
+}
 
 class CompactorMockDriver(
     val dispatcher: CoroutineDispatcher,
@@ -172,18 +189,21 @@ class CompactorMockDriver(
                         )
                     }
                 }
+                addTriesToBufferPool(db.bufferPool, job.table, addedTries)
                 TriesAdded(Storage.VERSION, 0, addedTries)
             } else {
-                TriesAdded(
-                    Storage.VERSION, 0,
-                    listOf(
-                        TrieDetails.newBuilder()
-                            .setTableName(job.table.tableName)
-                            .setTrieKey(job.outputTrieKey.toString())
-                            .setDataFileSize(100L * 1024L * 1024L)
-                            .build()
-                    )
+                val addedTries = listOf(
+                    TrieDetails.newBuilder()
+                        .setTableName(job.table.tableName)
+                        .setTrieKey(job.outputTrieKey.toString())
+                        .setDataFileSize(100L * 1024L * 1024L)
+                        .build()
                 )
+
+                addTriesToBufferPool(db.bufferPool, job.table, addedTries)
+                TriesAdded(Storage.VERSION, 0, addedTries)
+
+
             }
             yield() // Force suspension before returning result
             LOGGER.debug("[executeJob completed] systemId=$systemId table=${job.table.tableName} job.outputTrieKey=${job.outputTrieKey}")
@@ -293,6 +313,8 @@ fun List<TrieKey>.prefix(levelPrefix: String) = this.filter { it.startsWith(leve
 class CompactorSimulationTest : SimulationTestBase() {
     var driverConfig: CompactorDriverConfig = CompactorDriverConfig()
     var numberOfSystems: Int = 1
+    private lateinit var allocator: BufferAllocator
+    private lateinit var bufferPools: List<BufferPool>
     private lateinit var mockDriver: CompactorMockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
     private lateinit var compactors: List<Compactor.Impl>
@@ -306,6 +328,11 @@ class CompactorSimulationTest : SimulationTestBase() {
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
         mockDriver = CompactorMockDriver(dispatcher, currentSeed, driverConfig)
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
+        allocator = RootAllocator()
+
+        bufferPools = List(numberOfSystems) {
+            MemoryStorage(allocator, epoch = 0)
+        }
 
         compactors = List(numberOfSystems) {
             Compactor.Impl(mockDriver, null, jobCalculator, false, 2, dispatcher)
@@ -316,13 +343,17 @@ class CompactorSimulationTest : SimulationTestBase() {
         }
 
         dbs = List(numberOfSystems) { i ->
-            MockDb("xtdb-$i", trieCatalogs[i])
+            MockDb("xtdb-$i", trieCatalogs[i], bufferPools[i])
         }
     }
 
     @AfterEach
     fun tearDown() {
         driverConfig = CompactorDriverConfig()
+        for (bp in bufferPools) {
+            bp.close()
+        }
+        allocator.close()
         super.tearDownSimulation()
     }
 
@@ -330,7 +361,10 @@ class CompactorSimulationTest : SimulationTestBase() {
         l0s.forEach {
             mockDriver.trieKeyToFileSize[it.trieKey.toString()] = it.dataFileSize
         }
-        dbs.forEach { db ->  db.trieCatalog.addTries(tableRef, l0s, Instant.now()) }
+        dbs.forEach { db ->
+            addTriesToBufferPool(db.bufferPool, tableRef, l0s)
+            db.trieCatalog.addTries(tableRef, l0s, Instant.now())
+        }
     }
 
 
