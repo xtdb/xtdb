@@ -3,7 +3,7 @@ package xtdb.garbage_collector
 import kotlinx.coroutines.*
 import kotlinx.coroutines.CoroutineScope
 import org.slf4j.LoggerFactory
-import xtdb.database.Database
+import xtdb.database.IDatabase
 import xtdb.time.microsAsInstant
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
@@ -17,7 +17,7 @@ import kotlin.time.Duration.Companion.seconds
 private val LOGGER = LoggerFactory.getLogger(GarbageCollector::class.java)
 
 class GarbageCollector @JvmOverloads constructor(
-    db: Database,
+    db: IDatabase,
     private val blocksToKeep: Int,
     private val garbageLifetime: Duration,
     private val approxRunInterval: Duration,
