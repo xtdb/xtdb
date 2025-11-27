@@ -128,13 +128,8 @@
         (t/is (= [:put] (->> other-payloads (mapcat :ops) (map :op))))))))
 
 (t/deftest test-tx-sink-disabled
-  (with-open [node (xtn/start-node (merge tu/*node-opts*
-                                          {:tx-sink {:enable false
-                                                     :output-log [::tu/recording {}]
-                                                     :format :transit+json}}))]
-    (t/is (thrown? java.lang.IllegalStateException
-                   "tx sink not initialised"
-                   (get-output-log node)))))
+  (with-open [node (xtn/start-node tu/*node-opts*)]
+    (t/is (nil? (get-output-log node)))))
 
 (t/deftest test-tx-sink-multi-db
   (with-open [node (xtn/start-node {:tx-sink {:enable true
@@ -142,9 +137,7 @@
                                               :output-log [::tu/recording {}]
                                               :format :transit+json}})]
     (t/testing "not enabled for primary db"
-      (t/is (thrown? java.lang.IllegalStateException
-                     "tx sink not initialised"
-                     (get-output-log node))))
+      (t/is (nil? (get-output-log node))))
     (t/testing "enabled for secondary db"
       (jdbc/execute! node [(format "ATTACH DATABASE secondary WITH $$log: !InMemory$$")])
       (let [secondary (.build (-> (.createConnectionBuilder node)

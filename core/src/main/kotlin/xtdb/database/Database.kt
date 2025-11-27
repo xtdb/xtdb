@@ -41,7 +41,7 @@ interface IDatabase {
     val metadataManager: PageMetadata.Factory
     val logProcessor: LogProcessor
     val compactor: Compactor.ForDatabase
-    val txSink: TxSink
+    val txSink: TxSink?
 }
 
 data class Database(
@@ -56,14 +56,13 @@ data class Database(
 
     private val logProcessorOrNull: LogProcessor?,
     private val compactorOrNull: Compactor.ForDatabase?,
-    private val txSinkOrNull: TxSink?,
+    override val txSink: TxSink?,
 ): IDatabase {
     override val logProcessor: LogProcessor get() = logProcessorOrNull ?: error("log processor not initialised")
     override val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")
-    override val txSink: TxSink get() = txSinkOrNull ?: error("tx sink not initialised")
 
-    fun withComponents(logProcessor: LogProcessor?, compactor: Compactor.ForDatabase?, txSink: TxSink?) =
-        copy(logProcessorOrNull = logProcessor, compactorOrNull = compactor, txSinkOrNull = txSink)
+    fun withComponents(logProcessor: LogProcessor?, compactor: Compactor.ForDatabase?) =
+        copy(logProcessorOrNull = logProcessor, compactorOrNull = compactor)
 
     fun withSnapSource(snapSource: Snapshot.Source) = copy(snapSource = snapSource)
 
