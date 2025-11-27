@@ -68,7 +68,7 @@ enum class TemporalSplitting {
     BOTH
 }
 
-data class DriverConfig(
+data class CompactorDriverConfig(
     val temporalSplitting: TemporalSplitting = CURRENT,
     val baseTime: Instant = Instant.parse("2020-01-01T00:00:00Z"),
     val blocksPerWeek: Long = 140
@@ -77,7 +77,7 @@ data class DriverConfig(
 class CompactorMockDriver(
     val dispatcher: CoroutineDispatcher,
     val baseSeed: Int,
-    config: DriverConfig
+    config: CompactorDriverConfig
 ) : Factory {
     class AppendMessage(val triesAdded: TriesAdded, val msgTimestamp: Instant, val systemId: Int = 0)
 
@@ -226,7 +226,7 @@ private val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalo
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)
-annotation class WithDriverConfig(
+annotation class WithCompactorDriverConfig(
     val temporalSplitting: TemporalSplitting = TemporalSplitting.CURRENT,
     val baseTime: String = "2020-01-01T00:00:00Z",
     val blocksPerWeek: Long = 14
@@ -238,14 +238,14 @@ annotation class RepeatableSimulationTest
 
 class DriverConfigExtension : BeforeEachCallback {
     override fun beforeEach(context: ExtensionContext) {
-        val annotation = context.requiredTestMethod.getAnnotation(WithDriverConfig::class.java)
+        val annotation = context.requiredTestMethod.getAnnotation(WithCompactorDriverConfig::class.java)
             ?: return
 
         val testInstance = context.requiredTestInstance
         if (testInstance !is CompactorSimulationTest) return
 
         testInstance.driverConfig = with(annotation) {
-            DriverConfig(
+            CompactorDriverConfig(
                 temporalSplitting = temporalSplitting,
                 baseTime = Instant.parse(baseTime),
                 blocksPerWeek = blocksPerWeek
@@ -291,7 +291,7 @@ fun List<TrieKey>.prefix(levelPrefix: String) = this.filter { it.startsWith(leve
 @Tag("property")
 @ExtendWith(DriverConfigExtension::class, NumberOfSystemsExtension::class)
 class CompactorSimulationTest : SimulationTestBase() {
-    var driverConfig: DriverConfig = DriverConfig()
+    var driverConfig: CompactorDriverConfig = CompactorDriverConfig()
     var numberOfSystems: Int = 1
     private lateinit var mockDriver: CompactorMockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
@@ -322,7 +322,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
     @AfterEach
     fun tearDown() {
-        driverConfig = DriverConfig()
+        driverConfig = CompactorDriverConfig()
         super.tearDownSimulation()
     }
 
@@ -418,7 +418,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     }
 
     @Test
-    @WithDriverConfig(temporalSplitting = CURRENT)
+    @WithCompactorDriverConfig(temporalSplitting = CURRENT)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun biggerCompactorRun() {
         val docsTable = TableRef("xtdb", "public", "docs")
@@ -441,7 +441,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    @WithDriverConfig(temporalSplitting = CURRENT)
+    @WithCompactorDriverConfig(temporalSplitting = CURRENT)
     fun l1cToL2cCompaction(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
@@ -468,7 +468,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    @WithDriverConfig(temporalSplitting = CURRENT)
+    @WithCompactorDriverConfig(temporalSplitting = CURRENT)
     fun l1cToL2cWithPartialL2(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
@@ -509,7 +509,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    @WithDriverConfig(temporalSplitting = CURRENT)
+    @WithCompactorDriverConfig(temporalSplitting = CURRENT)
     fun l2cGapFillingAndL3cCompaction(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
@@ -599,7 +599,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    @WithDriverConfig(temporalSplitting = CURRENT)
+    @WithCompactorDriverConfig(temporalSplitting = CURRENT)
     fun concurrentTableCompaction(iteration: Int) {
         runConcurrentTableCompaction()
     }
@@ -607,7 +607,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     @RepeatableSimulationTest
     @WithNumberOfSystems(2)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    @WithDriverConfig(temporalSplitting = CURRENT)
+    @WithCompactorDriverConfig(temporalSplitting = CURRENT)
     fun multiSystemConcurrentTableCompaction(iteration: Int) {
         runConcurrentTableCompaction()
     }
@@ -644,7 +644,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     @RepeatedTest(10)
     @WithNumberOfSystems(2)
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
-    @WithDriverConfig(temporalSplitting = BOTH)
+    @WithCompactorDriverConfig(temporalSplitting = BOTH)
     fun biggerMultiSystemCompactorRun() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0tries = L0TrieKeys.take(1000).map { buildTrieDetails(docsTable.tableName, it, 10L * 1024L * 1024L) }
