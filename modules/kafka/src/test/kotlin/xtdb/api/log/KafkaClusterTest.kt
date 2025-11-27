@@ -19,6 +19,7 @@ import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.time.Duration
 import java.util.Collections.synchronizedList
+import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
 @Tag("integration")
@@ -60,10 +61,12 @@ class KafkaClusterTest {
             Log.localLog("log-path".asPath), Storage.local("storage-path".asPath)
         )
 
+        val topicName = "test-topic-${UUID.randomUUID()}"
+
         KafkaCluster.ClusterFactory(container.bootstrapServers)
             .pollDuration(Duration.ofMillis(100))
             .open().use { cluster ->
-                KafkaCluster.LogFactory("my-cluster", "test-topic")
+                KafkaCluster.LogFactory("my-cluster", topicName)
                     .openLog(mapOf("my-cluster" to cluster))
                     .use { log ->
                         log.subscribe(subscriber, 0).use { _ ->
