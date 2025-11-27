@@ -25,15 +25,16 @@
       :log (ig/ref :xtdb/log)
       :buffer-pool (ig/ref :xtdb/buffer-pool)
       :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)
-      :live-index (ig/ref :xtdb.indexer/live-index)}})
+      :live-index (ig/ref :xtdb.indexer/live-index)
+      :tx-sink (ig/ref :xtdb.tx-sink/for-db)}})
 
 (defmethod ig/init-key ::for-query [_ {:keys [allocator db-name db-config block-cat table-cat
                                               trie-cat log buffer-pool metadata-manager
-                                              live-index]}]
+                                              live-index tx-sink]}]
   (Database. db-name db-config allocator block-cat table-cat trie-cat
              log buffer-pool metadata-manager live-index
              live-index ; snap-src
-             nil nil nil))
+             nil nil tx-sink))
 
 (defmethod ig/expand-key :xtdb/db-catalog [k _]
   {k {:base {:allocator (ig/ref :xtdb/allocator)
@@ -87,8 +88,7 @@
     {:db (try
            (-> ^Database (::for-query sys)
                (.withComponents (:xtdb.log/processor sys)
-                                (:xtdb.compactor/for-db sys)
-                                (:xtdb.tx-sink/for-db sys)))
+                                (:xtdb.compactor/for-db sys)))
            (catch Throwable t
              (log/debug "Failed to initialize database components" {:db-name db-name, :exception (class t), :message (.getMessage t)})
              (ig/halt! sys)

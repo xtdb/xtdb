@@ -24,5 +24,5 @@ interface Indexer : AutoCloseable {
         fun onCommit(txKey: TransactionKey, liveIdxTx: LiveIndex.Tx)
     }
 
-    fun openForDatabase(db: Database, txSink: TxSink?): ForDatabase
+    fun openForDatabase(db: Database): ForDatabase
 }
