@@ -890,7 +890,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                     skipped-tx-path (util/->path (format "skipped-txs/%s" (util/->lex-dec-string @!skiptxid)))
                     stored-objects (.listAllObjects buffer-pool (util/->path "skipped-txs"))]
                 (t/is (seq stored-objects) "skipped-txs directory should contain files")
-                (t/is (some #(= skipped-tx-path (.getKey %)) stored-objects)
+                (t/is (some #(= skipped-tx-path (:key (os/<-StoredObject %))) stored-objects)
                       "Skipped transaction should be stored in object store")))))))))
 
 (t/deftest test-skip-txes-latest-submitted-tx-id
