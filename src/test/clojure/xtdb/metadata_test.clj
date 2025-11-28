@@ -42,22 +42,22 @@
 
   (t/is (= [{:num 1} {:num 1.0}]
            (tu/query-ra '[:scan {:table #xt/table xt_docs}
-                          [{num (= num 1)}]]
+                          [{num (== num 1)}]]
                         {:node tu/*node*})))
 
   (t/is (= [{:num 2.0}]
            (tu/query-ra '[:scan {:table #xt/table xt_docs}
-                          [{num (= num 2)}]]
+                          [{num (== num 2)}]]
                         {:node tu/*node*})))
 
   (t/is (= [{:num 4}]
            (tu/query-ra '[:scan {:table #xt/table xt_docs}
-                          [{num (= num ?x)}]]
+                          [{num (== num ?x)}]]
                         {:node tu/*node*, :args {:x (byte 4)}})))
 
   (t/is (= [{:num 3}]
            (tu/query-ra '[:scan {:table #xt/table xt_docs}
-                          [{num (= num ?x)}]]
+                          [{num (== num ?x)}]]
                         {:node tu/*node*, :args {:x (float 3)}}))))
 
 (deftest test-bloom-filter-for-datetime-types-2133
@@ -74,21 +74,21 @@
             {:timestamp #xt/zoned-date-time "2010-01-01T00:00Z"}
             {:timestamp #xt/date-time "2010-01-01T00:00:00"}]
            (tu/query-ra '[:scan {:table #xt/table xt_docs}
-                          [{timestamp (= timestamp #xt/zoned-date-time "2010-01-01T00:00:00Z")}]]
+                          [{timestamp (== timestamp #xt/zoned-date-time "2010-01-01T00:00:00Z")}]]
                         {:node tu/*node*, :default-tz #xt/zone "Z"})))
 
   (t/is (= [{:timestamp #xt/date "2010-01-01"}
             {:timestamp #xt/zoned-date-time "2010-01-01T00:00Z"}
             {:timestamp #xt/date-time "2010-01-01T00:00:00"}]
            (tu/query-ra '[:scan {:table #xt/table xt_docs}
-                          [{timestamp (= timestamp ?x)}]]
+                          [{timestamp (== timestamp ?x)}]]
                         {:node tu/*node*, :default-tz #xt/zone "Z", :args {:x #xt/date "2010-01-01"}})))
 
   (t/is (= [{:timestamp #xt/date "2010-01-01"}
             {:timestamp #xt/zoned-date-time "2010-01-01T00:00Z"}
             {:timestamp #xt/date-time "2010-01-01T00:00:00"}]
            (tu/query-ra '[:scan {:table #xt/table xt_docs}
-                          [{timestamp (= timestamp #xt/date-time "2010-01-01T00:00:00")}]]
+                          [{timestamp (== timestamp #xt/date-time "2010-01-01T00:00:00")}]]
                         {:node tu/*node*, :default-tz #xt/zone "Z"}))))
 
 (deftest test-bloom-filter-for-time-types
@@ -101,7 +101,7 @@
 
   (t/is (= [{:time #xt/time "04:05:06"}]
            (tu/query-ra '[:scan {:table #xt/table xt_docs}
-                          [{time (= time #xt/time "04:05:06")}]]
+                          [{time (== time #xt/time "04:05:06")}]]
                         {:node tu/*node*, :default-tz #xt/zone "Z"}))))
 
 (deftest test-min-max-on-xt-id
@@ -166,7 +166,7 @@
   (tu/finish-block! tu/*node*)
 
   (let [metadata-mgr (.getMetadataManager (db/primary-db tu/*node*))
-        true-selector (expr.meta/->metadata-selector tu/*allocator* '(= boolean_or_int true) '{boolean_or_int #xt/field {"boolean_or_int" :bool}} vw/empty-args)]
+        true-selector (expr.meta/->metadata-selector tu/*allocator* '(== boolean_or_int true) '{boolean_or_int #xt/field {"boolean_or_int" :bool}} vw/empty-args)]
 
     (t/testing "L0"
       (let [meta-file-path (Trie/metaFilePath "public$xt_docs" ^String (trie/->l0-trie-key 0))]

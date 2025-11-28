@@ -10,7 +10,7 @@
 ;; null-eq is an internal function used in situations where two nulls should compare equal,
 ;; e.g when grouping rows in group-by.
 (defmethod expr/codegen-call [:null_eq :any :any] [call]
-  (expr/codegen-call (assoc call :f :=)))
+  (expr/codegen-call (assoc call :f :==)))
 
 (defmethod expr/codegen-call [:null_eq :null :any] [_]
   {:return-type :bool, :->call-code (constantly false)})

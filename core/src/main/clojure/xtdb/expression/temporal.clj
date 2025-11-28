@@ -940,7 +940,7 @@
                   (= x-unit :month-day-nano) (fn [[x y]] `(compare-md*-intervals ~x ~y))
                   (= x-unit :month-day-micro) (fn [[x y]] `(compare-md*-intervals ~x ~y)))})
 
-(doseq [[f cmp] [[:= #(do `(zero? ~%))]
+(doseq [[f cmp] [[:== #(do `(zero? ~%))]
                  [:< #(do `(neg? ~%))]
                  [:<= #(do `(not (pos? ~%)))]
                  [:> #(do `(pos? ~%))]
@@ -962,7 +962,7 @@
 
 ;;;; Periods
 
-(defmethod expr/codegen-call [:= :tstz-range :tstz-range] [_]
+(defmethod expr/codegen-call [:== :tstz-range :tstz-range] [_]
   {:return-type :bool
    :->call-code (fn [[x y]]
                   (let [x-sym (gensym 'x)

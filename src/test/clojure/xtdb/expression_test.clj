@@ -60,7 +60,7 @@
             "mixing types")
 
       (t/is (= (repeat 1000 true)
-               (project '(= a d)))
+               (project '(== a d)))
             "predicate")
 
       (t/is (= (mapv #(Math/sin ^double %) (range 1000))
@@ -68,7 +68,7 @@
             "math")
 
       (t/is (= (interleave (map float (range)) (repeat 500 0))
-               (project '(if (= 0 (mod a 2)) (/ a 2) 0)))
+               (project '(if (== 0 (mod a 2)) (/ a 2) 0)))
             "if")
 
       (t/is (anomalous? [:incorrect nil] (project '(vec a)))
@@ -1678,17 +1678,17 @@
              (run-projection rel '(.. {:x {:y y}} x y))))))
 
 (t/deftest test-struct-equals
-  (t/is (= true (project1 '(= {} {}) {})))
-  (t/is (= false (project1 '(= {:a 1, :b 2} {:a 1, :b 2, :c 3}) {})))
-  (t/is (= false (project1 '(= {:a 1, :b 2, :c 3} {:a 1, :b 2} ) {})))
+  (t/is (= true (project1 '(== {} {}) {})))
+  (t/is (= false (project1 '(== {:a 1, :b 2} {:a 1, :b 2, :c 3}) {})))
+  (t/is (= false (project1 '(== {:a 1, :b 2, :c 3} {:a 1, :b 2} ) {})))
 
-  (t/is (= true (project1 '(= {:a 1, :b 2, :c 3} {:a 1, :b 2, :c 3}) {})))
-  (t/is (= false (project1 '(= {:a 1, :b 2, :c 4} {:a 1, :b 2, :c 3}) {})))
-  (t/is (= true (project1 '(= {:a 1, :b 2, :c 3} {:a 1, :b 2, :c 3.0}) {})))
-  (t/is (= false (project1 '(= {:a 1, :b 2, :c 2.5} {:a 1, :b 2, :c 3.0}) {})))
+  (t/is (= true (project1 '(== {:a 1, :b 2, :c 3} {:a 1, :b 2, :c 3}) {})))
+  (t/is (= false (project1 '(== {:a 1, :b 2, :c 4} {:a 1, :b 2, :c 3}) {})))
+  (t/is (= true (project1 '(== {:a 1, :b 2, :c 3} {:a 1, :b 2, :c 3.0}) {})))
+  (t/is (= false (project1 '(== {:a 1, :b 2, :c 2.5} {:a 1, :b 2, :c 3.0}) {})))
 
-  (t/is (= nil (project1 '(= {:a 1, :b 2, :c nil} {:a 1, :b 2, :c 3.0}) {})))
-  (t/is (= false (project1 '(= {:a 1, :b 3, :c nil} {:a 1, :b 2, :c 3.0}) {}))))
+  (t/is (= nil (project1 '(== {:a 1, :b 2, :c nil} {:a 1, :b 2, :c 3.0}) {})))
+  (t/is (= false (project1 '(== {:a 1, :b 3, :c nil} {:a 1, :b 2, :c 3.0}) {}))))
 
 
 (t/deftest test-struct-not-equals
@@ -1747,19 +1747,19 @@
     (t/is (= [42] (project1 '[(+ 1 a)] {:a 41})))))
 
 (t/deftest test-list-equal
-  (t/is (= true (project1 '(= [] []) {})))
-  (t/is (= false (project1 '(= [1 2] [1 2 3]) {})))
-  (t/is (= false (project1 '(= [1 2 3] [1 2]) {})))
+  (t/is (= true (project1 '(== [] []) {})))
+  (t/is (= false (project1 '(== [1 2] [1 2 3]) {})))
+  (t/is (= false (project1 '(== [1 2 3] [1 2]) {})))
 
-  (t/is (= true (project1 '(= [1 2 3] [1 2 3]) {})))
-  (t/is (= false (project1 '(= [1 2 4] [1 2 3]) {})))
-  (t/is (= true (project1 '(= [1 2 3] [1 2 3.0]) {})))
-  (t/is (= false (project1 '(= [1 2 2.5] [1 2 3.0]) {})))
+  (t/is (= true (project1 '(== [1 2 3] [1 2 3]) {})))
+  (t/is (= false (project1 '(== [1 2 4] [1 2 3]) {})))
+  (t/is (= true (project1 '(== [1 2 3] [1 2 3.0]) {})))
+  (t/is (= false (project1 '(== [1 2 2.5] [1 2 3.0]) {})))
 
-  (t/is (= nil (project1 '(= [1 2 nil] [1 2 3.0]) {})))
-  (t/is (= false (project1 '(= [1 3 nil] [1 2 3.0]) {})))
+  (t/is (= nil (project1 '(== [1 2 nil] [1 2 3.0]) {})))
+  (t/is (= false (project1 '(== [1 3 nil] [1 2 3.0]) {})))
 
-  (t/is (= true (project1 '(= [[1 2] [3 4]] [[1 2] [3 4]]) {}))))
+  (t/is (= true (project1 '(== [[1 2] [3 4]] [[1 2] [3 4]]) {}))))
 
 (t/deftest test-list-diff
   (t/is (= false (project1 '(<> [] []) {})))
@@ -1783,7 +1783,7 @@
 
   #_ ; TODO `=` on sets
   (t/is (= true
-           (project1 '(= #{1 2 3} a)
+           (project1 '(== #{1 2 3} a)
                      {:a #{1 2 3}})))
 
   (t/is (= {:roles #{:a :b :c}}
@@ -2064,7 +2064,7 @@
 
 (t/deftest test-uuids
   (t/is (= true
-           (project1 '(= #uuid "00000000-0000-0000-0000-000000000000" a)
+           (project1 '(== #uuid "00000000-0000-0000-0000-000000000000" a)
                      {:a #uuid "00000000-0000-0000-0000-000000000000"}))))
 
 (t/deftest test-cast-uuids
@@ -2130,7 +2130,7 @@
                      {:a1 3, :a2 "3"}]))))
 
 (t/deftest list-equality-batch-bindings-5047
-  (t/is (false? (->> (tu/query-ra '[:project [{ret (= [#xt/instant "1970-01-01T00:00:00Z"]
+  (t/is (false? (->> (tu/query-ra '[:project [{ret (== [#xt/instant "1970-01-01T00:00:00Z"]
                                                       [#xt/ldt "1970-01-01T00:00"])}]
                                     [:table [{}]]]
                                   {:default-tz #xt/zone "America/New_York"})

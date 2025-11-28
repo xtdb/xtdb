@@ -21,8 +21,8 @@
       {_sum_in_6
        (cond
         (or
-         (= o.1/o_orderpriority "1-URGENT")
-         (= o.1/o_orderpriority "2-HIGH"))
+         (== o.1/o_orderpriority "1-URGENT")
+         (== o.1/o_orderpriority "2-HIGH"))
         1
         0)}]
      [:map

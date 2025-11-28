@@ -128,7 +128,7 @@
 
 (defn selects->iid-bytes ^bytes [selects ^RelationReader args-rel]
   (when-let [eid-select (get selects "_id")]
-    (when (= '= (first eid-select))
+    (when (= '== (first eid-select))
       (when-let [eid (eid-select->eid eid-select)]
         (cond
           (and (s/valid? ::lp/value eid) (util/valid-iid? eid))

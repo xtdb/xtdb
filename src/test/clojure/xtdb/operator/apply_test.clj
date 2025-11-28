@@ -11,7 +11,7 @@
                            [[{:c_id "c1", :c_name "Alan"}
                              {:c_id "c2", :c_name "Bob"}
                              {:c_id "c3", :c_name "Charlie"}]]]
-                          [:select '(= o_customer_id ?c_id)
+                          [:select '(== o_customer_id ?c_id)
                            [::tu/pages
                             [[{:o_customer_id "c1", :o_value 12.34}
                               {:o_customer_id "c1", :o_value 14.80}]
@@ -43,7 +43,7 @@
                   {:c-id "c2", :c-name "Bob", :match true}
                   {:c-id "c3", :c-name "Charlie", :match false}]
             :types '{c_id #xt/type :utf8, c_name #xt/type :utf8, match #xt/type [:? :bool]}}
-           (-> (tu/query-ra [:apply '{:mark-join {match (= ?c_id o_customer_id)}} '{c_id ?c_id}
+           (-> (tu/query-ra [:apply '{:mark-join {match (== ?c_id o_customer_id)}} '{c_id ?c_id}
                              [::tu/pages
                               [[{:c_id "c1", :c_name "Alan"}
                                 {:c_id "c2", :c_name "Bob"}
@@ -57,14 +57,14 @@
 
   (t/is (= {:res [{:x 0}]
             :types '{x #xt/type :i64, match #xt/type [:? :bool]}}
-           (-> (tu/query-ra '[:apply {:mark-join {match (= 4 y)}} {}
+           (-> (tu/query-ra '[:apply {:mark-join {match (== 4 y)}} {}
                               [:table [{x 0}]]
                               [:table [{y nil}]]]
                             {:with-types? true})))
         "nil in RHS")
 
   (t/is (= [{:x 0, :match false} {:x 1, :match false}]
-           (tu/query-ra '[:apply {:mark-join {match (= nil z)}} {}
+           (tu/query-ra '[:apply {:mark-join {match (== nil z)}} {}
                           [:table [{:x 0}, {:x 1}]]
                           [:project [{z 1}]
                            [:select false
@@ -76,7 +76,7 @@
             {:y 1, :a 1, :b 2}]
            (tu/query-ra '[:apply :single-join {y ?y}
                           [:table [{:y 0} {:y 1}]]
-                          [:select (= ?y a)
+                          [:select (== ?y a)
                            [:table ?x]]]
                         {:args {:x [{:a 1, :b 2}]}})))
 
@@ -129,7 +129,7 @@
                [:table [{:z 0}, {:z 1}]]
                [:apply :single-join {}
                 [:table [{:x 0}, {:x 1}]]
-                [:select (= ?x2 y)
+                [:select (== ?x2 y)
                  [:table [{:y 0}, {:y 1}]]]]] {}))))
 
 (t/deftest test-shadowed-param
@@ -140,19 +140,19 @@
                [:table [{:z 0}, {:z 1}]]
                [:apply :single-join {x ?foo}
                 [:table [{:x 1}]]
-                [:select (= ?foo y)
+                [:select (== ?foo y)
                  [:table [{:y 0}]]]]] {}))))
 
 (t/deftest test-forwarding-nullable-type-information-494
   (t/is (= [{:x 0, :z 0, :y 0}]
            (tu/query-ra
-             '[:select (= z y)
+             '[:select (== z y)
                [:apply :single-join {x ?x1}
                 [:apply :single-join {x ?x2}
                  [:table [{:x 0}, {:x 1}]]
-                 [:select (= ?x2 z)
+                 [:select (== ?x2 z)
                   [:table [{:z 0}, {:z 2}]]]]
-                [:select (= ?x1 y)
+                [:select (== ?x1 y)
                  [:table [{:y 0}, {:y 2}]]]]] {}))))
 
 (deftest test-missing-column-in-independent-rel
@@ -162,7 +162,7 @@
          '[:apply :cross-join
            {foo ?bar}
            [:table [{:foo 1}]]
-           [:select (= baz ?bar)
+           [:select (== baz ?bar)
             [:table [{:baz 1}]]]] {}))
     "col with non null type")
 
@@ -184,6 +184,6 @@
         '[:apply :cross-join
           {not_foo ?bar}
           [:table [{:foo 1}]]
-          [:select (= baz ?bar)
+          [:select (== baz ?bar)
            [:table [{:baz 1}]]]] {})
       "not_foo missing")))

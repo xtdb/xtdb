@@ -4,7 +4,7 @@
   [{_sq_2 true}]
   [:anti-join
    [{x.1/y z}]
-   [:rename x.1 [:scan {:table #xt/table x} [y {z (= z 10)}]]]
+   [:rename x.1 [:scan {:table #xt/table x} [y {z (== z 10)}]]]
    [:project
     [{z y.3/z}]
     [:rename y.3 [:scan {:table #xt/table y} [z]]]]]]]

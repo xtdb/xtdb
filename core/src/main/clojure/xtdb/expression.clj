@@ -747,16 +747,16 @@
   (defmethod codegen-call [f-kw :any :any] [_]
     {:return-type :bool, :->call-code #(cmp `(compare ~@%))}))
 
-(defmethod codegen-call [:= :num :num] [_]
+(defmethod codegen-call [:== :num :num] [_]
   {:return-type :bool
    :->call-code #(do `(== ~@%))})
 
-(defmethod codegen-call [:= :any :any] [_]
+(defmethod codegen-call [:== :any :any] [_]
   {:return-type :bool
    :->call-code #(do `(= ~@%))})
 
 (doseq [col-type #{:varbinary :utf8 :uuid}]
-  (defmethod codegen-call [:= col-type col-type] [_]
+  (defmethod codegen-call [:== col-type col-type] [_]
     {:return-type :bool,
      :->call-code #(do `(.equals ~@%))}))
 
@@ -1608,11 +1608,11 @@
 (defmethod codegen-call [:get_field :any] [_]
   {:return-type :null, :->call-code (constantly nil)})
 
-(doseq [[op return-code] [[:= 1] [:<> -1]]]
+(doseq [[op return-code] [[:== 1] [:<> -1]]]
   (defmethod codegen-call [op :struct :struct] [{[[_ l-field-types] [_ r-field-types]] :arg-types}]
     (let [fields (set (keys l-field-types))]
       (if-not (= fields (set (keys r-field-types)))
-        {:return-type :bool, :->call-code (constantly (if (= := op) false true))}
+        {:return-type :bool, :->call-code (constantly (if (= :== op) false true))}
 
         (let [inner-calls (->> (for [field fields]
                                  (MapEntry/create field
@@ -1621,7 +1621,7 @@
                                                          (MapEntry/create [l-val-type r-val-type]
                                                                           (if (or (= :null l-val-type) (= :null r-val-type))
                                                                             {:return-type :null, :->call-code (constantly nil)}
-                                                                            (codegen-call {:f :=, :arg-types [l-val-type r-val-type]}))))
+                                                                            (codegen-call {:f :==, :arg-types [l-val-type r-val-type]}))))
                                                        (into {}))))
                                (into {}))
               l-sym (gensym 'l-struct)
@@ -1828,7 +1828,7 @@
                              ~(f return-type (-> `(trim-array-view ~n-sym ~list-sym)
                                                  (with-tag ListValueReader)))))))}))
 
-(doseq [[op return-code] [[:= 1] [:<> -1]]]
+(doseq [[op return-code] [[:== 1] [:<> -1]]]
   (defmethod codegen-call [op :list :list] [{[[_ l-el-type] [_ r-el-type]] :arg-types}]
     (let [n-sym (gensym 'n)
           len-sym (gensym 'len)
@@ -1838,7 +1838,7 @@
                              (MapEntry/create [l-el-type r-el-type]
                                               (if (or (= :null l-el-type) (= :null r-el-type))
                                                 {:return-type :null, :->call-code (constantly nil)}
-                                                (codegen-call {:f :=, :arg-types [l-el-type r-el-type]}))))
+                                                (codegen-call {:f :==, :arg-types [l-el-type r-el-type]}))))
                            (into {}))]
 
       {:return-type [:union #{:bool :null}]
@@ -1890,8 +1890,8 @@
    :->call-code (fn [[start end step]]
                   `(series (long ~start) (long ~end) (long ~step)))})
 
-(defmethod codegen-call [:= :set :set] [{[[_ _l-el-type] [_ _r-el-type]] :arg-types}]
-  (throw (UnsupportedOperationException. "TODO: `=` on sets")))
+(defmethod codegen-call [:== :set :set] [{[[_ _l-el-type] [_ _r-el-type]] :arg-types}]
+  (throw (UnsupportedOperationException. "TODO: `==` on sets")))
 
 (defmethod codegen-call [:<> :set :set] [{[[_ _l-el-type] [_ _r-el-type]] :arg-types}]
   (throw (UnsupportedOperationException. "TODO: `<>` on sets")))

@@ -434,21 +434,21 @@
     (t/is (= [{{:a 12, :b 42} 1
                {:a 12, :b 44} 1
                {:a 10, :b 42} 2}]
-             (->> (tu/query-ra [:left-outer-join '[{a c} (> b d) (= c -1)] left right]
+             (->> (tu/query-ra [:left-outer-join '[{a c} (> b d) (== c -1)] left right]
                                {:preserve-pages? true})
                   (mapv frequencies))))
 
     (t/is (= [{{:a 12, :b 42} 1
                {:a 12, :b 44} 1
                {:a 10, :b 42} 2}]
-             (->> (tu/query-ra [:left-outer-join '[{a c} (and (= c -1) (> b d))] left right]
+             (->> (tu/query-ra [:left-outer-join '[{a c} (and (== c -1) (> b d))] left right]
                                {:preserve-pages? true})
                   (mapv frequencies))))
 
     (t/is (= [{{:a 12, :b 42} 1
                {:a 12, :b 44} 1
                {:a 10, :b 42} 2}]
-             (->> (tu/query-ra [:left-outer-join '[{a c} {b d} (= c -1)] left right]
+             (->> (tu/query-ra [:left-outer-join '[{a c} {b d} (== c -1)] left right]
                                {:preserve-pages? true})
                   (mapv frequencies))))))
 
@@ -571,7 +571,7 @@
               {:a 10, :b 42} 2
               {:c 11, :d 42} 1}
 
-             (->> (tu/query-ra [:full-outer-join '[{a c} (not (= b 44))] left right])
+             (->> (tu/query-ra [:full-outer-join '[{a c} (not (== b 44))] left right])
                   (frequencies))))
 
     (t/is (= {{:a 12, :b 42} 1
@@ -670,7 +670,7 @@
     (t/is (= {{:a 12, :b 44} 1
               {:a 10, :b 42} 2}
 
-             (->> (tu/query-ra [:anti-join '[{a c} (not (= b 44))] left right])
+             (->> (tu/query-ra [:anti-join '[{a c} (not (== b 44))] left right])
                   (frequencies))))
 
     (t/is (= {{:a 12, :b 42} 1
@@ -944,12 +944,12 @@
       ;;
       ;;Instead we produce unconnected subgraphs (in this case 3) and then add the
       ;;join conditions to the outermost join.
-      (t/is (= '[[0] [1] ([:pred-expr (= (+ name person) foo)]) [2]]
+      (t/is (= '[[0] [1] ([:pred-expr (== (+ name person) foo)]) [2]]
                (:join-order
                 (lp/emit-expr
                  (s/conform ::lp/logical-plan
                             '[:mega-join
-                              [(= (+ name person) foo)]
+                              [(== (+ name person) foo)]
                               [[:table [{:name 1}]]
                                [:table [{:person 1}]]
                                [:table [{:foo 2 :bar "woo"}
@@ -959,7 +959,7 @@
       (t/is (= [{:person 1, :bar "woo", :name 1, :foo 2}]
                (tu/query-ra
                 '[:mega-join
-                  [(= (+ name person) foo)]
+                  [(== (+ name person) foo)]
                   [[:table [{:name 1}]]
                    [:table [{:person 1}]]
                    [:table [{:foo 2 :bar "woo"}
@@ -970,7 +970,7 @@
    (= '[:equi-condition {t0_n t1_n}]
       (join/adjust-to-equi-condition
        '{:cols #{t1_n t0_n},
-         :condition [:pred-expr (= t1_n t0_n)],
+         :condition [:pred-expr (== t1_n t0_n)],
          :condition-id 0,
          :cols-from-current-rel #{t0_n},
          :other-cols #{t1_n},
@@ -1045,10 +1045,10 @@
 (t/deftest test-non-joining-join-conditions
   (t/testing "non joining join conditions are added at the earliest possible point"
     (let [plan '[:mega-join
-                 [(= a b) (= b 1)]
+                 [(== a b) (== b 1)]
                  [[:table [{:a 1}]]
                   [:table [{:b 1}]]]]]
-      (t/is (= '[[0 [[:equi-condition {a b}] [:pred-expr (= b 1)]] 1]]
+      (t/is (= '[[0 [[:equi-condition {a b}] [:pred-expr (== b 1)]] 1]]
                (:join-order (lp/emit-expr (s/conform ::lp/logical-plan plan) {}))))
       (t/is (= [{:a 1, :b 1}] (tu/query-ra plan))))))
 

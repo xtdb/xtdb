@@ -67,4 +67,4 @@
        n.2
        [:scan
         {:table #xt/table nation}
-        [_id {n_name (= n_name "CANADA")}]]]]]]]]]
+        [_id {n_name (== n_name "CANADA")}]]]]]]]]]

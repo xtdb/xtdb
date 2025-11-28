@@ -21,7 +21,7 @@
           n.3
           [:scan
            {:table #xt/table nation}
-           [_id {n_name (= n_name "GERMANY")}]]]
+           [_id {n_name (== n_name "GERMANY")}]]]
          [:rename
           ps.1
           [:scan
@@ -42,7 +42,7 @@
            n.9
            [:scan
             {:table #xt/table nation}
-            [_id {n_name (= n_name "GERMANY")}]]]
+            [_id {n_name (== n_name "GERMANY")}]]]
           [:rename
            ps.7
            [:scan

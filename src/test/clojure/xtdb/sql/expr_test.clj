@@ -318,7 +318,7 @@
     "1 >= 2" '(>= 1 2)
     "1 < 2" '(< 1 2)
     "1 <= 2" '(<= 1 2)
-    "1 = 2" '(= 1 2)
+    "1 = 2" '(== 1 2)
     "1 != 2" '(<> 1 2)
     "1 <> 2" '(<> 1 2)
     "2 BETWEEN 1 AND 3" '(between 2 1 3)
@@ -1172,7 +1172,7 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     OVERLAPS PERIOD(TIMESTAMP '2002-01-01 00:00:00+00:00', TIMESTAMP '2003-01-01 00:00:00+00:00')"
 
     '(and
-      (=
+      (==
        (lower f/_system_time)
        (lower
         (period
@@ -1204,7 +1204,7 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
        xtdb/end-of-time))
     "foo._SYSTEM_TIME SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
-    '(=
+    '(==
       (coalesce (upper f/_valid_time) xtdb/end-of-time)
       (lower
        (period
@@ -1212,7 +1212,7 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
         #xt/zoned-date-time "2001-01-01T00:00Z")))
     "foo._VALID_TIME IMMEDIATELY PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
-    '(=
+    '(==
       (lower f/_valid_time)
       (coalesce
        (upper
@@ -1579,8 +1579,8 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= '(and) (plan-expr "WHERE")))
 
     (t/is (= '(and) (plan-expr "WHERE , ,")))
-    (t/is (= '(and (= f/a 1)) (plan-expr "WHERE , a = 1")))
-    (t/is (= '(and (= f/a 1) (= f/b 2)) (plan-expr "WHERE a = 1, , b = 2 ,")))))
+    (t/is (= '(and (== f/a 1)) (plan-expr "WHERE , a = 1")))
+    (t/is (= '(and (== f/a 1) (== f/b 2)) (plan-expr "WHERE a = 1, , b = 2 ,")))))
 
 (t/deftest select-snapshot-token
   (t/is (= [{:token (basis/->time-basis-str {"xtdb" [nil]})}]

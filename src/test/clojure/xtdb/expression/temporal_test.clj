@@ -18,7 +18,7 @@
 ;; equality may well remain incorrect for now, it is not the goal
 (t/deftest clock-influences-equality-of-ambiguous-datetimes-test
   (t/are [expected a b zone-id]
-      (= expected (-> (tu/query-ra [:project [{'res '(= ?a ?b)}]
+      (= expected (-> (tu/query-ra [:project [{'res '(== ?a ?b)}]
                                     [:table [{}]]]
                                    {:args {:a a, :b b}
                                     :current-time Instant/EPOCH
@@ -911,7 +911,7 @@
                 now instant-gen]
     (= (= (->inst t1 now default-tz)
           (->inst t2 now default-tz))
-       (->> (tu/query-ra [:project [{'res '(= ?t1 ?t2)}]
+       (->> (tu/query-ra [:project [{'res '(== ?t1 ?t2)}]
                           [:table [{}]]]
                          {:args {:t1 t1, :t2 t2}
                           :current-time now
@@ -1112,13 +1112,13 @@
   (t/testing "comparing intervals with different types"
     (t/is (anomalous? [:incorrect nil
                        #"Cannot compare intervals with different units"]
-                      (et/project1 '(= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 365 "DAY" 2 0)) {}))))
+                      (et/project1 '(== (single-field-interval 1 "YEAR" 2 0) (single-field-interval 365 "DAY" 2 0)) {}))))
 
   (t/testing "comparing year month intervals"
     (t/are [expected expr] (= expected (et/project1 expr {}))
       ;; = 
-      true '(= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 12 "MONTH" 2 0))
-      false '(= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
+      true '(== (single-field-interval 1 "YEAR" 2 0) (single-field-interval 12 "MONTH" 2 0))
+      false '(== (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
 
       ;; <
       true '(< (single-field-interval 1 "YEAR" 2 0) (single-field-interval 2 "YEAR" 2 0))
@@ -1145,13 +1145,13 @@
       (t/is (thrown-with-msg?
              RuntimeException
              #"Cannot compare month-day-micro/nano intervals when month component is non-zero."
-             (et/project1 '(= interval interval) test-doc)))))
+             (et/project1 '(== interval interval) test-doc)))))
 
   (t/testing "comparing month-day-nano intervals"
     (t/are [expected expr] (= expected (et/project1 expr {}))
       ;; =
-      true '(= (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2))
-      false '(= (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 2" "DAY" 2 "HOUR" 2))
+      true '(== (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2))
+      false '(== (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 2" "DAY" 2 "HOUR" 2))
 
       ;; <
       false '(< (multi-field-interval "1 0" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2))

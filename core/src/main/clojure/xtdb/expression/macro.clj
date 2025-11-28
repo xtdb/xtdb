@@ -67,7 +67,7 @@
       2 expr
       (macroexpand1r-call expr))))
 
-(doseq [f #{:< :<= := :!= :>= :>}]
+(doseq [f #{:< :<= :== :!= :>= :>}]
   (defmethod macroexpand1-call f [{:keys [args] :as expr}]
     (case (count args)
       (0 1) {:op :literal, :literal (not= f :!=)}
@@ -101,7 +101,7 @@
             :args (->> (for [[test expr] (partition-all 2 clauses)]
                          (if-not expr
                            [test] ; default case
-                           [{:op :call, :f :=,
+                           [{:op :call, :f :==,
                              :args [{:op :local, :local local} test]}
                             expr]))
                        (mapcat identity))}}))
@@ -124,7 +124,7 @@
      :expr x
      :body {:op :if
             :pred {:op :call, :f :true?
-                   :args [{:op :call, :f :=,
+                   :args [{:op :call, :f :==,
                            :args [{:op :local, :local local} y]}]}
             :then nil-literal
             :else {:op :local, :local local}}}))

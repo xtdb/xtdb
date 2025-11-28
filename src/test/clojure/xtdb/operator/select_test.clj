@@ -37,6 +37,6 @@
               [:table [{}]]])))
 
   (t/is (= [{} {} {}]
-           (tu/query-ra '[:select (= ?ap_n 2)
+           (tu/query-ra '[:select (== ?ap_n 2)
                           [:table [{} {} {}]]]
                         {:args {:ap-n 2}}))))

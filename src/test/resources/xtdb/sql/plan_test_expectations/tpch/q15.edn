@@ -37,7 +37,7 @@
      revenue.6/total_revenue
      {_ob10 s.5/_id}]
     [:select
-     (= revenue.6/total_revenue _sq_7)
+     (== revenue.6/total_revenue _sq_7)
      [:single-join
       []
       [:mega-join

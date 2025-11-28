@@ -536,11 +536,11 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             {:depth "  ->", :op :rename
              :explain {:prefix "u.1"}}
             {:depth "    ->", :op :select
-             :explain {:predicate "(= (+ a b) 12)"}}
+             :explain {:predicate "(== (+ a b) 12)"}}
             {:depth "      ->", :op :scan
              :explain {:table "xtdb.public.users"
                        :columns ["foo" "a" "b" "_id"]
-                       :predicates ["(= b 1)"]}}]
+                       :predicates ["(== b 1)"]}}]
            (xt/q tu/*node*
                  "EXPLAIN SELECT u._id, u.foo FROM users u WHERE u.a + u.b = 12 AND u.b = 1"))))
 
@@ -794,7 +794,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:v 904292726}]
            (tu/query-ra
-            '[:select (= (cast "bar" :regclass) v)
+            '[:select (== (cast "bar" :regclass) v)
               [:table [{v 904292726} {v 111}]]]
             {:node tu/*node*}))
         "select")
@@ -802,7 +802,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (t/is (= [{:col 904292726}]
            (tu/query-ra
             '[:scan {:table #xt/table bar}
-              [{col (= col (cast "bar" :regclass))}]]
+              [{col (== col (cast "bar" :regclass))}]]
             {:node tu/*node*}))
         "scan pred"))
 
@@ -1082,7 +1082,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (t/is (= [{:xt/id :toto, :col 3}]
            (tu/query-ra
             '[:join [{col col}]
-              [:scan {:table #xt/table xt_docs} [_id {col (= col 3)}]]
+              [:scan {:table #xt/table xt_docs} [_id {col (== col 3)}]]
               [:scan {:table #xt/table xt_docs} [_id col]]]
             {:node tu/*node*}))))
 

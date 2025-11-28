@@ -29,8 +29,8 @@
       [:mega-join
        [{c.4/c_nationkey n2.6/_id}
         (or
-         (and (= n1.5/n_name "FRANCE") (= n2.6/n_name "GERMANY"))
-         (and (= n1.5/n_name "GERMANY") (= n2.6/n_name "FRANCE")))
+         (and (== n1.5/n_name "FRANCE") (== n2.6/n_name "GERMANY"))
+         (and (== n1.5/n_name "GERMANY") (== n2.6/n_name "FRANCE")))
         {s.1/s_nationkey n1.5/_id}
         {o.3/o_custkey c.4/_id}
         {l.2/l_orderkey o.3/_id}

@@ -5,7 +5,7 @@
   [:semi-join
    [(> _needle z)]
    [:map
-    [{_needle (= x.1/z 1)}]
+    [{_needle (== x.1/z 1)}]
     [:rename x.1 [:scan {:table #xt/table x} [y z]]]]
    [:project
     [{z y.3/z}]

@@ -3,5 +3,5 @@
  [:rename
   si.1
   [:select
-   (= name lastname)
+   (== name lastname)
    [:scan {:table #xt/table stars_in} [lastname name]]]]]

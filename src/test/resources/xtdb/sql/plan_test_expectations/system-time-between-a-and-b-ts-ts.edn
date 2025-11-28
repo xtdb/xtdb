@@ -12,4 +12,4 @@
      {system_time_end
       (> system_time_end #xt/zoned-date-time "2999-01-01T00:00Z")}
      bar
-     {_table (= _table "foo")}]]]]]
+     {_table (== _table "foo")}]]]]]

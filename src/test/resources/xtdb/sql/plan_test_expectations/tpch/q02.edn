@@ -27,7 +27,7 @@
     [:map
      [{_sq_6 _min_out_12}]
      [:select
-      (= ps.3/ps_supplycost _min_out_12)
+      (== ps.3/ps_supplycost _min_out_12)
       [:group-by
        [p.1/_id
         p.1/p_size
@@ -63,7 +63,7 @@
             r.5
             [:scan
              {:table #xt/table region}
-             [_id {r_name (= r_name "EUROPE")}]]]
+             [_id {r_name (== r_name "EUROPE")}]]]
            [:rename
             n.4
             [:scan {:table #xt/table nation} [_id n_name n_regionkey]]]
@@ -77,7 +77,7 @@
             [:scan
              {:table #xt/table part}
              [_id
-              {p_size (= p_size 15)}
+              {p_size (== p_size 15)}
               p_mfgr
               {p_type (like p_type "%BRASS")}]]]
            [:rename
@@ -99,7 +99,7 @@
            r.10
            [:scan
             {:table #xt/table region}
-            [_id {r_name (= r_name "EUROPE")}]]]
+            [_id {r_name (== r_name "EUROPE")}]]]
           [:rename
            n.9
            [:scan {:table #xt/table nation} [_id n_regionkey]]]

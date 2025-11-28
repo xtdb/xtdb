@@ -151,7 +151,11 @@
                                    :sub-expr (.args call)})
             placeholder)
 
-        (list* (symbol (.f call)) (mapv plan-expr (.args call))))))
+        ;; Map = to == for SQL-like numeric coercion semantics
+        (list* (case fn
+                 = '==
+                 (symbol (.f call)))
+               (mapv plan-expr (.args call))))))
   (required-vars [call]
     (if (aggregate-fn? (symbol (.f call)))
       #{} ;; required vars should not traverse into aggregate fns, agg-fn sub-exprs are planned independently
@@ -268,7 +272,7 @@
                           col2 cols
                           :when (not= col col2)]
                       (set [col col2])))
-               (map #(list* '= %)))))
+               (map #(list* '== %)))))
        (vec)))
 
 (defn- wrap-unify [{:keys [ra-plan]} var->cols]
@@ -378,7 +382,7 @@
   (when-let [{:keys [r literal?]} (first (filter #(= period (:l %)) bindings))]
     (if literal?
       {:type :selection
-       :expr (list '= (list 'period (col-sym from) (col-sym to)) r)}
+       :expr (list '== (list 'period (col-sym from) (col-sym to)) r)}
       {:type :projection
        :expr {(col-sym period) (list 'period (col-sym from) (col-sym to))}})))
 
@@ -419,7 +423,7 @@
         distinct-scan-cols (distinct (replace-temporal-period-with-cols (mapv :l planned-bind-specs)))
         literal-preds-by-col (-> (->> planned-bind-specs
                                       (filter :literal?)
-                                      (map #(assoc % :pred (list '= (:l %) (:r %))))
+                                      (map #(assoc % :pred (list '== (:l %) (:r %))))
                                       (group-by :l))
                                  (update-vals #(map :pred %)))]
     (-> [:scan {:table table
@@ -722,7 +726,7 @@
             (wrap-expr-subqueries (:ra-plan acc-plan) acc-provided-vars arg-subqueries)]
            (->> unifying-vars-apply-param-mapping
                 (map (fn [[var param-for-var]]
-                       (list '= var param-for-var)))
+                       (list '== var param-for-var)))
                 (wrap-select ra-plan))]
           (wrap-project (vec (into acc-provided-vars provided-vars)))))
        [:left-outer-join

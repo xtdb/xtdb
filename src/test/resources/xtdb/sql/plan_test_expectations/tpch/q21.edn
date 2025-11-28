@@ -21,12 +21,12 @@
           n.4
           [:scan
            {:table #xt/table nation}
-           [_id {n_name (= n_name "SAUDI ARABIA")}]]]
+           [_id {n_name (== n_name "SAUDI ARABIA")}]]]
          [:rename
           o.3
           [:scan
            {:table #xt/table orders}
-           [{o_orderstatus (= o_orderstatus "F")} _id]]]
+           [{o_orderstatus (== o_orderstatus "F")} _id]]]
          [:rename
           s.1
           [:scan {:table #xt/table supplier} [s_name _id s_nationkey]]]
