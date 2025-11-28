@@ -1348,3 +1348,63 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                :committed true,
                :user-metadata {:source "clojure-api", :tags ["api-test"], :request-id "req-12345"}}]
              (xt/q conn ["SELECT * FROM xt.txs ORDER BY _id"])))))
+
+(t/deftest update-doesnt-put-unchanged-versions-5030
+  (xt/execute-tx tu/*node* [[:put-docs :docs
+                             {:xt/id 1, :a 1}
+                             {:xt/id 2, :a 2}
+                             {:xt/id 3, :a 3, :b 3}
+                             {:xt/id 4, :a 4, :b 4}
+                             {:xt/id 5, :a 5, :b nil}
+                             {:xt/id 6, :a nil}
+                             {:xt/id 7, :a 7}]])
+  (xt/execute-tx tu/*node* ["UPDATE docs SET a = 1 WHERE _id = 1"])
+  (t/is (= [{:xt/id 1, :a 1, :xt/valid-from #xt/zdt "2020-01-01[UTC]"}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME WHERE _id = 1"))
+        "update all cols, but unchanged")
+
+  (xt/execute-tx tu/*node* ["UPDATE docs SET a = 2, b = 2 WHERE _id = 2"])
+  (t/is (= [{:xt/id 2, :a 2, :xt/valid-from #xt/zdt "2020-01-01[UTC]", :xt/valid-to #xt/zdt "2020-01-03[UTC]"}
+            {:xt/id 2, :a 2, :b 2, :xt/valid-from #xt/zdt "2020-01-03[UTC]"}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME WHERE _id = 2 ORDER BY _valid_from"))
+        "existing cols unchanged, add non-existing cols")
+
+  (xt/execute-tx tu/*node* ["UPDATE docs SET b = 3 WHERE _id = 3"])
+  (t/is (= [{:xt/id 3, :a 3, :b 3, :xt/valid-from #xt/zdt "2020-01-01[UTC]"}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME WHERE _id = 3"))
+        "col unchanged, other existing cols")
+
+  (xt/execute-tx tu/*node* ["UPDATE docs SET a = 4, b = 5 WHERE _id = 4"])
+  (t/is (= [{:xt/id 4, :a 4, :b 4, :xt/valid-from #xt/zdt "2020-01-01[UTC]", :xt/valid-to #xt/zdt "2020-01-05[UTC]"}
+            {:xt/id 4, :a 4, :b 5, :xt/valid-from #xt/zdt "2020-01-05[UTC]"}]
+           (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME WHERE _id = 4 ORDER BY _valid_from"))
+        "one col unchanged, one col changed")
+
+  (t/testing "null handling"
+    (xt/execute-tx tu/*node* ["UPDATE docs SET b = NULL WHERE _id = 5"])
+    (t/is (= [{:xt/id 5, :a 5, :xt/valid-from #xt/zdt "2020-01-01[UTC]"}]
+             (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME WHERE _id = 5"))
+          "update b from NULL to NULL - should not create new version")
+
+    (xt/execute-tx tu/*node* ["UPDATE docs SET a = NULL WHERE _id = 6"])
+    (t/is (= [{:xt/id 6, :xt/valid-from #xt/zdt "2020-01-01[UTC]"}]
+             (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME WHERE _id = 6"))
+          "update a from NULL to NULL - should not create new version")
+
+    (xt/execute-tx tu/*node* ["UPDATE docs SET a = NULL WHERE _id = 7"])
+    (t/is (= [{:xt/id 7, :a 7, :xt/valid-from #xt/zdt "2020-01-01[UTC]", :xt/valid-to #xt/zdt "2020-01-08[UTC]"}
+              {:xt/id 7, :xt/valid-from #xt/zdt "2020-01-08[UTC]"}]
+             (xt/q tu/*node* "SELECT *, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME WHERE _id = 7 ORDER BY _valid_from"))
+          "update a from value to NULL - should create new version")))
+
+(t/deftest update-changes-types-if-requested-5030
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :a 1} {:xt/id 2, :a 2}]])
+  (xt/execute-tx tu/*node* ["UPDATE docs SET a = 1.0 WHERE _id = 1"
+                            "UPDATE docs SET a = 2 WHERE _id = 2"])
+
+  (t/is (= [{:xt/id 1, :a 1,          
+             :xt/valid-from #xt/zdt "2020-01-01Z[UTC]",
+             :xt/valid-to #xt/zdt "2020-01-02Z[UTC]"}
+            {:xt/id 1, :a 1.0, :xt/valid-from #xt/zdt "2020-01-02Z[UTC]"}
+            {:xt/id 2, :a 2, :xt/valid-from #xt/zdt "2020-01-01Z[UTC]"}]
+           (xt/q tu/*node* "SELECT _id, a, _valid_from, _valid_to FROM docs FOR ALL VALID_TIME ORDER BY _id, _valid_from"))))

@@ -1,10 +1,13 @@
 [:project
- ({_iid users.1/_iid}
+ [{_iid users.1/_iid}
   {_valid_from users.1/_valid_from}
   {_valid_to users.1/_valid_to}
-  {first_name "Sue"})
+  {first_name "Sue"}]
  [:rename
   users.1
   [:scan
    {:table #xt/table users, :for-valid-time :all-time}
-   [_valid_to _valid_from _iid]]]]
+   [_valid_to
+    _valid_from
+    {first_name (or (not (boolean (=== "Sue" first_name))))}
+    _iid]]]]

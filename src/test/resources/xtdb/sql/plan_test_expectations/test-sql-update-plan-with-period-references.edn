@@ -1,5 +1,5 @@
 [:project
- ({_iid foo.1/_iid}
+ [{_iid foo.1/_iid}
   {_valid_from foo.1/_valid_from}
   {_valid_to foo.1/_valid_to}
   {bar
@@ -10,9 +10,22 @@
     (>
      (coalesce (upper foo.1/_system_time) xtdb/end-of-time)
      (lower foo.1/_valid_time)))}
-  {baz foo.1/baz})
+  {baz foo.1/baz}]
  [:rename
   foo.1
-  [:scan
-   {:table #xt/table foo, :for-valid-time :all-time}
-   [_valid_to baz _system_time _valid_from _valid_time _iid]]]]
+  [:select
+   (or
+    (not
+     (boolean
+      (===
+       (and
+        (<
+         (lower _system_time)
+         (coalesce (upper _valid_time) xtdb/end-of-time))
+        (>
+         (coalesce (upper _system_time) xtdb/end-of-time)
+         (lower _valid_time)))
+       bar))))
+   [:scan
+    {:table #xt/table foo, :for-valid-time :all-time}
+    [_valid_to bar baz _system_time _valid_from _valid_time _iid]]]]]

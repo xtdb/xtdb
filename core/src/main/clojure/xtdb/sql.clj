@@ -496,8 +496,8 @@
   (plan-rel [_]
     (as-> [:list {(-> (->col-sym (str unique-table-alias) (str unnest-col))
                       (with-meta (meta unnest-col)))
-                   unnest-expr}]
-          plan
+                  unnest-expr}]
+        plan
 
       (if ordinality-col
         [:map [{(-> (->col-sym (str unique-table-alias) (str ordinality-col))
@@ -2376,8 +2376,8 @@
                                col-syms)
                   acc))
               (.accept (.queryExpressionNoWith ctx)
-                         (-> this
-                             (update-in [:env :ctes] (fnil into {}) ctes)))
+                       (-> this
+                           (update-in [:env :ctes] (fnil into {}) ctes)))
               (vals (reverse ctes)))))
 
   (visitQueryExpressionNoWith [{:keys [env] :as this} ctx]
@@ -2875,26 +2875,31 @@
                               {:predicate (.accept search-clause (map->ExprPlanVisitor {:env env, :scope dml-scope, :!subqs !subqs}))
                                :subqs (not-empty (into {} !subqs))}))
 
-          all-non-set-cols (for [col (find-cols dml-scope nil set-clauses-cols)
-                                 :let [col-sym (->col-sym (name col))]]
-                             (->ProjectedCol {col-sym col} col-sym))
+          existing-cols (find-cols dml-scope nil)
 
-          outer-projection (vec (concat '[_iid]
-                                        vt-projection
-                                        set-clauses-cols
-                                        (mapv :col-sym all-non-set-cols)))]
+          unset-col-projs (for [col existing-cols
+                                :let [col-sym (->col-sym (name col))]
+                                :when (not (contains? set-clauses-cols col-sym))]
+                            (->ProjectedCol {col-sym col} col-sym))
 
-      (->QueryExpr [:project outer-projection
-                    (as-> (plan-rel dml-scope) plan
+          unset-cols (into #{} (map :col-sym) unset-col-projs)]
 
-                      (if-let [{:keys [predicate subqs]} where-selection]
-                        (-> plan
-                            (apply-sqs subqs)
-                            (wrap-predicates predicate))
-                        plan)
+      (->QueryExpr (as-> (plan-rel dml-scope) plan
+                     (if-let [{:keys [predicate subqs]} where-selection]
+                       (-> plan
+                           (apply-sqs subqs)
+                           (wrap-predicates predicate))
+                       plan)
+                     
+                     [:project (vec (concat '[_iid] vt-projection set-clauses-cols unset-cols))
+                      [:select (let [existing-cols (into {} (map (juxt (comp symbol name) identity)) existing-cols)]
+                                 (list* 'or (for [col set-clauses-cols]
+                                              (xt/template
+                                               (not (boolean (=== ~col ~(get existing-cols col))))))))
+                       [:project (vec (concat aliased-cols set-clauses (map :projection unset-col-projs)))
+                        plan]]])
 
-                      [:project (concat aliased-cols set-clauses (mapv :projection all-non-set-cols)) plan])]
-                   (vec (concat internal-cols set-clauses-cols (map :col-sym all-non-set-cols))))))
+                   (vec (concat internal-cols set-clauses-cols unset-cols)))))
 
   (visitDeleteStatement [{{:keys [!id-count table-info default-db]} :env} ctx]
     (let [internal-cols (mapv ->col-sym '[_iid _valid_from _valid_to])
