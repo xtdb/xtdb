@@ -49,6 +49,7 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             private val inner: ICursor,
             private val tracer: Tracer?,
             private val parentSpan: Span?,
+            private val attributes: Map<String, String>? = null,
             private val clock: InstantSource = InstantSource.system()
         ) : ICursor by inner, ExplainAnalyze {
             override var pageCount: Int = 0; private set
@@ -68,6 +69,7 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
                         span = tracer.nextSpan(parentSpan)!!
                             .name("query.cursor.${inner.cursorType}")
                             .tag("cursor.type", inner.cursorType)
+                            .apply { attributes?.forEach { (k, v) -> tag(k, v) } }
                             .start()
                     }
                 }
@@ -110,5 +112,9 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
 
         @JvmStatic
         fun ICursor.wrapTracing(tracer: Tracer?, span: Span?): ICursor = TracingCursor(this, tracer, span)
+
+        @JvmStatic
+        fun ICursor.wrapTracing(tracer: Tracer?, span: Span?, attributes: Map<String, String>?): ICursor =
+            TracingCursor(this, tracer, span, attributes)
     }
 }

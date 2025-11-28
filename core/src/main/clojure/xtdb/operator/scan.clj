@@ -299,7 +299,9 @@
                                                     temporal-bounds
                                                     !segments (.iterator ^Iterable merge-tasks)
                                                     schema args)
-                                 (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))))))}))))
+                                 (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span {"table.name" (.getTableName table)
+                                                                                                                       "schema.name" (.getSchemaName table)
+                                                                                                                       "db.name" (.getDbName table)}))))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-fields, param-fields]}]
   (assert db-cat)
