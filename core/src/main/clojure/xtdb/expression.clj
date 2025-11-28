@@ -1893,6 +1893,44 @@
                                ~(f :null nil)
                                ~(f :bool `(== ~return-code ~res-sym))))))})))
 
+(defmethod codegen-call [:=== :list :list] [{[[_ l-el-type] [_ r-el-type]] :arg-types}]
+  (let [n-sym (gensym 'n)
+        len-sym (gensym 'len)
+        res-sym (gensym 'res)
+        inner-calls (->> (for [l-el-type (types/flatten-union-types l-el-type)
+                               r-el-type (types/flatten-union-types r-el-type)]
+                           (MapEntry/create [l-el-type r-el-type]
+                                            (codegen-call {:f :===, :arg-types [l-el-type r-el-type]})))
+                         (into {}))]
+
+    {:return-type :bool
+     :children (vals inner-calls)
+     :continue-call (fn continue-list= [f [l-code r-code]]
+                      (let [l-sym (gensym 'l), r-sym (gensym 'r)]
+                        (f :bool
+                           `(let [~l-sym ~l-code, ~r-sym ~r-code
+                                  ~len-sym (.size ~l-sym)]
+                              (if-not (= ~len-sym (.size ~r-sym))
+                                false
+                                (loop [~n-sym 0]
+                                  (cond
+                                    (>= ~n-sym ~len-sym) true
+                                    :else (let [~res-sym ~(continue-read
+                                                           (fn cont-l [l-el-type l-el-code]
+                                                             `(do
+                                                                ~(continue-read (fn cont-r [r-el-type r-el-code]
+                                                                                  (let [{:keys [return-type continue-call ->call-code]} (get inner-calls [l-el-type r-el-type])]
+                                                                                    (if continue-call
+                                                                                      (continue-call cont-b3-call [l-el-code r-el-code])
+                                                                                      (cont-b3-call return-type (->call-code [l-el-code r-el-code])))))
+                                                                                r-el-type
+                                                                                `(.nth ~r-sym ~n-sym))))
+                                                           l-el-type
+                                                           `(.nth ~l-sym ~n-sym))]
+                                            (if (< ~res-sym 1)
+                                              false
+                                              (recur (inc ~n-sym)))))))))))}))
+
 (defn series [^long start, ^long end, ^long step]
   (let [box (ValueBox.)]
     (reify ListValueReader

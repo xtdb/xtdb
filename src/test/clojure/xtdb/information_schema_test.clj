@@ -200,7 +200,8 @@
                                        [1007 "_int4"] [1016 "_int8"]
                                        [17 "bytea"]
                                        [1009 "_text"]
-                                       [11111 "keyword"]]]
+                                       [11111 "keyword"]
+                                       [11112 "duration"]]]
                     {:typtypmod -1,
                      :oid oid,
                      :typtype "b",

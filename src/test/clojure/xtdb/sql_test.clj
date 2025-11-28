@@ -1341,7 +1341,7 @@
   (t/is (=plan-file
          "test-for-all-valid-time-387-update"
          (sql/plan "UPDATE users FOR ALL VALID_TIME SET first_name = 'Sue'"
-                   {:table-info {#xt/table users #{}}})))
+                   {:table-info {#xt/table users #{"first_name"}}})))
 
   (t/is (=plan-file
          "test-for-all-valid-time-387-delete"

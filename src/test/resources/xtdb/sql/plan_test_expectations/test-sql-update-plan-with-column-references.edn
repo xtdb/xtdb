@@ -1,12 +1,14 @@
 [:project
- ({_iid foo.1/_iid}
+ [{_iid foo.1/_iid}
   {_valid_from foo.1/_valid_from}
   {_valid_to foo.1/_valid_to}
   {bar foo.1/baz}
   {baz foo.1/baz}
-  {quux foo.1/quux})
+  {quux foo.1/quux}]
  [:rename
   foo.1
-  [:scan
-   {:table #xt/table foo, :for-valid-time :all-time}
-   [_valid_to baz quux _valid_from _iid]]]]
+  [:select
+   (or (not (boolean (=== baz bar))))
+   [:scan
+    {:table #xt/table foo, :for-valid-time :all-time}
+    [_valid_to bar baz quux _valid_from _iid]]]]]
