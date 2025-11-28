@@ -1835,3 +1835,30 @@
   (t/is (= #xt/duration "PT13M56.12345678S" (time/alter-duration-precision 8 #xt/duration "PT13M56.123456789S")))
   (t/is (= #xt/duration "PT13M56.123456S" (time/alter-duration-precision 6 #xt/duration "PT13M56.123456789S")))
   (t/is (= #xt/duration "PT13M56.123S" (time/alter-duration-precision 3 #xt/duration "PT13M56.123456789S"))))
+
+(deftest test-type-strict-equality-temporal
+  (t/is (true? (et/project1 '(=== #xt/instant "2020-01-01T00:00:00Z"
+                                  #xt/instant "2020-01-01T00:00:00Z") {}))
+        "timestamp-tz === same TZ")
+
+  (t/is (false? (et/project1 '(=== #xt/zdt "2020-01-01T00:00:00Z"
+                                   #xt/zdt "2020-01-01T01:00:00+01:00") {}))
+        "timestamp-tz !== different TZ (same instant)")
+
+  (t/is (true? (et/project1 '(== #xt/zdt "2020-01-01T00:00:00Z"
+                                 #xt/zdt "2020-01-01T01:00:00+01:00") {}))
+        "timestamp-tz == different TZ (same instant)")
+
+  (t/is (true? (et/project1 '(=== #xt/ldt "2020-01-01T00:00:00"
+                                  #xt/ldt "2020-01-01T00:00:00") {}))
+        "timestamp-local ===")
+
+  (t/is (false? (et/project1 '(=== #xt/ldt "2020-01-01T00:00:00"
+                                   #xt/instant "2020-01-01T00:00:00Z") {}))
+        "timestamp-local !== timestamp-tz")
+
+  (t/is (true? (et/project1 '(=== #xt/date "2020-01-01" #xt/date "2020-01-01") {}))
+        "date ===")
+
+  (t/is (true? (et/project1 '(=== #xt/duration "PT1H" #xt/duration "PT1H") {}))
+        "duration ==="))

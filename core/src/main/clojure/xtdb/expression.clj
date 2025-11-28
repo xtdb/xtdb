@@ -612,7 +612,7 @@
 
 (def ^:private shortcut-null-args?
   (complement (comp #{:is_true :is_false :is_null :true? :false? :nil? :boolean
-                      :null_eq :compare_nulls_first :compare_nulls_last
+                      :=== :null_eq :compare_nulls_first :compare_nulls_last
                       :period :str :_patch}
                     normalise-fn-name)))
 
@@ -751,12 +751,31 @@
   {:return-type :bool
    :->call-code #(do `(== ~@%))})
 
-(defmethod codegen-call [:== :any :any] [_]
+(defmethod codegen-call [:== :any :any] [expr]
+  (codegen-call (assoc expr :f :===)))
+
+(defmethod codegen-call [:=== :any :any] [_]
   {:return-type :bool
    :->call-code #(do `(= ~@%))})
 
+(defmethod codegen-call [:=== :null :null] [_]
+  {:return-type :bool
+   :->call-code (constantly true)})
+
+(defmethod codegen-call [:=== :int :int] [_]
+  {:return-type :bool
+   :->call-code #(do `(== ~@%))})
+
+(defmethod codegen-call [:=== :float :float] [_]
+  {:return-type :bool
+   :->call-code #(do `(== ~@%))})
+
+(defmethod codegen-call [:=== :decimal :decimal] [_]
+  {:return-type :bool
+   :->call-code #(do `(== ~@%))})
+
 (doseq [col-type #{:varbinary :utf8 :uuid}]
-  (defmethod codegen-call [:== col-type col-type] [_]
+  (defmethod codegen-call [:=== col-type col-type] [_]
     {:return-type :bool,
      :->call-code #(do `(.equals ~@%))}))
 

@@ -940,8 +940,9 @@
                   (= x-unit :month-day-nano) (fn [[x y]] `(compare-md*-intervals ~x ~y))
                   (= x-unit :month-day-micro) (fn [[x y]] `(compare-md*-intervals ~x ~y)))})
 
-(doseq [[f cmp] [[:== #(do `(zero? ~%))]
-                 [:< #(do `(neg? ~%))]
+;; Comparison operators for temporal types
+;; For <, <=, >, >= - all combinations of date/timestamp-local/timestamp-tz
+(doseq [[f cmp] [[:< #(do `(neg? ~%))]
                  [:<= #(do `(not (pos? ~%)))]
                  [:> #(do `(pos? ~%))]
                  [:>= #(do `(not (neg? ~%)))]]]
@@ -960,9 +961,64 @@
          :batch-bindings batch-bindings
          :->call-code (comp cmp ->call-code)}))))
 
+(doseq [x [:date :timestamp-local :timestamp-tz]
+        y [:date :timestamp-local :timestamp-tz]]
+  (defmethod expr/codegen-call [:== x y] [expr]
+    (let [{:keys [batch-bindings ->call-code]} (expr/codegen-call (assoc expr :f :compare))]
+      {:return-type :bool,
+       :batch-bindings batch-bindings
+       :->call-code (comp #(do `(zero? ~%)) ->call-code)})))
+
+(doseq [x [:date :timestamp-local :timestamp-tz]
+        y [:date :timestamp-local :timestamp-tz]
+        :when (not= x y)]
+  (defmethod expr/codegen-call [:=== x y] [_]
+    {:return-type :bool
+     :->call-code (constantly false)}))
+
+;; timestamp-tz === requires same TZ string - different TZs return false even if same instant
+(defmethod expr/codegen-call [:=== :timestamp-tz :timestamp-tz] [{[[_ _x-unit x-tz] [_ _y-unit y-tz]] :arg-types, :as expr}]
+  (if (= x-tz y-tz)
+    (let [{:keys [batch-bindings ->call-code]} (expr/codegen-call (assoc expr :f :compare))]
+      {:return-type :bool,
+       :batch-bindings batch-bindings
+       :->call-code (comp #(do `(zero? ~%)) ->call-code)})
+    {:return-type :bool
+     :->call-code (constantly false)}))
+
+(defmethod expr/codegen-call [:=== :timestamp-local :timestamp-local] [expr]
+  (let [{:keys [batch-bindings ->call-code]} (expr/codegen-call (assoc expr :f :compare))]
+    {:return-type :bool,
+     :batch-bindings batch-bindings
+     :->call-code (comp #(do `(zero? ~%)) ->call-code)}))
+
+(defmethod expr/codegen-call [:=== :date :date] [expr]
+  (let [{:keys [batch-bindings ->call-code]} (expr/codegen-call (assoc expr :f :compare))]
+    {:return-type :bool,
+     :batch-bindings batch-bindings
+     :->call-code (comp #(do `(zero? ~%)) ->call-code)}))
+
+(defmethod expr/codegen-call [:=== :time-local :time-local] [expr]
+  (let [{:keys [batch-bindings ->call-code]} (expr/codegen-call (assoc expr :f :compare))]
+    {:return-type :bool,
+     :batch-bindings batch-bindings
+     :->call-code (comp #(do `(zero? ~%)) ->call-code)}))
+
+(defmethod expr/codegen-call [:=== :duration :duration] [expr]
+  (let [{:keys [batch-bindings ->call-code]} (expr/codegen-call (assoc expr :f :compare))]
+    {:return-type :bool,
+     :batch-bindings batch-bindings
+     :->call-code (comp #(do `(zero? ~%)) ->call-code)}))
+
+(defmethod expr/codegen-call [:=== :interval :interval] [expr]
+  (let [{:keys [batch-bindings ->call-code]} (expr/codegen-call (assoc expr :f :compare))]
+    {:return-type :bool,
+     :batch-bindings batch-bindings
+     :->call-code (comp #(do `(zero? ~%)) ->call-code)}))
+
 ;;;; Periods
 
-(defmethod expr/codegen-call [:== :tstz-range :tstz-range] [_]
+(defmethod expr/codegen-call [:=== :tstz-range :tstz-range] [_]
   {:return-type :bool
    :->call-code (fn [[x y]]
                   (let [x-sym (gensym 'x)

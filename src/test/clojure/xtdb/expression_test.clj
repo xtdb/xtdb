@@ -2135,3 +2135,13 @@
                                     [:table [{}]]]
                                   {:default-tz #xt/zone "America/New_York"})
                      first :ret))))
+
+(t/deftest test-type-strict-equality
+  (t/is (true? (project1 '(=== 3 3) {})) "int === int")
+  (t/is (true? (project1 '(=== 3.0 3.0) {})) "float === float")
+  (t/is (false? (project1 '(=== 3 3.0) {})) "int !== float")
+  (t/is (true? (project1 '(== 3 3.0) {})) "int == float (cross-type coercion)")
+  (t/is (true? (project1 '(=== "foo" "foo") {})))
+  (t/is (false? (project1 '(=== "foo" "bar") {})))
+  (t/is (true? (project1 '(=== a a) {:a nil})) "null === null")
+  (t/is (nil? (project1 '(== a a) {:a nil})) "null == null returns null"))
