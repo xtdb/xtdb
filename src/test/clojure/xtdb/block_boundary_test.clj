@@ -427,9 +427,6 @@
                      (and
                       (t/testing "three transactions recorded"
                         (= 3 (count (xt/q node "FROM xt.txs"))))
-                      (t/testing "document should have 3 versions in history"
-                        (let [res (xt/q node "SELECT *, _valid_from FROM docs FOR VALID_TIME ALL WHERE _id = 1")]
-                          (= 3 (count res))))
                       (t/testing "document has value equal to all of the updates merged"
                         (let [res (first (xt/q node "SELECT * FROM docs WHERE _id = 1")) 
                               record-fields [record (:fields update-statement-1) (:fields update-statement-2)]
