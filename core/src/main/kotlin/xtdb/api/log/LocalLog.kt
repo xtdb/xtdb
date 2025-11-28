@@ -208,6 +208,15 @@ class LocalLog(
             MessageMetadata(record.logOffset, record.logTimestamp)
         }
 
+    override fun readLastMessage(): Message? {
+        if (latestSubmittedOffset < 0) return null
+
+        return FileChannel.open(logFilePath).use { ch ->
+            ch.position(latestSubmittedOffset)
+            ch.readMessage()?.message
+        }
+    }
+
     override fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
         var latestCompletedOffset = latestProcessedOffset
 

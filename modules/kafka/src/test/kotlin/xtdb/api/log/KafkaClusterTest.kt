@@ -6,6 +6,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
@@ -108,5 +109,62 @@ class KafkaClusterTest {
             assertEquals("foo", it.dbName)
             assertEquals(databaseConfig, it.config)
         }
+    }
+
+    private fun txMessage(id: Byte) = Message.Tx(byteArrayOf(-1, id))
+
+    @Test
+    fun `readLastMessage returns null when topic is empty`() = runTest(timeout = 30.seconds)  {
+        val topicName = "test-topic-${UUID.randomUUID()}"
+
+        KafkaCluster.ClusterFactory(container.bootstrapServers)
+            .pollDuration(Duration.ofMillis(100))
+            .open().use { cluster ->
+                KafkaCluster.LogFactory("my-cluster", topicName)
+                    .openLog(mapOf("my-cluster" to cluster))
+                    .use { log ->
+                        assertEquals(null, log.readLastMessage())
+                    }
+            }
+    }
+
+    @Test
+    fun `readLastMessage returns the message after appending one`() = runTest(timeout = 30.seconds)  {
+        val topicName = "test-topic-${UUID.randomUUID()}"
+
+        KafkaCluster.ClusterFactory(container.bootstrapServers)
+            .pollDuration(Duration.ofMillis(100))
+            .open().use { cluster ->
+                KafkaCluster.LogFactory("my-cluster", topicName)
+                    .openLog(mapOf("my-cluster" to cluster))
+                    .use { log ->
+                        log.appendMessage(txMessage(1)).await()
+
+                        val lastMessage = log.readLastMessage()
+                        check(lastMessage is Message.Tx)
+                        assertArrayEquals(byteArrayOf(-1, 1), lastMessage.payload)
+                    }
+            }
+    }
+
+    @Test
+    fun `readLastMessage returns the last message after appending multiple`() = runTest(timeout = 30.seconds) {
+        val topicName = "test-topic-${UUID.randomUUID()}"
+
+        KafkaCluster.ClusterFactory(container.bootstrapServers)
+            .pollDuration(Duration.ofMillis(100))
+            .open().use { cluster ->
+                KafkaCluster.LogFactory("my-cluster", topicName)
+                    .openLog(mapOf("my-cluster" to cluster))
+                    .use { log ->
+                        log.appendMessage(txMessage(1)).await()
+                        log.appendMessage(txMessage(2)).await()
+                        log.appendMessage(txMessage(3)).await()
+
+                        val lastMessage = log.readLastMessage()
+                        check(lastMessage is Message.Tx)
+                        assertArrayEquals(byteArrayOf(-1, 3), lastMessage.payload)
+                    }
+            }
     }
 }

@@ -46,6 +46,8 @@ class RecordingLog(private val instantSource: InstantSource, ) : Log {
         )
     }
 
+    override fun readLastMessage(): Log.Message? = messages.lastOrNull()
+
     override fun subscribe(
         subscriber: Log.Subscriber,
         latestProcessedOffset: LogOffset

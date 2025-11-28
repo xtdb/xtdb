@@ -75,6 +75,8 @@ class InMemoryLog(
             res.await()
         }
 
+    override fun readLastMessage(): Message? = null
+
     override fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
         val job = subscriberScope.launch {
             var latestCompletedOffset = latestProcessedOffset

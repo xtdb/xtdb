@@ -212,6 +212,8 @@ interface Log : AutoCloseable {
 
     fun appendMessage(message: Message): CompletableFuture<MessageMetadata>
 
+    fun readLastMessage(): Message?
+
     fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription
 
     @FunctionalInterface

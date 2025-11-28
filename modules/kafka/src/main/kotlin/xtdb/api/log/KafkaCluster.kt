@@ -184,6 +184,17 @@ class KafkaCluster(
                     .also { messageMetadata -> latestSubmittedOffset0.updateAndGet { it.coerceAtLeast(messageMetadata.logOffset) } }
             }
 
+        override fun readLastMessage(): Message? =
+            kafkaConfigMap.openConsumer().use { c ->
+                val tp = TopicPartition(topic, 0)
+                val lastOffset = c.endOffsets(listOf(tp))[tp]?.minus(1)?.takeIf { it >= 0 } ?: return null
+                c.assign(listOf(tp))
+                c.seek(tp, lastOffset)
+
+                val records = c.poll(pollDuration).records(topic)
+                records.firstOrNull()?.let { record -> Message.parse(record.value()) }
+            }
+
         override fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
             val job = scope.launch {
                 kafkaConfigMap.openConsumer().use { c ->
