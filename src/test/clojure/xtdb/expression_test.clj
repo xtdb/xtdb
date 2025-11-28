@@ -1759,7 +1759,11 @@
   (t/is (= nil (project1 '(== [1 2 nil] [1 2 3.0]) {})))
   (t/is (= false (project1 '(== [1 3 nil] [1 2 3.0]) {})))
 
-  (t/is (= true (project1 '(== [[1 2] [3 4]] [[1 2] [3 4]]) {}))))
+  (t/is (= true (project1 '(== [[1 2] [3 4]] [[1 2] [3 4]]) {})))
+
+  (t/testing "strictly-typed list equality"
+    (t/is (true? (project1 '(=== [nil] [nil]) {})))
+    (t/is (false? (project1 '(=== [1 2 3] [1 2 3.0]) {})))))
 
 (t/deftest test-list-diff
   (t/is (= false (project1 '(<> [] []) {})))
