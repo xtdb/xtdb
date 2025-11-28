@@ -1497,6 +1497,20 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
   (t/is (= [{:v #xt/zoned-date-time "2021-10-21T12:34+01:00"}]
            (xt/q tu/*node* "SELECT TIMESTAMP WITH TIME ZONE '2021-10-21T12:34:00+01:00' v"))))
 
+(t/deftest test-timezone-single-word-syntax
+  ;; Tests that both TIME ZONE (two words) and TIMEZONE (single word) variants work
+  (t/testing "TIMESTAMP WITH TIMEZONE (single word)"
+    (t/is (= [{:v #xt/zoned-date-time "2021-10-21T12:34+01:00"}]
+             (xt/q tu/*node* "SELECT TIMESTAMP WITH TIMEZONE '2021-10-21T12:34:00+01:00' v"))))
+
+  (t/testing "TIMESTAMP WITHOUT TIMEZONE (single word)"
+    (t/is (= [{:v #xt/zoned-date-time "2005-07-31T12:30:30+01:00"}]
+             (xt/q tu/*node* "SELECT TIMESTAMP WITHOUT TIMEZONE '2005-07-31 12:30:30+01:00' AS v"))))
+
+  (t/testing "CAST AS TIMESTAMP WITH TIMEZONE (single word)"
+    (t/is (= [{:v (-> #xt/zoned-date-time "2021-10-21T12:34+01:00" in-system-tz)}]
+             (xt/q tu/*node* "SELECT CAST('2021-10-21 12:34:00+01:00' AS TIMESTAMP WITH TIMEZONE) v")))))
+
 (t/deftest variadic-overlaps-3441
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id, _valid_from, _valid_to) VALUES (1, DATE '2020-01-01', DATE '2020-01-03')"]
                            [:sql "INSERT INTO foo (_id, _valid_from, _valid_to) VALUES (2, DATE '2020-01-03', DATE '2020-01-05')"]

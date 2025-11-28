@@ -44,7 +44,7 @@ directlyExecutableStatement
     | ROLLBACK # RollbackStatement
     | SET SESSION CHARACTERISTICS AS sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
     | SET ROLE ( identifier | NONE ) # SetRoleStatement
-    | SET SESSION? TIME ZONE zone=expr # SetTimeZoneStatement
+    | SET SESSION? ('TIME' 'ZONE' | 'TIMEZONE') zone=expr # SetTimeZoneStatement
     | SET AWAIT_TOKEN ( TO | '=' ) awaitToken=expr # SetAwaitTokenStatement
     | SET SESSION? identifier ( TO | '=' ) literal # SetSessionVariableStatement
     | SHOW showVariable # ShowVariableStatement
@@ -191,8 +191,8 @@ scale : UNSIGNED_INTEGER ;
 charLengthUnits : 'CHARACTERS' | 'OCTETS' ;
 
 withOrWithoutTimeZone
-    : 'WITH' 'TIME' 'ZONE' #WithTimeZone
-    | 'WITHOUT' 'TIME' 'ZONE' #WithoutTimeZone
+    : 'WITH' ('TIME' 'ZONE' | 'TIMEZONE') #WithTimeZone
+    | 'WITHOUT' ('TIME' 'ZONE' | 'TIMEZONE') #WithoutTimeZone
     ;
 
 maximumCardinality : UNSIGNED_INTEGER ;

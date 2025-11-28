@@ -939,7 +939,11 @@
             (t/is (= "Asia/Tokyo" (q-tz tx)))))
 
         (testing "SET is a session operator, so the tz still applied to the session"
-          (t/is (= "Asia/Tokyo" (q-tz conn))))))))
+          (t/is (= "Asia/Tokyo" (q-tz conn))))
+
+        (t/testing "SET TIMEZONE (single word) syntax"
+          (jdbc/execute! conn ["SET TIMEZONE 'America/Los_Angeles'"])
+          (t/is (= "America/Los_Angeles" (q-tz conn))))))))
 
 (deftest pg-begin-unsupported-syntax-error-test
   (with-open [conn (jdbc-conn {"autocommit" "false"})]
