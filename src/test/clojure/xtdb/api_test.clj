@@ -161,6 +161,10 @@
 (t/deftest start-and-query-empty-node-re-231-test
   (t/is (= [] (xt/q tu/*node* "select a.a from a a" {}))))
 
+(t/deftest test-duration-jdbc-roundtrip
+  (t/is (= [{:d #xt/duration "PT1H30M"}]
+           (jdbc/execute! tu/*node* ["SELECT ? AS d" #xt/duration "PT1H30M"]))))
+
 (t/deftest test-basic-sql-dml
   (letfn [(all-users [{:keys [system-time]}]
             (->> (xt/q *node* "SELECT u.first_name, u.last_name, u._valid_from, u._valid_to FROM users FOR ALL VALID_TIME u"

@@ -723,6 +723,18 @@
                                   (byte-array (interval-rdr->iso-micro-interval-str-bytes rdr idx)))
                   :write-text (fn [_env ^VectorReader rdr idx] (interval-rdr->iso-micro-interval-str-bytes rdr idx))}
 
+       :duration {:typname "duration"
+                  :col-type [:duration :micro]
+                  :typlen 8
+                  :oid 11112
+                  :typcategory :timespan
+                  :typsend "duration_send"
+                  :typreceive "duration_recv"
+                  :read-text (fn [_env ba]
+                               (Duration/parse (read-utf8 ba)))
+                  :write-text (fn [_env ^VectorReader rdr idx]
+                                (utf8 (.getObject rdr idx)))}
+
        ;; json-write-text is essentially the default in send-query-result so no need to specify here
        :json {:typname "json"
               :oid 114
@@ -922,6 +934,10 @@
    [:interval :year-month] :interval
    [:interval :month-day-nano] :interval
    [:interval :month-day-micro] :interval
+   [:duration :second] :duration
+   [:duration :milli] :duration
+   [:duration :micro] :duration
+   [:duration :nano] :duration
    [:list :i32] :_int4
    [:list :i64] :_int8
    [:list :utf8] :_text

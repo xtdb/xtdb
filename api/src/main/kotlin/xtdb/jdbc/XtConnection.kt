@@ -48,6 +48,7 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                 "timestamp" -> getObject(columnIndex, LocalDateTime::class.java)
                 "timestamptz" -> getObject(columnIndex, ZonedDateTime::class.java)
                 "tstz-range" -> getObject(columnIndex, ZonedDateTimeRange::class.java)
+                "duration" -> getObject(columnIndex, Duration::class.java)
                 "interval" -> getObject(columnIndex, Interval::class.java)
                 "regclass" -> getObject(columnIndex, RegClass::class.java)
                 "regproc" -> getObject(columnIndex, RegProc::class.java)
@@ -73,6 +74,7 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                             OffsetDateTime::class.java -> s.asOffsetDateTime()
                             ZonedDateTime::class.java -> s.asZonedDateTime()
                             LocalDateTime::class.java -> s.asLocalDateTime()
+                            Duration::class.java -> Duration.parse(s)
                             Interval::class.java -> s.asInterval()
                             ZonedDateTimeRange::class.java -> s.asZonedDateTimeRange()
                             RegClass::class.java -> RegClass(s.toInt())
@@ -147,6 +149,12 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                 it.value = toString()
             }
 
+        private val Duration.asPgObject
+            get() = PGobject().also {
+                it.type = "duration"
+                it.value = toString()
+            }
+
         override fun setTimestamp(parameterIndex: Int, x: Timestamp?) {
             setTimestamp(parameterIndex, x, UTC_CAL)
         }
@@ -160,6 +168,7 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                 is Instant -> setObject(parameterIndex, x.atZone(ZoneOffset.UTC))
                 is ZonedDateTimeRange -> inner.setObject(parameterIndex, x.asPgObject)
                 is Interval -> inner.setObject(parameterIndex, x.asPgObject)
+                is Duration -> inner.setObject(parameterIndex, x.asPgObject)
                 is Date -> setObject(parameterIndex, x.toInstant())
                 is LocalDateTime -> setIsoTimestamp(parameterIndex, x)
 
