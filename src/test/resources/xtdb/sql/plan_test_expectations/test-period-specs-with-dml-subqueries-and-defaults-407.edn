@@ -26,4 +26,4 @@
        prop_owner.1
        [:scan
         {:table #xt/table prop_owner, :for-system-time :all-time}
-        [_system_from {id (= id 1)}]]]]]]]]]
+        [_system_from {id (== id 1)}]]]]]]]]]

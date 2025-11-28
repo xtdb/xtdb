@@ -14,4 +14,4 @@
       o.3
       [:scan
        {:table #xt/table orders}
-       [{customer_id (= customer_id ?_sq__id_3)} _id value]]]]]]]]
+       [{customer_id (== customer_id ?_sq__id_3)} _id value]]]]]]]]

@@ -102,7 +102,7 @@
                          {:op :test-not-null
                           :col (:variable nil-arg)}))))
 
-            (:< :<= :> :>= :=)
+            (:< :<= :> :>= :==)
             (when-let [[field-val-tag col-expr val-expr] (normalise-bool-args args)]
               (case field-val-tag
                 :constant expr
@@ -111,22 +111,22 @@
                            :<= (minmax-expr :<= :min col-expr val-expr)
                            :> (minmax-expr :> :max col-expr val-expr)
                            :>= (minmax-expr :>= :max col-expr val-expr)
-                           := {:op :call, :f :and
-                               :args [(minmax-expr :<= :min col-expr val-expr)
-                                      (minmax-expr :>= :max col-expr val-expr)
+                           :== {:op :call, :f :and
+                                :args [(minmax-expr :<= :min col-expr val-expr)
+                                       (minmax-expr :>= :max col-expr val-expr)
 
-                                      (bloom-expr col-expr val-expr)
-                                      (presence-expr col-expr val-expr)]})
+                                       (bloom-expr col-expr val-expr)
+                                       (presence-expr col-expr val-expr)]})
 
                 :val-col (case f
                            :< (minmax-expr :> :max col-expr val-expr)
                            :<= (minmax-expr :>= :max col-expr val-expr)
                            :> (minmax-expr :< :min col-expr val-expr)
                            :>= (minmax-expr :<= :min col-expr val-expr)
-                           := {:op :call, :f :and
-                               :args [(minmax-expr :<= :min col-expr val-expr)
-                                      (minmax-expr :>= :max col-expr val-expr)
-                                      (bloom-expr col-expr val-expr)]})))
+                           :== {:op :call, :f :and
+                                :args [(minmax-expr :<= :min col-expr val-expr)
+                                       (minmax-expr :>= :max col-expr val-expr)
+                                       (bloom-expr col-expr val-expr)]})))
 
             nil)
 

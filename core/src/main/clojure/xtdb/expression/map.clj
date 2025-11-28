@@ -46,7 +46,7 @@
 
 (defn ->equi-comparator [^VectorReader left-col, ^VectorReader right-col, params
                          {:keys [nil-keys-equal? param-fields]}]
-  (let [f (build-comparator {:op :call, :f (if nil-keys-equal? :null-eq :=)
+  (let [f (build-comparator {:op :call, :f (if nil-keys-equal? :null-eq :==)
                              :args [{:op :variable, :variable left-vec, :rel left-rel, :idx left-idx}
                                     {:op :variable, :variable right-vec, :rel right-rel, :idx right-idx}]}
                             {:vec-fields {left-vec (.getField left-col)

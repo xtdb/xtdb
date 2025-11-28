@@ -4,7 +4,7 @@
   []
   [[:rename
     foo.1
-    [:scan {:table #xt/table foo} [a {c (= c ?_2)} {b (= b ?_1)}]]]
+    [:scan {:table #xt/table foo} [a {c (== c ?_2)} {b (== b ?_1)}]]]
    [:rename
     bar.3
     [:rename
@@ -13,4 +13,4 @@
       [{bar.2/b bar.2/b}]
       [:rename
        bar.2
-       [:scan {:table #xt/table bar} [{c (= c ?_0)} b]]]]]]]]]
+       [:scan {:table #xt/table bar} [{c (== c ?_0)} b]]]]]]]]]

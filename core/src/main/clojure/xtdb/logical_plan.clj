@@ -327,7 +327,7 @@
 (defn equals-predicate? [predicate]
   (and (sequential? predicate)
        (= 3 (count predicate))
-       (= '= (first predicate))))
+       (= '== (first predicate))))
 
 (defn all-columns-in-relation?
   "Returns true if all columns referenced by the expression are present in the given relation.

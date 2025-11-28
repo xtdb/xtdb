@@ -21,4 +21,4 @@
    [:scan
     {:table #xt/table t1,
      :for-valid-time [:in (current-timestamp) xtdb/end-of-time]}
-    [{col1 (= col1 30)} _valid_to _valid_from _iid]]]]]
+    [{col1 (== col1 30)} _valid_to _valid_from _iid]]]]]

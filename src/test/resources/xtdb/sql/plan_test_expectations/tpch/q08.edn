@@ -12,7 +12,7 @@
     [:map
      [{_sum_in_11
        (cond
-        (= all_nations.9/nation "BRAZIL")
+        (== all_nations.9/nation "BRAZIL")
         all_nations.9/volume
         0)}]
      [:rename
@@ -33,7 +33,7 @@
           r.8
           [:scan
            {:table #xt/table region}
-           [_id {r_name (= r_name "AMERICA")}]]]
+           [_id {r_name (== r_name "AMERICA")}]]]
          [:rename n2.7 [:scan {:table #xt/table nation} [_id n_name]]]
          [:rename
           n1.6
@@ -65,7 +65,7 @@
           p.1
           [:scan
            {:table #xt/table part}
-           [_id {p_type (= p_type "ECONOMY ANODIZED STEEL")}]]]
+           [_id {p_type (== p_type "ECONOMY ANODIZED STEEL")}]]]
          [:rename
           s.2
           [:scan

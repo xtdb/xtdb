@@ -15,4 +15,4 @@
      z.4
      [:scan
       {:table #xt/table z}
-      [{baz (= baz ?_sq_biz_5)} {bar (= bar ?_sq_foo_4)}]]]]]]]
+      [{baz (== baz ?_sq_biz_5)} {bar (== bar ?_sq_foo_4)}]]]]]]]

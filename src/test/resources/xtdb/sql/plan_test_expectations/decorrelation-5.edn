@@ -16,8 +16,8 @@
      {_avg_out_8 (avg e2.4/grade)}]
     [:left-outer-join
      [(or
-       (= s.1/id e2.4/sid)
-       (and (= e2.4/curriculum s.1/major) (> s.1/year e2.4/date)))]
+       (== s.1/id e2.4/sid)
+       (and (== e2.4/curriculum s.1/major) (> s.1/year e2.4/date)))]
      [:map
       [{_row_number_0 (row-number)}]
       [:mega-join
@@ -28,7 +28,7 @@
           {:table #xt/table students}
           [name
            year
-           {major (or (= major "CS") (= major "Games Eng"))}
+           {major (or (== major "CS") (== major "Games Eng"))}
            id]]]
         [:rename
          e.2

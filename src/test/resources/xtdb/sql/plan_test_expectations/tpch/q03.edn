@@ -34,7 +34,7 @@
          c.1
          [:scan
           {:table #xt/table customer}
-          [_id {c_mktsegment (= c_mktsegment "BUILDING")}]]]
+          [_id {c_mktsegment (== c_mktsegment "BUILDING")}]]]
         [:rename
          o.2
          [:scan

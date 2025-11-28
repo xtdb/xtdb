@@ -391,7 +391,7 @@
                                                    :!subqs !join-cond-subqs})
           join-pred (if common-cols
                       (list* 'and (vec (for [col-name common-cols]
-                                         (list '= (find-col l-sq-scope [col-name]) (find-col r [col-name])))))
+                                         (list '== (find-col l-sq-scope [col-name]) (find-col r [col-name])))))
                       (.accept join-spec-ctx
                                (reify SqlVisitor
                                  (visitJoinCondition [_ ctx]
@@ -538,7 +538,7 @@
 
 (defn- negate-op [op]
   (case op
-    = '<>, <> '=
+    (= ==) '<>, <> '==
     < '>=, > '<=
     <= '>, >= '<))
 
@@ -1358,13 +1358,13 @@
   (visitUnaryNotExpr [this ctx] (list 'not (-> (.expr ctx) (.accept this))))
 
   (visitComparisonPredicate [this ctx]
-    (list ((some-fn {'!= '<>} identity)
+    (list ((some-fn {'!= '<>, '= '==} identity)
            (symbol (.getText (.compOp ctx))))
           (-> (.expr ctx 0) (.accept this))
           (-> (.expr ctx 1) (.accept this))))
 
   (visitComparisonPredicatePart2 [{:keys [pt1] :as this} ctx]
-    (list ((some-fn {'!= '<>} identity)
+    (list ((some-fn {'!= '<>, '= '==} identity)
            (symbol (.getText (.compOp ctx))))
           pt1
           (-> (.expr ctx) (.accept (dissoc this :pt1)))))
@@ -1502,7 +1502,7 @@
     (let [p1 (-> (.expr ctx 0) (.accept this))
           p2 (-> (.expr ctx 1) (.accept this))]
       (xt/template
-       (and (= (lower ~p1) (lower ~p2))
+       (and (== (lower ~p1) (lower ~p2))
             (null-eq (upper ~p1) (upper ~p2))))))
 
   (visitPeriodContainsPredicate [this ctx]
@@ -1526,13 +1526,13 @@
     (let [p1 (-> (.expr ctx 0) (.accept this))
           p2 (-> (.expr ctx 1) (.accept this))]
       (xt/template
-       (= (coalesce (upper ~p1) xtdb/end-of-time) (lower ~p2)))))
+       (== (coalesce (upper ~p1) xtdb/end-of-time) (lower ~p2)))))
 
   (visitPeriodImmediatelySucceedsPredicate [this ctx]
     (let [p1 (-> (.expr ctx 0) (.accept this))
           p2 (-> (.expr ctx 1) (.accept this))]
       (xt/template
-       (= (lower ~p1) (coalesce (upper ~p2) xtdb/end-of-time)))))
+       (== (lower ~p1) (coalesce (upper ~p2) xtdb/end-of-time)))))
 
   (visitPeriodStrictlyPrecedesPredicate [this ctx]
     (let [p1 (-> (.expr ctx 0) (.accept this))
@@ -1578,7 +1578,7 @@
     (let [p1 (-> (.expr ctx 0) (.accept this))
           p2 (-> (.expr ctx 1) (.accept this))]
       (xt/template
-       (and (= (lower ~p1) (lower ~p2))
+       (and (== (lower ~p1) (lower ~p2))
             (> (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
 
   (visitPeriodLeadsPredicate [this ctx]
@@ -1600,7 +1600,7 @@
           p2 (-> (.expr ctx 1) (.accept this))]
       (xt/template
        (and (< (lower ~p1) (lower ~p2))
-            (= (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
+            (== (coalesce (upper ~p1) xtdb/end-of-time) (coalesce (upper ~p2) xtdb/end-of-time))))))
 
   (visitTsTzRangeConstructor [this ctx]
     (xt/template
@@ -1894,7 +1894,7 @@
     (let [quantifier (case (str/lower-case (.getText (.quantifier ctx)))
                        "all" :all
                        ("some" "any") :any)
-          op (symbol (.getText (.compOp ctx)))]
+          op ((some-fn {'= '==} identity) (symbol (.getText (.compOp ctx))))]
       (.accept (.quantifiedComparisonPredicatePart3 ctx)
                (assoc this :qc-pt2 {:expr (.accept (.expr ctx) this)
                                     :op (cond-> op
@@ -1905,7 +1905,7 @@
     (let [quantifier (case (str/lower-case (.getText (.quantifier ctx)))
                        "all" :all
                        ("some" "any") :any)
-          op (symbol (.getText (.compOp ctx)))]
+          op ((some-fn {'= '==} identity) (symbol (.getText (.compOp ctx))))]
       (.accept (.quantifiedComparisonPredicatePart3 ctx)
                (assoc this :qc-pt2 {:expr pt1
                                     :op (cond-> op
@@ -1948,7 +1948,7 @@
                         {:sq-type :quantified-comparison
                          :assert-single-col? true
                          :expr (.accept (.expr ctx) this)
-                         :op '=})
+                         :op '==})
         (boolean (.NOT ctx)) (list 'not))))
 
   (visitInPredicatePart2 [{:keys [pt1 !subqs]} ctx]
@@ -1962,7 +1962,7 @@
                         {:sq-type :quantified-comparison
                          :assert-single-col? true
                          :expr pt1
-                         :op '=})
+                         :op '==})
         (boolean (.NOT ctx)) (list 'not))))
 
   (visitFetchFirstRowCount [this ctx]

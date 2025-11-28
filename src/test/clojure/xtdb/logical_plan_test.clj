@@ -87,7 +87,7 @@
        true
        (xt/template
         [:select
-         '(= ~(sql/->col-sym '_valid_time) 1)
+         '(== ~(sql/->col-sym '_valid_time) 1)
          [:project
           [{~(sql/->col-sym '_foo) 4}
            {~(sql/->col-sym '_valid_time)
@@ -102,7 +102,7 @@
        true
        (xt/template
         [:select
-         '(= ~(sql/->col-sym '_valid_time) ~(sql/->col-sym '_foo))
+         '(== ~(sql/->col-sym '_valid_time) ~(sql/->col-sym '_foo))
          [:project
           [{~(sql/->col-sym '_foo) 4}
            {~(sql/->col-sym '_valid_time)

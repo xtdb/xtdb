@@ -3,11 +3,11 @@
  [:apply
   :single-join
   {a.1/b ?_sq_b_3}
-  [:rename a.1 [:scan {:table #xt/table a} [{a (= a 42)} b]]]
+  [:rename a.1 [:scan {:table #xt/table a} [{a (== a 42)} b]]]
   [:group-by
    [{_sq_2 (vec_agg b1)}]
    [:project
     [{b1 b.3/b1}]
     [:rename
      b.3
-     [:scan {:table #xt/table b} [{b2 (= b2 ?_sq_b_3)} b1]]]]]]]
+     [:scan {:table #xt/table b} [{b2 (== b2 ?_sq_b_3)} b1]]]]]]]

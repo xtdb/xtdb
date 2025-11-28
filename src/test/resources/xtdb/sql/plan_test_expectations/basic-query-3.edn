@@ -9,4 +9,4 @@
     ms.2
     [:scan
      {:table #xt/table movie_star}
-     [{birthdate (< birthdate 1960)} {name (= name "Foo")}]]]]]]
+     [{birthdate (< birthdate 1960)} {name (== name "Foo")}]]]]]]

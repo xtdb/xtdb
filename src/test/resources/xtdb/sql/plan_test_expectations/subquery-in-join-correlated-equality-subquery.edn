@@ -4,7 +4,7 @@
   []
   [[:rename foo.1 [:scan {:table #xt/table foo} [a]]]
    [:select
-    (= bar.2/c _sq_3)
+    (== bar.2/c _sq_3)
     [:apply
      :single-join
      {bar.2/b ?_sq_b_4}
@@ -13,4 +13,4 @@
       [{_sq_3 foo.4/b}]
       [:rename
        foo.4
-       [:scan {:table #xt/table foo} [{a (= a ?_sq_b_4)} b]]]]]]]]]
+       [:scan {:table #xt/table foo} [{a (== a ?_sq_b_4)} b]]]]]]]]]

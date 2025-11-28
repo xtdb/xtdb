@@ -19,7 +19,7 @@
         r.6
         [:scan
          {:table #xt/table region}
-         [_id {r_name (= r_name "ASIA")}]]]
+         [_id {r_name (== r_name "ASIA")}]]]
        [:rename
         n.5
         [:scan {:table #xt/table nation} [_id n_name n_regionkey]]]

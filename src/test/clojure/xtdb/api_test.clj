@@ -456,7 +456,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
              {:depth "  ->", :op :scan,
               :explain {:table "xtdb.public.people",
                         :columns ["_valid_from" "age" "name" "_valid_to" "_id"],
-                        :predicates ["(= _id ?_0)"]}}]
+                        :predicates ["(== _id ?_0)"]}}]
            (xt/q tu/*node*
                  [(format "EXPLAIN XTQL ($$ %s $$, ?)"
                           (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))
@@ -468,7 +468,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
              {:depth "    ->", :op :scan,
               :explain {:table "xtdb.public.people"
                         :columns ["_valid_from" "age" "name" "_valid_to" "_id"]
-                        :predicates ["(= _id ?_0)"]}}]
+                        :predicates ["(== _id ?_0)"]}}]
            (xt/q tu/*node*
                  ["EXPLAIN SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?"
                   "dummy-arg-because-pgjdbc-expects-one"]))))

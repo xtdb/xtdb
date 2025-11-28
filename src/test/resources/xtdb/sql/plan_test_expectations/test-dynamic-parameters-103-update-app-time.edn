@@ -24,4 +24,4 @@
    u.1
    [:scan
     {:table #xt/table users, :for-valid-time [:in ?_0 ?_1]}
-    [_valid_to {id (= id ?_3)} _valid_from _iid]]]]]
+    [_valid_to {id (== id ?_3)} _valid_from _iid]]]]]

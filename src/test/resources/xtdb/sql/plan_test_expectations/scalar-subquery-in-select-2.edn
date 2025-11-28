@@ -1,8 +1,8 @@
 [:project
- [{some_column (= 1 _sq_2)}]
+ [{some_column (== 1 _sq_2)}]
  [:single-join
   []
-  [:rename x.1 [:scan {:table #xt/table x} [{y (= y 1)}]]]
+  [:rename x.1 [:scan {:table #xt/table x} [{y (== y 1)}]]]
   [:project
    [{_sq_2 _max_out_4}]
    [:group-by

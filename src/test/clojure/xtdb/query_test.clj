@@ -107,8 +107,8 @@
 
       (t/testing "only needs to scan block 1, page 1"
         (util/with-open [args (tu/open-args {:name "Ivan"})]
-          (let [lit-sel (expr.meta/->metadata-selector tu/*allocator* '(= name "Ivan") '{name #xt/field {"name" :utf8}} vw/empty-args)
-                param-sel (expr.meta/->metadata-selector tu/*allocator* '(= name ?name) '{name #xt/field {"name" :utf8}} args)]
+          (let [lit-sel (expr.meta/->metadata-selector tu/*allocator* '(== name "Ivan") '{name #xt/field {"name" :utf8}} vw/empty-args)
+                param-sel (expr.meta/->metadata-selector tu/*allocator* '(== name ?name) '{name #xt/field {"name" :utf8}} args)]
             (t/testing "L0 has no bloom filter metadata -> always match"
               (with-page-metadata node (Trie/metaFilePath #xt/table xt_docs ^String (trie/->l0-trie-key 0))
                 (fn [^PageMetadata page-metadata]
@@ -133,11 +133,11 @@
                   (t/is (true? (.test (.build param-sel page-metadata) 0)))))))))
 
       (t/is (= #{{:name "Ivan"}}
-               (set (tu/query-ra '[:scan {:table #xt/table xt_docs} [{name (= name "Ivan")}]]
+               (set (tu/query-ra '[:scan {:table #xt/table xt_docs} [{name (== name "Ivan")}]]
                                  {:node node}))))
 
       (t/is (= #{{:name "Ivan"}}
-               (set (tu/query-ra '[:scan {:table #xt/table xt_docs} [{name (= name ?name)}]]
+               (set (tu/query-ra '[:scan {:table #xt/table xt_docs} [{name (== name ?name)}]]
                                  {:node node, :args {:name "Ivan"}})))))))
 
 (t/deftest test-temporal-bounds
@@ -259,13 +259,13 @@
 
 (t/deftest test-join-theta
   (t/is (= [{:x3 "31" :x4 "13"} {:x3 "31" :x4 "31"}]
-           (tu/query-ra '[:join [(= x3 "31")]
+           (tu/query-ra '[:join [(== x3 "31")]
                           [:table [{x3 "13"} {x3 "31"}]]
                           [:table [{x4 "13"} {x4 "31"}]]]
                         {})))
 
   (t/is (= [{:x3 "31"}]
-           (tu/query-ra '[:join [{x3 x3} (= x3 "31")]
+           (tu/query-ra '[:join [{x3 x3} (== x3 "31")]
                           [:table [{x3 "13"} {x3 "31"}]]
                           [:table [{x3 "13"} {x3 "31"}]]]
                         {})))
@@ -278,7 +278,7 @@
 
   (t/is (= []
            (tu/query-ra '[:join
-                          [(= x1 x3)]
+                          [(== x1 x3)]
                           [:join [false]
                            [:table [{x1 1}]]
                            [:table [{x2 2}]]]
@@ -306,7 +306,7 @@
 
 (t/deftest test-empty-rel-still-throws-149
   (t/is (anomalous? [:incorrect nil #"Unknown symbol: '\?x13'"]
-                    (tu/query-ra '[:select (= ?x13 x4)
+                    (tu/query-ra '[:select (== ?x13 x4)
                                    [:table []]]
                                  {}))))
 

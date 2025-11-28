@@ -31,8 +31,8 @@
           [:scan
            {:table #xt/table part}
            [_id
-            {p_brand (= p_brand "Brand#23")}
-            {p_container (= p_container "MED BOX")}]]]]]]
+            {p_brand (== p_brand "Brand#23")}
+            {p_container (== p_container "MED BOX")}]]]]]]
       [:rename
        l.4
        [:scan {:table #xt/table lineitem} [l_quantity l_partkey]]]]]]]]]

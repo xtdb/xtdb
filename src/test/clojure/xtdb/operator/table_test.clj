@@ -91,7 +91,7 @@
                           [:union-all
                            [:project
                             [{x50 true}]
-                            [:select (= ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
+                            [:select (== ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
                            [:table [{x50 false}]]]]
                         {:args {:x53 "AIR"}})))
 
@@ -100,7 +100,7 @@
                           [:union-all
                            [:project
                             [{x50 true}]
-                            [:select (= ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
+                            [:select (== ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
                            [:table [{x50 false}]]]]
                         {:args {:x53 "AIR REG"}})))
 
@@ -109,7 +109,7 @@
                           [:union-all
                            [:project
                             [{x50 true}]
-                            [:select (= ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
+                            [:select (== ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
                            [:table [{x50 false}]]]]
                         {:args {:x53 "RAIL"}}))))
 

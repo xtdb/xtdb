@@ -41,7 +41,7 @@
          [:scan
           {:table #xt/table lineitem}
           [l_orderkey
-           {l_returnflag (= l_returnflag "R")}
+           {l_returnflag (== l_returnflag "R")}
            l_extendedprice
            l_discount]]]
         [:rename

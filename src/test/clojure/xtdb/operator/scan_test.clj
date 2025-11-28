@@ -147,7 +147,7 @@
     (tu/finish-block! tu/*node*)
 
     (t/is (= [{:boolean-or-int true}]
-             (tu/query-ra '[:scan {:table #xt/table xt_docs} [{boolean_or_int (= boolean_or_int true)}]]
+             (tu/query-ra '[:scan {:table #xt/table xt_docs} [{boolean_or_int (== boolean_or_int true)}]]
                           {:node tu/*node*})))))
 
 (t/deftest test-past-point-point-queries
@@ -379,7 +379,7 @@
   (t/is (= [{:first-name "Ivan", :xt/id :ivan}]
            (tu/query-ra '[:scan
                           {:table #xt/table xt_docs, :for-valid-time nil, :for-system-time nil}
-                          [{first_name (= first_name "Ivan")} _id]]
+                          [{first_name (== first_name "Ivan")} _id]]
                         {:node tu/*node*}))))
 
 (t/deftest test-absent-columns
@@ -389,14 +389,14 @@
 
   ;; column not existent in all docs
   (t/is (= [{:col2 "bar2", :xt/id :bar}]
-           (tu/query-ra '[:scan {:table #xt/table xt_docs} [_id {col2 (= col2 "bar2")}]]
+           (tu/query-ra '[:scan {:table #xt/table xt_docs} [_id {col2 (== col2 "bar2")}]]
                         {:node tu/*node*})))
 
   #_
   ;; column not existent at all
   (t/is (= []
            (tu/query-ra
-            '[:scan {:table #xt/table xt_docs} [_id {col-x (= col-x "toto")}]]
+            '[:scan {:table #xt/table xt_docs} [_id {col-x (== col-x "toto")}]]
             {:node tu/*node*}))))
 
 (t/deftest test-iid-fast-path
@@ -411,18 +411,18 @@
     (t/is (nil? (scan/selects->iid-bytes {} vw/empty-args)))
 
     (t/is (Arrays/equals (util/uuid->bytes search-uuid)
-                         (scan/selects->iid-bytes {"_id" (list '= '_id search-uuid)} vw/empty-args)))
+                         (scan/selects->iid-bytes {"_id" (list '== '_id search-uuid)} vw/empty-args)))
 
     (t/is (nil? (scan/selects->iid-bytes {"_id" (list '< '_id search-uuid)} vw/empty-args)))
 
     (with-open [^RelationReader args-rel (tu/open-args {:search-uuid #uuid "80000000-0000-0000-0000-000000000000"})]
       (t/is (Arrays/equals (util/uuid->bytes search-uuid)
-                           (scan/selects->iid-bytes '{"_id" (= _id ?search_uuid)}
+                           (scan/selects->iid-bytes '{"_id" (== _id ?search_uuid)}
                                                     args-rel))))
 
     (with-open [^RelationReader args-rel (tu/open-args {:search-uuid [#uuid "00000000-0000-0000-0000-000000000000"
                                                                       #uuid "80000000-0000-0000-0000-000000000000"]})]
-      (t/is (nil? (scan/selects->iid-bytes '{_id (= _id ?search_uuid)}
+      (t/is (nil? (scan/selects->iid-bytes '{_id (== _id ?search_uuid)}
                                                  args-rel))))
 
     (let [old-select->iid-byte-buffer scan/selects->iid-bytes]
@@ -433,22 +433,22 @@
                         iid-pred))]
 
         (t/is (= [{:version 2, :xt/id search-uuid}]
-                 (tu/query-ra [:scan {:table #xt/table xt_docs} ['version {'_id (list '= '_id search-uuid)}]]
+                 (tu/query-ra [:scan {:table #xt/table xt_docs} ['version {'_id (list '== '_id search-uuid)}]]
                               {:node tu/*node*})))
 
         (t/is (= [{:version 2, :xt/id search-uuid}]
-                 (tu/query-ra [:scan {:table #xt/table xt_docs} ['version {'_id (list '=  search-uuid '_id)}]]
+                 (tu/query-ra [:scan {:table #xt/table xt_docs} ['version {'_id (list '==  search-uuid '_id)}]]
                               {:node tu/*node*})))
 
         (t/is (= [{:version 2, :xt/id search-uuid}]
-                 (tu/query-ra '[:scan {:table #xt/table xt_docs} [version {_id (= _id ?search_uuid)}]]
+                 (tu/query-ra '[:scan {:table #xt/table xt_docs} [version {_id (== _id ?search_uuid)}]]
                               {:node tu/*node*, :args {:search-uuid #uuid "80000000-0000-0000-0000-000000000000"}})))
 
         (t/is (= [{:version 2, :xt/id search-uuid}
                   {:version 1, :xt/id search-uuid}]
                  (tu/query-ra [:scan {:table #xt/table xt_docs
                                       :for-valid-time :all-time}
-                               ['version {'_id (list '= '_id search-uuid)}]]
+                               ['version {'_id (list '== '_id search-uuid)}]]
                               {:node tu/*node*})))))))
 
 (t/deftest test-iid-fast-path-block-boundary
@@ -466,13 +466,13 @@
            (mapv #(xt/submit-tx node %)))
 
       (t/is (= [{:version (last @!search-uuid-versions), :xt/id search-uuid}]
-               (tu/query-ra [:scan {:table #xt/table xt_docs} ['version {'_id (list '= '_id search-uuid)}]]
+               (tu/query-ra [:scan {:table #xt/table xt_docs} ['version {'_id (list '== '_id search-uuid)}]]
                             {:node node})))
 
       (t/is (=  (into #{} @!search-uuid-versions)
                 (->> (tu/query-ra [:scan {:table #xt/table xt_docs
                                           :for-valid-time :all-time}
-                                   ['version {'_id (list '= '_id search-uuid)}]]
+                                   ['version {'_id (list '== '_id search-uuid)}]]
                                   {:node node})
                      (map :version)
                      set))))))
@@ -497,7 +497,7 @@
       (c/compact-all! node #xt/duration "PT1S")
 
       (t/is (= [{:xt/id search-uuid}]
-               (tu/query-ra [:scan '{:table #xt/table xt_docs} [{'_id (list '= '_id search-uuid)}]]
+               (tu/query-ra [:scan '{:table #xt/table xt_docs} [{'_id (list '== '_id search-uuid)}]]
                             {:node node}))))))
 
 (deftest test-live-tries-with-multiple-leaves-are-loaded-correctly-2710
@@ -529,7 +529,7 @@
       (t/is (= [{:col "toto"}]
                (tu/query-ra
                 '[:join [{col col}]
-                  [:scan {:table #xt/table xt_docs} [col {col (= col "toto")}]]
+                  [:scan {:table #xt/table xt_docs} [col {col (== col "toto")}]]
                   [:scan {:table #xt/table xt_docs} [col]]]
                 {:node tu/*node*})))
       ;; one page for the right side
@@ -563,7 +563,7 @@
 
   (t/is (= [#:xt{:id "foo-start"}]
            (tu/query-ra '[:scan {:table #xt/table xt_docs}
-                          [{_id (= "foo" (substring _id 1 3))}]]
+                          [{_id (== "foo" (substring _id 1 3))}]]
                         {:node tu/*node*}))))
 
 (t/deftest test-iid-col-type-3016

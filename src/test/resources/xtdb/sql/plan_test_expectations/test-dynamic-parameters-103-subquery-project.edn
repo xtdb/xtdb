@@ -5,4 +5,4 @@
   [:rename t1.1 [:scan {:table #xt/table t1} [col1]]]
   [:project
    [{_sq_2 ?_0}]
-   [:rename bar.3 [:scan {:table #xt/table bar} [{col1 (= col1 4)}]]]]]]
+   [:rename bar.3 [:scan {:table #xt/table bar} [{col1 (== col1 4)}]]]]]]

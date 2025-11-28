@@ -1,7 +1,7 @@
 [:project
  [{a f.1/a}]
  [:select
-  (= true _sq_2)
+  (== true _sq_2)
   [:mark-join
    {_sq_2 [true]}
    [:rename f.1 [:scan {:table #xt/table foo} [a]]]
