@@ -5,7 +5,7 @@
 # version/ref across all workflows. Reports any mismatches.
 #
 # Usage:
-#   ./bin/check-actions-consistency.sh [--strict]
+#   ./scripts/check-actions-consistency.sh [--strict]
 #
 # Options:
 #   --strict   Exit with non-zero status if inconsistencies are found.

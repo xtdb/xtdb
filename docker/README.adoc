@@ -4,7 +4,7 @@
 
 * Make sure to install docker buildx (`docker-buildx` package in Arch Linux)
 * Make sure your Docker daemon is running
-* `./bin/build-standalone-image.sh [--clean]` will build and tag as `xtdb/xtdb:latest`, and load it into your images list.
+* `./scripts/build-standalone-image.sh [--clean]` will build and tag as `xtdb/xtdb:latest`, and load it into your images list.
   The `--clean` flag can be used to ensure the xtdb uberjar is rebuilt.
 * To run: `docker run -ti --rm -p 5432:5432 xtdb/xtdb` (this will run the server, exposing port 5432)
 
