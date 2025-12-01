@@ -1,5 +1,6 @@
 (ns xtdb.tracer-test
-  (:require [clojure.test :as t]
+  (:require [clojure.string :as string]
+            [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
             [xtdb.pgwire-test :as pgw-test])
@@ -104,3 +105,29 @@
                                     "cursor.type" "table"}
                        :children []}]}]
                    (build-span-tree @!spans))))))))
+
+(t/deftest test-scan-span-includes-table-name
+  (t/testing "scan span includes the table name as an attribute"
+    (let [!spans (atom [])
+          exporter (test-span-exporter !spans)
+          span-processor (SimpleSpanProcessor/create exporter)]
+      (with-open [node (xtn/start-node
+                        {:tracer {:enabled? true
+                                  :service-name "xtdb-test"
+                                  :span-processor span-processor}})]
+
+        (xt/submit-tx node [[:put-docs :foo {:xt/id 1 :name "bar"}]])
+        (xt/q node "SELECT * FROM foo")
+        ;; Give spans a moment to be exported
+        (Thread/sleep 100)
+
+        (let [span-tree (build-span-tree @!spans)
+              scan-spans (->> span-tree
+                              (mapcat (fn collect-scan [span]
+                                        (concat
+                                         (when (string/includes? (:name span) "query.cursor.scan") [span])
+                                         (mapcat collect-scan (:children span))))))
+              scan-span (first scan-spans)] 
+          (t/is (= "query.cursor.scan.foo" (:name scan-span)))
+          (t/is (= "foo" (get-in scan-span [:attributes "table.name"])))
+          (t/is (= "xtdb" (get-in scan-span [:attributes "db.name"]))))))))
