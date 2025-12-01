@@ -32,6 +32,13 @@ buildRepl
 
 /.kotlin/
 
+# Eclipse JDT.LS
+.classpath
+.project
+.settings/
+**/bin/
+kls_database.db
+
 # Terraform
 .terraform/
 terraform.tfstate
