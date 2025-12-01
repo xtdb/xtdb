@@ -149,8 +149,6 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
     private val outWriters = OutWriters(al)
 
     private suspend fun MergeTask.merge(outWriter: OutWriter, pathFilter: ByteArray?) {
-        val isValidPtr = ArrowBufPointer()
-
         val path = path.let { if (pathFilter == null || it.size > pathFilter.size) it else pathFilter }
         val mergeQueue = PriorityQueue(Comparator.comparing(QueueElem::evPtr, EventRowPointer.comparator()))
 
