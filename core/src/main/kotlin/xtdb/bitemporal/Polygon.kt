@@ -3,19 +3,46 @@ package xtdb.bitemporal
 import com.carrotsearch.hppc.LongArrayList
 import xtdb.trie.EventRowPointer
 import kotlin.math.min
+import kotlin.math.max
 
-@JvmRecord
-data class Polygon(val validTimes: LongArrayList, val sysTimeCeilings: LongArrayList) : IPolygonReader {
+data class Polygon(val validTimes: LongArrayList, val sysTimeCeilings: LongArrayList) {
     constructor() : this(LongArrayList(), LongArrayList())
 
-    override val validTimeRangeCount
+    val validTimeRangeCount
         get() = sysTimeCeilings.elementsCount
 
-    override fun getValidFrom(rangeIdx: Int) = validTimes[rangeIdx]
+    fun getValidFrom(rangeIdx: Int) = validTimes[rangeIdx]
 
-    override fun getValidTo(rangeIdx: Int) = validTimes[rangeIdx + 1]
+    fun getValidTo(rangeIdx: Int) = validTimes[rangeIdx + 1]
 
-    override fun getSystemTo(rangeIdx: Int) = sysTimeCeilings[rangeIdx]
+    fun getSystemTo(rangeIdx: Int) = sysTimeCeilings[rangeIdx]
+
+    /**
+     * maximum value T where row is invalid for all (valid-time, sys-time) where both valid-time >= T and sys-time >= T
+     */
+    val recency: Long
+        get() {
+            val validTimeRangeCount = validTimeRangeCount
+
+            // largest recency we've seen so far
+            var recency = Long.MIN_VALUE
+
+            var validTo = getValidTo(validTimeRangeCount - 1)
+
+            // start from the RHS
+            for (i in (validTimeRangeCount - 1) downTo 0) {
+                recency = max(recency, min(getSystemTo(i), validTo))
+
+                val validFrom = getValidFrom(i)
+
+                // it's never going to get bigger than this, stop early
+                if (recency >= validFrom) return recency
+
+                validTo = validFrom
+            }
+
+            return recency
+        }
 
     fun calculateFor(ceiling: Ceiling, validFrom: Long, validTo: Long) {
         validTimes.clear()
