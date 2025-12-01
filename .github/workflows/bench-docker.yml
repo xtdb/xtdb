@@ -87,7 +87,7 @@ jobs:
 
       - name: Docker meta for xtdb-bench
         id: meta
-        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/${{ steps.image-tag.outputs.owner }}/xtdb-bench
           tags: |
