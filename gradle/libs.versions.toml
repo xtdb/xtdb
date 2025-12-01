@@ -18,7 +18,7 @@ protobuf = "4.31.1"
 protobuf-plugin = "0.9.5"
 reitit = "0.9.1"
 muuntaja = "0.6.11"
-testcontainers = "1.21.3"
+testcontainers = "2.0.2"
 micrometer = "1.15.1"
 micrometer-tracing = "1.4.1"
 opentelemetry = "1.45.0"
@@ -97,9 +97,9 @@ ring-jetty9-adapter = { group = "info.sunng", name = "ring-jetty9-adapter", vers
 jetty-alpn-server = { group = "org.eclipse.jetty", name = "jetty-alpn-server", version = "10.0.15" }
 
 testcontainers = { group = "org.testcontainers", name = "testcontainers", version.ref = "testcontainers" }
-testcontainers-kafka = { group = "org.testcontainers", name = "kafka", version.ref = "testcontainers" }
-testcontainers-minio = { group = "org.testcontainers", name = "minio", version.ref = "testcontainers" }
-testcontainers-keycloak={ group="com.github.dasniko", name="testcontainers-keycloak", version="3.4.0" }
+testcontainers-kafka = { group = "org.testcontainers", name = "testcontainers-kafka", version.ref = "testcontainers" }
+testcontainers-minio = { group = "org.testcontainers", name = "testcontainers-minio", version.ref = "testcontainers" }
+testcontainers-keycloak = { group = "com.github.dasniko", name = "testcontainers-keycloak", version = "3.4.0" }
 
 micrometer-core = { group = "io.micrometer", name = "micrometer-core", version.ref = "micrometer" }
 micrometer-registry-prometheus = { group = "io.micrometer", name = "micrometer-registry-prometheus", version.ref = "micrometer" }
@@ -120,8 +120,8 @@ opentelemetry-sdk = { group = "io.opentelemetry", name = "opentelemetry-sdk", ve
 # Clojure -> SLF4J
 # java.lang.System.Logger -> SLF4J
 # SLF4J -> Logback
-slf4j-api = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" } # use this when you refer to an SLF4J class
-slf4j-jpl = { group = "org.slf4j", name = "slf4j-jdk-platform-logging", version.ref = "slf4j" } # use this in applications
+slf4j-api = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" }                    # use this when you refer to an SLF4J class
+slf4j-jpl = { group = "org.slf4j", name = "slf4j-jdk-platform-logging", version.ref = "slf4j" }   # use this in applications
 logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback" } # use this in applications
 
 [plugins]
