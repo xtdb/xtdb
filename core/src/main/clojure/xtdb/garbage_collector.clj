@@ -4,7 +4,7 @@
             [xtdb.util :as util])
   (:import [xtdb.api Xtdb$Config GarbageCollectorConfig]
            xtdb.database.Database$Catalog
-           [xtdb.garbage_collector GarbageCollector]))
+           [xtdb.garbage_collector GarbageCollector$Impl GarbageCollector$Driver]))
 
 (defmethod xtn/apply-config! :xtdb/garbage-collector [^Xtdb$Config config _
                                                       {:keys [enabled? blocks-to-keep garbage-lifetime approx-run-interval]}]
@@ -24,13 +24,13 @@
 
 (defmethod ig/init-key :xtdb/garbage-collector [_ {:keys [^Database$Catalog db-cat, enabled? blocks-to-keep garbage-lifetime approx-run-interval]}]
   ;; TODO multi-db
-  (let [gc (GarbageCollector. (.getPrimary db-cat) blocks-to-keep garbage-lifetime approx-run-interval)]
+  (let [gc (GarbageCollector$Impl. (.getPrimary db-cat) (GarbageCollector$Driver/real) blocks-to-keep garbage-lifetime approx-run-interval)]
     (when enabled? (.start gc))
     gc))
 
-(defmethod ig/halt-key! :xtdb/garbage-collector [_ ^GarbageCollector gc]
+(defmethod ig/halt-key! :xtdb/garbage-collector [_ ^GarbageCollector$Impl gc]
   (when gc
     (.close gc)))
 
-(defn garbage-collector ^xtdb.garbage_collector.GarbageCollector [node]
+(defn garbage-collector ^xtdb.garbage_collector.GarbageCollector$Impl [node]
   (util/component node :xtdb/garbage-collector))
