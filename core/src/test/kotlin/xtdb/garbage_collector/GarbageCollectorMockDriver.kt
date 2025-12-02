@@ -8,6 +8,7 @@ import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.TrieKey
 import xtdb.util.debug
 import xtdb.util.logger
+import java.nio.file.Path
 
 private val LOGGER = GarbageCollectorMockDriver::class.logger
 
@@ -18,17 +19,16 @@ class GarbageCollectorMockDriver() : GarbageCollector.Driver.Factory {
         private val bufferPool = db.bufferPool
         private val trieCatalog = db.trieCatalog
 
-        override suspend fun deleteGarbageTries(tableName: TableRef, garbageTries: Set<TrieKey>) {
-            for (garbageTrie in garbageTries) {
-                LOGGER.debug("Deleting data file for garbage trie $garbageTrie")
-                bufferPool.deleteIfExists(tableName.metaFilePath(garbageTrie))
-                yield()
-                LOGGER.debug("Deleting meta file for garbage trie $garbageTrie")
-                bufferPool.deleteIfExists(tableName.dataFilePath(garbageTrie))
-                yield()
-            }
-            LOGGER.debug("Removing ${garbageTries.size} garbage tries from catalog for table $tableName")
-            trieCatalog.deleteTries(tableName, garbageTries)
+        override suspend fun deletePath(path: Path) {
+            yield()
+            LOGGER.debug("Deleting path $path")
+            bufferPool.deleteIfExists(path)
+        }
+
+        override suspend fun deleteTries(tableName: TableRef, trieKeys: Set<TrieKey>) {
+            yield()
+            LOGGER.debug("Removing ${trieKeys.size} tries from catalog for table $tableName")
+            trieCatalog.deleteTries(tableName, trieKeys)
         }
 
         override fun close() {}

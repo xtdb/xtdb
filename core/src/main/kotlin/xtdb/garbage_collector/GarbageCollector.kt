@@ -11,6 +11,7 @@ import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.TrieKey
 import java.io.Closeable
+import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
 import kotlin.coroutines.CoroutineContext
@@ -26,7 +27,8 @@ interface GarbageCollector : Closeable {
     fun start()
 
     interface Driver : AutoCloseable {
-        suspend fun deleteGarbageTries(tableName: TableRef, garbageTries: Set<TrieKey>)
+        suspend fun deletePath(path: Path)
+        suspend fun deleteTries(tableName: TableRef, trieKeys: Set<TrieKey>)
 
         interface Factory {
             fun create(db: IDatabase): Driver
@@ -39,12 +41,12 @@ interface GarbageCollector : Closeable {
                     private val trieCatalog = db.trieCatalog
                     private val bufferPool = db.bufferPool
 
-                    override suspend fun deleteGarbageTries(tableName: TableRef, garbageTries: Set<TrieKey>) {
-                        for (garbageTrie in garbageTries) {
-                            bufferPool.deleteIfExists(tableName.metaFilePath(garbageTrie))
-                            bufferPool.deleteIfExists(tableName.dataFilePath(garbageTrie))
-                        }
-                        trieCatalog.deleteTries(tableName, garbageTries)
+                    override suspend fun deletePath(path: Path) {
+                        bufferPool.deleteIfExists(path)
+                    }
+
+                    override suspend fun deleteTries(tableName: TableRef, trieKeys: Set<TrieKey>) {
+                        trieCatalog.deleteTries(tableName, trieKeys)
                     }
 
                     override fun close() {}
@@ -82,10 +84,15 @@ interface GarbageCollector : Closeable {
                 val tableNames = blockCatalog.allTables.shuffled().take(100)
                 for (tableName in tableNames) {
                     val garbageTries = trieCatalog.garbageTries(tableName, asOf)
-                    runBlocking { driver.deleteGarbageTries(tableName, garbageTries) }
+                    runBlocking {
+                        for (garbageTrie in garbageTries) {
+                            driver.deletePath(tableName.metaFilePath(garbageTrie))
+                            driver.deletePath(tableName.dataFilePath(garbageTrie))
+                        }
+                        driver.deleteTries(tableName, garbageTries)
+                    }
                 }
                 LOGGER.debug("Trie garbage collection completed")
-
             } catch (e: Exception) {
                 LOGGER.warn("Trie garbage collection failed", e)
             } catch (e: Throwable) {
