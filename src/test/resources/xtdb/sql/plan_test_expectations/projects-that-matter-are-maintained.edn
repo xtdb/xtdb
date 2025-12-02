@@ -1,5 +1,5 @@
 [:distinct {}
- [:union-all
+ [:union-all {}
   [:project
    [{id customers.1/id}]
    [:rename customers.1 [:scan {:table #xt/table customers} [id]]]]

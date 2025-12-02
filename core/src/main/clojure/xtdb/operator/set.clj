@@ -17,6 +17,7 @@
 
 (defmethod lp/ra-expr :union-all [_]
   (s/cat :op #{:∪ :union-all}
+         :opts map?
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
@@ -65,7 +66,7 @@
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
-(defmethod lp/emit-expr :union-all [{:keys [left right]} args]
+(defmethod lp/emit-expr :union-all [{:keys [_opts left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
                   (fn [{left-fields :fields :as left-rel} {right-fields :fields :as right-rel}]
                     {:op :union-all

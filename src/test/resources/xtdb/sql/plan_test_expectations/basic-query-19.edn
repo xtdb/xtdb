@@ -1,7 +1,7 @@
 [:order-by
  [[name {:direction :asc, :null-ordering :nulls-last}]]
  [:distinct {}
-  [:union-all
+  [:union-all {}
    [:project
     [{name si.1/name}]
     [:rename si.1 [:scan {:table stars_in} [name]]]]

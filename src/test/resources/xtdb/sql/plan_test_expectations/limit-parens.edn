@@ -1,4 +1,4 @@
-[:union-all
+[:union-all {}
  [:top
   {:skip nil, :limit 1}
   [:project

@@ -1,4 +1,4 @@
-[:union-all
+[:union-all {}
  [:project
   [{name si.1/name}]
   [:rename si.1 [:scan {:table #xt/table stars_in} [name]]]]

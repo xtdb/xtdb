@@ -267,7 +267,7 @@
     [:difference lhs _]
     (relation-columns lhs)
 
-    [:union-all lhs _]
+    [:union-all _opts lhs _]
     (relation-columns lhs)
 
     [:unnest columns relation]

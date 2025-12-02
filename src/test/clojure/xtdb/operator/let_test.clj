@@ -40,7 +40,7 @@
            (tu/query-ra '[:let [Foo [::tu/pages
                                      [[{:a 12}, {:a 0}]
                                       [{:a 12}, {:a 100}]]]]
-                          [:union-all
+                          [:union-all {}
                            [:relation Foo {:col-names [a]}]
                            [:relation Foo {:col-names [a]}]]]
                         {:preserve-pages? true}))
@@ -53,7 +53,7 @@
                                      [[{:a 12}, {:a 0}]
                                       [{:a 12}, {:a 100}]]]]
                           [:order-by [[a]]
-                           [:union-all
+                           [:union-all {}
                             [:relation Foo {:col-names [a]}]
                             [:relation Foo {:col-names [a]}]]]]))
         "can pass it to other operators"))

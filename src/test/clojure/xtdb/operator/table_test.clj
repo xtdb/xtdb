@@ -88,7 +88,7 @@
 (t/deftest test-table-handles-symbols
   (t/is (= '[{:x50 true}]
            (tu/query-ra '[:top {:limit 1}
-                          [:union-all
+                          [:union-all {}
                            [:project
                             [{x50 true}]
                             [:select (== ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
@@ -97,7 +97,7 @@
 
   (t/is (= '[{:x50 true}]
            (tu/query-ra '[:top {:limit 1}
-                          [:union-all
+                          [:union-all {}
                            [:project
                             [{x50 true}]
                             [:select (== ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
@@ -106,7 +106,7 @@
 
   (t/is (= '[{:x50 false}]
            (tu/query-ra '[:top {:limit 1}
-                          [:union-all
+                          [:union-all {}
                            [:project
                             [{x50 true}]
                             [:select (== ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]

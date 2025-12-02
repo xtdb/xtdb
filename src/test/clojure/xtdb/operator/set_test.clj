@@ -12,7 +12,7 @@
                   #{{:a 10, :b 1}
                     {:a 15, :b 2}}
                   #{{:a 83, :b 3}}]}
-           (-> (tu/query-ra [:union-all
+           (-> (tu/query-ra [:union-all {}
                              [::tu/pages
                               [[{:a 12 :b 10}, {:a 0 :b 15}]
                                [{:a 100 :b 15}]]]
@@ -24,7 +24,7 @@
                (update :res (partial mapv set)))))
 
   (t/testing "empty input and output"
-    (t/is (empty? (tu/query-ra [:union-all
+    (t/is (empty? (tu/query-ra [:union-all {}
                                 [::tu/pages '{a #xt/type :i64} []]
                                 [::tu/pages '{a #xt/type :i64} []]])))))
 
@@ -34,14 +34,14 @@
              (tu/query-ra
               [:cross-join
                [:table [{}]]
-               [:union-all
+               [:union-all {}
                 [::tu/pages '{a #xt/type :i64} [[]]]
                 [::tu/pages [[{:a 10}, {:a 15}]]]]])))))
 
 (t/deftest test-union-all-empty-batches-both-sides
   (t/is (= [{:a 10} {:a 15}]
            (tu/query-ra
-            [:union-all
+            [:union-all {}
              [::tu/pages '{a #xt/type :i64} [[] [{:a 10}]]]
              [::tu/pages '{a #xt/type :i64} [[] [{:a 15}]]]]))))
 

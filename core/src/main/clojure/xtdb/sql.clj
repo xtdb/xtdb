@@ -2440,7 +2440,7 @@
                               [:rename (zipmap r-col-syms l-col-syms) plan]
                               plan))
 
-          plan [:union-all l-plan (rename-col-syms r-plan)]]
+          plan [:union-all {} l-plan (rename-col-syms r-plan)]]
       (->QueryExpr (if-not (.ALL ctx) [:distinct {} plan] plan) l-col-syms)))
 
   (visitExceptQuery [this ctx]

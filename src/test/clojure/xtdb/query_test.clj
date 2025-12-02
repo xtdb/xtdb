@@ -371,7 +371,7 @@
                (tu/query-ra '[:scan {:table #xt/table [new_db foo]} [_id]]
                             {:node node, :default-db "new_db", :with-types? true})))
 
-      (let [{:keys [res types]} (tu/query-ra '[:union-all
+      (let [{:keys [res types]} (tu/query-ra '[:union-all {}
                                                [:scan {:table #xt/table [xtdb foo]} [_id]]
                                                [:scan {:table #xt/table [new_db foo]} [_id]]]
                                              {:node node, :with-types? true})]
