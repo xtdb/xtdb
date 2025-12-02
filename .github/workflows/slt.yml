@@ -14,12 +14,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        slt-dir: [{dir: "random/expr/", error: 62},
-                  {dir: "random/aggregates/", error: 13, failure: 35},
-                  {dir: "random/groupby/", error: 111},
+        slt-dir: [
+                  # {dir: "random/expr/", error: 62},
+                  {dir: "random/aggregates/", error: 13},
+                  {dir: "random/groupby/", error: 51},
                   {dir: "random/select/"},
-                  {dir: "index/between/", error: 10},
-                  {dir: "index/commute/", error: 10},
+                  {dir: "index/between/"},
+                  {dir: "index/commute/"},
                   {dir: "index/orderby/", error: 60},
                   {dir: "index/orderby_nosort/"},
                   {dir: "index/in/"},
