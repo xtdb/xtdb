@@ -1,9 +1,9 @@
 [:difference
- [:distinct
+ [:distinct {}
   [:project
    [{name si.1/name}]
    [:rename si.1 [:scan {:table #xt/table stars_in} [name]]]]]
- [:distinct
+ [:distinct {}
   [:project
    [{name si.2/name}]
    [:rename si.2 [:scan {:table #xt/table stars_in} [name]]]]]]

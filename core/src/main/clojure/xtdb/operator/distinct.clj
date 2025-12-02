@@ -14,6 +14,7 @@
 
 (defmethod lp/ra-expr :distinct [_]
   (s/cat :op #{:δ :distinct}
+         :opts map?
          :relation ::lp/ra-expression))
 
 (deftype DistinctCursor [^BufferAllocator al
@@ -74,7 +75,7 @@
                                                        :param-types param-types})))
                           64 4)))
 
-(defmethod lp/emit-expr :distinct [{:keys [relation]} args]
+(defmethod lp/emit-expr :distinct [{:keys [_opts relation]} args]
   (lp/unary-expr (lp/emit-expr relation args)
                  (fn [{inner-fields :fields :as inner-rel}]
                    {:op :distinct

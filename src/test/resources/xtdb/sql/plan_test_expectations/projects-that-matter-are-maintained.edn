@@ -1,4 +1,4 @@
-[:distinct
+[:distinct {}
  [:union-all
   [:project
    [{id customers.1/id}]

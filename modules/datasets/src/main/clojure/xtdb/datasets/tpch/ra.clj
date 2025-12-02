@@ -365,7 +365,7 @@
 (def q16-part-supplier-relationship
   (-> '[:order-by [[supplier_cnt {:direction :desc}] [p_brand] [p_type] [p_size]]
         [:group-by [p_brand p_type p_size {supplier_cnt (count ps_suppkey)}]
-         [:distinct
+         [:distinct {}
           [:project [p_brand p_type p_size ps_suppkey]
            [:join [{p_partkey ps_partkey}]
             [:semi-join [{p_size p_size}]
@@ -510,7 +510,7 @@
         [:top {:limit 100}
          [:order-by [[numwait {:direction :desc}] [s_name]]
           [:group-by [s_name {numwait (row-count)}]
-           [:distinct
+           [:distinct {}
             [:project [s_name l1/l_orderkey]
              [:anti-join [{l1/l_orderkey l3/l_orderkey}]
               [:relation L1 {:col-names [l_orderkey l_suppkey l_receiptdate l_commitdate]}]

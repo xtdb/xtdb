@@ -1,6 +1,6 @@
 [:order-by
  [[name {:direction :asc, :null-ordering :nulls-last}]]
- [:distinct
+ [:distinct {}
   [:union-all
    [:project
     [{name si.1/name}]

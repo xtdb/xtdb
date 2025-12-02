@@ -2359,7 +2359,7 @@
              plan])
 
           (if (some-> select-clause .setQuantifier (.getText) (str/upper-case) (= "DISTINCT"))
-            [:distinct plan]
+            [:distinct {} plan]
             plan))))))
 
 (defrecord QueryPlanVisitor [env scope]
@@ -2441,7 +2441,7 @@
                               plan))
 
           plan [:union-all l-plan (rename-col-syms r-plan)]]
-      (->QueryExpr (if-not (.ALL ctx) [:distinct plan] plan) l-col-syms)))
+      (->QueryExpr (if-not (.ALL ctx) [:distinct {} plan] plan) l-col-syms)))
 
   (visitExceptQuery [this ctx]
     (let [{l-plan :plan, l-col-syms :col-syms} (-> (.queryExpressionBody ctx) (.accept this)
@@ -2460,7 +2460,7 @@
 
           wrap-distinct (fn [plan]
                           (if (not (.ALL ctx))
-                            [:distinct plan]
+                            [:distinct {} plan]
                             plan))]
 
       (->QueryExpr [:difference
@@ -2485,7 +2485,7 @@
 
           plan [:intersect l-plan (rename-col-syms r-plan)]]
       (->QueryExpr (if-not (.ALL ctx)
-                     [:distinct plan]
+                     [:distinct {} plan]
                      plan)
                    l-col-syms)))
 
@@ -2967,7 +2967,7 @@
                               {:predicate (.accept search-clause (map->ExprPlanVisitor {:env env, :scope dml-scope, :!subqs !subqs}))
                                :subqs (not-empty (into {} !subqs))}))]
 
-      (->QueryExpr [:distinct
+      (->QueryExpr [:distinct {}
                     [:project internal-cols
                      (as-> (plan-rel dml-scope) plan
 

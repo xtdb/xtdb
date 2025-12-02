@@ -1,4 +1,4 @@
-[:distinct
+[:distinct {}
  [:union-all
   [:project
    [{movie_title si.1/movie_title}]

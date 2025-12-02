@@ -258,7 +258,7 @@
     [:top _ relation]
     (relation-columns relation)
 
-    [:distinct relation]
+    [:distinct _opts relation]
     (relation-columns relation)
 
     [:intersect lhs _]

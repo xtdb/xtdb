@@ -1,4 +1,4 @@
-[:distinct
+[:distinct {}
  [:project
   [{_iid u.1/_iid}]
   [:rename
