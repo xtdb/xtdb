@@ -1,7 +1,7 @@
 [:project
  [{ps_partkey ps.1/ps_partkey} value]
  [:order-by
-  [[value {:direction :desc, :null-ordering :nulls-first}]]
+  {:order-specs [[value {:direction :desc, :null-ordering :nulls-first}]]}
   [:project
    [ps.1/ps_partkey {value _sum_out_12}]
    [:select

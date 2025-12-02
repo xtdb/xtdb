@@ -817,7 +817,7 @@
   (plan-query-tail [{:keys [order-specs]} {:keys [ra-plan provided-vars]}]
     ;;TODO Change order specs to use keywords
     (let [planned-specs (mapv plan-order-spec order-specs)]
-      {:ra-plan [:order-by (mapv :order-spec planned-specs)
+      {:ra-plan [:order-by {:order-specs (mapv :order-spec planned-specs)}
                  ra-plan]
        :provided-vars provided-vars}))
 

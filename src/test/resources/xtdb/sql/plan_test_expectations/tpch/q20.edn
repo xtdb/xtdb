@@ -1,7 +1,7 @@
 [:project
  [{s_name s.1/s_name} {s_address s.1/s_address}]
  [:order-by
-  [[s.1/s_name {:direction :asc, :null-ordering :nulls-last}]]
+  {:order-specs [[s.1/s_name {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
    [s.1/s_name s.1/s_address]
    [:map

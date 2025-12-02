@@ -10,7 +10,7 @@
    {c_phone c.1/c_phone}
    {c_comment c.1/c_comment}]
   [:order-by
-   [[revenue {:direction :desc, :null-ordering :nulls-first}]]
+   {:order-specs [[revenue {:direction :desc, :null-ordering :nulls-first}]]}
    [:project
     [{c_custkey c.1/_id}
      c.1/c_name

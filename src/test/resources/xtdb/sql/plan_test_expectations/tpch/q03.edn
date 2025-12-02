@@ -6,8 +6,8 @@
    {o_orderdate o.2/o_orderdate}
    {o_shippriority o.2/o_shippriority}]
   [:order-by
-   [[revenue {:direction :desc, :null-ordering :nulls-first}]
-    [o.2/o_orderdate {:direction :asc, :null-ordering :nulls-last}]]
+   {:order-specs [[revenue {:direction :desc, :null-ordering :nulls-first}]
+    [o.2/o_orderdate {:direction :asc, :null-ordering :nulls-last}]]}
    [:project
     [l.3/l_orderkey
      {revenue _sum_out_4}

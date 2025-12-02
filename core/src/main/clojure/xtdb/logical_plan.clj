@@ -252,7 +252,7 @@
     [:select _ relation]
     (relation-columns relation)
 
-    [:order-by _ relation]
+    [:order-by _opts relation]
     (relation-columns relation)
 
     [:top _ relation]

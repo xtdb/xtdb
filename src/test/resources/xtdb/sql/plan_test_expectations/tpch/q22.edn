@@ -1,8 +1,8 @@
 [:project
  [{cntrycode custsale.12/cntrycode} numcust totacctbal]
  [:order-by
-  [[custsale.12/cntrycode
-    {:direction :asc, :null-ordering :nulls-last}]]
+  {:order-specs [[custsale.12/cntrycode
+    {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
    [custsale.12/cntrycode
     {numcust _row_count_13}

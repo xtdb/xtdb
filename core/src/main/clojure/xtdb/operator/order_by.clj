@@ -28,7 +28,7 @@
 
 (defmethod lp/ra-expr :order-by [_]
   (s/cat :op '#{:τ :tau :order-by order-by}
-         :order-specs ::order-specs
+         :opts (s/keys :req-un [::order-specs])
          :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -264,13 +264,14 @@
     (util/try-close loader)
     (util/try-close in-cursor)))
 
-(defmethod lp/emit-expr :order-by [{:keys [order-specs relation]} args]
-  (lp/unary-expr (lp/emit-expr relation args)
-    (fn [{:keys [fields], :as rel}]
-      {:op :order-by
-       :children [rel]
-       :explain {:order-specs (pr-str order-specs)}
-       :fields fields
-       :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
-                   (cond-> (OrderByCursor. allocator in-cursor (rename-fields fields) order-specs false nil nil nil nil)
-                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))
+(defmethod lp/emit-expr :order-by [{:keys [opts relation]} args]
+  (let [{:keys [order-specs]} opts]
+    (lp/unary-expr (lp/emit-expr relation args)
+      (fn [{:keys [fields], :as rel}]
+        {:op :order-by
+         :children [rel]
+         :explain {:order-specs (pr-str order-specs)}
+         :fields fields
+         :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
+                     (cond-> (OrderByCursor. allocator in-cursor (rename-fields fields) order-specs false nil nil nil nil)
+                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))

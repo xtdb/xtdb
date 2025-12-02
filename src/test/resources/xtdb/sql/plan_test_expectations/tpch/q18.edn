@@ -8,8 +8,8 @@
    {o_totalprice o.2/o_totalprice}
    sum_qty]
   [:order-by
-   [[o.2/o_totalprice {:direction :desc, :null-ordering :nulls-first}]
-    [o.2/o_orderdate {:direction :asc, :null-ordering :nulls-last}]]
+   {:order-specs [[o.2/o_totalprice {:direction :desc, :null-ordering :nulls-first}]
+    [o.2/o_orderdate {:direction :asc, :null-ordering :nulls-last}]]}
    [:project
     [c.1/c_name
      {c_custkey c.1/_id}

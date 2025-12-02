@@ -1,8 +1,8 @@
 [:project
  [{nation profit.7/nation} {o_year profit.7/o_year} sum_profit]
  [:order-by
-  [[profit.7/nation {:direction :asc, :null-ordering :nulls-last}]
-   [profit.7/o_year {:direction :desc, :null-ordering :nulls-first}]]
+  {:order-specs [[profit.7/nation {:direction :asc, :null-ordering :nulls-last}]
+   [profit.7/o_year {:direction :desc, :null-ordering :nulls-first}]]}
   [:project
    [profit.7/nation profit.7/o_year {sum_profit _sum_out_8}]
    [:group-by

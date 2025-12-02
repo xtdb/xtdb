@@ -4,10 +4,10 @@
   {p_size p.2/p_size}
   supplier_cnt]
  [:order-by
-  [[supplier_cnt {:direction :desc, :null-ordering :nulls-first}]
+  {:order-specs [[supplier_cnt {:direction :desc, :null-ordering :nulls-first}]
    [p.2/p_brand {:direction :asc, :null-ordering :nulls-last}]
    [p.2/p_type {:direction :asc, :null-ordering :nulls-last}]
-   [p.2/p_size {:direction :asc, :null-ordering :nulls-last}]]
+   [p.2/p_size {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
    [p.2/p_brand
     p.2/p_type

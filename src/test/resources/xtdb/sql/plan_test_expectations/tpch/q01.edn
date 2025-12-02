@@ -10,8 +10,8 @@
   avg_disc
   count_order]
  [:order-by
-  [[l.1/l_returnflag {:direction :asc, :null-ordering :nulls-last}]
-   [l.1/l_linestatus {:direction :asc, :null-ordering :nulls-last}]]
+  {:order-specs [[l.1/l_returnflag {:direction :asc, :null-ordering :nulls-last}]
+   [l.1/l_linestatus {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
    [l.1/l_returnflag
     l.1/l_linestatus

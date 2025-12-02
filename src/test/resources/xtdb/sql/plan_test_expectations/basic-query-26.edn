@@ -1,8 +1,8 @@
 [:project
  [{movie_title si.1/movie_title}]
  [:order-by
-  [[_ob2 {:direction :desc, :null-ordering :nulls-first}]
-   [si.1/movie_title {:direction :asc, :null-ordering :nulls-last}]]
+  {:order-specs [[_ob2 {:direction :desc, :null-ordering :nulls-first}]
+   [si.1/movie_title {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
    [si.1/movie_title {_ob2 (== si.1/year "foo")}]
    [:rename si.1 [:scan {:table stars_in} [year movie_title]]]]]]

@@ -1,6 +1,6 @@
 [:order-by
- [[custdist {:direction :desc, :null-ordering :nulls-first}]
-  [c_count {:direction :desc, :null-ordering :nulls-first}]]
+ {:order-specs [[custdist {:direction :desc, :null-ordering :nulls-first}]
+  [c_count {:direction :desc, :null-ordering :nulls-first}]]}
  [:project
   [c_count {custdist _row_count_4}]
   [:group-by

@@ -28,7 +28,7 @@
    {s_phone s.5/s_phone}
    {total_revenue revenue.6/total_revenue}]
   [:order-by
-   [[_ob10 {:direction :asc, :null-ordering :nulls-last}]]
+   {:order-specs [[_ob10 {:direction :asc, :null-ordering :nulls-last}]]}
    [:project
     [{s_suppkey s.5/_id}
      s.5/s_name

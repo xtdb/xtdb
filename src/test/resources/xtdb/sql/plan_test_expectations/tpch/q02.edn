@@ -10,10 +10,10 @@
    {s_phone s.2/s_phone}
    {s_comment s.2/s_comment}]
   [:order-by
-   [[s.2/s_acctbal {:direction :desc, :null-ordering :nulls-first}]
+   {:order-specs [[s.2/s_acctbal {:direction :desc, :null-ordering :nulls-first}]
     [n.4/n_name {:direction :asc, :null-ordering :nulls-last}]
     [s.2/s_name {:direction :asc, :null-ordering :nulls-last}]
-    [_ob13 {:direction :asc, :null-ordering :nulls-last}]]
+    [_ob13 {:direction :asc, :null-ordering :nulls-last}]]}
    [:project
     [s.2/s_acctbal
      s.2/s_name

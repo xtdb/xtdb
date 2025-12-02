@@ -52,7 +52,7 @@
            (tu/query-ra '[:let [Foo [::tu/pages
                                      [[{:a 12}, {:a 0}]
                                       [{:a 12}, {:a 100}]]]]
-                          [:order-by [[a]]
+                          [:order-by {:order-specs [[a]]}
                            [:union-all {}
                             [:relation Foo {:col-names [a]}]
                             [:relation Foo {:col-names [a]}]]]]))

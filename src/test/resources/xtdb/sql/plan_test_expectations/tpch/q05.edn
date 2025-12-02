@@ -1,7 +1,7 @@
 [:project
  [{n_name n.5/n_name} revenue]
  [:order-by
-  [[revenue {:direction :desc, :null-ordering :nulls-first}]]
+  {:order-specs [[revenue {:direction :desc, :null-ordering :nulls-first}]]}
   [:project
    [n.5/n_name {revenue _sum_out_7}]
    [:group-by

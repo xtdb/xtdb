@@ -10,7 +10,7 @@
              {:a 12, :b 10}
              {:a 83, :b 100}
              {:a 100, :b 83}]]
-           (tu/query-ra [:order-by '[[a]]
+           (tu/query-ra [:order-by {:order-specs '[[a]]}
                          [::tu/pages
                           [[{:a 12, :b 10}
                             {:a 0, :b 15}]
@@ -22,7 +22,7 @@
             {:a 12.4, :b 10}
             {:a 83.0, :b 100}
             {:a 100, :b 83}]
-           (tu/query-ra '[:order-by [[a]]
+           (tu/query-ra '[:order-by {:order-specs [[a]]}
                           [:table [{:a 12.4, :b 10}
                                    {:a 0, :b 15}
                                    {:a 100, :b 83}
@@ -31,7 +31,7 @@
         "mixed numeric types")
 
   (t/is (= []
-           (tu/query-ra '[:order-by [[a]]
+           (tu/query-ra '[:order-by {:order-specs [[a]]}
                           [::tu/pages
                            [[] []]]]
                         {}))
@@ -40,20 +40,20 @@
 (t/deftest test-order-by-with-nulls
   (let [table-with-nil [{:a 12.4, :b 10}, {:a nil, :b 15}, {:a 100, :b 83}, {:a 83.0, :b 100}]]
     (t/is (= [{:b 15}, {:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}]
-             (tu/query-ra '[:order-by [[a {:null-ordering :nulls-first}]]
-                            [:table ?table]]
+             (tu/query-ra '[:order-by {:order-specs [[a {:null-ordering :nulls-first}]]}
+                          [:table ?table]]
                           {:args {:table table-with-nil}}))
           "nulls first")
 
     (t/is (= [{:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}, {:b 15}]
-             (tu/query-ra '[:order-by [[a {:null-ordering :nulls-last}]]
-                            [:table ?table]]
+             (tu/query-ra '[:order-by {:order-specs [[a {:null-ordering :nulls-last}]]}
+                          [:table ?table]]
                           {:args {:table table-with-nil}}))
           "nulls last")
 
     (t/is (= [{:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}, {:b 15}]
-             (tu/query-ra '[:order-by [[a]]
-                            [:table ?table]]
+             (tu/query-ra '[:order-by {:order-specs [[a]]}
+                          [:table ?table]]
                           {:args {:table table-with-nil}}))
           "default nulls last")))
 
@@ -63,7 +63,7 @@
           batches (mapv vec (partition-all 13 data))
           sorted (sort-by (juxt :a :b) data)]
       (t/is (= sorted
-               (tu/query-ra [:order-by '[[a] [b]]
+               (tu/query-ra [:order-by {:order-specs '[[a] [b]]}
                              [::tu/pages batches]]
                             {}))
             "spilling to disk"))))

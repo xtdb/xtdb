@@ -4,11 +4,11 @@
   {l_year shipping.7/l_year}
   revenue]
  [:order-by
-  [[shipping.7/supp_nation
+  {:order-specs [[shipping.7/supp_nation
     {:direction :asc, :null-ordering :nulls-last}]
    [shipping.7/cust_nation
     {:direction :asc, :null-ordering :nulls-last}]
-   [shipping.7/l_year {:direction :asc, :null-ordering :nulls-last}]]
+   [shipping.7/l_year {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
    [shipping.7/supp_nation
     shipping.7/cust_nation

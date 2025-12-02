@@ -1,7 +1,7 @@
 [:project
  [{l_shipmode l.2/l_shipmode} high_line_count low_line_count]
  [:order-by
-  [[l.2/l_shipmode {:direction :asc, :null-ordering :nulls-last}]]
+  {:order-specs [[l.2/l_shipmode {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
    [l.2/l_shipmode
     {high_line_count _sum_out_5}

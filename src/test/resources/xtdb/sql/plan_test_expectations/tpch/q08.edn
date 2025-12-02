@@ -1,8 +1,8 @@
 [:project
  [{o_year all_nations.9/o_year} mkt_share]
  [:order-by
-  [[all_nations.9/o_year
-    {:direction :asc, :null-ordering :nulls-last}]]
+  {:order-specs [[all_nations.9/o_year
+    {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
    [all_nations.9/o_year {mkt_share (/ _sum_out_10 _sum_out_12)}]
    [:group-by

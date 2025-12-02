@@ -2064,7 +2064,7 @@
         [:map in-projs plan]
         plan)
 
-      [:order-by (mapv :order-by-spec ob-specs)
+      [:order-by {:order-specs (mapv :order-by-spec ob-specs)}
        plan]
 
       (if in-projs
@@ -2078,7 +2078,7 @@
                       in-projs)
        plan]
 
-      [:order-by (mapv :order-by-spec ob-specs)
+      [:order-by {:order-specs (mapv :order-by-spec ob-specs)}
        plan]
 
       (if in-projs
@@ -2750,7 +2750,7 @@
         [:patch-gaps {:valid-from ~valid-from, :valid-to ~valid-to}
          [:project [_iid _valid_from _valid_to
                     {doc ~(into {} (map (juxt keyword identity)) known-cols)}]
-          [:order-by [[_iid] [_valid_from]]
+          [:order-by {:order-specs [[_iid] [_valid_from]]}
            [:scan {:table ~table
                    :for-valid-time [:in ~valid-from ~valid-to]}
             [_iid _valid_from _valid_to

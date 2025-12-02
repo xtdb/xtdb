@@ -1,7 +1,7 @@
 [:project
  [{o_orderpriority o.1/o_orderpriority} order_count]
  [:order-by
-  [[o.1/o_orderpriority {:direction :asc, :null-ordering :nulls-last}]]
+  {:order-specs [[o.1/o_orderpriority {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
    [o.1/o_orderpriority {order_count _row_count_5}]
    [:group-by

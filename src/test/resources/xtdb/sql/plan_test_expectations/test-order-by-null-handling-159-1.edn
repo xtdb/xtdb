@@ -1,5 +1,5 @@
 [:project
  [{a foo.1/a}]
  [:order-by
-  [[foo.1/a {:direction :asc, :null-ordering :nulls-first}]]
+  {:order-specs [[foo.1/a {:direction :asc, :null-ordering :nulls-first}]]}
   [:rename foo.1 [:scan {:table #xt/table foo} [a]]]]]

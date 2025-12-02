@@ -1286,7 +1286,7 @@
                             {:xt/id id4, :b 4}]])
 
       (t/is (= [{:foo id1, :bar id1, :a 1, :b 1} {:foo id2, :bar id2, :a 2, :b 2}]
-               (tu/query-ra '[:order-by [[a]]
+               (tu/query-ra '[:order-by {:order-specs [[a]]}
                               [:join [{foo bar}]
                                [:rename {_id foo}
                                 [:scan {:table #xt/table foo}

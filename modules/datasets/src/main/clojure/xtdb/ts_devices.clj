@@ -85,7 +85,7 @@
   ;; LIMIT 10;
 
   '[:top {:limit 10}
-    [:order-by [[time {:direction :desc}]]
+    [:order-by {:order-specs [[time {:direction :desc}]]}
      [:project [time device-id battery-temperature]
       [:scan [time device-id battery-temperature
               {battery-status (= battery-status "discharging")}]]]]])
@@ -101,8 +101,8 @@
   ;; LIMIT 5;
 
   '[:top {:limit 5}
-    [:order-by [[cpu-avg-1min {:direction :desc}]
-                [time {:direction :desc}]]
+    [:order-by {:order-specs [[cpu-avg-1min {:direction :desc}]
+                [time {:direction :desc}]]}
      [:join {device-id device-id}
       [:scan [device-id time cpu-avg-1min
               {battery-level (< battery-level 30)}
@@ -122,7 +122,7 @@
   ;; LIMIT 12;
 
   '[:top {:limit 12}
-    [:order-by [[hour]]
+    [:order-by {:order-specs [[hour]]}
      [:group-by [hour
                  {min-battery-level (min battery-level)}
                  {max-battery-level (max battery-level)}]

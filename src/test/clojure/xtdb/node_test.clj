@@ -1145,7 +1145,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
               :types '{_id #xt/type :i64
                        bar #xt/type [:? :utf8]
                        foo #xt/type [:? :utf8]}}
-             (tu/query-ra '[:order-by [[_id]]
+             (tu/query-ra '[:order-by {:order-specs [[_id]]}
                             [:scan {:table #xt/table device} [_id foo bar]]]
                           {:node tu/*node*
                            :with-types? true})))

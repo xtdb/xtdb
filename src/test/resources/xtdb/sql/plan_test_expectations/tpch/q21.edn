@@ -3,8 +3,8 @@
  [:project
   [{s_name s.1/s_name} numwait]
   [:order-by
-   [[numwait {:direction :desc, :null-ordering :nulls-first}]
-    [s.1/s_name {:direction :asc, :null-ordering :nulls-last}]]
+   {:order-specs [[numwait {:direction :desc, :null-ordering :nulls-first}]
+    [s.1/s_name {:direction :asc, :null-ordering :nulls-last}]]}
    [:project
     [s.1/s_name {numwait _row_count_13}]
     [:group-by
