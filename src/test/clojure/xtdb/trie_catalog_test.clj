@@ -598,7 +598,7 @@
             (tu/finish-block! node)
             (c/compact-all! node #xt/duration "PT1S"))
 
-          (.collectGarbage gc)
+          (.collectAllGarbage gc)
 
           ;; we keep block 01 and 02
           ;; the 01 latest-complete-tx is cutoff (no garbage lifetime), i.e. the level 1 block 01 remains as it is compacted later

@@ -3,8 +3,6 @@ package xtdb.garbage_collector
 import kotlinx.coroutines.yield
 import xtdb.database.IDatabase
 import xtdb.table.TableRef
-import xtdb.trie.Trie.dataFilePath
-import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.TrieKey
 import xtdb.util.debug
 import xtdb.util.logger

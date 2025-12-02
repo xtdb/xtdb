@@ -22,8 +22,9 @@ private val LOGGER = LoggerFactory.getLogger(GarbageCollector::class.java)
 
 
 interface GarbageCollector : Closeable {
-    fun garbageCollectTries(garbageAsOf: Instant? = null)
-    fun collectGarbage()
+    suspend fun garbageCollectTries(garbageAsOf: Instant? = null)
+    suspend fun collectGarbage()
+    fun collectAllGarbage()
     fun start()
 
     interface Driver : AutoCloseable {
@@ -74,7 +75,7 @@ interface GarbageCollector : Closeable {
             blockCatalog.blockFromLatest(blocksToKeep)
                 ?.let { it.latestCompletedTx.systemTime.microsAsInstant - garbageLifetime }
 
-        override fun garbageCollectTries(garbageAsOf: Instant?) {
+        override suspend fun garbageCollectTries(garbageAsOf: Instant?) {
             val asOf = garbageAsOf ?: defaultGarbageAsOf() ?: return
 
             LOGGER.debug("Garbage collecting data older than {}", asOf)
@@ -84,13 +85,11 @@ interface GarbageCollector : Closeable {
                 val tableNames = blockCatalog.allTables.shuffled().take(100)
                 for (tableName in tableNames) {
                     val garbageTries = trieCatalog.garbageTries(tableName, asOf)
-                    runBlocking {
-                        for (garbageTrie in garbageTries) {
-                            driver.deletePath(tableName.metaFilePath(garbageTrie))
-                            driver.deletePath(tableName.dataFilePath(garbageTrie))
-                        }
-                        driver.deleteTries(tableName, garbageTries)
+                    for (garbageTrie in garbageTries) {
+                        driver.deletePath(tableName.metaFilePath(garbageTrie))
+                        driver.deletePath(tableName.dataFilePath(garbageTrie))
                     }
+                    driver.deleteTries(tableName, garbageTries)
                 }
                 LOGGER.debug("Trie garbage collection completed")
             } catch (e: Exception) {
@@ -100,13 +99,17 @@ interface GarbageCollector : Closeable {
             }
         }
 
-        override fun collectGarbage() {
+        override suspend fun collectGarbage() {
             LOGGER.debug("Starting block garbage collection")
             blockGc.garbageCollectBlocks()
             LOGGER.debug("Block garbage collection completed")
 
             garbageCollectTries()
             LOGGER.debug("Next GC run scheduled in ${approxRunInterval.toMillis()}ms")
+        }
+
+        override fun collectAllGarbage() = runBlocking {
+            collectGarbage()
         }
 
         override fun start() {
