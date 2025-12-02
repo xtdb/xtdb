@@ -1,16 +1,15 @@
 package xtdb.garbage_collector
 
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.yield
-import org.slf4j.LoggerFactory
 import xtdb.database.IDatabase
 import xtdb.table.TableRef
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.TrieKey
-import java.time.Instant
+import xtdb.util.debug
+import xtdb.util.logger
 
-private val LOGGER = LoggerFactory.getLogger(GarbageCollectorMockDriver::class.java)
+private val LOGGER = GarbageCollectorMockDriver::class.logger
 
 class GarbageCollectorMockDriver() : GarbageCollector.Driver.Factory {
     override fun create(db: IDatabase) = ForDatabase(db)
@@ -21,14 +20,14 @@ class GarbageCollectorMockDriver() : GarbageCollector.Driver.Factory {
 
         override suspend fun deleteGarbageTries(tableName: TableRef, garbageTries: Set<TrieKey>) {
             for (garbageTrie in garbageTries) {
-                LOGGER.debug("Deleting data file for garbage trie {}", garbageTrie)
+                LOGGER.debug("Deleting data file for garbage trie $garbageTrie")
                 bufferPool.deleteIfExists(tableName.metaFilePath(garbageTrie))
                 yield()
-                LOGGER.debug("Deleting meta file for garbage trie {}", garbageTrie)
+                LOGGER.debug("Deleting meta file for garbage trie $garbageTrie")
                 bufferPool.deleteIfExists(tableName.dataFilePath(garbageTrie))
                 yield()
             }
-            LOGGER.debug("Removing {} garbage tries from catalog for table {}", garbageTries.size, tableName)
+            LOGGER.debug("Removing ${garbageTries.size} garbage tries from catalog for table $tableName")
             trieCatalog.deleteTries(tableName, garbageTries)
         }
 
