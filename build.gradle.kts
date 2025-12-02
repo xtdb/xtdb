@@ -98,6 +98,17 @@ allprojects {
         maven { url = uri("https://repo.clojars.org/") }
     }
 
+    // Force all modules to use vendored Clojure
+    configurations.all {
+        resolutionStrategy {
+            dependencySubstitution {
+                substitute(module("org.clojure:clojure"))
+                    .using(project(":vendor:clojure"))
+                    .because("Using vendored Clojure for development")
+            }
+        }
+    }
+
     if (plugins.hasPlugin("java-library")) {
         java {
             withSourcesJar()
@@ -188,7 +199,7 @@ allprojects {
 
         if (plugins.hasPlugin("dev.clojurephant.clojure")) {
             dependencies {
-                implementation(libs.clojure)
+                implementation(project(":vendor:clojure"))
 
                 testRuntimeOnly("dev.clojurephant", "jovial", "0.4.1")
                 nrepl("cider", "cider-nrepl", "0.58.0")
@@ -534,7 +545,7 @@ val codoxRuntime = configurations.create("codoxRuntime") {
     isCanBeResolved = true
 }
 
-dependencies.add("codoxRuntime", "org.clojure:clojure:1.12.0")
+dependencies.add("codoxRuntime", project(":vendor:clojure"))
 dependencies.add("codoxRuntime", "codox:codox:0.10.8")
 
 tasks.register("build-codox", JavaExec::class) {
