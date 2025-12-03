@@ -5,6 +5,7 @@ import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
+import xtdb.trie.TrieKey
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
@@ -46,5 +47,7 @@ class SimulationTestUtils {
                 blockIndex++
             }
         }
+
+        fun List<TrieKey>.prefix(levelPrefix: String) = this.filter { it.startsWith(levelPrefix) }
     }
 }

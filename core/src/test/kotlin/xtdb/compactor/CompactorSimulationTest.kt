@@ -17,6 +17,7 @@ import xtdb.SimulationTestUtils.Companion.addTriesToBufferPool
 import xtdb.SimulationTestUtils.Companion.buildTrieDetails
 import xtdb.SimulationTestUtils.Companion.createJobCalculator
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.SimulationTestUtils.Companion.prefix
 import xtdb.SimulationTestUtils.Companion.setLogLevel
 import xtdb.WithSeed
 import xtdb.api.log.Log
@@ -270,8 +271,6 @@ class NumberOfSystemsExtension : BeforeEachCallback {
         testInstance.numberOfSystems = annotation.numberOfSystems
     }
 }
-
-fun List<TrieKey>.prefix(levelPrefix: String) = this.filter { it.startsWith(levelPrefix) }
 
 @Tag("property")
 @ExtendWith(DriverConfigExtension::class, NumberOfSystemsExtension::class)
