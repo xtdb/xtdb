@@ -30,15 +30,14 @@
 (defn skip-statement? [^String x]
   (boolean (re-find #"(?is)^\s*CREATE\s+(UNIQUE\s+)?INDEX\s+(\w+)\s+ON\s+(\w+)\s*\((.+)\)\s*$" x)))
 
-(defn- execute-sql-statement [node sql-statement variables opts]
-  (xt/execute-tx node
+(defn- execute-sql-statement [{:keys [conn] :as node} sql-statement variables opts]
+  (xt/execute-tx conn
                  [[:sql sql-statement]]
                  (cond-> opts
                    (get variables "CURRENT_TIMESTAMP") (assoc :current-time (Instant/parse (get variables "CURRENT_TIMESTAMP")))))
-
   node)
 
-(defn- execute-sql-query [{:keys [^Database$Catalog db-cat] :as node} sql-statement variables {:keys [direct-sql] :as opts}]
+(defn- execute-sql-query [{:keys [conn ^Database$Catalog db-cat]} sql-statement variables {:keys [direct-sql] :as opts}]
   (let [db (.getPrimary db-cat)
         !cache (atom {})
         plan-stmt sql/plan
@@ -52,7 +51,7 @@
                                                           (not direct-sql) (update :table-info update-vals #(disj % "_id"))))]
                                 (swap! !cache assoc sql plan)
                                 plan)))]
-      (let [res (xt/q node sql-statement
+      (let [res (xt/q conn sql-statement
                       (-> (into {:default-tz #xt/zone "UTC"} opts)
                           (assoc :key-fn :snake-case-string)
                           (cond-> (get variables "CURRENT_TIMESTAMP") (assoc :current-time (Instant/parse (get variables "CURRENT_TIMESTAMP"))))))
@@ -126,7 +125,7 @@
 
   (visitInsertStatement [_ ctx]
     (let [ops (.accept ctx (->InsertOpsVisitor node statement))]
-      (xt/execute-tx node ops)
+      (xt/execute-tx (:conn node) ops)
       node)))
 
 (extend-protocol slt/DbEngine

@@ -321,8 +321,10 @@
 
 (defn with-xtdb [f]
   (require 'xtdb.sql.logic-test.xtdb-engine)
-  (binding [*db-engine* tu/*node*]
-    (f)))
+  (let [node tu/*node*]
+    (with-open [conn (.getConnection node)]
+      (binding [*db-engine* (assoc node :conn conn)]
+        (f)))))
 
 (defn with-jdbc [url f]
   (with-open [c (DriverManager/getConnection url)]

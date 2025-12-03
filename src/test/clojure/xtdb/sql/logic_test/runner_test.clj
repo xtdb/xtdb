@@ -5,7 +5,7 @@
             [xtdb.sql.logic-test.xtdb-engine :as xtdb-engine]
             [xtdb.test-util :as tu]))
 
-(t/use-fixtures :each tu/with-node)
+(t/use-fixtures :each tu/with-node slt/with-xtdb)
 
 (t/deftest test-sql-logic-test-parser
   (t/is (= 6 (count (slt/parse-script
@@ -49,7 +49,7 @@ SELECT t1.a FROM t1
 ")]
 
     (t/is (= 3 (count records)))
-    (t/is (= {:t1 '[a b c d e]} (:tables (:db-engine (slt/execute-records tu/*node* records)))))))
+    (t/is (= {:t1 '[a b c d e]} (:tables (:db-engine (slt/execute-records slt/*db-engine* records)))))))
 
 (t/deftest test-sql-logic-test-completion
   (let [script "statement ok
@@ -75,7 +75,7 @@ foo
     (binding [slt/*opts* {:script-mode :completion :query-limit 2}]
       (t/is (= script
                (with-out-str
-                 (slt/execute-records tu/*node* records)))))))
+                 (slt/execute-records slt/*db-engine* records)))))))
 
 (t/deftest test-parse-create-table
   (t/is (= '{:type :create-table
@@ -109,11 +109,11 @@ CREATE UNIQUE INDEX t1i0 ON t1(
   b1
 )"))))
 
-(t/deftest test-insert->doc
+(t/deftest test-insert->doc->doc
   (let [tables {:t1 '[a b c d e]}]
     (letfn [(sql->ops [sql-insert-string]
               (-> (.accept (antlr/parse-statement sql-insert-string)
-                           (xtdb-engine/->InsertOpsVisitor (assoc tu/*node* :tables tables) sql-insert-string))
+                           (xtdb-engine/->InsertOpsVisitor (assoc slt/*db-engine* :tables tables) sql-insert-string))
                   (update-in [0 2] dissoc :xt/id)))]
       (t/is (= [[:put-docs :t1 {:e 103 :c 102 :b 100 :d 101 :a 104}]]
                (sql->ops "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)")))
