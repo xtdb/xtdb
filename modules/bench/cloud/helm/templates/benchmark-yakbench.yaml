@@ -29,6 +29,7 @@ spec:
         "helm.sh/hook": pre-install,pre-upgrade
         "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
     spec:
+      shareProcessNamespace: true
       nodeSelector:
         {{- toYaml .Values.providerConfig.nodeSelector | nindent 8 }}
       serviceAccountName: xtdb-service-account
@@ -42,6 +43,13 @@ spec:
         - name: local-disk-cache
           emptyDir:
             sizeLimit: {{ .Values.xtdbConfig.localDiskCache.sizeLimit }}
+        - name: dumps
+          emptyDir:
+            sizeLimit: {{ .Values.dumpUpload.volumeSizeLimit }}
+        - name: dump-upload-scripts
+          configMap:
+            name: dump-upload-scripts
+            defaultMode: 0755
       initContainers:
       - name: wait-for-kafka
         image: busybox
@@ -63,6 +71,8 @@ spec:
               subPath: xtdbconfig.yaml
             - name: local-disk-cache
               mountPath: /var/lib/xtdb/buffers/
+            - name: dumps
+              mountPath: /dumps
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           envFrom:
@@ -98,4 +108,23 @@ spec:
           ports:
             - name: metrics
               containerPort: 8080
+        - name: dump-uploader
+          image: mcr.microsoft.com/azure-cli:latest
+          command: ["/bin/bash", "/scripts/upload-dumps.sh"]
+          volumeMounts:
+            - name: dumps
+              mountPath: /dumps
+            - name: dump-upload-scripts
+              mountPath: /scripts
+          resources:
+            {{- toYaml .Values.dumpUpload.resources | nindent 12 }}
+          env:
+            - name: AZURE_STORAGE_ACCOUNT
+              value: {{ .Values.providerConfig.env.AZURE_STORAGE_ACCOUNT | default "" | quote }}
+            - name: AZURE_STORAGE_CONTAINER
+              value: {{ .Values.providerConfig.env.AZURE_STORAGE_CONTAINER | default "" | quote }}
+            - name: XTDB_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
 {{- end }}

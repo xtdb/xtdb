@@ -13,3 +13,74 @@ data:
   {{ $key }}: {{ $val | quote }}
   {{- end }}
   {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dump-upload-scripts
+  namespace: {{ .Release.Namespace }}
+data:
+  upload-dumps.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    DUMP_DIR=/dumps
+    PREFIX="dumps/${XTDB_NODE_ID:-unknown}/$(date +%Y-%m-%dT%H-%M-%S)"
+
+    echo "Installing inotify-tools and procps..."
+    if command -v apk &>/dev/null; then
+      apk add --no-cache inotify-tools procps >/dev/null 2>&1
+    elif command -v tdnf &>/dev/null; then
+      tdnf install -y inotify-tools procps-ng >/dev/null 2>&1
+    else
+      apt-get update -qq && apt-get install -y -qq inotify-tools procps >/dev/null 2>&1
+    fi
+
+    # Azure workload identity login
+    if [[ -n "${AZURE_FEDERATED_TOKEN_FILE:-}" ]]; then
+      echo "Logging in with Azure workload identity..."
+      az login --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
+        --service-principal \
+        -u "$AZURE_CLIENT_ID" \
+        -t "$AZURE_TENANT_ID" \
+        --output none
+    elif [[ -n "${AZURE_CLIENT_ID:-}" ]]; then
+      echo "Logging in with Azure managed identity..."
+      az login --identity --username "$AZURE_CLIENT_ID" --output none
+    fi
+
+    upload_file() {
+      local file=$1
+      echo "Uploading $file to $PREFIX/$file..."
+      az storage blob upload \
+        --account-name "$AZURE_STORAGE_ACCOUNT" \
+        --container-name "$AZURE_STORAGE_CONTAINER" \
+        --name "$PREFIX/$file" \
+        --file "$DUMP_DIR/$file" \
+        --auth-mode login \
+        --overwrite
+      echo "Uploaded: $PREFIX/$file"
+    }
+
+    # Background: watch for main container (java process) to exit
+    (
+      while pgrep -x java >/dev/null 2>&1; do
+        sleep 5
+      done
+      echo "Main container exited, waiting 10s for any final uploads..."
+      sleep 10
+      # Upload any dumps that might have been missed
+      for f in "$DUMP_DIR"/*.hprof; do
+        [[ -f "$f" ]] && upload_file "$(basename "$f")"
+      done
+      echo "Sidecar exiting."
+      kill $$
+    ) &
+
+    echo "Watching $DUMP_DIR for heap dumps..."
+
+    inotifywait -m -e close_write --format '%f' "$DUMP_DIR" 2>/dev/null | while read -r file; do
+      if [[ "$file" == *.hprof ]]; then
+        upload_file "$file"
+      fi
+    done

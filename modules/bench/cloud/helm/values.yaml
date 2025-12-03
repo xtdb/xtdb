@@ -28,10 +28,23 @@ xtdbConfig:
   # Core environment variables
   kafkaBootstrapServers: xtdb-benchmark-kafka.cloud-benchmark.svc.cluster.local:9092
   logTopic: xtdb-log
-  jdkOptions: "-Xmx3000m -Xms3000m -XX:MaxDirectMemorySize=5000m -XX:MaxMetaspaceSize=500m --enable-native-access=ALL-UNNAMED"
+  jdkOptions: "-Xmx3000m -Xms3000m -XX:MaxDirectMemorySize=5000m -XX:MaxMetaspaceSize=500m --enable-native-access=ALL-UNNAMED -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/dumps -XX:+ExitOnOutOfMemoryError"
   loggingLevel: info
   localDiskCache:
     sizeLimit: "150Gi"
+
+dumpUpload:
+  # Sidecar container resources for heap dump upload
+  # azure-cli image + tdnf install needs ~512Mi during package install
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "50m"
+    limits:
+      memory: "768Mi"
+      cpu: "200m"
+  # Size limit for the dumps volume
+  volumeSizeLimit: "10Gi"
 
 providerConfig:
   # Set by cloud provider override

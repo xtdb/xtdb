@@ -531,6 +531,71 @@ jobs:
             echo "No git metadata found on job"
           fi
 
+      - name: Rescue Crash Dumps
+        if: steps.check-deployment.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          STORAGE_ACCOUNT="xtdbazurebenchmark"
+          SRC_CONTAINER="xtdbazurebenchmarkcontainer"
+          DST_CONTAINER="xtdb-crash-dumps"
+
+          # Check if there are any dumps to rescue (heap dumps or XTDB crash logs)
+          HEAP_COUNT=$(az storage blob list \
+            --auth-mode login \
+            --account-name "$STORAGE_ACCOUNT" \
+            --container-name "$SRC_CONTAINER" \
+            --prefix "dumps/" \
+            --query "length(@)" \
+            --output tsv 2>/dev/null || echo "0")
+
+          CRASH_COUNT=$(az storage blob list \
+            --auth-mode login \
+            --account-name "$STORAGE_ACCOUNT" \
+            --container-name "$SRC_CONTAINER" \
+            --prefix "xtdb-object-store/crashes/" \
+            --query "length(@)" \
+            --output tsv 2>/dev/null || echo "0")
+
+          TOTAL_COUNT=$((HEAP_COUNT + CRASH_COUNT))
+          if [ "$TOTAL_COUNT" = "0" ]; then
+            echo "No crash artifacts to rescue (heap dumps: $HEAP_COUNT, crash logs: $CRASH_COUNT)"
+            exit 0
+          fi
+
+          echo "Found crash artifacts to rescue (heap dumps: $HEAP_COUNT, crash logs: $CRASH_COUNT)"
+
+          # Ensure destination container exists
+          az storage container create \
+            --auth-mode login \
+            --account-name "$STORAGE_ACCOUNT" \
+            --name "$DST_CONTAINER" \
+            --public-access off 2>/dev/null || true
+
+          # Copy dumps to safe container with timestamp prefix
+          TIMESTAMP=$(date -u +"%Y-%m-%d/%H-%M-%S")
+          BENCH_TYPE="${{ inputs.benchType }}"
+
+          # Rescue heap dumps (from dump-uploader sidecar)
+          az storage blob copy start-batch \
+            --auth-mode login \
+            --account-name "$STORAGE_ACCOUNT" \
+            --source-container "$SRC_CONTAINER" \
+            --destination-container "$DST_CONTAINER" \
+            --pattern "dumps/*" \
+            --destination-path "$TIMESTAMP/$BENCH_TYPE" || true
+
+          # Rescue XTDB crash logs (from crash-log! in indexer)
+          az storage blob copy start-batch \
+            --auth-mode login \
+            --account-name "$STORAGE_ACCOUNT" \
+            --source-container "$SRC_CONTAINER" \
+            --destination-container "$DST_CONTAINER" \
+            --pattern "xtdb-object-store/crashes/*" \
+            --destination-path "$TIMESTAMP/$BENCH_TYPE" || true
+
+          echo "Crash artifacts rescued to $DST_CONTAINER/$TIMESTAMP/$BENCH_TYPE/"
+
       - name: Run Cleanup Script
         if: ${{ always() && steps.check-deployment.outcome == 'success' }}
         run: |
