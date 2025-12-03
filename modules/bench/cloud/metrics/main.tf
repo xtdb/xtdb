@@ -20,9 +20,15 @@ terraform {
   }
 }
 
+variable "subscription_id" {
+  description = "Azure subscription ID for benchmark resources"
+  type        = string
+  default     = "91804669-c60b-4727-afa2-d7021fe5055b"
+}
+
 provider "azurerm" {
   features {}
-  subscription_id = "91804669-c60b-4727-afa2-d7021fe5055b"
+  subscription_id = var.subscription_id
 }
 
 provider "azapi" {}
@@ -125,6 +131,57 @@ locals {
     : "filter_param = todouble(log.${bench.param_path})\n                      | where benchmark == \"${bench.name}\" and filter_param == ${bench.param_value}"
   }
 
+  # TPC-H individual query breakdown KQL (cold and hot)
+  # Note: query-level logs don't have "benchmark" field, so we match on stage pattern
+  tpch_query_types = ["cold", "hot"]
+  tpch_query_kql = {
+    for query_type in local.tpch_query_types : query_type => trimspace(<<-KQL
+      let raw = ContainerLog
+      | where LogEntry startswith "{" and LogEntry contains "${query_type}-queries-q"
+      | extend log = parse_json(LogEntry)
+      | extend stage = tostring(log.stage),
+               duration_ms = todouble(log['time-taken-ms']),
+               bench_id = tostring(log['bench-id'])
+      | where stage startswith "${query_type}-queries-q"
+      | extend query_name = extract("${query_type}-queries-(q[0-9]+-[a-z-]+)", 1, stage)
+      | where isnotempty(query_name)
+      | summarize duration_ms = max(duration_ms) by bench_id, query_name, TimeGenerated;
+      let thresholds = raw | summarize p20 = percentile(duration_ms, 20) by query_name;
+      raw
+      | join kind=inner thresholds on query_name
+      | where duration_ms > p20
+      | top ${var.anomaly_baseline_n * 20} by TimeGenerated desc
+      | order by TimeGenerated asc
+      | project TimeGenerated, query_name, duration_ms
+    KQL
+    )
+  }
+
+  # Yakbench profile query breakdown KQL (global, max-user, mean-user)
+  # Extracts from the "profiles" JSON blob in output-profile-data stage
+  yakbench_profile_types = ["global", "max-user", "mean-user"]
+  yakbench_query_kql = {
+    for profile_type in local.yakbench_profile_types : profile_type => trimspace(<<-KQL
+      let raw = ContainerLog
+      | where LogEntry startswith "{" and LogEntry contains "profiles"
+      | extend log = parse_json(LogEntry)
+      | where isnotnull(log.profiles)
+      | extend bench_id = tostring(log['bench-id'])
+      | mv-expand profile = log.profiles['${profile_type}']
+      | extend query_id = tostring(profile.id),
+               mean_ms = todouble(profile['mean']) / 1000000.0
+      | summarize mean_ms = max(mean_ms) by bench_id, query_id, TimeGenerated;
+      let thresholds = raw | summarize p20 = percentile(mean_ms, 20) by query_id;
+      raw
+      | join kind=inner thresholds on query_id
+      | where mean_ms > p20
+      | top ${var.anomaly_baseline_n * 20} by TimeGenerated desc
+      | order by TimeGenerated asc
+      | project TimeGenerated, query_id, mean_ms
+    KQL
+    )
+  }
+
   # Dashboard KQL queries per benchmark
   # auctionmark uses string comparison (ISO duration), others use numeric comparison
   dashboard_queries = {
@@ -141,7 +198,7 @@ locals {
       | order by TimeGenerated asc
       | project TimeGenerated, ${bench.metric_name}
     KQL
-    ) : trimspace(<<-KQL
+      ) : trimspace(<<-KQL
       ContainerLog
       | where LogEntry startswith "{" and LogEntry has "benchmark"
       | extend log = parse_json(LogEntry)
@@ -165,6 +222,10 @@ resource "azurerm_logic_app_workflow" "bench_alert_relay" {
   location            = var.location
   resource_group_name = var.resource_group_name
   enabled             = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "azurerm_logic_app_trigger_http_request" "bench_alert_trigger" {
@@ -219,6 +280,10 @@ resource "azurerm_monitor_action_group" "bench_slack" {
     resource_id             = azurerm_logic_app_workflow.bench_alert_relay.id
     callback_url            = azapi_resource_action.bench_alert_relay_cb.output.value
     use_common_alert_schema = true
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -307,7 +372,7 @@ resource "azapi_resource" "bench_anomaly" {
                              fast_violation = current_value < threshold_value_fast,
                              prev_diff_ratio = iif(isnotnull(prev_value) and prev_value > 0, abs(current_value - prev_value) / prev_value, real(null))
                     | extend new_normal_candidate = isnotnull(prev_diff_ratio) and prev_diff_ratio <= ${var.anomaly_new_normal_relative_threshold}
-                    | where (slow_violation or fast_violation) // TEMP and not(new_normal_candidate)
+                    | where (slow_violation or fast_violation) and not(new_normal_candidate)
                     | project run_id, slow_violation, fast_violation, TimeGenerated, current_value, baseline_mean, baseline_std, prev_value, prev_diff_ratio
                 KQL
               }
@@ -372,6 +437,12 @@ resource "azurerm_role_assignment" "bench_anomaly_la_reader" {
   role_definition_name             = "Log Analytics Reader"
   principal_id                     = azapi_resource.bench_anomaly[each.key].output.identity.principalId
   skip_service_principal_aad_check = true
+
+  lifecycle {
+    create_before_destroy = true
+    # These assignments already exist - ignore drift from terraform defaults
+    ignore_changes = [principal_id, skip_service_principal_aad_check]
+  }
 }
 
 # Azure Portal Dashboard: recent runs (line chart per benchmark)
@@ -384,60 +455,173 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
     lenses = {
       "0" = {
         order = 0
-        parts = {
-          for key, bench in local.benchmarks : "${key}-runs-timeseries" => {
-            position = {
-              x       = local.dashboard_positions[bench.dashboard_idx].x
-              y       = local.dashboard_positions[bench.dashboard_idx].y
-              colSpan = 6
-              rowSpan = 4
+        parts = merge(
+          # Existing benchmark summary charts (2x2 grid)
+          {
+            for key, bench in local.benchmarks : "${key}-runs-timeseries" => {
+              position = {
+                x       = local.dashboard_positions[bench.dashboard_idx].x
+                y       = local.dashboard_positions[bench.dashboard_idx].y
+                colSpan = 6
+                rowSpan = 4
+              }
+              metadata = {
+                inputs = [
+                  { name = "resourceTypeMode", isOptional = true },
+                  { name = "ComponentId", isOptional = true },
+                  {
+                    name = "Scope"
+                    value = {
+                      resourceIds = [data.azurerm_log_analytics_workspace.cluster_law.id]
+                    }
+                    isOptional = true
+                  },
+                  { name = "PartId", value = "bench-${key}-part", isOptional = true },
+                  { name = "Version", value = "2.0", isOptional = true },
+                  { name = "TimeRange", value = "P30D", isOptional = true },
+                  { name = "DashboardId", isOptional = true },
+                  { name = "DraftRequestParameters", isOptional = true },
+                  { name = "Query", value = local.dashboard_queries[key], isOptional = true },
+                  { name = "ControlType", value = "FrameControlChart", isOptional = true },
+                  { name = "SpecificChart", value = "Line", isOptional = true },
+                  { name = "PartTitle", value = "Benchmark ${bench.display_name} Runs", isOptional = true },
+                  { name = "PartSubTitle", value = var.cluster_law_name, isOptional = true },
+                  {
+                    name = "Dimensions"
+                    value = {
+                      xAxis       = { name = "TimeGenerated", type = "datetime" }
+                      yAxis       = [{ name = bench.metric_name, type = "real" }]
+                      splitBy     = []
+                      aggregation = "Sum"
+                    }
+                    isOptional = true
+                  },
+                  {
+                    name = "LegendOptions"
+                    value = {
+                      isEnabled = true
+                      position  = "Bottom"
+                    }
+                    isOptional = true
+                  },
+                  { name = "IsQueryContainTimeRange", value = false, isOptional = true }
+                ]
+                type     = "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart"
+                settings = {}
+              }
             }
-            metadata = {
-              inputs = [
-                { name = "resourceTypeMode", isOptional = true },
-                { name = "ComponentId", isOptional = true },
-                {
-                  name = "Scope"
-                  value = {
-                    resourceIds = [data.azurerm_log_analytics_workspace.cluster_law.id]
-                  }
-                  isOptional = true
-                },
-                { name = "PartId", value = "${bench.dashboard_idx}58d931e-8294-47ce-8d13-c04026627f4${bench.dashboard_idx}", isOptional = true },
-                { name = "Version", value = "2.0", isOptional = true },
-                { name = "TimeRange", value = "P30D", isOptional = true },
-                { name = "DashboardId", isOptional = true },
-                { name = "DraftRequestParameters", isOptional = true },
-                { name = "Query", value = local.dashboard_queries[key], isOptional = true },
-                { name = "ControlType", value = "FrameControlChart", isOptional = true },
-                { name = "SpecificChart", value = "Line", isOptional = true },
-                { name = "PartTitle", value = "Benchmark ${bench.display_name} Runs", isOptional = true },
-                { name = "PartSubTitle", value = var.cluster_law_name, isOptional = true },
-                {
-                  name = "Dimensions"
-                  value = {
-                    xAxis       = { name = "TimeGenerated", type = "datetime" }
-                    yAxis       = [{ name = bench.metric_name, type = "real" }]
-                    splitBy     = []
-                    aggregation = "Sum"
-                  }
-                  isOptional = true
-                },
-                {
-                  name = "LegendOptions"
-                  value = {
-                    isEnabled = true
-                    position  = "Bottom"
-                  }
-                  isOptional = true
-                },
-                { name = "IsQueryContainTimeRange", value = false, isOptional = true }
-              ]
-              type     = "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart"
-              settings = {}
+          },
+          # TPC-H individual query breakdown charts (cold and hot) - row 8
+          {
+            for idx, query_type in local.tpch_query_types : "tpch-${query_type}-queries" => {
+              position = {
+                x       = idx * 6
+                y       = 8
+                colSpan = 6
+                rowSpan = 4
+              }
+              metadata = {
+                inputs = [
+                  { name = "resourceTypeMode", isOptional = true },
+                  { name = "ComponentId", isOptional = true },
+                  {
+                    name = "Scope"
+                    value = {
+                      resourceIds = [data.azurerm_log_analytics_workspace.cluster_law.id]
+                    }
+                    isOptional = true
+                  },
+                  { name = "PartId", value = "tpch-${query_type}-queries-part", isOptional = true },
+                  { name = "Version", value = "2.0", isOptional = true },
+                  { name = "TimeRange", value = "P30D", isOptional = true },
+                  { name = "DashboardId", isOptional = true },
+                  { name = "DraftRequestParameters", isOptional = true },
+                  { name = "Query", value = local.tpch_query_kql[query_type], isOptional = true },
+                  { name = "ControlType", value = "FrameControlChart", isOptional = true },
+                  { name = "SpecificChart", value = "Line", isOptional = true },
+                  { name = "PartTitle", value = "TPC-H ${title(query_type)} Queries (SF=${var.tpch_anomaly_scale_factor})", isOptional = true },
+                  { name = "PartSubTitle", value = "Individual query times", isOptional = true },
+                  {
+                    name = "Dimensions"
+                    value = {
+                      xAxis       = { name = "TimeGenerated", type = "datetime" }
+                      yAxis       = [{ name = "duration_ms", type = "real" }]
+                      splitBy     = [{ name = "query_name", type = "string" }]
+                      aggregation = "Sum"
+                    }
+                    isOptional = true
+                  },
+                  {
+                    name = "LegendOptions"
+                    value = {
+                      isEnabled = true
+                      position  = "Bottom"
+                    }
+                    isOptional = true
+                  },
+                  { name = "IsQueryContainTimeRange", value = false, isOptional = true }
+                ]
+                type     = "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart"
+                settings = {}
+              }
+            }
+          },
+          # Yakbench profile breakdown charts (global, max-user, mean-user) - row 12
+          {
+            for idx, profile_type in local.yakbench_profile_types : "yakbench-${profile_type}-queries" => {
+              position = {
+                x       = idx * 4
+                y       = 12
+                colSpan = 4
+                rowSpan = 4
+              }
+              metadata = {
+                inputs = [
+                  { name = "resourceTypeMode", isOptional = true },
+                  { name = "ComponentId", isOptional = true },
+                  {
+                    name = "Scope"
+                    value = {
+                      resourceIds = [data.azurerm_log_analytics_workspace.cluster_law.id]
+                    }
+                    isOptional = true
+                  },
+                  { name = "PartId", value = "yakbench-${profile_type}-queries-part", isOptional = true },
+                  { name = "Version", value = "2.0", isOptional = true },
+                  { name = "TimeRange", value = "P30D", isOptional = true },
+                  { name = "DashboardId", isOptional = true },
+                  { name = "DraftRequestParameters", isOptional = true },
+                  { name = "Query", value = local.yakbench_query_kql[profile_type], isOptional = true },
+                  { name = "ControlType", value = "FrameControlChart", isOptional = true },
+                  { name = "SpecificChart", value = "Line", isOptional = true },
+                  { name = "PartTitle", value = "Yakbench ${replace(title(profile_type), "-", " ")} Queries", isOptional = true },
+                  { name = "PartSubTitle", value = "Mean query times (ms)", isOptional = true },
+                  {
+                    name = "Dimensions"
+                    value = {
+                      xAxis       = { name = "TimeGenerated", type = "datetime" }
+                      yAxis       = [{ name = "mean_ms", type = "real" }]
+                      splitBy     = [{ name = "query_id", type = "string" }]
+                      aggregation = "Sum"
+                    }
+                    isOptional = true
+                  },
+                  {
+                    name = "LegendOptions"
+                    value = {
+                      isEnabled = true
+                      position  = "Bottom"
+                    }
+                    isOptional = true
+                  },
+                  { name = "IsQueryContainTimeRange", value = false, isOptional = true }
+                ]
+                type     = "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart"
+                settings = {}
+              }
             }
           }
-        }
+        )
       }
     }
     metadata = {

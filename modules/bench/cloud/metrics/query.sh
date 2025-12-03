@@ -22,13 +22,19 @@ MAIN_TF="${SCRIPT_DIR}/main.tf"
 usage() {
   echo "Usage: $0 <command> <query-type> <benchmark> [terraform.tfvars]" >&2
   echo "  command:    render | run" >&2
-  echo "  query-type: anomaly | dashboard" >&2
+  echo "  query-type: anomaly | dashboard | queries-cold | queries-hot |" >&2
+  echo "              profile-global | profile-max-user | profile-mean-user" >&2
   echo "  benchmark:  tpch | yakbench | readings | auctionmark" >&2
   echo "" >&2
   echo "Examples:" >&2
-  echo "  $0 render anomaly tpch       # Output the KQL query" >&2
-  echo "  $0 run dashboard yakbench    # Run query against Azure" >&2
-  echo "  $0 run anomaly readings      # Run query against Azure" >&2
+  echo "  $0 render anomaly tpch          # Output the KQL query" >&2
+  echo "  $0 run dashboard yakbench       # Run query against Azure" >&2
+  echo "  $0 run anomaly readings         # Run query against Azure" >&2
+  echo "  $0 run queries-cold tpch        # TPC-H individual cold query times" >&2
+  echo "  $0 run queries-hot tpch         # TPC-H individual hot query times" >&2
+  echo "  $0 run profile-global yakbench  # Yakbench global profile queries" >&2
+  echo "  $0 run profile-max-user yakbench    # Yakbench max-user queries" >&2
+  echo "  $0 run profile-mean-user yakbench   # Yakbench mean-user queries" >&2
   exit 1
 }
 
@@ -42,8 +48,23 @@ if [[ "$COMMAND" != "render" && "$COMMAND" != "run" ]]; then
   usage
 fi
 
-if [[ "$QUERY_TYPE" != "anomaly" && "$QUERY_TYPE" != "dashboard" ]]; then
-  echo "Error: query-type must be 'anomaly' or 'dashboard'" >&2
+if [[ "$QUERY_TYPE" != "anomaly" && "$QUERY_TYPE" != "dashboard" && \
+      "$QUERY_TYPE" != "queries-cold" && "$QUERY_TYPE" != "queries-hot" && \
+      "$QUERY_TYPE" != "profile-global" && "$QUERY_TYPE" != "profile-max-user" && "$QUERY_TYPE" != "profile-mean-user" ]]; then
+  echo "Error: query-type must be 'anomaly', 'dashboard', 'queries-cold', 'queries-hot'," >&2
+  echo "       'profile-global', 'profile-max-user', or 'profile-mean-user'" >&2
+  usage
+fi
+
+# queries-cold and queries-hot only work with tpch
+if [[ "$QUERY_TYPE" == "queries-cold" || "$QUERY_TYPE" == "queries-hot" ]] && [[ "$BENCHMARK" != "tpch" ]]; then
+  echo "Error: queries-cold and queries-hot only work with tpch benchmark" >&2
+  usage
+fi
+
+# profile-* only work with yakbench
+if [[ "$QUERY_TYPE" == "profile-global" || "$QUERY_TYPE" == "profile-max-user" || "$QUERY_TYPE" == "profile-mean-user" ]] && [[ "$BENCHMARK" != "yakbench" ]]; then
+  echo "Error: profile-global, profile-max-user, profile-mean-user only work with yakbench benchmark" >&2
   usage
 fi
 
@@ -78,8 +99,10 @@ get_var() {
 
 # Get variables with defaults from variables.tf
 ANOMALY_BASELINE_N=$(get_var "anomaly_baseline_n" "30")
+ANOMALY_BASELINE_N_TIMES_20=$((ANOMALY_BASELINE_N * 20))
 ANOMALY_SIGMA=$(get_var "anomaly_sigma" "2")
 ANOMALY_NEW_NORMAL_RELATIVE_THRESHOLD=$(get_var "anomaly_new_normal_relative_threshold" "0.05")
+TPCH_ANOMALY_SCALE_FACTOR=$(get_var "tpch_anomaly_scale_factor" "1.0")
 
 # Benchmark-specific configuration (mirrors local.benchmarks in main.tf)
 case "$BENCHMARK" in
@@ -144,38 +167,51 @@ extract_query() {
       in_resource && in_query && /^ *KQL$/ { in_query = 0; in_resource = 0; next }
       in_query { print }
     ' "$MAIN_TF"
-  else
-    # Dashboard query - generate directly (mirrors local.dashboard_queries in main.tf)
-    # auctionmark (param_is_string=true) uses string comparison (ISO duration), others use numeric comparison
-    if [[ "$PARAM_IS_STRING" == "true" ]]; then
-      cat <<KQL
-ContainerLog
-| where LogEntry startswith "{" and LogEntry has "benchmark"
-| extend log = parse_json(LogEntry)
-| where isnotnull(log.benchmark) and log.stage != "init"
-| extend benchmark = tostring(log.benchmark),
-         filter_param = tostring(log.\${each.value.param_path}),
-         \${each.value.metric_name} = todouble(log[\${each.value.metric_path}])
-| where benchmark == "\${each.value.name}" and filter_param == "\${each.value.param_value}"
-| top \${var.anomaly_baseline_n} by TimeGenerated desc
-| order by TimeGenerated asc
-| project TimeGenerated, \${each.value.metric_name}
-KQL
+  elif [[ "$QUERY_TYPE" == "queries-cold" || "$QUERY_TYPE" == "queries-hot" ]]; then
+    # TPC-H individual query breakdown - extract from local.tpch_query_kql in main.tf
+    local QUERY_PREFIX
+    if [[ "$QUERY_TYPE" == "queries-cold" ]]; then
+      QUERY_PREFIX="cold"
     else
-      cat <<KQL
-ContainerLog
-| where LogEntry startswith "{" and LogEntry has "benchmark"
-| extend log = parse_json(LogEntry)
-| where isnotnull(log.benchmark) and log.stage != "init"
-| extend benchmark = tostring(log.benchmark),
-         filter_param = todouble(log.\${each.value.param_path}),
-         duration_ms = todouble(log[\${each.value.metric_path}])
-| where benchmark == "\${each.value.name}" and filter_param == \${each.value.param_value}
-| top \${var.anomaly_baseline_n} by TimeGenerated desc
-| extend duration_minutes = todouble(duration_ms) / 60000
-| order by TimeGenerated asc
-| project TimeGenerated, duration_minutes
-KQL
+      QUERY_PREFIX="hot"
+    fi
+    # Extract the heredoc from tpch_query_kql (there's only one, used for both cold/hot via ${query_type})
+    awk '
+      /tpch_query_kql = \{/ { in_block = 1 }
+      in_block && /<<-KQL$/ { in_query = 1; next }
+      in_block && in_query && /^ *KQL$/ { in_query = 0; in_block = 0 }
+      in_query { print }
+    ' "$MAIN_TF" | sed "s/\${query_type}/${QUERY_PREFIX}/g"
+  elif [[ "$QUERY_TYPE" == "profile-global" || "$QUERY_TYPE" == "profile-max-user" || "$QUERY_TYPE" == "profile-mean-user" ]]; then
+    # Yakbench profile breakdown - extract from local.yakbench_query_kql in main.tf
+    local PROFILE_TYPE
+    PROFILE_TYPE="${QUERY_TYPE#profile-}"  # Strip "profile-" prefix
+    # Extract the heredoc from yakbench_query_kql
+    awk '
+      /yakbench_query_kql = \{/ { in_block = 1 }
+      in_block && /<<-KQL$/ { in_query = 1; next }
+      in_block && in_query && /^ *KQL$/ { in_query = 0; in_block = 0 }
+      in_query { print }
+    ' "$MAIN_TF" | sed "s/\${profile_type}/${PROFILE_TYPE}/g"
+  else
+    # Dashboard query - extract from local.dashboard_queries in main.tf
+    # There are two heredocs: first for string params, second for numeric params
+    if [[ "$PARAM_IS_STRING" == "true" ]]; then
+      # Extract the first heredoc (string param version)
+      awk '
+        /dashboard_queries = \{/ { in_block = 1 }
+        in_block && /<<-KQL$/ && !found { in_query = 1; found = 1; next }
+        in_block && in_query && /^ *KQL$/ { in_query = 0 }
+        in_query { print }
+      ' "$MAIN_TF"
+    else
+      # Extract the second heredoc (numeric param version)
+      awk '
+        /dashboard_queries = \{/ { in_block = 1 }
+        in_block && /<<-KQL$/ { count++; if (count == 2) { in_query = 1 }; next }
+        in_block && in_query && /^ *KQL$/ { in_query = 0; in_block = 0 }
+        in_query { print }
+      ' "$MAIN_TF"
     fi
   fi
 }
@@ -201,6 +237,8 @@ render_query() {
   echo "$QUERY_TEMPLATE" | \
     sed "s/^.\{${MIN_INDENT}\}//" | \
     sed "s/\${var.anomaly_baseline_n}/${ANOMALY_BASELINE_N}/g" | \
+    sed "s/\${var.anomaly_baseline_n \* 20}/${ANOMALY_BASELINE_N_TIMES_20}/g" | \
+    sed "s/\${var.tpch_anomaly_scale_factor}/${TPCH_ANOMALY_SCALE_FACTOR}/g" | \
     sed "s/\${var.anomaly_sigma}/${ANOMALY_SIGMA}/g" | \
     sed "s/\${var.anomaly_new_normal_relative_threshold}/${ANOMALY_NEW_NORMAL_RELATIVE_THRESHOLD}/g" | \
     sed "s/\${var.${PARAM_VAR}}/${PARAM_VALUE}/g" | \
@@ -210,6 +248,11 @@ render_query() {
     sed "s/\${each.value.metric_path}/${METRIC_PATH}/g" | \
     sed "s/\${each.value.metric_name}/${METRIC_NAME}/g" | \
     sed "s/\${each.value.name}/${BENCH_NAME}/g" | \
+    sed "s/\${bench.param_path}/${PARAM_PATH}/g" | \
+    sed "s/\${bench.param_value}/${PARAM_VALUE}/g" | \
+    sed "s/\${bench.metric_path}/${METRIC_PATH}/g" | \
+    sed "s/\${bench.metric_name}/${METRIC_NAME}/g" | \
+    sed "s/\${bench.name}/${BENCH_NAME}/g" | \
     sed "s/\${local.param_filter_expr\[each.key\]}/${ESCAPED_FILTER_EXPR}/g"
 }
 
