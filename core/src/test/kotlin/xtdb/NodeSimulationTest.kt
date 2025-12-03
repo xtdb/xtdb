@@ -229,7 +229,74 @@ Instant.now()
         runBlocking { garbageCollector.garbageCollectTries(Instant.now() + Duration.ofHours(1)) }
 
         Assertions.assertEquals(expectedL2Tries.toSet(), trieCatalog.listAllTrieKeys(table).toSet(), "l1s should get garbage collected from trie catalog, leaving l2s")
+    }
 
+    @RepeatableSimulationTest
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    fun `gc collects old garbage while compaction runs`(iteration: Int) {
+        val table = TableRef("xtdb", "public", "docs")
+        val defaultFileTarget = 100L * 1024L * 1024L
 
+        val oldl1Tries = L1TrieKeys.take(4).toList()
+        val oldl2Tries = listOf("l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03")
+        val oldTries = oldl1Tries + oldl2Tries
+
+        addTries(
+            table,
+            oldTries.map { buildTrieDetails(table.tableName, it, defaultFileTarget) },
+            Instant.now()
+        )
+
+        Assertions.assertEquals(oldTries, trieCatalog.listAllTrieKeys(table), "tries present in catalog")
+        Assertions.assertEquals(oldTries, listTrieNamesFromBufferPool(bufferPool, table), "tries present in buffer pool")
+
+        val newL1Tries = listOf("l01-rc-b04", "l01-rc-b05", "l01-rc-b06", "l01-rc-b07")
+        addTries(
+            table,
+            newL1Tries.map { buildTrieDetails(table.tableName, it, defaultFileTarget) },
+            Instant.now()
+        )
+
+        // Finish blocks so GC can consider tries for collection
+        for (blockIndex in 5L..7L) {
+            blockCatalog.finishBlock(
+                blockIndex = blockIndex,
+                latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
+                latestProcessedMsgId = blockIndex,
+                tables = listOf(table),
+                secondaryDatabases = null
+            )
+        }
+
+        val expectedNewL2Tries = listOf("l02-rc-p0-b07", "l02-rc-p1-b07", "l02-rc-p2-b07", "l02-rc-p3-b07")
+
+        // Launch compaction (for new L1s) and GC (for old garbage L1s) in parallel
+        runBlocking(dispatcher) {
+            val compactionJob = launch {
+                compactorForDb.startCompaction().await()
+            }
+            val gcJob = launch {
+                garbageCollector.garbageCollectTries(Instant.now() + Duration.ofHours(1))
+            }
+
+            compactionJob.join()
+            gcJob.join()
+        }
+
+        val finalTriesInCatalog = trieCatalog.listAllTrieKeys(table).toSet()
+        val finalTriesInBufferPool = listTrieNamesFromBufferPool(bufferPool, table).toSet()
+
+        Assertions.assertTrue(oldl1Tries.none { it in finalTriesInCatalog }, "Old L1 tries should be garbage collected")
+        Assertions.assertTrue(oldl1Tries.none { it in finalTriesInBufferPool }, "Old L1 tries should be removed from buffer pool")
+
+        Assertions.assertTrue(expectedNewL2Tries.all { it in finalTriesInCatalog }, "New L2 tries should be created by compaction")
+        Assertions.assertTrue(expectedNewL2Tries.all { it in finalTriesInBufferPool }, "New L2 tries should be in buffer pool")
+
+        Assertions.assertTrue(oldl2Tries.all { it in finalTriesInCatalog }, "Old L2 tries should still be present")
+        Assertions.assertTrue(oldl2Tries.all { it in finalTriesInBufferPool }, "Old L2 tries should still be in buffer pool")
+
+        runBlocking { garbageCollector.garbageCollectTries(Instant.now() + Duration.ofHours(1)) }
+        val l2Set = (oldl2Tries + expectedNewL2Tries).toSet()
+        Assertions.assertEquals(l2Set.toSet(), trieCatalog.listAllTrieKeys(table).toSet(), "l1s should get garbage collected from trie catalog, leaving l2s")
     }
 }
