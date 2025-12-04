@@ -5,7 +5,8 @@
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.log :as xt-log])
   (:import [xtdb.api.log Log$Message]
            [xtdb.database Database$Catalog]
            [xtdb.test.log RecordingLog]))
@@ -160,3 +161,23 @@
         (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
         (jdbc/execute! secondary ["INSERT INTO docs RECORDS {_id: 1}"])
         (t/is (= 1 (count (.getMessages output-log))))))))
+
+(t/deftest test-tx-sink-restart
+  (t/testing "after restart, tx-sink does not resend old messages"
+    (util/with-tmp-dirs #{local-path}
+      (let [messages (with-open [node (xtn/start-node {:log [:local {:path (.resolve local-path "log")}]
+                                                       :tx-sink {:enable true
+                                                                 :output-log [::tu/recording {}]
+                                                                 :format :transit+json}})]
+                       (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1}]])
+                       (let [^RecordingLog output-log (get-output-log node)]
+                         (.getMessages output-log)))]
+        (t/is (= 1 (count messages)))
+        (with-open [node (xtn/start-node {:log [:local {:path (.resolve local-path "log")}]
+                                          :tx-sink {:enable true
+                                                    :output-log [::tu/recording {:messages messages}]
+                                                    :format :transit+json}})]
+          (xt-log/sync-node node #xt/duration "PT1S")
+          (let [^RecordingLog output-log (get-output-log node)]
+            (t/is (= 1 (count (.getMessages output-log))))
+            (t/is (= messages (.getMessages output-log)))))))))

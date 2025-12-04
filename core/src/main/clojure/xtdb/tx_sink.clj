@@ -7,7 +7,7 @@
             [xtdb.util :as util]
             [xtdb.time :as time])
   (:import (xtdb.api TxSinkConfig Xtdb Xtdb$Config)
-           (xtdb.api.log Log Log$Message$Tx)
+           (xtdb.api.log Log Log$Message Log$Message$Tx)
            (xtdb.catalog BlockCatalog)
            (xtdb.indexer Indexer$TxSink LiveIndex$Tx)
            (xtdb.table TableRef)))
@@ -40,6 +40,11 @@
     :transit+json #(xtdb.serde/write-transit % :json)
     :transit+msgpack #(xtdb.serde/write-transit % :msgpack)))
 
+(defn ->decode-fn [fmt]
+  (case fmt
+    :transit+json #(xtdb.serde/read-transit % :json)
+    :transit+msgpack #(xtdb.serde/read-transit % :msgpack)))
+
 (defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format enable db-name]}]
   (.txSink config
            (cond-> (TxSinkConfig.)
@@ -57,35 +62,45 @@
                  :base base
                  :db-name db-name}})
 
-(defrecord TxSink [^Log output-log encode-as-bytes ^BlockCatalog block-cat db-name]
+(defn gt [a b] (pos? (compare a b)))
+
+(defrecord TxSink [^Log output-log encode-as-bytes ^BlockCatalog block-cat db-name last-tx-key]
   Indexer$TxSink
   (onCommit [_ tx-key live-idx-tx]
-    (util/with-open [live-idx-snap (.openSnapshot live-idx-tx)]
-      (let [live-tables (.getLiveTables live-idx-snap)]
-        (.appendMessage output-log
-                        (-> {:transaction {:id tx-key}
-                             :system-time (let [live-table (.liveTable live-idx-tx (first live-tables))
-                                                start-pos (.getStartPos live-table)
-                                                live-relation (.getLiveRelation live-table)
-                                                system-from-vec (.vectorFor live-relation "_system_from")]
-                                            (time/->instant (.getObject system-from-vec start-pos)))
-                             :source {;:version "1.0.0" ;; TODO
-                                      :db db-name
-                                      :block-idx (inc (or (.getCurrentBlockIndex block-cat) -1))}
-                             :tables (->> live-tables
-                                          (map #(read-table-rows % live-idx-tx))
-                                          (into []))}
-                            encode-as-bytes
-                            Log$Message$Tx.))))))
+    (when (or (nil? last-tx-key) (gt tx-key last-tx-key))
+      (util/with-open [live-idx-snap (.openSnapshot live-idx-tx)]
+        (let [live-tables (.getLiveTables live-idx-snap)]
+          (.appendMessage output-log
+                          (-> {:transaction {:id tx-key}
+                               :system-time (let [live-table (.liveTable live-idx-tx (first live-tables))
+                                                  start-pos (.getStartPos live-table)
+                                                  live-relation (.getLiveRelation live-table)
+                                                  system-from-vec (.vectorFor live-relation "_system_from")]
+                                              (time/->instant (.getObject system-from-vec start-pos)))
+                               :source {;:version "1.0.0" ;; TODO
+                                        :db db-name
+                                        :block-idx (inc (or (.getCurrentBlockIndex block-cat) -1))}
+                               :tables (->> live-tables
+                                            (map #(read-table-rows % live-idx-tx))
+                                            (into []))}
+                              encode-as-bytes
+                              Log$Message$Tx.)))))))
 
-(defmethod ig/init-key ::for-db [_ {:keys [^TxSinkConfig tx-sink-conf output-log block-cat db-name]}]
+(defmethod ig/init-key ::for-db [_ {:keys [^TxSinkConfig tx-sink-conf ^Log output-log block-cat db-name]}]
   (when (and tx-sink-conf
              (.getEnable tx-sink-conf)
              (= db-name (.getDbName tx-sink-conf)))
-    (map->TxSink {:output-log output-log
-                  :encode-as-bytes (->encode-fn (keyword (.getFormat tx-sink-conf)))
-                  :block-cat block-cat
-                  :db-name db-name})))
+    (let [last-message (try
+                         (let [decode-record (->decode-fn (keyword (.getFormat tx-sink-conf)))]
+                           (->> (.readLastMessage output-log)
+                                Log$Message/.encode
+                                decode-record))
+                         (catch Exception _ nil))]
+      (map->TxSink {:output-log output-log
+                    :encode-as-bytes (->encode-fn (keyword (.getFormat tx-sink-conf)))
+                    :block-cat block-cat
+                    :db-name db-name
+                    :last-tx-key (some-> last-message :transaction :id)}))))
 
 (defmethod ig/init-key ::output-log [_ {:keys [^TxSinkConfig tx-sink-conf db-name]
                                         {:keys [log-clusters]} :base}]
