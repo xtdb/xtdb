@@ -2,6 +2,7 @@ package xtdb.indexer
 
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
@@ -18,7 +19,9 @@ import xtdb.arrow.asChannel
 import xtdb.catalog.BlockCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.Database
+import xtdb.block.proto.Block
 import xtdb.error.Anomaly
+import xtdb.error.Fault
 import xtdb.error.Interrupted
 import xtdb.table.TableRef
 import xtdb.util.MsgIdUtil.msgIdToEpoch
@@ -26,6 +29,7 @@ import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
+import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
 import xtdb.util.debug
 import xtdb.util.error
@@ -53,8 +57,11 @@ class LogProcessor(
     private val indexer: Indexer.ForDatabase,
     private val compactor: Compactor.ForDatabase,
     flushTimeout: Duration,
-    private val skipTxs: Set<MessageId>
+    private val skipTxs: Set<MessageId>,
+    private val mode: Database.Mode = Database.Mode.READ_WRITE
 ) : Log.Subscriber, AutoCloseable {
+
+    private val readOnly: Boolean get() = mode == Database.Mode.READ_ONLY
 
     init {
         assert((dbCatalog != null) == (db.name == "xtdb")) { "dbCatalog supplied iff db == 'xtdb'" }
@@ -64,6 +71,7 @@ class LogProcessor(
     private val epoch = log.epoch
 
     private val blockCatalog = db.blockCatalog
+    private val tableCatalog = db.tableCatalog
     private val trieCatalog = db.trieCatalog
     private val liveIndex = db.liveIndex
 
@@ -140,7 +148,8 @@ class LogProcessor(
     private val subscription = log.subscribe(this, latestProcessedOffset)
 
     override fun processRecords(records: List<Log.Record>) = runBlocking {
-        if (flusher.checkBlockTimeout(blockCatalog, liveIndex)) {
+        // Don't send FlushBlock messages in read-only mode - we can't write to the log
+        if (!readOnly && flusher.checkBlockTimeout(blockCatalog, liveIndex)) {
             val flushMessage = Message.FlushBlock(blockCatalog.currentBlockIndex ?: -1)
             val offset = log.appendMessage(flushMessage).await().logOffset
             flusher.flushedTxId = offsetToMsgId(epoch, offset)
@@ -251,7 +260,11 @@ class LogProcessor(
                 }
                 latestProcessedMsgId = msgId
                 if (toFinishBlock) {
-                    finishBlock()
+                    if (readOnly) {
+                        waitForBlock()
+                    } else {
+                        finishBlock()
+                    }
                 }
                 watchers.notify(msgId, res)
             } catch (e: ClosedByInterruptException) {
@@ -299,6 +312,61 @@ class LogProcessor(
         compactor.signalBlock()
         LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
     }
+
+    /**
+     * In read-only mode, we can't write blocks ourselves.
+     * Instead, we poll the object store waiting for the primary cluster to write the block.
+     * When the block appears and matches our latestProcessedMsgId exactly, we can clear the live index.
+     */
+    private suspend fun waitForBlock() {
+        val expectedBlockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
+        LOG.debug("read-only mode: waiting for block 'b${expectedBlockIdx.asLexHex}' from primary cluster...")
+
+        val pollInterval = Duration.ofSeconds(1)
+
+        while (true) {
+            val blockFile = blockCatalog.allBlockFiles
+                .find { parseBlockIndex(it.key.fileName) == expectedBlockIdx }
+
+            if (blockFile != null) {
+                val block = Block.parseFrom(db.bufferPool.getByteArray(blockFile.key))
+                val blockMsgId = block.latestProcessedMsgId
+
+                when {
+                    blockMsgId == latestProcessedMsgId -> {
+                        // Exact match - the block covers exactly the transactions we've indexed
+                        LOG.debug("read-only mode: found matching block 'b${expectedBlockIdx.asLexHex}'")
+                        blockCatalog.refresh()
+                        tableCatalog.refresh()
+                        trieCatalog.refresh()
+                        liveIndex.nextBlock()
+                        return
+                    }
+                    blockMsgId > latestProcessedMsgId -> {
+                        // Block is ahead of us - this shouldn't happen in normal operation
+                        throw Fault(
+                            "Read-only block mismatch: block 'b${expectedBlockIdx.asLexHex}' has msgId $blockMsgId " +
+                                "but we're at $latestProcessedMsgId"
+                        )
+                    }
+                    else -> {
+                        // Block is behind us - keep waiting for the right one
+                        LOG.debug("read-only mode: block 'b${expectedBlockIdx.asLexHex}' has msgId $blockMsgId, " +
+                            "waiting for $latestProcessedMsgId")
+                    }
+                }
+            }
+
+            // Wait and retry
+            delay(pollInterval.toMillis())
+        }
+    }
+
+    private fun parseBlockIndex(fileName: java.nio.file.Path): Long? =
+        Regex("b(\\p{XDigit}+)\\.binpb")
+            .matchEntire(fileName.toString())
+            ?.groups?.get(1)
+            ?.value?.let { "x$it".fromLexHex }
 
     @JvmOverloads
     fun awaitAsync(msgId: MessageId = latestSubmittedMsgId) = watchers.awaitAsync(msgId)

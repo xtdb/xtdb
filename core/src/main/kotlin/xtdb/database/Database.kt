@@ -7,6 +7,7 @@ import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.time.withTimeout
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import org.apache.arrow.memory.BufferAllocator
@@ -20,6 +21,7 @@ import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
+import xtdb.database.proto.DatabaseMode
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.LogProcessor
 import xtdb.indexer.Snapshot
@@ -54,7 +56,7 @@ data class Database(
     // snapSource will mostly be the same as liveIndex - exception being within a transaction
     override val metadataManager: PageMetadata.Factory, val liveIndex: LiveIndex, val snapSource: Snapshot.Source,
 
-    private val logProcessorOrNull: LogProcessor?,
+    val logProcessorOrNull: LogProcessor?,
     private val compactorOrNull: Compactor.ForDatabase?,
     override val txSink: TxSink?,
 ): IDatabase {
@@ -84,18 +86,42 @@ data class Database(
     }
 
     @Serializable
+    enum class Mode {
+        @SerialName("read-write") READ_WRITE,
+        @SerialName("read-only") READ_ONLY;
+
+        fun toProto(): DatabaseMode = when (this) {
+            READ_WRITE -> DatabaseMode.READ_WRITE
+            READ_ONLY -> DatabaseMode.READ_ONLY
+        }
+
+        companion object {
+            @JvmStatic
+            fun fromProto(mode: DatabaseMode): Mode = when (mode) {
+                DatabaseMode.READ_WRITE, DatabaseMode.UNRECOGNIZED -> READ_WRITE
+                DatabaseMode.READ_ONLY -> READ_ONLY
+            }
+        }
+    }
+
+    @Serializable
     data class Config(
         val log: Log.Factory = Log.inMemoryLog,
         val storage: Storage.Factory = Storage.inMemory(),
+        val mode: Mode = Mode.READ_WRITE,
     ) {
         fun log(log: Log.Factory) = copy(log = log)
         fun storage(storage: Storage.Factory) = copy(storage = storage)
+        fun mode(mode: Mode) = copy(mode = mode)
+
+        val isReadOnly: Boolean get() = mode == Mode.READ_ONLY
 
         val serializedConfig: DatabaseConfig
             get() = DatabaseConfig.newBuilder()
                 .also { dbConfig ->
                     log.writeTo(dbConfig)
                     dbConfig.applyStorage(storage)
+                    dbConfig.mode = mode.toProto()
                 }.build()
 
         companion object {
@@ -107,6 +133,7 @@ data class Database(
                 Config()
                     .log(Log.Factory.fromProto(dbConfig))
                     .storage(Storage.Factory.fromProto(dbConfig))
+                    .mode(Mode.fromProto(dbConfig.mode))
         }
     }
 
@@ -120,6 +147,7 @@ data class Database(
 
                 databaseNames
                     .mapNotNull { databaseOrNull(it) }
+                    .filter { it.logProcessorOrNull != null }
                     .map { db -> launch { basis[db.name]?.first()?.let { db.await(it) } } }
                     .joinAll()
             }
@@ -127,6 +155,7 @@ data class Database(
             private suspend fun Catalog.syncAll0() = coroutineScope {
                 databaseNames
                     .mapNotNull { databaseOrNull(it) }
+                    .filter { it.logProcessorOrNull != null }
                     .map { db -> launch { db.sync() } }
                     .joinAll()
             }

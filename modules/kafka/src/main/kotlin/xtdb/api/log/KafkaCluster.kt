@@ -261,6 +261,9 @@ class KafkaCluster(
             return cluster.KafkaLog(clusterAlias, topic, epoch)
         }
 
+        override fun openReadOnlyLog(clusters: Map<LogClusterAlias, Cluster>) =
+            ReadOnlyLog(openLog(clusters))
+
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
             dbConfig.setOtherLog(ProtoAny.pack(kafkaLogConfig {
                 this.topic = this@LogFactory.topic

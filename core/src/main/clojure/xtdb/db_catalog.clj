@@ -6,8 +6,8 @@
   (:import [java.lang AutoCloseable]
            [java.util HashMap]
            xtdb.api.Xtdb$Config
-           [xtdb.database Database Database$Catalog Database$Config]
-           [xtdb.database.proto DatabaseConfig DatabaseConfig$LogCase DatabaseConfig$StorageCase]))
+           [xtdb.database Database Database$Catalog Database$Config Database$Mode]
+           [xtdb.database.proto DatabaseConfig DatabaseConfig$LogCase DatabaseConfig$StorageCase DatabaseMode]))
 
 (defmethod ig/init-key ::allocator [_ {{:keys [allocator]} :base, :keys [db-name]}]
   (util/->child-allocator allocator (format "database/%s" db-name)))
@@ -49,22 +49,23 @@
 (defn- db-system [db-name base ^Database$Config db-config]
   (let [^Xtdb$Config conf (get-in base [:config :config])
         indexer-conf (.getIndexer conf)
+        mode (.getMode db-config)
         opts {:base base, :db-name db-name}]
     (-> {::allocator opts
          :xtdb/block-catalog opts
          :xtdb/table-catalog opts
          :xtdb/trie-catalog opts
          :xtdb.metadata/metadata-manager opts
-         :xtdb/log (assoc opts :factory (.getLog db-config))
-         :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config))
+         :xtdb/log (assoc opts :factory (.getLog db-config) :mode mode)
+         :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config) :mode mode)
          :xtdb.indexer/live-index (assoc opts :indexer-conf indexer-conf)
 
          ::for-query (assoc opts :db-config db-config)
 
          :xtdb.tx-sink/for-db (assoc opts :tx-sink-conf (.getTxSink conf))
          :xtdb.indexer/for-db opts
-         :xtdb.compactor/for-db opts
-         :xtdb.log/processor (assoc opts :indexer-conf indexer-conf)}
+         :xtdb.compactor/for-db (assoc opts :mode mode)
+         :xtdb.log/processor (assoc opts :indexer-conf indexer-conf :mode mode)}
         (doto ig/load-namespaces))))
 
 (defn- open-db [db-name base db-config]
@@ -140,7 +141,9 @@
                      (doseq [[_ {:keys [sys]}] !dbs]
                        (ig/halt! sys))))]
 
-      (let [xtdb-db-config (Database$Config. (.getLog conf) (.getStorage conf))]
+      (let [xtdb-db-config (-> (Database$Config.)
+                               (.log (.getLog conf))
+                               (.storage (.getStorage conf)))]
         (util/with-close-on-catch [xtdb-db (open-db "xtdb" (assoc base :db-catalog db-cat) xtdb-db-config)]
           (.put !dbs "xtdb" xtdb-db)
 
@@ -177,4 +180,9 @@
 
               DatabaseConfig$StorageCase/LOCAL_STORAGE
               (let [ls (.getLocalStorage conf)]
-                [:local {:path (.hasPath ls), :epoch (.getEpoch ls)}]))})
+                [:local {:path (.hasPath ls), :epoch (.getEpoch ls)}]))
+
+   :mode (condp = (.getMode conf)
+           DatabaseMode/READ_WRITE :read-write
+           DatabaseMode/READ_ONLY :read-only
+           :read-write)})

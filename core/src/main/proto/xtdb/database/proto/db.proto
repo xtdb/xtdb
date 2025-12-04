@@ -6,6 +6,11 @@ option java_multiple_files = true;
 
 import "google/protobuf/any.proto";
 
+enum DatabaseMode {
+    READ_WRITE = 0;
+    READ_ONLY = 1;
+}
+
 message InMemoryLog {
 }
 
@@ -39,5 +44,7 @@ message DatabaseConfig {
         LocalStorage local_storage = 5;
         RemoteStorage remote_storage = 6;
     }
+
+    DatabaseMode mode = 7;
 }
 

@@ -1,7 +1,8 @@
 {:block-idx 0,
- :latest-processed-msg-id 114,
+ :latest-processed-msg-id 116,
  :table-names #{"xt/txs"},
  :secondary-dbs
  {"new_db"
   {:log [:local {:path true}],
-   :storage [:local {:path true, :epoch 0}]}}}
+   :storage [:local {:path true, :epoch 0}],
+   :mode :read-write}}}

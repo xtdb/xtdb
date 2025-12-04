@@ -40,7 +40,7 @@
   (let [node-dir (util/->path "target/multi-db/overlapping-caches")]
     (util/delete-dir node-dir)
     (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "xtdb/log")}]
-                                      :storage [:local {:path (.resolve node-dir "xtdb/objects")}]},)
+                                      :storage [:local {:path (.resolve node-dir "xtdb/objects")}]})
                 xtdb-conn (.build (.createConnectionBuilder node))]
 
       (jdbc/execute! xtdb-conn ["
@@ -176,7 +176,7 @@ ATTACH DATABASE new_db WITH $$
                                    "Cannot attach a database in a transaction."
                                    {:db-name "new_db"}]}
                (pgw-test/reading-ex
-                 (jdbc/execute! conn ["ATTACH DATABASE new_db"]))))
+                (jdbc/execute! conn ["ATTACH DATABASE new_db"]))))
       (finally
         (jdbc/execute! conn ["ROLLBACK"])))))
 
@@ -187,7 +187,7 @@ ATTACH DATABASE new_db WITH $$
               :detail #xt/error [:conflict :xtdb/db-exists "Database already exists"
                                  {:db-name "xtdb"}]}
              (pgw-test/reading-ex
-               (jdbc/execute! node ["ATTACH DATABASE xtdb"]))))
+              (jdbc/execute! node ["ATTACH DATABASE xtdb"]))))
 
     (jdbc/execute! node ["ATTACH DATABASE new_db"])
 
@@ -196,18 +196,18 @@ ATTACH DATABASE new_db WITH $$
               :detail #xt/error [:conflict :xtdb/db-exists "Database already exists"
                                  {:db-name "new_db"}]}
              (pgw-test/reading-ex
-               (jdbc/execute! node ["ATTACH DATABASE new_db"]))))))
+              (jdbc/execute! node ["ATTACH DATABASE new_db"]))))))
 
 (t/deftest dodgy-yaml
   (with-open [node (xtn/start-node)]
     (t/is (= {:sql-state "08P01"
-              :message "Invalid database config in `ATTACH DATABASE`: Unknown property 'somethingElse'. Known properties are: log, storage" ,
+              :message "Invalid database config in `ATTACH DATABASE`: Unknown property 'somethingElse'. Known properties are: log, mode, storage" ,
               :detail #xt/error [:incorrect :xtdb/invalid-database-config
-                                 "Invalid database config in `ATTACH DATABASE`: Unknown property 'somethingElse'. Known properties are: log, storage"
+                                 "Invalid database config in `ATTACH DATABASE`: Unknown property 'somethingElse'. Known properties are: log, mode, storage"
                                  {:sql "ATTACH DATABASE new_db WITH $$ somethingElse: $$ "}]},
 
              (pgw-test/reading-ex
-               (jdbc/execute! node ["ATTACH DATABASE new_db WITH $$ somethingElse: $$ "]))))))
+              (jdbc/execute! node ["ATTACH DATABASE new_db WITH $$ somethingElse: $$ "]))))))
 
 (t/deftest connected-to-secondary-db
   (with-open [node (pgw/open-playground)
@@ -221,21 +221,21 @@ ATTACH DATABASE new_db WITH $$
                                  "Can only attach databases when connected to the primary 'xtdb' database."
                                  {:db "new_db"}]}
              (pgw-test/reading-ex
-               (jdbc/execute! conn ["ATTACH DATABASE nope"]))))))
+              (jdbc/execute! conn ["ATTACH DATABASE nope"]))))))
 
 (t/deftest detach-database
   (with-open [node (xtn/start-node)
               xtdb-conn (.build (.createConnectionBuilder node))]
-    
+
     (jdbc/execute! xtdb-conn ["ATTACH DATABASE test_db"])
-    
+
     (with-open [test-conn (.build (-> (.createConnectionBuilder node)
                                       (.database "test_db")))]
       (jdbc/execute! test-conn ["INSERT INTO foo RECORDS {_id: 'test'}"])
       (t/is (= {:_id "test"} (jdbc/execute-one! test-conn ["SELECT * FROM foo"]))))
-    
+
     (jdbc/execute! xtdb-conn ["DETACH DATABASE test_db"])
-    
+
     (t/is (= {:sql-state "3D000", :message "database 'test_db' does not exist"}
              (pgw-test/reading-ex
               (with-open [test-conn (.build (-> (.createConnectionBuilder node)
@@ -255,7 +255,7 @@ ATTACH DATABASE new_db WITH $$
                                    "Cannot detach a database in a transaction."
                                    {:db-name "test_db"}]}
                (pgw-test/reading-ex
-                 (jdbc/execute! conn ["DETACH DATABASE test_db"]))))
+                (jdbc/execute! conn ["DETACH DATABASE test_db"]))))
       (finally
         (jdbc/execute! conn ["ROLLBACK"])))))
 
@@ -268,4 +268,8 @@ ATTACH DATABASE new_db WITH $$
                                  "Cannot detach the primary 'xtdb' database"
                                  {:db-name "xtdb"}]}
              (pgw-test/reading-ex
-               (jdbc/execute! conn ["DETACH DATABASE xtdb"]))))))
+              (jdbc/execute! conn ["DETACH DATABASE xtdb"]))))))
+
+
+
+
