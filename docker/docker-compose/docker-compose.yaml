@@ -60,10 +60,12 @@ services:
     expose:
       - 8080
       - 5432
+      - 9832
       - 3000
     ports:
       - 8081:8080
       - 5433:5432
+      - 9832:9832
     environment:
       AWS_REGION: "aws-iso-global"
       AWS_S3_FORCE_PATH_STYLE: "true"

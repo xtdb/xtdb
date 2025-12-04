@@ -1,9 +1,21 @@
 (ns xtdb.flight-sql
-  "Configuration support for FlightSQL server module."
-  (:require [xtdb.node :as xtn])
-  (:import [xtdb.api FlightSql$Factory Xtdb$Config]))
+  "FlightSQL server integrant component."
+  (:require [integrant.core :as ig]
+            [xtdb.node :as xtn]
+            [xtdb.util :as util])
+  (:import [xtdb.api FlightSql FlightSqlConfig Xtdb$Config]))
 
-(defmethod xtn/apply-config! ::server [^Xtdb$Config config, _ {:keys [host port]}]
-  (.module config (cond-> (FlightSql$Factory.)
-                    (some? host) (.host host)
-                    (some? port) (.port port))))
+(defmethod xtn/apply-config! :flight-sql [^Xtdb$Config config _ {:keys [host port]}]
+  (cond-> (.getFlightSql config)
+    (some? host) (.host host)
+    (some? port) (.port port)))
+
+(defmethod ig/expand-key ::server [k config]
+  {k {:node (ig/ref :xtdb/node)
+      :config config}})
+
+(defmethod ig/init-key ::server [_ {:keys [node config]}]
+  (FlightSql/open node config))
+
+(defmethod ig/halt-key! ::server [_ server]
+  (util/try-close server))

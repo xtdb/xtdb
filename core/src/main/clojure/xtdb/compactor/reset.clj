@@ -14,7 +14,8 @@
 (defn reset-compactor! [node-opts db-name {:keys [dry-run?]}]
   (let [config (doto (xtn/->config node-opts)
                  (-> (.getCompactor) (.threads 0))
-                 (.setServer nil))]
+                 (.setServer nil)
+                 (.setFlightSql nil))]
 
     (log/info "Starting a temporary node to catch up with any pending transactions on the tx-log")
 

@@ -2,6 +2,10 @@ server:
   host: '*'
   port: 5432
 
+flightSql:
+  host: '*'
+  port: 9832
+
 logClusters:
   kafkaCluster: !Kafka
     bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS

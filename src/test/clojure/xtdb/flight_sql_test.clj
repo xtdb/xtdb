@@ -8,7 +8,7 @@
            (org.apache.arrow.flight.sql FlightSqlClient)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
-           xtdb.api.FlightSql
+           xtdb.api.Xtdb
            xtdb.arrow.Relation))
 
 (def ^:private ^:dynamic ^FlightSqlClient *client* nil)
@@ -16,14 +16,10 @@
 
 (t/use-fixtures :each
   tu/with-allocator
-  (fn [f]
-    (tu/with-opts {:flight-sql-server {}}
-      f))
-
   tu/with-node
 
   (fn [f]
-    (let [port (.getPort ^FlightSql (.module tu/*node* FlightSql))]
+    (let [port (.getFlightSqlPort ^Xtdb tu/*node*)]
       (with-open [flight-client (-> (FlightClient/builder tu/*allocator* (Location/forGrpcInsecure "127.0.0.1" port))
                                     (.build))
                   client (FlightSqlClient. flight-client)
