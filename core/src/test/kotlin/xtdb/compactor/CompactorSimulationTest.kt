@@ -110,8 +110,11 @@ class CompactorMockDriver(
                 LOGGER.debug("[channel msg received] systemId=$systemId received ${trieKeys.size} tries: $trieKeys")
                 yield() // force suspension mid-message processing
                 msg.triesAdded.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                    trieCatalog.addTries(TableRef.parse(db.name, tableName), tries, msg.msgTimestamp)
+                    val tableRef = TableRef.parse(db.name, tableName)
+                    addTriesToBufferPool(db.bufferPool, tableRef, tries)
+                    trieCatalog.addTries(tableRef, tries, msg.msgTimestamp)
                 }
+
                 LOGGER.debug("[channel msg processed] systemId=$systemId added ${trieKeys.size} tries to catalog: $trieKeys")
             }
         }
