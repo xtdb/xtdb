@@ -23,6 +23,10 @@ import xtdb.compactor.Compactor
 import xtdb.compactor.CompactorDriverConfig
 import xtdb.compactor.CompactorMockDriver
 import xtdb.compactor.RepeatableSimulationTest
+import org.junit.jupiter.api.extension.BeforeEachCallback
+import org.junit.jupiter.api.extension.ExtendWith
+import org.junit.jupiter.api.extension.ExtensionContext
+import xtdb.compactor.MockDb
 import xtdb.database.DatabaseName
 import xtdb.database.IDatabase
 import xtdb.garbage_collector.GarbageCollector
@@ -67,52 +71,81 @@ fun listTrieNamesFromBufferPool(bufferPool: BufferPool, tableRef: TableRef): Lis
 @MethodSource("xtdb.SimulationTestBase#iterationSource")
 annotation class RepeatableSimulationTest
 
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
+annotation class WithNumberOfSystems(val numberOfSystems: Int)
+
+class NumberOfSystemsExtension : BeforeEachCallback {
+    override fun beforeEach(context: ExtensionContext) {
+        val annotation = context.requiredTestMethod.getAnnotation(WithNumberOfSystems::class.java)
+            ?: return
+
+        val testInstance = context.requiredTestInstance
+        if (testInstance !is NodeSimulationTest) return
+
+        testInstance.numberOfSystems = annotation.numberOfSystems
+    }
+}
+
 @Tag("property")
+@ExtendWith(NumberOfSystemsExtension::class)
 class NodeSimulationTest : SimulationTestBase() {
+    var numberOfSystems: Int = 1
     val garbageLifetime = Duration.ofSeconds(60)
     private lateinit var allocator: BufferAllocator
-    private lateinit var bufferPool: MemoryStorage
+    private lateinit var bufferPools: List<MemoryStorage>
     private lateinit var compactorDriver: CompactorMockDriver
-    private lateinit var compactor: Compactor
-    private lateinit var compactorForDb: Compactor.ForDatabase
-    private lateinit var blockCatalog: BlockCatalog
-    private lateinit var trieCatalog: TrieCatalog
-    private lateinit var db: MockDatabase
-    private lateinit var garbageCollector: GarbageCollector
-
+    private lateinit var gcDriver: GarbageCollectorMockDriver
+    private lateinit var compactors: List<Compactor.Impl>
+    private lateinit var compactorsForDb: List<Compactor.ForDatabase>
+    private lateinit var blockCatalogs: List<BlockCatalog>
+    private lateinit var trieCatalogs: List<TrieCatalog>
+    private lateinit var dbs: List<MockDatabase>
+    private lateinit var garbageCollectors: List<GarbageCollector>
 
     @BeforeEach
     fun setUp() {
         super.setUpSimulation()
         setLogLevel.invoke("xtdb".symbol, "DEBUG")
-        val jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
 
+        val jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
         compactorDriver = CompactorMockDriver(dispatcher, currentSeed, CompactorDriverConfig())
+        gcDriver = GarbageCollectorMockDriver()
         allocator = RootAllocator()
-        bufferPool = MemoryStorage(allocator, epoch = 0)
-        compactor = Compactor.Impl(compactorDriver, null, jobCalculator, false, 2, dispatcher)
-        trieCatalog = createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
-        blockCatalog = BlockCatalog("xtdb", bufferPool)
-        val uninitializedDb = MockDatabase("xtdb", allocator, bufferPool, trieCatalog, blockCatalog, null)
-        compactorForDb = compactor.openForDatabase(uninitializedDb)
-        db = uninitializedDb.withCompactor(compactorForDb)
-        garbageCollector = GarbageCollector.Impl(
-            db = db,
-            driverFactory = GarbageCollectorMockDriver(),
-            blocksToKeep = 2,
-            garbageLifetime = garbageLifetime,
-            approxRunInterval = Duration.ofSeconds(30),
-            coroutineCtx = dispatcher
-        )
+
+        bufferPools = List(numberOfSystems) {
+            MemoryStorage(allocator, epoch = 0)
+        }
+        compactors = List(numberOfSystems) {
+            Compactor.Impl(compactorDriver, null, jobCalculator, false, 2, dispatcher)
+        }
+        trieCatalogs = List(numberOfSystems) {
+            createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
+        }
+        blockCatalogs = List(numberOfSystems) { i ->
+            BlockCatalog("xtdb", bufferPools[i])
+        }
+        val uninitializedDbs = List(numberOfSystems) { i ->
+            MockDatabase("xtdb", allocator, bufferPools[i], trieCatalogs[i], blockCatalogs[i], null)
+        }
+        compactorsForDb = uninitializedDbs.mapIndexed {
+            i, db -> compactors[i].openForDatabase(db)
+        }
+        dbs = uninitializedDbs.mapIndexed {
+            i, db -> db.withCompactor(compactorsForDb[i])
+        }
+        garbageCollectors = dbs.map {
+            db -> GarbageCollector.Impl(db, gcDriver, 2, garbageLifetime, Duration.ofSeconds(30), dispatcher)
+        }
     }
 
     @AfterEach
     fun tearDown() {
         super.tearDownSimulation()
-        garbageCollector.close()
-        bufferPool.close()
-        compactorForDb.close()
-        compactor.close()
+        garbageCollectors.forEach { it.close() }
+        bufferPools.forEach { it.close() }
+        compactorsForDb.forEach { it.close() }
+        compactors.forEach { it.close() }
         allocator.close()
     }
 
@@ -120,8 +153,10 @@ class NodeSimulationTest : SimulationTestBase() {
         tries.forEach {
             compactorDriver.trieKeyToFileSize[it.trieKey.toString()] = it.dataFileSize
         }
-        db.trieCatalog.addTries(tableRef, tries, timestamp)
-        addTriesToBufferPool(bufferPool, tableRef, tries)
+        dbs.forEach { db ->
+            db.trieCatalog.addTries(tableRef, tries, timestamp)
+            addTriesToBufferPool(db.bufferPool, tableRef, tries)
+        }
     }
 
 
@@ -131,11 +166,16 @@ class NodeSimulationTest : SimulationTestBase() {
         val table = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val l1Tries = L1TrieKeys.take(4).toList()
+        val bufferPool = bufferPools[0]
+        val blockCatalog = blockCatalogs[0]
+        val trieCatalog = trieCatalogs[0]
+        val compactorForDb = compactorsForDb[0]
+        val garbageCollector = garbageCollectors[0]
 
         addTries(
             table,
             l1Tries.map { buildTrieDetails(table.tableName, it, defaultFileTarget) },
-Instant.now()
+            Instant.now()
         )
 
         for (blockIndex in 1L..3L) {
@@ -176,7 +216,11 @@ Instant.now()
         val table = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val l1Tries = L1TrieKeys.take(8).toList()
-        val testScope = CoroutineScope(dispatcher)
+        val bufferPool = bufferPools[0]
+        val blockCatalog = blockCatalogs[0]
+        val trieCatalog = trieCatalogs[0]
+        val compactorForDb = compactorsForDb[0]
+        val garbageCollector = garbageCollectors[0]
         val expectedL2Tries = listOf(
             "l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03",
             "l02-rc-p0-b07", "l02-rc-p1-b07", "l02-rc-p2-b07", "l02-rc-p3-b07"
@@ -236,6 +280,11 @@ Instant.now()
     fun `gc collects old garbage while compaction runs`(iteration: Int) {
         val table = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
+        val bufferPool = bufferPools[0]
+        val blockCatalog = blockCatalogs[0]
+        val trieCatalog = trieCatalogs[0]
+        val compactorForDb = compactorsForDb[0]
+        val garbageCollector = garbageCollectors[0]
 
         val oldl1Tries = L1TrieKeys.take(4).toList()
         val oldl2Tries = listOf("l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03")
