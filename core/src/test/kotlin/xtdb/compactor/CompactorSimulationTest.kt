@@ -305,7 +305,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         }
 
         trieCatalogs = List(numberOfSystems) {
-            createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
+            createTrieCatalog.invoke(null, null, mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
         }
 
         // All databases share the same buffer pool

@@ -47,7 +47,6 @@
     (update-vals hlls #(doto ^ByteBuffer % (.position 0)))
     res))
 
-
 (defn- local-date->instant [^java.time.LocalDate local-date]
   (.toInstant (.atStartOfDay local-date ZoneOffset/UTC)))
 
@@ -136,38 +135,34 @@
 (defn load-tables-to-metadata ^java.util.Map [^BufferPool buffer-pool, ^BlockCatalog block-cat]
   (when-let [block-idx (.getCurrentBlockIndex block-cat)]
     (let [tables (.getAllTables block-cat)]
-      [block-idx
-       (->> (for [^TableRef table tables
-                  :let [table-block-path (->table-block-metadata-obj-key (Trie/getTablePath table) block-idx)
-                        table-block (TableBlock/parseFrom (.getByteArray buffer-pool table-block-path))]]
-              (MapEntry/create table (<-table-block table-block)))
-            (into {}))])))
+      (->> (for [^TableRef table tables
+                 :let [table-block-path (->table-block-metadata-obj-key (Trie/getTablePath table) block-idx)
+                       table-block (TableBlock/parseFrom (.getByteArray buffer-pool table-block-path))]]
+             (MapEntry/create table (<-table-block table-block)))
+           (into {})))))
 
-(deftype TableCatalog [^BufferPool buffer-pool
-                       ^:volatile-mutable ^long block-idx
+(deftype TableCatalog [^BufferPool buffer-pool, ^BlockCatalog block-cat
                        ^:volatile-mutable table->metadata]
-  xtdb.catalog.TableCatalog
   PTableCatalog
   (finish-block! [this block-idx delta-table->metadata table->partitions]
-    (when (or (nil? (.block-idx this)) (< (.block-idx this) block-idx))
-      (let [new-table->metadata (new-tables-metadata table->metadata delta-table->metadata)
-            tables (ArrayList.)]
-        (doseq [[^TableRef table {:keys [row-count fields hlls]}] new-table->metadata]
-          (let [table-partitions (get table->partitions table)
-                fields (for [[col-name field] fields]
-                         (types/field-with-name field col-name))
-                table-block-path (->table-block-metadata-obj-key (Trie/getTablePath table) block-idx)]
-            (.add tables table)
-            (.putObject buffer-pool table-block-path
-                        (write-table-block-data (Schema. fields) row-count
-                                                (map (comp ->partition
-                                                           #(update % :tries (partial map (fn [trie] (trie/->trie-details table trie)))))
-                                                     table-partitions)
-                                                hlls))))
-        (set! (.block-idx this) block-idx)
-        (set! (.table->metadata this) new-table->metadata)
-        (vec tables))))
+    (let [new-table->metadata (new-tables-metadata table->metadata delta-table->metadata)
+          tables (ArrayList.)]
+      (doseq [[^TableRef table {:keys [row-count fields hlls]}] new-table->metadata]
+        (let [table-partitions (get table->partitions table)
+              fields (for [[col-name field] fields]
+                       (types/field-with-name field col-name))
+              table-block-path (->table-block-metadata-obj-key (Trie/getTablePath table) block-idx)]
+          (.add tables table)
+          (.putObject buffer-pool table-block-path
+                      (write-table-block-data (Schema. fields) row-count
+                                              (map (comp ->partition
+                                                         #(update % :tries (partial map (fn [trie] (trie/->trie-details table trie)))))
+                                                   table-partitions)
+                                              hlls))))
+      (set! (.table->metadata this) new-table->metadata)
+      (vec tables)))
 
+  xtdb.catalog.TableCatalog
   (rowCount [_ table] (get-in table->metadata [table :row-count]))
 
   (getField [_ table col-name]
@@ -175,13 +170,17 @@
             (get col-name (types/->field #xt/type [:? :null] col-name))))
 
   (getFields [_ table] (get-in table->metadata [table :fields]))
-  (getFields [_] (update-vals table->metadata :fields)))
+  (getFields [_] (update-vals table->metadata :fields))
+
+  (refresh [this]
+    (set! (.table->metadata this)
+          (-> (load-tables-to-metadata buffer-pool block-cat)
+              (update-vals #(dissoc % :partitions))))))
 
 (defmethod ig/expand-key :xtdb/table-catalog [k _]
   {k {:buffer-pool (ig/ref :xtdb/buffer-pool)
       :block-cat (ig/ref :xtdb/block-catalog)}})
 
 (defmethod ig/init-key :xtdb/table-catalog [_ {:keys [buffer-pool block-cat]}]
-  (let [[block-idx table->table-block] (load-tables-to-metadata buffer-pool block-cat)]
-    (TableCatalog. buffer-pool (or block-idx -1)
-                   (update-vals table->table-block #(dissoc % :partitions)))))
+  (doto (TableCatalog. buffer-pool block-cat {})
+    (.refresh)))

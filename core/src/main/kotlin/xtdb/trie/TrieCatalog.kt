@@ -12,4 +12,6 @@ interface TrieCatalog {
     fun garbageTries(table: TableRef, asOf: Instant) : Set<TrieKey>
     fun deleteTries(table: TableRef, garbageTrieKeys: Set<TrieKey>)
     fun listAllTrieKeys(table: TableRef) : List<TrieKey>
+
+    fun refresh()
 }
