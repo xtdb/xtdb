@@ -85,4 +85,24 @@ class XtConnectionTest {
             }
         }
     }
+
+    @Test
+    fun `test timestamptz via xtdb jdbc driver is always text format, so that ZoneId is preserved`(node: Xtdb) {
+
+        node.createConnectionBuilder()
+            .option("prepareThreshold", "-1")
+            .option("binaryTransfer", "true")
+            .build().use { conn ->
+            conn.prepareStatement("SELECT TIMESTAMP '2020-05-01+01:00[Europe/London]' ts").use { stmt ->
+                stmt.executeQuery().use { res ->
+                    res.next()
+                    assertEquals(
+                        "2020-05-01+01:00[Europe/London]".asZonedDateTime(),
+                        res.getObject(1)
+                    )
+                }
+            }
+
+        }
+    }
 }

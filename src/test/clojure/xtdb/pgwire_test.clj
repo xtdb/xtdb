@@ -85,6 +85,22 @@
                                                            :allocator tu/*allocator*
                                                            :drain-wait 250}
                                                           opts))))
+(defn pgjdbc-conn
+  "Raw pgjdbc driver - bypasses xtdb driver. Avoids testing xtdb driver features"
+  (^Connection [] (pgjdbc-conn nil))
+  (^Connection [opts]
+   (let [pg-driver (org.postgresql.Driver.)
+         props (doto (java.util.Properties.)
+                 (.setProperty "user" (or (:user opts) "xtdb"))
+                 (as-> p
+                     (doseq [[k v] (dissoc opts :dbname :user)]
+                       (when (string? k)
+                         (.setProperty p k (str v))))))]
+     (.connect pg-driver
+               (format "jdbc:postgresql://localhost:%d/%s"
+                       *port*
+                       (:dbname opts "xtdb"))
+               props))))
 
 (defn jdbc-conn
   (^Connection [] (jdbc-conn nil))
@@ -2660,20 +2676,20 @@ ORDER BY 1,2;")
         (t/is (= [{:_id 1}] (jdbc/execute! ro-conn ["SELECT * FROM foo"])))))))
 
 (t/deftest test-return-nano-ts-as-micro-ts
-  ;; we now have more precision for text than we do for binary
+  ;;uses pgjdbc driver as xtdb driver only uses text for tstz and has nano support
   (doseq [binary? [false true]
           {:keys [^Class type binary-val text-val input]} [{:input "'2024-01-01T00:00:01.123456789'::TIMESTAMP(9)"
                                                             :type LocalDateTime
                                                             :binary-val #xt/date-time "2024-01-01T00:00:01.123456"
-                                                            :text-val #xt/date-time "2024-01-01T00:00:01.123456789"}
+                                                            :text-val #xt/date-time "2024-01-01T00:00:01.123456"}
                                                            {:input "'2024-01-01T00:00:01.123456789Z'::TIMESTAMP(9) WITH TIME ZONE"
                                                             :type OffsetDateTime,
-                                                            :binary-val (-> #xt/zdt "2024-01-01T00:00:01.123456Z" in-system-tz (.toOffsetDateTime))
-                                                            :text-val (-> #xt/zdt "2024-01-01T00:00:01.123456789Z" in-system-tz (.toOffsetDateTime))}]
+                                                            :binary-val #xt/odt "2024-01-01T00:00:01.123456Z"
+                                                            :text-val #xt/odt "2024-01-01T00:00:01.123456Z"}]
           :let [q (format "SELECT %s v" input)]]
 
     (t/testing (format "pgjdbc - binary?: %s, type: %s, pg-type: %s, val: %s" binary? type val input)
-      (with-open [conn (jdbc-conn {"prepareThreshold" -1 "binaryTransfer" binary?})
+      (with-open [conn (pgjdbc-conn {"prepareThreshold" -1 "binaryTransfer" binary?})
                   stmt (.prepareStatement conn q)]
         (with-open [rs (.executeQuery stmt)]
           (.next rs)
