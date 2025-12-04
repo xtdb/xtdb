@@ -18,7 +18,8 @@ interface FlightSql : AutoCloseable {
         @JvmStatic
         fun open(xtdb: Xtdb, config: FlightSqlConfig): FlightSql {
             XtdbProducer(xtdb).closeOnCatch { producer ->
-                val server = builder(xtdb.allocator, forGrpcInsecure(config.host, config.port), producer)
+                val host = if (config.host == "*") "0.0.0.0" else config.host
+                val server = builder(xtdb.allocator, forGrpcInsecure(host, config.port), producer)
                     .also { it.withErrorLoggingMiddleware() }
                     .build()
                     .also { it.start() }
