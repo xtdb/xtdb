@@ -12,18 +12,20 @@ import java.time.InstantSource
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.CompletableFuture
 
-class RecordingLog(private val instantSource: InstantSource, ) : Log {
+class RecordingLog(private val instantSource: InstantSource, messages: List<Log.Message>) : Log {
     override val epoch = 0
-    val messages = mutableListOf<Log.Message>()
+    val messages = messages.toMutableList()
 
     @SerialName("!Recording")
     @Serializable
     data class Factory(
         @Transient var instantSource: InstantSource = InstantSource.system()
     ) : Log.Factory {
+        var messages: List<Log.Message> = emptyList()
         fun instantSource(instantSource: InstantSource) = apply { this.instantSource = instantSource }
+        fun messages(messages: List<Log.Message>) = apply { this.messages = messages }
 
-        override fun openLog(clusters: Map<LogClusterAlias, Log.Cluster>) = RecordingLog(instantSource)
+        override fun openLog(clusters: Map<LogClusterAlias, Log.Cluster>) = RecordingLog(instantSource, messages)
 
         override fun writeTo(dbConfig: DatabaseConfig.Builder) = Unit
     }

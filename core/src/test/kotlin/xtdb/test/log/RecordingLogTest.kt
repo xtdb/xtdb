@@ -39,4 +39,16 @@ class RecordingLogTest {
         assertTrue(lastMessage is Message.Tx)
         assertArrayEquals(byteArrayOf(-1, 3), (lastMessage as Message.Tx).payload)
     }
+
+    @Test
+    fun `factory can be initialized with messages`() {
+        val log = RecordingLog.Factory()
+            .messages(listOf(txMessage(1), txMessage(2), txMessage(3)))
+            .openLog(emptyMap())
+
+        val lastMessage = log.readLastMessage()
+        assertNotNull(lastMessage)
+        assertTrue(lastMessage is Message.Tx)
+        assertArrayEquals(byteArrayOf(-1, 3), (lastMessage as Message.Tx).payload)
+    }
 }

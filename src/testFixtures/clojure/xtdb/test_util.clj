@@ -396,6 +396,7 @@
   (->> (.listAllObjects (.getBufferPool (db/primary-db node)) (util/->path path))
        (mapv (comp str #(.getFileName ^Path %) :key os/<-StoredObject))))
 
-(defmethod xt-log/->log-factory ::recording [_ {:keys [instant-src]}]
+(defmethod xt-log/->log-factory ::recording [_ {:keys [instant-src messages]}]
   (cond-> (RecordingLog$Factory.)
-    instant-src (.instantSource instant-src)))
+    instant-src (.instantSource instant-src)
+    messages (.messages messages)))
