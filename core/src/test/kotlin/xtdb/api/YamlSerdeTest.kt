@@ -232,7 +232,7 @@ class YamlSerdeTest {
         """.trimIndent()
 
         assertEquals(
-            listOf(FlightSqlServer.Factory(port = 9833)),
+            listOf(FlightSql.Factory(port = 9833)),
             nodeConfig(input).getModules()
         )
     }

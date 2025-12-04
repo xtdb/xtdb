@@ -86,3 +86,12 @@ inline fun <C, L : Iterable<C>, R : AutoCloseable?> L.safeMap(block: (C) -> R): 
 
         els
     }
+
+inline fun <C, L : Iterable<C>, R : AutoCloseable?> L.safeMapIndexed(block: (Int, C) -> R): List<R> =
+    mutableListOf<R>().closeAllOnCatch { els ->
+        for ((idx, el) in this.withIndex()) {
+            els.add(block(idx, el))
+        }
+
+        els
+    }
