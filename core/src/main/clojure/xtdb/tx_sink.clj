@@ -70,21 +70,21 @@
     (when (or (nil? last-tx-key) (gt tx-key last-tx-key))
       (util/with-open [live-idx-snap (.openSnapshot live-idx-tx)]
         (let [live-tables (.getLiveTables live-idx-snap)]
-          (.appendMessage output-log
-                          (-> {:transaction {:id tx-key}
-                               :system-time (let [live-table (.liveTable live-idx-tx (first live-tables))
-                                                  start-pos (.getStartPos live-table)
-                                                  live-relation (.getLiveRelation live-table)
-                                                  system-from-vec (.vectorFor live-relation "_system_from")]
-                                              (time/->instant (.getObject system-from-vec start-pos)))
-                               :source {;:version "1.0.0" ;; TODO
-                                        :db db-name
-                                        :block-idx (inc (or (.getCurrentBlockIndex block-cat) -1))}
-                               :tables (->> live-tables
-                                            (map #(read-table-rows % live-idx-tx))
-                                            (into []))}
-                              encode-as-bytes
-                              Log$Message$Tx.)))))))
+          @(.appendMessage output-log
+                           (-> {:transaction {:id tx-key}
+                                :system-time (let [live-table (.liveTable live-idx-tx (first live-tables))
+                                                   start-pos (.getStartPos live-table)
+                                                   live-relation (.getLiveRelation live-table)
+                                                   system-from-vec (.vectorFor live-relation "_system_from")]
+                                               (time/->instant (.getObject system-from-vec start-pos)))
+                                :source {;:version "1.0.0" ;; TODO
+                                         :db db-name
+                                         :block-idx (inc (or (.getCurrentBlockIndex block-cat) -1))}
+                                :tables (->> live-tables
+                                             (map #(read-table-rows % live-idx-tx))
+                                             (into []))}
+                               encode-as-bytes
+                               Log$Message$Tx.)))))))
 
 (defmethod ig/init-key ::for-db [_ {:keys [^TxSinkConfig tx-sink-conf ^Log output-log block-cat db-name]}]
   (when (and tx-sink-conf
