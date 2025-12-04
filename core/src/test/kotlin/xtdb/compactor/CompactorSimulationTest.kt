@@ -310,7 +310,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         }
 
         dbs = List(numberOfSystems) { i ->
-            MockDb("xtdb-$i", trieCatalogs[i], bufferPools[i])
+            MockDb("xtdb", trieCatalogs[i], bufferPools[i])
         }
     }
 
