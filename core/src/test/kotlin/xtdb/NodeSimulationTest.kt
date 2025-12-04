@@ -43,6 +43,7 @@ import xtdb.util.asPath
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 import kotlin.time.Duration.Companion.microseconds
 
 data class MockDatabase(
@@ -347,5 +348,84 @@ class NodeSimulationTest : SimulationTestBase() {
         runBlocking { garbageCollector.garbageCollectTries(Instant.now() + Duration.ofHours(1)) }
         val l2Set = (oldl2Tries + expectedNewL2Tries).toSet()
         Assertions.assertEquals(l2Set.toSet(), trieCatalog.listAllTrieKeys(table).toSet(), "l1s should get garbage collected from trie catalog, leaving l2s")
+    }
+
+    @RepeatableSimulationTest
+    @WithNumberOfSystems(2)
+    @Timeout(value = 10, unit = TimeUnit.SECONDS)
+    fun `multi-system compaction and gc`(iteration: Int) {
+        val table = TableRef("xtdb", "public", "docs")
+        val defaultFileTarget = 100L * 1024L * 1024L
+
+        // Add some old L1 tries and their corresponding L2s (already compacted, so L1s are garbage)
+        val oldL1Tries = L1TrieKeys.take(4).toList()
+        val oldL2Tries = listOf("l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03")
+        addTries(
+            table,
+            (oldL1Tries + oldL2Tries).map { buildTrieDetails(table.tableName, it, defaultFileTarget) },
+            Instant.now()
+        )
+
+        // Add new L1 tries that will be compacted
+        val newL1Tries = listOf("l01-rc-b04", "l01-rc-b05", "l01-rc-b06", "l01-rc-b07")
+        addTries(
+            table,
+            newL1Tries.map { buildTrieDetails(table.tableName, it, defaultFileTarget) },
+            Instant.now()
+        )
+
+        // Finish blocks so GC can consider tries for collection
+        blockCatalogs.forEach { blockCatalog ->
+            for (blockIndex in 5L..7L) {
+                blockCatalog.finishBlock(
+                    blockIndex = blockIndex,
+                    latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
+                    latestProcessedMsgId = blockIndex,
+                    tables = listOf(table),
+                    secondaryDatabases = null
+                )
+            }
+        }
+
+        val expectedNewL2Tries = listOf("l02-rc-p0-b07", "l02-rc-p1-b07", "l02-rc-p2-b07", "l02-rc-p3-b07")
+        val expectedL2Tries = oldL2Tries + expectedNewL2Tries
+
+        // Launch compaction and GC across all systems in parallel
+        runBlocking(dispatcher) {
+            val compactionJobs = compactorsForDb.shuffled(rand).map { compactor ->
+                launch {
+                    compactor.startCompaction().await()
+                }
+            }
+            val gcJobs = garbageCollectors.shuffled(rand).map { gc ->
+                val jobId = UUID.randomUUID().toString().substring(0, 8)
+                launch(CoroutineName("gc-$jobId")) {
+                    gc.garbageCollectTries(Instant.now() + Duration.ofHours(1))
+                }
+            }
+
+            (compactionJobs + gcJobs).joinAll()
+        }
+
+        // Verify all catalogs have the expected L2 tries and some old L1s were GCed
+        trieCatalogs.forEach { trieCatalog ->
+            val triesInCatalog = trieCatalog.listAllTrieKeys(table).toSet()
+            Assertions.assertTrue(expectedL2Tries.all { it in triesInCatalog }, "All L2 tries should be present in all catalogs")
+
+            val oldL1sRemaining = oldL1Tries.count { it in triesInCatalog }
+            Assertions.assertTrue(oldL1sRemaining < oldL1Tries.size, "Some old L1s should have been garbage collected")
+        }
+
+        // Final GC pass to clean up remaining L1s
+        runBlocking {
+            garbageCollectors.forEach { gc ->
+                gc.garbageCollectTries(Instant.now() + Duration.ofHours(1))
+            }
+        }
+
+        // Verify all systems converged to the same state
+        val allTrieSets = trieCatalogs.map { it.listAllTrieKeys(table).toSet() }
+        Assertions.assertEquals(1, allTrieSets.distinct().size, "All systems should have converged to the same trie set")
+        Assertions.assertEquals(expectedL2Tries.toSet(), allTrieSets.first(), "Final state should only contain L2 tries")
     }
 }
