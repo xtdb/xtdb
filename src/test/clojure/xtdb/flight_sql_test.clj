@@ -1,6 +1,5 @@
 (ns xtdb.flight-sql-test
   (:require [clojure.test :as t]
-            [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.test-util :as tu])
   (:import (org.apache.arrow.adbc.core AdbcConnection)
@@ -13,7 +12,6 @@
            xtdb.arrow.Relation))
 
 (def ^:private ^:dynamic ^FlightSqlClient *client* nil)
-(def ^:private ^:dynamic *conn* nil)
 (def ^:private ^:dynamic ^AdbcConnection *adbc-conn* nil)
 
 (t/use-fixtures :each
@@ -29,13 +27,11 @@
       (with-open [flight-client (-> (FlightClient/builder tu/*allocator* (Location/forGrpcInsecure "127.0.0.1" port))
                                     (.build))
                   client (FlightSqlClient. flight-client)
-
-                  conn (jdbc/get-connection {:jdbcUrl (format "jdbc:arrow-flight-sql://localhost:%d?useEncryption=false" port)})
                   adbc-db (-> (FlightSqlDriver. tu/*allocator*)
                               (.open  {"uri" (str "grpc+tcp://127.0.0.1:" port)}))
                   adbc-conn (.connect adbc-db)]
 
-        (binding [*client* client, *conn* conn, *adbc-conn* adbc-conn]
+        (binding [*client* client, *adbc-conn* adbc-conn]
           (f))))))
 
 (def ^:private ^"[Lorg.apache.arrow.flight.CallOption;"

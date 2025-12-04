@@ -429,7 +429,6 @@ dependencies {
 
     projectDep(":modules:bench")
     projectDep(":modules:xtdb-datasets")
-    projectDep(":modules:xtdb-flight-sql")
     projectDep(":modules:xtdb-kafka-connect")
 
     // testFixtures dependencies
@@ -517,6 +516,10 @@ dependencies {
 
     // hato uses cheshire for application/json encoding
     testImplementation("cheshire", "cheshire", "5.12.0")
+
+    // Flight SQL tests
+    testImplementation(libs.arrow.adbc)
+    testImplementation(libs.arrow.adbc.fsql)
 }
 
 if (hasProperty("fin")) {
