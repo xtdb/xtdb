@@ -2,6 +2,10 @@ server:
   host: '*'
   port: 5432
 
+flightSql:
+  host: '*'
+  port: 9832
+
 log: !Local
   path: "/var/lib/xtdb/log"
 

@@ -11,6 +11,9 @@ spec:
   - port: {{ .Values.xtdbService.server.servicePort }}
     targetPort: {{ .Values.xtdbService.server.targetPort }}
     name: server
+  - port: {{ .Values.xtdbService.flightSqlServer.servicePort }}
+    targetPort: {{ .Values.xtdbService.flightSqlServer.targetPort }}
+    name: flight-sql
   - port: {{ .Values.xtdbService.healthzServer.servicePort }}
     targetPort: {{ .Values.xtdbService.healthzServer.targetPort }}
     name: healthz

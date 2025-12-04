@@ -9,10 +9,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.api.FlightSqlServer
 import xtdb.api.Xtdb
-import xtdb.api.flightSqlServer
-import xtdb.api.module
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
 import java.time.ZonedDateTime
@@ -30,10 +27,10 @@ class AdbcTest {
     fun setUp() {
         xtdb = Xtdb.openNode {
             server { port = 0 }
-            flightSqlServer { port = 0 }
+            flightSql { port = 0 }
         }
 
-        val flightPort = xtdb.module<FlightSqlServer>()!!.port
+        val flightPort = xtdb.flightSqlPort
 
         al = RootAllocator()
         db = FlightSqlDriver(al).open(mapOf("uri" to "grpc+tcp://127.0.0.1:${flightPort}"))

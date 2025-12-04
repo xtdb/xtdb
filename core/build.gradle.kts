@@ -42,6 +42,7 @@ dependencies {
     api(libs.netty.common)
     api(libs.arrow.adbc)
     api(libs.arrow.adbc.driver.manager)
+    api(libs.arrow.flight.sql)
 
     api(libs.roaring.bitmap)
 
@@ -97,7 +98,6 @@ dependencies {
     testImplementation(project(":modules:xtdb-aws"))
     testImplementation(project(":modules:xtdb-google-cloud"))
     testImplementation(project(":modules:xtdb-azure"))
-    testImplementation(project(":modules:xtdb-flight-sql"))
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))

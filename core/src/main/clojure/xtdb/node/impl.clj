@@ -104,6 +104,11 @@
   (getServerReadOnlyPort [this]
     (get-in (util/component this :xtdb.pgwire/server) [:read-only :port] -1))
 
+  (getFlightSqlPort [this]
+    (if-let [fsql (util/component this :xtdb.flight-sql/server)]
+      (.getPort ^xtdb.api.FlightSql fsql)
+      -1))
+
   (createConnectionBuilder [this]
     (let [server (util/component this :xtdb.pgwire/server)
           ^DataSource data-source (or (:read-write server) (:read-only server))]
@@ -332,6 +337,7 @@
 
 (defn node-system [^Xtdb$Config opts]
   (let [srv-config (.getServer opts)
+        flight-sql-config (.getFlightSql opts)
         healthz (.getHealthz opts)
         tracer (.getTracer opts)]
     (-> {:xtdb/node {}
@@ -352,6 +358,7 @@
          :xtdb/garbage-collector (.getGarbageCollector opts)
          :xtdb/modules (.getModules opts)}
         (cond-> srv-config (assoc :xtdb.pgwire/server srv-config)
+                flight-sql-config (assoc :xtdb.flight-sql/server flight-sql-config)
                 healthz (assoc :xtdb/healthz healthz))
         (doto ig/load-namespaces))))
 

@@ -39,6 +39,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     val serverPort: Int
     val serverReadOnlyPort: Int
+    val flightSqlPort: Int
 
     interface CompactorNode : AutoCloseable
 
@@ -64,6 +65,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     @Serializable
     data class Config(
         var server: ServerConfig? = ServerConfig(),
+        var flightSql: FlightSqlConfig? = FlightSqlConfig(),
         var logClusters: Map<LogClusterAlias, Log.Cluster.Factory<*>> = emptyMap(),
         var log: Log.Factory = Log.inMemoryLog,
         var storage: Storage.Factory = Storage.inMemory(),
@@ -95,6 +97,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         @JvmSynthetic
         fun server(configure: ServerConfig.() -> Unit) = apply { (server ?: ServerConfig()).configure() }
+
+        @JvmSynthetic
+        fun flightSql(configure: FlightSqlConfig.() -> Unit) = apply { (flightSql ?: FlightSqlConfig()).configure() }
 
         @JvmSynthetic
         fun indexer(configure: IndexerConfig.() -> Unit) = apply { indexer.configure() }

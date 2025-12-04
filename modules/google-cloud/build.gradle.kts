@@ -25,11 +25,11 @@ dependencies {
     api(project(":xtdb-api"))
     api(project(":xtdb-core"))
 
-    api("com.google.cloud", "google-cloud-storage", "2.38.0") {
+    api("com.google.cloud", "google-cloud-storage", "2.60.0") {
         exclude("com.google.guava","listenablefuture")
     }
 
-    api("com.google.guava","guava","32.1.1-jre")
+    api("com.google.guava","guava","33.4.7-jre")
 
     api(kotlin("stdlib"))
 

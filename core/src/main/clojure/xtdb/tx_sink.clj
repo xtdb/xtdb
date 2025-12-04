@@ -116,5 +116,6 @@
   (let [config (doto (xtn/->config node-opts)
                  (-> (.getCompactor) (.threads 0))
                  (.setServer nil)
+                 (.setFlightSql nil)
                  (some-> (.getTxSink) (.enable true)))]
     (.open config)))
