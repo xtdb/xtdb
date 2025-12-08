@@ -633,6 +633,8 @@ jobs:
         id: timeseries-chart
         if: steps.check-deployment.outcome == 'success' && steps.derive.outputs.bench_status == 'success'
         continue-on-error: true
+        env:
+          SCALE_FACTOR: ${{ env.SCALE_FACTOR }}
         run: |
           set -euo pipefail
           BENCH_TYPE="${{ inputs.benchType }}"
@@ -642,7 +644,14 @@ jobs:
           # Install rsvg-convert for SVG to PNG conversion (for Slack)
           sudo apt-get update && sudo apt-get install -y librsvg2-bin
 
-          ./modules/bench/cloud/scripts/tasks plot-benchmark-timeseries "$BENCH_TYPE"
+          # Build command with optional scale-factor
+          CMD_ARGS=("plot-benchmark-timeseries")
+          if [ -n "$SCALE_FACTOR" ]; then
+            CMD_ARGS+=("--scale-factor" "$SCALE_FACTOR")
+          fi
+          CMD_ARGS+=("$BENCH_TYPE")
+
+          ./modules/bench/cloud/scripts/tasks "${CMD_ARGS[@]}"
 
           SVG_FILE="${BENCH_TYPE}-benchmark-timeseries.svg"
           PNG_FILE="${BENCH_TYPE}-benchmark-timeseries.png"

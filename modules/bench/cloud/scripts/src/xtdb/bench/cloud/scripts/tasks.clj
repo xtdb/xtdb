@@ -473,6 +473,10 @@
                            (str/trim (:out result))))
 
         ;; Construct the Kusto query
+        ;; Only filter by scale_factor if provided
+        scale-factor-clause (if scale-factor
+                              (format " and scale_factor == %s" scale-factor)
+                              "")
         query (format "%s
   | where %s startswith \"{\" and %s has \"benchmark\"
   | extend log = parse_json(%s)
@@ -481,7 +485,7 @@
       benchmark = tostring(log.benchmark),
       metric_value = todouble(log['%s']),
       scale_factor = todouble(log.parameters['scale-factor'])
-  | where benchmark == \"%s\" and scale_factor == %s and isnotnull(metric_value)
+  | where benchmark == \"%s\"%s and isnotnull(metric_value)
   | top %d by TimeGenerated desc
   | order by TimeGenerated asc
   | project TimeGenerated, metric_value"
@@ -491,7 +495,7 @@
                       log-field
                       metric
                       benchmark
-                      scale-factor
+                      scale-factor-clause
                       limit)
 
         ;; Run az CLI command
@@ -637,91 +641,58 @@
     ;; Clean up temp file
     (.delete (java.io.File. temp-spec-file))))
 
-(defmulti plot-benchmark-timeseries
+(def ^:private benchmark-configs
+  {"tpch"       {:benchmark-name "TPC-H (OLAP)"
+                 :title "TPC-H Benchmark Performance"
+                 :default-scale-factor 1.0}
+   "yakbench"   {:benchmark-name "Yakbench"
+                 :title "Yakbench Benchmark Performance"
+                 :default-scale-factor 1.0}
+   "auctionmark" {:benchmark-name "Auction Mark OLTP"
+                  :title "AuctionMark Benchmark Performance"
+                  :default-scale-factor 0.1}
+   "readings"   {:benchmark-name "Readings benchmarks"
+                 :title "Readings Benchmark Performance"
+                 :default-scale-factor nil}}) ;; readings doesn't use scale-factor
+
+(defn plot-benchmark-timeseries
   "Plot a benchmark timeseries chart from Azure Log Analytics.
 
-  benchmark-type: benchmark type (e.g., \"tpch\", \"yakbench\", \"auctionmark\")
+  benchmark-type: benchmark type (e.g., \"tpch\", \"yakbench\", \"auctionmark\", \"readings\")
+  opts: {:scale-factor 1.0}  ; scale factor to filter by (uses default if not provided)
 
   Fetches benchmark data and plots it to an SVG file.
   Uses default parameters suitable for the specified benchmark type."
-  (fn [benchmark-type] benchmark-type))
-
-(defmethod plot-benchmark-timeseries "tpch" [_benchmark-type]
-  (let [data-ms (fetch-azure-benchmark-timeseries {:benchmark "TPC-H (OLAP)"})
-        ;; Convert milliseconds to minutes
-        data (mapv (fn [{:keys [timestamp value]}]
-                     (let [num-value (if (string? value)
-                                       (Double/parseDouble value)
-                                       (double value))]
-                       {:timestamp timestamp
-                        :value (/ num-value 60000.0)}))
-                   data-ms)
-        output-path "tpch-benchmark-timeseries.svg"
-        title "TPC-H Benchmark Performance"]
-    (plot-timeseries data {:output-path output-path
-                          :title title
-                          :x-label "Time"
-                          :y-label "Duration (minutes)"})
-    (println "Generated chart:" output-path)
-    output-path))
-
-(defmethod plot-benchmark-timeseries "yakbench" [_benchmark-type]
-  (let [data-ms (fetch-azure-benchmark-timeseries {:benchmark "Yakbench"})
-        data (mapv (fn [{:keys [timestamp value]}]
-                     (let [num-value (if (string? value)
-                                       (Double/parseDouble value)
-                                       (double value))]
-                       {:timestamp timestamp
-                        :value (/ num-value 60000.0)}))
-                   data-ms)
-        output-path "yakbench-benchmark-timeseries.svg"
-        title "Yakbench Benchmark Performance"]
-    (plot-timeseries data {:output-path output-path
-                          :title title
-                          :x-label "Time"
-                          :y-label "Duration (minutes)"})
-    (println "Generated chart:" output-path)
-    output-path))
-
-(defmethod plot-benchmark-timeseries "auctionmark" [_benchmark-type]
-  (let [data-ms (fetch-azure-benchmark-timeseries {:benchmark "Auction Mark OLTP"})
-        data (mapv (fn [{:keys [timestamp value]}]
-                     (let [num-value (if (string? value)
-                                       (Double/parseDouble value)
-                                       (double value))]
-                       {:timestamp timestamp
-                        :value (/ num-value 60000.0)}))
-                   data-ms)
-        output-path "auctionmark-benchmark-timeseries.svg"
-        title "AuctionMark Benchmark Performance"]
-    (plot-timeseries data {:output-path output-path
-                          :title title
-                          :x-label "Time"
-                          :y-label "Duration (minutes)"})
-    (println "Generated chart:" output-path)
-    output-path))
-
-(defmethod plot-benchmark-timeseries "readings" [_benchmark-type]
-  (let [data-ms (fetch-azure-benchmark-timeseries {:benchmark "Readings benchmarks"})
-        data (mapv (fn [{:keys [timestamp value]}]
-                     (let [num-value (if (string? value)
-                                       (Double/parseDouble value)
-                                       (double value))]
-                       {:timestamp timestamp
-                        :value (/ num-value 60000.0)}))
-                   data-ms)
-        output-path "readings-benchmark-timeseries.svg"
-        title "Readings Benchmark Performance"]
-    (plot-timeseries data {:output-path output-path
-                          :title title
-                          :x-label "Time"
-                          :y-label "Duration (minutes)"})
-    (println "Generated chart:" output-path)
-    output-path))
-
-(defmethod plot-benchmark-timeseries :default [benchmark-type]
-  (throw (ex-info (format "Unsupported benchmark type for timeseries plotting: %s" benchmark-type)
-                  {:benchmark-type benchmark-type})))
+  ([benchmark-type] (plot-benchmark-timeseries benchmark-type {}))
+  ([benchmark-type {:keys [scale-factor]}]
+   (let [config (get benchmark-configs benchmark-type)
+         _ (when-not config
+             (throw (ex-info (format "Unsupported benchmark type for timeseries plotting: %s" benchmark-type)
+                             {:benchmark-type benchmark-type
+                              :supported (keys benchmark-configs)})))
+         {:keys [benchmark-name title default-scale-factor]} config
+         sf (or scale-factor default-scale-factor)
+         fetch-opts (cond-> {:benchmark benchmark-name}
+                      sf (assoc :scale-factor sf))
+         data-ms (fetch-azure-benchmark-timeseries fetch-opts)
+         ;; Convert milliseconds to minutes
+         data (mapv (fn [{:keys [timestamp value]}]
+                      (let [num-value (if (string? value)
+                                        (Double/parseDouble value)
+                                        (double value))]
+                        {:timestamp timestamp
+                         :value (/ num-value 60000.0)}))
+                    data-ms)
+         output-path (str benchmark-type "-benchmark-timeseries.svg")
+         chart-title (if sf
+                       (str title " (SF " sf ")")
+                       title)]
+     (plot-timeseries data {:output-path output-path
+                            :title chart-title
+                            :x-label "Time"
+                            :y-label "Duration (minutes)"})
+     (println "Generated chart:" output-path)
+     output-path)))
 
 (defn help []
   (println "Usage: bb <command> [args...]")
@@ -729,9 +700,10 @@
   (println "Commands:")
   (println "  summarize-log [--format table|slack|github] <benchmark-type> <log-file>")
   (println "      Print a benchmark summary. Default format is 'table'.")
-  (println "  plot-benchmark-timeseries <benchmark-type>")
+  (println "  plot-benchmark-timeseries [--scale-factor SF] <benchmark-type>")
   (println "      Plot a benchmark timeseries chart from Azure Log Analytics.")
   (println "      Supported benchmark types: tpch, yakbench, auctionmark, readings")
+  (println "      --scale-factor: Filter by scale factor (default: 1.0 for tpch/yakbench, 0.1 for auctionmark)")
   (println "  help")
   (println "      Show this help message"))
 
@@ -747,14 +719,16 @@
             (flush))
 
           "plot-benchmark-timeseries"
-          (let [[benchmark-type & extra] rest-args]
+          (let [{:keys [args opts]} (cli/parse-args rest-args {:coerce {:scale-factor :double}})
+                [benchmark-type & extra] args
+                scale-factor (:scale-factor opts)]
             (when (seq extra)
               (throw (ex-info "Too many positional arguments supplied."
                               {:arguments rest-args})))
             (when-not benchmark-type
               (throw (ex-info "Benchmark type is required."
                               {:arguments rest-args})))
-            (plot-benchmark-timeseries benchmark-type))
+            (plot-benchmark-timeseries benchmark-type {:scale-factor scale-factor}))
 
           (do
             (println (str "Unknown command: " command))
