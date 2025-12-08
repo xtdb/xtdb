@@ -629,32 +629,39 @@ jobs:
             echo "Monitoring stack not found; skipping."
           fi
 
-      - name: Generate TPC-H Timeseries Chart
+      - name: Generate Benchmark Timeseries Chart
         id: timeseries-chart
-        if: steps.check-deployment.outcome == 'success' && inputs.benchType == 'tpch' && steps.derive.outputs.bench_status == 'success'
+        if: steps.check-deployment.outcome == 'success' && steps.derive.outputs.bench_status == 'success'
         continue-on-error: true
         run: |
           set -euo pipefail
+          BENCH_TYPE="${{ inputs.benchType }}"
+
           # Install vega tools for chart generation
           npm install -g vega vega-lite vega-cli
           # Install rsvg-convert for SVG to PNG conversion (for Slack)
           sudo apt-get update && sudo apt-get install -y librsvg2-bin
 
-          ./modules/bench/cloud/scripts/tasks plot-benchmark-timeseries tpch
+          ./modules/bench/cloud/scripts/tasks plot-benchmark-timeseries "$BENCH_TYPE"
 
-          if [ -f tpch-benchmark-timeseries.svg ]; then
-            echo "Generated TPC-H timeseries chart"
+          SVG_FILE="${BENCH_TYPE}-benchmark-timeseries.svg"
+          PNG_FILE="${BENCH_TYPE}-benchmark-timeseries.png"
+
+          if [ -f "$SVG_FILE" ]; then
+            echo "Generated ${BENCH_TYPE} timeseries chart"
             echo "has_chart=true" >> "$GITHUB_OUTPUT"
+            echo "svg_file=${SVG_FILE}" >> "$GITHUB_OUTPUT"
+            echo "png_file=${PNG_FILE}" >> "$GITHUB_OUTPUT"
             # Convert to PNG for Slack - use zoom to scale up while preserving aspect ratio
-            rsvg-convert --zoom=2 tpch-benchmark-timeseries.svg -o tpch-benchmark-timeseries.png
+            rsvg-convert --zoom=2 "$SVG_FILE" -o "$PNG_FILE"
           fi
 
-      - name: Upload TPC-H Timeseries Chart
-        if: steps.check-deployment.outcome == 'success' && inputs.benchType == 'tpch' && hashFiles('tpch-benchmark-timeseries.svg') != ''
+      - name: Upload Benchmark Timeseries Chart
+        if: steps.check-deployment.outcome == 'success' && steps.timeseries-chart.outputs.has_chart == 'true'
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: tpch-timeseries-${{ steps.timestamp.outputs.value }}
-          path: tpch-benchmark-timeseries.svg
+          name: ${{ inputs.benchType }}-timeseries-${{ steps.timestamp.outputs.value }}
+          path: ${{ steps.timeseries-chart.outputs.svg_file }}
           retention-days: 30
 
       - name: Write Job Summary
@@ -821,20 +828,37 @@ jobs:
           token: ${{ secrets.BENCHMARK_SLACK_BOT_TOKEN }}
           payload-file-path: ./slack-message.json
 
-      - name: Post TPC-H Timeseries Chart to Slack
-        if: steps.timeseries-chart.outputs.has_chart == 'true' && hashFiles('tpch-benchmark-timeseries.png') != ''
+      - name: Post Benchmark Timeseries Chart to Slack
+        if: steps.timeseries-chart.outputs.has_chart == 'true'
         env:
           SLACK_BOT_TOKEN: ${{ secrets.BENCHMARK_SLACK_BOT_TOKEN }}
           SLACK_CHANNEL: ${{ secrets.BENCHMARK_SLACK_CHANNEL_ID }}
+          BENCH_TYPE: ${{ inputs.benchType }}
+          PNG_FILE: ${{ steps.timeseries-chart.outputs.png_file }}
         run: |
           set -euo pipefail
-          FILE_PATH="tpch-benchmark-timeseries.png"
+
+          # Map benchmark type to friendly name
+          case "$BENCH_TYPE" in
+            tpch) FRIENDLY_NAME="TPC-H" ;;
+            auctionmark) FRIENDLY_NAME="AuctionMark" ;;
+            readings) FRIENDLY_NAME="Readings" ;;
+            yakbench) FRIENDLY_NAME="Yakbench" ;;
+            *) FRIENDLY_NAME="$BENCH_TYPE" ;;
+          esac
+
+          FILE_PATH="$PNG_FILE"
+          if [ ! -f "$FILE_PATH" ]; then
+            echo "Chart file not found: $FILE_PATH"
+            exit 1
+          fi
+
           FILE_SIZE=$(stat -c%s "$FILE_PATH" 2>/dev/null || stat -f%z "$FILE_PATH")
 
           # Step 1: Get upload URL (using form data)
           UPLOAD_RESPONSE=$(curl -s \
             -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
-            -F "filename=tpch-benchmark-timeseries.png" \
+            -F "filename=${PNG_FILE}" \
             -F "length=${FILE_SIZE}" \
             https://slack.com/api/files.getUploadURLExternal)
 
@@ -852,10 +876,10 @@ jobs:
             "$UPLOAD_URL"
 
           # Step 3: Complete the upload (using form data)
-          FILES_JSON="[{\"id\":\"${FILE_ID}\",\"title\":\"TPC-H Performance Trend\"}]"
+          FILES_JSON="[{\"id\":\"${FILE_ID}\",\"title\":\"${FRIENDLY_NAME} Performance Trend\"}]"
           curl -s \
             -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
             -F "files=${FILES_JSON}" \
             -F "channel_id=${SLACK_CHANNEL}" \
-            -F "initial_comment=📈 TPC-H Benchmark Performance Trend (last 30 runs)" \
+            -F "initial_comment=${FRIENDLY_NAME} Benchmark Performance Trend (last 30 runs)" \
             https://slack.com/api/files.completeUploadExternal

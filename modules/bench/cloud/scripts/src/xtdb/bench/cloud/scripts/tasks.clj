@@ -666,22 +666,58 @@
     output-path))
 
 (defmethod plot-benchmark-timeseries "yakbench" [_benchmark-type]
-  (let [data (fetch-azure-benchmark-timeseries {:benchmark "yakbench"})
+  (let [data-ms (fetch-azure-benchmark-timeseries {:benchmark "Yakbench"})
+        data (mapv (fn [{:keys [timestamp value]}]
+                     (let [num-value (if (string? value)
+                                       (Double/parseDouble value)
+                                       (double value))]
+                       {:timestamp timestamp
+                        :value (/ num-value 60000.0)}))
+                   data-ms)
         output-path "yakbench-benchmark-timeseries.svg"
         title "Yakbench Benchmark Performance"]
     (plot-timeseries data {:output-path output-path
                           :title title
                           :x-label "Time"
-                          :y-label "Duration (ms)"})))
+                          :y-label "Duration (minutes)"})
+    (println "Generated chart:" output-path)
+    output-path))
 
 (defmethod plot-benchmark-timeseries "auctionmark" [_benchmark-type]
-  (let [data (fetch-azure-benchmark-timeseries {:benchmark "auctionmark"})
+  (let [data-ms (fetch-azure-benchmark-timeseries {:benchmark "Auction Mark OLTP"})
+        data (mapv (fn [{:keys [timestamp value]}]
+                     (let [num-value (if (string? value)
+                                       (Double/parseDouble value)
+                                       (double value))]
+                       {:timestamp timestamp
+                        :value (/ num-value 60000.0)}))
+                   data-ms)
         output-path "auctionmark-benchmark-timeseries.svg"
-        title "Auctionmark Benchmark Performance"]
+        title "AuctionMark Benchmark Performance"]
     (plot-timeseries data {:output-path output-path
                           :title title
                           :x-label "Time"
-                          :y-label "Duration (ms)"})))
+                          :y-label "Duration (minutes)"})
+    (println "Generated chart:" output-path)
+    output-path))
+
+(defmethod plot-benchmark-timeseries "readings" [_benchmark-type]
+  (let [data-ms (fetch-azure-benchmark-timeseries {:benchmark "Readings benchmarks"})
+        data (mapv (fn [{:keys [timestamp value]}]
+                     (let [num-value (if (string? value)
+                                       (Double/parseDouble value)
+                                       (double value))]
+                       {:timestamp timestamp
+                        :value (/ num-value 60000.0)}))
+                   data-ms)
+        output-path "readings-benchmark-timeseries.svg"
+        title "Readings Benchmark Performance"]
+    (plot-timeseries data {:output-path output-path
+                          :title title
+                          :x-label "Time"
+                          :y-label "Duration (minutes)"})
+    (println "Generated chart:" output-path)
+    output-path))
 
 (defmethod plot-benchmark-timeseries :default [benchmark-type]
   (throw (ex-info (format "Unsupported benchmark type for timeseries plotting: %s" benchmark-type)
@@ -695,7 +731,7 @@
   (println "      Print a benchmark summary. Default format is 'table'.")
   (println "  plot-benchmark-timeseries <benchmark-type>")
   (println "      Plot a benchmark timeseries chart from Azure Log Analytics.")
-  (println "      Supported benchmark types: tpch, yakbench, auctionmark")
+  (println "      Supported benchmark types: tpch, yakbench, auctionmark, readings")
   (println "  help")
   (println "      Show this help message"))
 
