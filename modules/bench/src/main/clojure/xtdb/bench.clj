@@ -466,7 +466,9 @@
         (log/info "Running node from config file:" config-file)
         (try
           (with-open [node (xtn/start-node config-file)]
-            (benchmark-fn node))
+            (binding [tu/*allocator* (util/component node :xtdb/allocator)
+                      *registry* (util/component node :xtdb.metrics/registry)]
+              (benchmark-fn node)))
           (catch Throwable t
             (if @shutting-down?
               (log/warn t "Error during shutdown (ignored):")
