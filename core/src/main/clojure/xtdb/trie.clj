@@ -92,8 +92,8 @@
       (.build)))
 
 (defn filter-pages
-  ([pages] (filter-pages pages (TemporalBounds.)))
-  ([pages ^TemporalBounds query-bounds]
+  ([pages] (filter-pages pages {}))
+  ([pages {:keys [^TemporalBounds query-bounds], :or {query-bounds (TemporalBounds.)}}]
    (let [leaves (ArrayList.)]
      (loop [[^Segment$PageMeta page & more-pages] pages
             smallest-valid-from Long/MAX_VALUE
@@ -123,16 +123,14 @@
 
          (when (seq leaves)
            (let [valid-time (TemporalDimension. smallest-valid-from largest-valid-to)]
-             (loop [[^Segment$PageMeta page & more-pages] non-taken-pages]
-               (when page
-                 (let [temporal-metadata (.getTemporalMetadata page)
-                       obj-largest-system-from (.getMaxSystemFrom temporal-metadata)]
-                   (when (and (<= smallest-system-from obj-largest-system-from)
-                              (.intersects (TemporalDimension. (.getMinValidFrom temporal-metadata)
-                                                               (.getMaxValidTo temporal-metadata))
-                                           valid-time))
-                     (.add leaves page))
-                   (recur more-pages)))))
+             (doseq [^Segment$PageMeta page non-taken-pages]
+               (let [temporal-metadata (.getTemporalMetadata page)
+                     obj-largest-system-from (.getMaxSystemFrom temporal-metadata)]
+                 (when (and (<= smallest-system-from obj-largest-system-from)
+                            (.intersects (TemporalDimension. (.getMinValidFrom temporal-metadata)
+                                                             (.getMaxValidTo temporal-metadata))
+                                         valid-time))
+                   (.add leaves page)))))
            (vec leaves)))))))
 
 (defn- <-MemoryHashTrieNode [^MemoryHashTrie$Node node]

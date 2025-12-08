@@ -294,7 +294,7 @@
                                      (let [[memory-rel trie] (info-schema/table-template info-schema table)]
                                        (MemorySegment. trie memory-rel))))
 
-                             (let [merge-tasks (MergePlanner/planSync !segments (->path-pred iid-set) #(trie/filter-pages % temporal-bounds))]
+                             (let [merge-tasks (MergePlanner/planSync !segments (->path-pred iid-set) #(trie/filter-pages % {:query-bounds temporal-bounds}))]
                                (cond-> (ScanCursor. allocator (vec col-names) col-preds
                                                     temporal-bounds
                                                     !segments (.iterator ^Iterable merge-tasks)

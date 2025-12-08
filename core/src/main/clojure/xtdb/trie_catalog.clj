@@ -285,7 +285,7 @@
 
 (defn filter-tries [tries query-bounds]
   (-> (map (comp map->CatalogEntry #(assoc % :query-bounds query-bounds)) tries)
-      (trie/filter-pages query-bounds)))
+      (trie/filter-pages {:query-bounds query-bounds})))
 
 (defn <-trie-metadata [^TrieMetadata trie-metadata]
   (when (and trie-metadata (.hasTemporalMetadata trie-metadata))

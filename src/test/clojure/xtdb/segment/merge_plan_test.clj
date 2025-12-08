@@ -50,24 +50,24 @@
 
         (t/is (= #{1} (->> (trie/filter-pages [(->mock-page 0 false vt0 vt3 sf1 (dec sf2))
                                                (->mock-page 1 true vt1 vt2 sf2 sf2)]
-                                              (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                              {:query-bounds (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE)})
                            ->pages))
               "Take page 1. Page 0 system from strictly before page 1.")
         (t/is (= #{0 1} (->> (trie/filter-pages [(->mock-page 0 false vt0 (inc vt1) sf1 sf2)
                                                  (->mock-page 1 true vt1 vt2 sf2 sf2)]
-                                                (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                                {:query-bounds (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE)})
                              ->pages))
               "Take page 1. Page 0 system from overlaps.")
 
         (t/is (= #{1} (->> (trie/filter-pages [(->mock-page 0 false vt0 vt1 sf1 (inc sf2))
                                                (->mock-page 1 true vt1 vt2 sf2 sf2)]
-                                              (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                              {:query-bounds (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE)})
                            ->pages))
               "Take page 1. Page 0 valid-time strictly before page 1.")
 
         (t/is (= #{0 1} (->> (trie/filter-pages [(->mock-page 0 false vt0 (inc vt1) sf1 (inc sf2))
                                                  (->mock-page 1 true vt1 vt2 sf2 sf2)]
-                                                (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                                {:query-bounds (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE)})
                              ->pages))
               "Take page 1. Page 0 valid-time overlpas."))
 
@@ -76,13 +76,13 @@
         ;; TODO could we filter page 0 in the two assertions below?
         (t/is (= #{0 1} (->> (trie/filter-pages [(->mock-page 0 false vt0 vt2 sf1 sf2)
                                                  (->mock-page 1 true vt1 vt2 sf2 sf2)]
-                                                (tu/->temporal-bounds vt0 Long/MAX_VALUE (inc sf2) Long/MAX_VALUE))
+                                                {:query-bounds (tu/->temporal-bounds vt0 Long/MAX_VALUE (inc sf2) Long/MAX_VALUE)})
                              ->pages))
               "Take page 1. Page 0 system from overlaps. Query system-time bounds don't touch page 0")
 
         (t/is (= #{0 1} (->> (trie/filter-pages [(->mock-page 0 false vt0 vt1 sf1 (inc sf2))
                                                  (->mock-page 1 true (dec vt1) vt2 sf2 sf2)]
-                                                (tu/->temporal-bounds (inc vt1) Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                                {:query-bounds (tu/->temporal-bounds (inc vt1) Long/MAX_VALUE sf1 Long/MAX_VALUE)})
                              ->pages))
               "Take page 1. Page 0 valid-time overlpas. Query valid-time bounds don't touch page 0")))
 
@@ -92,19 +92,19 @@
 
         (t/is (= #{1} (->> (trie/filter-pages [(->mock-page 1 true vt1 vt2 sf2 sf2)
                                                (->mock-page 2 false vt2 vt3 sf3 sf3)]
-                                              (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                              {:query-bounds (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE)})
                            ->pages))
               "Take page 1. Page 2 doesn't overlap in valid-time")
 
         (t/is (= #{1 2} (->> (trie/filter-pages [(->mock-page 1 true vt1 (inc vt2) sf2 sf2)
                                                  (->mock-page 2 false vt2 vt3 sf3 sf3)]
-                                                (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                                {:query-bounds (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE)})
                              ->pages))
               "Take page 1. Page 2 overlaps in valid-time")
 
         (t/is (= #{1 2} (->> (trie/filter-pages [(->mock-page 1 true vt1 (inc vt2) sf2 sf2)
                                                  (->mock-page 2 false vt2 (inc vt3) sf3 sf3)]
-                                                (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE))
+                                                {:query-bounds (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 Long/MAX_VALUE)})
                              ->pages))
               "Take page 1. Page 2 can bound page 1 and we can't filter newer pages (no constraints on query system-time)."))
 
@@ -113,14 +113,14 @@
         ;; TODO can 2 be filtered here?
         (t/is (= #{1 2} (->> (trie/filter-pages [(->mock-page 1 true vt1 (inc vt2) sf2 sf2)
                                                  (->mock-page 2 false vt2 vt3 sf3 sf3)]
-                                                (tu/->temporal-bounds vt1 (dec vt2) sf1 Long/MAX_VALUE))
+                                                {:query-bounds (tu/->temporal-bounds vt1 (dec vt2) sf1 Long/MAX_VALUE)})
                              ->pages))
               "Take page 1. Page 2 overlaps in valid-time")
 
 
         (t/is (= #{1} (->> (trie/filter-pages [(->mock-page 1 true vt1 (inc vt2) sf2 sf3)
                                                (->mock-page 2 false vt2 (inc vt3) sf3 sf3)]
-                                              (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 sf3))
+                                              {:query-bounds (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 sf3)})
                            ->pages))
               "Take page 1. Page 2 can bound page 1 and we can filter newer pages because of query system-time constraints.")))
 
@@ -140,7 +140,7 @@
               (->> (trie/filter-pages
                     (for [[page min-vf max-vt] temporal-page-metadata]
                       (->mock-page page min-vf max-vt))
-                    query-bounds)
+                    {:query-bounds query-bounds})
                    (mapv :page)))]
 
       (t/testing "non intersecting pages and no retrospective updates"
