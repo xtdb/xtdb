@@ -32,4 +32,5 @@ jobs:
       scale_factor: ${{ inputs.scale_factor || '1.0' }}
       branch: ${{ github.ref_name }}
       timeout_minutes: 90
+      benchmark_timeout: PT2H
     secrets: inherit

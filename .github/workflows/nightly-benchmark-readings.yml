@@ -36,6 +36,7 @@ jobs:
       job_display_name: Readings
       branch: ${{ github.ref_name }}
       timeout_minutes: 90
+      benchmark_timeout: PT2H
       readings_device_count: ${{ inputs.readings_device_count || '10000' }}
       reading_count: ${{ inputs.reading_count || '1000' }}
     secrets: inherit

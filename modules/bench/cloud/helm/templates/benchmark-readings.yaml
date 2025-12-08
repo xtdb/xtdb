@@ -108,6 +108,10 @@ spec:
             - {{ .Values.readings.devices | quote }}
             - --readings
             - {{ .Values.readings.readings | quote }}
+            {{- if .Values.timeout }}
+            - --timeout
+            - {{ .Values.timeout | quote }}
+            {{- end }}
           ports:
             - name: metrics
               containerPort: 8080

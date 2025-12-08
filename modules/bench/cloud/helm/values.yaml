@@ -17,6 +17,10 @@ job:
   # Set to 0 to disable cleanup by TTL controller
   ttlSecondsAfterFinished: 3600
 
+# Benchmark timeout (ISO-8601 duration, e.g. PT1H30M for 90 minutes)
+# If set, the benchmark will gracefully abort after this duration
+timeout: ""
+
 readings:
   devices: 10000
   readings: 10000

@@ -106,6 +106,10 @@ spec:
             - "/var/lib/xtdb-config/xtdbconfig.yaml"
             - --scale-factor
             - {{ .Values.tpch.scaleFactor | quote }}
+            {{- if .Values.timeout }}
+            - --timeout
+            - {{ .Values.timeout | quote }}
+            {{- end }}
           ports:
             - name: metrics
               containerPort: 8080

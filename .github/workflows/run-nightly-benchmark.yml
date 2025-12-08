@@ -17,10 +17,15 @@ on:
         required: true
         type: string
       timeout_minutes:
-        description: 'Job timeout in minutes'
+        description: 'Job timeout in minutes (GitHub Actions workflow timeout)'
         required: false
         default: 90
         type: number
+      benchmark_timeout:
+        description: 'Benchmark timeout as ISO-8601 duration (e.g. PT1H30M). If empty, no timeout is applied.'
+        required: false
+        default: ''
+        type: string
       branch:
         description: 'Branch to build the benchmark image from'
         required: false
@@ -234,6 +239,7 @@ jobs:
           NODE_COUNT: ${{ inputs.node_count }}
           READINGS_DEVICE_COUNT: ${{ inputs.readings_device_count }}
           READING_COUNT: ${{ inputs.reading_count }}
+          BENCHMARK_TIMEOUT: ${{ inputs.benchmark_timeout }}
         run: |
           helm dependency update ./modules/bench/cloud/helm
           HELM_ARGS=(
@@ -270,6 +276,9 @@ jobs:
           fi
           if [ -n "$READING_COUNT" ]; then
             HELM_ARGS+=(--set "${BENCH_TYPE}.readings=${READING_COUNT}")
+          fi
+          if [ -n "$BENCHMARK_TIMEOUT" ]; then
+            HELM_ARGS+=(--set "timeout=${BENCHMARK_TIMEOUT}")
           fi
 
           helm upgrade --install "xtdb-benchmark" ./modules/bench/cloud/helm "${HELM_ARGS[@]}"
