@@ -131,3 +131,51 @@
           (t/is (= "query.cursor.scan.foo" (:name scan-span)))
           (t/is (= "foo" (get-in scan-span [:attributes "table.name"])))
           (t/is (= "xtdb" (get-in scan-span [:attributes "db.name"]))))))))
+
+(t/deftest test-transaction-tracing
+  (t/testing "multiple SQL operations in one transaction create separate spans"
+    (let [!spans (atom [])
+          exporter (test-span-exporter !spans)
+          span-processor (SimpleSpanProcessor/create exporter)]
+      (with-open [node (xtn/start-node
+                        {:tracer {:enabled? true
+                                  :service-name "xtdb-test"
+                                  :span-processor span-processor}})]
+
+        (xt/submit-tx node [[:sql "INSERT INTO users (_id, name) VALUES (1, 'Alice')"]])
+        (xt/submit-tx node [[:sql "UPDATE users SET foo='bar' WHERE name='alice'"]])
+        
+        ;; Give spans a moment to be exported
+        (Thread/sleep 100) 
+        
+        (let [span-tree (build-span-tree @!spans)
+              tx-spans (filter #(= "xtdb.transaction.sql" (:name %)) span-tree)] 
+          (t/is (= 1 (count tx-spans))) 
+          (t/is (= {:name "xtdb.transaction.sql"
+                    :attributes {"query.text" "UPDATE users SET foo='bar' WHERE name='alice'"},
+                    :children
+                    [{:name "xtdb.query"
+                      :attributes {"query.text" "UPDATE users SET foo='bar' WHERE name='alice'"},
+                      :children
+                      [{:name "query.cursor.project"
+                        :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "project"},
+                        :children []}
+                       {:name "query.cursor.project"
+                        :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "project"},
+                        :children []}
+                       {:name "query.cursor.rename"
+                        :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "rename"},
+                        :children []}
+                       {:name "query.cursor.select"
+                        :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "select"},
+                        :children []}
+                       {:name "query.cursor.scan.users"
+                        :attributes
+                        {"cursor.page_count" "0",
+                         "cursor.row_count" "0",
+                         "cursor.type" "scan",
+                         "db.name" "xtdb",
+                         "schema.name" "public",
+                         "table.name" "users"},
+                        :children []}]}]}
+                   (first tx-spans))))))))

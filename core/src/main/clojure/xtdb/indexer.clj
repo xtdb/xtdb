@@ -381,7 +381,7 @@
 (defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, db-cat, tx-opts, {:keys [stmt message]}]
   (let [^PreparedQuery pq (.prepareQuery q-src stmt db-cat tx-opts)]
     (-> (fn eval-query [^RelationReader args]
-          (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
+          (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz :tracer :query-text])
                                              (assoc :args args, :close-args? false)))]
 
             (letfn [(throw-assert-failed []
@@ -397,8 +397,8 @@
 
 (defn- query-indexer [allocator, ^IQuerySource q-src, db-cat, ^RelationIndexer rel-idxer, tx-opts, {:keys [stmt] :as query-opts}]
   (let [^PreparedQuery pq (.prepareQuery q-src stmt db-cat tx-opts)]
-    (-> (fn eval-query [^RelationReader args]
-          (with-open [res (-> (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
+    (-> (fn eval-query [^RelationReader args] 
+          (with-open [res (-> (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz :tracer :query-text])
                                                  (assoc :args args, :close-args? false))))]
             (.forEachRemaining res
                                (fn [^RelationReader in-rel]
@@ -542,7 +542,7 @@
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx
                                               ^VectorReader tx-ops-rdr, ^IQuerySource q-src, db-cat,
-                                              {:keys [default-db tx-key] :as tx-opts}]
+                                              {:keys [default-db tx-key tracer] :as tx-opts}]
   (let [sql-leg (.vectorFor tx-ops-rdr "sql")
         query-rdr (.vectorFor sql-leg "query")
         args-rdr (.vectorFor sql-leg "args")
@@ -557,30 +557,33 @@
         (let [query-str (.getObject query-rdr tx-op-idx)]
           (err/wrap-anomaly {:sql query-str, :tx-op-idx tx-op-idx, :tx-key tx-key}
             (util/with-open [^Relation$ILoader args-loader (open-args-rdr allocator args-rdr tx-op-idx)]
-              (let [[q-tag q-args] (parse-sql/parse-statement query-str {:default-db default-db})
-                    tx-opts (assoc tx-opts :arg-fields (some-> args-loader (.getSchema) (.getFields)))]
-                (case q-tag
-                  :insert (foreach-arg-row allocator args-loader
-                                           (query-indexer allocator q-src db-cat upsert-idxer tx-opts q-args))
-                  :patch (foreach-arg-row allocator args-loader
-                                          (query-indexer allocator q-src db-cat patch-idxer tx-opts q-args))
-                  :update (foreach-arg-row allocator args-loader
-                                           (query-indexer allocator q-src db-cat upsert-idxer tx-opts q-args))
-                  :delete (foreach-arg-row allocator args-loader
-                                           (query-indexer allocator q-src db-cat delete-idxer tx-opts q-args))
-                  :erase (foreach-arg-row allocator args-loader
-                                          (query-indexer allocator q-src db-cat erase-idxer tx-opts q-args))
-                  :assert (foreach-arg-row allocator args-loader
-                                           (->assert-idxer q-src db-cat tx-opts q-args))
+              (metrics/with-span tracer "xtdb.transaction.sql" {:attributes {:query.text query-str}} 
+                (let [[q-tag q-args] (parse-sql/parse-statement query-str {:default-db default-db})
+                      tx-opts (assoc tx-opts 
+                                     :arg-fields (some-> args-loader (.getSchema) (.getFields))
+                                     :query-text query-str)]
+                  (case q-tag
+                    :insert (foreach-arg-row allocator args-loader
+                                             (query-indexer allocator q-src db-cat upsert-idxer tx-opts q-args))
+                    :patch (foreach-arg-row allocator args-loader
+                                            (query-indexer allocator q-src db-cat patch-idxer tx-opts q-args))
+                    :update (foreach-arg-row allocator args-loader
+                                             (query-indexer allocator q-src db-cat upsert-idxer tx-opts q-args))
+                    :delete (foreach-arg-row allocator args-loader
+                                             (query-indexer allocator q-src db-cat delete-idxer tx-opts q-args))
+                    :erase (foreach-arg-row allocator args-loader
+                                            (query-indexer allocator q-src db-cat erase-idxer tx-opts q-args))
+                    :assert (foreach-arg-row allocator args-loader
+                                             (->assert-idxer q-src db-cat tx-opts q-args))
 
-                  :create-user (let [{:keys [username password]} q-args]
-                                 (update-pg-user! live-idx-tx tx-key username password))
+                    :create-user (let [{:keys [username password]} q-args]
+                                   (update-pg-user! live-idx-tx tx-key username password))
 
-                  :alter-user (let [{:keys [username password]} q-args]
-                                (update-pg-user! live-idx-tx tx-key username password))
+                    :alter-user (let [{:keys [username password]} q-args]
+                                  (update-pg-user! live-idx-tx tx-key username password))
 
-                  (throw (err/incorrect ::invalid-sql-tx-op "Invalid SQL query sent as transaction operation"
-                                        {:query query-str})))))))
+                    (throw (err/incorrect ::invalid-sql-tx-op "Invalid SQL query sent as transaction operation"
+                                          {:query query-str}))))))))
 
         nil))))
 
@@ -692,7 +695,8 @@
                              :tx-key tx-key
                              :indexer this
                              :default-db (.getName db)
-                             :user-metadata user-metadata}
+                             :user-metadata user-metadata
+                             :tracer tracer}
 
                     !put-docs-idxer (delay (->put-docs-indexer live-index live-idx-tx tx-ops-rdr db system-time tx-opts))
                     !patch-docs-idxer (delay (->patch-docs-indexer live-index live-idx-tx tx-ops-rdr q-src db-cat system-time tx-opts))
