@@ -531,6 +531,14 @@ jobs:
             echo "No git metadata found on job"
           fi
 
+      - name: Re-authenticate Azure CLI (before rescue)
+        if: steps.check-deployment.outcome == 'success'
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2
+        with:
+          client-id: ${{ secrets.BENCHMARK_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.BENCHMARK_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.BENCHMARK_AZURE_SUBSCRIPTION_ID }}
+
       - name: Rescue Crash Dumps
         if: steps.check-deployment.outcome == 'success'
         continue-on-error: true
@@ -595,6 +603,14 @@ jobs:
             --destination-path "$TIMESTAMP/$BENCH_TYPE" || true
 
           echo "Crash artifacts rescued to $DST_CONTAINER/$TIMESTAMP/$BENCH_TYPE/"
+
+      - name: Re-authenticate Azure CLI (before cleanup)
+        if: ${{ always() && steps.check-deployment.outcome == 'success' }}
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2
+        with:
+          client-id: ${{ secrets.BENCHMARK_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.BENCHMARK_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.BENCHMARK_AZURE_SUBSCRIPTION_ID }}
 
       - name: Run Cleanup Script
         if: ${{ always() && steps.check-deployment.outcome == 'success' }}

@@ -152,6 +152,14 @@ jobs:
           echo "failed_job_names=${failed_jobs_json}" >> "$GITHUB_OUTPUT"
           echo "succeeded_job_names=${succeeded_jobs_json}" >> "$GITHUB_OUTPUT"
 
+      - name: Re-authenticate Azure CLI (before cleanup)
+        if: steps.inspect-deployment.outputs.deployment_status == 'completed' || steps.inspect-deployment.outputs.deployment_status == 'failed'
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2
+        with:
+          client-id: ${{ secrets.BENCHMARK_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.BENCHMARK_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.BENCHMARK_AZURE_SUBSCRIPTION_ID }}
+
       - name: Cleanup Existing Deployment
         if: steps.inspect-deployment.outputs.deployment_status == 'completed' || steps.inspect-deployment.outputs.deployment_status == 'failed'
         run: |
@@ -176,6 +184,14 @@ jobs:
         run: |
           echo "Workflow cancellation requested due to existing deployment. Stopping job."
           exit 0
+
+      - name: Re-authenticate Azure CLI (before clear state)
+        if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2
+        with:
+          client-id: ${{ secrets.BENCHMARK_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.BENCHMARK_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.BENCHMARK_AZURE_SUBSCRIPTION_ID }}
 
       - name: Clear Bench State
         if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
