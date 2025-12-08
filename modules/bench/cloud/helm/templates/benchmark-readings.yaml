@@ -17,7 +17,7 @@ metadata:
 spec:
   parallelism: 1
   completions: 1
-  backoffLimit: 1
+  backoffLimit: 0
   ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished | default 0 }}
   template:
     metadata:
