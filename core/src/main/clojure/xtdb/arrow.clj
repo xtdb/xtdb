@@ -7,7 +7,7 @@
   (:import (java.nio.file Files)
            [java.util Spliterators]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb.arrow NullVector Relation) 
+           (xtdb.arrow NullVector Relation)
            (xtdb.trie MemoryHashTrie)))
 
 (defn read-arrow-stream-file
@@ -28,10 +28,13 @@
   ([^BufferAllocator al, path-ish f]
    (with-open [loader (Relation/loader al (util/->path path-ish))
                cursor (.openCursor loader al)]
-     (f {:schema (.getSchema loader)
-         :batches (->> (iterator-seq (Spliterators/iterator cursor))
-                       (map (fn [^Relation rel]
-                              (util/->clj (.getAsMaps rel)))))}))))
+     (let [it (Spliterators/iterator cursor)]
+       (letfn [(page-seq []
+                 (lazy-seq
+                  (when (.hasNext it)
+                    (cons (util/->clj (.getAsMaps ^Relation (.next it))) (page-seq)))))]
+         (f {:schema (.getSchema loader)
+             :batches (page-seq)}))))))
 
 (defn read-arrow-file
   ([al path-ish]
