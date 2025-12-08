@@ -22,7 +22,10 @@ metadata:
 data:
   upload-dumps.sh: |
     #!/bin/bash
-    set -euo pipefail
+    # NOTE: This sidecar must always exit 0 to avoid failing the Job
+    # Errors are logged but don't affect exit code
+    set -uo pipefail
+    trap 'exit 0' EXIT TERM INT
 
     DUMP_DIR=/dumps
     PREFIX="dumps/${XTDB_NODE_ID:-unknown}/$(date +%Y-%m-%dT%H-%M-%S)"
