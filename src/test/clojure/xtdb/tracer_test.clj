@@ -143,39 +143,56 @@
                                   :span-processor span-processor}})]
 
         (xt/submit-tx node [[:sql "INSERT INTO users (_id, name) VALUES (1, 'Alice')"]])
-        (xt/submit-tx node [[:sql "UPDATE users SET foo='bar' WHERE name='alice'"]])
+        (xt/submit-tx node [[:sql "UPDATE users SET foo='bar' WHERE name='alice'"]]) 
+        (xt/submit-tx node [[:patch-docs :users {:xt/id "alice" :foo "baz"}]])
+        (xt/submit-tx node [[:delete-docs :users 1]])
+        (xt/submit-tx node [[:erase-docs :users 1]])
         
         ;; Give spans a moment to be exported
         (Thread/sleep 100) 
         
         (let [span-tree (build-span-tree @!spans)
-              tx-spans (filter #(= "xtdb.transaction.sql" (:name %)) span-tree)] 
-          (t/is (= 1 (count tx-spans))) 
-          (t/is (= {:name "xtdb.transaction.sql"
-                    :attributes {"query.text" "UPDATE users SET foo='bar' WHERE name='alice'"},
-                    :children
-                    [{:name "xtdb.query"
+              tx-spans (filter #(string/includes? (:name %) "xtdb.transaction") span-tree)
+              tx-span-names (mapv :name tx-spans)]
+          ;; we may expect the patch/delete/erase to differ here if they go through delete-docs/erase-docs indexer
+          (t/is (= ["xtdb.transaction.put-docs"
+                    "xtdb.transaction.sql"
+                    "xtdb.transaction.sql"
+                    "xtdb.transaction.sql"
+                    "xtdb.transaction.sql"]
+                   tx-span-names))
+          (let [[put-tx update-tx _patch-tx _delete-tx _erase-tx] tx-spans]
+            (t/is (= {:name "xtdb.transaction.put-docs"
+                      :attributes {"db" "xtdb"
+                                   "schema" "public" 
+                                   "table" "users"},
+                      :children []} 
+                     put-tx))
+            (t/is (= {:name "xtdb.transaction.sql"
                       :attributes {"query.text" "UPDATE users SET foo='bar' WHERE name='alice'"},
                       :children
-                      [{:name "query.cursor.project"
-                        :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "project"},
-                        :children []}
-                       {:name "query.cursor.project"
-                        :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "project"},
-                        :children []}
-                       {:name "query.cursor.rename"
-                        :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "rename"},
-                        :children []}
-                       {:name "query.cursor.select"
-                        :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "select"},
-                        :children []}
-                       {:name "query.cursor.scan.users"
-                        :attributes
-                        {"cursor.page_count" "0",
-                         "cursor.row_count" "0",
-                         "cursor.type" "scan",
-                         "db.name" "xtdb",
-                         "schema.name" "public",
-                         "table.name" "users"},
-                        :children []}]}]}
-                   (first tx-spans))))))))
+                      [{:name "xtdb.query"
+                        :attributes {"query.text" "UPDATE users SET foo='bar' WHERE name='alice'"},
+                        :children
+                        [{:name "query.cursor.project"
+                          :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "project"},
+                          :children []}
+                         {:name "query.cursor.project"
+                          :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "project"},
+                          :children []}
+                         {:name "query.cursor.rename"
+                          :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "rename"},
+                          :children []}
+                         {:name "query.cursor.select"
+                          :attributes {"cursor.page_count" "0" "cursor.row_count" "0" "cursor.type" "select"},
+                          :children []}
+                         {:name "query.cursor.scan.users"
+                          :attributes
+                          {"cursor.page_count" "0",
+                           "cursor.row_count" "0",
+                           "cursor.type" "scan",
+                           "db.name" "xtdb",
+                           "schema.name" "public",
+                           "table.name" "users"},
+                          :children []}]}]}
+                     update-tx))))))))
