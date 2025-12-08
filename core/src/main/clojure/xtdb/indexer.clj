@@ -619,7 +619,8 @@
 (defmethod ig/expand-key :xtdb/indexer [k opts]
   {k (merge {:config (ig/ref :xtdb/config)
              :q-src (ig/ref ::q/query-source)
-             :metrics-registry (ig/ref :xtdb.metrics/registry)}
+             :metrics-registry (ig/ref :xtdb.metrics/registry)
+             :tracer (ig/ref :xtdb/tracer)}
             opts)})
 
 (defn- commit [tx-key ^LiveIndex$Tx live-idx-tx ^Indexer$TxSink tx-sink]
@@ -629,7 +630,8 @@
 (defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
                                ^Database db, ^LiveIndex live-index, table-catalog
                                ^Timer tx-timer
-                               ^Counter tx-error-counter]
+                               ^Counter tx-error-counter
+                               tracer]
   Indexer$ForDatabase
   (close [_]
     (util/close allocator))
@@ -742,7 +744,7 @@
       (add-tx-row! (.getName db) live-idx-tx tx-key e {})
       (commit tx-key live-idx-tx (.getTxSink db)))))
 
-(defmethod ig/init-key :xtdb/indexer [_ {:keys [config, q-src, metrics-registry]}]
+(defmethod ig/init-key :xtdb/indexer [_ {:keys [config, q-src, metrics-registry, tracer]}]
   (let [tx-timer (metrics/add-timer metrics-registry "tx.op.timer"
                                     {:description "indicates the timing and number of transactions"})
         tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
@@ -754,7 +756,7 @@
 
           (->IndexerForDatabase allocator (:node-id config) q-src
                                 db (.getLiveIndex db) (.getTableCatalog db)
-                                tx-timer tx-error-counter)))
+                                tx-timer tx-error-counter tracer)))
 
       (close [_]))))
 
