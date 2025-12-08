@@ -133,7 +133,7 @@ For example:
 (from :users [{:username "james"} first-name last-name])
 
 ;; `SELECT first_name, last_name FROM users WHERE username = ?`
-(from :users [{:username $username} first-name last-name])
+(from :users [{:username username-param} first-name last-name])
 ```
 
 Additionally, 'from' supports a special column reference - `projectAllCols` in JSON and the `*` symbol in Clojure.

@@ -14,7 +14,7 @@ XTQL is our new, data-oriented, composable query language:
 
 ## Querying XTQL
 
-XTQL can either be queried within an SQL query, or via the Clojure API.
+XTQL can either be queried within an SQL query, or via the [Clojure API](#querying-via-the-clojure-api).
 
 To query XTQL within a SQL query, you can either execute it:
 
@@ -38,6 +38,19 @@ To query XTQL within a SQL query, you can either execute it:
   ORDER BY u.last_name DESC, u.first_name DESC
   LIMIT 10
   ```
+
+### Parameters in SQL
+
+To pass parameters to an XTQL query embedded in SQL, use the syntax `XTQL ($$ query $$, ?, ?, ...)` where each `?` corresponds to a parameter declared in the `fn`:
+
+```sql
+-- Find users by country with minimum age
+XTQL ($$
+  (fn [min-age country]
+    (-> (from :users [{:country country} name age])
+        (where (>= age min-age))))
+$$, ?, ?)
+```
 
 ## 'Operators' and 'relations'
 
@@ -230,6 +243,42 @@ If not, forgive me - we'll follow this up with more XTDB 2.x bitemporality conte
 - This means that you can (for example) query the same table at two points-in-time in the same query - 'who worked here in both 2018 and 2023':
 
   <IncludeCode file="src/test/resources/docs/xtql_tutorial_examples_xtql.yaml" snippet="bitemp-xtql-3" lang="clojure" />
+
+## Querying via the Clojure API
+
+Using `xt/q`, you can pass an XTQL query directly:
+
+```clojure
+(require '[xtdb.api :as xt])
+
+;; Simple query - no parameters
+(xt/q node '(from :users [first-name last-name]))
+
+;; Query with pipeline
+(xt/q node '(-> (from :users [first-name last-name])
+                (order-by last-name first-name)
+                (limit 10)))
+```
+
+### Parameterized Queries
+
+To pass parameters to an XTQL query, wrap the query in a vector with the parameter values following it. The query itself should be wrapped in `fn` to declare the parameters:
+
+```clojure
+;; Positional parameters
+(xt/q node ['(fn [min-age country]
+               (-> (from :users [{:country country} name age])
+                   (where (>= age min-age))))
+            18 "UK"])
+
+;; Alternatively, pass a map to avoid positional arguments
+;; Access fields using (. map field) - use simple keywords or snake_case interop keywords for field names
+(xt/q node ['(fn [params]
+               (-> (from :users [first-name age country])
+                   (where (>= age (. params my$ns$min_age)))
+                   (where (= country (. params country)))))
+            {:my.ns/min-age 18 :country "UK"}])
+```
 
 ## For more information
 
