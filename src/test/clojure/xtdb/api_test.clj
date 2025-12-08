@@ -99,6 +99,31 @@
                (set (xt/q *node* "SELECT b._id, b.v FROM bar b"
                           {:default-tz (ZoneId/of "Europe/London")})))))))
 
+(deftest test-sql-insert-records-complex-types
+  (t/testing "INSERT INTO with RECORDS roundtrips all Clojure data types"
+    (let [doc {:xt/id "joe"
+               :first-name "Joe"
+               :my-keyword :your-own.ns-etc/key-word
+               :my.ns.col/col1-key "foo"
+               :my-map {:your-own.ns-etc/key-word "v"}
+               :my-set #{["nested" :edn] {:etc true}}
+               :my-bigint 1
+               :my-float 1.23
+               :my-decimal 1.0M
+               :my-date (java.time.LocalDate/of 2025 6 12)
+               :my-timestamptz #xt/zdt "2025-06-12T00:00Z[UTC]"
+               :my-time (java.time.LocalTime/of 22 15 04 1237)
+               :my-duration (java.time.Duration/parse "PT1H3M5.533S")
+               :my-interval #xt/interval "P163DT12H"
+               :my-period #xt/tstz-range [#xt/zdt "2025-01-01T00:00Z[UTC]" #xt/zdt "2025-06-12T00:00Z[UTC]"]
+               :my-uri #xt/uri "https://xtdb.com"
+               :my-uuid #uuid "97a392d5-5e3f-406f-9651-a828ee79b156"}]
+
+      (xt/execute-tx *node* [[:sql "INSERT INTO complex_types_test RECORDS ?" [doc]]])
+
+      (t/is (= doc
+               (:result (first (xt/q *node* "SELECT NEST_ONE(SELECT * FROM complex_types_test WHERE complex_types_test._id = 'joe') AS result"))))))))
+
 (t/deftest can-manually-specify-system-time-47
   (let [tx1 (xt/execute-tx *node* [[:put-docs :docs {:xt/id :foo}]]
                            {:system-time #inst "2012"})
