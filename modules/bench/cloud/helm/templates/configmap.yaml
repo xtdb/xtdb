@@ -65,25 +65,28 @@ data:
       echo "Uploaded: $PREFIX/$file"
     }
 
-    # Background: watch for main container (java process) to exit
-    (
-      while pgrep -x java >/dev/null 2>&1; do
-        sleep 5
-      done
-      echo "Main container exited, waiting 10s for any final uploads..."
-      sleep 10
-      # Upload any dumps that might have been missed
-      for f in "$DUMP_DIR"/*.hprof; do
-        [[ -f "$f" ]] && upload_file "$(basename "$f")"
-      done
-      echo "Sidecar exiting."
-      kill $$
-    ) &
-
     echo "Watching $DUMP_DIR for heap dumps..."
 
+    # Start inotifywait in background so we can kill it later
     inotifywait -m -e close_write --format '%f' "$DUMP_DIR" 2>/dev/null | while read -r file; do
       if [[ "$file" == *.hprof ]]; then
         upload_file "$file"
       fi
+    done &
+    WATCH_PID=$!
+
+    # Wait for main container (java process) to exit
+    while pgrep -x java >/dev/null 2>&1; do
+      sleep 5
     done
+
+    echo "Main container exited, waiting 10s for any final uploads..."
+    sleep 10
+
+    # Upload any dumps that might have been missed
+    for f in "$DUMP_DIR"/*.hprof; do
+      [[ -f "$f" ]] && upload_file "$(basename "$f")"
+    done
+
+    echo "Sidecar exiting."
+    kill $WATCH_PID 2>/dev/null || true
