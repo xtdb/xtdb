@@ -125,11 +125,14 @@
            (let [valid-time (TemporalDimension. smallest-valid-from largest-valid-to)]
              (doseq [^Segment$PageMeta page non-taken-pages]
                (let [temporal-metadata (.getTemporalMetadata page)
-                     obj-largest-system-from (.getMaxSystemFrom temporal-metadata)]
+                     obj-largest-system-from (.getMaxSystemFrom temporal-metadata)
+                     page-recency (.getRecency page)]
                  (when (and (<= smallest-system-from obj-largest-system-from)
                             (.intersects (TemporalDimension. (.getMinValidFrom temporal-metadata)
                                                              (.getMaxValidTo temporal-metadata))
-                                         valid-time))
+                                         valid-time)
+                            (or (>= page-recency smallest-valid-from)
+                                (>= page-recency smallest-system-from)))
                    (.add leaves page)))))
            (vec leaves)))))))
 
