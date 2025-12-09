@@ -526,7 +526,7 @@
          table-name "ContainerLog"
          log-field "LogEntry"
          benchmark "TPC-H (OLAP)"
-         scale-factor 1
+         scale-factor nil
          limit 30
          metric "time-taken-ms"
          unit :millis}}]
