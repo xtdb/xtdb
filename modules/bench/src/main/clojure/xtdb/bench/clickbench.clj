@@ -15,6 +15,7 @@
            [java.time Duration LocalDate LocalDateTime ZoneId ZoneOffset ZonedDateTime]
            [java.time.format DateTimeFormatter]
            [java.util.zip GZIPInputStream GZIPOutputStream]
+           [software.amazon.awssdk.regions Region]
            [software.amazon.awssdk.services.s3 S3Client]
            [software.amazon.awssdk.services.s3.model GetObjectRequest]))
 
@@ -129,7 +130,9 @@
       (log/info "downloading" (str file))
       (io/make-parents file)
 
-      (.getObject (S3Client/create)
+      (.getObject (-> (S3Client/builder)
+                        (.region Region/EU_WEST_1)
+                        (.build))
                   (-> (GetObjectRequest/builder)
                       (.bucket "xtdb-datasets")
                       (.key (format "clickbench/hits-%s.transit.json.gz" (name size)))
@@ -160,6 +163,10 @@
 (defmethod b/cli-flags :clickbench [_]
   [["-l" "--limit LIMIT"
     :parse-fn parse-long]
+
+   ["-s" "--size SIZE" "Dataset size: tiny, small, medium, full"
+    :parse-fn keyword
+    :default :small]
 
    ["-h" "--help"]])
 

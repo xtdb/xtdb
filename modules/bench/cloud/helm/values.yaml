@@ -28,6 +28,12 @@ readings:
 yakbench:
   scaleFactor: 0.1
 
+clickbench:
+  size: small
+  limit: ""
+  # Name of k8s secret containing AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+  awsSecretName: "xtdb-aws-datasets-secret"
+
 xtdbConfig:
   # Core environment variables
   kafkaBootstrapServers: xtdb-benchmark-kafka.cloud-benchmark.svc.cluster.local:9092

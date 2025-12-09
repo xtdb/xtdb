@@ -1,6 +1,6 @@
 name: Nightly Benchmark Cleanup
 run-name: >-
-  Benchmark Cleanup: ${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType }}
+  Benchmark Cleanup: ${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType == 'clickbench' && 'ClickBench' || inputs.benchType }}
 
 on:
   workflow_dispatch:
@@ -14,6 +14,7 @@ on:
           - auctionmark
           - readings
           - yakbench
+          - clickbench
       status:
         description: 'Status of the benchmark'
         required: true

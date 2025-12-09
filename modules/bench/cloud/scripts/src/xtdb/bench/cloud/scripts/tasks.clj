@@ -119,6 +119,23 @@
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
+(defmethod parse-log "clickbench" [_benchmark-type log-file-path]
+  (let [content (slurp log-file-path)
+        lines (str/split-lines content)
+        stage-lines (filter #(str/starts-with? % "{\"stage\":") lines)
+        stages (mapv (fn [line]
+                       (try
+                         (json/parse-string line true)
+                         (catch Exception e
+                           (throw (ex-info (str "Failed to parse JSON line: " line)
+                                           {:line line :error (.getMessage e)})))))
+                     stage-lines)
+        {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
+    {:all-stages stages
+     :ingest-stages (filterv #(contains? #{"submit-docs" "sync" "finish-block" "compact" "ingest" "download"} (:stage %)) stages)
+     :benchmark-total-time-ms benchmark-total-time-ms
+     :benchmark-summary benchmark-summary}))
+
 (defn tpch-stage->query-row
   [idx {:keys [stage time-taken-ms]}]
   (when-let [[_ hot-cold query-num name] (re-find #"^((?:hot|cold))-queries-q(\d+)-(.*)$" stage)]
@@ -263,6 +280,38 @@
               (java.time.Duration/ofMillis benchmark-total-time-ms)
               "N/A"))))
 
+(defn clickbench-stage->row
+  [idx {:keys [stage time-taken-ms]}]
+  {:stage-order idx
+   :stage (title-case stage)
+   :time-taken-ms time-taken-ms
+   :duration (format-duration :millis time-taken-ms)})
+
+(defn clickbench-summary->stage-rows
+  [summary]
+  (let [rows (->> (:ingest-stages summary)
+                  (map-indexed clickbench-stage->row)
+                  (sort-by :stage-order)
+                  vec)
+        total-ms (reduce + (map :time-taken-ms rows))
+        rows-with-percent (mapv (fn [row]
+                                  (let [ms (:time-taken-ms row)
+                                        pct (if (pos? total-ms)
+                                              (* 100.0 (/ ms total-ms))
+                                              0.0)]
+                                    (-> row
+                                        (assoc :percent-of-total (format "%.2f%%" pct))
+                                        (dissoc :stage-order))))
+                                rows)]
+    {:rows rows-with-percent
+     :total-ms total-ms}))
+
+(defmethod summary->table "clickbench" [summary]
+  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
+    (str (totals->string total-ms (:benchmark-total-time-ms summary))
+         "\n\n"
+         (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
+
 (defn wrap-slack-code [& strings]
   (str "```\n" (str/join strings) "\n```"))
 
@@ -300,6 +349,14 @@
             (if benchmark-total-time-ms
               (java.time.Duration/ofMillis benchmark-total-time-ms)
               "N/A"))))
+
+(defmethod summary->slack "clickbench" [summary]
+  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
+    (str
+     (totals->string total-ms (:benchmark-total-time-ms summary))
+     "\n\n"
+     (wrap-slack-code
+      (rows->string [:stage :duration] rows)))))
 
 
 (defn github-table
@@ -379,6 +436,16 @@
               (java.time.Duration/ofMillis benchmark-total-time-ms)
               "N/A"))))
 
+(defmethod summary->github-markdown "clickbench" [summary]
+  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)
+        columns [{:key :stage :header "Stage"}
+                 {:key :time-taken-ms :header "Time (ms)"}
+                 {:key :duration :header "Duration"}
+                 {:key :percent-of-total :header "% of total"}]]
+    (str (github-table columns rows)
+         "\n\n"
+         (totals->string total-ms (:benchmark-total-time-ms summary)))))
+
 (defn load-summary
   [benchmark-type log-file-path]
   (-> (parse-log benchmark-type log-file-path)
@@ -421,6 +488,7 @@
     (let [summary (load-summary benchmark-type log-file-path)]
       (case (:benchmark-type summary)
         "auctionmark" nil
+        "clickbench" nil
         "tpch" (when (empty? (:query-stages summary))
                  (throw (ex-info "No query stages found in log file"
                                  {:benchmark-type "tpch"
@@ -653,7 +721,10 @@
                   :default-scale-factor 0.1}
    "readings"   {:benchmark-name "Readings benchmarks"
                  :title "Readings Benchmark Performance"
-                 :default-scale-factor nil}}) ;; readings doesn't use scale-factor
+                 :default-scale-factor nil} ;; readings doesn't use scale-factor
+   "clickbench" {:benchmark-name "Clickbench Hits"
+                 :title "Clickbench Benchmark Performance"
+                 :default-scale-factor nil}}) ;; clickbench uses size, not scale-factor
 
 (defn plot-benchmark-timeseries
   "Plot a benchmark timeseries chart from Azure Log Analytics.

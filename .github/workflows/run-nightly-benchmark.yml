@@ -61,6 +61,16 @@ on:
         required: false
         default: ''
         type: string
+      clickbench_size:
+        description: 'Dataset size for clickbench (tiny, small, medium, full)'
+        required: false
+        default: ''
+        type: string
+      clickbench_limit:
+        description: 'Row limit for clickbench'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   id-token: write
@@ -219,6 +229,16 @@ jobs:
             --from-literal=GITHUB_PAT="${{ secrets.BENCHMARK_GITHUB_PAT }}" \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Create AWS Datasets Secret (for clickbench)
+        if: (steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress') && inputs.bench_type == 'clickbench'
+        run: |
+          set -euo pipefail
+          kubectl -n cloud-benchmark create secret generic xtdb-aws-datasets-secret \
+            --from-literal=AWS_ACCESS_KEY_ID="${{ secrets.BENCHMARK_DATASETS_AWS_ACCESS_KEY_ID }}" \
+            --from-literal=AWS_SECRET_ACCESS_KEY="${{ secrets.BENCHMARK_DATASETS_AWS_SECRET_ACCESS_KEY }}" \
+            --from-literal=AWS_REGION="${{ secrets.BENCHMARK_DATASETS_AWS_REGION || 'eu-west-1' }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Record Deployment Start
         if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
         run: echo "DEPLOY_START=$(date -u +%s)" >> "$GITHUB_ENV"
@@ -240,6 +260,8 @@ jobs:
           READINGS_DEVICE_COUNT: ${{ inputs.readings_device_count }}
           READING_COUNT: ${{ inputs.reading_count }}
           BENCHMARK_TIMEOUT: ${{ inputs.benchmark_timeout }}
+          CLICKBENCH_SIZE: ${{ inputs.clickbench_size }}
+          CLICKBENCH_LIMIT: ${{ inputs.clickbench_limit }}
         run: |
           helm dependency update ./modules/bench/cloud/helm
           HELM_ARGS=(
@@ -279,6 +301,12 @@ jobs:
           fi
           if [ -n "$BENCHMARK_TIMEOUT" ]; then
             HELM_ARGS+=(--set "timeout=${BENCHMARK_TIMEOUT}")
+          fi
+          if [ -n "$CLICKBENCH_SIZE" ]; then
+            HELM_ARGS+=(--set "clickbench.size=${CLICKBENCH_SIZE}")
+          fi
+          if [ -n "$CLICKBENCH_LIMIT" ]; then
+            HELM_ARGS+=(--set "clickbench.limit=${CLICKBENCH_LIMIT}")
           fi
 
           helm upgrade --install "xtdb-benchmark" ./modules/bench/cloud/helm "${HELM_ARGS[@]}"

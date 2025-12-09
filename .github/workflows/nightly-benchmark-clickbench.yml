@@ -1,0 +1,47 @@
+name: Nightly Benchmark ClickBench
+run-name: "ClickBench (size: ${{ inputs.size || 'small' }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      size:
+        description: 'Dataset size (tiny, small, medium, full)'
+        required: false
+        default: 'small'
+        type: choice
+        options:
+          - tiny
+          - small
+          - medium
+          - full
+      limit:
+        description: 'Limit number of rows (optional)'
+        required: false
+        default: ''
+        type: string
+  schedule:
+    - cron: '0 2 * * *'  # Run daily at 2am UTC (offset from other benchmarks)
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+  packages: write
+
+concurrency:
+  group: nightly-benchmark-clickbench
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    if: ${{ github.event_name != 'schedule' || github.repository == 'xtdb/xtdb' }}
+    uses: ./.github/workflows/run-nightly-benchmark.yml
+    with:
+      bench_type: clickbench
+      job_display_name: ClickBench
+      branch: ${{ github.ref_name }}
+      timeout_minutes: 120
+      benchmark_timeout: PT3H
+      clickbench_size: ${{ inputs.size || 'small' }}
+      clickbench_limit: ${{ inputs.limit || '' }}
+    secrets: inherit
