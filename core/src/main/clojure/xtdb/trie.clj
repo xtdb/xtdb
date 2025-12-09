@@ -126,11 +126,15 @@
              (loop [[^Segment$PageMeta page & more-pages] non-taken-pages]
                (when page
                  (let [temporal-metadata (.getTemporalMetadata page)
-                       obj-largest-system-from (.getMaxSystemFrom temporal-metadata)]
+                       obj-largest-system-from (.getMaxSystemFrom temporal-metadata)
+                       page-recency (.getRecency page)]
                    (when (and (<= smallest-system-from obj-largest-system-from)
                               (.intersects (TemporalDimension. (.getMinValidFrom temporal-metadata)
                                                                (.getMaxValidTo temporal-metadata))
-                                           valid-time))
+                                           valid-time)
+                              (or (>= page-recency smallest-valid-from)
+                                  (>= page-recency smallest-system-from)))
+
                      (.add leaves page))
                    (recur more-pages)))))
            (vec leaves)))))))
