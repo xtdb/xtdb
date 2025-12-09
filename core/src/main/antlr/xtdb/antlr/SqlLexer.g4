@@ -79,7 +79,7 @@ PG_NOT_REGEX_I : '!~*' ;
 
 ALL: 'ALL' ;
 ALTER : 'ALTER' ;
-ANALYZE : 'ANALYZE' ;
+ANALYZE : 'ANALYZE' | 'ANALYSE' ;
 AND : 'AND' ;
 ANY : 'ANY' ;
 ARRAY : 'ARRAY' ;
