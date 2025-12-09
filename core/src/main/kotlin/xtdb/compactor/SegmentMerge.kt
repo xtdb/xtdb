@@ -25,10 +25,12 @@ import xtdb.trie.Trie
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.dataRelSchema
 import xtdb.trie.Trie.metaFilePath
+import xtdb.trie.RecencyMicros
 import xtdb.trie.TrieKey
 import xtdb.arrow.MergeTypes.Companion.mergeFields
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.*
+import xtdb.time.LocalDateTimeUtil.asMicros
 import java.nio.file.Path
 import java.time.LocalDate
 import java.util.*
@@ -243,6 +245,8 @@ private class LocalSegment(
 
     private val dataFile = dir.resolve(table.dataFilePath(trieKey))
     private val metaFile = dir.resolve(table.metaFilePath(trieKey))
+    private val parsedTrieKey = Trie.parseKey(trieKey)
+    private val recency: RecencyMicros = parsedTrieKey.recency?.atStartOfDay()?.asMicros ?: Long.MAX_VALUE
 
     inner class Metadata : Segment.Metadata<ArrowHashTrie.Leaf> {
         private val pageMetadata = PageMetadata.open(al, metaFile)
@@ -251,14 +255,14 @@ private class LocalSegment(
         // in the utility, we keep the Segments open throughout,
         // so can be excused for the dataLoader being used 'outside its lifetime'
         override fun page(leaf: ArrowHashTrie.Leaf) =
-            pageMeta(this@LocalSegment, this, leaf, UNBOUND_TEMPORAL_METADATA)
+            pageMeta(this@LocalSegment, this, leaf, UNBOUND_TEMPORAL_METADATA, recency)
 
         override fun testPage(leaf: ArrowHashTrie.Leaf) = true
 
         override fun close() = pageMetadata.close()
     }
 
-    override val part = Trie.parseKey(trieKey).part?.toArray()
+    override val part = parsedTrieKey.part?.toArray()
 
     override suspend fun openMetadata(): Metadata = Metadata()
 
