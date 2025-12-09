@@ -277,6 +277,11 @@
         (< min-query-recency recency)
         true)))
 
+  (getRecency [_]
+    (if recency
+      (time/instant->micros (time/->instant recency {:default-tz ZoneOffset/UTC}))
+      Long/MAX_VALUE))
+
   (getTemporalMetadata [_]
     ;; if we reset compaction, we may not have temporal metadata until the next compaction
     ;; so we need to treat the file as if it contains _anything_

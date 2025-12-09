@@ -12,6 +12,7 @@
 (defrecord MockPage [page metadata-matches? temporal-metadata]
   Segment$PageMeta
   (testMetadata [_] metadata-matches?)
+  (getRecency [_] Long/MAX_VALUE)
   (getTemporalMetadata [_] temporal-metadata))
 
 (defn ->mock-page
