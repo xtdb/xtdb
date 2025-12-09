@@ -20,7 +20,7 @@ class MemorySegment(val trie: MemoryHashTrie, val rel: RelationReader) : Segment
         override val trie: HashTrie<MemoryHashTrie.Leaf> get() = this@MemorySegment.trie
 
         override fun page(leaf: MemoryHashTrie.Leaf) =
-            pageMeta(this@MemorySegment, this, leaf, UNBOUND_TEMPORAL_METADATA)
+            pageMeta(this@MemorySegment, this, leaf, UNBOUND_TEMPORAL_METADATA, recency = Long.MAX_VALUE)
 
         override fun testPage(leaf: MemoryHashTrie.Leaf) = true
 

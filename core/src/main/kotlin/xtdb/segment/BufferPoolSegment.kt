@@ -15,17 +15,21 @@ import xtdb.trie.ArrowHashTrie
 import xtdb.trie.Trie
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
+import xtdb.trie.RecencyMicros
 import xtdb.trie.TrieKey
+import xtdb.time.LocalDateTimeUtil.asMicros
 
 class BufferPoolSegment(
     al: BufferAllocator, private val bp: BufferPool, private val mm: PageMetadata.Factory,
     val table: TableRef, val trieKey: TrieKey, val metadataPredicate: MetadataPredicate? = null,
 ) : Segment<ArrowHashTrie.Leaf> {
     val dataFilePath = table.dataFilePath(trieKey)
-    private val resolveSameSystemTimeEvents = Trie.parseKey(trieKey).level == 0L
+    private val parsedTrieKey = Trie.parseKey(trieKey)
+    private val resolveSameSystemTimeEvents = parsedTrieKey.level == 0L
+    private val recency: RecencyMicros = parsedTrieKey.recency?.atStartOfDay()?.asMicros ?: Long.MAX_VALUE
 
     override val part: ByteArray?
-        get() = Trie.parseKey(trieKey).part?.toArray()
+        get() = parsedTrieKey.part?.toArray()
 
     override val schema: Schema = bp.getFooter(dataFilePath).schema
 
@@ -46,7 +50,8 @@ class BufferPoolSegment(
             return pages[dataPageIndex]
                 ?: pageMeta(
                     this@BufferPoolSegment, this, leaf,
-                    pageMetadata.temporalMetadata(dataPageIndex)
+                    pageMetadata.temporalMetadata(dataPageIndex),
+                    recency
                 ).also { pages[dataPageIndex] = it }
         }
 

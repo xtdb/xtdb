@@ -2,6 +2,7 @@ package xtdb.segment
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.trie.RecencyMicros
 
 class TestSegment(val name: String, val trie: TestTrie) : Segment<TestTrie.Leaf> {
     override val part = null
@@ -11,6 +12,7 @@ class TestSegment(val name: String, val trie: TestTrie) : Segment<TestTrie.Leaf>
         override suspend fun loadDataPage(al: BufferAllocator) = error("loadDataPage")
         override val page: Segment.Page<TestTrie.Leaf> get() = this
         override val temporalMetadata get() = error("temporalMetadata")
+        override val recency: RecencyMicros get() = Long.MAX_VALUE
         override fun testMetadata() = error("testMetadata")
     }
 

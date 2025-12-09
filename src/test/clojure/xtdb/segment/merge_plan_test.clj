@@ -9,23 +9,24 @@
 
 (t/use-fixtures :each tu/with-allocator)
 
-(defrecord MockPage [page metadata-matches? temporal-metadata]
+(defrecord MockPage [page metadata-matches? temporal-metadata recency]
   Segment$PageMeta
   (testMetadata [_] metadata-matches?)
+  (getRecency [_] recency)
   (getTemporalMetadata [_] temporal-metadata))
 
 (defn ->mock-page
   ([page] (->mock-page page true))
-  ([page metadata-matches?] (->MockPage page metadata-matches? util/unconstraint-temporal-metadata))
+  ([page metadata-matches?] (->MockPage page metadata-matches? util/unconstraint-temporal-metadata Long/MAX_VALUE))
 
   ([page min-valid-from max-valid-to] (->mock-page page true min-valid-from max-valid-to))
   ([page metadata-matches? min-valid-from max-valid-to]
-   (->MockPage page metadata-matches? (tu/->temporal-metadata min-valid-from max-valid-to)))
+   (->MockPage page metadata-matches? (tu/->temporal-metadata min-valid-from max-valid-to) Long/MAX_VALUE))
 
   ([page metadata-matches? min-vf max-vt min-sf]
    (->mock-page page metadata-matches? min-vf max-vt min-sf Long/MAX_VALUE))
   ([page metadata-matches? min-vf max-vt min-sf max-sf]
-   (->MockPage page metadata-matches? (tu/->temporal-metadata min-vf max-vt min-sf max-sf))))
+   (->MockPage page metadata-matches? (tu/->temporal-metadata min-vf max-vt min-sf max-sf) Long/MAX_VALUE)))
 
 (def ^:private inst->micros (comp time/instant->micros time/->instant))
 
@@ -71,7 +72,6 @@
                              ->pages))
               "Take page 1. Page 0 valid-time overlpas."))
 
-
       (t/testing "Tighter constraints on query bounds"
         ;; TODO could we filter page 0 in the two assertions below?
         (t/is (= #{0 1} (->> (trie/filter-pages [(->mock-page 0 false vt0 vt2 sf1 sf2)
@@ -108,7 +108,6 @@
                              ->pages))
               "Take page 1. Page 2 can bound page 1 and we can't filter newer pages (no constraints on query system-time)."))
 
-
       (t/testing "Constraints on query bounds"
         ;; TODO can 2 be filtered here?
         (t/is (= #{1 2} (->> (trie/filter-pages [(->mock-page 1 true vt1 (inc vt2) sf2 sf2)
@@ -117,13 +116,11 @@
                              ->pages))
               "Take page 1. Page 2 overlaps in valid-time")
 
-
         (t/is (= #{1} (->> (trie/filter-pages [(->mock-page 1 true vt1 (inc vt2) sf2 sf3)
                                                (->mock-page 2 false vt2 (inc vt3) sf3 sf3)]
                                               {:query-bounds (tu/->temporal-bounds vt0 Long/MAX_VALUE sf1 sf3)})
                            ->pages))
               "Take page 1. Page 2 can bound page 1 and we can filter newer pages because of query system-time constraints.")))
-
 
     (t/is (= #{0 1 2} (->> (trie/filter-pages [(->mock-page 0 true vt0 Long/MAX_VALUE sf1 sf1)
                                                (->mock-page 1 false vt1 vt2 sf2 sf2)
@@ -210,3 +207,11 @@
 
           (t/is (= [2 3] (query-bounds->pages (tu/->temporal-bounds micros-2020 micros-2021 micros-2023 (inc micros-2023))))
                 "2020, but only 3 can bound page 2 in 2020"))))))
+
+(t/deftest test-filters-by-recency
+  (t/is (= [1]
+           (->> (trie/filter-pages [(->MockPage 1 true (tu/->temporal-metadata 20251205 Long/MAX_VALUE) Long/MAX_VALUE)
+                                    (->MockPage 2 false (tu/->temporal-metadata 20250706 Long/MAX_VALUE 20250707 20251208) 20250707)]
+                                   (tu/->temporal-bounds 20251212 Long/MAX_VALUE))
+
+                (mapv :page)))))

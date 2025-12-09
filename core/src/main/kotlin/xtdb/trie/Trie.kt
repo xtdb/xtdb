@@ -24,6 +24,7 @@ import java.time.temporal.ChronoField
 
 typealias Level = Long
 typealias InstantMicros = Long
+typealias RecencyMicros = Long
 typealias RowIndex = Int
 typealias BlockIndex = Long
 typealias TableName = String
