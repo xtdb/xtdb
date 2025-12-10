@@ -142,6 +142,13 @@ Reading a hash trie file::
 * Pipe to a file: `./gradlew -q :readHashTrieFile -Pfile=<file> > output.edn`
 --
 
+Reading a table-block file::
++
+--
+* `./gradlew -q :readTableBlockFile -Pfile=<file>`
+* Pipe to a file: `./gradlew -q :readTableBlockFile -Pfile=<file> > output.edn`
+--
+
 Reading crash logs::
 +
 --

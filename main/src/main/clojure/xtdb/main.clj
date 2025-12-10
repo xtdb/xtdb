@@ -253,6 +253,25 @@
           (println "Usage: `read-hash-trie-file <file>")
           (System/exit 2))))))
 
+(def read-table-block-file-cli-spec
+  [["-h" "--help"]])
+
+(defn read-table-block-file [args]
+  (let [{{:keys [help]} :options} (-> (parse-args args read-table-block-file-cli-spec)
+                                      (handling-arg-errors-or-help))]
+    (if help
+      (do
+        (println "Usage: read-table-block-file <file>")
+        (System/exit 0))
+
+      (if-let [file (first args)]
+        (binding [pp/*print-right-margin* 120]
+          (pp/pprint ((requiring-resolve 'xtdb.pbuf/read-table-block-file) file)))
+
+        (binding [*out* *err*]
+          (println "Usage: `read-table-block-file <file>`")
+          (System/exit 2))))))
+
 (defn -main [& args]
   (binding [*out* *err*]
     (println (str "Starting " (version-string) " ...")))
@@ -291,6 +310,10 @@
         "read-hash-trie-file" (do
                                 (read-hash-trie-file more-args)
                                 (System/exit 0))
+
+        "read-table-block-file" (do
+                                  (read-table-block-file more-args)
+                                  (System/exit 0))
 
         ("help" "-h" "--help") (do
                                  (print-help)
