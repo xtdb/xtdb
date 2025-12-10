@@ -30,7 +30,7 @@
               trie-cat (.getTrieCatalog db)
               live-idx (.getLiveIndex db)
               compacted-file-keys (vec (for [^TableRef table (.getTables trie-cat)
-                                             ^String trie-key (trie-cat/compacted-trie-keys (trie-cat/trie-state trie-cat table))
+                                             ^String trie-key (trie-cat/compacted-trie-keys-syn-l3h (trie-cat/trie-state trie-cat table))
 
                                              ;; meta file first, as it's the marker
                                              file-key [(Trie/metaFilePath table trie-key)
@@ -54,7 +54,7 @@
             (do
               (log/info "Resetting compaction...")
 
-              (trie-cat/reset->l0! trie-cat)
+              (trie-cat/reset->l2h! trie-cat)
               (xt-log/send-flush-block-msg! db)
               (xt-log/sync-db db #xt/duration "PT5M")
               (log/info "Reset complete. Deleting compacted files...")
