@@ -10,18 +10,27 @@ import java.time.Instant
 import java.time.ZoneId
 
 interface Indexer : AutoCloseable {
-
     interface ForDatabase : AutoCloseable {
         fun indexTx(
-            msgId: MessageId, msgTimestamp: Instant, txOps: VectorReader?,
-            systemTime: Instant?, defaultTz: ZoneId?, user: String?, userMetadata: Any?
+            msgId: MessageId,
+            msgTimestamp: Instant,
+            txOps: VectorReader?,
+            systemTime: Instant?,
+            defaultTz: ZoneId?,
+            user: String?,
         ): TransactionResult
 
-        fun addTxRow(txKey: TransactionKey, error: Throwable?)
+        fun addTxRow(
+            txKey: TransactionKey,
+            error: Throwable?,
+        )
     }
 
     interface TxSink {
-        fun onCommit(txKey: TransactionKey, liveIdxTx: LiveIndex.Tx)
+        fun onCommit(
+            txKey: TransactionKey,
+            liveIdxTx: LiveIndex.Tx,
+        )
     }
 
     fun openForDatabase(db: Database): ForDatabase
