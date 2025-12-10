@@ -91,19 +91,18 @@ resources:
     memory: "10G"
     ephemeral-storage: 180Gi
 
-# For our bitnami/kafka deployment
+# Kafka deployment using official apache/kafka image
 kafka:
   image:
-    registry: docker.io
-    repository: bitnamilegacy/kafka
-    tag: 4.0.0-debian-12-r10
-    pullPolicy: Always
-  listeners:
-    client:
-      protocol: PLAINTEXT
-    controller:
-      protocol: PLAINTEXT
-  controller:
-    persistence:
-      size: 50Gi
-    resourcesPreset: medium
+    repository: apache/kafka
+    tag: "4.0.1"
+    pullPolicy: IfNotPresent
+  persistence:
+    size: 50Gi
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
