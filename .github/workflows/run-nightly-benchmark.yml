@@ -99,6 +99,15 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
 
+      - name: Install Babashka
+        run: |
+          set -euo pipefail
+          BABASHKA_VERSION=1.12.209
+          curl -sSfL "https://github.com/babashka/babashka/releases/download/v${BABASHKA_VERSION}/babashka-${BABASHKA_VERSION}-linux-amd64.tar.gz" -o /tmp/babashka.tar.gz
+          sudo tar -xzf /tmp/babashka.tar.gz -C /usr/local/bin bb
+          rm -f /tmp/babashka.tar.gz
+          bb --version
+
       - name: Azure CLI Login
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2
         with:
@@ -122,50 +131,12 @@ jobs:
         id: inspect-deployment
         run: |
           set -euo pipefail
-
-          jobs_json=$(kubectl get jobs -n cloud-benchmark -o json 2>/dev/null || echo '{"items":[]}')
-          job_count=$(echo "$jobs_json" | jq '.items | length')
-
-          running_jobs_json=$(echo "$jobs_json" | jq -c '[.items[] | select((.status.active // 0) > 0) | .metadata.name]')
-          failed_jobs_json=$(echo "$jobs_json" | jq -c '[.items[] | select((.status.failed // 0) > 0 or ((.status.conditions // []) | map(select(.type == "Failed" and .status == "True")) | length) > 0) | .metadata.name]')
-          succeeded_jobs_json=$(echo "$jobs_json" | jq -c '[.items[] | select((.status.active // 0) == 0 and ((.status.succeeded // 0) > 0 or ((.status.conditions // []) | map(select(.type == "Complete" and .status == "True")) | length) > 0)) | .metadata.name]')
-          terminal_jobs_json=$(echo "$jobs_json" | jq -c '[.items[] | select((.status.active // 0) == 0 and (((.status.succeeded // 0) > 0) or ((.status.failed // 0) > 0) or ((.status.conditions // []) | map(select((.type == "Complete" and .status == "True") or (.type == "Failed" and .status == "True"))) | length) > 0)) | .metadata.name]')
-          pending_jobs_json=$(echo "$jobs_json" | jq -c '[.items[] | select((.status.active // 0) == 0 and ((.status.succeeded // 0) == 0) and ((.status.failed // 0) == 0) and ((.status.conditions // []) | length) == 0) | .metadata.name]')
-
-          running_count=$(echo "$running_jobs_json" | jq 'length')
-          failed_count=$(echo "$failed_jobs_json" | jq 'length')
-          success_count=$(echo "$succeeded_jobs_json" | jq 'length')
-          terminal_count=$(echo "$terminal_jobs_json" | jq 'length')
-          pending_count=$(echo "$pending_jobs_json" | jq 'length')
-
-
-
-          if [ "$job_count" -eq 0 ]; then
-            DEPLOYMENT_STATUS="completed"
-          elif [ "$running_count" -gt 0 ]; then
-            DEPLOYMENT_STATUS="in_progress"
-          elif [ "$failed_count" -gt 0 ]; then
-            DEPLOYMENT_STATUS="failed"
-          elif [ "$success_count" -gt 0 ] || [ "$terminal_count" -gt 0 ]; then
-            DEPLOYMENT_STATUS="completed"
-          elif [ "$pending_count" -gt 0 ]; then
-            DEPLOYMENT_STATUS="in_progress"
-          else
-            DEPLOYMENT_STATUS="in_progress"
-          fi
-
-          echo "Existing deployment status: ${DEPLOYMENT_STATUS}"
-          echo "Jobs discovered: $(echo "$jobs_json" | jq -r '[.items[].metadata.name] | join(", ")')"
-          echo "Running jobs: $(echo "$running_jobs_json" | jq -r 'join(", ")')"
-          echo "Failed jobs: $(echo "$failed_jobs_json" | jq -r 'join(", ")')"
-          echo "Succeeded jobs: $(echo "$succeeded_jobs_json" | jq -r 'join(", ")')"
-          echo "Terminal jobs: $(echo "$terminal_jobs_json" | jq -r 'join(", ")')"
-
-          echo "deployment_status=${DEPLOYMENT_STATUS}" >> "$GITHUB_OUTPUT"
-          echo "job_names=$(echo "$jobs_json" | jq -c '[.items[].metadata.name]')" >> "$GITHUB_OUTPUT"
-          echo "terminal_job_names=${terminal_jobs_json}" >> "$GITHUB_OUTPUT"
-          echo "failed_job_names=${failed_jobs_json}" >> "$GITHUB_OUTPUT"
-          echo "succeeded_job_names=${succeeded_jobs_json}" >> "$GITHUB_OUTPUT"
+          result=$(./modules/bench/cloud/scripts/tasks inspect-deployment)
+          echo "deployment_status=$(echo "$result" | jq -r '.status')" >> "$GITHUB_OUTPUT"
+          echo "job_names=$(echo "$result" | jq -c '.jobNames')" >> "$GITHUB_OUTPUT"
+          echo "terminal_job_names=$(echo "$result" | jq -c '.terminalJobs')" >> "$GITHUB_OUTPUT"
+          echo "failed_job_names=$(echo "$result" | jq -c '.failedJobs')" >> "$GITHUB_OUTPUT"
+          echo "succeeded_job_names=$(echo "$result" | jq -c '.succeededJobs')" >> "$GITHUB_OUTPUT"
 
       - name: Re-authenticate Azure CLI (before cleanup)
         if: steps.inspect-deployment.outputs.deployment_status == 'completed' || steps.inspect-deployment.outputs.deployment_status == 'failed'
@@ -318,123 +289,35 @@ jobs:
           SLACK_LABEL: ${{ env.SLACK_LABEL }}
         run: |
           set -euo pipefail
-
           echo "immediate_failure=false" >> "$GITHUB_OUTPUT"
-          ATTEMPTS=36
-          SLEEP_SECONDS=10
-          REQUIRED_RUNNING_SECONDS=120
-          running_since=""
-          echo "Checking for immediate benchmark pod failures..."
-          for attempt in $(seq 1 "$ATTEMPTS"); do
-            pods_json=$(kubectl get pods -n cloud-benchmark -o json)
 
-            pods=$(echo "$pods_json" | jq '[.items[]
-              | select((.metadata.labels["app.kubernetes.io/component"] // "") == "benchmark")
-            ]')
-            pod_count=$(echo "$pods" | jq 'length')
-            if [ "$pod_count" -eq 0 ]; then
-              echo "Attempt ${attempt}/${ATTEMPTS}: no benchmark pods detected yet."
-              sleep "$SLEEP_SECONDS"
-              continue
-            fi
-
-            failing_pods=$(echo "$pods" | jq '
-              [.[]
-               | select(
-                   (.status.phase == "Failed")
-                   or ((.status.containerStatuses // [])
-                       | any(
-                           ((.state.terminated // null) != null and ((.state.terminated.exitCode // 0) != 0))
-                           or ((.state.waiting // null) != null and ((.state.waiting.reason // "") | test("CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError|RunContainerError|ContainerCannotRun|Error")))
-                         ))
-                   or ((.status.initContainerStatuses // [])
-                       | any(
-                           ((.state.terminated // null) != null and ((.state.terminated.exitCode // 0) != 0))
-                           or ((.state.waiting // null) != null and ((.state.waiting.reason // "") | test("CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError|RunContainerError|ContainerCannotRun|Error")))
-                         ))
-                 )
-               | .metadata.name
-              ]')
-            failing_count=$(echo "$failing_pods" | jq 'length')
-
-            if [ "$failing_count" -gt 0 ]; then
-              echo "error detected: ${failing_count} failing benchmark pod(s) soon after deployment."
-              echo "immediate_failure=true" >> "$GITHUB_OUTPUT"
-              mapfile -t pod_names < <(echo "$failing_pods" | jq -r '.[]')
-              primary_pod="${pod_names[0]:-}"
-              if [ -n "$primary_pod" ]; then
-                echo "immediate_failure_pod=${primary_pod}" >> "$GITHUB_OUTPUT"
-                failure_log_path="$RUNNER_TEMP/immediate-failure-${primary_pod}.log"
-                if kubectl logs "$primary_pod" -n cloud-benchmark --all-containers=true --tail=200 > "$failure_log_path" 2>/dev/null; then
-                  head -n 60 "$failure_log_path" > "${failure_log_path}.preview"
-                  mv "${failure_log_path}.preview" "$failure_log_path"
-                  echo "immediate_failure_log_path=${failure_log_path}" >> "$GITHUB_OUTPUT"
-                fi
+          # Run the check (exits non-zero on failure)
+          result=$(./modules/bench/cloud/scripts/tasks check-immediate-failure 2>&1) || {
+            echo "immediate_failure=true" >> "$GITHUB_OUTPUT"
+            echo "::group::check-immediate-failure output"
+            echo "$result"
+            echo "::endgroup::"
+            pod_name=$(echo "$result" | jq -r '.podName // empty' 2>/dev/null || true)
+            if [ -n "$pod_name" ]; then
+              echo "immediate_failure_pod=${pod_name}" >> "$GITHUB_OUTPUT"
+              # Save log preview to file
+              log_preview=$(echo "$result" | jq -r '.logPreview // empty' 2>/dev/null || true)
+              if [ -n "$log_preview" ]; then
+                failure_log_path="$RUNNER_TEMP/immediate-failure-${pod_name}.log"
+                echo "$log_preview" | head -n 60 > "$failure_log_path"
+                echo "immediate_failure_log_path=${failure_log_path}" >> "$GITHUB_OUTPUT"
               fi
-              cleanup_triggered=false
-              for pod in "${pod_names[@]}"; do
-                echo "describe ${pod}"
-                kubectl describe pod "${pod}" -n cloud-benchmark || true
-
-                echo "logs ${pod}"
-                pod_log="$(kubectl logs "${pod}" -n cloud-benchmark --all-containers=true 2>/dev/null || true)"
-                echo "$pod_log"
-
-                if printf '%s' "$pod_log" | grep -q "Triggered cleanup workflow"; then
-                  cleanup_triggered=true
-                fi
-              done
-
-              if [ "$cleanup_triggered" != true ]; then
-                echo "No cleanup workflow trigger detected in logs; invoking clear-bench script." >&2
-                ./modules/bench/cloud/clear-bench.sh azure || true
-              fi
-              exit 1
             fi
-
-            completed_count=$(echo "$pods" | jq '[.[] | select(.status.phase == "Succeeded")] | length')
-            if [ "$completed_count" -gt 0 ]; then
-              echo "Benchmark job already completed successfully."
-              exit 0
+            # Check if cleanup was already triggered
+            cleanup_triggered=$(echo "$result" | jq -r '.cleanupTriggered // false' 2>/dev/null || echo "false")
+            if [ "$cleanup_triggered" != "true" ]; then
+              echo "No cleanup workflow trigger detected; invoking clear-bench script." >&2
+              ./modules/bench/cloud/clear-bench.sh azure || true
             fi
+            exit 1
+          }
 
-            running_count=$(echo "$pods" | jq '[.[]
-              | select(
-                  (.status.phase == "Running")
-                  and ((.status.containerStatuses // [])
-                       | any((.state.running // null) != null))
-                  and ((.status.initContainerStatuses // [])
-                       | all(
-                           ((.state.terminated // null) != null)
-                           and ((.state.terminated.exitCode // 0) == 0)
-                         ))
-                )
-            ] | length')
-
-            if [ "$running_count" -gt 0 ]; then
-              if [ -z "$running_since" ]; then
-                running_since=$(date -u +%s)
-                echo "Benchmark pods entered running state; starting stability timer."
-              else
-                now_ts=$(date -u +%s)
-                elapsed=$((now_ts - running_since))
-                echo "Benchmark pods running for ${elapsed}s (target: ${REQUIRED_RUNNING_SECONDS}s)."
-                if [ "$elapsed" -ge "$REQUIRED_RUNNING_SECONDS" ]; then
-                  echo "Benchmark pods have been running for at least ${REQUIRED_RUNNING_SECONDS}s; considering startup successful."
-                  exit 0
-                fi
-              fi
-            else
-              if [ -n "$running_since" ]; then
-                echo "Benchmark pods no longer running; resetting stability timer."
-              fi
-              running_since=""
-            fi
-
-            sleep "$SLEEP_SECONDS"
-          done
-
-          echo "No immediate benchmark pod failures detected in the initial monitoring window."
+          echo "No immediate benchmark pod failures detected."
 
       - name: Remove Monitoring Stack on Failure
         if: failure() && (steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress')

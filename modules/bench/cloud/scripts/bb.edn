@@ -7,14 +7,42 @@
  :tasks
  {:requires [[xtdb.bench.cloud.scripts.tasks :as tasks]]
 
+  ;; Log analysis commands
   summarize-log {:doc "Print a summary of a benchmark log"
                  :task (do
                          (print (tasks/summarize-log *command-line-args*))
                          (flush))}
+
   plot-benchmark-timeseries
-  {:doc "Fetches benchmark time series data from Azure and renders a plot (requires Python/matplotlib, plus cljplot as a dependency)"
+  {:doc "Fetches benchmark time series data from Azure and renders a plot"
    :task (tasks/plot-benchmark-timeseries (first *command-line-args*))}
 
+  ;; K8s commands (output JSON for workflow consumption)
+  inspect-deployment
+  {:doc "Inspect k8s deployment status (outputs JSON)"
+   :task (tasks/inspect-deployment *command-line-args*)}
+
+  check-immediate-failure
+  {:doc "Check for immediate benchmark pod failures (outputs JSON)"
+   :task (tasks/check-immediate-failure *command-line-args*)}
+
+  capture-benchmark-logs
+  {:doc "Capture logs from benchmark pods (outputs JSON)"
+   :task (tasks/capture-benchmark-logs *command-line-args*)}
+
+  compute-grafana-time-range
+  {:doc "Compute Grafana time range from log file (outputs JSON)"
+   :task (tasks/compute-grafana-time-range *command-line-args*)}
+
+  wait-for-benchmark-completion
+  {:doc "Wait for benchmark job to complete (outputs JSON)"
+   :task (tasks/wait-for-benchmark-completion *command-line-args*)}
+
+  derive-benchmark-status
+  {:doc "Derive benchmark status from job/pod states (outputs JSON)"
+   :task (tasks/derive-benchmark-status *command-line-args*)}
+
+  ;; Testing
   test {:doc "Run the test suite"
         :requires [[clojure.test :as t]
                    [xtdb.bench.cloud.scripts.tasks-test]]

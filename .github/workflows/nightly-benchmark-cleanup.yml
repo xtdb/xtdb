@@ -93,72 +93,11 @@ jobs:
         if: steps.check-deployment.outcome == 'success'
         run: |
           set -euo pipefail
-          JOB="${{ inputs.benchType }}"
-          NS="cloud-benchmark"
-
-          # Check current pod states for informational purposes
-          sel='-l app.kubernetes.io/name=xtdb,app.kubernetes.io/component=benchmark'
-          failed_cnt=$(kubectl get pods -n "$NS" $sel --field-selector=status.phase=Failed --no-headers 2>/dev/null | wc -l | tr -d ' ')
-          succeeded_cnt=$(kubectl get pods -n "$NS" $sel --field-selector=status.phase=Succeeded --no-headers 2>/dev/null | wc -l | tr -d ' ')
-          nonterminal_cnt=$(kubectl get pods -n "$NS" $sel --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null | wc -l | tr -d ' ')
-
-          echo "Current pod state: ${succeeded_cnt:-0} succeeded, ${failed_cnt:-0} failed, ${nonterminal_cnt:-0} non-terminal"
-
-          # Always wait for the benchmark Job to reach a terminal state
-          # This ensures we don't prematurely cleanup while the job is still running
-          if kubectl get job "$JOB" -n "$NS" >/dev/null 2>&1; then
-            echo "Polling job/$JOB until Complete or Failed..."
-            # Poll up to ~2h (720 * 10s)
-            for i in $(seq 1 720); do
-              COMPLETE=$(kubectl get job "$JOB" -n "$NS" -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' || true)
-              FAILED=$(kubectl get job "$JOB" -n "$NS" -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' || true)
-              if [ "$COMPLETE" = "True" ]; then
-                echo "job/$JOB Complete"
-                break
-              fi
-              if [ "$FAILED" = "True" ]; then
-                echo "job/$JOB Failed"
-                break
-              fi
-
-              # Optional: stop early if all benchmark pods are terminal
-              remaining=$(kubectl get pods -n "$NS" \
-                -l app.kubernetes.io/name=xtdb,app.kubernetes.io/component=benchmark \
-                --field-selector=status.phase!=Succeeded,status.phase!=Failed \
-                --no-headers 2>/dev/null | wc -l | tr -d ' ')
-              if [ "${remaining:-0}" = "0" ]; then
-                echo "All benchmark pods are terminal; stopping job wait"
-                break
-              fi
-
-              sleep 10
-            done
-          else
-            echo "job/$JOB not found in namespace $NS; continuing"
-          fi
-
-          # Gracefully wait for benchmark pods to finish terminating
-          # (pods created by the benchmark Job under app.kubernetes.io/name=xtdb & component=benchmark)
-          for i in $(seq 1 30); do
-            remaining=$(kubectl get pods -n "$NS" \
-              -l app.kubernetes.io/name=xtdb,app.kubernetes.io/component=benchmark \
-              --field-selector=status.phase!=Succeeded,status.phase!=Failed \
-              --no-headers 2>/dev/null | wc -l | tr -d ' ')
-            if [ "${remaining:-0}" = "0" ]; then
-              echo "All benchmark pods completed/terminated"
-              break
-            fi
-            echo "Waiting for benchmark pods to complete... ($i) remaining=$remaining"
-            sleep 4
-          done
-
-          # Final verification that all pods are in terminal state
-          final_nonterminal=$(kubectl get pods -n "$NS" $sel --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null | wc -l | tr -d ' ')
-          if [ "${final_nonterminal:-0}" != "0" ]; then
-            echo "WARNING: ${final_nonterminal} pods are still not in terminal state after waiting"
-            kubectl get pods -n "$NS" $sel --no-headers
-          else
-            echo "Verified: All benchmark pods are in terminal state"
+          result=$(./modules/bench/cloud/scripts/tasks wait-for-benchmark-completion "${{ inputs.benchType }}")
+          echo "Wait result: $result"
+          timed_out=$(echo "$result" | jq -r '.timedOut')
+          if [ "$timed_out" = "true" ]; then
+            echo "WARNING: Timed out waiting for job completion"
           fi
 
       - name: Determine Benchmark Status
@@ -166,25 +105,8 @@ jobs:
         if: steps.check-deployment.outcome == 'success'
         run: |
           set -euo pipefail
-          JOB="${{ inputs.benchType }}"
-          NS="cloud-benchmark"
-
-          STATUS="unknown"
-          if kubectl get job "$JOB" -n "$NS" >/dev/null 2>&1; then
-            COMPLETE=$(kubectl get job "$JOB" -n "$NS" -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' || true)
-            FAILED=$(kubectl get job "$JOB" -n "$NS" -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' || true)
-            if [ "$FAILED" = "True" ]; then STATUS="failure"; fi
-            if [ "$COMPLETE" = "True" ]; then STATUS="success"; fi
-          else
-            # If the job isn't present, infer from pods: any Failed pod => failure, any Succeeded pod => success
-            sel='-l app.kubernetes.io/name=xtdb,app.kubernetes.io/component=benchmark'
-            failed_cnt=$(kubectl get pods -n "$NS" $sel --field-selector=status.phase=Failed --no-headers 2>/dev/null | wc -l | tr -d ' ')
-            succeeded_cnt=$(kubectl get pods -n "$NS" $sel --field-selector=status.phase=Succeeded --no-headers 2>/dev/null | wc -l | tr -d ' ')
-            if [ "${failed_cnt:-0}" -gt 0 ]; then STATUS="failure";
-            elif [ "${succeeded_cnt:-0}" -gt 0 ]; then STATUS="success";
-            fi
-          fi
-
+          result=$(./modules/bench/cloud/scripts/tasks derive-benchmark-status "${{ inputs.benchType }}")
+          STATUS=$(echo "$result" | jq -r '.status')
           echo "bench_status=${STATUS}" >> "$GITHUB_OUTPUT"
           echo "Derived benchmark status: ${STATUS}"
 
@@ -193,109 +115,47 @@ jobs:
         id: logs
         run: |
           set -euo pipefail
-          NS="cloud-benchmark"
-          JOB_NAME="${{ inputs.benchType }}"
-
           mkdir -p pod-logs
-          pods=$(kubectl get pods -n "$NS" -l job-name="$JOB_NAME" -o jsonpath='{.items[*].metadata.name}' || true)
 
-          # Fallback selector (in case job-name label is missing): select XTDB benchmark pods by component/name
-          if [ -z "$pods" ]; then
-            pods=$(kubectl get pods -n "$NS" -l app.kubernetes.io/name=xtdb,app.kubernetes.io/component=benchmark -o jsonpath='{.items[*].metadata.name}' || true)
+          result=$(./modules/bench/cloud/scripts/tasks capture-benchmark-logs "${{ inputs.benchType }}")
+
+          # Write primary log to benchmark.log
+          primary_log=$(echo "$result" | jq -r '.primaryLog // empty')
+          if [ -n "$primary_log" ]; then
+            echo "$primary_log" > benchmark.log
           fi
 
-          # Download logs for each pod with a small retry loop
-          total_ms=0
-          count_ms=0
-          primary_log=""
-          for pod in $pods; do
-            attempts=0
-            # Try primary container logs explicitly, with retries (handles pods that are still terminating)
-            until kubectl logs "$pod" -n "$NS" -c xtdb-node > "pod-logs/$pod.log" 2>/dev/null || \
-                  kubectl logs "$pod" -n "$NS" > "pod-logs/$pod.log" 2>/dev/null || \
-                  [ $attempts -ge 12 ]; do
-              attempts=$((attempts+1))
-              echo "Waiting for logs from $pod (attempt $attempts)..."
-              sleep 5
-            done
-
-            # If empty or unavailable, try previous logs (in case of restarts)
-            if [ ! -s "pod-logs/$pod.log" ]; then
-              kubectl logs "$pod" -n "$NS" -c xtdb-node --previous > "pod-logs/$pod.previous.log" 2>/dev/null || \
-              kubectl logs "$pod" -n "$NS" --previous > "pod-logs/$pod.previous.log" 2>/dev/null || true
-            fi
-
-            # If still nothing, capture describe for diagnostics
-            if [ ! -s "pod-logs/$pod.log" ] && [ ! -s "pod-logs/$pod.previous.log" ]; then
-              kubectl describe pod "$pod" -n "$NS" > "pod-logs/$pod.describe.txt" 2>/dev/null || true
-            fi
-            # Choose a primary log for convenience (use previous if primary absent)
-            if [ -z "$primary_log" ]; then
-              src_for_primary=""
-              if [ -s "pod-logs/$pod.log" ]; then src_for_primary="pod-logs/$pod.log"; fi
-              if [ -z "$src_for_primary" ] && [ -s "pod-logs/$pod.previous.log" ]; then src_for_primary="pod-logs/$pod.previous.log"; fi
-              if [ -n "$src_for_primary" ]; then
-                cp "$src_for_primary" benchmark.log || true
-                primary_log="$pod"
-              fi
-            fi
-            if [ -s "pod-logs/$pod.log" ] || [ -s "pod-logs/$pod.previous.log" ]; then
-              # Extract last time-taken-ms in this pod's log
-              src_log="pod-logs/$pod.log"
-              [ -s "pod-logs/$pod.log" ] || src_log="pod-logs/$pod.previous.log"
-              pod_ms=$(grep -o '"time-taken-ms":[0-9]\+' "$src_log" | tail -1 | cut -d: -f2 || true)
-              if [ -n "$pod_ms" ]; then
-                total_ms=$((total_ms + pod_ms))
-                count_ms=$((count_ms + 1))
-              fi
-              # Capture params EDN once (supports tpch, auctionmark, or yakbench namespaces in loggers)
-              if [ -z "${{ steps.logs.outputs.params_edn || '' }}" ]; then
-                params_line=$(grep -m1 -E 'INFO[[:space:]]+xtdb\.bench\.(tpch|auctionmark|yakbench)[[:space:]]+-[[:space:]]+\{.*\}' "$src_log" || true)
-                if [ -n "$params_line" ]; then
-                  params_edn=$(echo "$params_line" | sed -E 's/.*INFO[[:space:]]+xtdb\.bench\.(tpch|auctionmark|yakbench)[[:space:]]+-[[:space:]]+(\{.*\}).*/\2/')
-                  {
-                    echo 'params_edn<<EOF'
-                    echo "$params_edn"
-                    echo 'EOF'
-                  } >> "$GITHUB_OUTPUT"
-                  sf=$(echo "$params_edn" | sed -nE 's/.*:scale-factor[[:space:]]+([0-9.]+).*/\1/p' || true)
-                  if [ -n "${sf}" ]; then
-                    echo "SCALE_FACTOR=${sf}" >> "$GITHUB_ENV"
-                  fi
-                fi
-              fi
+          # Write individual pod logs
+          for pod in $(echo "$result" | jq -r '.logs | keys[]'); do
+            log_content=$(echo "$result" | jq -r --arg pod "$pod" '.logs[$pod] // empty')
+            if [ -n "$log_content" ]; then
+              echo "$log_content" > "pod-logs/${pod}.log"
             fi
           done
 
-          # If we never picked a primary, try the nodeId the job passed us
-          if [ -z "$primary_log" ]; then
-            if kubectl logs "${{ inputs.nodeId }}" -n "$NS" > benchmark.log 2>/dev/null; then
-              primary_log="${{ inputs.nodeId }}"
-            fi
+          # Extract metrics
+          params_edn=$(echo "$result" | jq -r '.paramsEdn // empty')
+          if [ -n "$params_edn" ]; then
+            {
+              echo 'params_edn<<EOF'
+              echo "$params_edn"
+              echo 'EOF'
+            } >> "$GITHUB_OUTPUT"
           fi
 
-          # Compute average time if we have any samples
-          if [ "$count_ms" -gt 0 ]; then
-            avg_ms=$((total_ms / count_ms))
-            echo "time_taken=$avg_ms" >> "$GITHUB_OUTPUT"
+          sf=$(echo "$result" | jq -r '.scaleFactor // empty')
+          if [ -n "$sf" ]; then
+            echo "SCALE_FACTOR=${sf}" >> "$GITHUB_ENV"
+          fi
 
-            total_seconds=$((avg_ms / 1000))
-            rem_ms=$((avg_ms % 1000))
-            hours=$((total_seconds / 3600))
-            minutes=$(((total_seconds % 3600) / 60))
-            seconds=$((total_seconds % 60))
-            sec_str="$seconds"
-            if [ "$rem_ms" -gt 0 ]; then
-              ms_padded=$(printf "%03d" "$rem_ms")
-              sec_str="${seconds}.${ms_padded}"
-            fi
-            duration="PT"
-            if [ "$hours" -gt 0 ]; then duration="${duration}${hours}H"; fi
-            if [ "$minutes" -gt 0 ]; then duration="${duration}${minutes}M"; fi
-            if [ "$seconds" -gt 0 ] || [ "$rem_ms" -gt 0 ] || [ "$duration" = "PT" ]; then
-              duration="${duration}${sec_str}S"
-            fi
-            echo "time_taken_iso=$duration" >> "$GITHUB_OUTPUT"
+          time_taken=$(echo "$result" | jq -r '.totalTimeMs // empty')
+          if [ -n "$time_taken" ]; then
+            echo "time_taken=${time_taken}" >> "$GITHUB_OUTPUT"
+          fi
+
+          time_iso=$(echo "$result" | jq -r '.timeTakenIso // empty')
+          if [ -n "$time_iso" ]; then
+            echo "time_taken_iso=${time_iso}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set Timestamp
@@ -319,34 +179,9 @@ jobs:
         if: steps.check-deployment.outcome == 'success'
         run: |
           set -euo pipefail
-          FROM_PARAM="now-2h"
-          TO_PARAM="now"
-          if [ -f benchmark.log ]; then
-            # Extract first timestamp like HH:MM:SS.mmm
-            start_ts=$(grep -m1 -oE '^[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}' benchmark.log || true)
-            if [ -n "$start_ts" ]; then
-              start_hms=${start_ts%.*}
-              start_ms=${start_ts#*.}
-              today=$(date -u +%Y-%m-%d)
-              # Candidates: today and yesterday (to handle jobs crossing midnight UTC)
-              cand1=$(date -u -d "$today $start_hms" +%s 2>/dev/null || echo "")
-              yesterday=$(date -u -d "$today - 1 day" +%Y-%m-%d)
-              cand2=$(date -u -d "$yesterday $start_hms" +%s 2>/dev/null || echo "")
-              now_s=$(date -u +%s)
-              pick=""
-              if [ -n "$cand1" ] && [ "$cand1" -le "$now_s" ]; then pick="$cand1"; fi
-              if [ -n "$cand2" ] && [ "$cand2" -le "$now_s" ]; then
-                if [ -z "$pick" ] || [ $((now_s - cand2)) -lt $((now_s - pick)) ]; then pick="$cand2"; fi
-              fi
-              if [ -n "$pick" ]; then
-                # Ensure ms parsed as decimal even with leading zeros
-                FROM_PARAM=$((pick * 1000 + 10#${start_ms}))
-                TO_PARAM="$(date -u +%s000)"
-              fi
-            fi
-          fi
-          echo "from=$FROM_PARAM" >> "$GITHUB_OUTPUT"
-          echo "to=$TO_PARAM" >> "$GITHUB_OUTPUT"
+          result=$(./modules/bench/cloud/scripts/tasks compute-grafana-time-range benchmark.log)
+          echo "from=$(echo "$result" | jq -r '.from')" >> "$GITHUB_OUTPUT"
+          echo "to=$(echo "$result" | jq -r '.to')" >> "$GITHUB_OUTPUT"
 
       - name: Port-forward Grafana (background)
         if: steps.check-deployment.outcome == 'success'
@@ -731,9 +566,16 @@ jobs:
           fi
 
           log_path="$(pwd)/benchmark.log"
-          summary="$(./modules/bench/cloud/scripts/tasks summarize-log --format github "${{ inputs.benchType }}" "$log_path")"
-          echo "## Query Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "$summary" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$log_path" ]; then
+            summary="$(./modules/bench/cloud/scripts/tasks summarize-log --format github "${{ inputs.benchType }}" "$log_path" 2>&1)" || summary=""
+            if [ -n "$summary" ]; then
+              echo "## Query Summary" >> "$GITHUB_STEP_SUMMARY"
+              echo "$summary" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            echo "## Query Summary" >> "$GITHUB_STEP_SUMMARY"
+            echo "_No benchmark log available_" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
 
       - name: Compose Slack Message
@@ -755,7 +597,10 @@ jobs:
           fi
 
           log_path="$(pwd)/benchmark.log"
-          summary="$(./modules/bench/cloud/scripts/tasks summarize-log --format slack "${{ inputs.benchType }}" "$log_path")"
+          summary=""
+          if [ -f "$log_path" ]; then
+            summary="$(./modules/bench/cloud/scripts/tasks summarize-log --format slack "${{ inputs.benchType }}" "$log_path" 2>&1)" || summary=""
+          fi
 
           # Build base message
           if [ -n "${{ steps.logs.outputs.time_taken_iso }}" ]; then
