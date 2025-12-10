@@ -5,14 +5,10 @@
             [clojure.test :as t]
             [xtdb.arrow-edn-test :as aet]
             [xtdb.block-catalog :as block-cat]
-            [xtdb.table-catalog :as table-cat]
-            [xtdb.trie-catalog :as trie-cat]
+            [xtdb.pbuf :as pbuf]
             [xtdb.util :as util])
   (:import [java.nio.file CopyOption FileVisitOption Files Path StandardCopyOption]
-           org.roaringbitmap.buffer.ImmutableRoaringBitmap
-           (xtdb.block.proto Block TableBlock)
-           (xtdb.log.proto TrieDetails)
-           (xtdb.util HyperLogLog)))
+           (xtdb.block.proto Block TableBlock)))
 
 (defmacro ignoring-ex [& body]
   `(try
@@ -28,19 +24,6 @@
 (defn- <-Block [^Block block]
   (-> (block-cat/<-Block block)
       (pr-str) (read-string)))
-
-(defn- <-TableBlock [^TableBlock block]
-  (-> (table-cat/<-table-block block)
-      (update :hlls update-vals (juxt hash HyperLogLog/estimate))
-      (update :partitions (partial mapv
-                                   (fn [partition]
-                                     (-> partition
-                                         (update :tries
-                                                 (partial mapv (fn [^TrieDetails trie-details]
-                                                                 {:trie-key (.getTrieKey trie-details)
-                                                                  :data-file-size (.getDataFileSize trie-details)
-                                                                  :trie-metadata (some-> (trie-cat/<-trie-metadata (.getTrieMetadata trie-details))
-                                                                                         (update :iid-bloom (juxt hash #(.getCardinality ^ImmutableRoaringBitmap %))))})))))))))
 
 (defn- write-pbuf-edn-file [^Path path parse-fn update-fn]
   (let [edn-file (.resolveSibling path (str (.getFileName path) ".edn"))]
@@ -63,7 +46,7 @@
      :or {parse-fn (fn [path ^bytes ba]
                      (cond
                        (re-matches #".*/tables/.*" (str path))
-                       (some-> (ignoring-ex (TableBlock/parseFrom ba)) <-TableBlock)
+                       (some-> (ignoring-ex (TableBlock/parseFrom ba)) pbuf/<-TableBlock)
 
                        :else
                        (some-> (ignoring-ex (Block/parseFrom ^bytes ba)) <-Block)))
