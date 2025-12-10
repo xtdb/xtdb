@@ -654,107 +654,108 @@
 
   (indexTx [this msg-id msg-ts tx-ops-rdr
             system-time default-tz _user user-metadata]
-    (let [db-name (.getName db)
-          lc-tx (.getLatestCompletedTx live-index)
-          default-system-time (or (when-let [lc-sys-time (some-> lc-tx (.getSystemTime))]
-                                    (when-not (neg? (compare lc-sys-time msg-ts))
-                                      (.plusNanos lc-sys-time 1000)))
-                                  msg-ts)]
+    (metrics/with-span tracer "xtdb.transaction" {:attributes {:operations.count (str (.getValueCount tx-ops-rdr))}}
+      (let [db-name (.getName db)
+            lc-tx (.getLatestCompletedTx live-index)
+            default-system-time (or (when-let [lc-sys-time (some-> lc-tx (.getSystemTime))]
+                                      (when-not (neg? (compare lc-sys-time msg-ts))
+                                        (.plusNanos lc-sys-time 1000)))
+                                    msg-ts)]
 
-      (if (and system-time lc-tx
-               (neg? (compare system-time (.getSystemTime lc-tx))))
-        (let [tx-key (serde/->TxKey msg-id default-system-time)
-              err (err/illegal-arg :invalid-system-time
-                                   {::err/message "specified system-time older than current tx"
-                                    :tx-key (serde/->TxKey msg-id system-time)
-                                    :latest-completed-tx (.getLatestCompletedTx live-index)})]
-          (log/warnf "specified system-time '%s' older than current tx '%s'"
-                     (pr-str system-time)
-                     (pr-str (.getLatestCompletedTx live-index)))
+        (if (and system-time lc-tx
+                 (neg? (compare system-time (.getSystemTime lc-tx))))
+          (let [tx-key (serde/->TxKey msg-id default-system-time)
+                err (err/illegal-arg :invalid-system-time
+                                     {::err/message "specified system-time older than current tx"
+                                      :tx-key (serde/->TxKey msg-id system-time)
+                                      :latest-completed-tx (.getLatestCompletedTx live-index)})]
+            (log/warnf "specified system-time '%s' older than current tx '%s'"
+                       (pr-str system-time)
+                       (pr-str (.getLatestCompletedTx live-index)))
 
-          (util/with-open [live-idx-tx (.startTx live-index tx-key)]
-            (when tx-error-counter
-              (.increment tx-error-counter))
-            (add-tx-row! db-name live-idx-tx tx-key err user-metadata)
-            (commit tx-key live-idx-tx (.getTxSink db)))
+            (util/with-open [live-idx-tx (.startTx live-index tx-key)]
+              (when tx-error-counter
+                (.increment tx-error-counter))
+              (add-tx-row! db-name live-idx-tx tx-key err user-metadata)
+              (commit tx-key live-idx-tx (.getTxSink db)))
 
-          (serde/->tx-aborted msg-id default-system-time err))
+            (serde/->tx-aborted msg-id default-system-time err))
 
-        (let [system-time (or system-time default-system-time)
-              tx-key (serde/->TxKey msg-id system-time)]
-          (util/with-open [live-idx-tx (.startTx live-index tx-key)]
-            (if (nil? tx-ops-rdr)
-              (do
-                (.abort live-idx-tx)
-                (util/with-open [live-idx-tx (.startTx live-index tx-key)]
-                  (add-tx-row! db-name live-idx-tx tx-key skipped-exn user-metadata)
-                  (commit tx-key live-idx-tx (.getTxSink db)))
+          (let [system-time (or system-time default-system-time)
+                tx-key (serde/->TxKey msg-id system-time)]
+            (util/with-open [live-idx-tx (.startTx live-index tx-key)]
+              (if (nil? tx-ops-rdr)
+                (do
+                  (.abort live-idx-tx)
+                  (util/with-open [live-idx-tx (.startTx live-index tx-key)]
+                    (add-tx-row! db-name live-idx-tx tx-key skipped-exn user-metadata)
+                    (commit tx-key live-idx-tx (.getTxSink db)))
 
-                (serde/->tx-aborted msg-id system-time skipped-exn))
+                  (serde/->tx-aborted msg-id system-time skipped-exn))
 
-              (let [db (-> db
-                           (.withSnapSource
-                            (reify Snapshot$Source
-                              (openSnapshot [_]
-                                (util/with-close-on-catch [live-index-snap (.openSnapshot live-idx-tx)]
-                                  (Snapshot. tx-key live-index-snap
-                                             (li/->schema live-index-snap table-catalog)))))))
+                (let [db (-> db
+                             (.withSnapSource
+                              (reify Snapshot$Source
+                                (openSnapshot [_]
+                                  (util/with-close-on-catch [live-index-snap (.openSnapshot live-idx-tx)]
+                                    (Snapshot. tx-key live-index-snap
+                                               (li/->schema live-index-snap table-catalog)))))))
 
-                    db-cat (Database$Catalog/singleton db)
+                      db-cat (Database$Catalog/singleton db)
 
-                    tx-opts {:snapshot-token (basis/->time-basis-str {db-name [system-time]})
-                             :current-time system-time
-                             :default-tz default-tz
-                             :tx-key tx-key
-                             :indexer this
-                             :default-db (.getName db)
-                             :user-metadata user-metadata
-                             :tracer tracer}
+                      tx-opts {:snapshot-token (basis/->time-basis-str {db-name [system-time]})
+                               :current-time system-time
+                               :default-tz default-tz
+                               :tx-key tx-key
+                               :indexer this
+                               :default-db (.getName db)
+                               :user-metadata user-metadata
+                               :tracer tracer}
 
-                    !put-docs-idxer (delay (->put-docs-indexer live-index live-idx-tx tx-ops-rdr db system-time tx-opts))
-                    !patch-docs-idxer (delay (->patch-docs-indexer live-index live-idx-tx tx-ops-rdr q-src db-cat system-time tx-opts))
-                    !delete-docs-idxer (delay (->delete-docs-indexer live-index live-idx-tx tx-ops-rdr db system-time tx-opts))
-                    !erase-docs-idxer (delay (->erase-docs-indexer live-index live-idx-tx tx-ops-rdr db tx-opts))
-                    !sql-idxer (delay (->sql-indexer allocator live-index live-idx-tx tx-ops-rdr q-src db-cat tx-opts))]
+                      !put-docs-idxer (delay (->put-docs-indexer live-index live-idx-tx tx-ops-rdr db system-time tx-opts))
+                      !patch-docs-idxer (delay (->patch-docs-indexer live-index live-idx-tx tx-ops-rdr q-src db-cat system-time tx-opts))
+                      !delete-docs-idxer (delay (->delete-docs-indexer live-index live-idx-tx tx-ops-rdr db system-time tx-opts))
+                      !erase-docs-idxer (delay (->erase-docs-indexer live-index live-idx-tx tx-ops-rdr db tx-opts))
+                      !sql-idxer (delay (->sql-indexer allocator live-index live-idx-tx tx-ops-rdr q-src db-cat tx-opts))]
 
-                (if-let [e (try
-                             (err/wrap-anomaly {}
-                                               (dotimes [tx-op-idx (.getValueCount tx-ops-rdr)]
-                                                 (.recordCallable tx-timer
-                                                                  #(case (.getLeg tx-ops-rdr tx-op-idx)
-                                                                     "xtql" (throw (err/unsupported :xtdb/xtql-dml-removed
-                                                                                                    (str/join ["XTQL DML is no longer supported, as of 2.0.0-beta7. "
-                                                                                                               "Please use SQL DML statements instead - "
-                                                                                                               "see the release notes for more information."])))
-                                                                     "sql" (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
-                                                                     "put-docs" (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
-                                                                     "patch-docs" (.indexOp ^OpIndexer @!patch-docs-idxer tx-op-idx)
-                                                                     "delete-docs" (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
-                                                                     "erase-docs" (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
-                                                                     "call" (throw (err/unsupported :xtdb/tx-fns-removed
-                                                                                                    (str/join ["tx-fns are no longer supported, as of 2.0.0-beta7. "
-                                                                                                               "Please use ASSERTs and SQL DML statements instead - "
-                                                                                                               "see the release notes for more information."]))))))
-                                               nil)
+                  (if-let [e (try
+                               (err/wrap-anomaly {}
+                                                 (dotimes [tx-op-idx (.getValueCount tx-ops-rdr)]
+                                                   (.recordCallable tx-timer
+                                                                    #(case (.getLeg tx-ops-rdr tx-op-idx)
+                                                                       "xtql" (throw (err/unsupported :xtdb/xtql-dml-removed
+                                                                                                      (str/join ["XTQL DML is no longer supported, as of 2.0.0-beta7. "
+                                                                                                                 "Please use SQL DML statements instead - "
+                                                                                                                 "see the release notes for more information."])))
+                                                                       "sql" (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
+                                                                       "put-docs" (.indexOp ^OpIndexer @!put-docs-idxer tx-op-idx)
+                                                                       "patch-docs" (.indexOp ^OpIndexer @!patch-docs-idxer tx-op-idx)
+                                                                       "delete-docs" (.indexOp ^OpIndexer @!delete-docs-idxer tx-op-idx)
+                                                                       "erase-docs" (.indexOp ^OpIndexer @!erase-docs-idxer tx-op-idx)
+                                                                       "call" (throw (err/unsupported :xtdb/tx-fns-removed
+                                                                                                      (str/join ["tx-fns are no longer supported, as of 2.0.0-beta7. "
+                                                                                                                 "Please use ASSERTs and SQL DML statements instead - "
+                                                                                                                 "see the release notes for more information."]))))))
+                                                 nil)
 
-                             (catch Anomaly$Caller e e))]
+                               (catch Anomaly$Caller e e))]
 
-                  (do
-                    (log/debug e "aborted tx")
-                    (.abort live-idx-tx)
+                    (do
+                      (log/debug e "aborted tx")
+                      (.abort live-idx-tx)
 
-                    (util/with-open [live-idx-tx (.startTx live-index tx-key)]
-                      (when tx-error-counter
-                        (.increment tx-error-counter))
-                      (add-tx-row! db-name live-idx-tx tx-key e user-metadata)
-                      (commit tx-key live-idx-tx (.getTxSink db)))
+                      (util/with-open [live-idx-tx (.startTx live-index tx-key)]
+                        (when tx-error-counter
+                          (.increment tx-error-counter))
+                        (add-tx-row! db-name live-idx-tx tx-key e user-metadata)
+                        (commit tx-key live-idx-tx (.getTxSink db)))
 
-                    (serde/->tx-aborted msg-id system-time e))
+                      (serde/->tx-aborted msg-id system-time e))
 
-                  (do
-                    (add-tx-row! db-name live-idx-tx tx-key nil user-metadata)
-                    (commit tx-key live-idx-tx (.getTxSink db))
-                    (serde/->tx-committed msg-id system-time))))))))))
+                    (do
+                      (add-tx-row! db-name live-idx-tx tx-key nil user-metadata)
+                      (commit tx-key live-idx-tx (.getTxSink db))
+                      (serde/->tx-committed msg-id system-time)))))))))))
 
   (addTxRow [_ tx-key e]
     (util/with-open [live-idx-tx (.startTx live-index tx-key)]
