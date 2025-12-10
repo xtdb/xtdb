@@ -1,5 +1,7 @@
 (ns xtdb.compactor.reset
-  (:require [clojure.string :as str]
+  (:require [clojure.pprint :as pp]
+            [clojure.set :as set]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
@@ -43,6 +45,34 @@
               (log/info "Dry run: no changes will be made."
                         "\n\nWhen you run this for real, ensure all nodes are stopped before running this command."
                         "\nThen, do not upgrade nodes until the reset is complete.")
+
+              (letfn [(freeze-state []
+                        (->> (for [[tbl {:keys [tries]}] (:!table-cats trie-cat)]
+                               [tbl (->> (for [[k tries] tries
+                                               :let [{:keys [live garbage]} tries]]
+                                           [k {:live (count live)
+                                               :garbage (count garbage)}])
+                                         (into {}))])
+                             (into {})))]
+                (let [state-before (freeze-state)]
+                  (trie-cat/reset->l0! trie-cat)
+                  (let [state-after (freeze-state)]
+                    (log/info "Trie catalog state diff:")
+                    (pp/pprint (->> (for [tbl (set/union (set (keys state-before))
+                                                         (set (keys state-after)))
+                                          :let [parts-before (get state-before tbl)
+                                                parts-after (get state-after tbl)]
+                                          part (set/union (set (keys parts-before))
+                                                          (set (keys parts-after)))
+                                          :let [{live-before :live, garbage-before :garbage} (get parts-before part)
+                                                {live-after :live, garbage-after :garbage} (get parts-after part)]
+                                          :when (or (not= live-before live-after)
+                                                    (not= garbage-before garbage-after))]
+                                      {:tbl tbl
+                                       :part part
+                                       :live {:before live-before, :after live-after}
+                                       :garbage {:before garbage-before, :after garbage-after}})
+                                    (group-by :tbl))))))
 
               (log/info "WOULD delete:\n"
                         (->> (map #(str "  " %) compacted-file-keys)
