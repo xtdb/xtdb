@@ -20,7 +20,7 @@ on:
         default: ''
         type: string
   schedule:
-    - cron: '0 2 * * *'  # Run daily at 2am UTC (offset from other benchmarks)
+    - cron: '0 7 * * *'  # Run daily at 07:00 UTC (after AuctionMark)
 
 permissions:
   id-token: write
