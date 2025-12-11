@@ -9,7 +9,8 @@
             [clojure.tools.logging :as log]
             [xtdb.error :as err]
             [xtdb.logging :as logging]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.mirrors.time-literals :as tl])
   (:import java.io.File))
 
 (defn version-string []
@@ -159,17 +160,21 @@
    [nil "--dry-run"
     "Lists files that would be deleted, without actually deleting them"
     :id :dry-run?]
+   [nil "--sync-timeout TIMEOUT"
+    "Specifies the timeout to catch up with the transaction log before resetting the compactione.g. 'PT5M' for 5 minutes)"
+    :id :sync-timeout
+    :parse-fn tl/duration]
    ["-h" "--help"]])
 
 (defn- reset-compactor! [args]
-  (let [{{:keys [dry-run? file]} :options, [db-name] :arguments} (-> (parse-args args reset-compactor-cli-spec)
-                                                                     (handling-arg-errors-or-help))]
+  (let [{{:keys [dry-run? sync-timeout file]} :options, [db-name] :arguments} (-> (parse-args args reset-compactor-cli-spec)
+                                                                                  (handling-arg-errors-or-help))]
     (when (nil? db-name)
       (binding [*out* *err*]
         (println "Missing db-name: `reset-compactor <db-name> [opts]`")
         (System/exit 2)))
 
-    ((requiring-resolve 'xtdb.compactor.reset/reset-compactor!) (file->node-opts file) db-name {:dry-run? dry-run?})))
+    ((requiring-resolve 'xtdb.compactor.reset/reset-compactor!) (file->node-opts file) db-name {:dry-run? dry-run? :sync-timeout sync-timeout})))
 
 (def tx-sink-cli-spec
   [config-file-opt

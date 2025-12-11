@@ -13,7 +13,8 @@
            xtdb.table.TableRef
            (xtdb.trie Trie)))
 
-(defn reset-compactor! [node-opts db-name {:keys [dry-run?]}]
+(defn reset-compactor! [node-opts db-name {:keys [dry-run? sync-timeout]
+                                           :or {sync-timeout #xt/duration "PT5M"}}]
   (let [config (doto (xtn/->config node-opts)
                  (-> (.getCompactor) (.threads 0))
                  (.setServer nil))]
@@ -24,7 +25,7 @@
       (let [^Database db (or (.databaseOrNull (db/<-node node) db-name)
                              (throw (err/incorrect ::db-not-found "Database not found" {:db-name db-name})))]
         (xt-log/send-flush-block-msg! db)
-        (xt-log/sync-db db #xt/duration "PT5M")
+        (xt-log/sync-db db sync-timeout)
 
         (log/info "Node caught up - resetting compaction...")
 
