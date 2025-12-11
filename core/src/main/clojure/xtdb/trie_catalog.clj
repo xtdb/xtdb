@@ -318,6 +318,7 @@
   (for [[k tries] tries
         :let [[level recency _part] k]
         :when (and (> level 2) recency
+                   (neg? (compare #xt/date "2025-10-14" recency))
                    (neg? (compare recency #xt/date "2025-12-01")))
         :let [{:keys [live nascent garbage]} tries
               tries (concat live nascent garbage)]
@@ -347,10 +348,12 @@
         (into {} (keep (fn [[[level recency part :as k] tries]]
                          (cond (and (> level 2)
                                     recency
+                                    (neg? (compare #xt/date "2025-10-14" recency))
                                     (neg? (compare recency #xt/date "2025-12-01")))
                                nil
                                (and (= level 2)
                                     recency
+                                    (neg? (compare #xt/date "2025-10-14" recency))
                                     (neg? (compare recency #xt/date "2025-12-01")))
                                [k
                                 (let [{:keys [live garbage]} tries
