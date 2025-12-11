@@ -76,8 +76,9 @@ interface GarbageCollector : Closeable {
                 ?.let { it.latestCompletedTx.systemTime.microsAsInstant - garbageLifetime }
 
         // For testing
+        @OptIn(ExperimentalStdlibApi::class)
         private suspend fun yieldIfSimulation() {
-            if (coroutineCtx != Dispatchers.IO) yield()
+            if (coroutineCtx[CoroutineDispatcher.Key] != Dispatchers.IO) yield()
         }
 
         override suspend fun garbageCollectTries(garbageAsOf: Instant?) {
