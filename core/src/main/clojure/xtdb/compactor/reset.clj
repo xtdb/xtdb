@@ -49,8 +49,8 @@
                         (->> (for [[tbl {:keys [tries]}] (:!table-cats trie-cat)]
                                [tbl (->> (for [[k tries] tries
                                                :let [{:keys [live garbage]} tries]]
-                                           [k {:live (count live)
-                                               :garbage (count garbage)}])
+                                           [k {:live (map #(dissoc % :trie-metadata) live)
+                                               :garbage (map #(dissoc % :trie-metadata) garbage)}])
                                          (into {}))])
                              (into {})))]
                 (let [state-before (freeze-state)]
@@ -65,8 +65,8 @@
                                                           (set (keys parts-after)))
                                           :let [{live-before :live, garbage-before :garbage} (get parts-before part)
                                                 {live-after :live, garbage-after :garbage} (get parts-after part)]
-                                          :when (or (not= live-before live-after)
-                                                    (not= garbage-before garbage-after))]
+                                          :when (or (not= (count live-before) (count live-after))
+                                                    (not= (count garbage-before) (count garbage-after)))]
                                       {:tbl tbl
                                        :part part
                                        :live {:before live-before, :after live-after}
