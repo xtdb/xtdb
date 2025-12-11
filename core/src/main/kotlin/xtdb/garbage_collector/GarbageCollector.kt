@@ -75,12 +75,19 @@ interface GarbageCollector : Closeable {
             blockCatalog.blockFromLatest(blocksToKeep)
                 ?.let { it.latestCompletedTx.systemTime.microsAsInstant - garbageLifetime }
 
+        // For testing
+        @OptIn(ExperimentalStdlibApi::class)
+        private suspend fun yieldIfSimulation() {
+            if (coroutineCtx[CoroutineDispatcher.Key] != Dispatchers.IO) yield()
+        }
+
         override suspend fun garbageCollectTries(garbageAsOf: Instant?) {
             val asOf = garbageAsOf ?: defaultGarbageAsOf() ?: return
 
             LOGGER.debug("Garbage collecting data older than {}", asOf)
 
             try {
+                yieldIfSimulation() // simulate suspension for testing
                 LOGGER.debug("Starting trie garbage collection")
                 val tableNames = blockCatalog.allTables.shuffled().take(100)
                 for (tableName in tableNames) {
