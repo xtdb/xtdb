@@ -281,7 +281,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     var driverConfig: CompactorDriverConfig = CompactorDriverConfig()
     var numberOfSystems: Int = 1
     private lateinit var allocator: BufferAllocator
-    private lateinit var bufferPools: List<BufferPool>
+    private lateinit var sharedBufferPool: BufferPool
     private lateinit var mockDriver: CompactorMockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
     private lateinit var compactors: List<Compactor.Impl>
@@ -297,9 +297,8 @@ class CompactorSimulationTest : SimulationTestBase() {
         jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
         allocator = RootAllocator()
 
-        bufferPools = List(numberOfSystems) {
-            MemoryStorage(allocator, epoch = 0)
-        }
+        // Create a single shared buffer pool for all systems
+        sharedBufferPool = MemoryStorage(allocator, epoch = 0)
 
         compactors = List(numberOfSystems) {
             Compactor.Impl(mockDriver, null, jobCalculator, false, 2, dispatcher)
@@ -309,17 +308,16 @@ class CompactorSimulationTest : SimulationTestBase() {
             createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
         }
 
+        // All databases share the same buffer pool
         dbs = List(numberOfSystems) { i ->
-            MockDb("xtdb", trieCatalogs[i], bufferPools[i])
+            MockDb("xtdb", trieCatalogs[i], sharedBufferPool)
         }
     }
 
     @AfterEach
     fun tearDown() {
         driverConfig = CompactorDriverConfig()
-        for (bp in bufferPools) {
-            bp.close()
-        }
+        sharedBufferPool.close()
         allocator.close()
         super.tearDownSimulation()
     }
