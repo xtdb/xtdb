@@ -428,4 +428,97 @@ class NodeSimulationTest : SimulationTestBase() {
         Assertions.assertEquals(1, allTrieSets.distinct().size, "All systems should have converged to the same trie set")
         Assertions.assertEquals(expectedL2Tries.toSet(), allTrieSets.first(), "Final state should only contain L2 tries")
     }
+
+    @RepeatableSimulationTest
+    @WithNumberOfSystems(2)
+    @Timeout(value = 10, unit = TimeUnit.SECONDS)
+    fun `staggered system startup during active compaction`(iteration: Int) {
+        val table = TableRef("xtdb", "public", "docs")
+        val defaultFileTarget = 100L * 1024L * 1024L
+
+        // Add L1 tries that will be compacted
+        val l1Tries = L1TrieKeys.take(8).toList()
+        addTries(
+            table,
+            l1Tries.map { buildTrieDetails(table.tableName, it, defaultFileTarget) },
+            Instant.now()
+        )
+
+        // Finish blocks so compaction can proceed
+        blockCatalogs.forEach { blockCatalog ->
+            for (blockIndex in 5L..7L) {
+                blockCatalog.finishBlock(
+                    blockIndex = blockIndex,
+                    latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
+                    latestProcessedMsgId = blockIndex,
+                    tables = listOf(table),
+                    secondaryDatabases = null
+                )
+            }
+        }
+
+        val expectedL2Tries = listOf(
+            "l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03",
+            "l02-rc-p0-b07", "l02-rc-p1-b07", "l02-rc-p2-b07", "l02-rc-p3-b07"
+        )
+
+        // System 0: Start compaction and GC immediately
+        // System 1: Start compaction and GC AFTER system 0 has already finished
+        runBlocking(dispatcher) {
+            // System 0 runs compaction and GC to completion
+            val system0Compaction = launch(CoroutineName("system0-compaction")) {
+                compactorsForDb[0].startCompaction().await()
+            }
+            val system0GC = launch(CoroutineName("system0-gc")) {
+                garbageCollectors[0].garbageCollectTries(Instant.now() + Duration.ofHours(1))
+            }
+
+            system0Compaction.join()
+            system0GC.join()
+
+            // Verify system 0 has completed its work
+            val system0Tries = trieCatalogs[0].listAllTrieKeys(table).toSet()
+            Assertions.assertTrue(
+                expectedL2Tries.all { it in system0Tries },
+                "System 0 should have all L2 tries after compaction"
+            )
+
+            // Now system 1 starts its compaction and GC
+            val system1Compaction = launch(CoroutineName("system1-compaction")) {
+                compactorsForDb[1].startCompaction().await()
+            }
+            val system1GC = launch(CoroutineName("system1-gc")) {
+                garbageCollectors[1].garbageCollectTries(Instant.now() + Duration.ofHours(1))
+            }
+
+            system1Compaction.join()
+            system1GC.join()
+        }
+
+        // Verify both systems have the expected L2 tries after all operations
+        trieCatalogs.forEachIndexed { index, trieCatalog ->
+            val triesInCatalog = trieCatalog.listAllTrieKeys(table).toSet()
+            Assertions.assertTrue(
+                expectedL2Tries.all { it in triesInCatalog },
+                "System $index should have all L2 tries present"
+            )
+        }
+
+        // Final GC pass to ensure convergence
+        runBlocking {
+            garbageCollectors.forEach { gc ->
+                gc.garbageCollectTries(Instant.now() + Duration.ofHours(1))
+            }
+        }
+
+        // Verify all systems converged to the same final state
+        val allTrieSets = trieCatalogs.map { it.listAllTrieKeys(table).toSet() }
+        Assertions.assertEquals(1, allTrieSets.distinct().size, "All systems should converge to the same trie set despite staggered startup")
+        Assertions.assertEquals(expectedL2Tries.toSet(), allTrieSets.first(), "Final state should only contain L2 tries, no L1s should remain")
+
+        // Verify buffer pools also match
+        val allBufferPoolTries = bufferPools.map { listTrieNamesFromBufferPool(it, table).toSet() }
+        Assertions.assertEquals(1, allBufferPoolTries.distinct().size, "All buffer pools should have the same tries")
+        Assertions.assertEquals(expectedL2Tries.toSet(), allBufferPoolTries.first(), "Buffer pools should only contain L2 tries")
+    }
 }
