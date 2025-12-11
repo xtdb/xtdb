@@ -11,21 +11,23 @@ import java.nio.file.Path
 private val LOGGER = GarbageCollectorMockDriver::class.logger
 
 class GarbageCollectorMockDriver() : GarbageCollector.Driver.Factory {
-    override fun create(db: IDatabase) = ForDatabase(db)
+    var nextSystemId = 0
 
-    class ForDatabase(val db: IDatabase) : GarbageCollector.Driver {
+    override fun create(db: IDatabase) = ForDatabase(db, nextSystemId++)
+
+    class ForDatabase(val db: IDatabase, val systemId: Int) : GarbageCollector.Driver {
         private val bufferPool = db.bufferPool
         private val trieCatalog = db.trieCatalog
 
         override suspend fun deletePath(path: Path) {
             yield()
-            LOGGER.debug("Deleting path $path")
+            LOGGER.debug("systemId=$systemId Deleting path $path")
             bufferPool.deleteIfExists(path)
         }
 
         override suspend fun deleteTries(tableName: TableRef, trieKeys: Set<TrieKey>) {
             yield()
-            LOGGER.debug("Removing ${trieKeys.size} tries from catalog for table $tableName")
+            LOGGER.debug("systemId=$systemId Removing ${trieKeys.size} tries from catalog for table $tableName: $trieKeys")
             trieCatalog.deleteTries(tableName, trieKeys)
         }
 
