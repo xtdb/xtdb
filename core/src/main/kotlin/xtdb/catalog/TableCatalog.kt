@@ -9,4 +9,6 @@ interface TableCatalog {
     fun getField(table: TableRef, columnName: ColumnName): Field?
     fun getFields(table: TableRef): Map<ColumnName, Field>?
     val fields: Map<TableRef, Map<ColumnName, Field>>
+
+    fun refresh()
 }

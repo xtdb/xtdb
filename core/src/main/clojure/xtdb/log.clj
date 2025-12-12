@@ -17,7 +17,7 @@
            (xtdb.api.log Log Log$Cluster$Factory Log$Factory Log$Message$Tx Log$MessageMetadata)
            (xtdb.arrow Relation Vector)
            xtdb.catalog.BlockCatalog
-           (xtdb.database Database Database$Catalog)
+           (xtdb.database Database Database$Catalog Database$Mode)
            xtdb.indexer.LogProcessor
            xtdb.table.TableRef
            (xtdb.tx TxOp$DeleteDocs TxOp$EraseDocs TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts TxWriter)
@@ -161,10 +161,11 @@
 (defmethod xtn/apply-config! :xtdb/log [^Xtdb$Config config _ [tag opts]]
   (.log config (->log-factory tag opts)))
 
-(defmethod ig/expand-key :xtdb/log [k {:keys [base factory]}]
+(defmethod ig/expand-key :xtdb/log [k {:keys [base factory mode]}]
   {k {:base base
       :block-cat (ig/ref :xtdb/block-catalog)
-      :factory factory}})
+      :factory factory
+      :mode mode}})
 
 (def out-of-sync-log-message
   "Node failed to start due to an invalid transaction log state (%s) that does not correspond with the latest indexed transaction (epoch=%s and offset=%s).
@@ -191,10 +192,13 @@
           (throw (->out-of-sync-exception latest-completed-offset latest-submitted-offset epoch)))
         (log/info "Starting node with a log that has a different epoch than the latest completed tx (This is expected if you are starting a new epoch) - Skipping offset validation.")))))
 
-(defmethod ig/init-key :xtdb/log [_ {:keys [^BlockCatalog block-cat, ^Log$Factory factory]
+(defmethod ig/init-key :xtdb/log [_ {:keys [^BlockCatalog block-cat, ^Log$Factory factory, ^Database$Mode mode]
                                      {:keys [log-clusters]} :base}]
-  (doto (.openLog factory log-clusters)
-    (validate-offsets (.getLatestCompletedTx block-cat))))
+  (let [log (if (= mode Database$Mode/READ_ONLY)
+              (.openReadOnlyLog factory log-clusters)
+              (.openLog factory log-clusters))]
+    (validate-offsets log (.getLatestCompletedTx block-cat))
+    log))
 
 (defmethod ig/halt-key! :xtdb/log [_ ^Log log]
   (util/close log))
@@ -221,7 +225,7 @@
                                                                                                              :system-time (some-> system-time time/expect-instant))))))]
         (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset message-meta))))))
 
-(defmethod ig/expand-key :xtdb.log/processor [k {:keys [base ^IndexerConfig indexer-conf]}]
+(defmethod ig/expand-key :xtdb.log/processor [k {:keys [base ^IndexerConfig indexer-conf ^Database$Mode mode]}]
   {k {:base base
       :allocator (ig/ref :xtdb.db-catalog/allocator)
       :db (ig/ref :xtdb.db-catalog/for-query)
@@ -229,12 +233,14 @@
       :compactor (ig/ref :xtdb.compactor/for-db)
       :block-flush-duration (.getFlushDuration indexer-conf)
       :skip-txs (.getSkipTxs indexer-conf)
-      :enabled? (.getEnabled indexer-conf)}})
+      :enabled? (.getEnabled indexer-conf)
+      :mode mode}})
 
 (defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry db-catalog]} :base
-                                               :keys [allocator db indexer compactor block-flush-duration skip-txs enabled?]}]
+                                               :keys [allocator db indexer compactor block-flush-duration skip-txs enabled? ^Database$Mode mode]}]
   (when enabled?
-    (LogProcessor. allocator meter-registry db-catalog db indexer compactor block-flush-duration (set skip-txs))))
+    (LogProcessor. allocator meter-registry db-catalog db indexer compactor block-flush-duration (set skip-txs)
+                   (or mode Database$Mode/READ_WRITE))))
 
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
   (util/close log-processor))

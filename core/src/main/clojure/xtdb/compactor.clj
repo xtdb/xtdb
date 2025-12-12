@@ -7,6 +7,7 @@
   (:import com.carrotsearch.hppc.ByteArrayList
            xtdb.api.CompactorConfig
            (xtdb.compactor Compactor Compactor$Driver Compactor$Impl Compactor$Job Compactor$JobCalculator)
+           (xtdb.database Database$Mode)
            (xtdb.trie Trie$Key)))
 
 (def ^:dynamic *ignore-signal-block?* false)
@@ -124,12 +125,15 @@
 (defmethod ig/halt-key! :xtdb/compactor [_ compactor]
   (util/close compactor))
 
-(defmethod ig/expand-key ::for-db [k {:keys [base]}]
+(defmethod ig/expand-key ::for-db [k {:keys [base mode]}]
   {k {:base base
+      :mode mode
       :query-db (ig/ref :xtdb.db-catalog/for-query)}})
 
-(defmethod ig/init-key ::for-db [_ {{:keys [^Compactor compactor]} :base, :keys [query-db]}]
-  (.openForDatabase compactor query-db))
+(defmethod ig/init-key ::for-db [_ {{:keys [^Compactor compactor]} :base, :keys [query-db ^Database$Mode mode]}]
+  (if (= mode Database$Mode/READ_ONLY)
+    (.openForDatabase Compactor/NOOP query-db)
+    (.openForDatabase compactor query-db)))
 
 (defmethod ig/halt-key! ::for-db [_ compactor-for-db]
   (util/close compactor-for-db))

@@ -27,7 +27,7 @@
       (->> (transduce (map (fn [[trie-key size]]
                              (-> (trie/parse-trie-key trie-key)
                                  (assoc :data-file-size (or size -1)))))
-                      (completing #(cat/apply-trie-notification {:file-size-target 20} %1 %2 as-of-time))
+                      (completing #(cat/apply-trie-notification  %1 %2 {:file-size-target 20, :as-of as-of-time}))
                       {}))))
 
 (defn- curr-tries [& trie-keys]
@@ -89,7 +89,6 @@
     (t/testing "recency filtering (temporal metadata always overlaps the query)"
       (let [query-bounds (tu/->temporal-bounds current-time (inc current-time))]
         (t/is (empty? (filter-tries [] query-bounds)))
-
 
         (t/is (= #{"l0-current-block-02" "l0-current-block-01" "l0-current-block-00"}
                  (filter-tries [["l0-current-block-00" nil [20200101 Long/MAX_VALUE]]
@@ -220,7 +219,6 @@
                        ["l01-rc-b00" 10] ["l01-rc-b01" 20] ["l01-rc-b02" 10] ["l01-rc-b03" 20]))
         "Superseded L1 files should not get returned"))
 
-
 (t/deftest test-l0-addition-idempotent-4545
   ;; L0 TriesAdded message arrives after the L1 compaction
   (t/is (= #{"l01-rc-b00"}
@@ -345,7 +343,7 @@
           (.addTries cat #xt/table foo
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]
-                           ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
+                           ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01" 4]]
                           (map #(apply trie/->trie-details #xt/table foo %)))
                      (Instant/now))
           (tu/finish-block! node))))
@@ -360,6 +358,11 @@
                    "l02-rc-p3-b01"}
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into (sorted-set) (map :trie-key)))))))))
+
+(defn trie-catalog-init [table->table-block]
+  (TrieCatalog. nil nil
+                (cat/load-tries table->table-block cat/*file-size-target*)
+                cat/*file-size-target*))
 
 (t/deftest test-trie-catalog-init-old-and-new-block-files-mixed-4664
   (let [->trie-details (partial trie/->trie-details #xt/table foo)
@@ -378,8 +381,8 @@
                            {:level 1 :recency nil :part []
                             :tries [(->trie-details {:trie-key "l01-rc-b00" :data-file-size 10 :state :live})]}]}
 
-        cat (cat/trie-catalog-init {#xt/table bar new-table-blocks
-                                    #xt/table foo old-table-blocks})]
+        cat (trie-catalog-init {#xt/table bar new-table-blocks
+                                #xt/table foo old-table-blocks})]
     (t/is (= #{"l00-rc-b01" "l01-rc-b00"}
              (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                   (into (sorted-set) (map :trie-key)))
@@ -392,13 +395,13 @@
     (let [old-table-blocks {:partitions
                             [{:level 0 :recency nil :part []
                               :tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10})
-                                      (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 })]}
+                                      (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10})]}
                              {:level 1 :recency nil :part []
                               :tries [(->trie-details {:trie-key "l01-rc-b00" :data-file-size 10})]}
                              {:level 1 :recency #xt/date "2020-01-01" :part []
-                              :tries [(->trie-details {:trie-key "l01-r20200101-b00" :data-file-size 10 })]}]}
+                              :tries [(->trie-details {:trie-key "l01-r20200101-b00" :data-file-size 10})]}]}
 
-          cat (cat/trie-catalog-init {#xt/table foo old-table-blocks})]
+          cat (trie-catalog-init {#xt/table foo old-table-blocks})]
 
       (t/is (= #{"l00-rc-b01" "l01-rc-b00" "l01-r20200101-b00"} (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                                                                      (into (sorted-set) (map :trie-key)))))
@@ -417,7 +420,7 @@
                               :tries [(->trie-details {:trie-key "l01-rc-b00" :data-file-size 10 :state :live})]}
                              {:level 1 :recency #xt/date "2020-01-01" :part []
                               :tries [(->trie-details {:trie-key "l01-r20200101-b00" :data-file-size 10 :state :live})]}]}
-          cat (cat/trie-catalog-init {#xt/table foo new-table-blocks})]
+          cat (trie-catalog-init {#xt/table foo new-table-blocks})]
 
       (t/is (= #{"l00-rc-b01" "l01-rc-b00" "l01-r20200101-b00"}
                (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
@@ -440,7 +443,7 @@
                              {:level 1 :recency #xt/date "2020-01-01" :part []
                               :max-block-idx 0
                               :tries [(->trie-details {:trie-key "l01-r20200101-b00" :data-file-size 10 :state :live})]}]}
-          cat (cat/trie-catalog-init {#xt/table foo new-table-blocks})]
+          cat (trie-catalog-init {#xt/table foo new-table-blocks})]
 
       (t/is (= #{"l00-rc-b01" "l01-rc-b00" "l01-r20200101-b00"}
                (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
@@ -463,7 +466,7 @@
                           :max-block-idx 1
                           :tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10 :state :live})
                                   (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})]}]}
-          cat (cat/trie-catalog-init {#xt/table foo table-blocks})]
+          cat (trie-catalog-init {#xt/table foo table-blocks})]
 
       (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
                (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
@@ -482,7 +485,7 @@
                             {:level 0 :recency nil :part []
                              :max-block-idx 1
                              :tries []}]}
-          cat (cat/trie-catalog-init {#xt/table foo no-table-blocks})]
+          cat (trie-catalog-init {#xt/table foo no-table-blocks})]
 
       (t/is (= #{}
                (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
@@ -516,7 +519,7 @@
                        ["l03-r20250101-p3-b09"]))))
 
 (t/deftest test-dry-trie-catalog-gc
-  (let [cat (TrieCatalog. (ConcurrentHashMap.) 20)] ;file-size-target
+  (let [cat (TrieCatalog. nil nil (ConcurrentHashMap.) 20)] ;file-size-target
     (letfn [(add-tries [tries inst]
               (.addTries cat #xt/table foo
                          (map #(apply trie/->trie-details #xt/table foo %) tries)
@@ -546,7 +549,7 @@
 
       (add-tries [["l00-rc-b02" 1] ["l00-rc-b03" 1]
                   ["l01-rc-b02" 2]
-                  ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01"4]]
+                  ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01" 4]]
                  #xt/instant "2002-01-01T00:00:00Z")
 
       (t/is (= [["l00-rc-b00" :garbage #xt/instant "2000-01-01T00:00:00Z"]
@@ -681,7 +684,6 @@
                       {:trie-key "l00-rc-b02" :block-idx 1}]}
              {:level 1 :recency nil :part []
               :tries [{:trie-key "l01-rc-b00" :block-idx 0}]}])))
-
 
   (t/is (= {[0 nil []] {:max-block-idx 15},
             [1 nil []] {:max-block-idx 15},

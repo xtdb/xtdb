@@ -224,7 +224,7 @@
          (into {} (map (fn [db-name]
                          ;; TODO multi-part
                          [db-name [(-> (.databaseOrNull db-cat db-name)
-                                       (.getLogProcessor)
+                                       (.getLog)
                                        (.getLatestSubmittedMsgId))]])))))
 
   (latest-processed-msg-ids [_]

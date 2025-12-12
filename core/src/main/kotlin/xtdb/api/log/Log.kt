@@ -17,6 +17,7 @@ import xtdb.log.proto.*
 import xtdb.log.proto.LogMessage.MessageCase
 import xtdb.storage.StorageEpoch
 import xtdb.trie.BlockIndex
+import xtdb.util.MsgIdUtil
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
@@ -149,6 +150,7 @@ interface Log : AutoCloseable {
 
     interface Factory {
         fun openLog(clusters: Map<LogClusterAlias, Cluster>): Log
+        fun openReadOnlyLog(clusters: Map<LogClusterAlias, Cluster>): Log
 
         fun writeTo(dbConfig: DatabaseConfig.Builder)
 
@@ -204,6 +206,9 @@ interface Log : AutoCloseable {
     val latestSubmittedOffset: LogOffset
 
     val epoch: Int
+
+    val latestSubmittedMsgId: MessageId
+        get() = MsgIdUtil.offsetToMsgId(epoch, latestSubmittedOffset)
 
     class MessageMetadata(
         val logOffset: LogOffset,

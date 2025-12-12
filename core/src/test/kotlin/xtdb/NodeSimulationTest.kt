@@ -121,7 +121,7 @@ class NodeSimulationTest : SimulationTestBase() {
             Compactor.Impl(compactorDriver, null, jobCalculator, false, 2, dispatcher)
         }
         trieCatalogs = List(numberOfSystems) {
-            createTrieCatalog.invoke(mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
+            createTrieCatalog.invoke(null, null, mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
         }
         blockCatalogs = List(numberOfSystems) { i ->
             BlockCatalog("xtdb", sharedBufferPool)

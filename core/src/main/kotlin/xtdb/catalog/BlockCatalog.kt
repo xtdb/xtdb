@@ -33,10 +33,16 @@ class BlockCatalog(private val dbName: DatabaseName, private val bp: BufferPool)
     val allBlockFiles get() = bp.listAllObjects(blocksPath).filter { it.key.fileName.extension == "binpb" }
     fun tableBlocks(table: TableRef) = bp.listAllObjects(table.tablePath.resolve(blocksPath))
 
+    private val latestBlock0 get() = 
+      allBlockFiles.lastOrNull()?.key
+        ?.let { blockKey -> Block.parseFrom(bp.getByteArray(blockKey)) }
+
     @Volatile
-    private var latestBlock: Block? =
-        allBlockFiles.lastOrNull()?.key
-            ?.let { blockKey -> Block.parseFrom(bp.getByteArray(blockKey)) }
+    private var latestBlock: Block? = latestBlock0
+        
+    fun refresh() {
+        latestBlock = latestBlock0
+    }
 
     fun blockFromLatest(distance: Int): Block? =
         allBlockFiles.toList().dropLast(maxOf(0, distance - 1)).lastOrNull()?.key

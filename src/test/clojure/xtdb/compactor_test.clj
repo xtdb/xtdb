@@ -37,7 +37,7 @@
         (->> (transduce (map (fn [[trie-key size]]
                                (-> (trie/parse-trie-key trie-key)
                                    (assoc :data-file-size (or size -1)))))
-                        (completing (partial cat/apply-trie-notification opts))
+                        (completing #(cat/apply-trie-notification %1 %2 opts))
                         {}))
         (as-> table-cat (c/compaction-jobs #xt/table foo, table-cat opts))
         (->> (into #{} (map (fn [job]

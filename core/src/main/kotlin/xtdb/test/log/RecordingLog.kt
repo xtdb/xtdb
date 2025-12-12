@@ -6,6 +6,7 @@ import kotlinx.serialization.Transient
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
 import xtdb.api.log.LogOffset
+import xtdb.api.log.ReadOnlyLog
 import xtdb.database.proto.DatabaseConfig
 import java.time.Instant
 import java.time.InstantSource
@@ -26,6 +27,9 @@ class RecordingLog(private val instantSource: InstantSource, messages: List<Log.
         fun messages(messages: List<Log.Message>) = apply { this.messages = messages }
 
         override fun openLog(clusters: Map<LogClusterAlias, Log.Cluster>) = RecordingLog(instantSource, messages)
+
+        override fun openReadOnlyLog(clusters: Map<LogClusterAlias, Log.Cluster>) =
+            ReadOnlyLog(openLog(clusters))
 
         override fun writeTo(dbConfig: DatabaseConfig.Builder) = Unit
     }

@@ -312,6 +312,9 @@ class LocalLog(
         override fun openLog(clusters: Map<LogClusterAlias, Cluster>) =
             LocalLog(path, instantSource, epoch, useInstantSourceForNonTx, coroutineContext)
 
+        override fun openReadOnlyLog(clusters: Map<LogClusterAlias, Cluster>) =
+            ReadOnlyLocalLog(path, epoch, coroutineContext)
+
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
             dbConfig.localLog = localLog {
                 this.path = this@Factory.path.toString()

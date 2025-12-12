@@ -4,7 +4,8 @@
             [xtdb.util :as util])
   (:import (xtdb.api.storage Storage Storage$Factory)
            xtdb.api.Xtdb$Config
-           (xtdb.storage BufferPool)))
+           (xtdb.database Database$Mode)
+           (xtdb.storage BufferPool ReadOnlyBufferPool)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -47,12 +48,14 @@
                        :remote ::remote)
                      opts))
 
-(defmethod ig/expand-key :xtdb/buffer-pool [k {:keys [base db-name factory]}]
-  {k {:base base, :factory factory, :db-name db-name
+(defmethod ig/expand-key :xtdb/buffer-pool [k {:keys [base db-name factory mode]}]
+  {k {:base base, :factory factory, :db-name db-name, :mode mode
       :allocator (ig/ref :xtdb.db-catalog/allocator)}})
 
-(defmethod ig/init-key :xtdb/buffer-pool [_ {{:keys [meter-registry mem-cache disk-cache]} :base, :keys [allocator ^Storage$Factory factory, db-name]}]
-  (.open factory allocator mem-cache disk-cache db-name meter-registry Storage/VERSION))
+(defmethod ig/init-key :xtdb/buffer-pool [_ {{:keys [meter-registry mem-cache disk-cache]} :base
+                                             :keys [allocator ^Storage$Factory factory, db-name ^Database$Mode mode]}]
+  (cond-> (.open factory allocator mem-cache disk-cache db-name meter-registry Storage/VERSION)
+    (= mode Database$Mode/READ_ONLY) (ReadOnlyBufferPool.)))
 
 (defmethod ig/halt-key! :xtdb/buffer-pool [_ ^BufferPool buffer-pool]
   (util/close buffer-pool))

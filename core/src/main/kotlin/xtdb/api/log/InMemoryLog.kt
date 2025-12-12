@@ -38,7 +38,11 @@ class InMemoryLog(
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
         fun coroutineContext(coroutineContext: CoroutineContext) = apply { this.coroutineContext = coroutineContext }
 
-        override fun openLog(clusters: Map<LogClusterAlias, Cluster>) = InMemoryLog(instantSource, epoch, coroutineContext)
+        override fun openLog(clusters: Map<LogClusterAlias, Cluster>) =
+            InMemoryLog(instantSource, epoch, coroutineContext)
+
+        override fun openReadOnlyLog(clusters: Map<LogClusterAlias, Cluster>) =
+            ReadOnlyLog(openLog(clusters))
 
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
             dbConfig.inMemoryLog = inMemoryLog {  }
