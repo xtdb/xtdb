@@ -50,8 +50,8 @@
                         (->> (for [[tbl {:keys [tries]}] (:!table-cats trie-cat)]
                                [tbl (->> (for [[k tries] tries
                                                :let [{:keys [live garbage]} tries]]
-                                           [k {:live (map #(dissoc % :trie-metadata) live)
-                                               :garbage (map #(dissoc % :trie-metadata) garbage)}])
+                                           [k {:live (map :trie-key live)
+                                               :garbage (map :trie-key garbage)}])
                                          (into {}))])
                              (into {})))]
                 (let [state-before (freeze-state)]
