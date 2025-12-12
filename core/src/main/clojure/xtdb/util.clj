@@ -1,6 +1,7 @@
 (ns xtdb.util
   (:refer-clojure :exclude [with-open])
   (:require [clojure.java.io :as io]
+            [clojure.java.shell :as sh]
             [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
@@ -506,13 +507,24 @@
 (defn used-netty-memory []
   (io.netty.util.internal.PlatformDependent/usedDirectMemory))
 
-(defn implementation-version []
+(defn manifest-version []
   (let [manifest (-> (ClassLoader/getSystemResource "META-INF/MANIFEST.MF")
                      .openStream
                      java.util.jar.Manifest.)
         attributes (.getMainAttributes manifest)]
     (when attributes
       (.getValue attributes "Implementation-Version"))))
+
+(defn xtdb-version-string []
+  (let [version (or (some-> (System/getenv "XTDB_VERSION") str/trim not-empty)
+                    (manifest-version)
+                    "2.x")
+        git-sha (or (some-> (System/getenv "GIT_SHA") str/trim not-empty (subs 0 7))
+                    (let [{:keys [out ^long exit]} (sh/sh "git" "rev-parse" "--short" "HEAD")]
+                      (when (zero? exit)
+                        (str/trim out))))]
+    (str/join " " [version
+                   (when git-sha (str "[" git-sha "]"))])))
 
 (def unconstraint-temporal-metadata
   (let [^TemporalMetadata$Builder builder (TemporalMetadata/newBuilder)]

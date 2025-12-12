@@ -1,6 +1,5 @@
 (ns xtdb.expression
-  (:require [clojure.java.shell :as sh]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.expression.macro :as macro]
             [xtdb.rewrite :refer [zmatch]]
@@ -43,19 +42,7 @@
 (def postgres-server-version "16")
 
 (defn xtdb-server-version []
-  ;; TODO this won't work if the user has XT in-process in their own git repo.
-  (or (System/getenv "XTDB_VERSION")
-
-      (util/implementation-version)
-
-      (when-let [git-sha (System/getenv "GIT_SHA")]
-        (subs git-sha 0 7))
-
-      (let [{:keys [out ^long exit]} (sh/sh "git" "rev-parse" "--short" "HEAD")]
-        (when (zero? exit)
-          (str/trim out)))
-
-      "unknown"))
+  (util/xtdb-version-string))
 
 (defn form->expr [form {:keys [vec-fields param-fields locals] :as env}]
   (cond
