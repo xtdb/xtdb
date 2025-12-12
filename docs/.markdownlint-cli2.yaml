@@ -1,0 +1,3 @@
+config:
+  MD013: false # line-length
+  MD033: false # no-inline-html
