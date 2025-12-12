@@ -32,9 +32,10 @@
         (let [bp (.getBufferPool db)
               trie-cat (.getTrieCatalog db)
               live-idx (.getLiveIndex db)
-              compacted-file-keys (vec (for [^TableRef table (.getTables trie-cat)
-                                             ^String trie-key (trie-cat/compacted-trie-keys-syn-l3h (trie-cat/trie-state trie-cat table))
-
+              compacted-trie-keys (vec (for [^TableRef table (.getTables trie-cat)
+                                             ^String trie-key (trie-cat/compacted-trie-keys-syn-l3h (trie-cat/trie-state trie-cat table))]
+                                         [table trie-key]))
+              compacted-file-keys (vec (for [[^TableRef table ^String trie-key] compacted-trie-keys
                                              ;; meta file first, as it's the marker
                                              file-key [(Trie/metaFilePath table trie-key)
                                                        (Trie/dataFilePath table trie-key)]]
@@ -50,8 +51,8 @@
                         (->> (for [[tbl {:keys [tries]}] (:!table-cats trie-cat)]
                                [tbl (->> (for [[k tries] tries
                                                :let [{:keys [live garbage]} tries]]
-                                           [k {:live (map :trie-key live)
-                                               :garbage (map :trie-key garbage)}])
+                                           [k {:live (map #(select-keys % [:trie-key :data-file-size]) live)
+                                               :garbage (map #(select-keys % [:trie-key :data-file-size]) garbage)}])
                                          (into {}))])
                              (into {})))]
                 (let [state-before (freeze-state)]
@@ -74,9 +75,9 @@
                                        :garbage {:before garbage-before, :after garbage-after}})
                                     (group-by :tbl))))))
 
-              (log/info "WOULD delete:\n"
-                        (->> (map #(str "  " %) compacted-file-keys)
-                             (str/join "\n"))))
+              (log/info "WOULD delete:")
+              (pp/pprint {:trie-keys compacted-trie-keys
+                          :file-keys compacted-file-keys}))
 
             (nil? (.getLatestCompletedTx live-idx))
             (log/error "No completed transactions found in the live index. Cannot reset compaction.")
