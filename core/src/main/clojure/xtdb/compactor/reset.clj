@@ -66,8 +66,8 @@
                                                           (set (keys parts-after)))
                                           :let [{live-before :live, garbage-before :garbage} (get parts-before part)
                                                 {live-after :live, garbage-after :garbage} (get parts-after part)]
-                                          :when (or (not= (count live-before) (count live-after))
-                                                    (not= (count garbage-before) (count garbage-after)))]
+                                          :when (or (not= live-before live-after)
+                                                    (not= garbage-before garbage-after))]
                                       {:tbl tbl
                                        :part part
                                        :live {:before live-before, :after live-after}
