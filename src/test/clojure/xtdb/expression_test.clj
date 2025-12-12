@@ -2149,3 +2149,42 @@
   (t/is (false? (project1 '(=== "foo" "bar") {})))
   (t/is (true? (project1 '(=== a a) {:a nil})) "null === null")
   (t/is (nil? (project1 '(== a a) {:a nil})) "null == null returns null"))
+
+(t/deftest test-format
+  (t/testing "basic string formatting"
+    (t/is (= "Hello World" (project1 '(format "Hello %s" a) {:a "World"})))
+    (t/is (= "Testing one, two, three, %" (project1 '(format "Testing %s, %s, %s, %%" a b c) {:a "one" :b "two" :c "three"}))))
+
+  (t/testing "identifier quoting (%I)"
+    (t/is (= "INSERT INTO \"Foo bar\" VALUES('O''Reilly')"
+             (project1 '(format "INSERT INTO %I VALUES(%L)" a b) {:a "Foo bar" :b "O'Reilly"})))
+    (t/is (= "INSERT INTO locations VALUES('C:\\Program Files')"
+             (project1 '(format "INSERT INTO %I VALUES(%L)" a b) {:a "locations" :b "C:\\Program Files"}))))
+
+  (t/testing "width specifiers"
+    (t/is (= "|       foo|" (project1 '(format "|%10s|" a) {:a "foo"})))
+    (t/is (= "|foo       |" (project1 '(format "|%-10s|" a) {:a "foo"}))))
+
+  (t/testing "width from argument (*)"
+    (t/is (= "|       foo|" (project1 '(format "|%*s|" w a) {:w 10 :a "foo"})))
+    (t/is (= "|foo       |" (project1 '(format "|%*s|" w a) {:w -10 :a "foo"})))
+    (t/is (= "|foo       |" (project1 '(format "|%-*s|" w a) {:w 10 :a "foo"})))
+    (t/is (= "|foo       |" (project1 '(format "|%-*s|" w a) {:w -10 :a "foo"}))))
+
+  (t/testing "position specifiers"
+    (t/is (= "Testing three, two, one" (project1 '(format "Testing %3$s, %2$s, %1$s" a b c) {:a "one" :b "two" :c "three"}))))
+
+  (t/testing "positional width from argument (*n$)"
+    (t/is (= "|       bar|" (project1 '(format "|%*2$s|" a w b) {:a "foo" :w 10 :b "bar"})))
+    (t/is (= "|       foo|" (project1 '(format "|%1$*2$s|" a w b) {:a "foo" :w 10 :b "bar"}))))
+
+  (t/testing "mixed positional and sequential"
+    (t/is (= "Testing three, two, three" (project1 '(format "Testing %3$s, %2$s, %s" a b c) {:a "one" :b "two" :c "three"}))))
+
+  (t/testing "null handling"
+    (t/is (= "value: " (project1 '(format "value: %s" a) {:a nil})))
+    (t/is (= "value: NULL" (project1 '(format "value: %L" a) {:a nil}))))
+
+  (t/testing "identifier null throws"
+    (t/is (thrown-with-msg? Exception #"null values cannot be formatted as an SQL identifier"
+                            (project1 '(format "%I" a) {:a nil})))))

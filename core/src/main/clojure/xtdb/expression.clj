@@ -715,7 +715,7 @@
                                (reverse emitted-args))]
                    (build-args-then-call [] [])))}))
 
-(declare codegen-concat)
+(declare codegen-concat codegen-format)
 
 (defmethod codegen-expr :call [{:keys [f args] :as expr} opts]
   (let [emitted-args (for [arg args]
@@ -725,6 +725,7 @@
           :and (codegen-and emitted-args)
           :or (codegen-or emitted-args)
           :concat (codegen-concat expr)
+          :format (codegen-format expr)
           (codegen-call* expr))
 
         (update :children (fnil into []) emitted-args)
@@ -1382,6 +1383,147 @@
   (if (instance? ByteBuffer s-or-buf)
     s-or-buf
     (ByteBuffer/wrap (.getBytes ^String s-or-buf StandardCharsets/UTF_8))))
+
+(defn- pg-quote-ident
+  "Quotes an identifier for safe use in SQL (equivalent to quote_ident).
+   Throws if value is null."
+  ^String [^String s]
+  (when (nil? s)
+    (throw (err/runtime-err :xtdb.expression/format-null-identifier
+                            {::err/message "null values cannot be formatted as an SQL identifier"})))
+  (let [needs-quoting? (or (.isEmpty s)
+                           (not (Character/isLetter (.charAt s 0)))
+                           (some #(and (not (Character/isLetterOrDigit ^char %))
+                                       (not= \_ ^char %)) s)
+                           (not= s (.toLowerCase s)))]
+    (if needs-quoting?
+      (str "\"" (.replace s "\"" "\"\"") "\"")
+      s)))
+
+(defn- pg-quote-literal
+  "Quotes a value as an SQL literal (equivalent to quote_nullable).
+   NULL values are returned as the string 'NULL' without quotes."
+  ^String [s]
+  (if (nil? s)
+    "NULL"
+    (let [^String s (if (string? s) s (str s))]
+      (str "'" (.replace s "'" "''") "'"))))
+
+(def ^:private ^Pattern format-specifier-pattern
+  #"%(?:(\d+)\$)?(-)?(?:(\d+)|\*(?:(\d+)\$)?)?([sIL%])")
+
+(defn pg-format
+  "PostgreSQL-compatible format function.
+   Format specifiers: %[position][flags][width]type
+   - position: n$ where n is 1-based argument index
+   - flags: - for left-justify
+   - width: minimum characters (number, *, or *n$)
+   - type: s (string), I (identifier), L (literal), % (literal %)"
+  ^String [^String format-str args]
+  (let [args (vec args)
+        arg-count (count args)
+        sb (StringBuilder.)
+        matcher (.matcher format-specifier-pattern format-str)
+        !last-consumed-idx (atom -1)]
+    (loop [last-end 0]
+      (if (.find matcher)
+        (let [start (.start matcher)
+              end (.end matcher)]
+          (.append sb (.substring format-str last-end start))
+          (let [position-str (.group matcher 1)
+                left-justify? (= "-" (.group matcher 2))
+                width-str (.group matcher 3)
+                width-position-str (.group matcher 4)
+                type-char (.group matcher 5)]
+            (if (= "%" type-char)
+              (.append sb "%")
+              (let [has-asterisk-width? (and (nil? width-str)
+                                             (nil? width-position-str)
+                                             (let [spec-content (.substring format-str start end)
+                                                   after-pos (if position-str (+ 2 (count position-str)) 1)
+                                                   after-flag (if left-justify? (inc after-pos) after-pos)]
+                                               (and (< after-flag (count spec-content))
+                                                    (= \* (.charAt spec-content after-flag)))))
+                    width (cond
+                            width-str
+                            (Long/parseLong width-str)
+
+                            width-position-str
+                            (let [w-idx (dec (Long/parseLong width-position-str))]
+                              (when (or (neg? w-idx) (>= w-idx arg-count))
+                                (throw (err/runtime-err :xtdb.expression/format-arg-index
+                                                        {::err/message (clojure.core/format "no argument at position %d" (inc w-idx))})))
+                              (reset! !last-consumed-idx w-idx)
+                              (long (nth args w-idx)))
+
+                            has-asterisk-width?
+                            (let [w-idx (inc ^long @!last-consumed-idx)]
+                              (when (>= w-idx arg-count)
+                                (throw (err/runtime-err :xtdb.expression/format-arg-index
+                                                        {::err/message (clojure.core/format "no argument at position %d" (inc w-idx))})))
+                              (reset! !last-consumed-idx w-idx)
+                              (long (nth args w-idx)))
+
+                            :else nil)
+
+                    effective-left-justify? (or left-justify? (and width (neg? ^long width)))
+                    effective-width (when width (Math/abs ^long width))
+
+                    arg-idx (if position-str
+                              (dec (Long/parseLong position-str))
+                              (inc ^long @!last-consumed-idx))
+                    _ (when (or (neg? arg-idx) (>= arg-idx arg-count))
+                        (throw (err/runtime-err :xtdb.expression/format-arg-index
+                                                {::err/message (clojure.core/format "no argument at position %d" (inc arg-idx))})))
+                    _ (reset! !last-consumed-idx arg-idx)
+                    arg-val (nth args arg-idx)
+                    formatted (case type-char
+                                "s" (if (nil? arg-val) "" (resolve-string arg-val))
+                                "I" (pg-quote-ident (when arg-val (resolve-string arg-val)))
+                                "L" (pg-quote-literal (when arg-val (resolve-string arg-val))))
+                    padded (if (and effective-width (> ^long effective-width (count formatted)))
+                             (let [padding (apply str (repeat (- ^long effective-width (count formatted)) \space))]
+                               (if effective-left-justify?
+                                 (str formatted padding)
+                                 (str padding formatted)))
+                             formatted)]
+                (.append sb padded))))
+          (recur end))
+        (do
+          (.append sb (.substring format-str last-end))
+          (.toString sb))))))
+
+(defn- codegen-format
+  "Codegen for PostgreSQL FORMAT function - variadic with format string + args"
+  [{:keys [emitted-args] :as expr}]
+  (when (< (count emitted-args) 1)
+    (throw (err/illegal-arg :xtdb.expression/arity-error
+                            {::err/message "Arity error, format requires at least one argument (the format string)"
+                             :expr (dissoc expr :emitted-args :arg-types)})))
+  (let [[fmt-emitted & arg-emitted] emitted-args
+        fmt-type (:return-type fmt-emitted)
+        _ (when-not (or (= :utf8 fmt-type) (= :null fmt-type)
+                        (and (vector? fmt-type) (= :union (first fmt-type))
+                             (some #{:utf8} (second fmt-type))))
+            (throw (err/illegal-arg :xtdb.expression/type-error
+                                    {::err/message "First argument to `format` must be a string"
+                                     :type fmt-type})))]
+    {:return-type :utf8
+     :continue
+     (fn continue-format [handle-emitted-expr]
+       (let [build-args-then-call
+             (reduce (fn step [build-next-arg {continue-this-arg :continue}]
+                       (fn continue-building-args [built-args]
+                         (continue-this-arg (fn [_arg-type emitted-arg]
+                                              (build-next-arg (conj built-args emitted-arg))))))
+                     (fn call-with-built-args [built-args]
+                       (let [[fmt-code & arg-codes] built-args]
+                         (handle-emitted-expr :utf8
+                                              `(resolve-utf8-buf
+                                                (pg-format (resolve-string ~fmt-code)
+                                                           [~@arg-codes])))))
+                     (reverse emitted-args))]
+         (build-args-then-call [])))}))
 
 ;; concat is not a simple mono-call, as it permits a variable number of arguments so we can avoid intermediate alloc
 (defn- codegen-concat [{:keys [emitted-args] :as expr}]
