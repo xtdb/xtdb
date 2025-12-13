@@ -1138,6 +1138,9 @@
 (def-sql-fns [str] 1 Long/MAX_VALUE)
 (def-sql-fns [namespace local_name] 1 1)
 
+;; system info
+(def-sql-fns [col_description] 2 2)
+
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor
   (visitSearchCondition [this ctx] (list* 'and (mapv (partial accept-visitor this) (.expr ctx))))

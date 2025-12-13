@@ -628,6 +628,11 @@
   (t/is (= [{:cat "xtdb"}]
            (xt/q tu/*node* "SELECT CURRENT_CATALOG() cat"))))
 
+(t/deftest test-col-description
+  (t/testing "col_description returns NULL (stub - XTDB doesn't support comments yet)"
+    (t/is (= [{}]
+             (xt/q tu/*node* "SELECT COL_DESCRIPTION(12345, 1) AS descr")))))
+
 (t/deftest test-in-subquery
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1 :x 1 :foo "Hello"}]
                            [:put-docs :docs {:xt/id 2 :x 2 :y 1}]])

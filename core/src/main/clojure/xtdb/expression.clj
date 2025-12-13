@@ -1349,6 +1349,9 @@
    :->call-code (fn [[setting-name]]
                   `(current-setting (resolve-string ~setting-name)))})
 
+(defmethod codegen-call [:col_description :int :int] [_]
+  {:return-type :null, :->call-code (constantly nil)})
+
 (defn sleep [^long duration unit]
   (Thread/sleep (long (* duration (quot (types/ts-units-per-second unit) 1000)))))
 
