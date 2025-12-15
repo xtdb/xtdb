@@ -293,8 +293,21 @@
 (defmethod codegen-cast [:uuid :utf8] [_]
   {:return-type :utf8, :->call-code #(do `(resolve-utf8-buf (str (util/byte-buffer->uuid (resolve-buf ~@%)))))})
 
+(defmethod codegen-cast [:any :utf8] [_]
+  {:return-type :utf8
+   :->call-code (fn [[code]]
+                  `(str->buf (pr-str (resolve-value ~code))))})
+
+(defmethod codegen-cast [:utf8 :utf8] [_]
+  {:return-type :utf8
+   :->call-code (fn [[code]] code)})
+
 (defmethod codegen-cast [:utf8 :varbinary] [_]
   {:return-type :varbinary , :->call-code #(do `(ByteBuffer/wrap (Hex/decodeHex (resolve-string ~@%))))})
+
+(defmethod codegen-cast [:varbinary :utf8] [_]
+  {:return-type :utf8
+   :->call-code #(do `(str->buf (str "\\x" (Hex/encodeHexString (resolve-bytes ~@%)))))})
 
 (defn resolve-string ^String [x]
   (cond
@@ -346,7 +359,7 @@
 (def ^:private col-type->rw-fn
   '{:bool Boolean, :i8 Byte, :i16 Short, :i32 Int, :i64 Long, :f32 Float, :f64 Double,
     :time-local Long, :timestamp-tz Long, :timestamp-local Long, :duration Long, :tstz-range Object
-    :utf8 Bytes, :varbinary Bytes, :keyword Bytes, :uuid Bytes, :uri Bytes
+    :utf8 Bytes, :varbinary Bytes, :keyword Bytes, :uuid Bytes
 
     :list Object, :set Object, :struct Object :transit Object})
 
@@ -358,7 +371,7 @@
 
 (doseq [k [:bool :i8 :i16 :i32 :i64 :f32 :f64
            :timestamp-tz :timestamp-local :time-local :duration :tstz-range
-           :utf8 :varbinary :uuid :uri :keyword :transit]
+           :utf8 :varbinary :uuid :keyword :transit]
         :let [rw-fn (col-type->rw-fn k)]]
   (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" rw-fn)) ~@args))
   (defmethod write-value-code k [_ & args] `(~(symbol (str ".write" rw-fn)) ~@args)))
@@ -1571,6 +1584,44 @@
 
 (defn str->buf ^ByteBuffer [^String s]
   (-> (.getBytes s StandardCharsets/UTF_8) (ByteBuffer/wrap)))
+
+(defn resolve-value
+  "Recursively resolves ValueReader/ValueBox/VectorReader objects and ByteBuffers to Clojure values.
+   Used by CAST any_type AS TEXT to convert complex Arrow types to printable Clojure values."
+  [v]
+  (cond
+    (instance? ListValueReader v)
+    (let [^ListValueReader lvr v]
+      (mapv #(resolve-value (.nth lvr %)) (range (.size lvr))))
+
+    (instance? VectorReader v)
+    (resolve-value (.getObject ^VectorReader v 0))
+
+    (instance? ValueBox v)
+    (let [^ValueBox vb v
+          leg (.getLeg vb)]
+      (case leg
+        nil nil
+        "null" nil
+        "i8" (.readByte vb)
+        "i16" (.readShort vb)
+        "i32" (.readInt vb)
+        "i64" (.readLong vb)
+        "f32" (.readFloat vb)
+        "f64" (.readDouble vb)
+        "bool" (.readBoolean vb)
+        "utf8" (buf->str (.readBytes vb))
+        (resolve-value (.readObject vb))))
+
+    (instance? ValueReader v)
+    (resolve-value (.readObject ^ValueReader v))
+
+    (instance? ByteBuffer v) (buf->str v)
+    (instance? Map v) (into {} (map (fn [[k val]] [k (resolve-value val)])) v)
+    (map? v) (into {} (map (fn [[k val]] [k (resolve-value val)])) v)
+    (sequential? v) (mapv resolve-value v)
+    (set? v) (into #{} (map resolve-value) v)
+    :else v))
 
 (doseq [[col-type parse-sym] [[:i8 `Byte/parseByte]
                               [:i16 `Short/parseShort]
