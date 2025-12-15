@@ -330,7 +330,7 @@
     (let [agg-factory (group-by/->aggregate-factory {:f :array-agg, :from-name 'k, :from-field #xt/field {"k" :i64}
                                                      :to-name 'vs, :zero-row? true})]
       (util/with-open [agg-spec (.build agg-factory tu/*allocator*)]
-        (t/is (= [:union #{:null [:list :i64]}] (types/field->col-type (.getField agg-factory))))
+        (t/is (= #xt/type [:? :list :i64] (types/->type (.getField agg-factory))))
 
         (.aggregate agg-spec (vr/rel-reader [k0]) gm0)
         (.aggregate agg-spec (vr/rel-reader [k1]) gm1)

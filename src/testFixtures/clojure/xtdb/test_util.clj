@@ -366,7 +366,7 @@
   ([node query opts]
    (let [^PreparedQuery prepared-q (xtp/prepare-sql node query (merge {:default-db "xtdb"} opts))]
      {:res (xt/q node query opts)
-      :res-type (mapv (juxt #(.getName ^Field %) types/field->col-type) (.getColumnFields prepared-q []))})))
+      :res-type (mapv (juxt #(.getName ^Field %) types/->type) (.getColumnFields prepared-q []))})))
 
 (defn with-container [^GenericContainer c, f]
   (if (.getContainerId c)
