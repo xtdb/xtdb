@@ -67,7 +67,7 @@
   (-> (fn [{:keys [to-type val-expr step-expr]} input-opts]
         (let [group-mapping-sym (gensym 'group-mapping)
 
-              return-type [:union (conj #{:null} to-type)]
+              return-col-type [:union (conj #{:null} to-type)]
 
               acc-expr {:op :variable, :variable acc-sym, :idx group-idx-sym
                         :extract-vec-from-rel? false}
@@ -79,10 +79,10 @@
                             :else acc-expr}
                            (expr/prepare-expr))
 
-              ;; ignore return-type of the codegen because it may be more specific than the acc type
+              ;; ignore return-col-type of the codegen because it may be more specific than the acc type
               {:keys [continue] :as emitted-expr} (expr/codegen-expr agg-expr input-opts)]
 
-          {:return-type return-type
+          {:return-col-type return-col-type
            :eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag Vector))
                                ~(-> expr/rel-sym (expr/with-tag RelationReader))
                                ~(-> group-mapping-sym (expr/with-tag VectorReader))]

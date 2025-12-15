@@ -163,7 +163,7 @@
 
 (defmethod expr/codegen-expr :test-bloom [{:keys [col bloom-hash-sym]} _opts]
   (let [bloom-vec-sym (gensym "bloom-vec")]
-    {:return-type :bool
+    {:return-col-type :bool
      :batch-bindings [[bloom-vec-sym `(some-> (.vectorForOrNull ~col-rdr-sym "bytes")
                                               (.vectorForOrNull "bloom"))]]
      :continue (fn [cont]
@@ -180,7 +180,7 @@
 
 (defmethod expr/codegen-expr :test-presence [{:keys [col value-type]} _opts]
   (let [presence-vec (gensym 'presence)]
-    {:return-type :bool
+    {:return-col-type :bool
      :batch-bindings [[presence-vec `(.vectorForOrNull ~col-rdr-sym ~(types/arrow-type->leg value-type))]]
      :continue (fn [cont]
                  (cont :bool
@@ -193,7 +193,7 @@
 
 (defmethod expr/codegen-expr :test-not-null [{:keys [col]} _opts]
   (let [count-vec (gensym 'count)]
-    {:return-type :bool
+    {:return-col-type :bool
      :batch-bindings [[count-vec `(.vectorForOrNull ~col-rdr-sym "count")]]
      :continue (fn [cont]
                  (cont :bool
@@ -205,35 +205,35 @@
                                 (> (.getLong ~count-vec ~expr/idx-sym) 0))))))}))
 
 (defmethod expr/codegen-call [:_meta_double :num] [_expr]
-  {:return-type :f64, :->call-code #(do `(double ~@%))})
+  {:return-col-type :f64, :->call-code #(do `(double ~@%))})
 
 (defmethod expr/codegen-call [:_meta_double :timestamp-tz] [{[[_ts-tz ts-unit _zone]] :arg-types}]
-  {:return-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+  {:return-col-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
 
 (defmethod expr/codegen-call [:_meta_double :timestamp-local] [{[[_ts-local ts-unit]] :arg-types}]
-  {:return-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+  {:return-col-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
 
 (defmethod expr/codegen-call [:_meta_double :date] [_]
-  {:return-type :f64, :->call-code #(do `(* ~@% 86400.0))})
+  {:return-col-type :f64, :->call-code #(do `(* ~@% 86400.0))})
 
 (defmethod expr/codegen-call [:_meta_double :time-local] [{[[_time-local ts-unit]] :arg-types}]
-  {:return-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+  {:return-col-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
 
 (defmethod expr/codegen-call [:_meta_double :duration] [{[[_duration ts-unit]] :arg-types}]
-  {:return-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+  {:return-col-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
 
 (defmethod expr/codegen-call [:_meta_double :any] [_]
-  {:return-type :null, :->call-code (fn [& _args] nil)})
+  {:return-col-type :null, :->call-code (fn [& _args] nil)})
 
 (defmethod expr/codegen-expr :test-minmax [{:keys [f min-or-max col val-sym dbl-sym]} opts]
   (case (get-in opts [:local-types dbl-sym])
-    :null {:return-type :bool, :continue (fn [cont] (cont :bool true))}
+    :null {:return-col-type :bool, :continue (fn [cont] (cont :bool true))}
 
     :f64 (let [col-name (str col)
                col-sym (gensym 'meta_col)
                val-type (get-in opts [:local-types val-sym])
                flavour-col (MetadataFlavour/getMetaColName (MetadataFlavour/getMetadataFlavour (st/->arrow-type val-type)))]
-           {:return-type :bool,
+           {:return-col-type :bool,
             :batch-bindings [[(-> col-sym (expr/with-tag VectorReader))
                               `(some-> (.vectorForOrNull ~col-rdr-sym ~flavour-col)
                                        (.vectorForOrNull ~(name min-or-max)))]]
