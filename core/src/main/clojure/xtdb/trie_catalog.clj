@@ -243,7 +243,7 @@
 
 (defn remove-garbage [table-cat garbage-trie-keys]
   (let [garbage-by-path (-> (->> (map trie/parse-trie-key garbage-trie-keys)
-                                 (group-by (juxt :level :recency :part)))
+                                 (group-by (fn [{:keys [level recency part]}] [level recency (vec part)])))
                             (update-vals #(map :trie-key %)))]
 
     (update table-cat :tries

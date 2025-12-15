@@ -710,3 +710,41 @@
               :tries [{:trie-key "l02-r20200101-b11f" :block-idx 31}]}
              {:level 3 :recency #xt/date "2020-01-01" :part [0]
               :tries [{:trie-key "l03-r20200101-p0-b07" :block-idx 7}]}]))))
+
+(t/deftest test-delete-garbage-l1-l2-with-live-l3
+  (let [cat (TrieCatalog. nil nil (ConcurrentHashMap.) 20)
+        table #xt/table foo
+        add-tries (fn [tries inst]
+                    (.addTries cat table
+                               (map #(apply trie/->trie-details table %) tries)
+                               inst))]
+
+    ;; Setup: Create L0s, L1s, L2s, then L3s that supersede L2 partition 0
+    (add-tries [["l00-rc-b00" 1] ["l00-rc-b01" 1]] #xt/instant "2000-01-01T00:00:00Z")
+    (add-tries [["l01-rc-b00" 2] ["l01-rc-b01" 2]] #xt/instant "2001-01-01T00:00:00Z")
+    (add-tries [["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4]
+                ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01" 4]]
+               #xt/instant "2002-01-01T00:00:00Z")
+    (add-tries [["l03-rc-p00-b01" 8] ["l03-rc-p01-b01" 8]
+                ["l03-rc-p02-b01" 8] ["l03-rc-p03-b01" 8]]
+               #xt/instant "2003-01-01T00:00:00Z")
+
+    (let [state (cat/trie-state cat table)
+          trie-keys #(into (sorted-set) (map :trie-key) %)]
+
+      ;; L3s supersede L2-p0, L2 supersedes L1, L1 supersedes L0
+      (t/is (= #{"l03-rc-p00-b01" "l03-rc-p01-b01" "l03-rc-p02-b01" "l03-rc-p03-b01"
+                 "l02-rc-p1-b01" "l02-rc-p2-b01" "l02-rc-p3-b01"}
+               (trie-keys (cat/current-tries state))))
+
+      ;; Delete garbage tries
+      (let [garbage (trie-keys (cat/garbage-tries state #xt/instant "2004-01-01T00:00:00Z"))]
+        (t/is (= #{"l01-rc-b00" "l01-rc-b01" "l02-rc-p0-b01"} garbage))
+        (.deleteTries cat table garbage))
+
+      ;; Verify remaining tries
+      (t/is (= #{"l00-rc-b00" "l00-rc-b01"
+                 "l02-rc-p1-b01" "l02-rc-p2-b01" "l02-rc-p3-b01"
+                 "l03-rc-p00-b01" "l03-rc-p01-b01" "l03-rc-p02-b01" "l03-rc-p03-b01"}
+               (trie-keys (cat/all-tries (cat/trie-state cat table))))
+            "garbage tries are removed"))))
