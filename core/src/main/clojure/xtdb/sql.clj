@@ -1041,6 +1041,7 @@
 
   (visitRegClassType [_ _] {:cast-type :regclass, :cast-opts {}})
   (visitRegProcType [_ _] {:cast-type :regproc, :cast-opts {}})
+  (visitOidType [_ _] {:cast-type :i32})
 
   (visitCharacterStringType [_ _] {:cast-type :utf8})
 
