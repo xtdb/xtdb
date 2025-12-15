@@ -65,7 +65,9 @@
                      (= 'xtdb/postgres-server-version form) {:op :literal, :literal (str "PostgreSQL " postgres-server-version)}
                      (= 'xtdb/xtdb-server-version form) {:op :literal, :literal (str "XTDB @ " (xtdb-server-version))}
                      (contains? locals form) {:op :local, :local form}
-                     (contains? param-fields form) {:op :param, :param form, :param-col-type (types/field->col-type (get param-fields form))}
+                     (contains? param-fields form) {:op :param, :param form, 
+                                                    :param-type (types/->type (get param-fields form))
+                                                    :param-col-type (types/field->col-type (get param-fields form))}
                      (contains? vec-fields form) {:op :variable, :variable form}
                      :else (throw (err/illegal-arg :xtdb.expression/unknown-symbol
                                                    {::err/message (format "Unknown symbol: '%s'" form)

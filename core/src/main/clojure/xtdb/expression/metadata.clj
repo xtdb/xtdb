@@ -8,7 +8,7 @@
   (:import java.util.function.IntPredicate
            java.util.List
            org.apache.arrow.memory.BufferAllocator
-           (xtdb.arrow RelationReader Vector VectorReader)
+           (xtdb.arrow RelationReader Vector VectorReader VectorType)
            (xtdb.arrow.metadata MetadataFlavour MetadataFlavour$Bytes MetadataFlavour$Presence)
            (xtdb.bloom BloomUtils)
            (xtdb.metadata MetadataPredicate PageMetadata)))
@@ -55,34 +55,31 @@
 
 (defn- bloom-expr [{col :variable} value-expr]
   (-> {:op :call, :f :or
-       :args (for [value-type (-> (case (:op value-expr)
-                                    ;; temporary, while the EE needs col-types
-                                    :literal (types/field->col-type (types/->field (types/value->vec-type (:literal value-expr))))
-                                    :param (:param-col-type value-expr))
-                                  types/flatten-union-types)]
-               (if (= MetadataFlavour$Bytes (MetadataFlavour/getMetadataFlavour (st/->arrow-type value-type)))
-                 {:op :test-bloom,
-                  :col col,
-                  :value-expr value-expr
-                  :bloom-hash-sym (gensym 'bloom-hashes)}
-                 {:op :literal, :literal true}))}
+       :args (let [^VectorType value-type (case (:op value-expr)
+                                            :literal (types/value->vec-type (:literal value-expr))
+                                            :param (:param-type value-expr))]
+               (for [^VectorType leg-type (some-> value-type .getUnionLegs)]
+                 (if (= MetadataFlavour$Bytes (MetadataFlavour/getMetadataFlavour (.getArrowType leg-type)))
+                   {:op :test-bloom,
+                    :col col,
+                    :value-expr value-expr
+                    :bloom-hash-sym (gensym 'bloom-hashes)}
+                   {:op :literal, :literal true})))}
 
       simplify-and-or-expr))
 
 (defn- presence-expr [{col :variable} value-expr]
   (-> {:op :call, :f :or
-       :args (for [col-type (-> (case (:op value-expr)
-                                  ;; temporary, while the EE needs col-types
-                                  :literal (types/field->col-type (types/->field (types/value->vec-type (:literal value-expr))))
-                                  :param (:param-col-type value-expr))
-                                types/flatten-union-types)
-                   :let [value-type (st/->arrow-type col-type)]]
-               (if (= MetadataFlavour$Presence (MetadataFlavour/getMetadataFlavour value-type))
-                 {:op :test-presence,
-                  :col col,
-                  :value-type value-type}
+       :args (let [^VectorType value-type (case (:op value-expr)
+                                            :literal (types/value->vec-type (:literal value-expr))
+                                            :param (:param-type value-expr))]
+               (for [^VectorType leg-type (some-> value-type .getUnionLegs)]
+                 (if (= MetadataFlavour$Presence (MetadataFlavour/getMetadataFlavour (.getArrowType leg-type)))
+                   {:op :test-presence,
+                    :col col,
+                    :value-type leg-type}
 
-                 {:op :literal, :literal true}))}
+                   {:op :literal, :literal true})))}
       simplify-and-or-expr))
 
 (declare meta-expr)
@@ -178,10 +175,10 @@
                                  (.isNull ~bloom-vec-sym ~expr/idx-sym)
                                  (BloomUtils/bloomContains ~bloom-vec-sym ~expr/idx-sym ~bloom-hash-sym)))))))}))
 
-(defmethod expr/codegen-expr :test-presence [{:keys [col value-type]} _opts]
+(defmethod expr/codegen-expr :test-presence [{:keys [col ^VectorType value-type]} _opts]
   (let [presence-vec (gensym 'presence)]
     {:return-col-type :bool
-     :batch-bindings [[presence-vec `(.vectorForOrNull ~col-rdr-sym ~(types/arrow-type->leg value-type))]]
+     :batch-bindings [[presence-vec `(.vectorForOrNull ~col-rdr-sym ~(types/arrow-type->leg (.getArrowType value-type)))]]
      :continue (fn [cont]
                  (cont :bool
                        `(boolean
@@ -251,9 +248,8 @@
 
 (def ^:private compile-meta-expr
   (-> (fn [expr opts]
-        (let [{:keys [param-fields vec-fields]} opts
-              opts {:param-types (update-vals param-fields types/->type)
-                    :col-types (update-vals vec-fields types/field->col-type)}
+        (let [{:keys [param-fields]} opts
+              opts {:param-types (update-vals param-fields types/->type)}
               expr (or (-> expr (expr/prepare-expr) (meta-expr opts) (expr/prepare-expr))
                        (expr/prepare-expr {:op :literal, :literal true}))
               {:keys [continue] :as emitted-expr} (expr/codegen-expr expr opts)]
