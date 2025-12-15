@@ -495,10 +495,10 @@
 
 (defmethod codegen-expr :variable [{:keys [variable rel idx extract-vec-from-rel?],
                                     :or {rel rel-sym, idx idx-sym, extract-vec-from-rel? true}}
-                                   {:keys [var->col-type extract-vecs-from-rel?]
+                                   {:keys [var-types extract-vecs-from-rel?]
                                     :or {extract-vecs-from-rel? true}}]
   ;; NOTE we now get the widest var-type in the expr itself, but don't use it here (yet? at all?)
-  (let [col-type (or (get var->col-type variable)
+  (let [col-type (or (some-> (get var-types variable) types/vec-type->col-type)
                      (throw (AssertionError. (str "unknown variable: " variable))))
         var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))]
 
@@ -514,7 +514,7 @@
 
 (defmethod codegen-expr :param [{:keys [param]} {:keys [param-types]}]
   (codegen-expr {:op :variable, :variable param, :rel args-sym, :idx 0}
-                {:var->col-type {param (types/vec-type->col-type (get param-types param))}}))
+                {:var-types {param (get param-types param)}}))
 
 (defmethod codegen-expr :if [{:keys [pred then else]} opts]
   (let [{p-cont :continue, :as emitted-p} (codegen-expr {:op :call, :f :boolean, :args [pred]} opts)
@@ -2041,20 +2041,20 @@
 (defn ->expression-projection-spec ^xtdb.operator.ProjectionSpec [col-name expr {:keys [vec-fields param-fields]}]
   (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
         widest-out-type (-> (emit-projection expr {:param-types (update-vals param-fields types/->type)
-                                                   :var->col-type (update-vals vec-fields types/field->col-type)})
+                                                   :var-types (update-vals vec-fields types/->type)})
                             :return-col-type)]
 
     (reify ProjectionSpec
       (getField [_] (types/col-type->field col-name widest-out-type))
 
       (project [_ allocator in-rel schema args]
-        (let [var->col-type (->> in-rel
-                                 (into {} (map (fn [^VectorReader iv]
-                                                 [(symbol (.getName iv))
-                                                  (types/field->col-type (.getField iv))]))))
+        (let [var-types (->> in-rel
+                             (into {} (map (fn [^VectorReader iv]
+                                             [(symbol (.getName iv))
+                                              (types/->type (.getField iv))]))))
 
               {:keys [return-col-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
-                                                                              :var->col-type var->col-type})]
+                                                                              :var-types var-types})]
           (util/with-close-on-catch [out-vec (Vector/open allocator (types/col-type->field col-name return-col-type))]
             (try
               (@!projection-fn in-rel schema args out-vec)

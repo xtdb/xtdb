@@ -106,10 +106,10 @@
           (reify
             AggregateSpec
             (aggregate [_ in-rel group-mapping]
-              (let [input-opts {:var->col-type (->> in-rel
-                                                    (into {acc-sym (types/field->col-type to-field)}
-                                                          (map (juxt #(symbol (.getName ^VectorReader %))
-                                                                     #(-> (.getField ^VectorReader %) types/field->col-type)))))}
+              (let [input-opts {:var-types (->> in-rel
+                                                (into {acc-sym (types/->type to-field)}
+                                                      (map (juxt #(symbol (.getName ^VectorReader %))
+                                                                 #(types/->type (.getField ^VectorReader %))))))}
                     {:keys [eval-agg]} (emit-agg agg-opts input-opts)]
                 (eval-agg out-vec in-rel group-mapping)))
 

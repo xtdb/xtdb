@@ -19,7 +19,7 @@
 (def build-comparator
   (-> (fn [expr input-opts]
         (let [{:keys [vec-fields param-fields]} input-opts
-              input-opts {:var->col-type (update-vals vec-fields types/field->col-type)
+              input-opts {:var-types (update-vals vec-fields types/->type)
                           :param-types (update-vals param-fields types/->type)}
                           
               {:keys [continue], :as emitted-expr}
