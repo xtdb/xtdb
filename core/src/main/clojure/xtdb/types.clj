@@ -58,6 +58,9 @@
 (defn ->type ^xtdb.arrow.VectorType [type-spec]
   (st/->type type-spec))
 
+(defn ->nullable-type ^xtdb.arrow.VectorType [type-spec]
+  (VectorType/maybe (->type type-spec)))
+
 (defn ->field
   (^org.apache.arrow.vector.types.pojo.Field [type-spec]
    (VectorType/field (->type type-spec)))
@@ -263,6 +266,9 @@
   (let [inner-type (apply arrow-type->col-type (.getType field) (or (.getChildren field) []))]
     (cond-> inner-type
       (.isNullable field) col-type->nullable-col-type)))
+
+(defn vec-type->col-type [^VectorType vec-type]
+  (field->col-type (VectorType/field vec-type)))
 
 ;;; fixed size binary
 

@@ -65,7 +65,7 @@
     (expr/codegen-call (assoc expr :f :compare))))
 
 (def ^:private build-comparator
-  (-> (fn [left-col-type right-col-type null-ordering]
+  (-> (fn [left-type right-type null-ordering]
         (let [left-idx-sym (gensym 'left-idx)
               right-idx-sym (gensym 'right-idx)
               left-col-sym (gensym 'left_col)
@@ -79,7 +79,7 @@
                                   :args [{:op :variable, :variable left-col-sym, :idx left-idx-sym}
                                          {:op :variable, :variable right-col-sym, :idx right-idx-sym}]}
 
-                                 {:var->col-type {left-col-sym left-col-type, right-col-sym right-col-type}
+                                 {:var-types {left-col-sym left-type, right-col-sym right-type}
                                   :extract-vecs-from-rel? false})]
 
           (-> `(fn [~(-> left-col-sym (expr/with-tag VectorReader))
@@ -95,7 +95,7 @@
 (defn ->comparator ^java.util.function.IntBinaryOperator [^VectorReader left-col, ^VectorReader right-col, null-ordering]
   (let [left-field (.getField left-col)
         right-field (.getField right-col)
-        f (build-comparator (types/field->col-type left-field)
-                            (types/field->col-type right-field)
+        f (build-comparator (types/->type left-field)
+                            (types/->type right-field)
                             null-ordering)]
     (f left-col right-col)))

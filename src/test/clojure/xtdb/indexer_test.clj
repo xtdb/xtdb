@@ -21,7 +21,8 @@
             [xtdb.ts-devices :as ts]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.serde.types :as st])
   (:import java.nio.ByteBuffer
            (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
@@ -429,8 +430,8 @@
                     (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/data/l00.+?\.arrow" %) objs))))
                     (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/l00.+?\.arrow" %) objs))))))
 
-                (t/is (= :utf8
-                         (types/field->col-type (.getField tc #xt/table device_readings "_id"))))
+                (t/is (= #xt/type :utf8
+                         (types/->type (.getField tc #xt/table device_readings "_id"))))
 
                 (let [{second-half-tx-id :tx-id} (reduce
                                                   (fn [_ tx-ops]
@@ -453,8 +454,8 @@
                                 (-> (xtp/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))
                                 second-half-tx-id))
 
-                      (t/is (= :utf8
-                               (types/field->col-type (.getField tc #xt/table device_info "_id"))))
+                      (t/is (= #xt/type :utf8
+                               (types/->type (.getField tc #xt/table device_info "_id"))))
 
                       (xt-log/await-node node3 second-half-await-token (Duration/ofSeconds 15))
                       (t/is (= second-half-tx-id (-> (xtp/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))))
@@ -469,8 +470,8 @@
                         (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/l00-.+.arrow" %) objs))))
                         (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/l00-.+.arrow" %) objs)))))
 
-                      (t/is (= :utf8
-                               (types/field->col-type (.getField tc #xt/table device_info "_id")))))))))))))))
+                      (t/is (= #xt/type :utf8
+                               (types/->type (.getField tc #xt/table device_info "_id")))))))))))))))
 
 (t/deftest merges-column-fields-on-restart
   (let [node-dir (util/->path "target/merges-column-fields")
@@ -484,8 +485,8 @@
 
         (tu/flush-block! node1)
 
-        (t/is (= :utf8
-                 (types/field->col-type (.getField tc1 #xt/table xt_docs "v"))))
+        (t/is (= #xt/type :utf8
+                 (types/->type (.getField tc1 #xt/table xt_docs "v"))))
 
         (xt/execute-tx node1 [[:put-docs :xt_docs {:xt/id 1, :v :bar}]
                               [:put-docs :xt_docs {:xt/id 2, :v #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
@@ -493,15 +494,18 @@
 
         (tu/flush-block! node1)
 
-        (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
-                 (types/field->col-type (.getField tc1 #xt/table xt_docs "v"))))))
+        (t/is (= #xt/type [:union :utf8 :keyword :uuid :transit]
+                 (types/->type (.getField tc1 #xt/table xt_docs "v")))))
 
-    (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
-      (let [tc2 (.getTableCatalog (db/primary-db node2))]
-        (xt-log/sync-node node2 (Duration/ofMillis 200))
+      (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
+        (let [tc2 (.getTableCatalog (db/primary-db node2))]
+          (xt-log/sync-node node2 (Duration/ofMillis 200))
 
-        (t/is (= [:union #{:utf8 :transit :keyword :uuid}]
-                 (types/field->col-type (.getField tc2 #xt/table xt_docs "v"))))))))
+          ;; this one comes out with union with type-ids null vs union with type-ids [].
+          ;; very annoying.
+          ;; so we render the type to compare.
+          (t/is (= [:union :utf8 :keyword :uuid :transit]
+                   (st/render-type (types/->type (.getField tc2 #xt/table xt_docs "v"))))))))))
 
 (t/deftest test-await-fails-fast
   (let [e (UnsupportedOperationException. "oh no!")]

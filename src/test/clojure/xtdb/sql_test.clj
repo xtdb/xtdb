@@ -2867,12 +2867,12 @@ UNION ALL
               {:res (:v (first res))
                :res-types (second (first res-type))}))]
 
-    (t/is (= {:res 301.02M, :res-types [:decimal 5 2 128]} (q "SELECT 301.02::DECIMAL(5, 2) AS V")))
-    (t/is (= {:res 301.0M, :res-types [:decimal 5 1 128]} (q "SELECT 301.02::DECIMAL(5, 1) AS V")))
-    (t/is (= {:res 301.020M, :res-types [:decimal 6 3 128]} (q "SELECT 301.02::DECIMAL(6, 3) AS V")))
-    (t/is (= {:res 301M, :res-types [:decimal 5 0 128]} (q "SELECT 301.02::DECIMAL(5) AS V")))
-    (t/is (= {:res 301.020000000M, :res-types [:decimal 64 9 256]} (q "SELECT 301.02::DECIMAL AS V")))
-    (t/is (= {:res 301.020000000M, :res-types [:decimal 64 9 256]} (q "SELECT '301.02'::DECIMAL AS V")))
+    (t/is (= {:res 301.02M, :res-types #xt/type [:decimal 5 2 128]} (q "SELECT 301.02::DECIMAL(5, 2) AS V")))
+    (t/is (= {:res 301.0M, :res-types #xt/type [:decimal 5 1 128]} (q "SELECT 301.02::DECIMAL(5, 1) AS V")))
+    (t/is (= {:res 301.020M, :res-types #xt/type [:decimal 6 3 128]} (q "SELECT 301.02::DECIMAL(6, 3) AS V")))
+    (t/is (= {:res 301M, :res-types #xt/type [:decimal 5 0 128]} (q "SELECT 301.02::DECIMAL(5) AS V")))
+    (t/is (= {:res 301.020000000M, :res-types #xt/type [:decimal 64 9 256]} (q "SELECT 301.02::DECIMAL AS V")))
+    (t/is (= {:res 301.020000000M, :res-types #xt/type [:decimal 64 9 256]} (q "SELECT '301.02'::DECIMAL AS V")))
     (t/is (anomalous? [:incorrect nil] (q "SELECT '301.02'::DECIMAL(65) AS V"))))
 
   (t/testing "correct EE behaviour"
@@ -2882,7 +2882,7 @@ UNION ALL
           {:keys [res res-type]} (tu/q-sql tu/*node* "SELECT d + 1 AS v FROM docs")
           res (map :v res)]
 
-      (t/is (= [["v" [:union #{[:decimal 32 2 128] [:decimal 32 1 128]}]]]
+      (t/is (= [["v" #xt/type [:union [:decimal 32 2 128] [:decimal 32 1 128]]]]
                res-type))
 
       (doseq [[expected result] (map vector expected-res res)]
@@ -2893,8 +2893,8 @@ UNION ALL
           {:keys [res res-type]} (tu/q-sql tu/*node* "SELECT d + 1::decimal(64,1) AS v FROM docs")
           res (map :v res)]
 
-      (t/is (= [["v" [:union #{[:decimal 64 2 256] [:decimal 64 1 256]}]]]
-               res-type) )
+      (t/is (= [["v" #xt/type [:union [:decimal 64 2 256] [:decimal 64 1 256]]]]
+               res-type))
 
       (doseq [[expected result] (map vector expected-res res)]
         (t/is (compare-decimals expected result)

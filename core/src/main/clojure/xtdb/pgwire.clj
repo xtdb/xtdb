@@ -917,7 +917,7 @@
     (-> (xt/template [:table [{~(keyword variable) ?_0}]])
         (with-meta {:param-count 1}))))
 
-(defn- show-var-param-types [variable]
+(defn- show-var-param-col-types [variable]
   (case variable
     "latest_completed_txs" [[:list [:struct {'db_name :utf8
                                              'part :i32
@@ -958,15 +958,15 @@
 
         (let [param-oids (->> (concat param-oids (repeat 0))
                               (into [] (take (.getParamCount pq))))
-              param-types (case statement-type
+              param-col-types (case statement-type
                             (:query :execute) (map (comp :col-type pg-types/pg-types-by-oid) param-oids)
-                            :show-variable (show-var-param-types (:variable stmt)))
-              pg-cols (if (some nil? param-types)
+                            :show-variable (show-var-param-col-types (:variable stmt)))
+              pg-cols (if (some nil? param-col-types)
                         ;; if we're unsure on some of the col-types, return all of the output cols as the fallback type (#4455)
                         (for [col-name (map str (.getColumnNames pq))]
                           {:pg-type :default, :col-name col-name})
 
-                        (->> (.getColumnFields pq (->> param-types
+                        (->> (.getColumnFields pq (->> param-col-types
                                                        (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
                                                                       (map-indexed (fn [idx field]
                                                                                      (types/field-with-name field (str "?_" idx))))))))

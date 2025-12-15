@@ -55,7 +55,7 @@
     :as opts}]
   (let [param-types (-> param-fields
                         (update-keys str)
-                        (update-vals types/field->col-type))
+                        (update-vals types/->type))
         build-key-col-names (get opts :build-key-col-names key-col-names)
 
         schema (Schema. (-> build-fields

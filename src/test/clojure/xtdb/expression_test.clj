@@ -331,7 +331,7 @@
     (with-open [out-ivec (.project (expr/->expression-projection-spec "out" expr input-types)
                                    tu/*allocator* rel {} vw/empty-args)]
       {:res (.toList out-ivec #xt/key-fn :kebab-case-keyword)
-       :res-type (types/field->col-type (.getField out-ivec))})))
+       :res-type (types/->type (.getField out-ivec))})))
 
 (t/deftest test-nils
   (with-open [rel (tu/open-rel {:x [1 1 nil nil]
@@ -404,12 +404,10 @@
 
     (t/is (= nil (len nil)))))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec character-length-is-equiv-to-code-point-count-prop
   (tcp/for-all [^String s tcg/string]
     (= (.count (.codePoints s)) (project1 '(character-length a) {:a s}))))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec octet-length-is-equiv-to-byte-count-prop
   (tcp/for-all [^String s tcg/string]
     (= (alength (.getBytes s "utf-8")) (project1 '(octet-length a) {:a s}))))
@@ -458,7 +456,7 @@
                                 {:x {:xa (byte 42), :xb (byte 41)}}
                                 {:x {:xb (byte 41)}}
                                 {:x {:xa nil :xb nil}}])]
-    (t/is (= {:res [1 2 1 0], :res-type :i32}
+    (t/is (= {:res [1 2 1 0], :res-type #xt/type :i32}
              (run-projection rel '(length x))))))
 
 (t/deftest test-like
@@ -1228,7 +1226,7 @@
 (t/deftest can-return-string-multiple-times
   (with-open [rel (tu/open-rel {:x [1 2 3]})]
     (t/is (= {:res ["foo" "foo" "foo"]
-              :res-type :utf8}
+              :res-type #xt/type :utf8}
              (run-projection rel "foo")))))
 
 (t/deftest test-cond
@@ -1237,18 +1235,18 @@
               (run-projection rel expr)))]
 
     (t/is (= {:res ["big" "small" "tiny" "tiny"]
-              :res-type :utf8}
+              :res-type #xt/type :utf8}
              (run-test '(cond (> x 100) "big", (> x 10) "small", "tiny")
                        [500 50 5 nil])))
 
     (t/is (= {:res ["big" "small" nil nil]
-              :res-type [:union #{:null :utf8}]}
+              :res-type #xt/type [:? :utf8]}
              (run-test '(cond (> x 100) "big", (> x 10) "small")
                        [500 50 5 nil])))))
 
 (t/deftest test-let
   (t/is (= {:res [6 9 12 nil]
-            :res-type [:union #{:null :i64}]}
+            :res-type #xt/type [:? :i64]}
            (with-open [rel (tu/open-rel {:x [1 2 3 nil]})]
              (run-projection rel '(let [y (* x 2)
                                         y (+ y 3)]
@@ -1256,7 +1254,7 @@
 
 (t/deftest test-case
   (t/is (= {:res ["x=1" "x=2" "none of the above" "none of the above"]
-            :res-type :utf8}
+            :res-type #xt/type :utf8}
            (with-open [rel (tu/open-rel {:x [1 2 3 nil]})]
              (run-projection rel '(case (* x 2)
                                     2 "x=1"
@@ -1270,15 +1268,15 @@
               (run-projection rel expr)))]
 
     (t/is (= {:res ["x" "y" nil]
-              :res-type [:union #{:null :utf8}]}
+              :res-type #xt/type [:? :utf8]}
              (run-test '(coalesce x y))))
 
     (t/is (= {:res ["x" "lit" "lit"]
-              :res-type :utf8}
+              :res-type #xt/type :utf8}
              (run-test '(coalesce x "lit" y))))
 
     (t/is (= {:res ["x" "y" "default"]
-              :res-type :utf8}
+              :res-type #xt/type :utf8}
              (run-test '(coalesce x y "default"))))))
 
 (t/deftest test-nullif
@@ -1288,7 +1286,7 @@
               (run-projection rel expr)))]
 
     (t/is (= {:res ["x" nil nil "x"]
-              :res-type [:union #{:utf8 :null}]}
+              :res-type #xt/type [:? :utf8]}
              (run-test '(nullif x y))))))
 
 (t/deftest test-mixing-numeric-types
@@ -1297,37 +1295,37 @@
               (-> (run-projection rel (list f 'x 'y))
                   (update :res first))))]
 
-    (t/is (= {:res 6, :res-type :i32}
+    (t/is (= {:res 6, :res-type #xt/type :i32}
              (run-test '+ (int 4) (int 2))))
 
-    (t/is (= {:res 6, :res-type :i64}
+    (t/is (= {:res 6, :res-type #xt/type :i64}
              (run-test '+ (int 2) (long 4))))
 
-    (t/is (= {:res 6, :res-type :i16}
+    (t/is (= {:res 6, :res-type #xt/type :i16}
              (run-test '+ (short 2) (short 4))))
 
-    (t/is (= {:res 6.5, :res-type :f32}
+    (t/is (= {:res 6.5, :res-type #xt/type :f32}
              (run-test '+ (byte 2) (float 4.5))))
 
-    (t/is (= {:res 6.5, :res-type :f32}
+    (t/is (= {:res 6.5, :res-type #xt/type :f32}
              (run-test '+ (float 2) (float 4.5))))
 
-    (t/is (= {:res 6.5, :res-type :f64}
+    (t/is (= {:res 6.5, :res-type #xt/type :f64}
              (run-test '+ (float 2) (double 4.5))))
 
-    (t/is (= {:res 6.5, :res-type :f64}
+    (t/is (= {:res 6.5, :res-type #xt/type :f64}
              (run-test '+ (int 2) (double 4.5))))
 
-    (t/is (= {:res -2, :res-type :i32}
+    (t/is (= {:res -2, :res-type #xt/type :i32}
              (run-test '- (short 2) (int 4))))
 
-    (t/is (= {:res 8, :res-type :i16}
+    (t/is (= {:res 8, :res-type #xt/type :i16}
              (run-test '* (byte 2) (short 4))))
 
-    (t/is (= {:res 2, :res-type :i16}
+    (t/is (= {:res 2, :res-type #xt/type :i16}
              (run-test '/ (short 4) (byte 2))))
 
-    (t/is (= {:res 2.0, :res-type :f32}
+    (t/is (= {:res 2.0, :res-type #xt/type :f32}
              (run-test '/ (float 4) (int 2))))))
 
 (t/deftest test-decimal-arithmetic-and-coersion
@@ -1336,74 +1334,74 @@
               (-> (run-projection rel (list f 'x 'y))
                   (update :res first))))]
     ;; standard ops
-    (t/is (= {:res 2.0M, :res-type [:decimal 32 1 128]}
+    (t/is (= {:res 2.0M, :res-type #xt/type [:decimal 32 1 128]}
              (run-test '+ (bigdec 1.0) (bigdec 1.0))))
 
-    (t/is (= {:res 2.01M, :res-type [:decimal 32 2 128]}
+    (t/is (= {:res 2.01M, :res-type #xt/type [:decimal 32 2 128]}
              (run-test '+  (bigdec 1.01) (bigdec 1.0)))
           "differnt scales take the larger")
 
-    (t/is (= {:res 0.0M, :res-type [:decimal 32 1 128]}
+    (t/is (= {:res 0.0M, :res-type #xt/type [:decimal 32 1 128]}
              (run-test '- (bigdec 1.0) (bigdec 1.0))))
-    (t/is (= {:res 0.5M, :res-type [:decimal 32 6 128]}
+    (t/is (= {:res 0.5M, :res-type #xt/type [:decimal 32 6 128]}
              (run-test '/ (bigdec 1.0) (bigdec 2.0))))
-    (t/is (= {:res 2.00M, :res-type [:decimal 32 2 128]}
+    (t/is (= {:res 2.00M, :res-type #xt/type [:decimal 32 2 128]}
              (run-test '* (bigdec 1.0) (bigdec 2.0))))
-    (t/is (= {:res false, :res-type :bool}
+    (t/is (= {:res false, :res-type #xt/type :bool}
              (run-test '> (bigdec 1.0) (bigdec 2.0))))
 
     (t/is (= {:res 61954235709850086879078532699846656405640394575840079131297.39935M,
-              :res-type [:decimal 64 5 256]}
+              :res-type #xt/type [:decimal 64 5 256]}
              (run-test '+ (bigdec 1.0)
                        61954235709850086879078532699846656405640394575840079131296.39935M)))
 
     ;; LUB
-    (t/is (= {:res 2.0M, :res-type [:decimal 32 1 128]}
+    (t/is (= {:res 2.0M, :res-type #xt/type [:decimal 32 1 128]}
              (run-test '* (byte 1) (bigdec 2.0))))
-    (t/is (= {:res 2.0M, :res-type [:decimal 32 1 128]}
+    (t/is (= {:res 2.0M, :res-type #xt/type [:decimal 32 1 128]}
              (run-test '* (short 1) (bigdec 2.0))))
-    (t/is (= {:res 2.0M, :res-type [:decimal 32 1 128]}
+    (t/is (= {:res 2.0M, :res-type #xt/type [:decimal 32 1 128]}
              (run-test '* (int 1) (bigdec 2.0))))
-    (t/is (= {:res 2.0M, :res-type [:decimal 32 1 128]}
+    (t/is (= {:res 2.0M, :res-type #xt/type [:decimal 32 1 128]}
              (run-test '* (bigdec 2.0) (int 1))))
-    (t/is (= {:res true, :res-type :bool}
+    (t/is (= {:res true, :res-type #xt/type :bool}
              (run-test '< (int 1) (bigdec 2.0))))
-    (t/is (= {:res false, :res-type :bool}
+    (t/is (= {:res false, :res-type #xt/type :bool}
              (run-test '> (int 1) (bigdec 2.0))))
-    (t/is (= {:res 3.0, :res-type :f32}
+    (t/is (= {:res 3.0, :res-type #xt/type :f32}
              (run-test '+ (float 1.0) (bigdec 2.0))))
-    (t/is (= {:res 3.0, :res-type :f64}
+    (t/is (= {:res 3.0, :res-type #xt/type :f64}
              (run-test '+ (double 1.0) (bigdec 2.0))))
-    (t/is (= {:res (double 9.0) :res-type :f64}
+    (t/is (= {:res (double 9.0) :res-type #xt/type :f64}
              (run-test 'power (double 3.0) (bigdec 2.0))))
 
-    (t/is (= {:res (double 3.0) :res-type :f64}
+    (t/is (= {:res (double 3.0) :res-type #xt/type :f64}
              (run-test 'log (double 2.0) (bigdec 8.0))))
 
     ;; least + greatest
 
-    (t/is (= {:res 2.0, :res-type [:union #{:f64 [:decimal 32 1 128]}]}
+    (t/is (= {:res 2.0, :res-type #xt/type [:union :f64 [:decimal 32 1 128]]}
              (run-test 'least (bigdec 3.0) (double 2.0))))
-    (t/is (= {:res 3.0, :res-type [:union #{:f64 [:decimal 32 1 128]}]}
+    (t/is (= {:res 3.0, :res-type #xt/type [:union :f64 [:decimal 32 1 128]]}
              (run-test 'greatest (double 3.0) (bigdec 2.0))))
 
-    (t/is (= {:res-type [:union #{[:decimal 32 2 128] [:decimal 32 1 128]}],
+    (t/is (= {:res-type #xt/type [:union [:decimal 32 2 128] [:decimal 32 1 128]],
               :res 1.0M}
              (run-test 'least (bigdec 1.0M) (bigdec 2.02))))
 
     ;; some edge cases
 
     (t/is (= {:res 1.0000000000000000000000000000001E+32M,
-              :res-type [:decimal 32 -1 128]}
+              :res-type #xt/type [:decimal 32 -1 128]}
              (run-test '+ (bigdec 1E+1M) (bigdec 1E+32M))))
 
     (t/is (thrown? RuntimeException
                    (run-test '+ (bigdec 1E+1M) (bigdec 1E+33M))))
 
-    (t/is (= {:res 1001E+125M, :res-type [:decimal 32 -125 128]}
+    (t/is (= {:res 1001E+125M, :res-type #xt/type [:decimal 32 -125 128]}
              (run-test '+  (bigdec 1E+128M)  (bigdec 1E+125M))))
 
-    (t/is (= {:res 2E+128M, :res-type [:decimal 32 -128 128]}
+    (t/is (= {:res 2E+128M, :res-type #xt/type [:decimal 32 -128 128]}
              (run-test '+ (bigdec 1E+128M) (bigdec 1E+128M)))
           "negative scale")
 
@@ -1432,23 +1430,23 @@
               (run-projection rel (list f 'x 'y))))]
 
     (t/is (= {:res [2.001M 2.0101M],
-              :res-type [:union #{[:decimal 32 3 128] [:decimal 32 4 128]}]}
+              :res-type #xt/type [:union [:decimal 32 4 128] [:decimal 32 3 128]]}
              (run-test '+
                        [(bigdec 1.0) (bigdec 1.01)]
                        [(bigdec 1.001) (bigdec 1.0001)])))
 
-    (t/is (= [:decimal 64 5 256]
+    (t/is (= #xt/type [:decimal 64 5 256]
              (-> (run-test '+
                            [(bigdec 1.0) (bigdec 1.01)]
                            (repeat 2 61954235709850086879078532699846656405640394575840079131296.39935M))
                  :res-type)))
 
-    (t/is (= {:res [0.0 0.010000000000000009], :res-type :f64}
+    (t/is (= {:res [0.0 0.010000000000000009], :res-type #xt/type :f64}
              (run-test '-
                        [(bigdec 1.0) (bigdec 1.01)]
                        (repeat 2 (double 1.0)))))
 
-    (t/is (= {:res-type [:union #{[:decimal 32 2 128] [:decimal 32 1 128]}],
+    (t/is (= {:res-type #xt/type [:union [:decimal 32 2 128] [:decimal 32 1 128]],
               :res [0.0M 0.01M]}
              (run-test '-
                        [(bigdec 1.0) (bigdec 1.01)]
@@ -1485,40 +1483,40 @@
 
 (t/deftest test-polymorphic-columns
   (t/is (= {:res [1.2 1 3.4]
-            :res-type [:union #{:i64 :f64}]}
+            :res-type #xt/type [:union :f64 :i64]}
            (with-open [rel (tu/open-rel {:x [1.2 1 3.4]})]
              (run-projection rel 'x))))
 
   (t/is (= {:res [4.4 9.75]
-            :res-type [:union #{:f32 :f64}]}
+            :res-type #xt/type [:union :f64 :f32]}
            (with-open [rel (tu/open-rel {:x [1 1.5]
                                          :y [3.4 (float 8.25)]})]
              (run-projection rel '(+ x y)))))
 
   (t/is (= {:res [(float 4.4) nil nil nil]
-            :res-type [:union #{:null :f32 :f64}]}
+            :res-type #xt/type [:union :f64 :f32 [:? :null]]}
            (with-open [rel (tu/open-rel {:x [1 12 nil nil]
                                          :y [(float 3.4) nil 4.8 nil]})]
              (run-projection rel '(+ x y))))))
 
 (t/deftest test-ternary-booleans
   (t/is (= [{:res [true false nil false false false nil false nil]
-             :res-type [:union #{:null :bool}]}
+             :res-type #xt/type [:? :bool]}
             {:res [true true true true false nil true nil nil]
-             :res-type [:union #{:null :bool}]}]
+             :res-type #xt/type [:? :bool]}]
            (with-open [rel (tu/open-rel {:x [true true true false false false nil nil nil]
                                          :y [true false nil true false nil true false nil]})]
              [(run-projection rel '(and x y))
               (run-projection rel '(or x y))])))
 
   (t/is (= [{:res [false true nil]
-             :res-type [:union #{:null :bool}]}
+             :res-type #xt/type [:? :bool]}
             {:res [true false false]
-             :res-type :bool}
+             :res-type #xt/type :bool}
             {:res [false true false]
-             :res-type :bool}
+             :res-type #xt/type :bool}
             {:res [false false true]
-             :res-type :bool}]
+             :res-type #xt/type :bool}]
            (with-open [rel (tu/open-rel {:x [true false nil]})]
              [(run-projection rel '(not x))
               (run-projection rel '(true? x))
@@ -1542,19 +1540,19 @@
 
     (t/testing "ts/dur"
       (t/is (= {:res [(time/->zdt #inst "2021-01-01T00:02:03Z")]
-                :res-type [:timestamp-tz :second "UTC"]}
+                :res-type #xt/type [:timestamp-tz :second "UTC"]}
                (test-projection '+
                                 #(->ts-vec "x" :second (.getEpochSecond (time/->instant #inst "2021")))
                                 #(->dur-vec "y" :second 123))))
 
       (t/is (= {:res [(time/->zdt #inst "2021-01-01T00:00:00.123Z")]
-                :res-type [:timestamp-tz :milli "UTC"]}
+                :res-type #xt/type [:timestamp-tz :milli "UTC"]}
                (test-projection '+
                                 #(->ts-vec "x" :second (.getEpochSecond (time/->instant #inst "2021")))
                                 #(->dur-vec "y" :milli 123))))
 
       (t/is (= {:res [(ZonedDateTime/parse "1970-01-01T00:02:34.000001234Z[UTC]")]
-                :res-type [:timestamp-tz :nano "UTC"]}
+                :res-type #xt/type [:timestamp-tz :nano "UTC"]}
                (test-projection '+
                                 #(->dur-vec "x" :second 154)
                                 #(->ts-vec "y" :nano 1234))))
@@ -1565,13 +1563,13 @@
                                                #(->dur-vec "y" :second 1))))
 
       (t/is (= {:res [(time/->zdt #inst "2020-12-31T23:59:59.998Z")]
-                :res-type [:timestamp-tz :micro "UTC"]}
+                :res-type #xt/type [:timestamp-tz :micro "UTC"]}
                (test-projection '-
                                 #(->ts-vec "x" :micro (time/instant->micros (time/->instant #inst "2021")))
                                 #(->dur-vec "y" :milli 2)))))
 
     (t/is (t/is (= {:res [(Duration/parse "PT23H59M59.999S")]
-                    :res-type [:duration :milli]}
+                    :res-type #xt/type [:duration :milli]}
                    (test-projection '-
                                     #(->ts-vec "x" :milli (.toEpochMilli (time/->instant #inst "2021-01-02")))
                                     #(->ts-vec "y" :milli (.toEpochMilli (time/->instant #inst "2021-01-01T00:00:00.001Z")))))))
@@ -1584,37 +1582,37 @@
                 (tu/open-vec col-name [value]))]
 
         (t/is (= {:res [(Duration/parse "PT0.002001S")]
-                  :res-type [:duration :micro]}
+                  :res-type #xt/type [:duration :micro]}
                  (test-projection '+
                                   #(->dur-vec "x" :micro 1)
                                   #(->dur-vec "y" :milli 2))))
 
         (t/is (= {:res [(Duration/parse "PT-1.999S")]
-                  :res-type [:duration :milli]}
+                  :res-type #xt/type [:duration :milli]}
                  (test-projection '-
                                   #(->dur-vec "x" :milli 1)
                                   #(->dur-vec "y" :second 2))))
 
         (t/is (= {:res [(Duration/parse "PT0.002S")]
-                  :res-type [:duration :milli]}
+                  :res-type #xt/type [:duration :milli]}
                  (test-projection '*
                                   #(->dur-vec "x" :milli 1)
                                   #(->bigint-vec "y" 2))))
 
         (t/is (= {:res [(Duration/parse "PT10S")]
-                  :res-type [:duration :second]}
+                  :res-type #xt/type [:duration :second]}
                  (test-projection '*
                                   #(->bigint-vec "x" 2)
                                   #(->dur-vec "y" :second 5))))
 
         (t/is (= {:res [(Duration/parse "PT0.000012S")]
-                  :res-type [:duration :micro]}
+                  :res-type #xt/type [:duration :micro]}
                  (test-projection '*
                                   #(->float8-vec "x" 2.4)
                                   #(->dur-vec "y" :micro 5))))
 
         (t/is (= {:res [(Duration/parse "PT3S")]
-                  :res-type [:duration :second]}
+                  :res-type #xt/type [:duration :second]}
                  (test-projection '/
                                   #(->dur-vec "x" :second 10)
                                   #(->bigint-vec "y" 3))))))))
@@ -1644,13 +1642,13 @@
                                 :y [3.4 8.25]})]
     (t/is (= {:res [{:x 1.2, :y 3.4}
                     {:x 3.4, :y 8.25}]
-              :res-type [:struct '{x :f64, y :f64}]}
+              :res-type #xt/type [:struct {"x" :f64} {"y" :f64}]}
              (run-projection rel '{:x x, :y y})))
 
-    (t/is (= {:res [3.4 8.25], :res-type :f64}
+    (t/is (= {:res [3.4 8.25], :res-type #xt/type :f64}
              (run-projection rel '(. {:x x, :y y} y))))
 
-    (t/is (= {:res [nil nil], :res-type :null}
+    (t/is (= {:res [nil nil], :res-type #xt/type [:? :null]}
              (run-projection rel '(. {:x x, :y y} z))))))
 
 (t/deftest test-namespaced-struct-literals
@@ -1659,22 +1657,22 @@
                                 :y$y [3.4 8.25]})]
     (t/is (= {:res [{:x/x 1.2, :y/y 3.4}
                     {:x/x 3.4, :y/y 8.25}]
-              :res-type [:struct '{x$x :f64, y$y :f64}]}
+              :res-type #xt/type [:struct {"x$x" :f64} {"y$y" :f64}]}
              (run-projection rel '{:x$x x$x, :y$y y$y})))))
 
 (t/deftest test-nested-structs
   (with-open [rel (tu/open-rel {:y [1.2 3.4]})]
     (t/is (= {:res [{:x {:y 1.2}}
                     {:x {:y 3.4}}]
-              :res-type [:struct '{x [:struct {y :f64}]}]}
+              :res-type #xt/type [:struct {"x" [:struct {"y" :f64}]}]}
              (run-projection rel '{:x {:y y}})))
 
     (t/is (= {:res [{:y 1.2} {:y 3.4}]
-              :res-type [:struct '{y :f64}]}
+              :res-type #xt/type [:struct {"y" :f64}]}
              (run-projection rel '(. {:x {:y y}} x))))
 
     (t/is (= {:res [1.2 3.4]
-              :res-type :f64}
+              :res-type #xt/type :f64}
              (run-projection rel '(.. {:x {:y y}} x y))))))
 
 (t/deftest test-struct-equals
@@ -1710,11 +1708,11 @@
                                   :y [3.4 8.25]})]
       (t/is (= {:res [[1.2 3.4 10.0]
                       [3.4 8.25 10.0]]
-                :res-type [:list :f64]}
+                :res-type #xt/type [:list :f64]}
                (run-projection rel '[x y 10.0])))
 
       (t/is (= {:res [[1.2 3.4] [3.4 8.25]]
-                :res-type [:list [:union #{:null :f64}]]}
+                :res-type #xt/type [:list [:? :f64]]}
                (run-projection rel '[(nth [x y] 0)
                                      (nth [x y] 1)])))))
 
@@ -1722,16 +1720,16 @@
     (with-open [rel (tu/open-rel {:x [1.2 3.4]
                                   :y [0 nil]})]
       (t/is (= {:res [1.2 nil]
-                :res-type [:union #{:f64 :null}]}
+                :res-type #xt/type [:? :f64]}
                (run-projection rel '(nth [x] y))))))
 
   (t/testing "index out of bounds"
     (with-open [rel (tu/open-rel {:x [1.2 3.4]})]
-      (t/is (= {:res [nil nil], :res-type [:union #{:null :f64}]}
+      (t/is (= {:res [nil nil], :res-type #xt/type [:? :f64]}
                (run-projection rel '(nth [x] -1)))))
 
     (with-open [rel (tu/open-rel {:x [1.2 3.4]})]
-      (t/is (= {:res [nil nil], :res-type [:union #{:null :f64}]}
+      (t/is (= {:res [nil nil], :res-type #xt/type [:? :f64]}
                (run-projection rel '(nth [x] 1))))))
 
   (t/testing "might not be lists"
@@ -1740,7 +1738,7 @@
                                       [4 5]
                                       "foo"]})]
       (t/is (= {:res [nil 2 5 nil]
-                :res-type [:union #{:i64 :null}]}
+                :res-type #xt/type [:? :i64]}
                (run-projection rel '(nth x 1))))))
 
   (t/testing "Nested expr"
@@ -1800,7 +1798,7 @@
   (with-open [rel (tu/open-rel {:x [{:a 42, :b 8}, {:a 12, :b 5}]})]
     (t/is (= {:res [{:a 42, :b 8, :sum 50}
                     {:a 12, :b 5, :sum 17}]
-              :res-type [:struct '{a :i64, b :i64, sum :i64}]}
+              :res-type #xt/type [:struct {"a" :i64} {"b" :i64} {"sum" :i64}]}
              (run-projection rel '{:a (. x a)
                                    :b (. x b)
                                    :sum (+ (. x a) (. x b))})))))
@@ -1818,13 +1816,11 @@
                     {:b 12}
                     {:a 15, :b 25.0}
                     10.0]
-              :res-type [:union #{[:struct '{a [:union #{:null :i64}],
-                                             b [:union #{:null :f64 :i64}]}]
-                                  :f64}]}
+              :res-type #xt/type [:union :f64 [:struct {"a" [:? :i64]} {"b" [:union :f64 [:? :null] [:? :i64]]}]]}
              (run-projection rel 'x)))
 
     (t/is (= {:res [42 12 nil nil 15 nil]
-              :res-type [:union #{:i64 :null}]}
+              :res-type #xt/type [:? :i64]}
              (run-projection rel '(. x a))))
 
     (t/is (= {:res [{:xa 42}
@@ -1833,8 +1829,7 @@
                     {:xb 12}
                     {:xa 15, :xb 25.0}
                     {}],
-              :res-type '[:struct {xa [:union #{:null :i64}],
-                                   xb [:union #{:f64 :null :i64}]}]}
+              :res-type #xt/type [:struct {"xa" [:? :i64]} {"xb" [:union :f64 [:? :null] :i64]}]}
              (run-projection rel '{:xa (. x a),
                                    :xb (. x b)})))))
 
@@ -1884,9 +1879,8 @@
                     {:sums [nil 11.5]}
                     {:a 15, :sums [40 nil]}
                     {:sums [nil nil]}],
-              :res-type '[:struct
-                          {a [:union #{:f64 :null :i64}],
-                           sums [:list [:union #{:f64 :null :i64}]]}]}
+              :res-type #xt/type [:struct {"a" [:union :f64 [:? :null] :i64]}
+                                          {"sums" [:list [:union :f64 [:? :null] :i64]]}]}
              (run-projection rel '{:a (. x a),
                                    :sums [(+ (. x a) (. x b))
                                           (+ (. x b) (nth (. x c) 1))]})))))
@@ -1895,11 +1889,11 @@
   (with-open [rel (vr/rel-reader [(tu/open-vec #xt/field {"x" [:struct {"maybe-float" [:? :f64]} {"maybe-str" [:? :utf8]}]}
                                                [{}])])]
 
-    (t/is (= {:res [nil], :res-type [:union #{:f64 :null}]}
+    (t/is (= {:res [nil], :res-type #xt/type [:? :f64]}
              (run-projection rel '(+ 42.0 (. x maybe-float)))))
-    (t/is (= {:res [nil], :res-type [:union #{:utf8 :null}]}
+    (t/is (= {:res [nil], :res-type #xt/type [:? :utf8]}
              (run-projection rel '(lower (. x maybe-str)))))
-    (t/is (= {:res [nil], :res-type [:union #{:utf8 :null}]}
+    (t/is (= {:res [nil], :res-type #xt/type [:? :utf8]}
              (run-projection rel '(upper (. x maybe-str)))))))
 
 (t/deftest test-current-times-111
@@ -1916,84 +1910,84 @@
         (binding [expr/*default-tz* utc-tz]
           (t/testing "UTC"
             (t/is (= {:res [utc-zdt-micros]
-                      :res-type [:timestamp-tz :micro "UTC"]}
+                      :res-type #xt/type [:timestamp-tz :micro "UTC"]}
                      (project-fn '(current-timestamp)))
                   "current-timestamp")
 
             (t/is (= {:res [(.toLocalDate utc-zdt-micros)]
-                      :res-type [:date :day]}
+                      :res-type #xt/type [:date :day]}
                      (project-fn '(current-date)))
                   "current-date")
 
             (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                      :res-type [:time-local :micro]}
+                      :res-type #xt/type [:time-local :micro]}
                      (project-fn '(current-time)))
                   "current-time")
 
             (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                      :res-type [:time-local :micro]}
+                      :res-type #xt/type [:time-local :micro]}
                      (project-fn '(local-time)))
                   "local-time")
 
             (t/is (= {:res [(.toLocalDateTime utc-zdt-micros)]
-                      :res-type [:timestamp-local :micro]}
+                      :res-type #xt/type [:timestamp-local :micro]}
                      (project-fn '(local-timestamp)))
                   "local-timestamp")))
 
         (binding [expr/*default-tz* la-tz]
           (t/testing "LA"
             (t/is (= {:res [la-zdt-micros]
-                      :res-type [:timestamp-tz :micro "America/Los_Angeles"]}
+                      :res-type #xt/type [:timestamp-tz :micro "America/Los_Angeles"]}
                      (run-projection (vr/rel-reader [] 1) '(current-timestamp)))
                   "current-timestamp")
 
             ;; these two are where we may differ from the spec, due to Type's Date and Time types not supporting a TZ.
             ;; I've opted to return these as UTC to differentiate them from `local-date`, `local-time` and `local-timestamp` below.
             (t/is (= {:res [(.toLocalDate utc-zdt-micros)]
-                      :res-type [:date :day]}
+                      :res-type #xt/type [:date :day]}
                      (project-fn '(current-date)))
                   "current-date")
 
             (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                      :res-type [:time-local :micro]}
+                      :res-type #xt/type [:time-local :micro]}
                      (project-fn '(current-time)))
                   "current-time")
 
             (t/is (= {:res [(.toLocalDate la-zdt-micros)]
-                      :res-type [:date :day]}
+                      :res-type #xt/type [:date :day]}
                      (project-fn '(local-date)))
                   "local-date")
 
             (t/is (= {:res [(.toLocalTime la-zdt-micros)]
-                      :res-type [:time-local :micro]}
+                      :res-type #xt/type [:time-local :micro]}
                      (project-fn '(local-time)))
                   "local-time")
 
             (t/is (= {:res [(.toLocalDateTime la-zdt-micros)]
-                      :res-type [:timestamp-local :micro]}
+                      :res-type #xt/type [:timestamp-local :micro]}
                      (project-fn '(local-timestamp)))
                   "local-timestamp")))
 
         (binding [expr/*default-tz* la-tz]
           (t/testing "timestamp precision"
             (t/is (= {:res [(-> la-zdt (.minusNanos 45))]
-                      :res-type [:timestamp-tz :nano "America/Los_Angeles"]}
+                      :res-type #xt/type [:timestamp-tz :nano "America/Los_Angeles"]}
                      (run-projection (vr/rel-reader [] 1) '(current-timestamp 7)))
                   "current-timestamp")
 
             (t/is (= {:res [(-> la-zdt-micros (.truncatedTo ChronoUnit/SECONDS) (.toLocalDateTime))]
-                      :res-type [:timestamp-local :second]}
+                      :res-type #xt/type [:timestamp-local :second]}
                      (project-fn '(local-timestamp 0)))
                   "local-timestamp"))
 
           (t/testing "time precision"
             (t/is (= {:res [(-> utc-zdt (.truncatedTo ChronoUnit/MILLIS) (.toLocalTime))]
-                      :res-type [:time-local :milli]}
+                      :res-type #xt/type [:time-local :milli]}
                      (project-fn '(current-time 3)))
                   "current-time")
 
             (t/is (= {:res [(-> la-zdt (.truncatedTo ChronoUnit/MILLIS) (.minusNanos 8e6) (.toLocalTime))]
-                      :res-type [:time-local :milli]}
+                      :res-type #xt/type [:time-local :milli]}
                      (project-fn '(local-time 2)))
                   "local-time"))))))
 
