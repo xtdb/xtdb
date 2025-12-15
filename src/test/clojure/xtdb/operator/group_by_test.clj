@@ -123,8 +123,8 @@
   (with-open [gm (tu/open-vec #xt/field {"gm" :i32} (map int [0 0 0]))
               v0 (tu/open-rel {:v [1 2 3]})
               v1 (tu/open-rel {:v [1 2.0 3]})]
-    (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v, :from-type [:union #{:i64 :f64}],
-                                                     :from-field #xt/field {"v" [:union #{:i64 :f64}]}
+    (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v,
+                                                     :from-field #xt/field {"v" [:union :i64 :f64]}
                                                      :to-name 'vsum, :zero-row? true})
           sum-spec (.build sum-factory tu/*allocator*)]
       (t/is (= #xt/field {"vsum" [:? :f64]} (.getField sum-factory)))
@@ -327,7 +327,7 @@
               k0 (Vector/fromList tu/*allocator* "k" [1 2 3])
               k1 (Vector/fromList tu/*allocator* "k" [4 5 6])]
 
-    (let [agg-factory (group-by/->aggregate-factory {:f :array-agg, :from-name 'k, :from-type :i64
+    (let [agg-factory (group-by/->aggregate-factory {:f :array-agg, :from-name 'k, :from-field #xt/field {"k" :i64}
                                                      :to-name 'vs, :zero-row? true})]
       (util/with-open [agg-spec (.build agg-factory tu/*allocator*)]
         (t/is (= [:union #{:null [:list :i64]}] (types/field->col-type (.getField agg-factory))))
@@ -482,9 +482,13 @@
 
 (t/deftest test-throws-for-variable-width-minmax-340
   ;; HACK only for now, until we support it properly
-  (t/is (thrown-with-msg? RuntimeException #"Unsupported types in min/max aggregate"
+  (t/is (thrown-with-msg? RuntimeException #"Incomparable types in min/max aggregate"
                           (tu/query-ra '[:group-by [{min (min a)}]
-                                         [:table [{:a 32} {:a "foo"}]]]))))
+                                         [:table [{:a 32} {:a "foo"}]]])))
+
+  (t/is (thrown-with-msg? RuntimeException #"Unsupported type in min/max aggregate"
+                          (tu/query-ra '[:group-by [{min (min a)}]
+                                         [:table [{:a "32"} {:a "foo"}]]]))))
 
 (t/deftest test-handles-absent-3057
   (let [data [{:id 1 :a 1}

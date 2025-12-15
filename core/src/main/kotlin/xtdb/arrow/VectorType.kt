@@ -52,7 +52,12 @@ data class VectorType(
 
     companion object {
 
+        @JvmStatic
+        @JvmOverloads
         fun maybe(type: VectorType, nullable: Boolean = true) = type.copy(nullable = nullable)
+
+        @JvmStatic
+        @JvmOverloads
         fun maybe(type: ArrowType, nullable: Boolean = true, children: List<Field> = emptyList()) =
             VectorType(type, nullable, children)
 

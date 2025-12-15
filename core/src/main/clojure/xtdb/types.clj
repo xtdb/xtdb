@@ -58,6 +58,9 @@
 (defn ->type ^xtdb.arrow.VectorType [type-spec]
   (st/->type type-spec))
 
+(defn ->nullable-type ^xtdb.arrow.VectorType [type-spec]
+  (VectorType/maybe (->type type-spec)))
+
 (defn ->field
   (^org.apache.arrow.vector.types.pojo.Field [type-spec]
    (VectorType/field (->type type-spec)))

@@ -18,7 +18,7 @@ class Sum(
     companion object {
         @JvmStatic
         fun outType(fromType: VectorType) =
-            maybe(leastUpperBound(fromType.unionLegs.map { it.arrowType })
+            maybe(leastUpperBound(listOf(fromType))
                 ?: throw Incorrect("Cannot compute SUM over type $fromType"))
     }
 
