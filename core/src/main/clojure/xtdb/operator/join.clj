@@ -488,7 +488,7 @@
   (let [[mark-col-name mark-condition] (first mark-spec)]
     (emit-join-expr-and-children (assoc join-expr :condition mark-condition) args
                                  {:build-side :right
-                                  :merge-fields-fn (fn [left-fields _] (assoc left-fields mark-col-name (types/col-type->field mark-col-name [:union #{:null :bool}])))
+                                  :merge-fields-fn (fn [left-fields _] (assoc left-fields mark-col-name (types/->field [:? :bool] mark-col-name)))
                                   :mark-col-name mark-col-name
                                   :join-type ::mark-join
                                   :track-unmatched-build-idxs? true

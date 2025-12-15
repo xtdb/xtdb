@@ -75,7 +75,7 @@
 (defmethod ->window-fn-factory :row_number [{:keys [to-name]}]
   (reify IWindowFnSpecFactory
     (getToColumnName [_] to-name)
-    (getToColumnField [_] (types/col-type->field :i64))
+    (getToColumnField [_] (types/->field :i64))
 
     (build [_ al]
       (let [out-vec (LongVector. al (str to-name) false)

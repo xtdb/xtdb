@@ -55,7 +55,7 @@
             out-dependent-fields (zmatch mode
                                    [:mark-join mark-spec]
                                    (let [[col-name _expr] (first (:mark-join mark-spec))]
-                                     {col-name (types/col-type->field col-name [:union #{:null :bool}])})
+                                     {col-name (types/->field [:? :bool] col-name)})
 
                                    [:otherwise simple-mode]
                                    (case simple-mode

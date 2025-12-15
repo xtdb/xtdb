@@ -31,9 +31,8 @@
   (Math/abs ^Integer (hash s)))
 
   (defn- map->fields [m]
-    (into {} (map (fn [[col-name col-type]]
-                    [col-name (-> (types/->type col-type)
-                                  (types/->field (str col-name)))]))
+    (into {} (map (fn [[col-name type-spec]]
+                    [col-name (types/->field type-spec col-name)]))
           m))
 
 (defn schema-info->col-rows [schema-info]
@@ -387,7 +386,7 @@
       {:schema-name (.getSchemaName table)
        :table-name (.getTableName table)
        :col-name col-name
-       :col-type (pr-str (types/field->col-type col-field))})))
+       :col-type (pr-str (st/render-type (st/->type col-field)))})))
 
 (defn metrics-timers [^MeterRegistry reg]
   (->> (.getMeters reg)

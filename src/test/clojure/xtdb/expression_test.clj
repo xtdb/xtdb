@@ -386,8 +386,8 @@
   (t/is (thrown-with-msg? RuntimeException #"overflow"
                           (project1 '(- a -9223372036854775807) {:a 9223372036854775807}))))
 
-(defn- project-mono-value [f-sym val col-type]
-  (with-open [rel (vr/rel-reader [(tu/open-vec (types/col-type->field "s" col-type) [val])])]
+(defn- project-mono-value [f-sym val vec-type]
+  (with-open [rel (vr/rel-reader [(tu/open-vec (types/->field vec-type "s") [val])])]
     (-> (run-projection rel (list f-sym 's))
         :res
         first)))
@@ -417,12 +417,12 @@
 (t/deftest test-octet-length
   (letfn [(len [s vec-type]
             (project-mono-value 'octet-length s vec-type))]
-    (t/are [s] (= (alength (.getBytes s "utf-8")) (len s :utf8) (len (.getBytes s) :varbinary))
+    (t/are [s] (= (alength (.getBytes s "utf-8")) (len s #xt/type :utf8) (len (.getBytes s) #xt/type :varbinary))
       ""
       "a"
       "hello"
       "😀")
-    (t/is (= nil (len nil :null)))))
+    (t/is (= nil (len nil #xt/type :null)))))
 
 (t/deftest test-length
   (letfn [(length [test-val] (project1 (list 'length 'a) {:a test-val}))]
@@ -1892,8 +1892,7 @@
                                           (+ (. x b) (nth (. x c) 1))]})))))
 
 (t/deftest absent-handling-2944
-  (with-open [rel (vr/rel-reader [(tu/open-vec (types/col-type->field "x" [:struct '{maybe-float [:union #{:f64 :null}]
-                                                                                     maybe-str [:union #{:utf8 :null}]}])
+  (with-open [rel (vr/rel-reader [(tu/open-vec #xt/field {"x" [:struct {"maybe-float" [:? :f64]} {"maybe-str" [:? :utf8]}]}
                                                [{}])])]
 
     (t/is (= {:res [nil], :res-type [:union #{:f64 :null}]}

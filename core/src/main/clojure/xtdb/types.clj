@@ -50,29 +50,20 @@
   (Field. field-name field-type children))
 
 (def temporal-col-type [:timestamp-tz :micro "UTC"])
-(def temporal-type (st/->type [:timestamp-tz :micro "UTC"]))
+(def temporal-type (st/->type :instant))
 (def nullable-temporal-col-type [:union #{:null temporal-col-type}])
-(def nullable-temporal-type (st/->type [:? :timestamp-tz :micro "UTC"]))
-(def temporal-arrow-type (st/->arrow-type [:timestamp-tz :micro "UTC"]))
-(def nullable-temporal-field-type (FieldType/nullable temporal-arrow-type))
-
-(def temporal-col-types
-  {"_iid" [:fixed-size-binary 16],
-   "_system_from" temporal-col-type, "_system_to" nullable-temporal-col-type
-   "_valid_from" temporal-col-type, "_valid_to" nullable-temporal-col-type})
-
-(defn temporal-column? [col-name]
-  (contains? temporal-col-types (str col-name)))
+(def nullable-temporal-type (st/->type [:? :instant]))
+(def temporal-arrow-type (st/->arrow-type :instant))
 
 (defn ->type ^xtdb.arrow.VectorType [type-spec]
   (st/->type type-spec))
 
 (defn ->field
-  (^org.apache.arrow.vector.types.pojo.Field [^VectorType vec-type]
-   (VectorType/field vec-type))
+  (^org.apache.arrow.vector.types.pojo.Field [type-spec]
+   (VectorType/field (->type type-spec)))
 
-  (^org.apache.arrow.vector.types.pojo.Field [^VectorType vec-type, field-name]
-   (VectorType/field field-name vec-type)))
+  (^org.apache.arrow.vector.types.pojo.Field [type-spec, field-name]
+   (VectorType/field (str field-name) (->type type-spec))))
 
 (defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, name]
   (Field. name (.getFieldType field) (.getChildren field)))
@@ -81,6 +72,14 @@
   (if (.isNullable field)
     field
     (Field. (.getName field) (FieldType. true (.getType field) nil nil) (.getChildren field))))
+
+(def temporal-fields
+  {"_iid" (->field :iid "_iid"),
+   "_system_from" (->field :instant "_system_from"), "_system_to" (->field [:? :instant] "_system_to")
+   "_valid_from" (->field :instant "_valid_from"), "_valid_to" (->field [:? :instant] "_valid_to")})
+
+(defn temporal-col-name? [col-name]
+  (contains? temporal-fields (str col-name)))
 
 ;;;; col-types
 

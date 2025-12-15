@@ -453,9 +453,9 @@
             ["public" "foo" "a" :utf8]
             ["xt" "txs" "_id" :i64]
             ["xt" "txs" "committed" :bool]
-            ["xt" "txs" "error" [:union #{:null :transit}]]
-            ["xt" "txs" "system_time" [:timestamp-tz :micro "UTC"]]
-            ["xt" "txs" "user_metadata" [:union #{[:struct {}] :null}]]]
+            ["xt" "txs" "error" [:? :transit]]
+            ["xt" "txs" "system_time" :instant]
+            ["xt" "txs" "user_metadata" [:? :struct]]]
            (->> (xt/q tu/*node* "SELECT * FROM xt.live_columns ORDER BY schema_name, table_name, col_name")
                 (mapv (juxt :schema-name :table-name :col-name (comp read-string :col-type)))))))
 

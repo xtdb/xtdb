@@ -286,7 +286,7 @@
         (let [row-count (.getRowCount in-rel)]
           (when (pos? row-count)
             (let [content-rel (vr/rel-reader (->> in-rel
-                                                  (remove (comp types/temporal-column? #(.getName ^VectorReader %))))
+                                                  (remove (comp types/temporal-col-name? #(.getName ^VectorReader %))))
                                              (.getRowCount in-rel))
                   _ (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
 

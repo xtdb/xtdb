@@ -314,7 +314,7 @@
                (or (nil? schema-name) (= schema-name (symbol (.getSchemaName table-ref))))
                (or (nil? db-name) (= db-name (symbol (.getDbName table-ref)))))
       (for [col (if col-name
-                  (when (or (contains? cols col-name) (types/temporal-column? col-name)
+                  (when (or (contains? cols col-name) (types/temporal-col-name? col-name)
                             (temporal-period-column? col-name))
                     [col-name])
                   (available-cols this))
@@ -2577,10 +2577,10 @@
 
       (remove-ns-qualifiers query-expr env)
 
-      (if (some (comp types/temporal-column? str) col-syms)
+      (if (some types/temporal-col-name? col-syms)
         (->QueryExpr [:project (mapv (fn [col-sym]
                                        {col-sym
-                                        (if (types/temporal-column? (str col-sym))
+                                        (if (types/temporal-col-name? col-sym)
                                           (list 'cast col-sym types/temporal-col-type)
                                           col-sym)})
                                      col-syms)
@@ -2599,10 +2599,10 @@
 
         (remove-ns-qualifiers query-expr env)
 
-        (if (some (comp types/temporal-column? str) col-syms)
+        (if (some (comp types/temporal-col-name? str) col-syms)
           (->QueryExpr [:project (mapv (fn [col-sym]
                                          {col-sym
-                                          (if (types/temporal-column? (str col-sym))
+                                          (if (types/temporal-col-name? (str col-sym))
                                             (list 'cast col-sym types/temporal-col-type)
                                             col-sym)})
                                        col-syms)
@@ -2618,10 +2618,10 @@
           {:keys [plan col-syms] :as inner} (-> (.queryExpression ctx)
                                                 (.accept (cond-> this
                                                            out-col-syms (assoc :out-col-syms out-col-syms))))]
-      (if (some (comp types/temporal-column? str) col-syms)
+      (if (some (comp types/temporal-col-name? str) col-syms)
         (->QueryExpr [:project (mapv (fn [col-sym]
                                        {col-sym
-                                        (if (types/temporal-column? (str col-sym))
+                                        (if (types/temporal-col-name? (str col-sym))
                                           (list 'cast col-sym types/temporal-col-type)
                                           col-sym)})
                                      col-syms)
@@ -2636,7 +2636,7 @@
   (-find-cols [this [col-name table-name] excl-cols]
     (when (or (nil? table-name) (= table-name table-alias))
       (for [col (if col-name
-                  (when (or (contains? cols col-name) (types/temporal-column? col-name)
+                  (when (or (contains? cols col-name) (types/temporal-col-name? col-name)
                             (temporal-period-column? col-name))
                     [col-name])
                   (available-cols this))
@@ -2694,7 +2694,7 @@
   (-find-cols [this [col-name table-name :as _chain] excl-cols]
     (when (or (nil? table-name) (= table-name table-alias))
       (for [col (if col-name
-                  (when (or (contains? cols col-name) (types/temporal-column? col-name))
+                  (when (or (contains? cols col-name) (types/temporal-col-name? col-name))
                     [col-name])
                   (available-cols this))
             :when (not (contains? excl-cols col))]

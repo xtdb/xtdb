@@ -185,7 +185,9 @@
                        (ArrowType$FixedSizeList. list-size))
 
     :fixed-size-binary (let [[_ byte-width] col-type]
-                         (ArrowType$FixedSizeBinary. byte-width))))
+                         (ArrowType$FixedSizeBinary. byte-width))
+
+    :iid (.getArrowType VectorType/IID)))
 
 (declare render-field)
 

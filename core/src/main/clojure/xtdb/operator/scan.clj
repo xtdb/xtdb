@@ -105,7 +105,7 @@
     (let [^TemporalDimension sys-dim (apply-constraint for-system-time)
           bounds (TemporalBounds. (apply-constraint for-valid-time) sys-dim)]
       ;; we further constrain bases on tx
-      (when-let [system-time (some-> snapshot-token time/instant->micros)]
+      (when-let [^long system-time (some-> snapshot-token time/instant->micros)]
         (.setUpper sys-dim (min (inc system-time) (.getUpper sys-dim)))
 
         (when-not for-system-time
@@ -173,8 +173,7 @@
 (defn scan-fields [^Database$Catalog db-catalog, snaps, scan-cols]
   (letfn [(->field [[^TableRef table col-name]]
             (let [col-name (str col-name)]
-              ;; TODO move to fields here
-              (-> (or (some-> (types/temporal-col-types col-name) types/col-type->field)
+              (-> (or (types/temporal-fields col-name)
                       (-> (info-schema/derived-table table)
                           (get (symbol col-name)))
                       (-> (info-schema/template-table table)
@@ -226,7 +225,7 @@
                            (into {}))
 
             metadata-args (vec (for [[col-name select] selects
-                                     :when (not (types/temporal-column? col-name))]
+                                     :when (not (types/temporal-col-name? col-name))]
                                  select))
 
             row-count (.rowCount table-catalog table)]
