@@ -27,6 +27,7 @@ import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
 import xtdb.SimulationTestUtils.Companion.L0TrieKeys
+import xtdb.SimulationTestUtils.Companion.L3TrieKeys
 import xtdb.compactor.MockDb
 import xtdb.database.DatabaseName
 import xtdb.database.IDatabase
@@ -641,6 +642,89 @@ class NodeSimulationTest : SimulationTestBase() {
         Assertions.assertEquals(0, l1Count, "L1 tries should be fully GCed after final pass")
         Assertions.assertEquals(0, l2Count, "L2 tries should be fully GCed after final pass")
         Assertions.assertEquals(16, l3Count, "Should have at 16 L3 tries after final GC")
+
+        // Verify buffer pool matches catalog
+        val bufferPoolTries = listTrieNamesFromBufferPool(sharedBufferPool, table).toSet()
+        Assertions.assertEquals(finalTries.size, bufferPoolTries.size, "Buffer pool trie count should match catalog")
+        Assertions.assertEquals(finalTries, bufferPoolTries, "Buffer pool should match catalog")
+    }
+
+    @RepeatableSimulationTest
+    @WithNumberOfSystems(2)
+    @Timeout(value = 15, unit = TimeUnit.SECONDS)
+    fun `multi system l3 to l4 compaction`(iteration: Int) {
+        val table = TableRef("xtdb", "public", "docs")
+        val defaultFileTarget = 100L * 1024L * 1024L
+
+        // Using helper to generate 52 l3 tries
+        // - this generates p00->p03 for each block
+        // - we expect 13 blocks
+        // - therefore, we expect 48 l4 tries after compaction, and 4 l3 tries remaining/that couldn't be GCed
+        val l3Tries = L3TrieKeys.take(52).toList()
+
+        addTries(
+            table,
+            l3Tries.map { buildTrieDetails(table.tableName, it, defaultFileTarget) },
+            Instant.now()
+        )
+
+        blockCatalogs.forEach { blockCatalog ->
+            for (blockIndex in 0L..13L) {
+                blockCatalog.finishBlock(
+                    blockIndex = blockIndex,
+                    latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
+                    latestProcessedMsgId = blockIndex,
+                    tables = listOf(table),
+                    secondaryDatabases = null
+                )
+            }
+        }
+
+        // Run compaction and GC concurrently
+        runBlocking(dispatcher) {
+            val compactionJobs = compactorsForDb.shuffled(rand).map { compactor ->
+                launch {
+                    compactor.startCompaction().await()
+                }
+            }
+
+            val gcJobs = garbageCollectors.shuffled(rand).flatMap { gc ->
+                // Run multiple GC rounds at different times to catch tries at various stages
+                List(3) { round ->
+                    launch(CoroutineName("gc-round$round")) {
+                        repeat(round) { yield() }
+                        gc.garbageCollectTries(Instant.now() + Duration.ofHours(1))
+                    }
+                }
+            }
+
+            (compactionJobs + gcJobs).joinAll()
+        }
+
+        trieCatalogs.first().let { trieCatalog ->
+            val triesInCatalog = trieCatalog.listAllTrieKeys(table)
+            val l4Count = triesInCatalog.prefix("l04-rc-").size
+            Assertions.assertEquals(48, l4Count, "Should have 16 L4 tries (from 4 complete L3 sets)")
+        }
+
+        // Final GC pass to clean up all remaining garbage
+        runBlocking {
+            garbageCollectors.forEach { gc ->
+                gc.garbageCollectTries(Instant.now() + Duration.ofHours(1))
+            }
+        }
+
+        // Verify all systems converged
+        val allTrieSets = trieCatalogs.map { it.listAllTrieKeys(table).toSet() }
+        Assertions.assertEquals(1, allTrieSets.distinct().size, "All systems should converge to the same trie set")
+
+        // Validate final counts - we should have L3 and L4 tries
+        val finalTries = allTrieSets.first()
+        val expectedL3s = setOf("l03-rc-p00-b0c", "l03-rc-p01-b0c", "l03-rc-p02-b0c", "l03-rc-p03-b0c")
+        val finalL3s = finalTries.filter { it.startsWith("l03-rc-") }
+        val l4Count = finalTries.count { it.startsWith("l04-rc-") }
+        Assertions.assertEquals(expectedL3s, finalL3s.toSet(), "Should have 4 remaining L3 tries")
+        Assertions.assertEquals(48, l4Count, "Should have 16 L4 tries after final GC")
 
         // Verify buffer pool matches catalog
         val bufferPoolTries = listTrieNamesFromBufferPool(sharedBufferPool, table).toSet()
