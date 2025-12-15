@@ -2077,6 +2077,50 @@
   (t/is (= #uuid "123e4567-e89b-12d3-a456-426614174000"
            (project1 '(cast (cast #uuid "123e4567-e89b-12d3-a456-426614174000" #xt/type :utf8) #xt/type :uuid) {}))))
 
+(t/deftest test-cast-any-to-text
+  (t/testing "primitives"
+    (t/is (= "42" (project1 '(cast 42 #xt/type :utf8) {})))
+    (t/is (= "3.14" (project1 '(cast 3.14 #xt/type :utf8) {})))
+    (t/is (= "true" (project1 '(cast true #xt/type :utf8) {})))
+    (t/is (= "false" (project1 '(cast false #xt/type :utf8) {}))))
+
+  (t/testing "strings pass through"
+    (t/is (= "hello" (project1 '(cast "hello" #xt/type :utf8) {}))))
+
+  (t/testing "lists"
+    (t/is (= "[1 2 3]" (project1 '(cast [1 2 3] #xt/type :utf8) {})))
+    (t/is (= "[\"a\" \"b\"]" (project1 '(cast ["a" "b"] #xt/type :utf8) {})))
+    (t/is (= "[[1 2] [3 4]]" (project1 '(cast [[1 2] [3 4]] #xt/type :utf8) {}))))
+
+  (t/testing "structs"
+    (t/is (= "{\"a\" 1}" (project1 '(cast {:a 1} #xt/type :utf8) {})))
+    (t/is (= "{\"x\" \"hello\", \"y\" 42}" (project1 '(cast {:x "hello" :y 42} #xt/type :utf8) {}))))
+
+  (t/testing "nested structures"
+    (t/is (= "{\"arr\" [1 2], \"obj\" {\"z\" 3}}"
+             (project1 '(cast {:arr [1 2] :obj {:z 3}} #xt/type :utf8) {}))))
+
+  (t/testing "sets"
+    (let [result (project1 '(cast #{1 2 3} #xt/type :utf8) {})]
+      (t/is (re-matches #"\[\d \d \d\]" result))))
+
+  (t/testing "null"
+    (t/is (= nil (project1 '(cast nil #xt/type :utf8) {}))))
+
+  (t/testing "uri"
+    (t/is (= "https://example.com/path?q=1"
+             (project1 '(cast x #xt/type :utf8) {:x (java.net.URI. "https://example.com/path?q=1")}))))
+
+  (t/testing "varbinary"
+    (t/is (= "\\xdeadbeef"
+             (project1 '(cast x #xt/type :utf8) 
+                       {:x (byte-array [(unchecked-byte 0xde) (unchecked-byte 0xad)
+                                        (unchecked-byte 0xbe) (unchecked-byte 0xef)])}))))
+
+  (t/testing "from variables"
+    (t/is (= "[1 2 3]" (project1 '(cast x #xt/type :utf8) {:x [1 2 3]})))
+    (t/is (= "{\"a\" 1}" (project1 '(cast x #xt/type :utf8) {:x {:a 1}})))))
+
 (t/deftest test-truthy-if
   (t/is (= :true (project1 '(if 42 :true :false) {})))
   (t/is (= :true (project1 '(if true :true :false) {})))
