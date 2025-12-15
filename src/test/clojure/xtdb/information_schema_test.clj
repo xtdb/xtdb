@@ -258,7 +258,7 @@
              :column-name "_id",
              :table-catalog "xtdb",
              :table-schema "public"}]
-           (xt/q tu/*node* "FROM information_schema.columns ORDER BY table_name, column_name LIMIT 1"))))
+           (xt/q tu/*node* "SELECT table_catalog, table_schema, table_name, column_name, data_type FROM information_schema.columns ORDER BY table_name, column_name LIMIT 1"))))
 
 (deftest test-selection-and-projection
   (xt/submit-tx tu/*node* [[:put-docs :beanie {:xt/id :foo, :col1 "foo1"}]
@@ -518,9 +518,9 @@
                   "query information_schema from new-db")
 
             (t/is (= [{:table-catalog "new-db", :table-schema "public", :table-name "foo", :column-name "_id", :data-type ":keyword"}]
-                     (xt/q new-db-conn "FROM information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
+                     (xt/q new-db-conn "SELECT table_catalog, table_schema, table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
                   "query information_schema from new-db")
 
             (t/is (= [{:table-catalog "xtdb", :table-schema "public", :table-name "foo", :column-name "_id", :data-type ":utf8"}]
-                     (xt/q xt-conn "FROM information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
+                     (xt/q xt-conn "SELECT table_catalog, table_schema, table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
                   "query information_schema from xtdb")))))))

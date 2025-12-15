@@ -58,7 +58,9 @@
 (do
   (def info-tables
     (-> '{information_schema/tables {table_catalog :utf8, table_schema :utf8, table_name :utf8, table_type :utf8}
-          information_schema/columns {table_catalog :utf8, table_schema :utf8, table_name :utf8, column_name :utf8, data_type :utf8}
+          information_schema/columns {table_catalog :utf8, table_schema :utf8, table_name :utf8, column_name :utf8, data_type :utf8,
+                                       udt_schema :utf8, udt_name :utf8,
+                                       ordinal_position :i32, column_default [:? :utf8], is_nullable :utf8, is_identity :utf8}
           information_schema/schemata {catalog_name :utf8, schema_name :utf8, schema_owner :utf8}}
         (update-vals map->vec-types)))
 
@@ -262,12 +264,19 @@
      :rngsubdiff rngsubdiff}))
 
 (defn columns [col-rows]
-  (for [{:keys [^TableRef table, ^VectorType vec-type], col-name :name} col-rows]
+  (for [{:keys [^TableRef table, ^VectorType vec-type, idx], col-name :name} col-rows
+        :let [typname (.getTypname (PgType/fromVectorType vec-type))]]
     {:table-catalog (.getDbName table)
      :table-name (.getTableName table)
      :table-schema (.getSchemaName table)
      :column-name (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (str col-name))
-     :data-type (pr-str (st/render-type vec-type))}))
+     :data-type (pr-str (st/render-type vec-type))
+     :udt-schema "pg_catalog"
+     :udt-name (or typname "json")
+     :ordinal-position (int idx)
+     :column-default nil
+     :is-nullable (if (types/nullable-vec-type? vec-type) "YES" "NO")
+     :is-identity "NO"}))
 
 (defn pg-attribute [col-rows]
   (for [{:keys [idx table name ^VectorType vec-type]} col-rows
