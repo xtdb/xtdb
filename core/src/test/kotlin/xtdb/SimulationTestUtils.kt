@@ -48,6 +48,26 @@ class SimulationTestUtils {
             }
         }
 
+        val L2TrieKeys = sequence {
+            var partition = 0
+            var blockIndex = 0
+            while (true) {
+                yield("l02-rc-p$partition-b" + blockIndex.asLexHex)
+                partition = (partition + 1) % 4
+                if (partition == 0) blockIndex++
+            }
+        }
+
+        val L3TrieKeys = sequence {
+            var partition = 0
+            var blockIndex = 0
+            while (true) {
+                yield("l03-rc-p0$partition-b" + blockIndex.asLexHex)
+                partition = (partition + 1) % 4
+                if (partition == 0) blockIndex++
+            }
+        }
+
         fun List<TrieKey>.prefix(levelPrefix: String) = this.filter { it.startsWith(levelPrefix) }
     }
 }
