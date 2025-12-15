@@ -14,7 +14,6 @@
             [xtdb.metrics :as metrics]
             xtdb.operator.apply
             xtdb.operator.arrow
-            xtdb.operator.csv
             xtdb.operator.distinct
             xtdb.operator.group-by
             xtdb.operator.join
@@ -36,9 +35,7 @@
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [xtdb.xtql :as xtql]
-            [xtdb.xtql.plan :as xtql.plan])
+            [xtdb.vector.writer :as vw])
   (:import clojure.lang.MapEntry
            (com.github.benmanes.caffeine.cache Cache Caffeine)
            io.micrometer.core.instrument.Counter
@@ -52,7 +49,7 @@
            org.apache.arrow.vector.types.pojo.Field
            (xtdb ICursor IResultCursor IResultCursor$ErrorTrackingCursor PagesCursor)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api.query IKeyFn Query)
+           (xtdb.api.query IKeyFn)
            (xtdb.arrow RelationReader VectorReader VectorType)
            (xtdb.database Database$Catalog)
            (xtdb.indexer Snapshot)
