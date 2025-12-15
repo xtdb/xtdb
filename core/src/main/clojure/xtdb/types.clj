@@ -264,6 +264,9 @@
     (cond-> inner-type
       (.isNullable field) col-type->nullable-col-type)))
 
+(defn vec-type->col-type [^VectorType vec-type]
+  (field->col-type (VectorType/field vec-type)))
+
 ;;; fixed size binary
 
 (defmethod arrow-type->col-type ArrowType$FixedSizeBinary [^ArrowType$FixedSizeBinary fsb-type]

@@ -404,12 +404,10 @@
 
     (t/is (= nil (len nil)))))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec character-length-is-equiv-to-code-point-count-prop
   (tcp/for-all [^String s tcg/string]
     (= (.count (.codePoints s)) (project1 '(character-length a) {:a s}))))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec octet-length-is-equiv-to-byte-count-prop
   (tcp/for-all [^String s tcg/string]
     (= (alength (.getBytes s "utf-8")) (project1 '(octet-length a) {:a s}))))

@@ -58,7 +58,7 @@
        :args (for [value-type (-> (case (:op value-expr)
                                     ;; temporary, while the EE needs col-types
                                     :literal (types/field->col-type (types/->field (types/value->vec-type (:literal value-expr))))
-                                    :param (:param-type value-expr))
+                                    :param (:param-col-type value-expr))
                                   types/flatten-union-types)]
                (if (= MetadataFlavour$Bytes (MetadataFlavour/getMetadataFlavour (st/->arrow-type value-type)))
                  {:op :test-bloom,
@@ -74,7 +74,7 @@
        :args (for [col-type (-> (case (:op value-expr)
                                   ;; temporary, while the EE needs col-types
                                   :literal (types/field->col-type (types/->field (types/value->vec-type (:literal value-expr))))
-                                  :param (:param-type value-expr))
+                                  :param (:param-col-type value-expr))
                                 types/flatten-union-types)
                    :let [value-type (st/->arrow-type col-type)]]
                (if (= MetadataFlavour$Presence (MetadataFlavour/getMetadataFlavour value-type))
@@ -252,7 +252,7 @@
 (def ^:private compile-meta-expr
   (-> (fn [expr opts]
         (let [{:keys [param-fields vec-fields]} opts
-              opts {:param-types (update-vals param-fields types/field->col-type)
+              opts {:param-types (update-vals param-fields types/->type)
                     :col-types (update-vals vec-fields types/field->col-type)}
               expr (or (-> expr (expr/prepare-expr) (meta-expr opts) (expr/prepare-expr))
                        (expr/prepare-expr {:op :literal, :literal true}))

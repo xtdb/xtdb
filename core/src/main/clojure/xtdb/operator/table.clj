@@ -51,7 +51,7 @@
                            (select-keys explicit-col-names))))
 
 (defn- emit-rows-table [rows table-expr {:keys [param-fields schema] :as opts}]
-  (let [param-types (update-vals param-fields types/field->col-type)
+  (let [param-types (update-vals param-fields types/->type)
         field-sets (HashMap.)
         out-rows (->> rows
                       (mapv (fn [[row-tag row-arg]]
@@ -138,7 +138,7 @@
 
 (defn- emit-col-table [col-spec table-expr {:keys [param-fields schema] :as opts}]
   (let [[out-col v] (first col-spec)
-        param-types (update-vals param-fields types/field->col-type)
+        param-types (update-vals param-fields types/->type)
         expr (expr/form->expr v (assoc opts :param-types param-types))
         input-types (assoc opts :param-types param-types)
         {:keys [field ->list-expr]} (expr-list/compile-list-expr expr input-types)

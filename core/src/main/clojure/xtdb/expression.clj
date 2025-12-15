@@ -65,8 +65,8 @@
                      (= 'xtdb/postgres-server-version form) {:op :literal, :literal (str "PostgreSQL " postgres-server-version)}
                      (= 'xtdb/xtdb-server-version form) {:op :literal, :literal (str "XTDB @ " (xtdb-server-version))}
                      (contains? locals form) {:op :local, :local form}
-                     (contains? param-fields form) {:op :param, :param form, :param-type (types/field->col-type (get param-fields form))}
-                     (contains? vec-fields form) {:op :variable, :variable form, :var-type (types/field->col-type (get vec-fields form))}
+                     (contains? param-fields form) {:op :param, :param form, :param-col-type (types/field->col-type (get param-fields form))}
+                     (contains? vec-fields form) {:op :variable, :variable form}
                      :else (throw (err/illegal-arg :xtdb.expression/unknown-symbol
                                                    {::err/message (format "Unknown symbol: '%s'" form)
                                                     :symbol form})))
@@ -514,7 +514,7 @@
 
 (defmethod codegen-expr :param [{:keys [param]} {:keys [param-types]}]
   (codegen-expr {:op :variable, :variable param, :rel args-sym, :idx 0}
-                {:var->col-type {param (get param-types param)}}))
+                {:var->col-type {param (types/vec-type->col-type (get param-types param))}}))
 
 (defmethod codegen-expr :if [{:keys [pred then else]} opts]
   (let [{p-cont :continue, :as emitted-p} (codegen-expr {:op :call, :f :boolean, :args [pred]} opts)
@@ -2036,11 +2036,11 @@
        (into {} (map (fn [^VectorReader col]
                        (MapEntry/create
                         (symbol (.getName col))
-                        (types/field->col-type (.getField col))))))))
+                        (types/->type (.getField col))))))))
 
 (defn ->expression-projection-spec ^xtdb.operator.ProjectionSpec [col-name expr {:keys [vec-fields param-fields]}]
   (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
-        widest-out-type (-> (emit-projection expr {:param-types (update-vals param-fields types/field->col-type)
+        widest-out-type (-> (emit-projection expr {:param-types (update-vals param-fields types/->type)
                                                    :var->col-type (update-vals vec-fields types/field->col-type)})
                             :return-col-type)]
 

@@ -51,7 +51,7 @@
   [{:keys [list] :as list-expr}
    {:keys [param-fields schema] :as opts}]
   (let [[out-col v] (first list)
-        param-types (update-vals param-fields types/field->col-type)
+        param-types (update-vals param-fields types/->type)
         input-types (assoc opts :param-types param-types)
         expr (expr/form->expr v input-types) 
         {:keys [field ->list-expr]} (expr-list/compile-list-expr expr input-types)
