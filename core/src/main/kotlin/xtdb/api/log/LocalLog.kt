@@ -180,12 +180,11 @@ class LocalLog(
 
                     msgs.forEachIndexed { idx, msg ->
                         records[idx].also {
-                            msg.onCommit.complete(it)
-
                             mutex.withLock {
                                 committedCh.emit(it)
                                 latestSubmittedOffset = it.logOffset
                             }
+                            msg.onCommit.complete(it)
                         }
                     }
                 }
