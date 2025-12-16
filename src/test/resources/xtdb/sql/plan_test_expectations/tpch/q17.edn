@@ -3,7 +3,7 @@
  [:group-by
   [{_sum_out_7 (sum l.1/l_extendedprice)}]
   [:select
-   (< l.1/l_quantity _sq_3)
+   {:predicate (< l.1/l_quantity _sq_3)}
    [:map
     [{_sq_3 (* 0.2 _avg_out_6)}]
     [:group-by

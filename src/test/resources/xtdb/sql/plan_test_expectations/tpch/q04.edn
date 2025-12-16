@@ -45,7 +45,7 @@
        [:rename
         l.3
         [:select
-         (< l_commitdate l_receiptdate)
+         {:predicate (< l_commitdate l_receiptdate)}
          [:scan
           {:table #xt/table lineitem}
           [l_linestatus

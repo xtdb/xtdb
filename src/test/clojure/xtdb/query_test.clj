@@ -306,7 +306,7 @@
 
 (t/deftest test-empty-rel-still-throws-149
   (t/is (anomalous? [:incorrect nil #"Unknown symbol: '\?x13'"]
-                    (tu/query-ra '[:select (== ?x13 x4)
+                    (tu/query-ra '[:select {:predicate (== ?x13 x4)}
                                    [:table []]]
                                  {}))))
 

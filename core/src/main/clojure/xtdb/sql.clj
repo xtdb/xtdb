@@ -410,7 +410,7 @@
                   join-type)
          (into (into {} !lhs-refs) !sq-refs)
          (plan-rel l)
-         [:select join-pred
+         [:select {:predicate join-pred}
           (-> (plan-rel r)
               (apply-sqs !join-cond-subqs))]]))))
 
@@ -1996,7 +1996,7 @@
           (when (= 'and f)
             (reduce wrap-predicates plan args))))
 
-      [:select predicate
+      [:select {:predicate predicate}
        plan]))
 
 (defrecord ColumnCountMismatch [expected given]
@@ -2892,10 +2892,10 @@
                        plan)
                      
                      [:project (vec (concat '[_iid] vt-projection set-clauses-cols unset-cols))
-                      [:select (let [existing-cols (into {} (map (juxt (comp symbol name) identity)) existing-cols)]
-                                 (list* 'or (for [col set-clauses-cols]
-                                              (xt/template
-                                               (not (boolean (=== ~col ~(get existing-cols col))))))))
+                      [:select {:predicate (let [existing-cols (into {} (map (juxt (comp symbol name) identity)) existing-cols)]
+                                              (list* 'or (for [col set-clauses-cols]
+                                                           (xt/template
+                                                            (not (boolean (=== ~col ~(get existing-cols col))))))))}
                        [:project (vec (concat aliased-cols set-clauses (map :projection unset-col-projs)))
                         plan]]])
 

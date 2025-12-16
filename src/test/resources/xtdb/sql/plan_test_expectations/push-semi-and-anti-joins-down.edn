@@ -1,7 +1,7 @@
 [:project
  [{foo x.1/foo}]
  [:select
-  _sq_3
+  {:predicate _sq_3}
   [:apply
    {:mark-join {_sq_3 true}}
    {y.2/biz ?_sq_biz_5, x.1/foo ?_sq_foo_4}

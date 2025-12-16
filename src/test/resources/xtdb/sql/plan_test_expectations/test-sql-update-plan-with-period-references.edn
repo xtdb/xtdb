@@ -14,18 +14,18 @@
  [:rename
   foo.1
   [:select
-   (or
-    (not
-     (boolean
-      (===
-       (and
-        (<
-         (lower _system_time)
-         (coalesce (upper _valid_time) xtdb/end-of-time))
-        (>
-         (coalesce (upper _system_time) xtdb/end-of-time)
-         (lower _valid_time)))
-       bar))))
+   {:predicate (or
+                (not
+                 (boolean
+                  (===
+                   (and
+                    (<
+                     (lower _system_time)
+                     (coalesce (upper _valid_time) xtdb/end-of-time))
+                    (>
+                     (coalesce (upper _system_time) xtdb/end-of-time)
+                     (lower _valid_time)))
+                   bar))))}
    [:scan
     {:table #xt/table foo, :for-valid-time :all-time}
     [_valid_to bar baz _system_time _valid_from _valid_time _iid]]]]]

@@ -5,5 +5,5 @@
   [:rename
    {name x1, _valid_from x2, _valid_to x3}
    [:select
-    (and (< _valid_from _valid_to) (> _valid_to _valid_from))
+    {:predicate (and (< _valid_from _valid_to) (> _valid_to _valid_from))}
     [:scan {:table foo} [name _valid_from _valid_to]]]]]]

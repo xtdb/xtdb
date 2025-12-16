@@ -30,21 +30,21 @@
      true
      (xt/template
       [:select
-       (and
-        (<=
-         (lower ~(sql/->col-sym '_valid_time))
-         (lower
-          (period
-           #xt/zoned-date-time "2000-01-01T00:00Z"
-           #xt/zoned-date-time "2001-01-01T00:00Z")))
-        (>=
-         (coalesce (upper ~(sql/->col-sym '_valid_time)) xtdb/end-of-time)
-         (coalesce
-          (upper
-           (period
-            #xt/zoned-date-time "2000-01-01T00:00Z"
-            #xt/zoned-date-time "2001-01-01T00:00Z"))
-          xtdb/end-of-time)))
+       {:predicate (and
+                    (<=
+                     (lower ~(sql/->col-sym '_valid_time))
+                     (lower
+                      (period
+                       #xt/zoned-date-time "2000-01-01T00:00Z"
+                       #xt/zoned-date-time "2001-01-01T00:00Z")))
+                    (>=
+                     (coalesce (upper ~(sql/->col-sym '_valid_time)) xtdb/end-of-time)
+                     (coalesce
+                      (upper
+                       (period
+                        #xt/zoned-date-time "2000-01-01T00:00Z"
+                        #xt/zoned-date-time "2001-01-01T00:00Z"))
+                      xtdb/end-of-time)))}
        [:project
         [{~(sql/->col-sym '_valid_time)
           (period ~(sql/->col-sym '_valid_from)
@@ -59,21 +59,21 @@
          true
          (xt/template
           [:select
-           (and
-            (<=
-             (lower ~(sql/->col-sym '_valid_time))
-             (lower
-              (period
-               #xt/zoned-date-time "2000-01-01T00:00Z"
-               #xt/zoned-date-time "2001-01-01T00:00Z")))
-            (>=
-             (coalesce (upper ~(sql/->col-sym '_valid_time)) xtdb/end-of-time)
-             (coalesce
-              (upper
-               (period
-                #xt/zoned-date-time "2000-01-01T00:00Z"
-                #xt/zoned-date-time "2001-01-01T00:00Z"))
-              xtdb/end-of-time)))
+           {:predicate (and
+                        (<=
+                         (lower ~(sql/->col-sym '_valid_time))
+                         (lower
+                          (period
+                           #xt/zoned-date-time "2000-01-01T00:00Z"
+                           #xt/zoned-date-time "2001-01-01T00:00Z")))
+                        (>=
+                         (coalesce (upper ~(sql/->col-sym '_valid_time)) xtdb/end-of-time)
+                         (coalesce
+                          (upper
+                           (period
+                            #xt/zoned-date-time "2000-01-01T00:00Z"
+                            #xt/zoned-date-time "2001-01-01T00:00Z"))
+                          xtdb/end-of-time)))}
            [:project
             [{~(sql/->col-sym '_valid_time) (+ 1 ~(sql/->col-sym '_valid_from))}]
             [:scan {:table public/docs}
@@ -87,7 +87,7 @@
        true
        (xt/template
         [:select
-         '(== ~(sql/->col-sym '_valid_time) 1)
+         {:predicate '(== ~(sql/->col-sym '_valid_time) 1)}
          [:project
           [{~(sql/->col-sym '_foo) 4}
            {~(sql/->col-sym '_valid_time)

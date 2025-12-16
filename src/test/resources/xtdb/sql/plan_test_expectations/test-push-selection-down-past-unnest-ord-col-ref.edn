@@ -1,7 +1,7 @@
 [:project
  [{_id f.1/_id} {t (. uvs.3/v :t)} {v (. uvs.3/v :v)}]
  [:select
-  (< uvs.3/ord 2)
+  {:predicate (< uvs.3/ord 2)}
   [:unnest
    {uvs.3/v unnest}
    {:ordinality-column uvs.3/ord}

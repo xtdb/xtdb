@@ -794,7 +794,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:v 904292726}]
            (tu/query-ra
-            '[:select (== (cast "bar" :regclass) v)
+            '[:select {:predicate (== (cast "bar" :regclass) v)}
               [:table [{v 904292726} {v 111}]]]
             {:node tu/*node*}))
         "select")

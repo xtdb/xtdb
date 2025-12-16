@@ -4,4 +4,4 @@
   [x1]
   [:rename
    {bar x1, _table x2}
-   [:select false [:scan [bar {_table (== _table "foo")}]]]]]]
+   [:select {:predicate false} [:scan [bar {_table (== _table "foo")}]]]]]]

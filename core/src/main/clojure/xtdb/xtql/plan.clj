@@ -258,8 +258,8 @@
 (defn- wrap-select [ra-plan predicates]
   (case (count predicates)
     0 ra-plan
-    1 [:select (first predicates) ra-plan]
-    [:select (list* 'and predicates) ra-plan]))
+    1 [:select {:predicate (first predicates)} ra-plan]
+    [:select {:predicate (list* 'and predicates)} ra-plan]))
 
 (defn- unify-preds [var->cols]
   ;; this enumerates all the binary join conditions

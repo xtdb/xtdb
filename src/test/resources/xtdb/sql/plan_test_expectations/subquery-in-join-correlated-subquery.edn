@@ -4,7 +4,7 @@
   []
   [[:rename foo.1 [:scan {:table #xt/table foo} [a]]]
    [:select
-    _sq_3
+    {:predicate _sq_3}
     [:apply
      {:mark-join {_sq_3 (== ?_needle b)}}
      {bar.2/b ?_sq_b_4, bar.2/c ?_needle}

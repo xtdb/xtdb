@@ -17,7 +17,7 @@
       [{cntrycode (substring c.1/c_phone 1 2)}
        {c_acctbal c.1/c_acctbal}]
       [:select
-       (> c.1/c_acctbal _sq_4)
+       {:predicate (> c.1/c_acctbal _sq_4)}
        [:single-join
         []
         [:map

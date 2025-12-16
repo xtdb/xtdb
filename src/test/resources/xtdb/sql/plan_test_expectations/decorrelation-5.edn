@@ -1,7 +1,7 @@
 [:project
  [{name s.1/name} {course e.2/course}]
  [:select
-  (>= e.2/grade _sq_3)
+  {:predicate (>= e.2/grade _sq_3)}
   [:map
    [{_sq_3 (+ _avg_out_8 1)}]
    [:group-by

@@ -7,4 +7,4 @@
    y.4
    [:project
     [{z z.2/z}]
-    [:rename z.2 [:select true [:scan {:table #xt/table z} [z]]]]]]]]
+    [:rename z.2 [:select {:predicate true} [:scan {:table #xt/table z} [z]]]]]]]]

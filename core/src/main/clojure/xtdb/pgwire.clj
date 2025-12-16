@@ -908,7 +908,7 @@
     (-> '[:table ?_0]
         (with-meta {:param-count 1}))
 
-    "latest_submitted_tx" (-> '[:select (not (nil? tx_id))
+    "latest_submitted_tx" (-> '[:select {:predicate (not (nil? tx_id))}
                                 [:table [{:tx_id ?_0, :system_time ?_1,
                                           :committed ?_2, :error ?_3,
                                           :await_token ?_4}]]]

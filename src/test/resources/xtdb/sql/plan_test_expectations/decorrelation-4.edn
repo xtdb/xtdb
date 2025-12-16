@@ -3,7 +3,7 @@
  [:map
   [{_sq_3 _min_out_6}]
   [:select
-   (== e.2/grade _min_out_6)
+   {:predicate (== e.2/grade _min_out_6)}
    [:group-by
     [s.1/name
      s.1/id

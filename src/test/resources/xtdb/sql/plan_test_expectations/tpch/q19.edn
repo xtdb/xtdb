@@ -5,41 +5,41 @@
   [:map
    [{_sum_in_16 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]
    [:select
-    (or
-     (or
-      (and
-       (and
-        (and
-         (and
-          (and
-           (and (== p.2/p_brand "Brand#12") _sq_3)
-           (>= l.1/l_quantity 1))
-          (<= l.1/l_quantity (+ 1 10)))
-         (between p.2/p_size 1 5))
-        _sq_5)
-       (== l.1/l_shipinstruct "DELIVER IN PERSON"))
-      (and
-       (and
-        (and
-         (and
-          (and
-           (and (== p.2/p_brand "Brand#23") _sq_7)
-           (>= l.1/l_quantity 10))
-          (<= l.1/l_quantity (+ 10 10)))
-         (between p.2/p_size 1 10))
-        _sq_9)
-       (== l.1/l_shipinstruct "DELIVER IN PERSON")))
-     (and
-      (and
-       (and
-        (and
-         (and
-          (and (== p.2/p_brand "Brand#34") _sq_11)
-          (>= l.1/l_quantity 20))
-         (<= l.1/l_quantity (+ 20 10)))
-        (between p.2/p_size 1 15))
-       _sq_13)
-      (== l.1/l_shipinstruct "DELIVER IN PERSON")))
+    {:predicate (or
+                 (or
+                  (and
+                   (and
+                    (and
+                     (and
+                      (and
+                       (and (== p.2/p_brand "Brand#12") _sq_3)
+                       (>= l.1/l_quantity 1))
+                      (<= l.1/l_quantity (+ 1 10)))
+                     (between p.2/p_size 1 5))
+                    _sq_5)
+                   (== l.1/l_shipinstruct "DELIVER IN PERSON"))
+                  (and
+                   (and
+                    (and
+                     (and
+                      (and
+                       (and (== p.2/p_brand "Brand#23") _sq_7)
+                       (>= l.1/l_quantity 10))
+                      (<= l.1/l_quantity (+ 10 10)))
+                     (between p.2/p_size 1 10))
+                    _sq_9)
+                   (== l.1/l_shipinstruct "DELIVER IN PERSON")))
+                 (and
+                  (and
+                   (and
+                    (and
+                     (and
+                      (and (== p.2/p_brand "Brand#34") _sq_11)
+                      (>= l.1/l_quantity 20))
+                     (<= l.1/l_quantity (+ 20 10)))
+                    (between p.2/p_size 1 15))
+                   _sq_13)
+                  (== l.1/l_shipinstruct "DELIVER IN PERSON")))}
     [:mark-join
      {_sq_13 [{l.1/l_shipmode xt.values.14/_column_1}]}
      [:mark-join

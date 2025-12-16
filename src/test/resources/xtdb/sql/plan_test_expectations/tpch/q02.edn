@@ -27,7 +27,7 @@
     [:map
      [{_sq_6 _min_out_12}]
      [:select
-      (== ps.3/ps_supplycost _min_out_12)
+      {:predicate (== ps.3/ps_supplycost _min_out_12)}
       [:group-by
        [p.1/_id
         p.1/p_size

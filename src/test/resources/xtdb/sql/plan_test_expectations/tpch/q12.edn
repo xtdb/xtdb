@@ -37,9 +37,9 @@
          [:rename
           l.2
           [:select
-           (and
-            (< l_commitdate l_receiptdate)
-            (< l_shipdate l_commitdate))
+           {:predicate (and
+                        (< l_commitdate l_receiptdate)
+                        (< l_shipdate l_commitdate))}
            [:scan
             {:table #xt/table lineitem}
             [{l_receiptdate

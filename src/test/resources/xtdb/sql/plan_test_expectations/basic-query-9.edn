@@ -1,7 +1,7 @@
 [:project
  [{name me.1/name} {_column_2 _sum_out_4}]
  [:select
-  (< _min_out_3 1930)
+  {:predicate (< _min_out_3 1930)}
   [:group-by
    [me.1/name
     {_sum_out_4 (sum m.2/length)}

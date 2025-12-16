@@ -249,7 +249,7 @@
     [:group-by columns _]
     (mapv ->projected-column columns)
 
-    [:select _ relation]
+    [:select _opts relation]
     (relation-columns relation)
 
     [:order-by _opts relation]
@@ -373,11 +373,12 @@
 
 (defn- promote-selection-cross-join-to-join [z]
   (r/zmatch z
-    [:select predicate
+    [:select opts
      [:cross-join lhs rhs]]
     ;;=>
-    (when (columns-in-both-relations? predicate lhs rhs)
-      [:join [predicate] lhs rhs])))
+    (let [{:keys [predicate]} opts]
+      (when (columns-in-both-relations? predicate lhs rhs)
+        [:join [predicate] lhs rhs]))))
 
 (defn- merge-joins-to-mega-join [z]
   (r/zmatch z
@@ -403,23 +404,26 @@
 
 (defn- promote-selection-to-join [z]
   (r/zmatch z
-    [:select predicate
+    [:select opts
      [:join join-condition lhs rhs]]
     ;;=>
-    (when (columns-in-both-relations? predicate lhs rhs)
-      [:join (conj join-condition predicate) lhs rhs])
+    (let [{:keys [predicate]} opts]
+      (when (columns-in-both-relations? predicate lhs rhs)
+        [:join (conj join-condition predicate) lhs rhs]))
 
-    [:select predicate
+    [:select opts
      [:anti-join join-condition lhs rhs]]
     ;;=>
-    (when (columns-in-both-relations? predicate lhs rhs)
-      [:anti-join (conj join-condition predicate) lhs rhs])
+    (let [{:keys [predicate]} opts]
+      (when (columns-in-both-relations? predicate lhs rhs)
+        [:anti-join (conj join-condition predicate) lhs rhs]))
 
-    [:select predicate
+    [:select opts
      [:semi-join join-condition lhs rhs]]
     ;;=>
-    (when (columns-in-both-relations? predicate lhs rhs)
-      [:semi-join (conj join-condition predicate) lhs rhs])))
+    (let [{:keys [predicate]} opts]
+      (when (columns-in-both-relations? predicate lhs rhs)
+        [:semi-join (conj join-condition predicate) lhs rhs]))))
 
 (defn columns-in-predicate-present-in-relation? [relation predicate]
   (set/superset? (set (relation-columns relation)) (expr-symbols predicate)))
@@ -429,64 +433,68 @@
 
 (defn- push-selection-down-past-apply [z]
   (r/zmatch z
-    [:select predicate
+    [:select opts
      [:apply mode columns independent-relation dependent-relation]]
     ;;=>
-    (when (no-correlated-columns? predicate)
-      (cond
-        (columns-in-predicate-present-in-relation? independent-relation predicate)
-        [:apply
-         mode
-         columns
-         [:select predicate independent-relation]
-         dependent-relation]
+    (let [{:keys [predicate]} opts]
+      (when (no-correlated-columns? predicate)
+        (cond
+          (columns-in-predicate-present-in-relation? independent-relation predicate)
+          [:apply
+           mode
+           columns
+           [:select {:predicate predicate} independent-relation]
+           dependent-relation]
 
-        (and (= :join mode)
-             (columns-in-predicate-present-in-relation? dependent-relation predicate))
-        [:apply
-         mode
-         columns
-         independent-relation
-         [:select predicate dependent-relation]]))))
+          (and (= :join mode)
+               (columns-in-predicate-present-in-relation? dependent-relation predicate))
+          [:apply
+           mode
+           columns
+           independent-relation
+           [:select {:predicate predicate} dependent-relation]])))))
 
 (defn- push-selection-down-past-unnest [push-correlated? z]
   (r/zmatch z
-    [:select predicate
+    [:select opts
      [:unnest _columns relation]]
     ;;=>
-    (when (and (or push-correlated? (no-correlated-columns? predicate))
-               (columns-in-predicate-present-in-relation? relation predicate))
+    (let [{:keys [predicate]} opts]
+      (when (and (or push-correlated? (no-correlated-columns? predicate))
+                 (columns-in-predicate-present-in-relation? relation predicate))
 
-      [:unnest _columns
-       [:select predicate
-        relation]])
+        [:unnest _columns
+         [:select {:predicate predicate}
+          relation]]))
 
-    [:select predicate
+    [:select opts
      [:unnest _columns _ordinality_column relation]]
     ;;=>
-    (when (and (or push-correlated? (no-correlated-columns? predicate))
-               (columns-in-predicate-present-in-relation? relation predicate))
+    (let [{:keys [predicate]} opts]
+      (when (and (or push-correlated? (no-correlated-columns? predicate))
+                 (columns-in-predicate-present-in-relation? relation predicate))
 
-      [:unnest _columns _ordinality_column
-       [:select predicate
-        relation]])))
+        [:unnest _columns _ordinality_column
+         [:select {:predicate predicate}
+          relation]]))))
 
 (defn- push-selection-down-past-rename [push-correlated? z]
   (r/zmatch z
-    [:select predicate
+    [:select opts
      [:rename prefix-or-columns
       relation]]
     ;;=>
-    (when (or push-correlated? (no-correlated-columns? predicate))
-      (when-let [columns (cond
-                           (map? prefix-or-columns) (set/map-invert prefix-or-columns)
-                           (symbol? prefix-or-columns) (let [prefix (str prefix-or-columns)]
-                                                         (->> (for [c (relation-columns relation)]
-                                                                [(symbol prefix (name c)) c])
-                                                              (into {}))))]
-        [:rename prefix-or-columns
-         [:select (w/postwalk-replace columns predicate)
-          relation]]))))
+    (let [{:keys [predicate]} opts]
+      (when (or push-correlated? (no-correlated-columns? predicate))
+        (when-let [columns (cond
+                             (map? prefix-or-columns) (set/map-invert prefix-or-columns)
+                             (symbol? prefix-or-columns) (let [prefix (str prefix-or-columns)]
+                                                           (->> (for [c (relation-columns relation)]
+                                                                  [(symbol prefix (name c)) c])
+                                                                (into {}))))]
+          [:rename prefix-or-columns
+           [:select {:predicate (w/postwalk-replace columns predicate)}
+            relation]])))))
 
 (defn rename-map-for-projection-spec [projection-spec]
   (into {} (filter map?) projection-spec))
@@ -507,28 +515,29 @@
   ;;NOTE this could reasonably be extended to other/all extends projections if we decided
   ;;that the cost of repeating the cost of the expression is worth it.
   (r/zmatch z
-    [:select predicate
+    [:select opts
      [:project projection
       relation]]
     ;;=>
-    (when (or push-correlated? (no-correlated-columns? predicate))
-      (let [period-projections (->> projection
-                                    (keep period-extends-projection?)
-                                    (into {}))
-            cols-referenced-in-predicate (expr-symbols predicate)]
+    (let [{:keys [predicate]} opts]
+      (when (or push-correlated? (no-correlated-columns? predicate))
+        (let [period-projections (->> projection
+                                      (keep period-extends-projection?)
+                                      (into {}))
+              cols-referenced-in-predicate (expr-symbols predicate)]
 
-        (when (and
-               ;;predicate references period constructor created in project
-               (some #(contains? period-projections %) cols-referenced-in-predicate)
-               ;; all columns aside from newly projected period referenced in
-               ;; predicate are present inner relation
-               (set/superset? (set (relation-columns relation))
-                              (set/difference
-                               cols-referenced-in-predicate
-                               (set (keys period-projections)))))
-          [:project projection
-           [:select (w/postwalk-replace period-projections predicate)
-            relation]])))))
+          (when (and
+                 ;;predicate references period constructor created in project
+                 (some #(contains? period-projections %) cols-referenced-in-predicate)
+                 ;; all columns aside from newly projected period referenced in
+                 ;; predicate are present inner relation
+                 (set/superset? (set (relation-columns relation))
+                                (set/difference
+                                 cols-referenced-in-predicate
+                                 (set (keys period-projections)))))
+            [:project projection
+             [:select {:predicate (w/postwalk-replace period-projections predicate)}
+              relation]]))))))
 
 (defn remove-redudant-period-constructors [form]
   (when (and (list? form)
@@ -575,87 +584,95 @@
 
 (defn- optimise-select-expressions [z]
   (r/zmatch z
-    [:select predicate
+    [:select opts
      relation]
     ;;=>
-    (let [{:keys [expr rewrites-taken-place?]} (optimise-expression predicate)]
+    (let [{:keys [predicate]} opts
+          {:keys [expr rewrites-taken-place?]} (optimise-expression predicate)]
       (when rewrites-taken-place?
-        [:select expr
+        [:select {:predicate expr}
          relation]))))
 
 (defn- push-selection-down-past-project [push-correlated? z]
   (r/zmatch z
-    [:select predicate
+    [:select opts
      [:project projection
       relation]]
     ;;=>
-    (when (and (or push-correlated? (no-correlated-columns? predicate))
-               (not (predicate-depends-on-calculated-column? predicate projection)))
-      [:project projection
-       [:select (w/postwalk-replace (rename-map-for-projection-spec projection) predicate)
-        relation]])
+    (let [{:keys [predicate]} opts]
+      (when (and (or push-correlated? (no-correlated-columns? predicate))
+                 (not (predicate-depends-on-calculated-column? predicate projection)))
+        [:project projection
+         [:select {:predicate (w/postwalk-replace (rename-map-for-projection-spec projection) predicate)}
+          relation]]))
 
-    [:select predicate
+    [:select opts
      [:map projection
       relation]]
     ;;=>
-    (when (and (or push-correlated? (no-correlated-columns? predicate))
-               (not (predicate-depends-on-calculated-column? predicate projection)))
-      [:map projection
-       [:select (w/postwalk-replace (rename-map-for-projection-spec projection) predicate)
-        relation]])))
+    (let [{:keys [predicate]} opts]
+      (when (and (or push-correlated? (no-correlated-columns? predicate))
+                 (not (predicate-depends-on-calculated-column? predicate projection)))
+        [:map projection
+         [:select {:predicate (w/postwalk-replace (rename-map-for-projection-spec projection) predicate)}
+          relation]]))))
 
 (defn- push-selection-down-past-group-by [push-correlated? z]
   (r/zmatch z
-    [:select predicate
+    [:select opts
      [:group-by group-by-columns
       relation]]
     ;;=>
-    (when (and (or push-correlated? (no-correlated-columns? predicate))
-               (not (predicate-depends-on-calculated-column? predicate group-by-columns)))
-      [:group-by group-by-columns
-       [:select predicate
-        relation]])))
+    (let [{:keys [predicate]} opts]
+      (when (and (or push-correlated? (no-correlated-columns? predicate))
+                 (not (predicate-depends-on-calculated-column? predicate group-by-columns)))
+        [:group-by group-by-columns
+         [:select {:predicate predicate}
+          relation]]))))
 
 (defn- push-selection-down-past-join [push-correlated? z]
   (r/zmatch z
-    [:select predicate
+    [:select opts
      [join-op join-map lhs rhs]]
     ;;=>
-    (when (and
-            (contains?
-              #{:join :semi-join :anti-join :left-outer-join :single-join :mark-join} ;TODO full-outer-join
-              join-op)
-            (or push-correlated? (no-correlated-columns? predicate)))
-      (cond
-        (columns-in-predicate-present-in-relation? lhs predicate)
-        [join-op join-map [:select predicate lhs] rhs]
-        (and (= :join join-op)
-             (columns-in-predicate-present-in-relation? rhs predicate))
-        [join-op join-map lhs [:select predicate rhs]]))
+    (let [{:keys [predicate]} opts]
+      (when (and
+              (contains?
+                #{:join :semi-join :anti-join :left-outer-join :single-join :mark-join} ;TODO full-outer-join
+                join-op)
+              (or push-correlated? (no-correlated-columns? predicate)))
+        (cond
+          (columns-in-predicate-present-in-relation? lhs predicate)
+          [join-op join-map [:select {:predicate predicate} lhs] rhs]
+          (and (= :join join-op)
+               (columns-in-predicate-present-in-relation? rhs predicate))
+          [join-op join-map lhs [:select {:predicate predicate} rhs]])))
 
-    [:select predicate
+    [:select opts
      [:cross-join lhs rhs]]
     ;;=>
-    (when (or push-correlated? (no-correlated-columns? predicate))
-      (cond
-        (columns-in-predicate-present-in-relation? lhs predicate)
-        [:cross-join [:select predicate lhs] rhs]
-        (columns-in-predicate-present-in-relation? rhs predicate)
-        [:cross-join lhs [:select predicate rhs]]))))
+    (let [{:keys [predicate]} opts]
+      (when (or push-correlated? (no-correlated-columns? predicate))
+        (cond
+          (columns-in-predicate-present-in-relation? lhs predicate)
+          [:cross-join [:select {:predicate predicate} lhs] rhs]
+          (columns-in-predicate-present-in-relation? rhs predicate)
+          [:cross-join lhs [:select {:predicate predicate} rhs]])))))
 
 (defn- push-selections-with-fewer-variables-down [push-correlated? z]
   (r/zmatch z
-    [:select predicate-1
-     [:select predicate-2
+    [:select opts-1
+     [:select opts-2
       relation]]
     ;;=>
-    (when (and (or push-correlated? (no-correlated-columns? predicate-1))
-               (< (count (expr-symbols predicate-1))
-                  (count (expr-symbols predicate-2))))
-      [:select predicate-2
-       [:select predicate-1
-        relation]])))
+    (let [{predicate-1 :predicate} opts-1
+          {predicate-2 :predicate} opts-2]
+      (when (and (or push-correlated? (no-correlated-columns? predicate-1))
+                 (< (count (expr-symbols predicate-1))
+                    (count (expr-symbols predicate-2))))
+        [:select {:predicate predicate-2}
+         [:select {:predicate predicate-1}
+          relation]]))))
 
 (defn- remove-superseded-projects [z]
   (r/zmatch z
@@ -694,18 +711,21 @@
 
 (defn- merge-selections-around-scan [z]
   (r/zmatch z
-    [:select predicate-1
-     [:select predicate-2
+    [:select opts-1
+     [:select opts-2
       [:scan table relation]]]
     ;;=>
-    [:select (merge-conjunctions predicate-1 predicate-2) [:scan table relation]]))
+    (let [{predicate-1 :predicate} opts-1
+          {predicate-2 :predicate} opts-2]
+      [:select {:predicate (merge-conjunctions predicate-1 predicate-2)} [:scan table relation]])))
 
 (defn- add-selection-to-scan-predicate [z]
   (r/zmatch z
-    [:select predicate
+    [:select opts
      [:scan table columns]]
     ;;=>
-    (let [underlying-scan-columns (set (map ->projected-column columns))
+    (let [{:keys [predicate]} opts
+          underlying-scan-columns (set (map ->projected-column columns))
           {:keys [scan-columns new-select-predicate]}
           (reduce
             (fn [{:keys [scan-columns new-select-predicate] :as acc} predicate]
@@ -735,7 +755,7 @@
             (conjunction-clauses predicate))]
       (when-not (= columns scan-columns)
         (if new-select-predicate
-          [:select new-select-predicate
+          [:select {:predicate new-select-predicate}
            [:scan table scan-columns]]
           [:scan table scan-columns])))))
 
@@ -792,105 +812,118 @@
 
 (defn- pull-correlated-selection-up-towards-apply [z]
   (r/zmatch z
-    [:select predicate-1
-     [:select predicate-2
+    [:select opts-1
+     [:select opts-2
       relation]]
     ;;=>
-    (when (and (not-empty (expr-correlated-symbols predicate-2))
-               (or (empty? (expr-correlated-symbols predicate-1))
-                   (and (equals-predicate? predicate-2) ;; TODO remove equals preference
-                        (not (equals-predicate? predicate-1)))))
-      [:select predicate-2
-       [:select predicate-1
-        relation]])
-
-    [:project projection
-     [:select predicate
-      relation]]
-    ;;=>
-    (when (not-empty (expr-correlated-symbols predicate))
-      (let [p-map (->> (for [p projection]
-                         (cond
-                           (map? p) [(val (first p)) (key (first p))]
-                           (symbol? p) [p p]))
-                       (into {}))]
-        (when (every? p-map (expr-symbols predicate))
-          [:select (w/postwalk-replace p-map predicate)
-           [:project projection
-            relation]])))
-
-    [:map projection
-     [:select predicate
-      relation]]
-    ;;=>
-    (when (not-empty (expr-correlated-symbols predicate))
-      [:select predicate
-       [:map projection
-        relation]])
-
-    [:cross-join [:select predicate lhs] rhs]
-    ;;=>
-    (when (not-empty (expr-correlated-symbols predicate))
-      [:select predicate [:cross-join lhs rhs]])
-
-    [:cross-join lhs [:select predicate rhs]]
-    ;;=>
-    (when (not-empty (expr-correlated-symbols predicate))
-      [:select predicate [:cross-join lhs rhs]])
-
-    [join-op join-map [:select predicate lhs] rhs]
-    ;;=>
-    (when (not-empty (expr-correlated-symbols predicate))
-      [:select predicate [join-op join-map lhs rhs]])
-
-    [:join join-map lhs [:select predicate rhs]]
-    ;;=>
-    (when (not-empty (expr-correlated-symbols predicate))
-      [:select predicate [:join join-map lhs rhs]])
-
-    [:left-outer-join join-map lhs [:select predicate rhs]] ;;TODO full-outer-join but also is this correct for LOJ
-    ;;=>
-    (when (not-empty (expr-correlated-symbols predicate))
-      [:select predicate [:left-outer-join join-map lhs rhs]])
-
-    [:rename prefix-or-columns
-     [:select predicate
-      relation]]
-    ;;=>
-    (when (not-empty (expr-correlated-symbols predicate))
-      (when-let [columns (cond
-                           (map? prefix-or-columns) (set/map-invert prefix-or-columns)
-                           (symbol? prefix-or-columns) (let [prefix (str prefix-or-columns)]
-                                                         (->> (for [c (relation-columns relation)]
-                                                                [c (->col-sym prefix (name c)) ])
-                                                              (into {}))))]
-        [:select (w/postwalk-replace columns predicate)
-         [:rename prefix-or-columns
+    (let [{predicate-1 :predicate} opts-1
+          {predicate-2 :predicate} opts-2]
+      (when (and (not-empty (expr-correlated-symbols predicate-2))
+                 (or (empty? (expr-correlated-symbols predicate-1))
+                     (and (equals-predicate? predicate-2) ;; TODO remove equals preference
+                          (not (equals-predicate? predicate-1)))))
+        [:select {:predicate predicate-2}
+         [:select {:predicate predicate-1}
           relation]]))
 
-    [:group-by group-by-columns
-     [:select predicate
+    [:project projection
+     [:select opts
       relation]]
     ;;=>
-    (when (and (not-empty (expr-correlated-symbols predicate))
-               (set/subset?
-                (expr-symbols predicate)
-                (set (relation-columns [:group-by group-by-columns nil]))))
-      [:select predicate
-       [:group-by group-by-columns
-        relation]])))
+    (let [{:keys [predicate]} opts]
+      (when (not-empty (expr-correlated-symbols predicate))
+        (let [p-map (->> (for [p projection]
+                           (cond
+                             (map? p) [(val (first p)) (key (first p))]
+                             (symbol? p) [p p]))
+                         (into {}))]
+          (when (every? p-map (expr-symbols predicate))
+            [:select {:predicate (w/postwalk-replace p-map predicate)}
+             [:project projection
+              relation]]))))
+
+    [:map projection
+     [:select opts
+      relation]]
+    ;;=>
+    (let [{:keys [predicate]} opts]
+      (when (not-empty (expr-correlated-symbols predicate))
+        [:select {:predicate predicate}
+         [:map projection
+          relation]]))
+
+    [:cross-join [:select opts lhs] rhs]
+    ;;=>
+    (let [{:keys [predicate]} opts]
+      (when (not-empty (expr-correlated-symbols predicate))
+        [:select {:predicate predicate} [:cross-join lhs rhs]]))
+
+    [:cross-join lhs [:select opts rhs]]
+    ;;=>
+    (let [{:keys [predicate]} opts]
+      (when (not-empty (expr-correlated-symbols predicate))
+        [:select {:predicate predicate} [:cross-join lhs rhs]]))
+
+    [join-op join-map [:select opts lhs] rhs]
+    ;;=>
+    (let [{:keys [predicate]} opts]
+      (when (not-empty (expr-correlated-symbols predicate))
+        [:select {:predicate predicate} [join-op join-map lhs rhs]]))
+
+    [:join join-map lhs [:select opts rhs]]
+    ;;=>
+    (let [{:keys [predicate]} opts]
+      (when (not-empty (expr-correlated-symbols predicate))
+        [:select {:predicate predicate} [:join join-map lhs rhs]]))
+
+    [:left-outer-join join-map lhs [:select opts rhs]] ;;TODO full-outer-join but also is this correct for LOJ
+    ;;=>
+    (let [{:keys [predicate]} opts]
+      (when (not-empty (expr-correlated-symbols predicate))
+        [:select {:predicate predicate} [:left-outer-join join-map lhs rhs]]))
+
+    [:rename prefix-or-columns
+     [:select opts
+      relation]]
+    ;;=>
+    (let [{:keys [predicate]} opts]
+      (when (not-empty (expr-correlated-symbols predicate))
+        (when-let [columns (cond
+                             (map? prefix-or-columns) (set/map-invert prefix-or-columns)
+                             (symbol? prefix-or-columns) (let [prefix (str prefix-or-columns)]
+                                                           (->> (for [c (relation-columns relation)]
+                                                                  [c (->col-sym prefix (name c)) ])
+                                                                (into {}))))]
+          [:select {:predicate (w/postwalk-replace columns predicate)}
+           [:rename prefix-or-columns
+            relation]])))
+
+    [:group-by group-by-columns
+     [:select opts
+      relation]]
+    ;;=>
+    (let [{:keys [predicate]} opts]
+      (when (and (not-empty (expr-correlated-symbols predicate))
+                 (set/subset?
+                  (expr-symbols predicate)
+                  (set (relation-columns [:group-by group-by-columns nil]))))
+        [:select {:predicate predicate}
+         [:group-by group-by-columns
+          relation]]))))
 
 (defn- squash-correlated-selects [z]
   (r/zmatch z
-    [:select predicate-1
-     [:select predicate-2
+    [:select opts-1
+     [:select opts-2
       relation]]
     ;;=>
-    (when (and (seq (expr-correlated-symbols predicate-1))
-               (seq (expr-correlated-symbols predicate-2)))
-      [:select
-       (merge-conjunctions predicate-1 predicate-2)
-       relation])))
+    (let [{predicate-1 :predicate} opts-1
+          {predicate-2 :predicate} opts-2]
+      (when (and (seq (expr-correlated-symbols predicate-1))
+                 (seq (expr-correlated-symbols predicate-2)))
+        [:select
+         {:predicate (merge-conjunctions predicate-1 predicate-2)}
+         relation]))))
 
 (defn parameters-referenced-in-relation? [dependent-relation parameters]
   (let [apply-symbols (set parameters)
@@ -979,23 +1012,25 @@
   (r/zmatch z
     [:apply mode columns
      independent-relation
-     [:select predicate
+     [:select opts
       dependent-relation]]
     ;; =>
-    (when-let [[mj-col mj-projection] (first (:mark-join mode))]
-      [:apply {:mark-join {mj-col (if (true? mj-projection)
-                                    predicate
-                                    (list 'and predicate mj-projection))}}
-       columns
-       independent-relation
-       dependent-relation])))
+    (let [{:keys [predicate]} opts]
+      (when-let [[mj-col mj-projection] (first (:mark-join mode))]
+        [:apply {:mark-join {mj-col (if (true? mj-projection)
+                                      predicate
+                                      (list 'and predicate mj-projection))}}
+         columns
+         independent-relation
+         dependent-relation]))))
 
 (defn- select-mark-join->semi-join [z]
   (r/zmatch z
-    [:select predicate
+    [:select opts
      [:mark-join projection lhs rhs]]
     ;; =>
-    (let [mj-col (key (first projection))]
+    (let [{:keys [predicate]} opts
+          mj-col (key (first projection))]
       (cond
         (= predicate mj-col)
         [:map [{mj-col true}]
@@ -1042,29 +1077,31 @@
   (r/zmatch
     z
     [:apply mode columns independent-relation
-     [:select predicate dependent-relation]]
+     [:select opts dependent-relation]]
     ;;=>
-    (when-not (:mark-join mode)
-      (when (seq (expr-correlated-symbols predicate))
-        (when-not (parameters-referenced-in-relation?
-                    dependent-relation
-                    (vals columns))
-          [(if (= :cross-join mode)
-             :join
-             mode)
-           [(w/postwalk-replace (set/map-invert columns) predicate)]
-           independent-relation dependent-relation])))))
+    (let [{:keys [predicate]} opts]
+      (when-not (:mark-join mode)
+        (when (seq (expr-correlated-symbols predicate))
+          (when-not (parameters-referenced-in-relation?
+                      dependent-relation
+                      (vals columns))
+            [(if (= :cross-join mode)
+               :join
+               mode)
+             [(w/postwalk-replace (set/map-invert columns) predicate)]
+             independent-relation dependent-relation]))))))
 
 (defn- decorrelate-apply-rule-3
   "R A× (σp E) = σp (R A× E)"
   [z]
   (r/zmatch z
-    [:apply :cross-join columns independent-relation [:select predicate dependent-relation]]
+    [:apply :cross-join columns independent-relation [:select opts dependent-relation]]
     ;;=>
-    (when (seq (expr-correlated-symbols predicate)) ;; select predicate is correlated
-      [:select (w/postwalk-replace (set/map-invert columns) predicate)
-       (let [columns (remove-unused-correlated-columns columns dependent-relation)]
-         [:apply :cross-join columns independent-relation dependent-relation])])))
+    (let [{:keys [predicate]} opts]
+      (when (seq (expr-correlated-symbols predicate)) ;; select predicate is correlated
+        [:select {:predicate (w/postwalk-replace (set/map-invert columns) predicate)}
+         (let [columns (remove-unused-correlated-columns columns dependent-relation)]
+           [:apply :cross-join columns independent-relation dependent-relation])]))))
 
 (defn- decorrelate-apply-rule-4
   "R A× (πv E) = πv ∪ columns(R) (R A× E)"
@@ -1287,11 +1324,12 @@
 (defn- promote-selection-to-mega-join [z]
   (r/zmatch
     z
-    [:select predicate
+    [:select opts
      [:mega-join join-condition rels]]
     ;;=>
-    (when (columns-in-predicate-present-in-relation? [:mega-join join-condition rels] predicate)
-      [:mega-join (conj join-condition predicate) rels])))
+    (let [{:keys [predicate]} opts]
+      (when (columns-in-predicate-present-in-relation? [:mega-join join-condition rels] predicate)
+        [:mega-join (conj join-condition predicate) rels]))))
 
 (defn- split-conjunctions-in-mega-join [z]
   (r/zmatch
@@ -1321,7 +1359,7 @@
                                (update-vals (fn [updates-for-rel]
                                               (reduce
                                                 (fn [rel pred]
-                                                  [:select (:pred pred)
+                                                  [:select {:predicate (:pred pred)}
                                                    rel])
                                                 (:rel (first updates-for-rel))
                                                 (mapcat :preds updates-for-rel)))))

@@ -2,4 +2,4 @@
  [{s docs.1/_id}]
  [:rename
   docs.1
-  [:select (> nil 1) [:scan {:table #xt/table docs} [_id]]]]]
+  [:select {:predicate (> nil 1)} [:scan {:table #xt/table docs} [_id]]]]]

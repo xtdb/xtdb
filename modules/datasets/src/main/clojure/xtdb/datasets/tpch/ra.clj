@@ -83,7 +83,7 @@
             [o_orderpriority _id
              {o_orderdate (and (>= o_orderdate ?start_date)
                                (< o_orderdate ?end_date))}]]]
-          [:select (< l_commitdate l_receiptdate)
+          [:select {:predicate (< l_commitdate l_receiptdate)}
            [:scan {:table #xt/table lineitem} [l_orderkey l_commitdate l_receiptdate]]]]]]
       (with-args {:start-date (LocalDate/parse "1993-07-01")
                   ;; in the spec this is one date with `+ INTERVAL 3 MONTHS`
@@ -300,8 +300,8 @@
           [:join [{o_orderkey l_orderkey}]
            [:rename {_id o_orderkey}
             [:scan {:table #xt/table orders} [_id o_orderpriority]]]
-           [:select (and (< l_commitdate l_receiptdate)
-                         (< l_shipdate l_commitdate))
+           [:select {:predicate (and (< l_commitdate l_receiptdate)
+                                     (< l_shipdate l_commitdate))}
             [:scan {:table #xt/table lineitem}
              [l_orderkey l_commitdate l_shipdate
               {l_shipmode (or (== l_shipmode ?ship_mode1)
@@ -413,7 +413,7 @@
             [:semi-join [{o_orderkey l_orderkey}]
              [:rename {_id o_orderkey}
               [:scan {:table #xt/table orders} [_id o_custkey o_orderdate o_totalprice]]]
-             [:select (> sum_qty ?qty)
+             [:select {:predicate (> sum_qty ?qty)}
               [:group-by [l_orderkey {sum_qty (sum l_quantity)}]
                [:scan {:table #xt/table lineitem} [l_orderkey l_quantity]]]]]
             [:rename {_id c_custkey}
@@ -424,33 +424,33 @@
 (def q19-discounted-revenue
   (-> '[:group-by [{revenue (sum disc_price)}]
         [:project [{disc_price (* l_extendedprice (- 1 l_discount))}]
-         [:select (or (and (== p_brand ?brand1)
-                           (or (== p_container "SM CASE")
-                               (== p_container "SM BOX")
-                               (== p_container "SM PACK")
-                               (== p_container "SM PKG"))
-                           (>= l_quantity ?qty1)
-                           (<= l_quantity (+ ?qty1 10))
-                           (>= p_size 1)
-                           (<= p_size 5))
-                      (and (== p_brand ?brand2)
-                           (or (== p_container "MED CASE")
-                               (== p_container "MED BOX")
-                               (== p_container "MED PACK")
-                               (== p_container "MED PKG"))
-                           (>= l_quantity ?qty2)
-                           (<= l_quantity (+ ?qty2 10))
-                           (>= p_size 1)
-                           (<= p_size 10))
-                      (and (== p_brand ?brand3)
-                           (or (== p_container "LG CASE")
-                               (== p_container "LG BOX")
-                               (== p_container "LG PACK")
-                               (== p_container "LG PKG"))
-                           (>= l_quantity ?qty3)
-                           (<= l_quantity (+ ?qty3 10))
-                           (>= p_size 1)
-                           (<= p_size 15)))
+         [:select {:predicate (or (and (== p_brand ?brand1)
+                                       (or (== p_container "SM CASE")
+                                           (== p_container "SM BOX")
+                                           (== p_container "SM PACK")
+                                           (== p_container "SM PKG"))
+                                       (>= l_quantity ?qty1)
+                                       (<= l_quantity (+ ?qty1 10))
+                                       (>= p_size 1)
+                                       (<= p_size 5))
+                                  (and (== p_brand ?brand2)
+                                       (or (== p_container "MED CASE")
+                                           (== p_container "MED BOX")
+                                           (== p_container "MED PACK")
+                                           (== p_container "MED PKG"))
+                                       (>= l_quantity ?qty2)
+                                       (<= l_quantity (+ ?qty2 10))
+                                       (>= p_size 1)
+                                       (<= p_size 10))
+                                  (and (== p_brand ?brand3)
+                                       (or (== p_container "LG CASE")
+                                           (== p_container "LG BOX")
+                                           (== p_container "LG PACK")
+                                           (== p_container "LG PKG"))
+                                       (>= l_quantity ?qty3)
+                                       (<= l_quantity (+ ?qty3 10))
+                                       (>= p_size 1)
+                                       (<= p_size 15)))}
           [:join [{p_partkey l_partkey}]
            [:rename {_id p_partkey}
             [:scan {:table #xt/table part} [_id p_brand p_container p_size]]]
@@ -491,7 +491,7 @@
                   [:join [{l1/l_suppkey s_suppkey}]
                    [:join [{l1/l_orderkey o_orderkey}]
                     [:rename l1
-                     [:select (> l_receiptdate l_commitdate)
+                     [:select {:predicate (> l_receiptdate l_commitdate)}
                       [:scan {:for-valid-time [:at :now], :table #xt/table lineitem}
                        [l_orderkey l_suppkey l_receiptdate l_commitdate]]]]
                     [:rename {_id o_orderkey}
@@ -516,7 +516,7 @@
               [:relation L1 {:col-names [l_orderkey l_suppkey l_receiptdate l_commitdate]}]
               [:join [{l1/l_orderkey l3/l_orderkey} (<> l3/l_suppkey l1/l_suppkey)]
                [:relation L1 {:col-names [l_orderkey l_suppkey l_receiptdate l_commitdate]}]
-               [:select (> l3/l_receiptdate l3/l_commitdate)
+               [:select {:predicate (> l3/l_receiptdate l3/l_commitdate)}
                 [:rename l3
                  [:scan {:table #xt/table lineitem} [l_orderkey l_suppkey l_receiptdate l_commitdate]]]]]]]]]]]]
       (with-args {:nation "SAUDI ARABIA"})))
@@ -534,7 +534,7 @@
            [:join [(> c_acctbal avg_acctbal)]
             [:relation Customer {:col-names [c_custkey cntrycode c_acctbal]}]
             [:group-by [{avg_acctbal (avg c_acctbal)}]
-             [:select (> c_acctbal 0.0)
+             [:select {:predicate (> c_acctbal 0.0)}
               [:relation Customer {:col-names [c_custkey cntrycode c_acctbal]}]]]]
            [:scan {:for-valid-time [:at :now], :table #xt/table orders}
             [o_custkey]]]]]]

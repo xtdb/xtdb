@@ -7,7 +7,7 @@
 (t/deftest test-select
   (t/is (= [[{:a 12, :b 10}]
             [{:a 100, :b 83}]]
-           (tu/query-ra [:select '(> a b)
+           (tu/query-ra [:select {:predicate '(> a b)}
                          [::tu/pages
                           [[{:a 12, :b 10}
                             {:a 0, :b 15}]
@@ -18,7 +18,7 @@
   (t/testing "param"
     (t/is (= [[{:a 100, :b 83}]
               [{:a 83, :b 100}]]
-             (tu/query-ra [:select '(> a ?b)
+             (tu/query-ra [:select {:predicate '(> a ?b)}
                            [::tu/pages
                             [[{:a 12, :b 10}
                               {:a 0, :b 15}]
@@ -29,14 +29,14 @@
 
 (deftest test-no-column-relation
   (t/is (= [{}]
-           (tu/query-ra '[:select true
+           (tu/query-ra '[:select {:predicate true}
                           [:table [{}]]])))
   (t/is (= []
            (tu/query-ra
-            '[:select false
+            '[:select {:predicate false}
               [:table [{}]]])))
 
   (t/is (= [{} {} {}]
-           (tu/query-ra '[:select (== ?ap_n 2)
+           (tu/query-ra '[:select {:predicate (== ?ap_n 2)}
                           [:table [{} {} {}]]]
                         {:args {:ap-n 2}}))))

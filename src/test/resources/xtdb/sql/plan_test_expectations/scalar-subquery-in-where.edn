@@ -1,7 +1,7 @@
 [:project
  [{some_column x.1/y}]
  [:select
-  (== x.1/y _sq_2)
+  {:predicate (== x.1/y _sq_2)}
   [:single-join
    []
    [:rename x.1 [:scan {:table #xt/table x} [y]]]

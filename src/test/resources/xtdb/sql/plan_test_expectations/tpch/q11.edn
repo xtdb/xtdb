@@ -5,7 +5,7 @@
   [:project
    [ps.1/ps_partkey {value _sum_out_12}]
    [:select
-    (> _sum_out_4 _sq_6)
+    {:predicate (> _sum_out_4 _sq_6)}
     [:single-join
      []
      [:group-by

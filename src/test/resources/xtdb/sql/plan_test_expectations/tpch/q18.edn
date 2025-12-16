@@ -42,7 +42,7 @@
          [:project
           [{l_orderkey l.5/l_orderkey}]
           [:select
-           (> _sum_out_6 300)
+           {:predicate (> _sum_out_6 300)}
            [:group-by
             [l.5/l_orderkey {_sum_out_6 (sum l.5/l_quantity)}]
             [:rename

@@ -22,7 +22,7 @@
          [:semi-join
           [{ps.4/ps_partkey _id}]
           [:select
-           (> ps.4/ps_availqty _sq_7)
+           {:predicate (> ps.4/ps_availqty _sq_7)}
            [:map
             [{_sq_7 (* 0.5 _sum_out_11)}]
             [:group-by
