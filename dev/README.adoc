@@ -165,3 +165,15 @@ Process crash logs into EDN format:
 
 Example: `./dev/read-crash-log-folder.sh /path/to/my-crash-logs` outputs to `/path/to/my-crash-logs/edn/`
 --
+
+== Comments
+
+(mostly for AI agents)
+
+Elide comments and docstrings that only describe the code under question or repeat the name of the function - assume that the reading developer is familiar with standard development practices.
+DO write comments describing any non-standard practices, or anything that might be counter-intuitive.
+e.g. "This is for performance, because ...", "see #bugnum", "this might be mutated by <...>"
+
+== Git
+
+see link:GIT.adoc[] for details on git practices in XTDB.
