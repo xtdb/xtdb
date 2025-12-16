@@ -57,6 +57,12 @@ This is particularly useful for non-JVM testing - see the `/lang` README for mor
 == Testing
 
 * Test all with `./gradlew test`; `./gradlew integration-test` for longer tests
+** Individual tests: identify the module they live in, and (for Clojure tests) replace dashes with underscores.
+   
+   Most Clojure tests live in the root module (under `/src/test/clojure`) so that they're available by default in the root REPL.
+   e.g. `./gradlew :test --tests 'xtdb.api_test*'`
+
+   You can also run with a wildcarded keyword - e.g. `./gradlew :test --tests '*expression*'`.
 * Property-based testing with `./gradlew property-test`
 ** Run with custom iterations: `./gradlew property-test -Piterations=500` (defaults to 100)
 ** Uses test.check generators to test with randomized data including composite types
