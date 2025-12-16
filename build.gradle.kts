@@ -698,6 +698,14 @@ createBench("tsbs-iot", mapOf(
     "timestampEnd" to "--timestamp-end"
 ))
 
+createBench("fusion", mapOf(
+    "deviceCount" to "--devices",
+    "readingCount" to "--readings",
+    "batchSize" to "--batch-size",
+    "updateBatchSize" to "--update-batch-size",
+    "updatesPerDevice" to "--updates-per-device"
+))
+
 createBench("patch", mapOf("docCount" to "--doc-count", "patchCount" to "--patch-count"))
 
 createBench("ingestTxOverhead", mapOf("docCount" to "--doc-count", "batchSizes" to "--batch-sizes"))
