@@ -601,6 +601,20 @@
   (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00"}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00' AS TIMESTAMP WITHOUT TIME ZONE) as \"timestamp\"")))
 
+  (t/testing "CAST timestamp with timezone to TIMESTAMP (Metabase compatibility)"
+    (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00"}]
+             (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00Z' AS TIMESTAMP) as \"timestamp\""))
+          "ignores Z suffix with CAST")
+    (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00"}]
+             (xt/q tu/*node* "SELECT CAST('2021-10-21T12:34:00+01:00' AS TIMESTAMP) as \"timestamp\""))
+          "ignores timezone offset with CAST")
+    (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00"}]
+             (xt/q tu/*node* "SELECT '2021-10-21T12:34:00Z'::timestamp as \"timestamp\""))
+          "ignores Z suffix with ::")
+    (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:34:00"}]
+             (xt/q tu/*node* "SELECT '2021-10-21T12:34:00+01:00'::timestamp as \"timestamp\""))
+          "ignores timezone offset with ::"))
+
   (t/is (= [{:date #xt/date "2021-10-21"}]
            (xt/q tu/*node* "SELECT CAST('2021-10-21' AS DATE) as \"date\"")))
 

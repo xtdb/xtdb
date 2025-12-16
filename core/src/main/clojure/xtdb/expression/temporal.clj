@@ -315,12 +315,18 @@
 (defn gen-alter-precision [precision]
   (if precision (list `(alter-precision ~precision)) '()))
 
-(defn parse-ts-local [ts-str]
+(defn parse-ts-local
+  "Parses a timestamp string to LocalDateTime.
+   For PostgreSQL compatibility, accepts timestamps with timezone info (like 'Z' suffix)
+   and converts to LocalDateTime by extracting the local date-time portion."
+  [ts-str]
   (parse-with-error-handling "timestamp without timezone"
                              (fn [s]
                                (let [res (time/parse-sql-timestamp-literal s)]
-                                 (when (instance? LocalDateTime res)
-                                   res)))
+                                 (cond
+                                   (instance? LocalDateTime res) res
+                                   (instance? ZonedDateTime res) (.toLocalDateTime ^ZonedDateTime res)
+                                   :else nil)))
                              ts-str))
 
 (defmethod expr/codegen-cast [:utf8 :timestamp-local] [{:keys [^VectorType target-type] {:keys [precision]} :cast-opts}]
