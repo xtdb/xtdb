@@ -25,7 +25,7 @@ class TransitVector(override val inner: VarBinaryVector) : ExtensionVector(), Me
 
     override fun writeObject0(value: Any) =
         when (value) {
-            is ClojureForm, is Anomaly,
+            is ClojureForm, is Anomaly, is Throwable,
             -> inner.writeObject(requiringResolve("xtdb.serde/write-transit")(value) as ByteArray)
 
             else -> throw InvalidWriteObjectException(this, value)

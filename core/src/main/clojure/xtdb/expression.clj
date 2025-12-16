@@ -364,7 +364,7 @@
     :time-local Long, :timestamp-tz Long, :timestamp-local Long, :duration Long, :tstz-range Object
     :utf8 Bytes, :varbinary Bytes, :keyword Bytes, :uuid Bytes
 
-    :list Object, :set Object, :struct Object :transit Object})
+    :list Object, :set Object, :struct Object :transit Bytes})
 
 (defmethod read-value-code :null [_ & _args] nil)
 
