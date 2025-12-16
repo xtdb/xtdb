@@ -1,6 +1,5 @@
 (ns xtdb.pgwire
   (:require [clojure.java.io :as io]
-            [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [cognitect.anomalies :as-alias anom]
@@ -16,7 +15,6 @@
             [xtdb.metrics :as metrics]
             [xtdb.node :as xtn]
             [xtdb.pgwire.io :as pgio]
-            [xtdb.pgwire.types :as pg-types]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
@@ -24,7 +22,8 @@
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [clojure.test :as t])
   (:import io.micrometer.core.instrument.Counter
            [java.io Closeable DataInputStream EOFException IOException PushbackInputStream]
            [java.lang Thread$State]
@@ -47,6 +46,8 @@
            xtdb.database.Database$Config
            (xtdb.error Incorrect Interrupted)
            xtdb.IResultCursor
+           (xtdb.pgwire PgType PgTypes)
+           xtdb.JsonSerde
            (xtdb.query PreparedQuery)
            (xtdb.tx TxOpts)
            (xtdb.tx_ops Sql)))
@@ -274,7 +275,7 @@
             (-> (ex->pgw-err ex)
                 (assoc :detail (case (get-in @conn-state [:session :parameters "fallback_output_format"])
                                  :transit (serde/write-transit ex :json)
-                                 (pg-types/json-bytes ex))))))
+                                 (JsonSerde/encodeToBytes ex))))))
 
         severity-str (str/upper-case (name severity))]
     (pgio/cmd-write-msg conn pgio/msg-error-response
@@ -584,22 +585,26 @@
 (defn cmd-rollback [{:keys [conn-state]}]
   (swap! conn-state dissoc :transaction))
 
+(defn- fallback-type [session]
+  (case (get-in session [:parameters "fallback_output_format"] :json)
+    :json PgType/PG_JSON
+    :transit PgType/PG_TRANSIT))
+
+(defn- field->pg-col [^Field field]
+  {:pg-type (PgType/fromField field)
+   :col-name (.getName field)})
+
 (defn- cmd-send-row-description [{:keys [conn-state] :as conn} pg-cols]
-  (let [defaults {:table-oid 0
-                  :column-attribute-number 0
-                  :typlen -1
-                  :type-modifier -1
-                  :result-format :text}
-        types-with-default (-> pg-types/pg-types
-                               (assoc :default (->> (get-in @conn-state [:session :parameters "fallback_output_format"] :json)
-                                                    (get pg-types/pg-types))))
-        apply-defaults (fn [{:keys [pg-type col-name result-format]}]
-                         (-> (into defaults
-                                   (-> (get types-with-default pg-type)
-                                       (select-keys [:oid :typlen :type-modifier])
-                                       (set/rename-keys {:oid :column-oid})))
-                             (assoc :column-name col-name)
-                             (cond-> result-format (assoc :result-format result-format))))
+  (let [fallback (fallback-type (:session @conn-state))
+        apply-defaults (fn [{:keys [^PgType pg-type col-name result-format]}]
+                         (let [^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) fallback pg-type)]
+                           {:table-oid 0
+                            :column-attribute-number 0
+                            :column-oid (.getOid pg-type)
+                            :typlen (.getTyplen pg-type)
+                            :type-modifier -1
+                            :column-name col-name
+                            :result-format (or result-format :text)}))
         data {:columns (mapv apply-defaults pg-cols)}]
 
     (log/trace "sending row description - " (assoc data :input-cols pg-cols))
@@ -617,7 +622,7 @@
                                          :show-variable []
                                          (vec (for [^long param-oid param-oids]
                                                 (if (zero? param-oid)
-                                                  (get-in pg-types/pg-types [:text :oid])
+                                                  (.getOid PgType/PG_TEXT)
                                                   param-oid))))}))
 
 (defn cmd-describe-canned-response [conn canned-response]
@@ -697,7 +702,7 @@
    ;; because our query protocol impl is broken, or partially implemented.
    ;; java.lang.IllegalStateException: Received resultset tuples, but no field structure for them
    {:q "select string_agg(word, ',') from pg_catalog.pg_get_keywords()"
-    :cols [{:col-name "col1" :pg-type :varchar}]
+    :cols [{:col-name "col1" :pg-type PgType/PG_VARCHAR}]
     :rows (fn [_conn] [["xtdb"]])}])
 
 (defn- trim-sql [s]
@@ -917,20 +922,20 @@
     (-> (xt/template [:table [{~(keyword variable) ?_0}]])
         (with-meta {:param-count 1}))))
 
-(defn- show-var-param-col-types [variable]
+(defn- show-var-param-types [variable]
   (case variable
-    "latest_completed_txs" [[:list [:struct {'db_name :utf8
-                                             'part :i32
-                                             'tx_id :i64
-                                             'system_time types/temporal-col-type}]]]
-    ("latest_submitted_msg_ids" "latest_processed_msg_ids") [[:list [:struct {'db_name :utf8
-                                                                              'part :i32
-                                                                              'msg_id :i64}]]]
-    "latest_submitted_tx" [:i64 types/temporal-col-type :bool :transit :utf8]
-    "await_token" [:utf8]
-    "standard_conforming_strings" [:bool]
+    "latest_completed_txs" [#xt/type [:list [:struct {"db_name" :utf8}
+                                                     {"part" :i32}
+                                                     {"tx_id" :i64}
+                                                     {"system_time" :instant}]]]
+    ("latest_submitted_msg_ids" "latest_processed_msg_ids") [#xt/type [:list [:struct {"db_name" :utf8}
+                                                                                      {"part" :i32}
+                                                                                      {"msg_id" :i64}]]]
+    "latest_submitted_tx" [#xt/type :i64, #xt/type :instant, #xt/type :bool, #xt/type :transit, #xt/type :utf8]
+    "await_token" [#xt/type :utf8]
+    "standard_conforming_strings" [#xt/type :bool]
 
-    [:utf8]))
+    [#xt/type :utf8]))
 
 (defn- prep-stmt [{:keys [node conn-state default-db] :as conn} {:keys [statement-type param-oids] :as stmt}]
   (case statement-type
@@ -958,19 +963,19 @@
 
         (let [param-oids (->> (concat param-oids (repeat 0))
                               (into [] (take (.getParamCount pq))))
-              param-col-types (case statement-type
-                            (:query :execute) (map (comp :col-type pg-types/pg-types-by-oid) param-oids)
-                            :show-variable (show-var-param-col-types (:variable stmt)))
-              pg-cols (if (some nil? param-col-types)
+              param-types (case statement-type
+                            (:query :execute) (map #(some-> (PgType/fromOid %) .getXtType) param-oids)
+                            :show-variable (show-var-param-types (:variable stmt)))
+              pg-cols (if (some nil? param-types)
                         ;; if we're unsure on some of the col-types, return all of the output cols as the fallback type (#4455)
                         (for [col-name (map str (.getColumnNames pq))]
-                          {:pg-type :default, :col-name col-name})
+                          {:pg-type PgType/PG_DEFAULT, :col-name col-name})
 
-                        (->> (.getColumnFields pq (->> param-col-types
-                                                       (into [] (comp (map (comp types/col-type->field types/col-type->nullable-col-type))
-                                                                      (map-indexed (fn [idx field]
-                                                                                     (types/field-with-name field (str "?_" idx))))))))
-                             (mapv pg-types/field->pg-col)))]
+                        (->> (.getColumnFields pq (->> param-types
+                                                       (into [] (comp (map types/->nullable-type)
+                                                                      (map-indexed (fn [idx vt]
+                                                                                     (types/->field vt (str "?_" idx))))))))
+                             (mapv field->pg-col)))]
           (assoc stmt
                  :prepared-query pq
                  :param-oids param-oids
@@ -1023,19 +1028,19 @@
 
       (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "PREPARE"}))))
 
-(defn- ->xtify-arg [session {:keys [arg-format param-oids]}]
+(defn- ->xtify-arg [_session {:keys [arg-format param-oids]}]
   (fn xtify-arg [arg-idx arg]
     (when (some? arg)
       (let [param-oid (nth param-oids arg-idx)
             arg-format (nth arg-format arg-idx :text)
-            {:keys [read-binary, read-text]} (or (get pg-types/pg-types-by-oid param-oid)
-                                                 (throw (err/unsupported ::unsupported-param-type "Unsupported param type provided for read"
-                                                                         {:param-oid param-oid, :arg-format arg-format, :arg arg})))]
+            ^PgType pg-type (or (PgType/fromOid param-oid)
+                                (throw (err/unsupported ::unsupported-param-type "Unsupported param type provided for read"
+                                                        {:param-oid param-oid, :arg-format arg-format, :arg arg})))]
 
         (try
           (if (= :binary arg-format)
-            (read-binary session arg)
-            (read-text session arg))
+            (.readBinary pg-type arg)
+            (.readText pg-type arg))
           (catch Exception e
             (let [ex-msg (or (ex-message e) (str "invalid arg representation - " e))]
               (throw (err/incorrect ::invalid-arg-representation ex-msg
@@ -1079,17 +1084,18 @@
                   (.openQuery prepared-query (assoc query-opts :args args-rel :query-text (:query stmt))))))
 
             (->pg-cols [prepared-pg-cols ^IResultCursor cursor]
-              (let [resolved-pg-cols (mapv pg-types/field->pg-col (.getResultFields cursor))]
+              (let [resolved-pg-cols (mapv field->pg-col (.getResultFields cursor))]
                 (when-not (and (= (count prepared-pg-cols) (count resolved-pg-cols))
                                (->> (map vector prepared-pg-cols resolved-pg-cols)
                                     (every? (fn [[{prepared-pg-type :pg-type} {resolved-pg-type :pg-type}]]
-                                              (or (= prepared-pg-type :default)
-                                                  (= resolved-pg-type :null)
-                                                  (= prepared-pg-type resolved-pg-type))))))
+                                              (or (identical? prepared-pg-type PgType/PG_DEFAULT)
+                                                  (identical? resolved-pg-type PgType/PG_NULL)
+                                                  (identical? prepared-pg-type resolved-pg-type))))))
                   (throw (err/conflict :prepared-query-out-of-date "cached plan must not change result type"
+                                       #_ ; FIXME: these break because of PgType not being serializable
                                        {:prepared-cols prepared-pg-cols
-                                        :resolved-cols resolved-pg-cols}))))
-              (with-result-formats prepared-pg-cols result-format))]
+                                        :resolved-cols resolved-pg-cols})))
+              (with-result-formats prepared-pg-cols result-format)))]
 
       (case statement-type
         :query (util/with-close-on-catch [cursor (->cursor xt-args)]
@@ -1154,7 +1160,7 @@
                                                           (-> (.vectorForOrNull args-rel (.getName field))
                                                               (.getObject 0))))
                                              :param-oids (->> arg-fields
-                                                              (mapv (comp :oid pg-types/pg-types :pg-type pg-types/field->pg-col)))))
+                                                              (mapv (comp PgType/.getOid :pg-type field->pg-col)))))
                                   (finally
                                     (util/close args-rel))))))))
 
@@ -1215,7 +1221,7 @@
 (defn cmd-write-canned-response [conn {:keys [q rows] :as _canned-resp}]
   (let [rows (rows conn)]
     (doseq [row rows]
-      (pgio/cmd-write-msg conn pgio/msg-data-row {:vals (mapv (fn [v] (if (bytes? v) v (pg-types/utf8 v))) row)}))
+      (pgio/cmd-write-msg conn pgio/msg-data-row {:vals (mapv (fn [v] (if (bytes? v) v (PgTypes/utf8 v))) row)}))
 
     (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head q) " " (count rows))})))
 
@@ -1323,10 +1329,8 @@
                       {:keys [limit query ^IResultCursor cursor pg-cols] :as _portal}]
   (try
     (let [n-rows-out (volatile! 0)
-          session (:session @conn-state)
-          types-with-default (-> pg-types/pg-types
-                                 (assoc :default (->> (get-in session [:parameters "fallback_output_format"] :json)
-                                                      (get pg-types/pg-types))))]
+          {session-params :parameters, :as session} (:session @conn-state)
+          fallback (fallback-type session)]
       (run-cancellable-query!
         conn
         (fn []
@@ -1343,14 +1347,12 @@
                                                                    limit (min (- limit @n-rows-out)))]
                                                (let [row (mapv
                                                            (fn [{:keys [^String col-name pg-type result-format]}]
-                                                             (let [{:keys [write-binary write-text]} (get types-with-default pg-type)
+                                                             (let [^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) fallback pg-type)
                                                                    rdr (.vectorForOrNull rel col-name)]
                                                                (when-not (.isNull rdr idx)
                                                                  (if (= :binary result-format)
-                                                                   (write-binary session rdr idx)
-                                                                   (if write-text
-                                                                     (write-text session rdr idx)
-                                                                     (pg-types/write-json session rdr idx))))))
+                                                                   (.writeBinary pg-type session-params rdr idx)
+                                                                   (.writeText pg-type session-params rdr idx)))))
                                                            pg-cols)]
                                                  (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
                                                  (vswap! n-rows-out inc))))))))))

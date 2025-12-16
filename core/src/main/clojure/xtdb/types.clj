@@ -472,16 +472,4 @@
        (into {} (map (juxt key (fn [[k v]]
                                  (field-with-name (merge-fields v null-field) (str k))))))))
 
-(defn remove-nulls
-  [typ]
-  (zmatch typ
-    [:union inner-types] (let [res (->> (disj inner-types :null)
-                                        (into #{} (map remove-nulls)))]
-                           (if (<= (count res) 1)
-                             (first res)
-                             [:union res]))
-    [:list inner-type] [:list (remove-nulls inner-type)]
-    [:set inner-type] [:set (remove-nulls inner-type)]
-    [:struct field-map] [:struct (zipmap (keys field-map)
-                                         (map remove-nulls (vals field-map)))]
-    typ))
+

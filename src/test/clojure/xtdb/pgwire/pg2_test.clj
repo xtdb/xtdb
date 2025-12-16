@@ -250,7 +250,7 @@
 
 (deftest test-time
   (with-open [conn (pg-conn {})]
-    (t/is (= [{:v "20:40:31.932254"}]
+    (t/is (= [{:v #xt/time "20:40:31.932254"}]
              (pg/execute conn "SELECT TIME '20:40:31.932254' v"))
           "time is returned as json")))
 

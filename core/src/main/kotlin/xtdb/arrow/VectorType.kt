@@ -129,6 +129,9 @@ data class VectorType(
         val DATE_DAY = VectorType(ArrowType.Date(org.apache.arrow.vector.types.DateUnit.DAY))
 
         @JvmField
+        val TIME_MICRO = VectorType(ArrowType.Time(MICROSECOND, 64))
+
+        @JvmField
         val TIME_NANO = VectorType(ArrowType.Time(org.apache.arrow.vector.types.TimeUnit.NANOSECOND, 64))
 
         @JvmField

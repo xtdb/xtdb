@@ -27,6 +27,9 @@ import java.io.OutputStream
 import java.math.BigDecimal
 import java.time.*
 import java.util.*
+import xtdb.table.TableRef
+import xtdb.time.Interval
+import xtdb.time.asInterval
 
 /**
  * @suppress
@@ -40,8 +43,8 @@ object AnySerde : KSerializer<Any> {
     private fun JsonElement.asLong() = (this as? JsonPrimitive)?.longOrNull
     private fun JsonElement.asDouble() = (this as? JsonPrimitive)?.doubleOrNull
 
-    private fun toThrowable(obj: JsonObject): Throwable {
-        val errorMessage = obj["xtdb.error/message"]!!.asString()!!
+    private fun toThrowable(type: String, obj: JsonObject): Throwable {
+        val errorMessage = obj["xtdb.error/message"]?.asString()
 
         val dataObj = obj["xtdb.error/data"] as? JsonObject
 
@@ -53,19 +56,25 @@ object AnySerde : KSerializer<Any> {
 
         fun IPersistentMap.withCategory(cat: Keyword) = assoc(CATEGORY, cat)
 
-        return when (obj["xtdb.error/class"]!!.asString()!!) {
-            "xtdb.error.Incorrect" -> Incorrect(errorMessage, errorData.withCategory(INCORRECT))
-            "xtdb.error.Unsupported" -> Unsupported(errorMessage, errorData.withCategory(UNSUPPORTED))
-            "xtdb.error.Conflict" -> Conflict(errorMessage, errorData.withCategory(CONFLICT))
-            "xtdb.error.Fault" -> Fault(errorMessage, errorData.withCategory(FAULT))
-            "xtdb.error.Interrupted" -> Interrupted(errorMessage, errorData.withCategory(INTERRUPTED))
-            "xtdb.error.NotFound" -> NotFound(errorMessage, errorData.withCategory(NOT_FOUND))
-            "xtdb.error.Forbidden" -> Forbidden(errorMessage, errorData.withCategory(FORBIDDEN))
-            "xtdb.error.Busy" -> Busy(errorMessage, errorData.withCategory(BUSY))
-            "xtdb.error.Unavailable" -> Unavailable(errorMessage, errorData.withCategory(UNAVAILABLE))
-            else -> ExceptionInfo(errorMessage, PersistentHashMap.create(errorData))
+        return when (type) {
+            "xt:incorrect" -> Incorrect(errorMessage, errorData.withCategory(INCORRECT))
+            "xt:unsupported" -> Unsupported(errorMessage, errorData.withCategory(UNSUPPORTED))
+            "xt:conflict" -> Conflict(errorMessage, errorData.withCategory(CONFLICT))
+            "xt:fault" -> Fault(errorMessage, errorData.withCategory(FAULT))
+            "xt:interrupted" -> Interrupted(errorMessage, errorData.withCategory(INTERRUPTED))
+            "xt:not-found" -> NotFound(errorMessage, errorData.withCategory(NOT_FOUND))
+            "xt:forbidden" -> Forbidden(errorMessage, errorData.withCategory(FORBIDDEN))
+            "xt:busy" -> Busy(errorMessage, errorData.withCategory(BUSY))
+            "xt:unavailable" -> Unavailable(errorMessage, errorData.withCategory(UNAVAILABLE))
+            "xt:error" -> ExceptionInfo(errorMessage, PersistentHashMap.create(errorData))
+            else -> throw jsonIAE("unknown-error-type", obj)
         }
     }
+
+    private val ANOMALY_TYPES = setOf(
+        "xt:incorrect", "xt:unsupported", "xt:conflict", "xt:fault", "xt:interrupted",
+        "xt:not-found", "xt:forbidden", "xt:busy", "xt:unavailable", "xt:error"
+    )
 
     fun JsonElement.toValue(): Any? = when (this) {
         is JsonArray -> map { it.toValue() }
@@ -95,6 +104,7 @@ object AnySerde : KSerializer<Any> {
                     "xt:date" -> LocalDate.parse(value.asStringOrThrow())
                     "xt:time" -> LocalTime.parse(value.asStringOrThrow())
                     "xt:duration" -> Duration.parse(value.asStringOrThrow())
+                    "xt:interval" -> value.asStringOrThrow().asInterval()
                     "xt:timeZone" -> ZoneId.of(value.asStringOrThrow())
                     "xt:period" -> Period.parse(value.asStringOrThrow())
                     "xt:keyword" -> Keyword.intern(value.asStringOrThrow())
@@ -105,7 +115,17 @@ object AnySerde : KSerializer<Any> {
                         this
                     )).map { it.toValue() }.toSet()
 
-                    "xt:error" -> toThrowable(
+                    "xt:table" -> {
+                        val obj = value as? JsonObject ?: throw jsonIAEwithMessage("@value must be object!", this)
+                        TableRef(
+                            obj["db"]?.asStringOrThrow() ?: throw jsonIAEwithMessage("db is required!", this),
+                            obj["schema"]?.asString() ?: "public",
+                            obj["table"]?.asStringOrThrow() ?: throw jsonIAEwithMessage("table is required!", this)
+                        )
+                    }
+
+                    in ANOMALY_TYPES -> toThrowable(
+                        type,
                         value as? JsonObject ?: throw jsonIAEwithMessage(
                             "@value must be object!",
                             this
@@ -125,17 +145,30 @@ object AnySerde : KSerializer<Any> {
 
     private fun Any?.toJsonLdElement(type: String) = mapOf("@type" to type, "@value" to toString()).toJsonElement()
 
-    private fun Throwable.toJsonLdElement() = mapOf(
-        "@type" to "xt:error",
-        "@value" to listOfNotNull(
-            "xtdb.error/message" to message,
-            "xtdb.error/class" to javaClass.name,
-            (this as? IExceptionInfo)?.let {
-                "xtdb.error/data" to (data as Map<*, *>).mapKeys { (k, _) -> (k as? Keyword)?.sym?.toString() ?: k }
-                    .minus("cognitect.anomalies/category")
-            }
-        ).toMap()
-    ).toJsonElement()
+    private fun Throwable.toJsonLdElement(): JsonElement {
+        val type = when (this) {
+            is Incorrect -> "xt:incorrect"
+            is Unsupported -> "xt:unsupported"
+            is Conflict -> "xt:conflict"
+            is Fault -> "xt:fault"
+            is Interrupted -> "xt:interrupted"
+            is NotFound -> "xt:not-found"
+            is Forbidden -> "xt:forbidden"
+            is Busy -> "xt:busy"
+            is Unavailable -> "xt:unavailable"
+            else -> "xt:error"
+        }
+        return mapOf(
+            "@type" to type,
+            "@value" to listOfNotNull(
+                "xtdb.error/message" to message,
+                (this as? IExceptionInfo)?.let {
+                    "xtdb.error/data" to (data as Map<*, *>).mapKeys { (k, _) -> (k as? Keyword)?.sym?.toString() ?: k }
+                        .minus("cognitect.anomalies/category")
+                }
+            ).toMap()
+        ).toJsonElement()
+    }
 
     private fun Any?.toJsonElement(): JsonElement = when (this) {
         null -> JsonNull
@@ -164,6 +197,11 @@ object AnySerde : KSerializer<Any> {
         is Period -> toJsonLdElement("xt:period")
         is Date -> toInstant().toJsonElement()
         is Duration -> toJsonLdElement("xt:duration")
+        is Interval -> toJsonLdElement("xt:interval")
+        is TableRef -> mapOf(
+            "@type" to "xt:table",
+            "@value" to mapOf("db" to dbName, "schema" to schemaName, "table" to tableName)
+        ).toJsonElement()
         is Throwable -> toJsonLdElement()
         else -> throw Incorrect("unknown type: ${this.javaClass.name}")
     }
@@ -267,6 +305,12 @@ fun <T : Any> decode(inputStream: InputStream, clazz: Class<T>): Any {
  * @suppress
  */
 fun encode(value: Any): String = JSON_SERDE.encodeToString(value)
+
+/**
+ * @suppress
+ */
+@Suppress("unused")
+fun encodeToBytes(value: Any): ByteArray = encode(value).toByteArray(Charsets.UTF_8)
 
 /**
  * @suppress

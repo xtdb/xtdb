@@ -48,6 +48,7 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                 "timestamp" -> getObject(columnIndex, LocalDateTime::class.java)
                 "timestamptz" -> getObject(columnIndex, ZonedDateTime::class.java)
                 "tstz-range" -> getObject(columnIndex, ZonedDateTimeRange::class.java)
+                "time" -> getObject(columnIndex, LocalTime::class.java)
                 "duration" -> getObject(columnIndex, Duration::class.java)
                 "interval" -> getObject(columnIndex, Interval::class.java)
                 "regclass" -> getObject(columnIndex, RegClass::class.java)

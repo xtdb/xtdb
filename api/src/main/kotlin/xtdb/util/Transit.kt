@@ -2,14 +2,14 @@ package xtdb.util
 
 import clojure.lang.Keyword
 
-internal enum class TransitFormat(fmt: String) {
+enum class TransitFormat(fmt: String) {
     JSON("json"), MSGPACK("msgpack");
 
     val key: Keyword = Keyword.intern(fmt)
 }
 
-internal fun readTransit(bs: ByteArray, fmt: TransitFormat) =
+fun readTransit(bs: ByteArray, fmt: TransitFormat): Any? =
     requiringResolve("xtdb.serde/read-transit").invoke(bs, fmt.key)
 
-internal fun writeTransit(obj: Any, fmt: TransitFormat) =
+fun writeTransit(obj: Any, fmt: TransitFormat): ByteArray =
     requiringResolve("xtdb.serde/write-transit").invoke(obj, fmt.key) as ByteArray

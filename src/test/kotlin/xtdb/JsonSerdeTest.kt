@@ -135,10 +135,9 @@ class JsonSerdeTest {
             data = mapOf("a" to 1L),
         ).assertRoundTrip(
             """{
-              "@type": "xt:error",
+              "@type": "xt:incorrect",
               "@value": {
                 "xtdb.error/message": "sort your request out!",
-                "xtdb.error/class": "xtdb.error.Incorrect",
                 "xtdb.error/data": {
                   "xtdb.error/code": {"@type":"xt:keyword","@value":"xtdb/malformed-req"},
                   "a": 1
@@ -156,10 +155,9 @@ class JsonSerdeTest {
             mapOf("a" to 1L)
         ).assertRoundTrip(
             """{
-              "@type": "xt:error",
+              "@type": "xt:unsupported",
               "@value": {
                 "xtdb.error/message": "ruh roh.",
-                "xtdb.error/class": "xtdb.error.Unsupported",
                 "xtdb.error/data": {
                   "xtdb.error/code": {"@type":"xt:keyword","@value":"xtdb/boom"},
                   "a": 1

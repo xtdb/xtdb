@@ -3,7 +3,6 @@
             [integrant.core :as ig]
             [xtdb.authn.crypt :as authn.crypt]
             [xtdb.metadata]
-            [xtdb.pgwire.types :as pg-types]
             [xtdb.serde.types :as st]
             [xtdb.table :as table]
             [xtdb.trie :as trie]
@@ -22,6 +21,7 @@
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader VectorType VectorReader VectorWriter)
            xtdb.database.Database
+           xtdb.pgwire.PgType
            (xtdb.indexer Snapshot)
            xtdb.operator.SelectionSpec
            xtdb.table.TableRef
@@ -225,27 +225,36 @@
      :reltoastrelid (int 0)}))
 
 (defn pg-type []
-  (for [{:keys [oid typname typsend typreceive typelem typinput typoutput] :as typ} (vals (dissoc pg-types/pg-types :default :null))]
-    {:oid (int oid)
-     :typname typname
+  (for [^PgType typ PgType/values]
+    {:oid (int (.getOid typ))
+     :typname (.getTypname typ)
      :typnamespace (name->oid "pg_catalog")
      :typowner (name->oid "xtdb")
      :typtype "b"
-     :typcategory (some-> typ :typcategory name first str/upper-case)
+     :typcategory (some-> (.getTypcategory typ) .getChr str)
      :typbasetype (int 0)
      :typnotnull false
      :typtypmod (int -1)
      :typrelid (int 0) ; zero for non composite types (or pg_class ref for composite types)
-     :typelem (int (or typelem 0))
-     :typarray (int (or (some-> typ :typarray pg-types/pg-types :oid)
-                        0))
-     :typsend typsend
-     :typreceive typreceive
-     :typinput (or typinput "")
-     :typoutput (or typoutput "")}))
+     :typelem (int (or (.getTypelem typ) 0))
+     :typarray (int (or (.getTyparray typ) 0))
+     :typsend (.getTypsend typ)
+     :typreceive (.getTypreceive typ)
+     :typinput (or (.getTypinput typ) "")
+     :typoutput (or (.getTypoutput typ) "")}))
+
+(def pg-ranges
+  {:tstz-range
+   {:rngtypid 3910
+    :rngsubtype 1184
+    :rngmultitypid 4534
+    :rngcollation 0
+    :rngsubopc 3127
+    :rngcanonical ""
+    :rngsubdiff "tstzrange_subdiff"}})
 
 (defn pg-range []
-  (for [{:keys [rngtypid rngsubtype rngmultitypid rngcollation rngsubopc rngcanonical rngsubdiff]} (vals pg-types/pg-ranges)]
+  (for [{:keys [rngtypid rngsubtype rngmultitypid rngcollation rngsubopc rngcanonical rngsubdiff]} (vals pg-ranges)]
     {:rngtypid (int rngtypid)
      :rngsubtype (int rngsubtype)
      :rngmultitypid (int rngmultitypid)
@@ -264,16 +273,12 @@
 
 (defn pg-attribute [col-rows]
   (for [{:keys [idx table name field]} col-rows
-        :let [{:keys [oid typlen]} (-> field
-                                       (types/field-with-name (str name))
-                                       (pg-types/field->pg-col)
-                                       :pg-type
-                                       (->> (get (-> pg-types/pg-types
-                                                     (assoc :default (get pg-types/pg-types :json))))))]]
+        :let [^PgType pg-type (PgType/fromField field)
+              ^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) PgType/PG_JSON pg-type)]]
     {:attrelid (name->oid (table/ref->schema+table table))
      :attname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (str name))
-     :atttypid (int oid)
-     :attlen (int (or typlen -1))
+     :atttypid (.getOid pg-type)
+     :attlen (int (or (.getTyplen pg-type) -1))
      :attnum (int idx)
      :attisdropped false
      :attnotnull false

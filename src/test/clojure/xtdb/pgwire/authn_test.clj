@@ -77,11 +77,9 @@
                    :localized-severity "ERROR",
                    :sql-state "28P01",
                    :message "Password authentication failed for user: test-user"
-                   :detail {:category "cognitect.anomalies/incorrect",
-                            :status 401,
-                            :code "xtdb/authn-failed",
-                            :body {:refresh-token nil, :expires-at nil, :access-token nil}
-                            :message "Password authentication failed for user: test-user"}}}]]
+                   :detail #xt/error [:incorrect :xtdb/authn-failed
+                                      "Password authentication failed for user: test-user"
+                                      {:status 401, :body {"access-token" nil, "refresh-token" nil, "expires-at" nil}}]}}]]
                @!in-msgs)))))
 
 (deftest ^:integration test-oidc-client-credentials-auth-success
@@ -113,7 +111,7 @@
                    :localized-severity "ERROR",
                    :sql-state "28P01",
                    :message "Client credentials must be provided in the format 'client-id:client-secret'",
-                   :detail {:category "cognitect.anomalies/incorrect",
-                            :code "xtdb/invalid-client-credentials",
-                            :message "Client credentials must be provided in the format 'client-id:client-secret'"}}}]]
+                   :detail #xt/error [:incorrect :xtdb/invalid-client-credentials
+                                      "Client credentials must be provided in the format 'client-id:client-secret'"
+                                      {}]}}]]
                @!in-msgs)))))

@@ -90,7 +90,7 @@
                                                                   [598393539 "_valid_from" 4 1184 8]
                                                                   [598393539 "_valid_to" 5 1184 8]
                                                                   [598393539 "committed" 6 16 1]
-                                                                  [598393539 "error" 7 114 -1]
+                                                                  [598393539 "error" 7 16384 -1]
                                                                   [598393539 "system_time" 8 1184 8]]]
                   {:atttypmod -1,
                    :attrelid attrelid,

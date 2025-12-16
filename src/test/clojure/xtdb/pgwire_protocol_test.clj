@@ -2,15 +2,18 @@
   (:require [clojure.test :as t :refer [deftest]]
             [jsonista.core :as json]
             [xtdb.authn :as authn]
+            [xtdb.authn-test :as authn-test]
             [xtdb.db-catalog :as db]
+            [xtdb.indexer.live-index :as li]
             [xtdb.pgwire :as pgwire]
             [xtdb.pgwire.io :as pgio]
-            [xtdb.pgwire.types :as pg-types]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [java.lang AutoCloseable]
            [java.nio.charset StandardCharsets]
-           [java.time Clock]))
+           [java.time Clock InstantSource]
+           xtdb.JsonSerde
+           [xtdb.pgwire PgType]))
 
 (def ^:dynamic ^:private *port* nil)
 
@@ -36,8 +39,7 @@
                  :msg-error-response (update-in data [:error-fields :detail]
                                                 (fn [detail]
                                                   (if (bytes? detail)
-                                                    (json/read-value (String. ^bytes detail StandardCharsets/UTF_8)
-                                                                     json/keyword-keys-object-mapper)
+                                                    (JsonSerde/decode (String. ^bytes detail))
                                                     detail)))
                  data)]
       (swap! !in-msgs conj [(:name msg-def) data]))
@@ -159,7 +161,7 @@
 
 (deftest test-extended-query
   (let [insert "INSERT INTO docs (_id, name) VALUES ('aln', $1)"
-        param-types [(-> pg-types/pg-types :text :oid)]
+        param-types [(.getOid PgType/PG_TEXT)]
         param-values ["alan"]
         query "SELECT * FROM docs"
         {:keys [!in-msgs] :as frontend} (->recording-frontend)]
@@ -205,7 +207,7 @@
                @!in-msgs)))))
 
 (deftest test-wrong-param-encoding-3653
-  (let [param-types [(-> pg-types/pg-types :timestamp :oid)]
+  (let [param-types [(.getOid PgType/PG_TIMESTAMP)]
         param-values ["alan"]
         query "SELECT $1 as v"
         {:keys [!in-msgs] :as frontend} (->recording-frontend)]
@@ -220,12 +222,10 @@
                   {:severity "ERROR",
                    :localized-severity "ERROR",
                    :sql-state "22P02",
-                   :message "invalid timestamp: Text 'alan' could not be parsed at index 0"
-                   :detail {:arg-idx 0,
-                            :category "cognitect.anomalies/incorrect",
-                            :arg-format "text",
-                            :code "xtdb.pgwire/invalid-arg-representation",
-                            :message "invalid timestamp: Text 'alan' could not be parsed at index 0"}}}]
+                   :message "Text 'alan' could not be parsed at index 0"
+                   :detail #xt/error [:incorrect :xtdb.pgwire/invalid-arg-representation 
+                                      "Text 'alan' could not be parsed at index 0"
+                                      {:arg-idx 0, :arg-format :text}]}}]
                 [:msg-ready {:status :idle}]]
                @!in-msgs)))))
 
@@ -296,10 +296,9 @@
                 [:msg-error-response {:error-fields
                                       {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01",
                                        :message "DML is not allowed in a READ ONLY transaction"
-                                       :detail {:category "cognitect.anomalies/incorrect",
-                                                :code "xtdb/dml-in-read-only-tx",
-                                                :query "INSERT INTO foo RECORDS {_id: 1}",
-                                                :message "DML is not allowed in a READ ONLY transaction"}}}]
+                                       :detail #xt/error [:incorrect :xtdb/dml-in-read-only-tx 
+                                                          "DML is not allowed in a READ ONLY transaction"
+                                                          {:query "INSERT INTO foo RECORDS {_id: 1}"}]}}]
                 [:msg-ready {:status :idle}]]
 
                (test "SELECT 1 one; INSERT INTO foo RECORDS {_id: 1}"))))
@@ -310,10 +309,9 @@
                 [:msg-error-response {:error-fields
                                       {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01",
                                        :message "Queries are unsupported in a DML transaction"
-                                       :detail {:category "cognitect.anomalies/incorrect",
-                                                :code "xtdb/queries-in-read-write-tx",
-                                                :query "SELECT 1 one",
-                                                :message "Queries are unsupported in a DML transaction"}}}]
+                                       :detail #xt/error [:incorrect :xtdb/queries-in-read-write-tx
+                                                          "Queries are unsupported in a DML transaction"
+                                                          {:query "SELECT 1 one"}]}}]
                 [:msg-ready {:status :idle}]]
 
                (test "INSERT INTO foo RECORDS {_id: 1}; SELECT 1 one"))))
@@ -332,9 +330,7 @@
                 [:msg-error-response {:error-fields
                                       {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01"
                                        :message "data exception - division by zero"
-                                       :detail {:category "cognitect.anomalies/incorrect",
-                                                :code "xtdb.expression/division-by-zero",
-                                                :message "data exception - division by zero"}}}]
+                                       :detail #xt/error [:incorrect :xtdb.expression/division-by-zero "data exception - division by zero" {}]}}]
                 [:msg-ready {:status :failed-transaction}]]
                (test "BEGIN; SELECT 1/0 boom;"))))
 
@@ -348,4 +344,3 @@
                                        :detail nil}}]
                 [:msg-ready {:status :idle}]]
                (test "SELECT 1 one; BEGIN"))))))
-

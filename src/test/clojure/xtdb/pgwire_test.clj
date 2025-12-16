@@ -28,6 +28,7 @@
            (java.util Arrays Calendar List TimeZone)
            (java.util.concurrent CountDownLatch TimeUnit)
            (org.postgresql.util PGobject PSQLException)
+           (xtdb.pgwire PgType)
            (xtdb JsonSerde)
            (xtdb.api DataSource$ConnectionBuilder)
            xtdb.api.log.Log$Message$FlushBlock
@@ -256,7 +257,7 @@
       (with-open [rs (.executeQuery stmt)
                   rs-star (.executeQuery star-stmt)]
         (t/is (= [{:my_col nil} {:my_col "foo"}] (resultset-seq rs)))
-        (t/is (= [{:_id 1, :my_col nil} {:_id 2, :my_col "foo"}] (resultset-seq rs-star)))))))
+       (t/is (= [{:_id 1, :my_col nil} {:_id 2, :my_col "foo"}] (resultset-seq rs-star)))))))
 
 (deftest parameterized-query-test
   (with-open [conn (jdbc-conn)
@@ -319,15 +320,15 @@
 
      ;; dates / times
 
-     {:sql "DATE '2021-12-24'", :clj "2021-12-24"}
-     {:sql "TIME '03:04:11'", :clj "03:04:11"}
-     {:sql "TIMESTAMP '2021-03-04 03:04:11'", :clj "2021-03-04T03:04:11"}
-     {:sql "TIMESTAMP '2021-03-04 03:04:11+02:00'", :clj "2021-03-04T03:04:11+02:00"}
-     {:sql "TIMESTAMP '2021-12-24 11:23:44.003'", :clj "2021-12-24T11:23:44.003"}
+     {:sql "DATE '2021-12-24'", :clj #xt/date "2021-12-24"}
+     {:sql "TIME '03:04:11'", :clj #xt/time "03:04:11"}
+     {:sql "TIMESTAMP '2021-03-04 03:04:11'", :clj #xt/date-time "2021-03-04T03:04:11"}
+     {:sql "TIMESTAMP '2021-03-04 03:04:11+02:00'", :clj #xt/zdt "2021-03-04T03:04:11+02:00"}
+     {:sql "TIMESTAMP '2021-12-24 11:23:44.003'", :clj #xt/date-time "2021-12-24T11:23:44.003"}
 
-     {:sql "INTERVAL '1' YEAR", :clj "P12M"}
-     {:sql "INTERVAL '1' MONTH", :clj "P1M"}
-     {:sql "INTERVAL 'P1DT1H1M1.123456S'" :clj "P1DT1H1M1.123456S"}
+     {:sql "INTERVAL '1' YEAR", :clj #xt/interval "P12M"}
+     {:sql "INTERVAL '1' MONTH", :clj #xt/interval "P1M"}
+     {:sql "INTERVAL 'P1DT1H1M1.123456S'" :clj #xt/interval "P1DT1H1M1.123456S"}
 
      {:sql "DATE '2021-12-24' - DATE '2021-12-23'", :clj 1}
 
@@ -450,7 +451,7 @@
   ;; quick test for now to confirm canned response mechanism at least doesn't crash!
   ;; this may later be replaced by client driver tests (e.g test sqlalchemy connect & query)
   (with-redefs [pgw/canned-responses [{:q "hello!"
-                                       :cols [{:col-name "greet", :pg-type :json}]
+                                       :cols [{:col-name "greet", :pg-type PgType/PG_JSON}]
                                        :rows (fn [_] [["\"hey!\""]])}]]
     (with-open [conn (jdbc-conn)]
       (is (= [{:greet "hey!"}] (q conn ["hello!"]))))))
@@ -716,13 +717,13 @@
        (testing "error during query execution"
          (send "select (1 / 0) from (values (42)) a (a);\n")
          (is (= ["ERROR:  data exception - division by zero"
-                 "DETAIL:  {\"category\":\"cognitect.anomalies\\/incorrect\",\"code\":\"xtdb.expression\\/division-by-zero\",\"message\":\"data exception - division by zero\"}"]
+                 "DETAIL:  {\"@type\":\"xt:incorrect\",\"@value\":{\"xtdb.error/message\":\"data exception - division by zero\",\"xtdb.error/data\":{\"xtdb.error/code\":{\"@type\":\"xt:keyword\",\"@value\":\"xtdb.expression/division-by-zero\"}}}}"]
                 (read :stderr)))
 
          (with-redefs [pgw/cmd-exec-query (fn [& _]  (throw (Exception. "unexpected")))]
            (send "select 1;\n")
            (is (= ["ERROR:  unexpected"
-                   "DETAIL:  {\"category\":\"cognitect.anomalies\\/fault\",\"code\":\"xtdb.error\\/unknown\",\"message\":\"unexpected\"}"]
+                   "DETAIL:  {\"@type\":\"xt:fault\",\"@value\":{\"xtdb.error/message\":\"unexpected\",\"xtdb.error/data\":{\"xtdb.error/code\":{\"@type\":\"xt:keyword\",\"@value\":\"xtdb.error/unknown\"}}}}"]
                   (read :stderr))))
 
          (with-redefs [pgw/cmd-exec-query (fn [& _]  (throw (ex-info "with pg code" {::pgw/severity :error, ::pgw/error-code "XXXXX"})))]
@@ -732,7 +733,7 @@
 
          (testing "query error allows session to continue"
            (send "select 'ping';\n")
-           (is (= [["_column_1"] ["ping"]] (read))))))))
+           (is (= [["_column_1"] ["ping"]] (read)))))))))
 
   (deftest psql-error-no-hanging-3930
     (psql-session
@@ -740,14 +741,14 @@
        (testing "error query"
          (send "INSERT INTO foo (id, a) VALUES (1, 2);\n")
          (is (= ["ERROR:  missing '_id'"
-                 "DETAIL:  {\"doc\":{\"id\":1,\"a\":2},\"category\":\"cognitect.anomalies\\/incorrect\",\"code\":\"missing-id\",\"message\":\"missing '_id'\"}"]
+                 "DETAIL:  {\"@type\":\"xt:incorrect\",\"@value\":{\"xtdb.error/message\":\"missing '_id'\",\"xtdb.error/data\":{\"doc\":{\"id\":1,\"a\":2},\"xtdb.error/code\":{\"@type\":\"xt:keyword\",\"@value\":\"missing-id\"}}}}"]
                 (read :stderr)))
          ;; to drain the standard stream
          (read))
 
        (testing "ping"
          (send "select 'ping';\n")
-         (is (= [["_column_1"] ["ping"]] (read))))))))
+         (is (= [["_column_1"] ["ping"]] (read)))))))
 
 (deftest map-read-test
   (with-open [conn (jdbc-conn)]
@@ -2653,7 +2654,7 @@ ORDER BY 1,2;")
          (send (str sql ";\n"))
          (t/is (= [["depth" "op" "explain"]
                    ["->" "project"
-                    "{\"project\":\"[{_id foo.1\\/_id}]\",\"append?\":false}"]
+                    "{\"project\":\"[{_id foo.1/_id}]\",\"append?\":false}"]
                    ["  ->" "rename"
                     "{\"prefix\":\"foo.1\"}"]
                    ["    ->" "scan"
@@ -3067,3 +3068,6 @@ ORDER BY 1,2;")
       (t/testing "After ROLLBACK, DML should work again"
         (.execute stmt "ROLLBACK")
         (.execute stmt "INSERT INTO foo RECORDS {_id: 3, name: 'works now'}")))))
+
+(comment
+  (user/set-log-level! 'xtdb.pgwire :trace))
