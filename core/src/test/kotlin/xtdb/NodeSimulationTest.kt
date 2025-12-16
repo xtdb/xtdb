@@ -89,6 +89,9 @@ class NumberOfSystemsExtension : BeforeEachCallback {
     }
 }
 
+// Settings used by all tests in this class
+private const val logLevel = "WARN"
+
 @Tag("property")
 @ExtendWith(NumberOfSystemsExtension::class)
 class NodeSimulationTest : SimulationTestBase() {
@@ -108,7 +111,7 @@ class NodeSimulationTest : SimulationTestBase() {
     @BeforeEach
     fun setUp() {
         super.setUpSimulation()
-        setLogLevel.invoke("xtdb".symbol, "DEBUG")
+        setLogLevel.invoke("xtdb".symbol, logLevel)
 
         val jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
         compactorDriver = CompactorMockDriver(dispatcher, currentSeed, CompactorDriverConfig())

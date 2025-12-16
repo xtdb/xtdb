@@ -227,7 +227,7 @@ class CompactorMockDriver(
 }
 
 // Settings used by all tests in this class
-private const val logLevel = "INFO"
+private const val logLevel = "WARN"
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)

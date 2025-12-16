@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit
 
 private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
 
-private const val logLevel = "INFO"
+private const val logLevel = "WARN"
 
 private val LOGGER = CacheSimulationTest::class.logger
 
