@@ -52,7 +52,8 @@
                        :storage [:local {:path (io/file dev-node-dir "objects")}]
                        :healthz {:port 8080
                                  :host "*"}
-                       :flight-sql-server {:port 52358}}}})
+                       :flight-sql {:port 52358
+                                    :host "*"}}}})
 
 (comment
   (do
