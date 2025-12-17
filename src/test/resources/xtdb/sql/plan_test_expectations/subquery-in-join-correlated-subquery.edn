@@ -6,8 +6,7 @@
    [:select
     {:predicate _sq_3}
     [:apply
-     {:mark-join {_sq_3 (== ?_needle b)}}
-     {bar.2/b ?_sq_b_4, bar.2/c ?_needle}
+     {:mode :mark-join, :columns {bar.2/b ?_sq_b_4, bar.2/c ?_needle}, :mark-join-projection {_sq_3 (== ?_needle b)}}
      [:rename bar.2 [:scan {:table #xt/table bar} [c b]]]
      [:project
       [{b foo.4/b}]

@@ -3,8 +3,7 @@
  [:project
   [x1 x2]
   [:apply
-   :semi-join
-   {x2 ?x13, x4 ?x14}
+   {:mode :semi-join, :columns {x2 ?x13, x4 ?x14}}
    [:mega-join
     []
     [[:rename {a x1, b x2} [:scan {:table r} [a b]]]

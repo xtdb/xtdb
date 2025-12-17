@@ -175,19 +175,19 @@
 (defn- apply-sqs [plan subqs]
   (reduce-kv (fn [plan sq-sym {:keys [query-plan sq-type sq-refs] :as sq}]
                (case sq-type
-                 :scalar [:apply :single-join sq-refs
+                 :scalar [:apply {:mode :single-join, :columns sq-refs}
                           plan
                           [:project [{sq-sym (first (:col-syms query-plan))}]
                            (:plan query-plan)]]
 
-                 :nest-one [:apply :single-join sq-refs
+                 :nest-one [:apply {:mode :single-join, :columns sq-refs}
                             plan
                             [:project [{sq-sym (->> (for [col-sym (:col-syms query-plan)]
                                                       (MapEntry/create (keyword col-sym) col-sym))
                                                     (into {}))}]
                              (:plan query-plan)]]
 
-                 :nest-many [:apply :single-join sq-refs
+                 :nest-many [:apply {:mode :single-join, :columns sq-refs}
                              plan
                              [:group-by [{sq-sym (list 'array_agg sq-sym)}]
                               [:project [{sq-sym (->> (for [col-sym (:col-syms query-plan)]
@@ -195,13 +195,13 @@
                                                       (into {}))}]
                                (:plan query-plan)]]]
 
-                 :array-by-query [:apply :single-join sq-refs
+                 :array-by-query [:apply {:mode :single-join, :columns sq-refs}
                                   plan
                                   [:group-by [{sq-sym (list 'vec_agg (first (:col-syms query-plan)))}]
                                    (:plan query-plan)]]
 
 
-                 :exists [:apply {:mark-join {sq-sym true}} sq-refs
+                 :exists [:apply {:mode :mark-join, :columns sq-refs, :mark-join-projection {sq-sym true}}
                           plan
                           (:plan query-plan)]
 
@@ -213,14 +213,16 @@
                                             ;;can't apply shortcut if column is already mapped to existing param due to limitation
                                             ;;of input col as key in sq-refs param map
                                             [:apply
-                                             {:mark-join {sq-sym (list op needle-param (first (:col-syms query-plan)))}}
-                                             (assoc sq-refs expr needle-param)
+                                             {:mode :mark-join
+                                              :columns (assoc sq-refs expr needle-param)
+                                              :mark-join-projection {sq-sym (list op needle-param (first (:col-syms query-plan)))}}
                                              plan
                                              (:plan query-plan)]
 
                                             [:apply
-                                             {:mark-join {sq-sym (list op needle-param (first (:col-syms query-plan)))}}
-                                             (assoc sq-refs (->col-sym '_needle) needle-param)
+                                             {:mode :mark-join
+                                              :columns (assoc sq-refs (->col-sym '_needle) needle-param)
+                                              :mark-join-projection {sq-sym (list op needle-param (first (:col-syms query-plan)))}}
                                              [:map [{'_needle expr}]
                                               plan]
                                              (:plan query-plan)]))))
@@ -406,10 +408,10 @@
            (plan-rel r)]
           (add-err! env (->SubqueryDisallowed)))
 
-        [:apply (if (= join-type :join)
-                  :cross-join
-                  join-type)
-         (into (into {} !lhs-refs) !sq-refs)
+        [:apply {:mode (if (= join-type :join)
+                         :cross-join
+                         join-type)
+                 :columns (into (into {} !lhs-refs) !sq-refs)}
          (plan-rel l)
          [:select {:predicate join-pred}
           (-> (plan-rel r)
@@ -430,7 +432,7 @@
   (plan-rel [_]
     (let [planned-l (plan-rel l)
           planned-r (plan-rel r)]
-      [:apply :cross-join (into {} !sq-refs)
+      [:apply {:mode :cross-join, :columns (into {} !sq-refs)}
        planned-l planned-r])))
 
 (defrecord DerivedTable [plan table-alias unique-table-alias, ^SequencedSet available-cols]

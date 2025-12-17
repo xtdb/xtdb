@@ -1,8 +1,7 @@
 [:project
  [{customer_id c.1/_id} {name c.1/name} {orders _sq_2}]
  [:apply
-  :single-join
-  {c.1/_id ?_sq__id_3}
+  {:mode :single-join, :columns {c.1/_id ?_sq__id_3}}
   [:rename c.1 [:scan {:table #xt/table customers} [_id name]]]
   [:group-by
    [{_sq_2 (array_agg _sq_2)}]

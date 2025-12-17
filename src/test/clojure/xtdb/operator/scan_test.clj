@@ -93,7 +93,7 @@
     (t/is (= #{{:foo {:bar 42}} {:foo {:bar "forty-two"}}}
              (set (util/->clj (tu/query-ra
                                ;; the cross-join copies data from the underlying MultiVectorReader
-                               '[:apply :cross-join {}
+                               '[:apply {:mode :cross-join, :columns {}}
                                  [:table [{}]]
                                  [:scan {:table #xt/table xt_docs} [foo]]]
                                {:node node})))))))

@@ -3,8 +3,7 @@
  [:project
   [x4]
   [:apply
-   :single-join
-   {x1 ?x8, x2 ?x9}
+   {:mode :single-join, :columns {x1 ?x8, x2 ?x9}}
    [:rename
     {_valid_from x1, _valid_to x2}
     [:scan {:table bar} [_valid_from _valid_to]]]

@@ -11,35 +11,36 @@
            (xtdb.arrow RelationReader)
            (xtdb.operator.apply ApplyCursor ApplyMode$AntiJoin ApplyMode$CrossJoin ApplyMode$LeftJoin ApplyMode$MarkJoin ApplyMode$SemiJoin ApplyMode$SingleJoin DependentCursorFactory)))
 
+(s/def ::mode #{:cross-join, :left-outer-join, :semi-join, :anti-join, :single-join, :mark-join})
+(s/def ::columns (s/map-of ::lp/column ::lp/column, :conform-keys true))
+(s/def ::mark-join-projection ::lp/column-expression)
+
 (defmethod lp/ra-expr :apply [_]
   (s/cat :op #{:apply}
-         :mode (s/or :mark-join (s/map-of #{:mark-join} ::lp/column-expression, :count 1, :conform-keys true)
-                     :otherwise #{:cross-join, :left-outer-join, :semi-join, :anti-join, :single-join})
-         :columns (s/map-of ::lp/column ::lp/column, :conform-keys true)
+         :opts (s/keys :req-un [::mode ::columns]
+                       :opt-un [::mark-join-projection])
          :independent-relation ::lp/ra-expression
          :dependent-relation ::lp/ra-expression))
 
-(defn ->mode-strategy [mode dependent-fields]
-  (zmatch mode
-    [:mark-join mark-spec]
-    (let [[col-name _expr] (first (:mark-join mark-spec))]
+(defn ->mode-strategy [mode mark-join-projection dependent-fields]
+  (case mode
+    :mark-join
+    (let [[col-name _expr] (first mark-join-projection)]
       (ApplyMode$MarkJoin. (str col-name)))
 
-    [:otherwise simple-mode]
-    (case simple-mode
-      :cross-join (ApplyMode$CrossJoin. dependent-fields)
-      :left-outer-join (ApplyMode$LeftJoin. dependent-fields)
-      :semi-join ApplyMode$SemiJoin/INSTANCE
-      :anti-join ApplyMode$AntiJoin/INSTANCE
-      :single-join (ApplyMode$SingleJoin. dependent-fields))))
+    :cross-join (ApplyMode$CrossJoin. dependent-fields)
+    :left-outer-join (ApplyMode$LeftJoin. dependent-fields)
+    :semi-join ApplyMode$SemiJoin/INSTANCE
+    :anti-join ApplyMode$AntiJoin/INSTANCE
+    :single-join (ApplyMode$SingleJoin. dependent-fields)))
 
-(defmethod lp/emit-expr :apply [{:keys [mode columns independent-relation dependent-relation]} args]
+(defmethod lp/emit-expr :apply [{:keys [opts independent-relation dependent-relation]} args]
+  (let [{:keys [mode columns mark-join-projection]} opts]
+    ;; TODO: decodes/re-encodes row values - can we pass these directly to the sub-query?
 
-  ;; TODO: decodes/re-encodes row values - can we pass these directly to the sub-query?
-
-  (lp/unary-expr (lp/emit-expr independent-relation args)
-    (fn [{independent-fields :fields, :as indep-rel}]
-      (let [{:keys [param-fields] :as dependent-args} (-> args
+    (lp/unary-expr (lp/emit-expr independent-relation args)
+      (fn [{independent-fields :fields, :as indep-rel}]
+        (let [{:keys [param-fields] :as dependent-args} (-> args
                                                           (update :param-fields
                                                                   (fnil into {})
                                                                   (map (fn [[ik dk]]
@@ -52,38 +53,33 @@
                                                                               :column ik})))))
                                                                   columns))
             {dependent-fields :fields, ->dependent-cursor :->cursor, :as dep-rel} (lp/emit-expr dependent-relation dependent-args)
-            out-dependent-fields (zmatch mode
-                                   [:mark-join mark-spec]
-                                   (let [[col-name _expr] (first (:mark-join mark-spec))]
+            out-dependent-fields (case mode
+                                   :mark-join
+                                   (let [[col-name _expr] (first mark-join-projection)]
                                      {col-name (types/->field [:? :bool] col-name)})
 
-                                   [:otherwise simple-mode]
-                                   (case simple-mode
-                                     :cross-join dependent-fields
+                                   :cross-join dependent-fields
 
-                                     (:left-outer-join :single-join) (types/with-nullable-fields dependent-fields)
+                                   (:left-outer-join :single-join) (types/with-nullable-fields dependent-fields)
 
-                                     (:semi-join :anti-join) {}))]
-        {:op (zmatch mode
-               [:mark-join _] :apply-mark-join
-               [:otherwise simple-mode]
-               (case simple-mode
+                                   (:semi-join :anti-join) {})]
+          {:op (case mode
+                 :mark-join :apply-mark-join
                  :cross-join :apply-cross-join
                  :left-outer-join :apply-left-join
                  :semi-join :apply-semi-join
                  :anti-join :apply-anti-join
-                 :single-join :apply-single-join))
+                 :single-join :apply-single-join)
          :children [indep-rel dep-rel]
          :explain {:columns (pr-str columns)}
          :fields (merge-with types/merge-fields independent-fields out-dependent-fields)
 
          :->cursor (let [out-dep-fields (for [[col-name field] out-dependent-fields]
                                           (types/field-with-name field (str col-name)))
-                         mode-strat (->mode-strategy mode out-dep-fields)
+                         mode-strat (->mode-strategy mode mark-join-projection out-dep-fields)
                          open-dependent-cursor
-                         (zmatch mode
-                           [:mark-join mark-spec]
-                           (let [[_col-name form] (first (:mark-join mark-spec))
+                         (if (= mode :mark-join)
+                           (let [[_col-name form] (first mark-join-projection)
                                  input-types {:vec-fields dependent-fields
                                               :param-fields param-fields}
                                  projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
@@ -100,8 +96,7 @@
 
                                            (close [_] (.close dep-cursor)))
                                    (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))))
-
-                           [:otherwise _] ->dependent-cursor)]
+                           ->dependent-cursor)]
 
                      (fn [{:keys [allocator explain-analyze? tracer query-span] :as query-opts} independent-cursor]
                        (cond-> (ApplyCursor. allocator mode-strat independent-cursor out-dep-fields
@@ -116,4 +111,4 @@
                                                                                                                          (.select (int-array [idx]))
                                                                                                                          (.withName (str dk)))))
                                                                                                            1))))))))
-                         (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))))
+                         (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))})))))

@@ -5,8 +5,7 @@
   [:group-by
    [tab0.1/z _row_number_0 {_sum_out_6 (sum x.5/y)}]
    [:apply
-    :left-outer-join
-    {tab0.1/z ?_sq_z_3}
+    {:mode :left-outer-join, :columns {tab0.1/z ?_sq_z_3}}
     [:map
      [{_row_number_0 (row-number)}]
      [:rename tab0.1 [:scan {:table #xt/table tab0} [z]]]]

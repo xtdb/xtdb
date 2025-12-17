@@ -1,8 +1,7 @@
 [:project
  [{_column_1 _sq_2}]
  [:apply
-  :single-join
-  {bar.1/_valid_time ?_sq__valid_time_3}
+  {:mode :single-join, :columns {bar.1/_valid_time ?_sq__valid_time_3}}
   [:rename
    bar.1
    [:project

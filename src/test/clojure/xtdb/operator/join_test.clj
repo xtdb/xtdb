@@ -896,7 +896,7 @@
   (t/testing "params"
     (t/is (= [{:x1 1, :x2 1, :x4 3, :x3 1, :x5 2}]
              (tu/query-ra
-              '[:apply :cross-join {x5 ?x2}
+              '[:apply {:mode :cross-join, :columns {x5 ?x2}}
                 [::tu/pages [[{:x5 2}]]]
                 [:mega-join
                  [{x1 (- ?x2 1)}

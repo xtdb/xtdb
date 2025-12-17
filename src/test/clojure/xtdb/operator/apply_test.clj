@@ -6,7 +6,7 @@
 
 (t/deftest test-apply-operator
   (letfn [(q [mode]
-            (tu/query-ra [:apply mode '{c_id ?c_id}
+            (tu/query-ra [:apply {:mode mode, :columns '{c_id ?c_id}}
                           [::tu/pages
                            [[{:c_id "c1", :c_name "Alan"}
                              {:c_id "c2", :c_name "Bob"}
@@ -43,7 +43,7 @@
                   {:c-id "c2", :c-name "Bob", :match true}
                   {:c-id "c3", :c-name "Charlie", :match false}]
             :types '{c_id #xt/type :utf8, c_name #xt/type :utf8, match #xt/type [:? :bool]}}
-           (-> (tu/query-ra [:apply '{:mark-join {match (== ?c_id o_customer_id)}} '{c_id ?c_id}
+           (-> (tu/query-ra [:apply {:mode :mark-join, :columns '{c_id ?c_id}, :mark-join-projection '{match (== ?c_id o_customer_id)}}
                              [::tu/pages
                               [[{:c_id "c1", :c_name "Alan"}
                                 {:c_id "c2", :c_name "Bob"}
@@ -57,14 +57,14 @@
 
   (t/is (= {:res [{:x 0}]
             :types '{x #xt/type :i64, match #xt/type [:? :bool]}}
-           (-> (tu/query-ra '[:apply {:mark-join {match (== 4 y)}} {}
+           (-> (tu/query-ra '[:apply {:mode :mark-join, :columns {}, :mark-join-projection {match (== 4 y)}}
                               [:table [{x 0}]]
                               [:table [{y nil}]]]
                             {:with-types? true})))
         "nil in RHS")
 
   (t/is (= [{:x 0, :match false} {:x 1, :match false}]
-           (tu/query-ra '[:apply {:mark-join {match (== nil z)}} {}
+           (tu/query-ra '[:apply {:mode :mark-join, :columns {}, :mark-join-projection {match (== nil z)}}
                           [:table [{:x 0}, {:x 1}]]
                           [:project [{z 1}]
                            [:select {:predicate false}
@@ -74,7 +74,7 @@
 (t/deftest test-apply-single
   (t/is (= [{:y 0}
             {:y 1, :a 1, :b 2}]
-           (tu/query-ra '[:apply :single-join {y ?y}
+           (tu/query-ra '[:apply {:mode :single-join, :columns {y ?y}}
                           [:table [{:y 0} {:y 1}]]
                           [:select {:predicate (== ?y a)}
                            [:table ?x]]]
@@ -82,7 +82,7 @@
 
   (t/is (thrown-with-msg? RuntimeException
                           #"cardinality violation"
-                          (tu/query-ra '[:apply :single-join {}
+                          (tu/query-ra '[:apply {:mode :single-join, :columns {}}
                                          [:table [{:y 0}]]
                                          [:table ?x]]
                                        {:args {:x [{:a 1, :b 2} {:a 3, :b 4}]}}))
@@ -90,13 +90,13 @@
 
   (t/testing "returns null on empty"
     (t/is (= [{:y 0}]
-             (tu/query-ra '[:apply :single-join {}
+             (tu/query-ra '[:apply {:mode :single-join, :columns {}}
                             [:table [{:y 0}]]
                             [:table ?x]]
                           {:args {:x []}})))
 
     (t/is (= [{:y 0}]
-             (tu/query-ra '[:apply :single-join {}
+             (tu/query-ra '[:apply {:mode :single-join, :columns {}}
                             [:table [{:y 0}]]
                             [:table [a b] ?x]]
                           {:args {:x []}})))))
@@ -105,7 +105,7 @@
   (t/is (= {:res [{}], :types '{x3 #xt/type [:? :i64]}}
            (-> (tu/query-ra
                 '[:group-by [{x3 (sum x2)}]
-                  [:apply :cross-join {}
+                  [:apply {:mode :cross-join, :columns {}}
                    [:table [{x1 15}]]
                    [:select {:predicate false}
                     [:table [{x2 20}]]]]]
@@ -113,7 +113,7 @@
 
   (t/is (= {:res [], :types '{x1 #xt/type :i64, x2 #xt/type :i64}}
            (-> (tu/query-ra '[:project [x1 x2]
-                              [:apply :cross-join {}
+                              [:apply {:mode :cross-join, :columns {}}
                                [:table [{x1 15}]]
                                [:select {:predicate false}
                                 [:table [{x2 20}]]]]]
@@ -125,9 +125,9 @@
             {:z 1, :x 0, :y 1}
             {:z 1, :x 1, :y 1}]
            (tu/query-ra
-             '[:apply :cross-join {z ?x2}
+             '[:apply {:mode :cross-join, :columns {z ?x2}}
                [:table [{:z 0}, {:z 1}]]
-               [:apply :single-join {}
+               [:apply {:mode :single-join, :columns {}}
                 [:table [{:x 0}, {:x 1}]]
                 [:select {:predicate (== ?x2 y)}
                  [:table [{:y 0}, {:y 1}]]]]] {}))))
@@ -136,9 +136,9 @@
   (t/is (= [{:z 0, :x 1}
             {:z 1, :x 1}]
            (tu/query-ra
-             '[:apply :cross-join {z ?foo}
+             '[:apply {:mode :cross-join, :columns {z ?foo}}
                [:table [{:z 0}, {:z 1}]]
-               [:apply :single-join {x ?foo}
+               [:apply {:mode :single-join, :columns {x ?foo}}
                 [:table [{:x 1}]]
                 [:select {:predicate (== ?foo y)}
                  [:table [{:y 0}]]]]] {}))))
@@ -147,8 +147,8 @@
   (t/is (= [{:x 0, :z 0, :y 0}]
            (tu/query-ra
              '[:select {:predicate (== z y)}
-               [:apply :single-join {x ?x1}
-                [:apply :single-join {x ?x2}
+               [:apply {:mode :single-join, :columns {x ?x1}}
+                [:apply {:mode :single-join, :columns {x ?x2}}
                  [:table [{:x 0}, {:x 1}]]
                  [:select {:predicate (== ?x2 z)}
                   [:table [{:z 0}, {:z 2}]]]]
@@ -159,8 +159,7 @@
   (t/is
     (= [{:foo 1 :baz 1}]
        (tu/query-ra
-         '[:apply :cross-join
-           {foo ?bar}
+         '[:apply {:mode :cross-join, :columns {foo ?bar}}
            [:table [{:foo 1}]]
            [:select {:predicate (== baz ?bar)}
             [:table [{:baz 1}]]]] {}))
@@ -169,8 +168,7 @@
   (t/is
     (= [{:baz 1}]
        (tu/query-ra
-         '[:apply :cross-join
-           {foo ?bar}
+         '[:apply {:mode :cross-join, :columns {foo ?bar}}
            [:table [{:foo nil}]]
            [:select {:predicate (nil? ?bar)}
             [:table [{:baz 1}]]]] {}))
@@ -181,8 +179,7 @@
       Exception
       #"Column missing from independent relation: not_foo"
       (tu/query-ra
-        '[:apply :cross-join
-          {not_foo ?bar}
+        '[:apply {:mode :cross-join, :columns {not_foo ?bar}}
           [:table [{:foo 1}]]
           [:select {:predicate (== baz ?bar)}
            [:table [{:baz 1}]]]] {})

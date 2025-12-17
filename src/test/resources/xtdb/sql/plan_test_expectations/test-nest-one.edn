@@ -1,8 +1,7 @@
 [:project
  [{order_id o.1/_id} {value o.1/value} {customer _sq_2}]
  [:apply
-  :single-join
-  {o.1/customer_id ?_sq_customer_id_3}
+  {:mode :single-join, :columns {o.1/customer_id ?_sq_customer_id_3}}
   [:rename
    o.1
    [:scan {:table #xt/table orders} [customer_id _id value]]]

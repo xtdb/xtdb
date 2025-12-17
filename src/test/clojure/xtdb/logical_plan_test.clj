@@ -170,3 +170,52 @@
                 (period ~f1 ~t1)
                 ~(sql/->col-sym 'col1)))))
        "not possible to tell if col1 is a period or a scalar temporal value (timestamp etc.)"))))
+
+(t/deftest test-push-selection-down-past-apply
+  (t/testing "pushes selection down to independent relation"
+    (t/is
+     (= (xt/template
+         [:apply
+          {:mode :cross-join, :columns {}}
+          [:select
+           {:predicate (== ~(sql/->col-sym 'x) 10)}
+           [:scan {:table #xt/table foo} [~(sql/->col-sym 'x)]]]
+          [:scan {:table #xt/table bar} [~(sql/->col-sym 'y)]]])
+        (lp/push-selection-down-past-apply
+         (xt/template
+          [:select
+           {:predicate (== ~(sql/->col-sym 'x) 10)}
+           [:apply
+            {:mode :cross-join, :columns {}}
+            [:scan {:table #xt/table foo} [~(sql/->col-sym 'x)]]
+            [:scan {:table #xt/table bar} [~(sql/->col-sym 'y)]]]])))))
+
+  (t/testing "pushes selection down to dependent relation for cross-join"
+    (t/is
+     (= (xt/template
+         [:apply
+          {:mode :cross-join, :columns {}}
+          [:scan {:table #xt/table foo} [~(sql/->col-sym 'x)]]
+          [:select
+           {:predicate (== ~(sql/->col-sym 'y) 20)}
+           [:scan {:table #xt/table bar} [~(sql/->col-sym 'y)]]]])
+        (lp/push-selection-down-past-apply
+         (xt/template
+          [:select
+           {:predicate (== ~(sql/->col-sym 'y) 20)}
+           [:apply
+            {:mode :cross-join, :columns {}}
+            [:scan {:table #xt/table foo} [~(sql/->col-sym 'x)]]
+            [:scan {:table #xt/table bar} [~(sql/->col-sym 'y)]]]])))))
+
+  (t/testing "does not push down to dependent relation for non-cross-join modes"
+    (t/is
+     (nil?
+      (lp/push-selection-down-past-apply
+       (xt/template
+        [:select
+         {:predicate (== ~(sql/->col-sym 'bar/y) 20)}
+         [:apply
+          {:mode :semi-join, :columns {}}
+          [:scan {:table #xt/table foo} [~(sql/->col-sym 'x)]]
+          [:scan {:table #xt/table bar} [~(sql/->col-sym 'y)]]]]))))))

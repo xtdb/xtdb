@@ -484,7 +484,7 @@
   (case type
     :scalar
     (if (seq tmp-expr-sym->expr-vec)
-      [:apply :single-join tmp-expr-sym->apply-param-sym
+      [:apply {:mode :single-join, :columns tmp-expr-sym->apply-param-sym}
        [:map tmp-expr-sym->expr-vec
         (wrap-expr-subqueries* plan arg-subqueries)]
        subquery]
@@ -493,8 +493,7 @@
        subquery])
     :exists
     (if (seq tmp-expr-sym->expr-vec)
-      [:apply {:mark-join {placeholder true}}
-       tmp-expr-sym->apply-param-sym
+      [:apply {:mode :mark-join, :columns tmp-expr-sym->apply-param-sym, :mark-join-projection {placeholder true}}
        [:map tmp-expr-sym->expr-vec
         (wrap-expr-subqueries* plan arg-subqueries)]
        subquery]
@@ -702,7 +701,7 @@
           [{acc-plan-with-unique-cols :ra-plan}
            {join-subquery-plan-with-unique-cols :ra-plan}] rels]
       (wrap-unify
-       {:ra-plan [:apply :cross-join tmp-expr-sym->apply-param-sym
+       {:ra-plan [:apply {:mode :cross-join, :columns tmp-expr-sym->apply-param-sym}
                   [:map tmp-expr-sym->expr-vec
                    (wrap-expr-subqueries acc-plan-with-unique-cols acc-provided-vars arg-subqueries)]
                   join-subquery-plan-with-unique-cols]}
@@ -719,9 +718,10 @@
      (if (seq tmp-expr-sym->expr-vec)
        (let [unifying-vars-apply-param-mapping (unifying-vars->apply-param-mapping unifying-vars)]
          (->
-          [:apply :left-outer-join (merge
-                                    tmp-expr-sym->apply-param-sym
-                                    unifying-vars-apply-param-mapping)
+          [:apply {:mode :left-outer-join
+                   :columns (merge
+                             tmp-expr-sym->apply-param-sym
+                             unifying-vars-apply-param-mapping)}
            [:map tmp-expr-sym->expr-vec
             (wrap-expr-subqueries (:ra-plan acc-plan) acc-provided-vars arg-subqueries)]
            (->> unifying-vars-apply-param-mapping
