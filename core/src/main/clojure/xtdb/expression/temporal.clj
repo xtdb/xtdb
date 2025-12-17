@@ -1010,11 +1010,21 @@
      :batch-bindings batch-bindings
      :->call-code (comp #(do `(zero? ~%)) ->call-code)}))
 
-(defmethod expr/codegen-call [:=== :interval :interval] [expr]
-  (let [{:keys [batch-bindings ->call-code]} (expr/codegen-call (assoc expr :f :compare))]
-    {:return-col-type :bool,
-     :batch-bindings batch-bindings
-     :->call-code (comp #(do `(zero? ~%)) ->call-code)}))
+(defn intervals-equal? [^PeriodDuration x ^PeriodDuration y]
+  (let [period-x (.getPeriod x)
+        period-y (.getPeriod y)]
+    (and (= (.toTotalMonths period-x) (.toTotalMonths period-y))
+         (= (.getDays period-x) (.getDays period-y))
+         (= (.getDuration x) (.getDuration y)))))
+
+(defmethod expr/codegen-call [:== :interval :interval] [_expr]
+  {:return-col-type :bool,
+   :->call-code (fn [[l r]] `(intervals-equal? ~l ~r))})
+
+(defmethod expr/codegen-call [:=== :interval :interval] [{[[_x x-unit] [_y y-unit]] :arg-types :as expr}]
+  (if (not= x-unit y-unit)
+    {:return-col-type :bool, :->call-code (constantly false)}
+    (expr/codegen-call (assoc expr :f :==))))
 
 ;;;; Periods
 
