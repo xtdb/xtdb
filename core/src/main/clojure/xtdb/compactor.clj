@@ -10,6 +10,8 @@
            (xtdb.database Database$Mode)
            (xtdb.trie Trie$Key)))
 
+;; see `dev/doc/compaction.md` for an explanation of the compaction strategy.
+
 (def ^:dynamic *ignore-signal-block?* false)
 (def ^:dynamic *recency-partition* nil)
 
