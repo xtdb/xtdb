@@ -21,7 +21,7 @@
            (com.github.benmanes.caffeine.cache Cache Caffeine)
            (java.net URI)
            (java.time Duration LocalDate LocalTime OffsetTime ZoneOffset)
-           (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
+           (java.util Collection HashMap HashSet LinkedHashMap LinkedHashSet Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field)
@@ -235,10 +235,11 @@
     (when (.RECURSIVE ctx)
       (throw (err/unsupported ::recursive-ctes "Recursive CTEs are not supported yet")))
 
-    (->> (.withListElement ctx)
-         (reduce (fn [ctes ^ParserRuleContext wle]
-                   (conj ctes (.accept wle (update-in this [:env :ctes] (fnil into {}) ctes))))
-                 {})))
+    (let [ctes (java.util.LinkedHashMap.)]
+      (doseq [^ParserRuleContext wle (.withListElement ctx)]
+        (let [me (.accept wle (update-in this [:env :ctes] (fnil into {}) ctes))]
+          (.put ctes (key me) (val me))))
+      ctes))
 
   (visitWithListElement [{{:keys [!id-count]} :env} ctx]
     (let [query-name (identifier-sym (.queryName ctx))]

@@ -61,6 +61,25 @@
                   SELECT _system_time
                   FROM data"))))
 
+(t/deftest test-materialized-cte-ordering-with-many-ctes-5109
+  (xt/execute-tx tu/*node* [[:put-docs :tbl {:xt/id 1}]])
+
+  (t/is (= [{:xt/id 1}]
+           (xt/q tu/*node*
+                 "WITH MATERIALIZED
+                    a AS (SELECT _id FROM tbl),
+                    b AS (SELECT _id FROM a),
+                    b2 AS (SELECT _id FROM b),
+                    c AS (SELECT _id FROM a),
+                    c2 AS (SELECT _id FROM c),
+                    MATERIALIZED d AS (SELECT _id FROM a),
+                    d2 AS (SELECT _id FROM d),
+                    d3 AS (SELECT _id FROM d2),
+                    d4 AS (SELECT _id FROM d3)
+                  SELECT _id FROM b2
+                  UNION SELECT _id FROM c2
+                  UNION SELECT _id FROM d2"))))
+
 (t/deftest iseq-from-symbol-bug-4378
   (t/is (anomalous? [:incorrect nil #"Subquery arity error"]
                     (sql/plan "
