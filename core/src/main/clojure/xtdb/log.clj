@@ -127,6 +127,9 @@
             (.open factory)))
     (into {} !clusters)))
 
+(defmethod ig/halt-key! ::clusters [_ clusters]
+  (util/close clusters))
+
 (defmulti ->log-factory
   (fn [k _opts]
     (when-let [ns (namespace k)]

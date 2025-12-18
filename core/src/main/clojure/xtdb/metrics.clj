@@ -107,6 +107,9 @@
                  {:unit "bytes"}))
     reg))
 
+(defmethod ig/halt-key! ::registry [_ ^PrometheusMeterRegistry reg]
+  (.clear reg)
+  (.close reg))
 
 (defmethod xtn/apply-config! ::cloudwatch [config _k v]
   (xtn/apply-config! config :xtdb.aws.cloudwatch/metrics v))
