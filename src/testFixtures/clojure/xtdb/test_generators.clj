@@ -115,6 +115,12 @@
             [1 (union-gen inner-gen filtered-simple-gen)]])))
       filtered-simple-gen))))
 
+(defn distinct-value-gen
+  ([length]
+   (distinct-value-gen length {}))
+  ([length {:keys [exclude-gens] :or {exclude-gens #{}}}]
+   (gen/vector-distinct (recursive-value-gen {:exclude-gens exclude-gens}) {:num-elements length})))
+
 (def field-type-gen
   (gen/let [v (recursive-value-gen)]
     (ArrowTypes/toFieldType v)))
