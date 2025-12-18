@@ -145,7 +145,7 @@ identifier
         | 'ROLE'
         | 'USER' | 'PASSWORD'
         | 'VARBINARY' | 'BYTEA'
-        | 'URI'
+        | 'URI' | 'OID'
         | 'COPY' | 'FORMAT'
         | 'ATTACH' | 'DETACH' | 'DATABASE'
         | METADATA
@@ -177,6 +177,7 @@ dataType
     | 'ROW' '(' fieldDefinition (',' fieldDefinition)* ')' # RowType
     | 'REGCLASS' #RegClassType
     | 'REGPROC' #RegProcType
+    | 'OID' #OidType
     | 'KEYWORD' #KeywordType
     | 'UUID' #UuidType
     | 'VARBINARY' #VarbinaryType
