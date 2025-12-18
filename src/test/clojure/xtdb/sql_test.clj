@@ -3090,3 +3090,16 @@ UNION ALL
 
   (t/is (= [{:result false}]
            (xt/q tu/*node* "SELECT 10 = ANY(SELECT col1 FROM docs) AS result"))))
+
+(t/deftest update-interval-with-months-5070
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :i #xt/interval "P12MT1S"}]])
+  (t/is (= [{:xt/id 1, :i #xt/interval "P12MT1S"}] (xt/q tu/*node* "FROM docs")))
+
+  (t/testing "update document with same interval (with months) - update should get de-duplicated"
+    (xt/execute-tx tu/*node* [["UPDATE docs SET i = ? WHERE _id = ?"  #xt/interval "P12MT1S" 1]])
+    (t/is (= 1 (count (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME ALL")))))
+
+  (t/testing "update document with different interval (with months) - update should go through"
+    (xt/execute-tx tu/*node* [["UPDATE docs SET i = ? WHERE _id = ?"  #xt/interval "P12MT2S" 1]])
+    (t/is (= 2 (count (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME ALL"))))
+    (t/is (= [{:xt/id 1, :i #xt/interval "P12MT2S"}] (xt/q tu/*node* "FROM docs")))))

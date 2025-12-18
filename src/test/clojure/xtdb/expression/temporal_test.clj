@@ -1112,7 +1112,11 @@
   (t/testing "comparing intervals with different types"
     (t/is (anomalous? [:incorrect nil
                        #"Cannot compare intervals with different units"]
-                      (et/project1 '(== (single-field-interval 1 "YEAR" 2 0) (single-field-interval 365 "DAY" 2 0)) {}))))
+                      (et/project1 '(> (single-field-interval 1 "YEAR" 2 0) (single-field-interval 365 "DAY" 2 0)) {})))
+    
+    (t/is (false? (et/project1 '(== (single-field-interval 1 "YEAR" 2 0) 
+                                    (single-field-interval 363 "DAY" 2 0)) {}))
+          "can check equality of two intervals with different types"))
 
   (t/testing "comparing year month intervals"
     (t/are [expected expr] (= expected (et/project1 expr {}))
@@ -1139,13 +1143,18 @@
       true '(>= (multi-field-interval "2-2" "YEAR" 2 "MONTH" 2) (single-field-interval 2 "YEAR" 2 0))
       false '(>= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 2 "YEAR" 2 0))))
 
-  (t/testing "can't compare month-day-micro intervals if months > 0"
+  (t/testing "comparing month-day-micro intervals if months > 0"
     (let [test-doc {:_id :foo,
                     :interval #xt/interval "P4M8DT1H"}]
       (t/is (thrown-with-msg?
              RuntimeException
              #"Cannot compare month-day-micro/nano intervals when month component is non-zero."
-             (et/project1 '(== interval interval) test-doc)))))
+             (et/project1 '(> interval interval) test-doc)))
+      
+      (t/testing "can check for equality of month-day-micro intervals when months > 0"
+        (t/is (= true (et/project1 '(== interval interval) test-doc))))))
+  
+  
 
   (t/testing "comparing month-day-nano intervals"
     (t/are [expected expr] (= expected (et/project1 expr {}))
@@ -1862,3 +1871,32 @@
 
   (t/is (true? (et/project1 '(=== #xt/duration "PT1H" #xt/duration "PT1H") {}))
         "duration ==="))
+
+(deftest test-interval-equality
+  (t/are [expected expr] (= expected (et/project1 expr {}))
+    ;; semantic equality - different units, same value
+    true '(== (single-field-interval 1 "YEAR" 2 0) (single-field-interval 12 "MONTH" 2 0))
+    true '(== (single-field-interval 2 "YEAR" 2 0) #xt/interval "P24M")
+    true '(== (single-field-interval 1 "HOUR" 2 0) (single-field-interval 60 "MINUTE" 2 0))
+
+    ;; semantic equality across interval types
+    true '(== (multi-field-interval "1 2" "DAY" 2 "HOUR" 2) (multi-field-interval "1 2" "DAY" 2 "HOUR" 9))
+    true '(== (single-field-interval 1 "YEAR" 2 0) #xt/interval "P12M0D")
+
+    ;; different values
+    false '(== (single-field-interval 1 "YEAR" 2 0) (single-field-interval 13 "MONTH" 2 0))
+    false '(== (single-field-interval 1 "DAY" 2 0) (single-field-interval 25 "HOUR" 2 0))))
+
+(deftest test-interval-strict-equality
+  (t/are [expected expr] (= expected (et/project1 expr {}))
+    ;; same unit and value
+    true '(=== (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
+    true '(=== (multi-field-interval "1 2" "DAY" 2 "HOUR" 2) (multi-field-interval "1 2" "DAY" 2 "HOUR" 2))
+    true '(=== (multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 9) (multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 9))
+
+    ;; different values
+    false '(=== (single-field-interval 1 "YEAR" 2 0) (single-field-interval 2 "YEAR" 2 0))
+    false '(=== (multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 9) (multi-field-interval "44:35.123456789" "MINUTE" 2 "SECOND" 9))
+
+    ;; cross-type intervals (mdm vs mdn)
+    false '(=== (multi-field-interval "1 2" "DAY" 2 "HOUR" 2) (multi-field-interval "1 2" "DAY" 2 "HOUR" 9))))
