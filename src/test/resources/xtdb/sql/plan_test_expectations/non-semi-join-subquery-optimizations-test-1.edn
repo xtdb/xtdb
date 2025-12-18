@@ -4,7 +4,7 @@
   {:predicate (or _sq_2 (== f.1/b 42))}
   [:mark-join
    {_sq_2 [{f.1/a xt.values.3/_column_1}]}
-   [:rename f.1 [:scan {:table #xt/table foo} [a b]]]
+   [:rename f.1 [:scan {:table #xt/table foo, :columns [a b]}]]
    [:rename
     xt.values.3
     [:table [_column_1] [{:_column_1 1} {:_column_1 2}]]]]]]

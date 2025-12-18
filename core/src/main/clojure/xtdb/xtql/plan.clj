@@ -427,9 +427,9 @@
                                       (group-by :l))
                                  (update-vals #(map :pred %)))]
     (-> [:scan {:table table
+                :columns (mapv #(wrap-scan-col-preds % (get literal-preds-by-col %)) distinct-scan-cols)
                 :for-valid-time (plan-temporal-filter for-valid-time)
-                :for-system-time (plan-temporal-filter for-system-time)}
-         (mapv #(wrap-scan-col-preds % (get literal-preds-by-col %)) distinct-scan-cols)]
+                :for-system-time (plan-temporal-filter for-system-time)}]
         (wrap-with-period-projection-or-selection planned-bind-specs)
         (wrap-with-ra-plan)
         (wrap-unify (-> planned-bind-specs

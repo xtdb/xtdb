@@ -4,4 +4,4 @@
   [{x3 (. x1 :my_field)}]
   [:rename
    {column_name x1}
-   [:scan {:table information_schema$columns} [column_name]]]]]
+   [:scan {:table information_schema$columns, :columns [column_name]}]]]]

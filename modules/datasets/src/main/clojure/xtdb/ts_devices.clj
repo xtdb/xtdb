@@ -87,8 +87,9 @@
   '[:top {:limit 10}
     [:order-by {:order-specs [[time {:direction :desc}]]}
      [:project [time device-id battery-temperature]
-      [:scan [time device-id battery-temperature
-              {battery-status (= battery-status "discharging")}]]]]])
+      [:scan {:table device-readings
+              :columns [time device-id battery-temperature
+                        {battery-status (= battery-status "discharging")}]}]]]])
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (def query-busiest-low-battery-devices
@@ -104,10 +105,12 @@
     [:order-by {:order-specs [[cpu-avg-1min {:direction :desc}]
                 [time {:direction :desc}]]}
      [:join {device-id device-id}
-      [:scan [device-id time cpu-avg-1min
-              {battery-level (< battery-level 30)}
-              {battery-status (= battery-status "discharging")}]]
-      [:scan [device-id model]]]]])
+      [:scan {:table device-readings
+              :columns [device-id time cpu-avg-1min
+                        {battery-level (< battery-level 30)}
+                        {battery-status (= battery-status "discharging")}]}]
+      [:scan {:table device-info
+              :columns [device-id model]}]]]])
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (def query-min-max-battery-levels-per-hour
@@ -129,9 +132,11 @@
       [:project [{hour (date-trunc "HOUR" time)}
                  battery-level]
        [:semi-join {device-id device-id}
-        [:scan [device-id time battery-level]]
-        [:scan [device-id {model (or (= model "pinto")
-                                     (= model "focus"))}]]]]]]])
+        [:scan {:table device-readings
+                :columns [device-id time battery-level]}]
+        [:scan {:table device-info
+                :columns [device-id {model (or (= model "pinto")
+                                               (= model "focus"))}]}]]]]]])
 
 (comment
   (require 'dev '[xtdb.test-util :as tu])

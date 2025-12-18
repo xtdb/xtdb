@@ -4,8 +4,8 @@
   []
   [:mega-join
    []
-   [[:rename foo.1 [:scan {:table #xt/table foo} [lastname name]]]
-    [:rename bar.2 [:scan {:table #xt/table bar} []]]]]
+   [[:rename foo.1 [:scan {:table #xt/table foo, :columns [lastname name]}]]
+    [:rename bar.2 [:scan {:table #xt/table bar, :columns []}]]]]
   [:project
    [{_sq_3 baz.4/frame}]
-   [:rename baz.4 [:scan {:table #xt/table baz} [frame]]]]]]
+   [:rename baz.4 [:scan {:table #xt/table baz, :columns [frame]}]]]]]

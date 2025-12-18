@@ -7,5 +7,4 @@
    [:rename
     foo.1
     [:scan
-     {:table #xt/table foo, :for-valid-time [:at (current-timestamp)]}
-     [bar]]]]]]
+     {:table #xt/table foo, :for-valid-time [:at (current-timestamp)], :columns [bar]}]]]]]

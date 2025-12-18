@@ -117,10 +117,9 @@
     (t/is (= [{:xt/id :foo, :version 0,
                :xt/valid-from (time/->zdt tt)
                :xt/system-from (time/->zdt tt)}]
-             (tu/query-ra '[:scan {:table #xt/table xt_docs}
-                            [_id version
+             (tu/query-ra '[:scan {:table #xt/table xt_docs, :columns [_id version
                              _valid_from, _valid_to
-                             _system_from, _system_to]]
+                             _system_from, _system_to]}]
                           {:node tu/*node*})))
 
     (let [tx1 (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :foo, :version 1}]])
@@ -138,19 +137,17 @@
                   :xt/system-from (time/->zdt tt2)}}
                (set (tu/query-ra '[:scan {:table #xt/table xt_docs,
                                           :for-system-time :all-time,
-                                          :for-valid-time :all-time}
-                                   [_id version
+                                          :for-valid-time :all-time, :columns [_id version
                                     _valid_from, _valid_to
-                                    _system_from, _system_to]]
+                                    _system_from, _system_to]}]
                                  {:node tu/*node*}))))
 
       (t/is (= [{:xt/id :foo, :version 0,
                  :xt/valid-from (time/->zdt tt)
                  :xt/system-from (time/->zdt tt)}]
-               (tu/query-ra '[:scan {:table #xt/table xt_docs}
-                              [_id version
+               (tu/query-ra '[:scan {:table #xt/table xt_docs, :columns [_id version
                                _valid_from, _valid_to
-                               _system_from, _system_to]]
+                               _system_from, _system_to]}]
                             {:node tu/*node*,
                              :snapshot-token (basis/->time-basis-str {"xtdb" [tt]})}))
             "re-using the original tx basis should see the same result"))))

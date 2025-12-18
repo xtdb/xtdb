@@ -6,4 +6,4 @@
    [si.1/movie_title {_ob2 si.1/year}]
    [:rename
     si.1
-    [:scan {:table #xt/table stars_in} [year movie_title]]]]]]
+    [:scan {:table #xt/table stars_in, :columns [year movie_title]}]]]]]

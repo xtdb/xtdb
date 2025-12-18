@@ -25,30 +25,27 @@
         {l.3/l_partkey ps.4/ps_partkey}
         {s.2/_id l.3/l_suppkey}
         {p.1/_id l.3/l_partkey}]
-       [[:rename n.6 [:scan {:table #xt/table nation} [_id n_name]]]
+       [[:rename n.6 [:scan {:table #xt/table nation, :columns [_id n_name]}]]
         [:rename
          o.5
-         [:scan {:table #xt/table orders} [_id o_orderdate]]]
+         [:scan {:table #xt/table orders, :columns [_id o_orderdate]}]]
         [:rename
          ps.4
          [:scan
-          {:table #xt/table partsupp}
-          [ps_partkey ps_supplycost ps_suppkey]]]
+          {:table #xt/table partsupp, :columns [ps_partkey ps_supplycost ps_suppkey]}]]
         [:rename
          l.3
          [:scan
-          {:table #xt/table lineitem}
-          [l_orderkey
+          {:table #xt/table lineitem, :columns [l_orderkey
            l_extendedprice
            l_quantity
            l_suppkey
            l_discount
-           l_partkey]]]
+           l_partkey]}]]
         [:rename
          p.1
          [:scan
-          {:table #xt/table part}
-          [_id {p_name (like p_name "%green%")}]]]
+          {:table #xt/table part, :columns [_id {p_name (like p_name "%green%")}]}]]
         [:rename
          s.2
-         [:scan {:table #xt/table supplier} [_id s_nationkey]]]]]]]]]]]
+         [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]]]]]]]]]

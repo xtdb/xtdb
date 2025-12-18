@@ -43,8 +43,7 @@
      [:rename
       l.1
       [:scan
-       {:table #xt/table lineitem}
-       [l_linestatus
+       {:table #xt/table lineitem, :columns [l_linestatus
         l_tax
         {l_shipdate
          (<=
@@ -55,4 +54,4 @@
         l_returnflag
         l_extendedprice
         l_quantity
-        l_discount]]]]]]]]
+        l_discount]}]]]]]]]

@@ -6,13 +6,12 @@
    {:mode :single-join, :columns {x1 ?x8, x2 ?x9}}
    [:rename
     {_valid_from x1, _valid_to x2}
-    [:scan {:table bar} [_valid_from _valid_to]]]
+    [:scan {:table bar, :columns [_valid_from _valid_to]}]]
    [:project
     [x4]
     [:rename
      {name x4, _valid_from x5, _valid_to x6}
      [:scan
-      {:table foo}
-      [name
+      {:table foo, :columns [name
        {_valid_from (< _valid_from ?x9)}
-       {_valid_to (> _valid_to ?x8)}]]]]]]]
+       {_valid_to (> _valid_to ?x8)}]}]]]]]]

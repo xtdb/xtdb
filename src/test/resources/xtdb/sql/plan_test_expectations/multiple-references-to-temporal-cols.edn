@@ -16,8 +16,7 @@
    [:scan
     {:table #xt/table foo,
      :for-system-time
-     [:in #xt/date "2001-01-01" #xt/date "2002-01-01"]}
-    [{_valid_from
+     [:in #xt/date "2001-01-01" #xt/date "2002-01-01"], :columns [{_valid_from
       (and
        (<
         _valid_from
@@ -38,4 +37,4 @@
      {_valid_to
       (and
        (> (coalesce _valid_to xtdb/end-of-time) #xt/date "2000-01-01")
-       (> _valid_to 10))}]]]]]
+       (> _valid_to 10))}]}]]]]

@@ -6,4 +6,4 @@
    {uvs.3/v unnest}
    [:map
     [{unnest f.1/vs}]
-    [:rename f.1 [:scan {:table #xt/table foo} [vs _id]]]]]]]
+    [:rename f.1 [:scan {:table #xt/table foo, :columns [vs _id]}]]]]]]

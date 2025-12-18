@@ -2,7 +2,7 @@
  [{_column_1 (not _sq_2)}]
  [:mark-join
   {_sq_2 [(> x.1/z z)]}
-  [:rename x.1 [:scan {:table #xt/table x} [z]]]
+  [:rename x.1 [:scan {:table #xt/table x, :columns [z]}]]
   [:project
    [{z y.3/z}]
-   [:rename y.3 [:scan {:table #xt/table y} [z]]]]]]
+   [:rename y.3 [:scan {:table #xt/table y, :columns [z]}]]]]]

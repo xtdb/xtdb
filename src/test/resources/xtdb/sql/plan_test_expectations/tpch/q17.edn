@@ -24,15 +24,13 @@
         [[:rename
           l.1
           [:scan
-           {:table #xt/table lineitem}
-           [l_extendedprice l_quantity l_partkey]]]
+           {:table #xt/table lineitem, :columns [l_extendedprice l_quantity l_partkey]}]]
          [:rename
           p.2
           [:scan
-           {:table #xt/table part}
-           [_id
+           {:table #xt/table part, :columns [_id
             {p_brand (== p_brand "Brand#23")}
-            {p_container (== p_container "MED BOX")}]]]]]]
+            {p_container (== p_container "MED BOX")}]}]]]]]
       [:rename
        l.4
-       [:scan {:table #xt/table lineitem} [l_quantity l_partkey]]]]]]]]]
+       [:scan {:table #xt/table lineitem, :columns [l_quantity l_partkey]}]]]]]]]]

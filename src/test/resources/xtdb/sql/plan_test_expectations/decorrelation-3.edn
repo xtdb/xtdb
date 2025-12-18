@@ -19,12 +19,12 @@
        [{customers.1/country country}]
        [:rename
         customers.1
-        [:scan {:table #xt/table customers} [country custno name]]]
+        [:scan {:table #xt/table customers, :columns [country custno name]}]]
        [:project
         [{country salesp.3/country}]
         [:rename
          salesp.3
-         [:scan {:table #xt/table salesp} [country]]]]]]]
+         [:scan {:table #xt/table salesp, :columns [country]}]]]]]]
     [:map
      [{_dep_countable_1 1}]
-     [:rename orders.5 [:scan {:table #xt/table orders} [custno]]]]]]]]
+     [:rename orders.5 [:scan {:table #xt/table orders, :columns [custno]}]]]]]]]

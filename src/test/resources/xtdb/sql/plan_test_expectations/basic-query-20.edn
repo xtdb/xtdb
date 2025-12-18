@@ -2,4 +2,4 @@
  {:skip nil, :limit 10}
  [:project
   [{movie_title si.1/movie_title}]
-  [:rename si.1 [:scan {:table #xt/table stars_in} [movie_title]]]]]
+  [:rename si.1 [:scan {:table #xt/table stars_in, :columns [movie_title]}]]]]

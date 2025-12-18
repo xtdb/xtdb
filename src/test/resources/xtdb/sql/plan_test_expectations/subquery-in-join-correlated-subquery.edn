@@ -2,14 +2,14 @@
  [{a foo.1/a}]
  [:mega-join
   []
-  [[:rename foo.1 [:scan {:table #xt/table foo} [a]]]
+  [[:rename foo.1 [:scan {:table #xt/table foo, :columns [a]}]]
    [:select
     {:predicate _sq_3}
     [:apply
      {:mode :mark-join, :columns {bar.2/b ?_sq_b_4, bar.2/c ?_needle}, :mark-join-projection {_sq_3 (== ?_needle b)}}
-     [:rename bar.2 [:scan {:table #xt/table bar} [c b]]]
+     [:rename bar.2 [:scan {:table #xt/table bar, :columns [c b]}]]
      [:project
       [{b foo.4/b}]
       [:rename
        foo.4
-       [:scan {:table #xt/table foo} [{a (== a ?_sq_b_4)} b]]]]]]]]]
+       [:scan {:table #xt/table foo, :columns [{a (== a ?_sq_b_4)} b]}]]]]]]]]

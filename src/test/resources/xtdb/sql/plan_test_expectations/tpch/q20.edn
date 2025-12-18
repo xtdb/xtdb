@@ -13,8 +13,7 @@
        [:rename
         s.1
         [:scan
-         {:table #xt/table supplier}
-         [s_name s_address _id s_nationkey]]]
+         {:table #xt/table supplier, :columns [s_name s_address _id s_nationkey]}]]
        [:project
         [{ps_suppkey ps.4/ps_suppkey}]
         [:map
@@ -39,13 +38,11 @@
                [:rename
                 ps.4
                 [:scan
-                 {:table #xt/table partsupp}
-                 [ps_partkey ps_availqty ps_suppkey]]]]
+                 {:table #xt/table partsupp, :columns [ps_partkey ps_availqty ps_suppkey]}]]]
               [:rename
                l.8
                [:scan
-                {:table #xt/table lineitem}
-                [{l_shipdate
+                {:table #xt/table lineitem, :columns [{l_shipdate
                   (and
                    (<
                     l_shipdate
@@ -55,16 +52,14 @@
                    (>= l_shipdate #xt/date "1994-01-01"))}
                  l_quantity
                  l_suppkey
-                 l_partkey]]]]]]]
+                 l_partkey]}]]]]]]
           [:project
            [{_id p.6/_id}]
            [:rename
             p.6
             [:scan
-             {:table #xt/table part}
-             [_id {p_name (like p_name "forest%")}]]]]]]]]
+             {:table #xt/table part, :columns [_id {p_name (like p_name "forest%")}]}]]]]]]]
       [:rename
        n.2
        [:scan
-        {:table #xt/table nation}
-        [_id {n_name (== n_name "CANADA")}]]]]]]]]]
+        {:table #xt/table nation, :columns [_id {n_name (== n_name "CANADA")}]}]]]]]]]]

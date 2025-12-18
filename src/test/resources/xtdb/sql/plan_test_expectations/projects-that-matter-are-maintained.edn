@@ -2,7 +2,7 @@
  [:union-all {}
   [:project
    [{id customers.1/id}]
-   [:rename customers.1 [:scan {:table #xt/table customers} [id]]]]
+   [:rename customers.1 [:scan {:table #xt/table customers, :columns [id]}]]]
   [:project
    [{id o.3/id}]
    [:rename
@@ -11,4 +11,4 @@
      [{id orders.2/id} {product orders.2/product}]
      [:rename
       orders.2
-      [:scan {:table #xt/table orders} [product id]]]]]]]]
+      [:scan {:table #xt/table orders, :columns [product id]}]]]]]]]

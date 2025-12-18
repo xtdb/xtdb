@@ -5,4 +5,4 @@
    [si.1/movie_title {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
    [si.1/movie_title {_ob2 (== si.1/year "foo")}]
-   [:rename si.1 [:scan {:table stars_in} [year movie_title]]]]]]
+   [:rename si.1 [:scan {:table stars_in, :columns [year movie_title]}]]]]]

@@ -4,4 +4,4 @@
   si.1
   [:select
    {:predicate (== name lastname)}
-   [:scan {:table #xt/table stars_in} [lastname name]]]]]
+   [:scan {:table #xt/table stars_in, :columns [lastname name]}]]]]

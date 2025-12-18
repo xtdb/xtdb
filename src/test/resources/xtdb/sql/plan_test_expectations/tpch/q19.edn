@@ -57,18 +57,16 @@
            [[:rename
              l.1
              [:scan
-              {:table #xt/table lineitem}
-              [l_extendedprice
+              {:table #xt/table lineitem, :columns [l_extendedprice
                l_quantity
                l_shipinstruct
                l_shipmode
                l_discount
-               l_partkey]]]
+               l_partkey]}]]
             [:rename
              p.2
              [:scan
-              {:table #xt/table part}
-              [_id p_brand p_size p_container]]]]]
+              {:table #xt/table part, :columns [_id p_brand p_size p_container]}]]]]
           [:rename
            xt.values.10
            [:table

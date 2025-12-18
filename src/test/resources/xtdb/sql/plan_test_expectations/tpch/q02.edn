@@ -62,35 +62,31 @@
           [[:rename
             r.5
             [:scan
-             {:table #xt/table region}
-             [_id {r_name (== r_name "EUROPE")}]]]
+             {:table #xt/table region, :columns [_id {r_name (== r_name "EUROPE")}]}]]
            [:rename
             n.4
-            [:scan {:table #xt/table nation} [_id n_name n_regionkey]]]
+            [:scan {:table #xt/table nation, :columns [_id n_name n_regionkey]}]]
            [:rename
             ps.3
             [:scan
-             {:table #xt/table partsupp}
-             [ps_partkey ps_supplycost ps_suppkey]]]
+             {:table #xt/table partsupp, :columns [ps_partkey ps_supplycost ps_suppkey]}]]
            [:rename
             p.1
             [:scan
-             {:table #xt/table part}
-             [_id
+             {:table #xt/table part, :columns [_id
               {p_size (== p_size 15)}
               p_mfgr
-              {p_type (like p_type "%BRASS")}]]]
+              {p_type (like p_type "%BRASS")}]}]]
            [:rename
             s.2
             [:scan
-             {:table #xt/table supplier}
-             [s_comment
+             {:table #xt/table supplier, :columns [s_comment
               s_name
               s_address
               s_phone
               _id
               s_acctbal
-              s_nationkey]]]]]]
+              s_nationkey]}]]]]]
         [:mega-join
          [{n.9/n_regionkey r.10/_id}
           {s.8/s_nationkey n.9/_id}
@@ -98,18 +94,15 @@
          [[:rename
            r.10
            [:scan
-            {:table #xt/table region}
-            [_id {r_name (== r_name "EUROPE")}]]]
+            {:table #xt/table region, :columns [_id {r_name (== r_name "EUROPE")}]}]]
           [:rename
            n.9
-           [:scan {:table #xt/table nation} [_id n_regionkey]]]
+           [:scan {:table #xt/table nation, :columns [_id n_regionkey]}]]
           [:rename
            ps.7
            [:scan
-            {:table #xt/table partsupp}
-            [ps_partkey ps_supplycost ps_suppkey]]]
+            {:table #xt/table partsupp, :columns [ps_partkey ps_supplycost ps_suppkey]}]]
           [:rename
            s.8
            [:scan
-            {:table #xt/table supplier}
-            [_id s_nationkey]]]]]]]]]]]]]
+            {:table #xt/table supplier, :columns [_id s_nationkey]}]]]]]]]]]]]]

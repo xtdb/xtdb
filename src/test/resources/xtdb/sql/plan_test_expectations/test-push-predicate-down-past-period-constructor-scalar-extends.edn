@@ -2,4 +2,4 @@
  [{_foo 4} {_valid_time (period _valid_from _valid_to)}]
  [:select
   {:predicate '(== (period _valid_from _valid_to) 1)}
-  [:scan {:table public/docs} [_bar]]]]
+  [:scan {:table public/docs, :columns [_bar]}]]]

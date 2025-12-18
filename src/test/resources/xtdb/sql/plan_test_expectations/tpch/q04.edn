@@ -13,8 +13,7 @@
       [:rename
        o.1
        [:scan
-        {:table #xt/table orders}
-        [o_orderpriority
+        {:table #xt/table orders, :columns [o_orderpriority
          _id
          {o_orderdate
           (and
@@ -23,7 +22,7 @@
             (+
              #xt/date "1993-07-01"
              (single-field-interval "3" "MONTH" 2 6)))
-           (>= o_orderdate #xt/date "1993-07-01"))}]]]
+           (>= o_orderdate #xt/date "1993-07-01"))}]}]]
       [:project
        [{_id l.3/_id}
         {l_comment l.3/l_comment}
@@ -47,8 +46,7 @@
         [:select
          {:predicate (< l_commitdate l_receiptdate)}
          [:scan
-          {:table #xt/table lineitem}
-          [l_linestatus
+          {:table #xt/table lineitem, :columns [l_linestatus
            l_receiptdate
            l_commitdate
            l_tax
@@ -64,4 +62,4 @@
            l_suppkey
            l_shipmode
            l_discount
-           l_partkey]]]]]]]]]]]
+           l_partkey]}]]]]]]]]]]

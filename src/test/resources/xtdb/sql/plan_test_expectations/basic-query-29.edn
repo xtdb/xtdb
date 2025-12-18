@@ -4,4 +4,4 @@
   {film.3/film unnest}
   [:map
    [{unnest si.1/films}]
-   [:rename si.1 [:scan {:table #xt/table stars_in} [films]]]]]]
+   [:rename si.1 [:scan {:table #xt/table stars_in, :columns [films]}]]]]]

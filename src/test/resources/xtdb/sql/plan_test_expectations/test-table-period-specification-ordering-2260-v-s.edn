@@ -5,5 +5,4 @@
   [:scan
    {:table #xt/table foo,
     :for-valid-time :all-time,
-    :for-system-time :all-time}
-   [bar]]]]
+    :for-system-time :all-time, :columns [bar]}]]]

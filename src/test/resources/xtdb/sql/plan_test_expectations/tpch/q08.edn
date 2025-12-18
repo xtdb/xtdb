@@ -32,42 +32,37 @@
         [[:rename
           r.8
           [:scan
-           {:table #xt/table region}
-           [_id {r_name (== r_name "AMERICA")}]]]
-         [:rename n2.7 [:scan {:table #xt/table nation} [_id n_name]]]
+           {:table #xt/table region, :columns [_id {r_name (== r_name "AMERICA")}]}]]
+         [:rename n2.7 [:scan {:table #xt/table nation, :columns [_id n_name]}]]
          [:rename
           n1.6
-          [:scan {:table #xt/table nation} [_id n_regionkey]]]
+          [:scan {:table #xt/table nation, :columns [_id n_regionkey]}]]
          [:rename
           c.5
-          [:scan {:table #xt/table customer} [c_nationkey _id]]]
+          [:scan {:table #xt/table customer, :columns [c_nationkey _id]}]]
          [:rename
           o.4
           [:scan
-           {:table #xt/table orders}
-           [_id
+           {:table #xt/table orders, :columns [_id
             {o_orderdate
              (between
               o_orderdate
               #xt/date "1995-01-01"
               #xt/date "1996-12-31")}
-            o_custkey]]]
+            o_custkey]}]]
          [:rename
           l.3
           [:scan
-           {:table #xt/table lineitem}
-           [l_orderkey
+           {:table #xt/table lineitem, :columns [l_orderkey
             l_extendedprice
             l_suppkey
             l_discount
-            l_partkey]]]
+            l_partkey]}]]
          [:rename
           p.1
           [:scan
-           {:table #xt/table part}
-           [_id {p_type (== p_type "ECONOMY ANODIZED STEEL")}]]]
+           {:table #xt/table part, :columns [_id {p_type (== p_type "ECONOMY ANODIZED STEEL")}]}]]
          [:rename
           s.2
           [:scan
-           {:table #xt/table supplier}
-           [_id s_nationkey]]]]]]]]]]]]
+           {:table #xt/table supplier, :columns [_id s_nationkey]}]]]]]]]]]]]

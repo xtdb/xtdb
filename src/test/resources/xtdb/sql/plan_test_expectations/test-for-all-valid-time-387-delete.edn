@@ -5,5 +5,4 @@
  [:rename
   users.1
   [:scan
-   {:table #xt/table users, :for-valid-time :all-time}
-   [_valid_to _valid_from _iid]]]]
+   {:table #xt/table users, :for-valid-time :all-time, :columns [_valid_to _valid_from _iid]}]]]

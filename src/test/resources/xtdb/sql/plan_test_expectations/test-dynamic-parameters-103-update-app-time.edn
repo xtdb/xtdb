@@ -23,9 +23,8 @@
   [:rename
    u.1
    [:scan
-    {:table #xt/table users, :for-valid-time [:in ?_0 ?_1]}
-    [_valid_to
+    {:table #xt/table users, :for-valid-time [:in ?_0 ?_1], :columns [_valid_to
      {id (== id ?_3)}
      _valid_from
      {first_name (or (not (boolean (=== ?_2 first_name))))}
-     _iid]]]]]
+     _iid]}]]]]

@@ -17,5 +17,4 @@
     {_valid_time (period _valid_from _valid_to)}
     {_system_time (period _system_from _system_to)}]
    [:scan
-    {:table #xt/table foo}
-    [_valid_from _valid_to _system_from _system_to]]]]]
+    {:table #xt/table foo, :columns [_valid_from _valid_to _system_from _system_to]}]]]]

@@ -10,5 +10,4 @@
   [:select
    {:predicate (or (not (boolean (=== baz bar))))}
    [:scan
-    {:table #xt/table foo, :for-valid-time :all-time}
-    [_valid_to bar baz quux _valid_from _iid]]]]]
+    {:table #xt/table foo, :for-valid-time :all-time, :columns [_valid_to bar baz quux _valid_from _iid]}]]]]

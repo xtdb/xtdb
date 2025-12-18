@@ -6,4 +6,4 @@
    [{_sum_out_4 (sum docs.1/_id)} {_sum_out_2 (sum _sum_in_3)}]
    [:map
     [{_sum_in_3 nil}]
-    [:rename docs.1 [:scan {:table #xt/table docs} [_id]]]]]]]
+    [:rename docs.1 [:scan {:table #xt/table docs, :columns [_id]}]]]]]]

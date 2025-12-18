@@ -2,7 +2,7 @@
  [{_column_1 _sq_2}]
  [:single-join
   []
-  [:rename t2.1 [:scan {:table #xt/table t2} []]]
+  [:rename t2.1 [:scan {:table #xt/table t2, :columns []}]]
   [:project
    [{_sq_2 4}]
    [:rename
@@ -10,5 +10,4 @@
     [:scan
      {:table #xt/table t1,
       :for-system-time
-      [:between #xt/date "3001-01-01" #xt/zdt "3002-01-01T00:00Z"]}
-     []]]]]]
+      [:between #xt/date "3001-01-01" #xt/zdt "3002-01-01T00:00Z"], :columns []}]]]]]

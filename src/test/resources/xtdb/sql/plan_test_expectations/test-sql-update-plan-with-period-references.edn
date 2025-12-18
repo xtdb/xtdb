@@ -27,5 +27,4 @@
                      (lower _valid_time)))
                    bar))))}
    [:scan
-    {:table #xt/table foo, :for-valid-time :all-time}
-    [_valid_to bar baz _system_time _valid_from _valid_time _iid]]]]]
+    {:table #xt/table foo, :for-valid-time :all-time, :columns [_valid_to bar baz _system_time _valid_from _valid_time _iid]}]]]]

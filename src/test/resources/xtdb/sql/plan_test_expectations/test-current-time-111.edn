@@ -9,4 +9,4 @@
   {_column_8 (local-time 6)}
   {_column_9 (local-timestamp)}
   {_column_10 (local-timestamp 9)}]
- [:rename u.1 [:scan {:table #xt/table u} [a]]]]
+ [:rename u.1 [:scan {:table #xt/table u, :columns [a]}]]]

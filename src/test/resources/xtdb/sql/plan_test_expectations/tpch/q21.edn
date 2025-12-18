@@ -20,16 +20,14 @@
         [[:rename
           n.4
           [:scan
-           {:table #xt/table nation}
-           [_id {n_name (== n_name "SAUDI ARABIA")}]]]
+           {:table #xt/table nation, :columns [_id {n_name (== n_name "SAUDI ARABIA")}]}]]
          [:rename
           o.3
           [:scan
-           {:table #xt/table orders}
-           [{o_orderstatus (== o_orderstatus "F")} _id]]]
+           {:table #xt/table orders, :columns [{o_orderstatus (== o_orderstatus "F")} _id]}]]
          [:rename
           s.1
-          [:scan {:table #xt/table supplier} [s_name _id s_nationkey]]]
+          [:scan {:table #xt/table supplier, :columns [s_name _id s_nationkey]}]]
          [:semi-join
           [(<> l_suppkey l1.2/l_suppkey) {l1.2/l_orderkey l_orderkey}]
           [:anti-join
@@ -39,8 +37,7 @@
             [:select
              {:predicate (> l_receiptdate l_commitdate)}
              [:scan
-              {:table #xt/table lineitem}
-              [l_receiptdate l_commitdate l_orderkey l_suppkey]]]]
+              {:table #xt/table lineitem, :columns [l_receiptdate l_commitdate l_orderkey l_suppkey]}]]]
            [:project
             [{_id l3.10/_id}
              {l_comment l3.10/l_comment}
@@ -64,8 +61,7 @@
              [:select
               {:predicate (> l_receiptdate l_commitdate)}
               [:scan
-               {:table #xt/table lineitem}
-               [l_linestatus
+               {:table #xt/table lineitem, :columns [l_linestatus
                 l_receiptdate
                 l_commitdate
                 l_tax
@@ -81,7 +77,7 @@
                 l_suppkey
                 l_shipmode
                 l_discount
-                l_partkey]]]]]]
+                l_partkey]}]]]]]
           [:project
            [{_id l2.6/_id}
             {l_comment l2.6/l_comment}
@@ -103,8 +99,7 @@
            [:rename
             l2.6
             [:scan
-             {:table #xt/table lineitem}
-             [l_linestatus
+             {:table #xt/table lineitem, :columns [l_linestatus
               l_receiptdate
               l_commitdate
               l_tax
@@ -120,4 +115,4 @@
               l_suppkey
               l_shipmode
               l_discount
-              l_partkey]]]]]]]]]]]]]]
+              l_partkey]}]]]]]]]]]]]]]

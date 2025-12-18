@@ -42,22 +42,24 @@
 
 ;; TODO be good to just specify a single expression here and have the interpreter split it
 ;; into metadata + col-preds - the former can accept more than just `(and ~@col-preds)
+(s/def ::columns (s/coll-of (s/or :column ::lp/column
+                                      :select ::lp/column-expression)))
+
 (defmethod lp/ra-expr :scan [_]
   (s/cat :op #{:scan}
-         :scan-opts (s/keys :req-un [::table]
-                            :opt-un [::lp/for-valid-time ::lp/for-system-time])
-         :columns (s/coll-of (s/or :column ::lp/column
-                                   :select ::lp/column-expression))))
+         :opts (s/keys :req-un [::table ::columns]
+                       :opt-un [::lp/for-valid-time ::lp/for-system-time])))
 
 (definterface IScanEmitter
   (emitScan [^xtdb.database.Database$Catalog db-cat scan-expr scan-fields param-fields]))
 
-(defn ->scan-cols [{:keys [columns], {:keys [table]} :scan-opts}]
-  (for [[col-tag col-arg] columns]
-    [table
-     (case col-tag
-       :column col-arg
-       :select (key (first col-arg)))]))
+(defn ->scan-cols [{:keys [opts]}]
+  (let [{:keys [table columns]} opts]
+    (for [[col-tag col-arg] columns]
+      [table
+       (case col-tag
+         :column col-arg
+         :select (key (first col-arg)))])))
 
 (defn ->temporal-bounds [^BufferAllocator alloc, ^RelationReader args,
                          {:keys [for-valid-time for-system-time]}, ^Instant snapshot-token]
@@ -191,8 +193,9 @@
 
 (defmethod ig/init-key ::scan-emitter [_ {:keys [info-schema]}]
   (reify IScanEmitter
-    (emitScan [_ db-cat {:keys [columns], {:keys [^TableRef table] :as scan-opts} :scan-opts} scan-fields param-fields]
-      (let [db-name (.getDbName table)
+    (emitScan [_ db-cat {:keys [opts]} scan-fields param-fields]
+      (let [{:keys [^TableRef table columns] :as scan-opts} opts
+            db-name (.getDbName table)
             db (.databaseOrNull db-cat db-name)
             ^PageMetadata$Factory metadata-mgr (.getMetadataManager db)
             ^BufferPool buffer-pool (.getBufferPool db)

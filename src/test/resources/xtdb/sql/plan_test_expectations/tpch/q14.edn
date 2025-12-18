@@ -14,8 +14,7 @@
     [[:rename
       l.1
       [:scan
-       {:table #xt/table lineitem}
-       [{l_shipdate
+       {:table #xt/table lineitem, :columns [{l_shipdate
          (and
           (<
            l_shipdate
@@ -25,5 +24,5 @@
           (>= l_shipdate #xt/date "1995-09-01"))}
         l_extendedprice
         l_discount
-        l_partkey]]]
-     [:rename p.2 [:scan {:table #xt/table part} [_id p_type]]]]]]]]
+        l_partkey]}]]
+     [:rename p.2 [:scan {:table #xt/table part, :columns [_id p_type]}]]]]]]]

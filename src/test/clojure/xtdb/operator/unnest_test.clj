@@ -132,7 +132,7 @@
                 {:ordinality-column o1}
                 [:map
                  [{unnest xs}]
-                 [:scan {:table #xt/table r1} [xs]]]]]]
+                 [:scan {:table #xt/table r1, :columns [xs]}]]]]]
             {:node tu/*node*}))))
 
 (t/deftest unnest-issue-4441
@@ -147,7 +147,7 @@
            (tu/query-ra
             '[:unnest
               {x1 xs}
-              [:scan {:table #xt/table r1} [xs]]]
+              [:scan {:table #xt/table r1, :columns [xs]}]]
             {:node tu/*node*}))))
 
 (t/deftest unnest-ordinality-join-issue-4131

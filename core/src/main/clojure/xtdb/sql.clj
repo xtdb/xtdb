@@ -338,10 +338,10 @@
           for-st (or for-system-time sys-time-default)]
 
       [:rename unique-table-alias
-       (cond-> [:scan (cond-> {:table table-ref}
+       (cond-> [:scan (cond-> {:table table-ref
+                               :columns scan-cols}
                         for-vt (assoc :for-valid-time for-vt)
-                        for-st (assoc :for-system-time for-st))
-                scan-cols]
+                        for-st (assoc :for-system-time for-st))]
          (or valid-time-col? sys-time-col?) (wrap-temporal-periods scan-cols valid-time-col? sys-time-col?))])))
 
 (defrecord JoinConditionScope [env l r]
@@ -2651,9 +2651,9 @@
   PlanRelation
   (plan-rel [{{:keys [default-db]} :env}]
     [:rename unique-table-alias
-     [:scan (cond-> {:table (table/->ref default-db (symbol table-name))}
-              for-valid-time (assoc :for-valid-time for-valid-time))
-      (vec (.keySet !reqd-cols))]]))
+     [:scan (cond-> {:table (table/->ref default-db (symbol table-name))
+                     :columns (vec (.keySet !reqd-cols))}
+              for-valid-time (assoc :for-valid-time for-valid-time))]]))
 
 (def ^:private vf-col (->col-sym "_valid_from"))
 (def ^:private vt-col (->col-sym "_valid_to"))
@@ -2711,8 +2711,8 @@
     [:rename unique-table-alias
      [:scan {:table (table/->ref default-db (symbol table-name))
              :for-system-time :all-time
-             :for-valid-time :all-time}
-      (vec (.keySet !reqd-cols))]]))
+             :for-valid-time :all-time
+             :columns (vec (.keySet !reqd-cols))}]]))
 
 (defn forbidden-update-col? [col]
   (str/starts-with? (str col) "_"))
@@ -2755,9 +2755,11 @@
                     {doc ~(into {} (map (juxt keyword identity)) known-cols)}]
           [:order-by {:order-specs [[_iid] [_valid_from]]}
            [:scan {:table ~table
-                   :for-valid-time [:in ~valid-from ~valid-to]}
-            [_iid _valid_from _valid_to
-             ~@known-cols]]]]]]]])))
+                   :for-valid-time [:in ~valid-from ~valid-to]
+                   :columns [_iid _valid_from _valid_to
+                             ~@known-cols]}]]]]]]])))
+
+
 
 (defrecord StmtVisitor [env scope]
   SqlVisitor

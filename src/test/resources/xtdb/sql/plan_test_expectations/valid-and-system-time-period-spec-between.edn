@@ -4,8 +4,8 @@
   t1.1
   [:scan
    {:table #xt/table t1,
+    :columns [],
     :for-valid-time
     [:between #xt/zdt "3001-01-01T00:00Z" #xt/date "3000-01-01"],
     :for-system-time
-    [:between #xt/date "2000-01-01" #xt/date "2001-01-01"]}
-   []]]]
+    [:between #xt/date "2000-01-01" #xt/date "2001-01-01"]}]]]

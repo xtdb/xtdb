@@ -2,7 +2,7 @@
  [{_column_1 _sq_2}]
  [:apply
   {:mode :single-join, :columns {tab0.1/z ?_sq_z_3}}
-  [:rename tab0.1 [:scan {:table #xt/table tab0} [z]]]
+  [:rename tab0.1 [:scan {:table #xt/table tab0, :columns [z]}]]
   [:project
    [{_sq_2 _array_agg_out6}]
    [:group-by

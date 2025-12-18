@@ -2,4 +2,4 @@
  [{bar foo.1/bar}]
  [:rename
   foo.1
-  [:scan {:table #xt/table foo, :for-system-time :all-time} [bar]]]]
+  [:scan {:table #xt/table foo, :for-system-time :all-time, :columns [bar]}]]]

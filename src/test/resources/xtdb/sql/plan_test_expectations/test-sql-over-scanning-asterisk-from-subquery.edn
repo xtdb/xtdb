@@ -4,4 +4,4 @@
   bar.2
   [:project
    [{a foo.1/a} {b foo.1/b}]
-   [:rename foo.1 [:scan {:table #xt/table foo} [a b]]]]]]
+   [:rename foo.1 [:scan {:table #xt/table foo, :columns [a b]}]]]]]

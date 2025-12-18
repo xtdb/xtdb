@@ -38,7 +38,7 @@
       (t/is (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]]))
 
       (t/is (= [{:xt/id :foo}]
-               (tu/query-ra '[:scan {:table #xt/table xt_docs} [_id]]
+               (tu/query-ra '[:scan {:table #xt/table xt_docs, :columns [_id]}]
                             {:node node}))))))
 
 (t/deftest ^:integration test-multi-db

@@ -196,8 +196,9 @@
                    (keys list)
                    (keys (first list))))
 
-    [:scan _scan-opts columns]
-    (mapv ->projected-column columns)
+    [:scan opts]
+    (let [{:keys [columns]} opts]
+      (mapv ->projected-column columns))
 
     [:join join-cond lhs rhs]
     (into (vec (relation-columns lhs))
@@ -719,18 +720,19 @@
   (r/zmatch z
     [:select opts-1
      [:select opts-2
-      [:scan table relation]]]
+      [:scan scan-opts]]]
     ;;=>
     (let [{predicate-1 :predicate} opts-1
           {predicate-2 :predicate} opts-2]
-      [:select {:predicate (merge-conjunctions predicate-1 predicate-2)} [:scan table relation]])))
+      [:select {:predicate (merge-conjunctions predicate-1 predicate-2)} [:scan scan-opts]])))
 
 (defn- add-selection-to-scan-predicate [z]
   (r/zmatch z
     [:select opts
-     [:scan table columns]]
+     [:scan scan-opts]]
     ;;=>
     (let [{:keys [predicate]} opts
+          {:keys [columns] :as scan-opts-map} scan-opts
           underlying-scan-columns (set (map ->projected-column columns))
           {:keys [scan-columns new-select-predicate]}
           (reduce
@@ -762,8 +764,8 @@
       (when-not (= columns scan-columns)
         (if new-select-predicate
           [:select {:predicate new-select-predicate}
-           [:scan table scan-columns]]
-          [:scan table scan-columns])))))
+           [:scan (assoc scan-opts-map :columns scan-columns)]]
+          [:scan (assoc scan-opts-map :columns scan-columns)])))))
 
 ;; Decorrelation rules.
 

@@ -2,9 +2,9 @@
  [{_column_1 _sq_2}]
  [:single-join
   []
-  [:rename a.1 [:scan {:table #xt/table a} [{a (== a 42)}]]]
+  [:rename a.1 [:scan {:table #xt/table a, :columns [{a (== a 42)}]}]]
   [:group-by
    [{_sq_2 (vec_agg b1)}]
    [:project
     [{b1 b.3/b1}]
-    [:rename b.3 [:scan {:table #xt/table b} [{b2 (== b2 42)} b1]]]]]]]
+    [:rename b.3 [:scan {:table #xt/table b, :columns [{b2 (== b2 42)} b1]}]]]]]]

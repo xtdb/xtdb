@@ -2,4 +2,4 @@
  {:skip ?_0, :limit ?_1}
  [:project
   [{a foo.1/a}]
-  [:rename foo.1 [:scan {:table #xt/table foo} [a]]]]]
+  [:rename foo.1 [:scan {:table #xt/table foo, :columns [a]}]]]]

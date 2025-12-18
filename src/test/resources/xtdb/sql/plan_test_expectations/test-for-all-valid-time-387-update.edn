@@ -6,8 +6,7 @@
  [:rename
   users.1
   [:scan
-   {:table #xt/table users, :for-valid-time :all-time}
-   [_valid_to
+   {:table #xt/table users, :for-valid-time :all-time, :columns [_valid_to
     _valid_from
     {first_name (or (not (boolean (=== "Sue" first_name))))}
-    _iid]]]]
+    _iid]}]]]

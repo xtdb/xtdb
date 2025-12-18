@@ -4,9 +4,8 @@
   [{si.1/star_name ms.2/name}]
   [[:rename
     si.1
-    [:scan {:table #xt/table stars_in} [star_name movie_title]]]
+    [:scan {:table #xt/table stars_in, :columns [star_name movie_title]}]]
    [:rename
     ms.2
     [:scan
-     {:table #xt/table movie_star}
-     [{birthdate (and (< birthdate 1960) (> birthdate 1950))} name]]]]]]
+     {:table #xt/table movie_star, :columns [{birthdate (and (< birthdate 1960) (> birthdate 1950))} name]}]]]]]

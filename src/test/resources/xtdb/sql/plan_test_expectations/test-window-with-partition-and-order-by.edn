@@ -11,4 +11,4 @@
      {:window-agg (row-number), :window-name window-name3}}]}
   [:map
    [{_ob4 docs.1/z}]
-   [:rename docs.1 [:scan {:table #xt/table docs} [y z]]]]]]
+   [:rename docs.1 [:scan {:table #xt/table docs, :columns [y z]}]]]]]

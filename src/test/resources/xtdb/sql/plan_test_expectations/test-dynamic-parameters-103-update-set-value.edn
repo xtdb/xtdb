@@ -22,8 +22,7 @@
    t1.1
    [:scan
     {:table #xt/table t1,
-     :for-valid-time [:in (current-timestamp) xtdb/end-of-time]}
-    [{col1 (or (not (boolean (=== ?_0 col1))))}
+     :for-valid-time [:in (current-timestamp) xtdb/end-of-time], :columns [{col1 (or (not (boolean (=== ?_0 col1))))}
      _valid_to
      _valid_from
-     _iid]]]]]
+     _iid]}]]]]

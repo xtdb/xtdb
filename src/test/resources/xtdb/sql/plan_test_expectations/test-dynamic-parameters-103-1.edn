@@ -2,4 +2,4 @@
  [{a foo.1/a}]
  [:rename
   foo.1
-  [:scan {:table #xt/table foo} [a {c (== c ?_1)} {b (== b ?_0)}]]]]
+  [:scan {:table #xt/table foo, :columns [a {c (== c ?_1)} {b (== b ?_0)}]}]]]

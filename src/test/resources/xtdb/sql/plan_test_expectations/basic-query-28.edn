@@ -4,4 +4,4 @@
   {:order-specs [[_ob2 {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
    [{_column_1 (== si.1/year "foo")} {_ob2 (== si.1/year "foo")}]
-   [:rename si.1 [:scan {:table #xt/table stars_in} [year]]]]]]
+   [:rename si.1 [:scan {:table #xt/table stars_in, :columns [year]}]]]]]

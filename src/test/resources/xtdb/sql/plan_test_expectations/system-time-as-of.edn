@@ -4,5 +4,4 @@
   foo.1
   [:scan
    {:table #xt/table foo,
-    :for-system-time [:at #xt/ldt "2999-01-01T00:00"]}
-   [bar]]]]
+    :for-system-time [:at #xt/ldt "2999-01-01T00:00"], :columns [bar]}]]]

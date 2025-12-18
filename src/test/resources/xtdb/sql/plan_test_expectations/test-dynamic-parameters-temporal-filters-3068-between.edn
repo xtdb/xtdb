@@ -3,5 +3,4 @@
  [:rename
   foo.1
   [:scan
-   {:table #xt/table foo, :for-valid-time [:between ?_0 ?_1]}
-   [bar]]]]
+   {:table #xt/table foo, :for-valid-time [:between ?_0 ?_1], :columns [bar]}]]]

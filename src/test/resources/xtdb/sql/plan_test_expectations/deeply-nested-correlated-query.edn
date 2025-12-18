@@ -6,9 +6,9 @@
    {:mode :semi-join, :columns {x2 ?x13, x4 ?x14}}
    [:mega-join
     []
-    [[:rename {a x1, b x2} [:scan {:table r} [a b]]]
-     [:rename {c x4} [:scan {:table s} [c]]]]]
+    [[:rename {a x1, b x2} [:scan {:table r, :columns [a b]}]]
+     [:rename {c x4} [:scan {:table s, :columns [c]}]]]]
    [:semi-join
     [(== x10 ?x14) {x7 x9}]
-    [:rename {a x6, b x7} [:scan {:table r} [{a (== a ?x13)} b]]]
-    [:rename {a x9, b x10} [:scan {:table r} [a b]]]]]]]
+    [:rename {a x6, b x7} [:scan {:table r, :columns [{a (== a ?x13)} b]}]]
+    [:rename {a x9, b x10} [:scan {:table r, :columns [a b]}]]]]]]

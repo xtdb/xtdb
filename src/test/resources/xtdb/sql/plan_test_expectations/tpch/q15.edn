@@ -9,8 +9,7 @@
      [:rename
       l.1
       [:scan
-       {:table #xt/table lineitem}
-       [{l_shipdate
+       {:table #xt/table lineitem, :columns [{l_shipdate
          (and
           (<
            l_shipdate
@@ -20,7 +19,7 @@
           (>= l_shipdate #xt/date "1996-01-01"))}
         l_extendedprice
         l_suppkey
-        l_discount]]]]]]]
+        l_discount]}]]]]]]
  [:project
   [{s_suppkey s_suppkey}
    {s_name s.5/s_name}
@@ -45,8 +44,7 @@
        [[:rename
          s.5
          [:scan
-          {:table #xt/table supplier}
-          [s_name s_address s_phone _id]]]
+          {:table #xt/table supplier, :columns [s_name s_address s_phone _id]}]]
         [:rename
          revenue.6
          [:relation

@@ -6,11 +6,11 @@
     foo.3
     [:project
      [{_id bar.1/_id}]
-     [:rename bar.1 [:scan {:table #xt/table bar} [{_id (== _id 5)}]]]]]
+     [:rename bar.1 [:scan {:table #xt/table bar, :columns [{_id (== _id 5)}]}]]]]
    [:rename
     baz.4
     [:project
      [{_id bar.1/_id}]
      [:rename
       bar.1
-      [:scan {:table #xt/table bar} [{_id (== _id 5)}]]]]]]]]
+      [:scan {:table #xt/table bar, :columns [{_id (== _id 5)}]}]]]]]]]

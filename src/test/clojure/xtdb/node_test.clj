@@ -371,9 +371,9 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
              :t1d {:foo {:bibble true}, :bar {:baz 1001}}}]
            (tu/query-ra '[:cross-join
                           [:rename {data t2d}
-                           [:scan {:table #xt/table t2} [data]]]
+                           [:scan {:table #xt/table t2, :columns [data]}]]
                           [:rename {data t1d}
-                           [:scan {:table #xt/table t1} [data]]]]
+                           [:scan {:table #xt/table t1, :columns [data]}]]]
                         {:node tu/*node*})
            #_(xt/q tu/*node* "SELECT t2.data t2d, t1.data t1d FROM t2, t1"))))
 
@@ -801,8 +801,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:col 904292726}]
            (tu/query-ra
-            '[:scan {:table #xt/table bar}
-              [{col (== col (cast "bar" :regclass))}]]
+            '[:scan {:table #xt/table bar, :columns [{col (== col (cast "bar" :regclass))}]}]
             {:node tu/*node*}))
         "scan pred"))
 
@@ -1053,8 +1052,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                             [:semi-join [{_id vals/_column_1}]
                              [:rename {bar/_id _id}
                               [:join [{foo/_id bar/foo}]
-                               [:rename foo [:scan {:table #xt/table foo} [_id]]]
-                               [:rename bar [:scan {:table #xt/table bar} [_id foo]]]]]
+                               [:rename foo [:scan {:table #xt/table foo, :columns [_id]}]]
+                               [:rename bar [:scan {:table #xt/table bar, :columns [_id foo]}]]]]
                              [:rename vals
                               [:table [_column_1]
                                [{:_column_1 "bar1"}]]]]]
@@ -1082,8 +1081,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (t/is (= [{:xt/id :toto, :col 3}]
            (tu/query-ra
             '[:join [{col col}]
-              [:scan {:table #xt/table xt_docs} [_id {col (== col 3)}]]
-              [:scan {:table #xt/table xt_docs} [_id col]]]
+              [:scan {:table #xt/table xt_docs, :columns [_id {col (== col 3)}]}]
+              [:scan {:table #xt/table xt_docs, :columns [_id col]}]]
             {:node tu/*node*}))))
 
 (deftest test-decimal-support
@@ -1146,7 +1145,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                        bar #xt/type [:? :utf8]
                        foo #xt/type [:? :utf8]}}
              (tu/query-ra '[:order-by {:order-specs [[_id]]}
-                            [:scan {:table #xt/table device} [_id foo bar]]]
+                            [:scan {:table #xt/table device, :columns [_id foo bar]}]]
                           {:node tu/*node*
                            :with-types? true})))
 
