@@ -172,7 +172,7 @@ dataType
     | 'TIMESTAMP' ('(' precision ')')? withOrWithoutTimeZone? # TimestampType
     | 'TIMESTAMPTZ' #TimestampTzType
     | 'INTERVAL' intervalQualifier? # IntervalType
-    | ('VARCHAR' | 'TEXT') # CharacterStringType
+    | ('CHAR' | 'VARCHAR' | 'TEXT') # CharacterStringType
     | 'DURATION' ('(' precision ')')? # DurationType
     | 'ROW' '(' fieldDefinition (',' fieldDefinition)* ')' # RowType
     | 'REGCLASS' #RegClassType

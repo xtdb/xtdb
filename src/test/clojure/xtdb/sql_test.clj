@@ -2516,6 +2516,18 @@ UNION ALL
   (t/is (= [{:k1 :foo/bar, :k2 :bar, :s1 ":foo/bar", :s2 ":bar"}]
            (xt/q tu/*node* "SELECT ':foo/bar'::keyword k1, 'bar'::keyword k2, (KEYWORD 'foo/bar')::text s1, (KEYWORD ':bar')::text s2"))))
 
+(t/deftest test-char-type
+  (t/testing "::char casts to utf8 (same as ::text and ::varchar)"
+    (t/is (= [{:c "f"}]
+             (xt/q tu/*node* "SELECT 'f'::char AS c")))
+
+    (t/is (= [{:c "f", :t "f", :v "f"}]
+             (xt/q tu/*node* "SELECT 'f'::char AS c, 'f'::text AS t, 'f'::varchar AS v"))))
+
+  (t/testing "char(n) with length parameter is not supported - XTDB uses Arrow's variable-length utf8 for all strings"
+    (t/is (anomalous? [:incorrect nil #"mismatched input '\('"]
+                      (xt/q tu/*node* "SELECT 'foo'::char(10) AS c")))))
+
 (t/deftest test-str
   (t/is (= [{:str "hello, 42.0 at 2020-01-01"}]
            (xt/q tu/*node* "SELECT STR('hello, ', NULL, 42.0, ' at ', DATE '2020-01-01') str"))))
