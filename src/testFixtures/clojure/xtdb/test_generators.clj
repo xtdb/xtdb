@@ -123,16 +123,20 @@
 (defn generate-record
   ([]
    (generate-record {}))
-  ([{:keys [potential-doc-ids exclude-gens]
+  ([{:keys [potential-doc-ids exclude-gens override-field-keys]
      :or {exclude-gens #{}}}]
    (gen/let [id (if potential-doc-ids
                   (gen/elements potential-doc-ids)
                   (gen/one-of [i64-gen safe-keyword-gen uuid-gen]))
-             num-fields (gen/choose 1 5)
-             field-keys (gen/vector-distinct
-                         (gen/elements [:a :b :c :d :e :f :g :h :i :j])
-                         {:num-elements num-fields
-                          :max-tries 100})
+             num-fields (if override-field-keys
+                          (gen/return (count override-field-keys))
+                          (gen/choose 1 5))
+             field-keys (if override-field-keys
+                          (gen/return override-field-keys)
+                          (gen/vector-distinct
+                           (gen/elements [:a :b :c :d :e :f :g :h :i :j])
+                           {:num-elements num-fields
+                            :max-tries 100}))
              field-values (gen/vector (recursive-value-gen {:exclude-gens exclude-gens}) num-fields)]
      (-> (zipmap field-keys field-values)
          (assoc :xt/id id)))))
@@ -144,7 +148,7 @@
      :vs vs
      :type element-gen}))
 
-(defn single-type-vector-vs-gen 
+(defn single-type-vector-vs-gen
   [min-length max-length]
   (gen/let [type-gen (gen/elements simple-type-gens)]
     (typed-vector-vs-gen type-gen min-length max-length)))
@@ -299,16 +303,20 @@
 (defn update-statement-gen
   ([id]
    (update-statement-gen id {}))
-  ([id {:keys [exclude-gens]}]
-   (gen/let [num-fields (gen/choose 1 5)
-             field-names (gen/vector-distinct
-                          (gen/elements [:a :b :c :d :e :f :g :h :i :j])
-                          {:num-elements num-fields
-                           :max-tries 100})
+  ([id {:keys [exclude-gens override-field-keys]}]
+   (gen/let [num-fields (if override-field-keys
+                          (gen/return (count override-field-keys))
+                          (gen/choose 1 5))
+             field-keys (if override-field-keys
+                          (gen/return override-field-keys)
+                          (gen/vector-distinct
+                           (gen/elements [:a :b :c :d :e :f :g :h :i :j])
+                           {:num-elements num-fields
+                            :max-tries 100}))
              field-values (gen/vector (recursive-value-gen {:exclude-gens exclude-gens}) num-fields)]
      (let [lifted-vals (mapv (fn [v] [:lift v]) field-values)
            [sql-string & params] (sql/format {:update :docs
-                                              :set (zipmap field-names lifted-vals)
+                                              :set (zipmap field-keys lifted-vals)
                                               :where [:= :_id id]})]
-       {:fields (zipmap field-names field-values)
+       {:fields (zipmap field-keys field-values)
         :sql-statement [:sql sql-string (vec params)]}))))
