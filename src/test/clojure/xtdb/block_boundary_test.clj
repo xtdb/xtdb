@@ -402,14 +402,17 @@
                             (t/testing "transaction count preserved after restart"
                               (= initial-tx-count (count (xt/q node "SELECT * FROM xt.txs")))))))))))
 
-(t/deftest ^:property updates-across-flush-boundaries
-  ;; TODO: To prevent failures here, we have to remove certain gens from UPDATE statement generation
+(t/deftest ^:property updates-adding-new-keys-cross-boundaries
   (let [exclude-gens #{tg/duration-gen tg/varbinary-gen tg/decimal-gen tg/set-gen}]
     (tu/run-property-test
      {:num-tests tu/property-test-iterations}
-     (prop/for-all [record (tg/generate-record {:potential-doc-ids #{1} :exclude-gens exclude-gens})
-                    update-statement-1 (tg/update-statement-gen 1 {:exclude-gens exclude-gens})
-                    update-statement-2 (tg/update-statement-gen 1 {:exclude-gens exclude-gens})
+     (prop/for-all [record (tg/generate-record {:potential-doc-ids #{1}
+                                                :exclude-gens exclude-gens
+                                                :override-field-keys [:a :b]})
+                    update-statement-1 (tg/update-statement-gen 1 {:exclude-gens exclude-gens
+                                                                   :override-field-keys [:c :d]})
+                    update-statement-2 (tg/update-statement-gen 1 {:exclude-gens exclude-gens
+                                                                   :override-field-keys [:e :f]})
                     flush-after-put? tg/bool-gen
                     flush-after-first-update? tg/bool-gen
                     flush-after-second-update? tg/bool-gen]
@@ -427,10 +430,13 @@
                      (and
                       (t/testing "three transactions recorded"
                         (= 3 (count (xt/q node "FROM xt.txs"))))
+                      (t/testing "document should have 3 entries in history"
+                        (let [res (xt/q node "SELECT * FROM docs FOR VALID_TIME ALL")]
+                          (= 3 (count res))))
                       (t/testing "document has value equal to all of the updates merged"
-                        (let [res (first (xt/q node "SELECT * FROM docs WHERE _id = 1")) 
+                        (let [res (first (xt/q node "SELECT * FROM docs WHERE _id = 1"))
                               record-fields [record (:fields update-statement-1) (:fields update-statement-2)]
                               expected-merged (reduce merge {:xt/id 1} record-fields)
-                              expected-merged-no-nils (tu/remove-nils expected-merged)] 
+                              expected-merged-no-nils (tu/remove-nils expected-merged)]
                           (= (tg/normalize-for-comparison expected-merged-no-nils)
                              (tg/normalize-for-comparison res))))))))))
