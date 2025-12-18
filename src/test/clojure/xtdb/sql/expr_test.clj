@@ -858,7 +858,15 @@
         [sql expected]
         (= expected (plan-expr-with-foo sql))
       "DATE_TRUNC(DAY, INTERVAL '5' DAY)" '(date_trunc "DAY" (single-field-interval "5" "DAY" 2 6))
-      "date_trunc(hour, interval '3 02:47:33' day to second)" '(date_trunc "HOUR" (multi-field-interval "3 02:47:33" "DAY" 2 "SECOND" 6)))))
+      "date_trunc(hour, interval '3 02:47:33' day to second)" '(date_trunc "HOUR" (multi-field-interval "3 02:47:33" "DAY" 2 "SECOND" 6))))
+
+  (t/testing "quoted precision string"
+    (t/are
+        [sql expected]
+        (= expected (plan-expr-with-foo sql))
+      "DATE_TRUNC('minute', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "MINUTE" #xt/date-time "2021-10-21T12:34:56")
+      "DATE_TRUNC('HOUR', TIMESTAMP '2021-10-21T12:34:56')" '(date_trunc "HOUR" #xt/date-time "2021-10-21T12:34:56")
+      "date_trunc('day', timestamp '2021-10-21T12:34:56')" '(date_trunc "DAY" #xt/date-time "2021-10-21T12:34:56"))))
 
 (t/deftest test-datetime-functions-plan
   (t/are [sql expected] (= expected (plan-expr-with-foo sql))
@@ -899,7 +907,13 @@
            (xt/q tu/*node* "select date_trunc(year, DATE '2001-11-27') as \"timestamp\"")))
 
   (t/is (= [{:timestamp #xt/date-time "2021-10-21T12:00:00"}]
-           (xt/q tu/*node* "select date_trunc(hour, timestamp '2021-10-21T12:34:56') as \"timestamp\""))))
+           (xt/q tu/*node* "select date_trunc(hour, timestamp '2021-10-21T12:34:56') as \"timestamp\"")))
+
+  (t/testing "quoted precision string"
+    (t/is (= [{:timestamp #xt/zoned-date-time "2021-10-21T12:34:00Z"}]
+             (xt/q tu/*node* "SELECT DATE_TRUNC('minute', TIMESTAMP '2021-10-21T12:34:56Z') as \"timestamp\"")))
+    (t/is (= [{:timestamp #xt/zoned-date-time "2021-10-21T12:00:00Z"}]
+             (xt/q tu/*node* "SELECT DATE_TRUNC('HOUR', TIMESTAMP '2021-10-21T12:34:56Z') as \"timestamp\"")))))
 
 (t/deftest test-date-trunc-with-timezone-query
   (t/is (= [{:timestamp #xt/zoned-date-time "2001-02-16T08:00-05:00"}]

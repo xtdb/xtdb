@@ -1643,7 +1643,10 @@
     (xt/template (current-setting ~(-> (.expr ctx) (.accept this)))))
 
   (visitDateTruncFunction [this ctx]
-    (let [dtp (-> (.dateTruncPrecision ctx) (.getText) (str/upper-case))
+    (let [precision-ctx (.dateTruncPrecision ctx)
+          dtp (if-let [char-str (.characterString precision-ctx)]
+                (-> (.accept char-str string-literal-visitor) str/upper-case)
+                (-> (.getText precision-ctx) str/upper-case))
           dts (-> (.dateTruncSource ctx) (.accept this))
           dt-tz (some-> (.dateTruncTimeZone ctx) (.accept this))]
       (if dt-tz
