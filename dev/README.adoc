@@ -36,7 +36,6 @@ You do not need to install Gradle to develop XT2 - there is a Gradle https://doc
 ** if you change any of the Java classes, that'll require a REPL bounce
 ** otherwise, `(dev/reset)` (or just `(reset)` if you're already in the `dev` ns) should be sufficient.
 ** Please don't put any more side-effecting top-level code in dev namespaces - you'll break this reload ability and make me sad.
-** To run a single test file, run (e.g.) `./gradlew test --tests 'xtdb.api_test**'`
 ** Run `git config core.hooksPath .githooks` to add xtdb hooks to your local repo.
 
 == XTDB 'playground'
@@ -57,12 +56,6 @@ This is particularly useful for non-JVM testing - see the `/lang` README for mor
 == Testing
 
 * Test all with `./gradlew test`; `./gradlew integration-test` for longer tests
-** Individual tests: identify the module they live in, and (for Clojure tests) replace dashes with underscores.
-   
-   Most Clojure tests live in the root module (under `/src/test/clojure`) so that they're available by default in the root REPL.
-   e.g. `./gradlew :test --tests 'xtdb.api_test*'`
-
-   You can also run with a wildcarded keyword - e.g. `./gradlew :test --tests '*expression*'`.
 * Property-based testing with `./gradlew property-test`
 ** Run with custom iterations: `./gradlew property-test -Piterations=500` (defaults to 100)
 ** Uses test.check generators to test with randomized data including composite types
@@ -70,6 +63,33 @@ This is particularly useful for non-JVM testing - see the `/lang` README for mor
 ** `docker-compose up` (`docker-compose up <kafka>` etc for individual containers),
 ** `./gradlew kafka-test`
 ** `docker-compose down`
+
+=== Running specific tests
+
+
+Most Clojure tests live in the root module (under `/src/test/clojure`) so that they're available by default in the root REPL under the :test task.
+
+NOTE: For Clojure namespaces, replace dashes with underscores.
+
+Run a test namespace::
++
+  ./gradlew :test --tests 'xtdb.api_test*'
+
+Run tests matching a wildcard keyword::
++
+  ./gradlew :test --tests '*expression*'
+
+Run a specific test::
++
+  ./gradlew :test --tests '**can-manually-specify-system-time-47**
+
+Run a specific property test::
++
+  ./gradlew :property-test --tests '**update-deduplication**' -Piterations=10
+
+Run a specific integration test::
++
+  ./gradlew :integration-test --tests '**test-on-disk-joining**'
 
 === Auth for testing cloud based resources
 
