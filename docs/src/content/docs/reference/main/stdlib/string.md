@@ -24,8 +24,11 @@ title: String functions
 
   See [Regular expressions in XTDB](#regexes) for more details.
 
+`REPLACE(s, target, replacement)`
+: Replace all occurrences of `target` in `s` with `replacement` (literal string matching).
+
 `REGEXP_REPLACE(s, pattern, replacement [, flags])`
-: Replace all occurrences of `pattern` in `s` with `replacement`.
+: Replace all occurrences of `pattern` in `s` with `replacement` (regex matching).
 
   See [Regular expressions in XTDB](#regexes) for more details.
 

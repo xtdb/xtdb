@@ -2,10 +2,16 @@
 title: Other Functions
 ---
 
+`CARDINALITY(list)`
+: returns the number of elements in the list.
+
 `LENGTH(expr)`
 : returns the length of the value in `expr`, where `<expr>` is one of the following:
   - A **string**: returns the number of utf8 characters in the string (alias for `CHAR_LENGTH`)
   - A **byte-array**: returns the number of bytes in the array (alias for `OCTET_LENGTH`)
-  - A **list**: returns the number of elements in the list
+  - A **list**: returns the number of elements in the list (alias for `CARDINALITY`)
   - A **set**: returns the number of elements in the set
   - A **struct**: returns the number of **non-absent** fields in the struct
+
+`TRIM_ARRAY(array, n)`
+: returns a copy of `array` with the last `n` elements removed.

@@ -31,10 +31,10 @@ Note:
 
 ## Boolean aggregate functions
 
-- `BOOL_AND(xs)` (true if all values are true; false otherwise)
+- `BOOL_AND(xs)` / `EVERY(xs)` (true if all values are true; false otherwise)
 - `BOOL_OR(xs)` (false if all values are false; true otherwise)
 
-Note: In keeping with Postgres, we rename `ALL` and `ANY` to `BOOL_AND` and `BOOL_OR` to avoid confusion with the logical operators.
+Note: In keeping with Postgres, we rename `ALL` and `ANY` to `BOOL_AND` and `BOOL_OR` to avoid confusion with the logical operators. `EVERY` is a SQL-standard alias for `BOOL_AND`.
 
 ## Composite-type aggregate functions
 
