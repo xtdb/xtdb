@@ -18,6 +18,7 @@
   ([^RelationReader rel start]
    (let [row-count (.getRowCount rel)
          iid-vec (.vectorFor rel "_iid")
+         system-from-vec (.vectorFor rel "_system_from")
          valid-from-vec (.vectorFor rel "_valid_from")
          valid-to-vec (.vectorFor rel "_valid_to")
          op-vec (.vectorFor rel "op")
@@ -27,6 +28,7 @@
              (let [leg (.getLeg op-vec i)]
                (cond-> {:iid (.getObject iid-vec i)
                         :valid-from (time/->instant (.getObject valid-from-vec i))
+                        :system-from (time/->instant (.getObject system-from-vec i))
                         :valid-to (let [vt (.getLong valid-to-vec i)]
                                     (when-not (= Long/MAX_VALUE vt)
                                       (time/->instant (.getObject valid-to-vec i))))}
