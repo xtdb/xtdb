@@ -2,11 +2,13 @@
   (:require [clojure.test :as t]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.db-catalog :as db]
+            [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]
-            [xtdb.log :as xt-log])
+            [xtdb.tx-sink :as tx-sink]
+            [xtdb.util :as util])
   (:import [xtdb.api.log Log$Message]
            [xtdb.database Database$Catalog]
            [xtdb.test.log RecordingLog]))
@@ -181,3 +183,34 @@
           (let [^RecordingLog output-log (get-output-log node)]
             (t/is (= 1 (count (.getMessages output-log))))
             (t/is (= messages (.getMessages output-log)))))))))
+
+(t/deftest test-read-relation-rows
+  (tu/with-tmp-dirs #{node-dir}
+    (with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 0})]
+      (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :value "first"}]])
+      (xt/execute-tx node [[:put-docs :docs {:xt/id 2 :value "second"}]])
+      (xt/execute-tx node [[:delete-docs :docs 1]])
+
+      (let [xtdb-db (db/primary-db node)
+            live-index (.getLiveIndex xtdb-db)
+            live-table (.liveTable live-index #xt/table docs)
+            live-rel (.getLiveRelation live-table)
+            rows (tx-sink/read-relation-rows live-rel)]
+
+        (t/is (= 3 (count rows)))
+
+        (t/testing "put operations include doc"
+          (let [puts (filter #(= :put (:op %)) rows)]
+            (t/is (= 2 (count puts)))
+            (t/is (every? :doc puts))
+            (t/is (= #{"first" "second"} (->> puts (map #(get-in % [:doc "value"])) set)))))
+
+        (t/testing "delete operations"
+          (let [deletes (filter #(= :delete (:op %)) rows)]
+            (t/is (= 1 (count deletes)))
+            (t/is (nil? (:doc (first deletes))))))
+
+        (t/testing "all rows have required temporal fields"
+          (t/is (every? :iid rows))
+          (t/is (every? :valid-from rows))
+          (t/is (every? #(contains? % :valid-to) rows)))))))

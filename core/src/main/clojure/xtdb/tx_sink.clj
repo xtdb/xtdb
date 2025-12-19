@@ -8,32 +8,39 @@
             [xtdb.time :as time])
   (:import (xtdb.api TxSinkConfig Xtdb Xtdb$Config)
            (xtdb.api.log Log Log$Message Log$Message$Tx)
+           (xtdb.arrow RelationReader)
            (xtdb.catalog BlockCatalog)
            (xtdb.indexer Indexer$TxSink LiveIndex$Tx)
            (xtdb.table TableRef)))
 
+(defn read-relation-rows
+  ([rel] (read-relation-rows rel 0))
+  ([^RelationReader rel start]
+   (let [row-count (.getRowCount rel)
+         iid-vec (.vectorFor rel "_iid")
+         valid-from-vec (.vectorFor rel "_valid_from")
+         valid-to-vec (.vectorFor rel "_valid_to")
+         op-vec (.vectorFor rel "op")
+         put-vec (.vectorFor op-vec "put")]
+     (into []
+           (for [i (range start row-count)]
+             (let [leg (.getLeg op-vec i)]
+               (cond-> {:iid (.getObject iid-vec i)
+                        :valid-from (time/->instant (.getObject valid-from-vec i))
+                        :valid-to (let [vt (.getLong valid-to-vec i)]
+                                    (when-not (= Long/MAX_VALUE vt)
+                                      (time/->instant (.getObject valid-to-vec i))))}
+                 leg (assoc :op (keyword leg))
+                 (and (= leg "put") put-vec) (assoc :doc (.getObject put-vec i)))))))))
+
 (defn read-table-rows [^TableRef table ^LiveIndex$Tx live-idx-tx]
   (let [live-table (.liveTable live-idx-tx table)
         start-pos (.getStartPos live-table)
-        live-relation (.getLiveRelation live-table)
-        pos (.getRowCount live-relation)
-        iid-vec (.vectorFor live-relation "_iid")
-        valid-from-vec (.vectorFor live-relation "_valid_from")
-        valid-to-vec (.vectorFor live-relation "_valid_to")
-        op-vec (.vectorFor live-relation "op")
-        put-vec (.vectorFor op-vec "put")]
+        live-relation (.getLiveRelation live-table)]
     {:db (.getDbName table)
      :schema (.getSchemaName table)
      :table (.getTableName table)
-     :ops (->> (for [i (range start-pos pos)]
-                 (let [leg (.getLeg op-vec i)]
-                   (cond-> {:op (keyword leg)
-                            :iid (.getObject iid-vec i)
-                            :valid-from (time/->instant (.getObject valid-from-vec i))
-                            :valid-to (when-not (= Long/MAX_VALUE (.getLong valid-to-vec i))
-                                        (time/->instant (.getObject valid-to-vec i)))}
-                     (= leg "put") (assoc :doc (.getObject put-vec i)))))
-               (into []))}))
+     :ops (read-relation-rows live-relation start-pos)}))
 
 (defn ->encode-fn [fmt]
   (case fmt
