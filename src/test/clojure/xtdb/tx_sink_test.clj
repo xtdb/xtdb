@@ -38,27 +38,27 @@
       (t/is (= 1 (count (.getMessages output-log))))
       (let [msg (-> (.getMessages output-log) first decode-record)]
         (t/is (= (util/->clj
-                   {:transaction {:id (serde/->TxKey 0 (.toInstant #inst "2020"))}
-                    :system-time #xt/instant "2020-01-01T00:00Z"
-                    :source {:db "xtdb" :block-idx 0}
-                    :tables [{:db "xtdb"
-                              :schema "public"
-                              :table "docs"
-                              :ops [{:op :put
-                                     :iid (util/->iid :doc1)
-                                     :valid-from  #xt/instant "2020-01-01T00:00Z"
-                                     :valid-to nil
-                                     :doc {"_id" :doc1, "value" "test"}}]}
-                             {:db "xtdb"
-                              :schema "xt"
-                              :table "txs"
-                              :ops [{:op :put
-                                     :iid (util/->iid 0)
-                                     :valid-from  #xt/instant "2020-01-01T00:00Z"
-                                     :valid-to nil
-                                     :doc {"_id" 0
-                                           "system_time" #xt/zdt "2020-01-01T00:00[UTC]"
-                                           "committed" true}}]}]})
+                  {:transaction {:id (serde/->TxKey 0 (.toInstant #inst "2020"))}
+                   :system-time #xt/instant "2020-01-01T00:00Z"
+                   :source {:db "xtdb" :block-idx 0}
+                   :tables [{:db "xtdb"
+                             :schema "public"
+                             :table "docs"
+                             :ops [{:op :put
+                                    :iid (util/->iid :doc1)
+                                    :valid-from  #xt/instant "2020-01-01T00:00Z"
+                                    :valid-to nil
+                                    :doc {"_id" :doc1, "value" "test"}}]}
+                            {:db "xtdb"
+                             :schema "xt"
+                             :table "txs"
+                             :ops [{:op :put
+                                    :iid (util/->iid 0)
+                                    :valid-from  #xt/instant "2020-01-01T00:00Z"
+                                    :valid-to nil
+                                    :doc {"_id" 0
+                                          "system_time" #xt/zdt "2020-01-01T00:00[UTC]"
+                                          "committed" true}}]}]})
                  (util/->clj msg))))
 
       (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1, a: 1, b: {c: [1, 2, 3], d: 'test'}}, {_id: 2, a: 2}, {_id: 3, a: 3}"])
