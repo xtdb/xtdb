@@ -45,10 +45,11 @@
     :transit+json #(xtdb.serde/read-transit % :json)
     :transit+msgpack #(xtdb.serde/read-transit % :msgpack)))
 
-(defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format enable db-name]}]
+(defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format enable db-name initial-scan]}]
   (.txSink config
            (cond-> (TxSinkConfig.)
              (some? enable) (.enable enable)
+             (some? initial-scan) (.initialScan initial-scan)
              (some? output-log) (.outputLog (log/->log-factory (first output-log) (second output-log)))
              (some? db-name) (.dbName db-name)
              (some? format) (.format (str (symbol format))))))
