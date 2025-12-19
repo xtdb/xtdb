@@ -408,4 +408,4 @@
   (dotimes [i n]
     (when (zero? (mod i 100))
       (println (format "Run %d/%d" i n)))
-    (t/test-var test-var)))
+    (t/test-vars [test-var])))
