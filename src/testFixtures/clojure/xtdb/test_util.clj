@@ -8,7 +8,7 @@
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.indexer :as idx]
-            [xtdb.log :as xt-log]
+            [xtdb.log :as xt-log] 
             [xtdb.logical-plan :as lp]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
@@ -400,3 +400,12 @@
   (cond-> (RecordingLog$Factory.)
     instant-src (.instantSource instant-src)
     messages (.messages messages)))
+
+;; Util for re-running flaky tests to try and capture errors. Usage example (with logging turned down via xtdb.logging):
+;; (logging/with-log-levels* [['xtdb :warn]]
+;;  (fn [] (tu/run-test-n-times #'my-flaky-test 1000)))
+(defn run-test-n-times [test-var n]
+  (dotimes [i n]
+    (when (zero? (mod i 100))
+      (println (format "Run %d/%d" i n)))
+    (t/test-var test-var)))
