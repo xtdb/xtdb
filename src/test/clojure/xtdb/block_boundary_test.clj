@@ -404,7 +404,7 @@
                               (= initial-tx-count (count (xt/q node "SELECT * FROM xt.txs")))))))))))
 
 (t/deftest ^:property updates-adding-new-keys-cross-boundaries
-  (let [exclude-gens #{tg/duration-gen tg/varbinary-gen tg/decimal-gen tg/set-gen tg/nil-gen}]
+  (let [exclude-gens #{tg/varbinary-gen tg/decimal-gen tg/nil-gen}]
     (tu/run-property-test
      {:num-tests tu/property-test-iterations}
      (prop/for-all [record (tg/generate-record {:potential-doc-ids #{1}
@@ -457,7 +457,7 @@
 ;; TODO - this fails for different reasons following #5116
 ;; Fails when :a is [[#NaN]]
 #_(t/deftest ^:property update-deduplication
-    (let [exclude-gens #{tg/duration-gen tg/varbinary-gen tg/decimal-gen tg/set-gen tg/nil-gen}]
+    (let [exclude-gens #{tg/varbinary-gen tg/decimal-gen tg/nil-gen}]
       (tu/run-property-test
        {:num-tests tu/property-test-iterations}
        (prop/for-all [record (tg/generate-record {:potential-doc-ids #{1}
@@ -493,7 +493,7 @@
                                  (tg/normalize-for-comparison res)))))))))))
 
 (t/deftest ^:property update-same-keys-new-values
-  (let [exclude-gens #{tg/duration-gen tg/varbinary-gen tg/decimal-gen tg/set-gen tg/nil-gen}]
+  (let [exclude-gens #{tg/varbinary-gen tg/decimal-gen tg/nil-gen}]
     (tu/run-property-test
      {:num-tests tu/property-test-iterations}
      (prop/for-all [[value-1 value-2 value-3] (tg/distinct-value-gen 3 {:exclude-gens exclude-gens})
