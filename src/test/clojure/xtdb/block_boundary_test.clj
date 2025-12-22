@@ -404,7 +404,7 @@
                               (= initial-tx-count (count (xt/q node "SELECT * FROM xt.txs")))))))))))
 
 (t/deftest ^:property updates-adding-new-keys-cross-boundaries
-  (let [exclude-gens #{tg/duration-gen tg/varbinary-gen tg/decimal-gen tg/set-gen tg/nil-gen}]
+  (let [exclude-gens #{tg/varbinary-gen tg/decimal-gen tg/nil-gen}]
     (tu/run-property-test
      {:num-tests tu/property-test-iterations}
      (prop/for-all [record (tg/generate-record {:potential-doc-ids #{1}
@@ -442,15 +442,22 @@
                           (= (tg/normalize-for-comparison expected-merged-no-nils)
                              (tg/normalize-for-comparison res))))))))))
 
+(defn ->insert-tx [k v]
+  (let [[sql-string & params] (honey-sql/format {:insert-into [:docs]
+                                                 :columns [:_id k]
+                                                 :values [[1 [:lift v]]]})]
+    [:sql sql-string (vec params)]))
+
 (defn ->update-tx [k v]
   (let [[sql-string & params] (honey-sql/format {:update :docs
                                                  :set {k [:lift v]}
                                                  :where [:= :_id 1]})]
     [:sql sql-string (vec params)]))
 
-;; TODO - failing currently
+;; TODO - this fails for different reasons following #5116
+;; Fails when :a is [[#NaN]]
 #_(t/deftest ^:property update-deduplication
-    (let [exclude-gens #{tg/duration-gen tg/varbinary-gen tg/decimal-gen tg/set-gen tg/nil-gen}]
+    (let [exclude-gens #{tg/varbinary-gen tg/decimal-gen tg/nil-gen}]
       (tu/run-property-test
        {:num-tests tu/property-test-iterations}
        (prop/for-all [record (tg/generate-record {:potential-doc-ids #{1}
@@ -461,8 +468,10 @@
                       flush-after-second-update? tg/bool-gen]
                      (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
                                                        :compactor {:threads 0}})]
-                       (let [update-sql (->update-tx :a (:a record))]
-                         (xt/execute-tx node [[:put-docs :docs record]])
+                       (let [value (:a record)
+                             insert-sql (->insert-tx :a value)
+                             update-sql (->update-tx :a value)]
+                         (xt/execute-tx node [insert-sql])
                          (when flush-after-put? (tu/flush-block! node))
 
                          (xt/execute-tx node [update-sql])
@@ -484,7 +493,7 @@
                                  (tg/normalize-for-comparison res)))))))))))
 
 (t/deftest ^:property update-same-keys-new-values
-  (let [exclude-gens #{tg/duration-gen tg/varbinary-gen tg/decimal-gen tg/set-gen tg/nil-gen}]
+  (let [exclude-gens #{tg/varbinary-gen tg/decimal-gen tg/nil-gen}]
     (tu/run-property-test
      {:num-tests tu/property-test-iterations}
      (prop/for-all [[value-1 value-2 value-3] (tg/distinct-value-gen 3 {:exclude-gens exclude-gens})
@@ -493,10 +502,10 @@
                     flush-after-second-update? tg/bool-gen]
                    (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
                                                      :compactor {:threads 0}})]
-                     (let [record {:xt/id 1 :a value-1}
+                     (let [insert-sql (->insert-tx :a value-1)
                            update-statement-1 (->update-tx :a value-2)
                            update-statement-2 (->update-tx :a value-3)]
-                       (xt/execute-tx node [[:put-docs :docs record]])
+                       (xt/execute-tx node [insert-sql])
                        (when flush-after-put? (tu/flush-block! node))
 
                        (xt/execute-tx node [update-statement-1])
