@@ -10,6 +10,46 @@ title: String functions
 `CHARACTER_LENGTH(s)` | `CHAR_LENGTH(s)`
 : length of string, in UTF8 characters
 
+`FORMAT(format_str, ...)`
+: Formats arguments according to a format string (PostgreSQL-compatible).
+
+  Format specifiers: `%[position][flags][width]type`
+
+  - **position**: `n$` where n is 1-based argument index
+  - **flags**: `-` for left-justify within width
+  - **width**: minimum field width (number, `*` for next arg, or `*n$` for positional arg)
+  - **type**:
+    - `s` - format as string
+    - `I` - format as SQL identifier (double-quoted if needed)
+    - `L` - format as SQL literal (single-quoted, with proper escaping)
+    - `%` - output a literal `%`
+
+  Examples:
+  ```sql
+  FORMAT('Hello %s', 'World')
+  -- 'Hello World'
+
+  FORMAT('Testing %s, %s, %s', 'one', 'two', 'three')
+  -- 'Testing one, two, three'
+
+  FORMAT('INSERT INTO %I VALUES(%L)', 'Foo bar', 'O''Reilly')
+  -- 'INSERT INTO "Foo bar" VALUES(''O''''Reilly'')'
+
+  FORMAT('|%10s|', 'foo')
+  -- '|       foo|'
+
+  FORMAT('|%-10s|', 'foo')
+  -- '|foo       |'
+
+  FORMAT('Testing %3$s, %2$s, %1$s', 'one', 'two', 'three')
+  -- 'Testing three, two, one'
+  ```
+
+  Notes:
+  - `%I` throws an error if the argument is null
+  - `%L` outputs `NULL` (unquoted) for null arguments
+  - A specifier without a position uses the next argument after the last consumed
+
 `str [NOT] LIKE like_pattern`
 : Returns true iff the `str` matches (/ doesn't match) the
     `like_pattern`.
