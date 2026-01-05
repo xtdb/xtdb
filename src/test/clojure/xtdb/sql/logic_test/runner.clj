@@ -477,9 +477,9 @@
 
   (sort-by val (update-vals (group-by #(subs % 0 20) (map key @error-counts-by-message)) count))
 
-  (time (-main  "--verify" "--db" "xtdb" "src/test/resources/xtdb/sql/logic_test/sqlite_test/random/groupby/slt_good_1.test"))
+  (time (-main  "--verify" "--db" "xtdb" "sqlite-test/random/groupby/slt_good_1.test"))
 
-  (time (-main "--verify" "--db" "sqlite" "src/test/resources/xtdb/sql/logic_test/sqlite_test/select4.test"))
+  (time (-main "--verify" "--db" "sqlite" "sqlite-test/select4.test"))
 
   (time (-main "--verify" "--direct-sql" "--db" "xtdb" "src/test/resources/xtdb/sql/logic_test/direct-sql/dml.test"))
 
@@ -490,7 +490,7 @@
 
   (= (time
       (with-out-str
-        (-main "--db" "xtdb" "--limit" "10" "src/test/resources/xtdb/sql/logic_test/sqlite_test/select1.test")))
+        (-main "--db" "xtdb" "--limit" "10" "sqlite-test/select1.test")))
      (time
       (with-out-str
-        (-main "--db" "sqlite" "--limit" "10" "src/test/resources/xtdb/sql/logic_test/sqlite_test/select1.test")))))
+        (-main "--db" "sqlite" "--limit" "10" "sqlite-test/select1.test")))))

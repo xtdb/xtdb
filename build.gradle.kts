@@ -575,7 +575,7 @@ fun createSltTask(
             "--max-failures", maxFailures.toString(),
             "--max-errors", maxErrors.toString(),
         ) + extraArgs + testFiles.map {
-            "src/test/resources/xtdb/sql/logic_test/sqlite_test/$it"
+            "sqlite-test/$it"
         }
     }
 }
