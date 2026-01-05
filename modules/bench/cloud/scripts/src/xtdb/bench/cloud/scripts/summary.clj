@@ -290,6 +290,28 @@
         normalized (if (contains? supported-formats fmt) fmt :table)]
     normalized))
 
+(defmethod summary->table "tsbs-iot" [summary]
+  (let [{:keys [benchmark-total-time-ms ingest-stages]} summary
+        ingest-time-ms (reduce + 0 (map :time-taken-ms ingest-stages))]
+    (format "TSBS IoT | Total: %s | Ingest: %s"
+            (util/format-duration :millis benchmark-total-time-ms)
+            (util/format-duration :millis ingest-time-ms))))
+
+(defmethod summary->slack "tsbs-iot" [summary]
+  (let [{:keys [benchmark-total-time-ms ingest-stages]} summary
+        ingest-time-ms (reduce + 0 (map :time-taken-ms ingest-stages))]
+    (str
+     (util/totals->string ingest-time-ms benchmark-total-time-ms)
+     "\n\nTSBS IoT time series benchmark completed")))
+
+(defmethod summary->github-markdown "tsbs-iot" [summary]
+  (let [{:keys [benchmark-total-time-ms ingest-stages]} summary
+        ingest-time-ms (reduce + 0 (map :time-taken-ms ingest-stages))]
+    (str
+     "### TSBS IoT Benchmark\n\n"
+     (format "- **Total Time**: %s\n" (util/format-duration :millis benchmark-total-time-ms))
+     (format "- **Ingest Time**: %s\n" (util/format-duration :millis ingest-time-ms)))))
+
 (defn render-summary
   [summary {:keys [format]}]
   (let [fmt (normalize-format format)]

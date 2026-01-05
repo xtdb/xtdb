@@ -34,6 +34,11 @@ clickbench:
   # Name of k8s secret containing AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
   awsSecretName: "xtdb-aws-datasets-secret"
 
+tsbs-iot:
+  devices: 2000
+  timestampStart: "2020-01-01T00:00:00Z"
+  timestampEnd: "2020-01-07T00:00:00Z"
+
 xtdbConfig:
   # Core environment variables
   kafkaBootstrapServers: xtdb-benchmark-kafka.cloud-benchmark.svc.cluster.local:9092

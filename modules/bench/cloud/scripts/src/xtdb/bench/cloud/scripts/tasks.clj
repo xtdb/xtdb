@@ -43,6 +43,10 @@
         "readings" (when (empty? (:query-stages parsed-summary))
                      (throw (ex-info "No query stages found in log file"
                                      {:benchmark-type "readings"
+                                      :log-file log-file-path})))
+        "tsbs-iot" (when (empty? (:ingest-stages parsed-summary))
+                     (throw (ex-info "No ingest stages found in log file"
+                                     {:benchmark-type "tsbs-iot"
                                       :log-file log-file-path}))))
       (summary/render-summary parsed-summary {:format format}))))
 
@@ -146,7 +150,7 @@
   (println)
   (println "  plot-benchmark-timeseries [--scale-factor SF] <benchmark-type>")
   (println "      Plot a benchmark timeseries chart from Azure Log Analytics.")
-  (println "      Supported: tpch, yakbench, auctionmark, readings, clickbench")
+  (println "      Supported: tpch, yakbench, auctionmark, readings, clickbench, tsbs-iot")
   (println)
   (println "Kubernetes Commands (output JSON):")
   (println "  inspect-deployment [--namespace NS]")

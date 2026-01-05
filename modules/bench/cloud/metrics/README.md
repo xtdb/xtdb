@@ -7,7 +7,7 @@ This Terraform module provisions Azure resources for benchmark metrics alerting 
 - **Logic App (alert relay)**: Relays Azure Monitor alerts to Slack via webhook
 - **Action Group**: Routes Azure Monitor alerts to the Logic App
 - **Logic App (anomaly detection)**: Scheduled anomaly detection for each benchmark using Logs Query API (managed identity, `for_each` over benchmarks)
-- **Azure Portal Dashboard**: Time-series charts for recent benchmark runs (TPC-H, Yakbench, Readings, AuctionMark)
+- **Azure Portal Dashboard**: Time-series charts for recent benchmark runs (TPC-H, Yakbench, Readings, AuctionMark, TSBS IoT)
 - **Role Assignments**: Log Analytics Reader for anomaly detection Logic Apps
 
 ## Supported Benchmarks
@@ -20,6 +20,7 @@ The module supports anomaly detection and dashboard visualization for:
 | `yakbench` | `scale-factor` | `time-taken-ms` | 1.0 |
 | `readings` | `devices` | `time-taken-ms` | 10000 |
 | `auctionmark` | `duration` | `throughput` | PT30M (disabled) |
+| `tsbs-iot` | `devices` | `time-taken-ms` | 2000 |
 
 ## Configuration
 
@@ -46,6 +47,11 @@ Each benchmark has its own set of variables:
 - `auctionmark_anomaly_logic_app_name` — Logic App name
 - `auctionmark_anomaly_alert_enabled` — enable/disable (disabled by default)
 - `auctionmark_anomaly_duration` — ISO 8601 duration to filter on (e.g., `PT30M`)
+
+**TSBS IoT:**
+- `tsbs_iot_anomaly_logic_app_name` — Logic App name
+- `tsbs_iot_anomaly_alert_enabled` — enable/disable
+- `tsbs_iot_anomaly_devices` — device count to filter on
 
 ### Shared anomaly detection variables
 
@@ -91,6 +97,7 @@ A utility script for rendering and running KQL queries locally:
 ./query.sh render dashboard yakbench
 ./query.sh render anomaly readings
 ./query.sh render anomaly auctionmark
+./query.sh render anomaly tsbs-iot
 
 # Run a query against Azure Log Analytics (requires az cli login)
 ./query.sh run anomaly tpch
@@ -102,7 +109,7 @@ Usage:
 ./query.sh <command> <query-type> <benchmark> [terraform.tfvars]
   command:    render | run
   query-type: anomaly | dashboard
-  benchmark:  tpch | yakbench | readings | auctionmark
+  benchmark:  tpch | yakbench | readings | auctionmark | tsbs-iot
 ```
 
 The script extracts queries from `main.tf` and substitutes Terraform variables from `terraform.tfvars`, so the queries stay in sync with the deployed infrastructure.

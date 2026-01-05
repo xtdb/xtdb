@@ -9,19 +9,33 @@
   (:import (java.time Duration LocalTime)))
 
 (defmethod b/cli-flags :tsbs-iot [_]
-  [[nil "--scale SCALE"
+  [[nil "--devices DEVICES"
+    :id :devices
     :parse-fn parse-long]
 
-   ["-f" "--file TXS_FILE"
+   [nil "--timestamp-start TIMESTAMP_START"
+    :id :timestamp-start
+    :parse-fn time/->instant]
+
+   [nil "--timestamp-end TIMESTAMP_END"
+    :id :timestamp-end
+    :parse-fn time/->instant]
+
+   [nil "--file TXS_FILE"
     :id :txs-file
     :parse-fn util/->path]
 
    ["-h" "--help"]])
 
-(defmethod b/->benchmark :tsbs-iot [_ {:keys [seed txs-file], :or {seed 0}, :as opts}]
+(defmethod b/->benchmark :tsbs-iot [_ {:keys [seed txs-file devices timestamp-start timestamp-end], :or {seed 0}, :as opts}]
   {:title "TSBS IoT"
    :benchmark-type :tsbs-iot
-   :seed seed,
+   :seed seed
+   :parameters {:seed seed
+                :txs-file txs-file
+                :devices devices
+                :timestamp-start timestamp-start
+                :timestamp-end timestamp-end}
    :tasks [{:t :do
             :stage :ingest
             :tasks [(letfn [(submit-txs [node txs]
@@ -47,7 +61,10 @@
 
                               (tsbs/with-generated-data (into {:use-case :iot,
                                                                :log-interval #xt/duration "PT5M"}
-                                                              opts)
+                                                              (if devices
+                                                                ;; We pass devices as scale here to not confuse with scale-factor elsewhere
+                                                                (assoc opts :scale devices)
+                                                                opts))
                                 (partial submit-txs node)))}))
 
                     {:t :call
@@ -72,7 +89,7 @@
 ;; not intended to be run as a test - more for ease of REPL dev
 (t/deftest ^:benchmark run-iot
   (util/with-tmp-dirs #{node-tmp-dir}
-    (-> (b/->benchmark :tsbs-iot {:scale 40, :timestamp-start #inst "2020-01-01", :timestamp-end #inst "2020-01-07"})
+    (-> (b/->benchmark :tsbs-iot {:devices 40, :timestamp-start #inst "2020-01-01", :timestamp-end #inst "2020-01-07"})
         (b/run-benchmark {:node-dir node-tmp-dir}))))
 
 (t/deftest ^:benchmark run-iot-from-file

@@ -181,3 +181,22 @@ variable "auctionmark_anomaly_duration" {
   type        = string
   default     = "PT30M"
 }
+
+# TSBS IoT anomaly detection configuration
+variable "tsbs_iot_anomaly_logic_app_name" {
+  description = "Logic App name for scheduled TSBS IoT anomaly detection"
+  type        = string
+  default     = "xtdb-bench-tsbs-iot-anomaly-schedule"
+}
+
+variable "tsbs_iot_anomaly_alert_enabled" {
+  description = "Whether the TSBS IoT anomaly detection Logic App is enabled"
+  type        = bool
+  default     = true
+}
+
+variable "tsbs_iot_anomaly_devices" {
+  description = "TSBS IoT devices count to scope anomaly detection to"
+  type        = number
+  default     = 2000
+}

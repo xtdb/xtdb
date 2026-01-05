@@ -114,14 +114,28 @@ locals {
       metric_name     = "throughput"
       dashboard_idx   = 3
     }
+    tsbs-iot = {
+      name            = "TSBS IoT"
+      display_name    = "TSBS IoT"
+      logic_app_name  = var.tsbs_iot_anomaly_logic_app_name
+      enabled         = var.tsbs_iot_anomaly_alert_enabled
+      param_name      = "devices"
+      param_path      = "parameters['devices']"
+      param_value     = var.tsbs_iot_anomaly_devices
+      param_is_string = false
+      metric_path     = "'time-taken-ms'"
+      metric_name     = "duration_minutes"
+      dashboard_idx   = 4
+    }
   }
 
-  # Dashboard part positions (2x2 grid, 6 cols wide, 4 rows tall each)
+  # Dashboard part positions (6 cols wide, 4 rows tall each)
   dashboard_positions = {
     0 = { x = 0, y = 0 }
     1 = { x = 6, y = 0 }
     2 = { x = 0, y = 4 }
     3 = { x = 6, y = 4 }
+    4 = { x = 0, y = 8 }
   }
 
   # Filter expressions per benchmark (string params quoted, numeric params use todouble)
@@ -511,12 +525,12 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
               }
             }
           },
-          # TPC-H individual query breakdown charts (cold and hot) - row 8
+          # TPC-H individual query breakdown charts (cold and hot) - row 12
           {
             for idx, query_type in local.tpch_query_types : "tpch-${query_type}-queries" => {
               position = {
                 x       = idx * 6
-                y       = 8
+                y       = 12
                 colSpan = 6
                 rowSpan = 4
               }
@@ -566,12 +580,12 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
               }
             }
           },
-          # Yakbench profile breakdown charts (global, max-user, mean-user) - row 12
+          # Yakbench profile breakdown charts (global, max-user, mean-user) - row 16
           {
             for idx, profile_type in local.yakbench_profile_types : "yakbench-${profile_type}-queries" => {
               position = {
                 x       = idx * 4
-                y       = 12
+                y       = 16
                 colSpan = 4
                 rowSpan = 4
               }

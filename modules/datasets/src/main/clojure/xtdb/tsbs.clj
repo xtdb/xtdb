@@ -13,17 +13,23 @@
 ;; see https://github.com/timescale/tsbs
 
 (def ^java.io.File tsbs-dir
-  (some-> (System/getProperty "xtdb.rootDir")
-          (io/file "modules/datasets/lib/tsbs")))
+  (if-let [root (System/getProperty "xtdb.rootDir")]
+    (io/file root "modules/datasets/lib/tsbs")
+    (io/file "/opt/xtdb/tsbs")))
 
 (defn make-gen []
-  (log/info "Making TSBS generators...")
-  (let [{:keys [exit out err]} (sh/sh "make" "generators"
-                                      :dir tsbs-dir)]
-    (if (zero? exit)
-      (log/info "Made TSBS generators.")
-      (throw (ex-info "Failed making TSBS generators"
-                      {:exit exit, :out out, :err err})))))
+  (let [bin-dir (io/file tsbs-dir "bin")
+        generator-bin (io/file bin-dir "tsbs_generate_data")]
+    (if (.exists generator-bin)
+      (log/info "TSBS generators already built.")
+      (do
+        (log/info "Making TSBS generators...")
+        (let [{:keys [exit out err]} (sh/sh "make" "generators"
+                                            :dir tsbs-dir)]
+          (if (zero? exit)
+            (log/info "Made TSBS generators.")
+            (throw (ex-info "Failed making TSBS generators"
+                            {:exit exit, :out out, :err err}))))))))
 
 (defn- parse-tags-row [tags-row]
   ;; tags,col1 type1,col2 type2,...

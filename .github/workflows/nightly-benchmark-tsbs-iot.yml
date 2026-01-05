@@ -1,0 +1,46 @@
+name: Nightly Benchmark TSBS IoT
+run-name: "TSBS IoT (devices: ${{ inputs.devices || '2000' }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      devices:
+        description: 'Number of devices'
+        required: false
+        default: '2000'
+        type: string
+      timestamp_start:
+        description: 'Timestamp Start (ISO-8601)'
+        required: false
+        default: '2020-01-01T00:00:00Z'
+        type: string
+      timestamp_end:
+        description: 'Timestamp End (ISO-8601)'
+        required: false
+        default: '2020-01-07T00:00:00Z'
+        type: string
+  schedule:
+    - cron: '0 7 * * *'  # Run daily at 07:00 UTC
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+  packages: write
+
+concurrency:
+  group: nightly-benchmark-tsbs-iot
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    if: ${{ github.event_name != 'schedule' || github.repository == 'xtdb/xtdb' }}
+    uses: ./.github/workflows/run-nightly-benchmark.yml
+    with:
+      bench_type: tsbs-iot
+      job_display_name: TSBS IoT
+      tsbs_device_count: ${{ inputs.devices || '2000' }}
+      branch: ${{ github.ref_name }}
+      timeout_minutes: 120
+      benchmark_timeout: PT3H
+    secrets: inherit

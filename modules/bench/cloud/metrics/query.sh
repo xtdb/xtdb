@@ -3,7 +3,7 @@
 # Usage: ./query.sh <command> <query-type> <benchmark> [terraform.tfvars]
 #   command:    render | run
 #   query-type: anomaly | dashboard
-#   benchmark:  tpch | yakbench | readings | auctionmark
+#   benchmark:  tpch | yakbench | readings | auctionmark | tsbs-iot
 #
 # Examples:
 #   ./query.sh render anomaly tpch
@@ -24,12 +24,13 @@ usage() {
   echo "  command:    render | run" >&2
   echo "  query-type: anomaly | dashboard | queries-cold | queries-hot |" >&2
   echo "              profile-global | profile-max-user | profile-mean-user" >&2
-  echo "  benchmark:  tpch | yakbench | readings | auctionmark" >&2
+  echo "  benchmark:  tpch | yakbench | readings | auctionmark | tsbs-iot" >&2
   echo "" >&2
   echo "Examples:" >&2
   echo "  $0 render anomaly tpch          # Output the KQL query" >&2
   echo "  $0 run dashboard yakbench       # Run query against Azure" >&2
   echo "  $0 run anomaly readings         # Run query against Azure" >&2
+  echo "  $0 run anomaly tsbs-iot         # Run query against Azure" >&2
   echo "  $0 run queries-cold tpch        # TPC-H individual cold query times" >&2
   echo "  $0 run queries-hot tpch         # TPC-H individual hot query times" >&2
   echo "  $0 run profile-global yakbench  # Yakbench global profile queries" >&2
@@ -68,8 +69,8 @@ if [[ "$QUERY_TYPE" == "profile-global" || "$QUERY_TYPE" == "profile-max-user" |
   usage
 fi
 
-if [[ "$BENCHMARK" != "tpch" && "$BENCHMARK" != "yakbench" && "$BENCHMARK" != "readings" && "$BENCHMARK" != "auctionmark" ]]; then
-  echo "Error: benchmark must be 'tpch', 'yakbench', 'readings', or 'auctionmark'" >&2
+if [[ "$BENCHMARK" != "tpch" && "$BENCHMARK" != "yakbench" && "$BENCHMARK" != "readings" && "$BENCHMARK" != "auctionmark" && "$BENCHMARK" != "tsbs-iot" ]]; then
+  echo "Error: benchmark must be 'tpch', 'yakbench', 'readings', 'auctionmark', or 'tsbs-iot'" >&2
   usage
 fi
 
@@ -145,6 +146,16 @@ case "$BENCHMARK" in
     PARAM_IS_STRING=true
     METRIC_PATH="'throughput'"
     METRIC_NAME="throughput"
+    ;;
+  tsbs-iot)
+    BENCH_NAME="TSBS IoT"
+    PARAM_NAME="devices"
+    PARAM_PATH="parameters['devices']"
+    PARAM_VALUE=$(get_var "tsbs_iot_anomaly_devices" "2000")
+    PARAM_VAR="tsbs_iot_anomaly_devices"
+    PARAM_IS_STRING=false
+    METRIC_PATH="'time-taken-ms'"
+    METRIC_NAME="duration_minutes"
     ;;
 esac
 
@@ -269,6 +280,12 @@ else
   if ! command -v jq &> /dev/null; then
     echo "Error: jq not found. Install with: brew install jq" >&2
     exit 1
+  fi
+
+  # Check for log-analytics extension
+  if ! az extension show --name log-analytics &> /dev/null; then
+    echo "Installing az log-analytics extension..." >&2
+    az extension add --name log-analytics --only-show-errors
   fi
 
   RESOURCE_GROUP=$(get_var "resource_group_name" "")

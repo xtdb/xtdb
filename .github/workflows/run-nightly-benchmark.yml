@@ -71,6 +71,11 @@ on:
         required: false
         default: ''
         type: string
+      tsbs_device_count:
+        description: 'Device count for TSBS IoT benchmark'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   id-token: write
@@ -233,6 +238,7 @@ jobs:
           BENCHMARK_TIMEOUT: ${{ inputs.benchmark_timeout }}
           CLICKBENCH_SIZE: ${{ inputs.clickbench_size }}
           CLICKBENCH_LIMIT: ${{ inputs.clickbench_limit }}
+          TSBS_DEVICE_COUNT: ${{ inputs.tsbs_device_count }}
         run: |
           helm dependency update ./modules/bench/cloud/helm
           HELM_ARGS=(
@@ -278,6 +284,9 @@ jobs:
           fi
           if [ -n "$CLICKBENCH_LIMIT" ]; then
             HELM_ARGS+=(--set "clickbench.limit=${CLICKBENCH_LIMIT}")
+          fi
+          if [ -n "$TSBS_DEVICE_COUNT" ]; then
+            HELM_ARGS+=(--set "tsbs-iot.devices=${TSBS_DEVICE_COUNT}")
           fi
 
           helm upgrade --install "xtdb-benchmark" ./modules/bench/cloud/helm "${HELM_ARGS[@]}"
