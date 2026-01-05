@@ -7,3 +7,6 @@
 [submodule "modules/datasets/lib/tsbs"]
 	path = modules/datasets/lib/tsbs
 	url = https://github.com/timescale/tsbs.git
+[submodule "vendor/clojure"]
+	path = vendor/clojure
+	url = https://github.com/clojure/clojure.git
