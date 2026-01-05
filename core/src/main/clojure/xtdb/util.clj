@@ -10,7 +10,7 @@
             [integrant.core :as ig])
   (:import [clojure.lang Keyword MapEntry Symbol]
            io.netty.util.internal.PlatformDependent
-           (java.io File Writer)
+           (java.io File IOException Writer)
            java.lang.AutoCloseable
            (java.net MalformedURLException ServerSocket URI URL)
            java.nio.ByteBuffer
@@ -520,7 +520,9 @@
                     (manifest-version)
                     "2.x")
         git-sha (or (some-> (System/getenv "GIT_SHA") str/trim not-empty (subs 0 7))
-                    (let [{:keys [out ^long exit]} (sh/sh "git" "rev-parse" "--short" "HEAD")]
+                    (when-let [{:keys [out ^long exit]} (try
+                                                          (sh/sh "git" "rev-parse" "--short" "HEAD")
+                                                          (catch IOException _))] ; couldn't start git
                       (when (zero? exit)
                         (str/trim out))))]
     (str/join " " [version
