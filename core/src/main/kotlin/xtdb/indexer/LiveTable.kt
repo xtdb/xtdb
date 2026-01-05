@@ -19,6 +19,10 @@ import xtdb.util.closeOnCatch
 import java.nio.ByteBuffer
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
 
 class LiveTable
 @JvmOverloads
@@ -184,6 +188,23 @@ constructor(
                 trieMetadataCalculator.build(), hllCalculator.build()
             )
         }
+    }
+
+    companion object {
+        @JvmStatic
+        fun Map<TableRef, LiveTable>.finishBlock(blockIdx: BlockIndex): Map<TableRef, FinishedBlock> =
+            // migrated here because of #5107 - may migrate the rest later.
+            runBlocking {
+                this@finishBlock
+                    .map { (tableName, liveTable) ->
+                        async(Dispatchers.IO) {
+                            tableName to liveTable.finishBlock(blockIdx)
+                        }
+                    }
+                    .awaitAll()
+                    .mapNotNull { (name, block) -> block?.let { name to it } }
+                    .toMap()
+            }
     }
 
     override fun close() {

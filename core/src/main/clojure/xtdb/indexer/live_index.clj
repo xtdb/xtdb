@@ -13,7 +13,6 @@
            (java.lang AutoCloseable)
            (java.time Duration)
            (java.util HashMap List Map)
-           (java.util.concurrent StructuredTaskScope$ShutdownOnFailure StructuredTaskScope$Subtask)
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api IndexerConfig TransactionKey)
@@ -21,7 +20,7 @@
            xtdb.api.storage.Storage
            xtdb.storage.BufferPool
            (xtdb.catalog BlockCatalog TableCatalog)
-           (xtdb.indexer LiveIndex$Snapshot LiveIndex$Tx LiveTable LiveTable$Snapshot LiveTable$Tx Snapshot Snapshot)
+           (xtdb.indexer LiveIndex$Snapshot LiveIndex$Tx LiveTable LiveTable$FinishedBlock LiveTable$Snapshot LiveTable$Tx Snapshot)
            (xtdb.log.proto TrieDetails)
            (xtdb.trie TrieCatalog)
            (xtdb.util RefCounter RowCounter)))
@@ -135,43 +134,27 @@
     (>= (.getBlockRowCount row-counter) rows-per-block))
 
   (finishBlock [_ block-idx]
-    (with-open [scope (StructuredTaskScope$ShutdownOnFailure.)]
-      (let [tasks (vec (for [[table ^LiveTable live-table] tables]
-                         (.fork scope (fn []
-                                        (try
-                                          (when-let [finished-block (.finishBlock live-table block-idx)]
-                                            [table {:fields (.getFields finished-block)
-                                                    :trie-key (.getTrieKey finished-block)
-                                                    :row-count (.getRowCount finished-block)
-                                                    :data-file-size (.getDataFileSize finished-block)
-                                                    :trie-metadata (.getTrieMetadata finished-block)
-                                                    :hlls (.getHllDeltas finished-block)}])
-                                          (catch InterruptedException e
-                                            (throw e))
-                                          (catch Exception e
-                                            (log/warn e "Error finishing block for table" live-table)
-                                            (throw e)))))))]
-        (.join scope)
+    (let [table-metadata (-> (LiveTable/finishBlock tables block-idx)
+                             (update-vals (fn [^LiveTable$FinishedBlock fb]
+                                            {:fields (.getFields fb)
+                                             :trie-key (.getTrieKey fb)
+                                             :row-count (.getRowCount fb)
+                                             :data-file-size (.getDataFileSize fb)
+                                             :trie-metadata (.getTrieMetadata fb)
+                                             :hlls (.getHllDeltas fb)})))]
+      (let [added-tries (for [[table {:keys [trie-key data-file-size trie-metadata state]}] table-metadata]
+                          (trie/->trie-details table trie-key data-file-size trie-metadata state))]
+        (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION (.getEpoch buffer-pool) added-tries))
+        (doseq [^TrieDetails added-trie added-tries]
+          (.addTries trie-cat (table/->ref db-name (.getTableName added-trie)) [added-trie] (.getSystemTime latest-completed-tx))))
 
-        (let [table-metadata (-> tasks
-                                 (->> (into {} (keep #(try
-                                                        (.get ^StructuredTaskScope$Subtask %)
-                                                        (catch Exception _
-                                                          (throw (.exception ^StructuredTaskScope$Subtask %)))))))
-                                 (util/rethrowing-cause))]
-          (let [added-tries (for [[table {:keys [trie-key data-file-size trie-metadata state]}] table-metadata]
-                              (trie/->trie-details table trie-key data-file-size trie-metadata state))]
-            (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION (.getEpoch buffer-pool) added-tries))
-            (doseq [^TrieDetails added-trie added-tries]
-              (.addTries trie-cat (table/->ref db-name (.getTableName added-trie)) [added-trie] (.getSystemTime latest-completed-tx))))
-
-          (let [all-tables (set (concat (keys table-metadata) (.getAllTables block-cat)))
-                table->partitions (->> all-tables
-                                       (map (fn [table]
-                                              (MapEntry/create table (->> (trie-cat/trie-state trie-cat table)
-                                                                          trie-cat/partitions))))
-                                       (into {}))]
-            (table-cat/finish-block! table-cat block-idx table-metadata table->partitions))))))
+      (let [all-tables (set (concat (keys table-metadata) (.getAllTables block-cat)))
+            table->partitions (->> all-tables
+                                   (map (fn [table]
+                                          (MapEntry/create table (->> (trie-cat/trie-state trie-cat table)
+                                                                      trie-cat/partitions))))
+                                   (into {}))]
+        (table-cat/finish-block! table-cat block-idx table-metadata table->partitions))))
 
   (nextBlock [this]
     (.nextBlock row-counter)
