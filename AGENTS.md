@@ -2,7 +2,7 @@
 
 NOTE to humans: keep this file to instructions for AI agents; if it'd be useful for humans, add it to the developer documentation instead and point the agents to it.
 
-See developer documentation in `/dev` in this repo, particularly `dev/README.adoc` and `dev/GIT.adoc`.
+See developer documentation in `/dev` in this repo, particularly @dev/README.adoc and @dev/GIT.adoc.
 `dev/doc/*.adoc` describe the high level architecture of XTDB - read those too.
 
 We develop using 'tidy-first' methodology - endeavouring to separate 'equivalence' changes (changes which do not affect runtime behaviour, changes which increase our options) from changes that advance the behaviour of XT.
