@@ -2142,3 +2142,20 @@
   (t/is (false? (project1 '(=== "foo" "bar") {})))
   (t/is (true? (project1 '(=== a a) {:a nil})) "null === null")
   (t/is (nil? (project1 '(== a a) {:a nil})) "null == null returns null"))
+
+(t/deftest test-struct-equality
+  (t/testing "non-strict equality (==)"
+    (t/is (true? (project1 '(== {} {}) {})))
+    (t/is (true? (project1 '(== {:a 1, :b 2} {:a 1, :b 2}) {})))
+    (t/is (false? (project1 '(== {:a 1, :b 2} {:a 1, :b 3}) {})))
+    (t/is (false? (project1 '(== {:a 1} {:a 1, :b 2}) {})))
+    (t/is (false? (project1 '(== {:a 1, :b 2} {:a 1}) {})))
+    (t/is (true? (project1 '(== {:a 1, :b 2, :c 3} {:a 1, :b 2, :c 3.0}) {})) "int == float"))
+
+  (t/testing "strict equality (===)"
+    (t/is (true? (project1 '(=== {} {}) {})))
+    (t/is (true? (project1 '(=== {:a 1, :b 2} {:a 1, :b 2}) {})))
+    (t/is (false? (project1 '(=== {:a 1, :b 2} {:a 1, :b 3}) {})))
+    (t/is (false? (project1 '(=== {:a 1} {:a 1, :b 2}) {})))
+    (t/is (false? (project1 '(=== {:a 1, :b 2} {:a 1}) {})))
+    (t/is (false? (project1 '(=== {:a 1, :b 2, :c 3} {:a 1, :b 2, :c 3.0}) {})) "int !== float")))

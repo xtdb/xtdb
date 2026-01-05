@@ -1664,6 +1664,48 @@
                                    ~(f :null nil)
                                    ~(f :bool `(== ~return-code ~res-sym))))))})))))
 
+(defmethod codegen-call [:=== :struct :struct] [{[[_ l-field-types] [_ r-field-types]] :arg-types}]
+  (let [fields (set (keys l-field-types))]
+    (if-not (= fields (set (keys r-field-types)))
+      {:return-col-type :bool, :->call-code (constantly false)} 
+      (let [inner-calls (->> (for [field fields]
+                               (MapEntry/create field
+                                                (->> (for [l-val-type (-> (get l-field-types field) types/flatten-union-types)
+                                                           r-val-type (-> (get r-field-types field) types/flatten-union-types)]
+                                                       (MapEntry/create [l-val-type r-val-type]
+                                                                        (codegen-call {:f :===, :arg-types [l-val-type r-val-type]})))
+                                                     (into {}))))
+                             (into {}))
+            l-sym (gensym 'l-struct)
+            r-sym (gensym 'r-struct)]
+        
+        {:return-col-type :bool
+         :continue-call (fn [f [l-code r-code]]
+                          (let [res-sym (gensym 'res)]
+                            `(let [~l-sym ~l-code
+                                   ~r-sym ~r-code
+                                   ~res-sym
+                                   ~(->> (for [[field inner-calls] inner-calls]
+                                           (continue-read (fn [l-val-type l-val-code]
+                                                            (continue-read (fn [r-val-type r-val-code]
+                                                                             (let [{:keys [return-col-type continue-call ->call-code]} (get inner-calls [l-val-type r-val-type])]
+                                                                               (if continue-call
+                                                                                 (continue-call cont-b3-call [l-val-code r-val-code])
+                                                                                 (cont-b3-call return-col-type (->call-code [l-val-code r-val-code])))))
+                                                                           (get r-field-types field)
+                                                                           (-> `(.get ~r-sym ~(str field))
+                                                                               (with-tag ValueReader))))
+                                                          (get l-field-types field)
+                                                          (-> `(.get ~l-sym ~(str field))
+                                                              (with-tag ValueReader))))
+                                         (reduce (fn [l-code r-code]
+                                                   `(let [~res-sym ~l-code]
+                                                      (if (== -1 ~res-sym)
+                                                        -1
+                                                        (min ~res-sym ~r-code))))
+                                                 1))]
+                               ~(f :bool `(== 1 ~res-sym)))))}))))
+
 (defn -patch [^ValueReader l, ^ValueReader r]
   (if (.isNull r)
     l

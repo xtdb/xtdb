@@ -3115,3 +3115,12 @@ UNION ALL
     (xt/execute-tx tu/*node* [["UPDATE docs SET i = ? WHERE _id = ?"  #xt/interval "P12MT2S" 1]])
     (t/is (= 2 (count (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME ALL"))))
     (t/is (= [{:xt/id 1, :i #xt/interval "P12MT2S"}] (xt/q tu/*node* "FROM docs")))))
+
+(t/deftest update-dedup-structs-5113
+  (t/testing "update with identical struct should be deduplicated"
+    (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :a {:x 0}}]])
+    (t/is (= [{:xt/id 1, :a {:x 0}}] (xt/q tu/*node* "FROM docs")))
+
+    (xt/execute-tx tu/*node* [[:sql "UPDATE docs SET a = ? WHERE _id = 1" [{:x 0}]]])
+    (t/is (= [{:xt/id 1, :a {:x 0}}] (xt/q tu/*node* "FROM docs")))
+    (t/is (= 1 (count (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME ALL"))))))
