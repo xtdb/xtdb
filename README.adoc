@@ -46,4 +46,4 @@ We would love to hear from you: hello@xtdb.com
 
 XTDB is licensed under the Mozilla Public License, version 2 or (at your option) any later version.
 
-Copyright © 2018-2025 JUXT LTD.
+Copyright © 2018-2026 JUXT LTD.
