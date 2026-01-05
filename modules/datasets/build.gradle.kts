@@ -13,10 +13,10 @@ dependencies {
     api(project(":xtdb-api"))
     api(project(":xtdb-core"))
 
-    api("io.airlift.tpch", "tpch", "0.10")
-    api("org.clojure", "data.csv", "1.0.1")
+    api(libs.tpch)
+    api(libs.clojure.data.csv)
 
-    api("software.amazon.awssdk", "s3", "2.16.76")
+    api(libs.aws.s3)
     api(libs.next.jdbc)
 }
 

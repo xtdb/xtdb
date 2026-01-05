@@ -190,8 +190,8 @@ allprojects {
             dependencies {
                 implementation(libs.clojure)
 
-                testRuntimeOnly("dev.clojurephant", "jovial", "0.4.1")
-                nrepl("cider", "cider-nrepl", "0.58.0")
+                testRuntimeOnly(libs.jovial)
+                nrepl(libs.cider.nrepl)
             }
 
             clojure {
@@ -464,16 +464,16 @@ dependencies {
     testImplementation(libs.clojure.tools.cli)
 
 
-    devImplementation("integrant", "repl", "0.3.2")
-    devImplementation("com.azure", "azure-identity", "1.9.0")
-    devImplementation("com.taoensso", "tufte", "2.6.3")
+    devImplementation(libs.integrant.repl)
+    devImplementation(libs.azure.identity)
+    devImplementation(libs.tufte)
     devImplementation("clojure.java-time:clojure.java-time:1.4.3")
-    testImplementation("com.zaxxer", "HikariCP", "5.1.0")
-    testImplementation("metosin", "jsonista", "0.3.3")
-    testImplementation("clj-commons", "clj-yaml", "1.0.27")
-    testImplementation("org.xerial", "sqlite-jdbc", "3.39.3.0")
-    testImplementation("clj-kondo", "clj-kondo", "2023.12.15")
-    testImplementation("com.github.igrishaev", "pg2-core", "0.1.33")
+    testImplementation(libs.hikaricp)
+    testImplementation(libs.jsonista)
+    testImplementation(libs.clj.yaml)
+    testImplementation(libs.sqlite.jdbc)
+    testImplementation(libs.clj.kondo)
+    testImplementation(libs.pg2.core)
     testImplementation(libs.hato)
 
     // test check
@@ -489,7 +489,7 @@ dependencies {
     api(libs.honeysql)
 
     // For generating clojure docs
-    testImplementation("codox", "codox", "0.10.8")
+    testImplementation(libs.codox)
 
     implementation(libs.kotlinx.coroutines)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -501,21 +501,21 @@ dependencies {
     testImplementation(libs.junit.jupiter.params)
 
     // For Healthz Test
-    testImplementation("clj-http", "clj-http","3.12.3")
+    testImplementation(libs.clj.http)
 
     // for AWS profiles (managing datasets)
-    devImplementation("software.amazon.awssdk", "sts", "2.16.76")
-    devImplementation("software.amazon.awssdk", "sso", "2.16.76")
-    devImplementation("software.amazon.awssdk", "ssooidc", "2.16.76")
+    devImplementation(libs.aws.sts)
+    devImplementation(libs.aws.sso)
+    devImplementation(libs.aws.ssooidc)
 
-    testImplementation("org.testcontainers", "minio", "1.20.0")
-    testImplementation("io.minio", "minio", "8.5.17")
+    testImplementation(libs.testcontainers.minio)
+    testImplementation(libs.minio)
 
-    devImplementation("com.taoensso", "nippy", "3.3.0")
-    testImplementation("com.taoensso", "nippy", "3.3.0")
+    devImplementation(libs.nippy)
+    testImplementation(libs.nippy)
 
     // hato uses cheshire for application/json encoding
-    testImplementation("cheshire", "cheshire", "5.12.0")
+    testImplementation(libs.cheshire)
 
     // Flight SQL tests
     testImplementation(libs.arrow.adbc)
@@ -524,8 +524,8 @@ dependencies {
 
 if (hasProperty("fin")) {
     dependencies {
-        devImplementation("vvvvalvalval", "scope-capture", "0.3.3")
-        devImplementation("lambdaisland", "deep-diff2", "2.12.219")
+        devImplementation(libs.scope.capture)
+        devImplementation(libs.deep.diff2)
     }
 }
 
@@ -537,8 +537,8 @@ val codoxRuntime = configurations.create("codoxRuntime") {
     isCanBeResolved = true
 }
 
-dependencies.add("codoxRuntime", "org.clojure:clojure:1.12.0")
-dependencies.add("codoxRuntime", "codox:codox:0.10.8")
+dependencies.add("codoxRuntime", libs.clojure)
+dependencies.add("codoxRuntime", libs.codox)
 
 tasks.register("build-codox", JavaExec::class) {
     dependsOn(":xtdb-api:compileClojure", ":xtdb-core:compileClojure")

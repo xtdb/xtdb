@@ -9,7 +9,7 @@ repositories {
 }
 
 dependencies {
-    implementation("org.clojure", "clojure", "1.12.0")
+    implementation("org.clojure:clojure:1.12.0")
     implementation(gradleApi())
     implementation("com.gradleup.shadow:shadow-gradle-plugin:8.3.6")
     implementation("org.apache.ant:ant:1.10.15") // eugh. _all_ of Ant for the DataReaderTransformer?

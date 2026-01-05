@@ -27,7 +27,7 @@ dependencies {
     api(project(":xtdb-api"))
     api(project(":xtdb-core"))
 
-    api("org.apache.kafka", "kafka-clients", "4.0.0")
+    api(libs.kafka.clients)
 
     api(kotlin("stdlib"))
 

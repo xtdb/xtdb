@@ -25,12 +25,12 @@ dependencies {
     api(project(":xtdb-api"))
     api(project(":xtdb-core"))
 
-    api("software.amazon.awssdk", "s3", "2.25.50")
+    api(libs.aws.s3)
 
     // metrics
     api(libs.micrometer.registry.cloudwatch2)
-    api("software.amazon.awssdk", "cloudwatch", "2.25.50")
-    api("software.amazon.awssdk", "sts", "2.25.50")
+    api(libs.aws.cloudwatch)
+    api(libs.aws.sts)
 
     api(kotlin("stdlib"))
 

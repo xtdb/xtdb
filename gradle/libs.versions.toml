@@ -2,8 +2,14 @@
 antlr = "4.13.2"
 arrow = "18.3.0"
 arrow-adbc = "0.21.0"
+aws-sdk = "2.25.50"
+azure = "1.13.1"
+azure-storage = "12.27.0"
 clojure = "1.12.0"
 exposed = "0.61.0"
+google-cloud-storage = "2.60.0"
+guava = "33.4.7-jre"
+kafka = "4.0.0"
 kotest = "6.0.4"
 kotlin = "2.2.0"
 kotlin-coroutines = "1.10.2"
@@ -15,7 +21,7 @@ junit = "5.13.0"
 junit-launcher = "1.12.2"
 netty = "4.2.2.Final"
 protobuf = "4.31.1"
-protobuf-plugin = "0.9.5"
+protobuf-plugin = "0.9.6"
 reitit = "0.9.1"
 muuntaja = "0.6.11"
 testcontainers = "2.0.2"
@@ -124,6 +130,51 @@ opentelemetry-sdk = { group = "io.opentelemetry", name = "opentelemetry-sdk", ve
 slf4j-api = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" }                    # use this when you refer to an SLF4J class
 slf4j-jpl = { group = "org.slf4j", name = "slf4j-jdk-platform-logging", version.ref = "slf4j" }   # use this in applications
 logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback" } # use this in applications
+
+# AWS SDK
+aws-s3 = { group = "software.amazon.awssdk", name = "s3", version.ref = "aws-sdk" }
+aws-cloudwatch = { group = "software.amazon.awssdk", name = "cloudwatch", version.ref = "aws-sdk" }
+aws-sts = { group = "software.amazon.awssdk", name = "sts", version.ref = "aws-sdk" }
+aws-sso = { group = "software.amazon.awssdk", name = "sso", version = "2.16.76" }
+aws-ssooidc = { group = "software.amazon.awssdk", name = "ssooidc", version = "2.16.76" }
+
+# Azure
+azure-storage-blob = { group = "com.azure", name = "azure-storage-blob", version.ref = "azure-storage" }
+azure-identity = { group = "com.azure", name = "azure-identity", version.ref = "azure" }
+azure-core-management = { group = "com.azure", name = "azure-core-management", version = "1.15.1" }
+
+# Google Cloud
+google-cloud-storage = { group = "com.google.cloud", name = "google-cloud-storage", version.ref = "google-cloud-storage" }
+guava = { group = "com.google.guava", name = "guava", version.ref = "guava" }
+
+# Kafka
+kafka-clients = { group = "org.apache.kafka", name = "kafka-clients", version.ref = "kafka" }
+kafka-connect-api = { group = "org.apache.kafka", name = "connect-api", version.ref = "kafka" }
+
+# Dev/test dependencies
+jovial = { group = "dev.clojurephant", name = "jovial", version = "0.4.1" }
+cider-nrepl = { group = "cider", name = "cider-nrepl", version = "0.58.0" }
+integrant-repl = { group = "integrant", name = "repl", version = "0.3.2" }
+tufte = { group = "com.taoensso", name = "tufte", version = "2.6.3" }
+nippy = { group = "com.taoensso", name = "nippy", version = "3.3.0" }
+hikaricp = { group = "com.zaxxer", name = "HikariCP", version = "5.1.0" }
+sqlite-jdbc = { group = "org.xerial", name = "sqlite-jdbc", version = "3.39.3.0" }
+clj-kondo = { group = "clj-kondo", name = "clj-kondo", version = "2023.12.15" }
+pg2-core = { group = "com.github.igrishaev", name = "pg2-core", version = "0.1.33" }
+codox = { group = "codox", name = "codox", version = "0.10.8" }
+clj-http = { group = "clj-http", name = "clj-http", version = "3.12.3" }
+minio = { group = "io.minio", name = "minio", version = "8.5.17" }
+cheshire = { group = "cheshire", name = "cheshire", version = "5.13.0" }
+scope-capture = { group = "vvvvalvalval", name = "scope-capture", version = "0.3.3" }
+deep-diff2 = { group = "lambdaisland", name = "deep-diff2", version = "2.12.219" }
+
+# Bench dependencies
+oshi-core = { group = "com.github.oshi", name = "oshi-core", version = "6.3.0" }
+hiccup = { group = "pro.juxt.clojars-mirrors.hiccup", name = "hiccup", version = "2.0.0-alpha2" }
+kixi-stats = { group = "kixi", name = "stats", version = "0.5.7" }
+
+# Datasets dependencies
+tpch = { group = "io.airlift.tpch", name = "tpch", version = "0.10" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
