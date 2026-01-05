@@ -1,6 +1,5 @@
 package xtdb.flight_sql
 
-import clojure.lang.ILookup
 import clojure.lang.IPersistentMap
 import clojure.lang.IPersistentVector
 import clojure.lang.PersistentArrayMap
@@ -29,9 +28,7 @@ import xtdb.asBytes
 import xtdb.IResultCursor
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.withName
-import xtdb.database.Database
 import xtdb.kw
-import xtdb.query.IQuerySource
 import xtdb.query.PreparedQuery
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
@@ -152,9 +149,6 @@ internal fun FlightServer.Builder.withErrorLoggingMiddleware(): FlightServer.Bui
 
 class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoCloseable {
     private val allocator = node.allocator.newChildAllocator("flight-sql", 0, Long.MAX_VALUE)
-
-    private val qSrc = (node as ILookup).valAt("q-src".kw) as IQuerySource
-    private val dbCat = (node as ILookup).valAt("db-cat".kw) as Database.Catalog
 
     private val fsqlTxs = ConcurrentHashMap<TxHandle, FsqlTx>()
     private val stmts = ConcurrentHashMap<PreparedStatementHandle, PreparedStatement>()
@@ -282,7 +276,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         try {
             val sql = cmd.queryBytes.toStringUtf8()
             val ticketHandle = newHandle()
-            val pq = qSrc.prepareQuery(sql, dbCat, DEFAULT_DB_OPTS) // TODO multi-db
+            val pq = node.prepareSql(sql, DEFAULT_DB_OPTS) // TODO multi-db
             val cursor = pq.openQuery(EMPTY)
             val ticket = Ticket(
                 ProtoAny.pack(
@@ -356,7 +350,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ) {
         val psId = newHandle()
         val sql = req.queryBytes.toStringUtf8()
-        val pq = qSrc.prepareQuery(sql, dbCat, DEFAULT_DB_OPTS) // TODO multi-db
+        val pq = node.prepareSql(sql, DEFAULT_DB_OPTS) // TODO multi-db
         val ps = PreparedStatement(
             sql,
             if (req.hasTransactionId()) req.transactionId else null,
