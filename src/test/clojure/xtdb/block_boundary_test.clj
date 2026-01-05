@@ -404,7 +404,7 @@
                               (= initial-tx-count (count (xt/q node "SELECT * FROM xt.txs")))))))))))
 
 (t/deftest ^:property updates-adding-new-keys-cross-boundaries
-  (let [exclude-gens #{tg/duration-gen tg/varbinary-gen tg/decimal-gen tg/set-gen tg/nil-gen}]
+  (let [exclude-gens #{tg/varbinary-gen tg/decimal-gen tg/nil-gen}]
     (tu/run-property-test
      {:num-tests tu/property-test-iterations}
      (prop/for-all [record (tg/generate-record {:potential-doc-ids #{1}
@@ -454,8 +454,9 @@
                                                  :where [:= :_id 1]})]
     [:sql sql-string (vec params)]))
 
-#_(t/deftest ^:property update-deduplication
-  (let [exclude-gens #{tg/duration-gen tg/varbinary-gen tg/decimal-gen tg/set-gen tg/nil-gen}]
+;; TODO - Fails when :a is [[#NaN]] or when it contains a set. 
+(t/deftest ^:property update-deduplication
+  (let [exclude-gens #{tg/varbinary-gen tg/decimal-gen tg/nil-gen tg/set-gen}]
     (tu/run-property-test
      {:num-tests tu/property-test-iterations}
      (prop/for-all [record (tg/generate-record {:potential-doc-ids #{1}
@@ -469,7 +470,7 @@
                      (let [value (:a record)
                            insert-sql (->insert-tx :a value)
                            update-sql (->update-tx :a value)]
-                       (xt/execute-tx node [insert-sql]) 
+                       (xt/execute-tx node [insert-sql])
                        (when flush-after-put? (tu/flush-block! node))
 
                        (xt/execute-tx node [update-sql])
@@ -491,7 +492,7 @@
                                (tg/normalize-for-comparison res)))))))))))
 
 (t/deftest ^:property update-same-keys-new-values
-  (let [exclude-gens #{tg/duration-gen tg/varbinary-gen tg/decimal-gen tg/set-gen tg/nil-gen}]
+  (let [exclude-gens #{tg/varbinary-gen tg/decimal-gen tg/nil-gen}]
     (tu/run-property-test
      {:num-tests tu/property-test-iterations}
      (prop/for-all [[value-1 value-2 value-3] (tg/distinct-value-gen 3 {:exclude-gens exclude-gens})
