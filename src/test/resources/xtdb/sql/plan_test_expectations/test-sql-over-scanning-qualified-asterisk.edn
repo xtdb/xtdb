@@ -1,6 +1,6 @@
 [:project
  [{lastname foo.1/lastname} {name foo.1/name} {jame bar.2/jame}]
  [:mega-join
-  []
+  {:conditions []}
   [[:rename foo.1 [:scan {:table #xt/table foo, :columns [lastname name]}]]
    [:rename bar.2 [:scan {:table #xt/table bar, :columns [jame]}]]]]]

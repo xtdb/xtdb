@@ -22,13 +22,13 @@
         {volume (* l.3/l_extendedprice (- 1 l.3/l_discount))}
         {nation n2.7/n_name}]
        [:mega-join
-        [{n1.6/n_regionkey r.8/_id}
+        {:conditions [{n1.6/n_regionkey r.8/_id}
          {s.2/s_nationkey n2.7/_id}
          {c.5/c_nationkey n1.6/_id}
          {o.4/o_custkey c.5/_id}
          {l.3/l_orderkey o.4/_id}
          {p.1/_id l.3/l_partkey}
-         {s.2/_id l.3/l_suppkey}]
+         {s.2/_id l.3/l_suppkey}]}
         [[:rename
           r.8
           [:scan

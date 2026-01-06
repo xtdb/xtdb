@@ -9,12 +9,12 @@
     [:map
      [{_sum_in_8 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]
      [:mega-join
-      [{n.5/n_regionkey r.6/_id}
+      {:conditions [{n.5/n_regionkey r.6/_id}
        {s.4/s_nationkey n.5/_id}
        {l.3/l_suppkey s.4/_id}
        {c.1/c_nationkey s.4/s_nationkey}
        {o.2/_id l.3/l_orderkey}
-       {c.1/_id o.2/o_custkey}]
+       {c.1/_id o.2/o_custkey}]}
       [[:rename
         r.6
         [:scan

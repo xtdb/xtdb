@@ -870,9 +870,9 @@
   (t/is (= [{:x1 1, :x2 1, :x4 3, :x3 1}]
            (tu/query-ra
             '[:mega-join
-              [{x1 x2}
-               (> (+ x1 10) (+ (+ x3 2) x4))
-               {x1 x3}]
+              {:conditions [{x1 x2}
+                            (> (+ x1 10) (+ (+ x3 2) x4))
+                            {x1 x3}]}
               [[::tu/pages [[{:x1 1}]]]
                [::tu/pages [[{:x2 1}]]]
                [::tu/pages [[{:x3 1 :x4 3}]]]]])))
@@ -881,10 +881,10 @@
     (t/is (= [{:x1 1, :x2 1, :x4 3, :x3 1, :x5 5, :x6 10, :x7 10, :x8 8}]
              (tu/query-ra
               '[:mega-join
-                [{x1 x2}
-                 (> (+ x1 10) (+ (+ x3 2) x4))
-                 {x1 x3}
-                 {x6 x7}]
+                {:conditions [{x1 x2}
+                              (> (+ x1 10) (+ (+ x3 2) x4))
+                              {x1 x3}
+                              {x6 x7}]}
                 [[::tu/pages [[{:x1 1}]]]
                  [::tu/pages [[{:x2 1}]]]
                  [::tu/pages [[{:x3 1 :x4 3}]]]
@@ -899,9 +899,9 @@
               '[:apply {:mode :cross-join, :columns {x5 ?x2}}
                 [::tu/pages [[{:x5 2}]]]
                 [:mega-join
-                 [{x1 (- ?x2 1)}
-                  (> (+ x1 10) (+ (+ x3 2) x4))
-                  {x1 x3}]
+                 {:conditions [{x1 (- ?x2 1)}
+                               (> (+ x1 10) (+ (+ x3 2) x4))
+                               {x1 x3}]}
                  [[::tu/pages [[{:x1 1}]]]
                   [::tu/pages [[{:x2 1}]]]
                   [::tu/pages [[{:x3 1 :x4 3}]]]]]])))
@@ -909,7 +909,7 @@
     (t/is (= [{:baz 10, :bar 1}]
              (tu/query-ra
               '[:mega-join
-                [{bar (- ?foo 0)}]
+                {:conditions [{bar (- ?foo 0)}]}
                 [[:table [{:bar 1}]]
                  [:table [{:baz 10}]]]]
               {:args {:foo 1}}))))
@@ -918,9 +918,9 @@
     (t/is (= []
              (tu/query-ra
               '[:mega-join
-                [{x1 x2}
-                 (> (+ x1 10) (+ (+ x3 2) x4))
-                 {x1 x3}]
+                {:conditions [{x1 x2}
+                              (> (+ x1 10) (+ (+ x3 2) x4))
+                              {x1 x3}]}
                 [[::tu/pages {x1 #xt/type :i64} []]
                  [::tu/pages [[{:x2 1}]]]
                  [::tu/pages [[{:x3 1 :x4 3}]]]]]))))
@@ -930,8 +930,8 @@
               {:person 1, :bar "yay", :name 1, :foo 1}]
              (tu/query-ra
               '[:mega-join
-                [{name person}
-                 {person foo}]
+                {:conditions [{name person}
+                              {person foo}]}
                 [[:table [{:name 1}]]
                  [:table [{:person 1}]]
                  [:table [{:foo 1 :bar "woo"}
@@ -949,7 +949,7 @@
                 (lp/emit-expr
                  (s/conform ::lp/logical-plan
                             '[:mega-join
-                              [(== (+ name person) foo)]
+                              {:conditions [(== (+ name person) foo)]}
                               [[:table [{:name 1}]]
                                [:table [{:person 1}]]
                                [:table [{:foo 2 :bar "woo"}
@@ -959,7 +959,7 @@
       (t/is (= [{:person 1, :bar "woo", :name 1, :foo 2}]
                (tu/query-ra
                 '[:mega-join
-                  [(== (+ name person) foo)]
+                  {:conditions [(== (+ name person) foo)]}
                   [[:table [{:name 1}]]
                    [:table [{:person 1}]]
                    [:table [{:foo 2 :bar "woo"}
@@ -986,10 +986,10 @@
     (:join-order
      (lp/emit-expr
       '{:op :mega-join,
-        :conditions
-        [[:equi-condition {bar biff}]
-         [:equi-condition {foo baz}]
-         [:equi-condition {foo bar}]],
+        :opts {:conditions
+               [[:equi-condition {bar biff}]
+                [:equi-condition {foo baz}]
+                [:equi-condition {foo bar}]]},
         :relations
         [{:op ::tu/pages,
           :stats {:row-count 3}
@@ -1012,8 +1012,8 @@
       (:join-order
        (lp/emit-expr
         '{:op :mega-join,
-          :conditions
-          [[:equi-condition {foo baz}]],
+          :opts {:conditions
+                 [[:equi-condition {foo baz}]]},
           :relations
           [{:op ::tu/pages,
             :stats {:row-count 3}
@@ -1045,7 +1045,7 @@
 (t/deftest test-non-joining-join-conditions
   (t/testing "non joining join conditions are added at the earliest possible point"
     (let [plan '[:mega-join
-                 [(== a b) (== b 1)]
+                 {:conditions [(== a b) (== b 1)]}
                  [[:table [{:a 1}]]
                   [:table [{:b 1}]]]]]
       (t/is (= '[[0 [[:equi-condition {a b}] [:pred-expr (== b 1)]] 1]]
@@ -1056,14 +1056,14 @@
   ;;FIXME expr->columns doesn't handle scalar literals in equi-join syntax
   #_(t/is (= [{:bar 5, :id 4, :foo 0}]
              (tu/query-ra
-              '[:mega-join [{id 4}]
+              '[:mega-join {:conditions [{id 4}]}
                 [[::tu/pages [[{:id 4, :foo 0}]]]
                  [::tu/pages [[{:bar 5}]]]]]))))
 
 (t/deftest test-row-table-mega-join-order
   (t/testing "row table mega-join order"
     (let [plan '[:mega-join
-                 [{bar biff} {foo baz} {foo bar}]
+                 {:conditions [{bar biff} {foo baz} {foo bar}]}
                  [[:table [{:baz 1} {:baz 2} {:baz 2}]]
                   [:table [{:biff 1} {:biff 2} {:biff 3} {:biff 4}]]
                   [:table [{:foo 1}]]

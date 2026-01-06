@@ -19,12 +19,12 @@
          (* l.3/l_extendedprice (- 1 l.3/l_discount))
          (* ps.4/ps_supplycost l.3/l_quantity))}]
       [:mega-join
-       [{s.2/s_nationkey n.6/_id}
+       {:conditions [{s.2/s_nationkey n.6/_id}
         {l.3/l_orderkey o.5/_id}
         {l.3/l_suppkey ps.4/ps_suppkey}
         {l.3/l_partkey ps.4/ps_partkey}
         {s.2/_id l.3/l_suppkey}
-        {p.1/_id l.3/l_partkey}]
+        {p.1/_id l.3/l_partkey}]}
        [[:rename n.6 [:scan {:table #xt/table nation, :columns [_id n_name]}]]
         [:rename
          o.5

@@ -7,7 +7,7 @@
    [:map
     [{_sq_3 true}]
     [:mega-join
-     [{s.1/s_nationkey n.2/_id}]
+     {:conditions [{s.1/s_nationkey n.2/_id}]}
      [[:semi-join
        {:conditions [{s.1/_id ps_suppkey}]}
        [:rename

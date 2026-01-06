@@ -32,9 +32,9 @@
      [:map
       [{_sum_in_6 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]
       [:mega-join
-       [{c.1/c_nationkey n.4/_id}
+       {:conditions [{c.1/c_nationkey n.4/_id}
         {o.2/_id l.3/l_orderkey}
-        {c.1/_id o.2/o_custkey}]
+        {c.1/_id o.2/o_custkey}]}
        [[:rename n.4 [:scan {:table #xt/table nation, :columns [_id n_name]}]]
         [:rename
          l.3

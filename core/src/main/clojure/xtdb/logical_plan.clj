@@ -206,7 +206,7 @@
             (remove (join-cond->common-cols conditions))
             (vec (relation-columns rhs))))
 
-    [:mega-join _ rels]
+    [:mega-join _opts rels]
     (vec (mapcat relation-columns rels))
 
     [:cross-join lhs rhs]
@@ -391,19 +391,21 @@
     [:join opts r1 r2]
     ;;=>
     (let [{:keys [conditions]} opts]
-      [:mega-join conditions [r1 r2]])
+      [:mega-join {:conditions conditions} [r1 r2]])
 
     [:cross-join r1 r2]
     ;;=>
-    [:mega-join [] [r1 r2]]
+    [:mega-join {:conditions []} [r1 r2]]
 
-    [:mega-join jc ^:z rels]
+    [:mega-join opts ^:z rels]
     ;;=>
     (when-let [mega-join (r/find-first (partial r/ctor? :mega-join) rels)]
-      (let [[_ inner-jc inner-rels :as inner-mega-join] (r/znode mega-join)
+      (let [{:keys [conditions]} opts
+            [_ inner-opts inner-rels :as inner-mega-join] (r/znode mega-join)
+            {inner-conditions :conditions} inner-opts
             outer-rels (r/znode rels)]
         [:mega-join
-         (vec (concat jc inner-jc))
+         {:conditions (vec (concat conditions inner-conditions))}
          (vec
            (concat
              (remove #(= inner-mega-join %) outer-rels)
@@ -1364,30 +1366,33 @@
   (r/zmatch
     z
     [:select opts
-     [:mega-join join-condition rels]]
+     [:mega-join mega-join-opts rels]]
     ;;=>
-    (let [{:keys [predicate]} opts]
-      (when (columns-in-predicate-present-in-relation? [:mega-join join-condition rels] predicate)
-        [:mega-join (conj join-condition predicate) rels]))))
+    (let [{:keys [predicate]} opts
+          {:keys [conditions]} mega-join-opts]
+      (when (columns-in-predicate-present-in-relation? [:mega-join mega-join-opts rels] predicate)
+        [:mega-join {:conditions (conj conditions predicate)} rels]))))
 
 (defn- split-conjunctions-in-mega-join [z]
   (r/zmatch
     z
-    [:mega-join join-condition rels]
+    [:mega-join opts rels]
     ;;=>
-    (when (some and-predicate? join-condition)
-      [:mega-join (vec (mapcat #(flatten-expr and-predicate? %) join-condition)) rels])))
+    (let [{:keys [conditions]} opts]
+      (when (some and-predicate? conditions)
+        [:mega-join {:conditions (vec (mapcat #(flatten-expr and-predicate? %) conditions))} rels]))))
 
 (defn- push-predicates-from-mega-join-to-child-relations [z]
   (r/zmatch
     z
-    [:mega-join join-condition rels]
+    [:mega-join opts rels]
     ;;=>
-    (let [indexed-rels (map-indexed (fn [idx rel] {:idx idx
+    (let [{:keys [conditions]} opts
+          indexed-rels (map-indexed (fn [idx rel] {:idx idx
                                                    :rel rel
                                                    :preds []}) rels)
           indexed-preds (map-indexed (fn [idx pred] {:idx idx
-                                                     :pred pred}) join-condition)]
+                                                     :pred pred}) conditions)]
       (when-let [moveable-preds
                  (seq
                    (for [{:keys [pred] :as predicate} indexed-preds
@@ -1408,7 +1413,7 @@
               output-rels (mapv #(if-let [updated-rel (get updated-rels (:idx %))]
                                    updated-rel
                                    (:rel %)) indexed-rels)]
-          [:mega-join output-join-conditions output-rels])))))
+          [:mega-join {:conditions output-join-conditions} output-rels])))))
 
 (def ^:private push-correlated-selection-down-past-join (partial push-selection-down-past-join true))
 (def ^:private push-correlated-selection-down-past-rename (partial push-selection-down-past-rename true))

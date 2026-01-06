@@ -7,7 +7,7 @@
     {_sum_out_4 (sum m.2/length)}
     {_min_out_3 (min m.2/year)}]
    [:mega-join
-    [{me.1/cert m.2/producer}]
+    {:conditions [{me.1/cert m.2/producer}]}
     [[:rename me.1 [:scan {:table #xt/table movie_exec, :columns [name cert]}]]
      [:rename
       m.2

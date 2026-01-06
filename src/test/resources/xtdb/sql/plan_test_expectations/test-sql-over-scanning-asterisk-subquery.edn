@@ -3,7 +3,7 @@
  [:single-join
   {:conditions []}
   [:mega-join
-   []
+   {:conditions []}
    [[:rename foo.1 [:scan {:table #xt/table foo, :columns [lastname name]}]]
     [:rename bar.2 [:scan {:table #xt/table bar, :columns []}]]]]
   [:project

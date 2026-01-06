@@ -1,6 +1,6 @@
 [:project
  [{a a.1/a}]
  [:mega-join
-  [{a.1/a (+ b.2/b 1)}]
+  {:conditions [{a.1/a (+ b.2/b 1)}]}
   [[:rename a.1 [:scan {:table #xt/table a, :columns [a]}]]
    [:rename b.2 [:scan {:table #xt/table bar, :columns [b]}]]]]]

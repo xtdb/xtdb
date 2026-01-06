@@ -53,7 +53,7 @@
          [:mark-join
           {:mark-spec {_sq_9 [{l.1/l_shipmode xt.values.10/_column_1}]}}
           [:mega-join
-           [{l.1/l_partkey p.2/_id}]
+           {:conditions [{l.1/l_partkey p.2/_id}]}
            [[:rename
              l.1
              [:scan

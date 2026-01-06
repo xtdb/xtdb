@@ -309,7 +309,7 @@
     (-> (case (count rels)
           0 {:ra-plan [:table [{}]]}
           1 (first rels)
-          {:ra-plan [:mega-join [] (mapv :ra-plan rels)]})
+          {:ra-plan [:mega-join {:conditions []} (mapv :ra-plan rels)]})
         (wrap-unify var->cols))))
 
 (defn- plan-out-spec [^Binding bind-spec]

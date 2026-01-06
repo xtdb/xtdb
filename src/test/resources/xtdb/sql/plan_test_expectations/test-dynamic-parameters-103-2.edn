@@ -1,7 +1,7 @@
 [:project
  [{a foo.1/a}]
  [:mega-join
-  []
+  {:conditions []}
   [[:rename
     foo.1
     [:scan {:table #xt/table foo, :columns [a {c (== c ?_2)} {b (== b ?_1)}]}]]

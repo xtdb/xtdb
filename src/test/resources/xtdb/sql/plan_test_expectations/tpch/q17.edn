@@ -20,7 +20,7 @@
       [:map
        [{_row_number_0 (row-number)}]
        [:mega-join
-        [{l.1/l_partkey p.2/_id}]
+        {:conditions [{l.1/l_partkey p.2/_id}]}
         [[:rename
           l.1
           [:scan

@@ -21,7 +21,7 @@
      [:map
       [{_sum_in_5 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]
       [:mega-join
-       [{o.2/_id l.3/l_orderkey} {c.1/_id o.2/o_custkey}]
+       {:conditions [{o.2/_id l.3/l_orderkey} {c.1/_id o.2/o_custkey}]}
        [[:rename
          l.3
          [:scan

@@ -14,9 +14,9 @@
       [:map
        [{_sq_9 true}]
        [:mega-join
-        [{s.1/s_nationkey n.4/_id}
+        {:conditions [{s.1/s_nationkey n.4/_id}
          {l1.2/l_orderkey o.3/_id}
-         {s.1/_id l1.2/l_suppkey}]
+         {s.1/_id l1.2/l_suppkey}]}
         [[:rename
           n.4
           [:scan

@@ -10,7 +10,7 @@
       (* l.1/l_extendedprice (- 1 l.1/l_discount))
       0)}]
    [:mega-join
-    [{l.1/l_partkey p.2/_id}]
+    {:conditions [{l.1/l_partkey p.2/_id}]}
     [[:rename
       l.1
       [:scan

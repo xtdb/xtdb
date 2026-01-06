@@ -1,11 +1,11 @@
 [:project
  [{name foo.1/name}]
  [:mega-join
-  [(<
+  {:conditions [(<
     (greatest (lower foo.1/_valid_time) (lower bar.2/_valid_time))
     (least
      (coalesce (upper foo.1/_valid_time) xtdb/end-of-time)
-     (coalesce (upper bar.2/_valid_time) xtdb/end-of-time)))]
+     (coalesce (upper bar.2/_valid_time) xtdb/end-of-time)))]}
   [[:rename
     foo.1
     [:project

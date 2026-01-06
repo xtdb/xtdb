@@ -81,7 +81,7 @@
 
 (defmethod lp/ra-expr :mega-join [_]
   (s/cat :op #{:mega-join}
-         :conditions ::join-condition
+         :opts (s/keys :req-un [::conditions])
          :relations (s/coll-of ::lp/ra-expression)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -679,8 +679,9 @@
    (map :condition unused-join-conditions)
    (last join-order)))
 
-(defmethod lp/emit-expr :mega-join [{:keys [conditions relations]} args]
-  (let [conditions-with-cols (->> conditions
+(defmethod lp/emit-expr :mega-join [{:keys [opts relations]} args]
+  (let [{:keys [conditions]} opts
+        conditions-with-cols (->> conditions
                                   (map (fn [condition]
                                          {:cols (condition->cols condition)
                                           :condition condition}))

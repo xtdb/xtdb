@@ -16,7 +16,7 @@
        [{_sum_in_13 (* ps.1/ps_supplycost ps.1/ps_availqty)}
         {_sum_in_5 (* ps.1/ps_supplycost ps.1/ps_availqty)}]
        [:mega-join
-        [{s.2/s_nationkey n.3/_id} {ps.1/ps_suppkey s.2/_id}]
+        {:conditions [{s.2/s_nationkey n.3/_id} {ps.1/ps_suppkey s.2/_id}]}
         [[:rename
           n.3
           [:scan
@@ -35,7 +35,7 @@
        [:map
         [{_sum_in_11 (* ps.7/ps_supplycost ps.7/ps_availqty)}]
         [:mega-join
-         [{s.8/s_nationkey n.9/_id} {ps.7/ps_suppkey s.8/_id}]
+         {:conditions [{s.8/s_nationkey n.9/_id} {ps.7/ps_suppkey s.8/_id}]}
          [[:rename
            n.9
            [:scan

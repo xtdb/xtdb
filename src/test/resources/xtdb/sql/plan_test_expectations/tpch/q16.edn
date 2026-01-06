@@ -23,7 +23,7 @@
      [:map
       [{_sq_3 true}]
       [:mega-join
-       [{ps.1/ps_partkey p.2/_id}]
+       {:conditions [{ps.1/ps_partkey p.2/_id}]}
        [[:anti-join
          {:conditions [{ps.1/ps_suppkey _id}]}
          [:rename

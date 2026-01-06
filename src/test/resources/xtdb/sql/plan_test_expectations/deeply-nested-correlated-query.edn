@@ -5,7 +5,7 @@
   [:apply
    {:mode :semi-join, :columns {x2 ?x13, x4 ?x14}}
    [:mega-join
-    []
+    {:conditions []}
     [[:rename {a x1, b x2} [:scan {:table r, :columns [a b]}]]
      [:rename {c x4} [:scan {:table s, :columns [c]}]]]]
    [:semi-join

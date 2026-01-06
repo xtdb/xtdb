@@ -55,10 +55,10 @@
         [:map
          [{_row_number_0 (row-number)}]
          [:mega-join
-          [{n.4/n_regionkey r.5/_id}
+          {:conditions [{n.4/n_regionkey r.5/_id}
            {s.2/s_nationkey n.4/_id}
            {p.1/_id ps.3/ps_partkey}
-           {s.2/_id ps.3/ps_suppkey}]
+           {s.2/_id ps.3/ps_suppkey}]}
           [[:rename
             r.5
             [:scan
@@ -88,9 +88,9 @@
               s_acctbal
               s_nationkey]}]]]]]
         [:mega-join
-         [{n.9/n_regionkey r.10/_id}
+         {:conditions [{n.9/n_regionkey r.10/_id}
           {s.8/s_nationkey n.9/_id}
-          {ps.7/ps_suppkey s.8/_id}]
+          {ps.7/ps_suppkey s.8/_id}]}
          [[:rename
            r.10
            [:scan

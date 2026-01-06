@@ -21,7 +21,7 @@
      [:map
       [{_row_number_0 (row-number)}]
       [:mega-join
-       [{s.1/id e.2/sid}]
+       {:conditions [{s.1/id e.2/sid}]}
        [[:rename
          s.1
          [:scan

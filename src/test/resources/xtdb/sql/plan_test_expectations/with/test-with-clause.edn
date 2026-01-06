@@ -1,7 +1,7 @@
 [:project
  [{foo_id foo.3/_id} {baz_id baz.4/_id}]
  [:mega-join
-  []
+  {:conditions []}
   [[:rename
     foo.3
     [:project

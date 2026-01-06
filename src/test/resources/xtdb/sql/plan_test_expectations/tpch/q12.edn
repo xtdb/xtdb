@@ -28,7 +28,7 @@
      [:map
       [{_sq_3 true}]
       [:mega-join
-       [{o.1/_id l.2/l_orderkey}]
+       {:conditions [{o.1/_id l.2/l_orderkey}]}
        [[:rename
          o.1
          [:scan {:table #xt/table orders, :columns [o_orderpriority _id]}]]
