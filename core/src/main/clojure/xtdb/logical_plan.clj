@@ -209,7 +209,7 @@
     [:mega-join _opts rels]
     (vec (mapcat relation-columns rels))
 
-    [:cross-join lhs rhs]
+    [:cross-join _opts lhs rhs]
     (vec (mapcat relation-columns [lhs rhs]))
 
     [:left-outer-join opts lhs rhs]
@@ -380,7 +380,7 @@
 (defn- promote-selection-cross-join-to-join [z]
   (r/zmatch z
     [:select opts
-     [:cross-join lhs rhs]]
+     [:cross-join _cross-join-opts lhs rhs]]
     ;;=>
     (let [{:keys [predicate]} opts]
       (when (columns-in-both-relations? predicate lhs rhs)
@@ -393,7 +393,7 @@
     (let [{:keys [conditions]} opts]
       [:mega-join {:conditions conditions} [r1 r2]])
 
-    [:cross-join r1 r2]
+    [:cross-join _opts r1 r2]
     ;;=>
     [:mega-join {:conditions []} [r1 r2]]
 
@@ -655,26 +655,15 @@
     (let [{:keys [predicate]} opts]
       (when (and
               (contains?
-                #{:join :semi-join :anti-join :left-outer-join :single-join :mark-join} ;TODO full-outer-join
+                #{:cross-join :join :semi-join :anti-join :left-outer-join :single-join :mark-join} ;TODO full-outer-join
                 join-op)
               (or push-correlated? (no-correlated-columns? predicate)))
         (cond
           (columns-in-predicate-present-in-relation? lhs predicate)
           [join-op join-map [:select {:predicate predicate} lhs] rhs]
-          (and (= :join join-op)
+          (and (contains? #{:cross-join :join} join-op)
                (columns-in-predicate-present-in-relation? rhs predicate))
-          [join-op join-map lhs [:select {:predicate predicate} rhs]])))
-
-    [:select opts
-     [:cross-join lhs rhs]]
-    ;;=>
-    (let [{:keys [predicate]} opts]
-      (when (or push-correlated? (no-correlated-columns? predicate))
-        (cond
-          (columns-in-predicate-present-in-relation? lhs predicate)
-          [:cross-join [:select {:predicate predicate} lhs] rhs]
-          (columns-in-predicate-present-in-relation? rhs predicate)
-          [:cross-join lhs [:select {:predicate predicate} rhs]])))))
+          [join-op join-map lhs [:select {:predicate predicate} rhs]])))))
 
 (defn- push-selections-with-fewer-variables-down [push-correlated? z]
   (r/zmatch z
@@ -870,17 +859,11 @@
          [:map projection
           relation]]))
 
-    [:cross-join [:select opts lhs] rhs]
+    [:cross-join _cross-join-opts lhs [:select opts rhs]]
     ;;=>
     (let [{:keys [predicate]} opts]
       (when (not-empty (expr-correlated-symbols predicate))
-        [:select {:predicate predicate} [:cross-join lhs rhs]]))
-
-    [:cross-join lhs [:select opts rhs]]
-    ;;=>
-    (let [{:keys [predicate]} opts]
-      (when (not-empty (expr-correlated-symbols predicate))
-        [:select {:predicate predicate} [:cross-join lhs rhs]]))
+        [:select {:predicate predicate} [:cross-join {} lhs rhs]]))
 
     [join-op join-map [:select opts lhs] rhs]
     ;;=>
@@ -1005,7 +988,7 @@
     (let [{:keys [mode columns]} opts]
       (when-not (parameters-referenced-in-relation? dependent-relation (vals columns))
         (case mode
-          :cross-join [:cross-join independent-relation dependent-relation]
+          :cross-join [:cross-join {} independent-relation dependent-relation]
           (:semi-join :anti-join :left-outer-join :single-join) [mode {:conditions []} independent-relation dependent-relation]
           nil)))))
 
@@ -1281,32 +1264,32 @@
   (r/zmatch
     z
     [:semi-join join-opts
-     [:cross-join inner-lhs inner-rhs]
+     [:cross-join _cross-join-opts inner-lhs inner-rhs]
      rhs]
     ;;=>
     (let [{:keys [conditions]} join-opts]
       (cond (all-columns-across-both-relations-with-one-in-each? conditions inner-lhs rhs)
-            [:cross-join
+            [:cross-join {}
              [:semi-join join-opts inner-lhs rhs]
              inner-rhs]
 
             (all-columns-across-both-relations-with-one-in-each? conditions inner-rhs rhs)
-            [:cross-join
+            [:cross-join {}
              inner-lhs
              [:semi-join join-opts inner-rhs rhs]]))
 
     [:anti-join join-opts
-     [:cross-join inner-lhs inner-rhs]
+     [:cross-join _cross-join-opts inner-lhs inner-rhs]
      rhs]
     ;;=>
     (let [{:keys [conditions]} join-opts]
       (cond (all-columns-across-both-relations-with-one-in-each? conditions inner-lhs rhs)
-            [:cross-join
+            [:cross-join {}
              [:anti-join join-opts inner-lhs rhs]
              inner-rhs]
 
             (all-columns-across-both-relations-with-one-in-each? conditions inner-rhs rhs)
-            [:cross-join
+            [:cross-join {}
              inner-lhs
              [:anti-join join-opts inner-rhs rhs]]))
 

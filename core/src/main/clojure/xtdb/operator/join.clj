@@ -22,6 +22,7 @@
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
+         :opts map?
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 

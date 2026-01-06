@@ -32,7 +32,7 @@
   (t/testing "empty left side"
     (t/is (= [{:a 10} {:a 15}]
              (tu/query-ra
-              [:cross-join
+              [:cross-join {}
                [:table [{}]]
                [:union-all {}
                 [::tu/pages '{a #xt/type :i64} [[]]]

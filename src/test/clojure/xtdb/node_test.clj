@@ -369,7 +369,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:t2d {:foo {:bibble false}, :bar {:baz 1002}},
              :t1d {:foo {:bibble true}, :bar {:baz 1001}}}]
-           (tu/query-ra '[:cross-join
+           (tu/query-ra '[:cross-join {}
                           [:rename {data t2d}
                            [:scan {:table #xt/table t2, :columns [data]}]]
                           [:rename {data t1d}

@@ -21,7 +21,7 @@
                   {{:a 12, :b 83, :c 3} 2, {:a 0, :b 83, :c 3} 1}
                   {{:a 100, :b 83, :c 3} 1}]
             :types '{a #xt/type :i64, b #xt/type :i64, c #xt/type :i64}}
-           (-> (tu/query-ra [:cross-join
+           (-> (tu/query-ra [:cross-join {}
                              [::tu/pages
                               [[{:a 12}, {:a 12}, {:a 0}]
                                [{:a 100}]]]
@@ -33,7 +33,7 @@
 
   (t/is (= {:res []
             :types '{a #xt/type :i64, b #xt/type :i64}}
-           (tu/query-ra [:cross-join
+           (tu/query-ra [:cross-join {}
                          [::tu/pages
                           [[{:a 12}, {:a 0}]
                            [{:a 100}]]]
@@ -43,7 +43,7 @@
 
   (t/is (= {:res [[{} {} {} {} {} {}]]
             :types {}}
-           (tu/query-ra [:cross-join
+           (tu/query-ra [:cross-join {}
                          [::tu/pages [[{} {} {}]]]
                          [::tu/pages [[{} {}]]]]
                         {:with-types? true, :preserve-pages? true}))
