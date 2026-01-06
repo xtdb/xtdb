@@ -5,9 +5,9 @@
   [:map
    [{_sq_2 true}]
    [:semi-join
-    [{f.1/b xt.values.5/_column_1}]
+    {:conditions [{f.1/b xt.values.5/_column_1}]}
     [:semi-join
-     [{f.1/a xt.values.3/_column_1}]
+     {:conditions [{f.1/a xt.values.3/_column_1}]}
      [:rename f.1 [:scan {:table #xt/table foo, :columns [{a (== a 42)} b]}]]
      [:rename
       xt.values.3

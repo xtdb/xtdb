@@ -10,8 +10,8 @@
     [:group-by
      [c.1/_id {_count_out_3 (count o.2/_id)}]
      [:left-outer-join
-      [{c.1/_id o.2/o_custkey}
-       (not (like o.2/o_comment "%special%requests%"))]
+      {:conditions [{c.1/_id o.2/o_custkey}
+       (not (like o.2/o_comment "%special%requests%"))]}
       [:rename c.1 [:scan {:table #xt/table customer, :columns [_id]}]]
       [:rename
        o.2

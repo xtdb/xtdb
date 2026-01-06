@@ -9,7 +9,7 @@
     [:mega-join
      [{s.1/s_nationkey n.2/_id}]
      [[:semi-join
-       [{s.1/_id ps_suppkey}]
+       {:conditions [{s.1/_id ps_suppkey}]}
        [:rename
         s.1
         [:scan
@@ -19,7 +19,7 @@
         [:map
          [{_sq_5 true}]
          [:semi-join
-          [{ps.4/ps_partkey _id}]
+          {:conditions [{ps.4/ps_partkey _id}]}
           [:select
            {:predicate (> ps.4/ps_availqty _sq_7)}
            [:map
@@ -31,8 +31,8 @@
               _row_number_0
               {_sum_out_11 (sum l.8/l_quantity)}]
              [:left-outer-join
-              [{ps.4/ps_partkey l.8/l_partkey}
-               {ps.4/ps_suppkey l.8/l_suppkey}]
+              {:conditions [{ps.4/ps_partkey l.8/l_partkey}
+               {ps.4/ps_suppkey l.8/l_suppkey}]}
               [:map
                [{_row_number_0 (row-number)}]
                [:rename

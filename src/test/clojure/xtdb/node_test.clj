@@ -1049,9 +1049,9 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
     (t/is (= [{:foo "foo1", :bar "bar1"}]
              (tu/query-ra '[:project [{bar _id} {foo foo/_id}]
-                            [:semi-join [{_id vals/_column_1}]
+                            [:semi-join {:conditions [{_id vals/_column_1}]}
                              [:rename {bar/_id _id}
-                              [:join [{foo/_id bar/foo}]
+                              [:join {:conditions [{foo/_id bar/foo}]}
                                [:rename foo [:scan {:table #xt/table foo, :columns [_id]}]]
                                [:rename bar [:scan {:table #xt/table bar, :columns [_id foo]}]]]]
                              [:rename vals
@@ -1080,7 +1080,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:xt/id :toto, :col 3}]
            (tu/query-ra
-            '[:join [{col col}]
+            '[:join {:conditions [{col col}]}
               [:scan {:table #xt/table xt_docs, :columns [_id {col (== col 3)}]}]
               [:scan {:table #xt/table xt_docs, :columns [_id col]}]]
             {:node tu/*node*}))))

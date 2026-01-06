@@ -56,7 +56,7 @@
   (t/is (= [{:b 12} {:b 2} {:a 12} {:a 0}]
            (tu/query-ra
              '[:project [a b]
-               [:full-outer-join [false]
+               [:full-outer-join {:conditions [false]}
                 [:table [{:a 12}, {:a 0}]]
                 [:table [{:b 12}, {:b 2}]]]]
              {}))))

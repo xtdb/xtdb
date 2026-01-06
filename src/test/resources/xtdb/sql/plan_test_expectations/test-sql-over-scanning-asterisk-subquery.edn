@@ -1,7 +1,7 @@
 [:project
  [{lastname foo.1/lastname} {name foo.1/name} {_column_2 _sq_3}]
  [:single-join
-  []
+  {:conditions []}
   [:mega-join
    []
    [[:rename foo.1 [:scan {:table #xt/table foo, :columns [lastname name]}]]

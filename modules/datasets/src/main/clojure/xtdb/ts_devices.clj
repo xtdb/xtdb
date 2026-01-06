@@ -104,7 +104,7 @@
   '[:top {:limit 5}
     [:order-by {:order-specs [[cpu-avg-1min {:direction :desc}]
                 [time {:direction :desc}]]}
-     [:join {device-id device-id}
+     [:join {:conditions [{device-id device-id}]}
       [:scan {:table device-readings
               :columns [device-id time cpu-avg-1min
                         {battery-level (< battery-level 30)}

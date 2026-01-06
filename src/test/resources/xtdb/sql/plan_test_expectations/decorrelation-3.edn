@@ -10,13 +10,13 @@
     _row_number_0
     {_row_count_7 (count _dep_countable_1)}]
    [:left-outer-join
-    [{customers.1/custno orders.5/custno}]
+    {:conditions [{customers.1/custno orders.5/custno}]}
     [:map
      [{_row_number_0 (row-number)}]
      [:map
       [{_sq_2 true}]
       [:anti-join
-       [{customers.1/country country}]
+       {:conditions [{customers.1/country country}]}
        [:rename
         customers.1
         [:scan {:table #xt/table customers, :columns [country custno name]}]]

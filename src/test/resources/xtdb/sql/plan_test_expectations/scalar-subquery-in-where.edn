@@ -3,7 +3,7 @@
  [:select
   {:predicate (== x.1/y _sq_2)}
   [:single-join
-   []
+   {:conditions []}
    [:rename x.1 [:scan {:table #xt/table x, :columns [y]}]]
    [:project
     [{_sq_2 _max_out_4}]

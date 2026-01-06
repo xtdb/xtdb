@@ -15,9 +15,9 @@
      _row_number_0
      {_avg_out_8 (avg e2.4/grade)}]
     [:left-outer-join
-     [(or
+     {:conditions [(or
        (== s.1/id e2.4/sid)
-       (and (== e2.4/curriculum s.1/major) (> s.1/year e2.4/date)))]
+       (and (== e2.4/curriculum s.1/major) (> s.1/year e2.4/date)))]}
      [:map
       [{_row_number_0 (row-number)}]
       [:mega-join

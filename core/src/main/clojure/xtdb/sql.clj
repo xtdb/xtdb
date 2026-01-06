@@ -403,7 +403,7 @@
       (if (= join-type :full-outer-join)
         (if (.isEmpty !join-cond-subqs)
           [:full-outer-join
-           [(w/postwalk-replace (set/map-invert !lhs-refs) join-pred)]
+           {:conditions [(w/postwalk-replace (set/map-invert !lhs-refs) join-pred)]}
            (plan-rel l)
            (plan-rel r)]
           (add-err! env (->SubqueryDisallowed)))
@@ -2746,7 +2746,7 @@
                 {_valid_to (cast (coalesce old/_valid_to ~valid-to xtdb/end-of-time)
                                  ~types/temporal-col-type)}
                 {doc (_patch old/doc new/doc)}]
-      [:left-outer-join [{new/_iid old/_iid}]
+      [:left-outer-join {:conditions [{new/_iid old/_iid}]}
        [:rename new
         ~(:plan patch-rel)]
        [:rename old

@@ -1,7 +1,7 @@
 [:project
  [{_column_1 _sq_2}]
  [:single-join
-  []
+  {:conditions []}
   [:rename a.1 [:scan {:table #xt/table a, :columns [{a (== a 42)}]}]]
   [:group-by
    [{_sq_2 (vec_agg b1)}]

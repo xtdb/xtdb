@@ -1,7 +1,7 @@
 [:project
  [{some_column (== 1 _sq_2)}]
  [:single-join
-  []
+  {:conditions []}
   [:rename x.1 [:scan {:table #xt/table x, :columns [{y (== y 1)}]}]]
   [:project
    [{_sq_2 _max_out_4}]

@@ -7,7 +7,7 @@
    [:select
     {:predicate (> _sum_out_4 _sq_6)}
     [:single-join
-     []
+     {:conditions []}
      [:group-by
       [ps.1/ps_partkey
        {_sum_out_12 (sum _sum_in_13)}

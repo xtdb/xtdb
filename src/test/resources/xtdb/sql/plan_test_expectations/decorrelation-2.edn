@@ -3,7 +3,7 @@
  [:map
   [{_sq_2 true}]
   [:semi-join
-   [{customers.1/custno custno}]
+   {:conditions [{customers.1/custno custno}]}
    [:rename
     customers.1
     [:scan

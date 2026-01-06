@@ -1,7 +1,7 @@
 [:project
  [{movie_title si.2/movie_title}]
  [:left-outer-join
-  [{m.1/title si.2/movie_title} {m.1/movie_year si.2/year}]
+  {:conditions [{m.1/title si.2/movie_title} {m.1/movie_year si.2/year}]}
   [:rename m.1 [:scan {:table #xt/table movie, :columns [movie_year title]}]]
   [:rename
    si.2

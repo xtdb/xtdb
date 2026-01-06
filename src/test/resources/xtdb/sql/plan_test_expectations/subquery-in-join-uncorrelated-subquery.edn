@@ -6,7 +6,7 @@
    [:select
     {:predicate (== bar.2/c _sq_3)}
     [:single-join
-     []
+     {:conditions []}
      [:rename bar.2 [:scan {:table #xt/table bar, :columns [c]}]]
      [:project
       [{_sq_3 foo.4/b}]

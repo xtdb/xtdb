@@ -34,33 +34,35 @@
 (s/def ::join-condition
   (s/coll-of ::join-condition-clause :kind vector?))
 
+(s/def ::conditions ::join-condition)
+
 (defmethod lp/ra-expr :join [_]
   (s/cat :op #{:⋈ :join}
-         :condition ::join-condition
+         :opts (s/keys :req-un [::conditions])
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
 (defmethod lp/ra-expr :left-outer-join [_]
   (s/cat :op #{:⟕ :left-outer-join}
-         :condition ::join-condition
+         :opts (s/keys :req-un [::conditions])
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
 (defmethod lp/ra-expr :full-outer-join [_]
   (s/cat :op #{:⟗ :full-outer-join}
-         :condition ::join-condition
+         :opts (s/keys :req-un [::conditions])
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
 (defmethod lp/ra-expr :semi-join [_]
   (s/cat :op #{:⋉ :semi-join}
-         :condition ::join-condition
+         :opts (s/keys :req-un [::conditions])
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
 (defmethod lp/ra-expr :anti-join [_]
   (s/cat :op #{:▷ :anti-join}
-         :condition ::join-condition
+         :opts (s/keys :req-un [::conditions])
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
@@ -72,7 +74,7 @@
 
 (defmethod lp/ra-expr :single-join [_]
   (s/cat :op #{:single-join}
-         :condition ::join-condition
+         :opts (s/keys :req-un [::conditions])
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
@@ -426,8 +428,11 @@
                                                    (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))
                                                  output-projections)))))}))
 
-(defn emit-join-expr-and-children {:style/indent 2} [join-expr args join-impl]
-  (emit-join-expr (emit-join-children join-expr args) args join-impl))
+(defn emit-join-expr-and-children {:style/indent 2} [{:keys [opts condition] :as join-expr} args join-impl]
+  (let [{:keys [conditions]} opts]
+    (emit-join-expr (-> (emit-join-children join-expr args)
+                        (assoc :condition (or condition conditions)))
+                    args join-impl)))
 
 (defn emit-inner-join-expr [join-expr args]
   (emit-join-expr join-expr args
@@ -436,8 +441,11 @@
                    :join-type ::inner-join
                    :pushdown-blooms? true}))
 
-(defmethod lp/emit-expr :join [join-expr args]
-  (emit-inner-join-expr (emit-join-children join-expr args) args))
+(defmethod lp/emit-expr :join [{:keys [opts] :as join-expr} args]
+  (let [{:keys [conditions]} opts]
+    (emit-inner-join-expr (-> (emit-join-children join-expr args)
+                              (assoc :condition conditions))
+                          args)))
 
 (defn determine-build-side [left right default-side]
   (let [^long left-row-count (or (:row-count (:stats left)) Long/MAX_VALUE)
@@ -447,8 +455,10 @@
       (< right-row-count left-row-count) :right
       :else default-side)))
 
-(defmethod lp/emit-expr :left-outer-join [join-expr args]
-  (let [{:keys [left right] :as emitted-join-children} (emit-join-children join-expr args)
+(defmethod lp/emit-expr :left-outer-join [{:keys [opts] :as join-expr} args]
+  (let [{:keys [conditions]} opts
+        {:keys [left right] :as emitted-join-children} (emit-join-children join-expr args)
+        emitted-join-children (assoc emitted-join-children :condition conditions)
         build-side (determine-build-side left right :right)]
     (emit-join-expr emitted-join-children
                     args

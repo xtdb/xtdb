@@ -29,9 +29,9 @@
           s.1
           [:scan {:table #xt/table supplier, :columns [s_name _id s_nationkey]}]]
          [:semi-join
-          [(<> l_suppkey l1.2/l_suppkey) {l1.2/l_orderkey l_orderkey}]
+          {:conditions [(<> l_suppkey l1.2/l_suppkey) {l1.2/l_orderkey l_orderkey}]}
           [:anti-join
-           [(<> l_suppkey l1.2/l_suppkey) {l1.2/l_orderkey l_orderkey}]
+           {:conditions [(<> l_suppkey l1.2/l_suppkey) {l1.2/l_orderkey l_orderkey}]}
            [:rename
             l1.2
             [:select

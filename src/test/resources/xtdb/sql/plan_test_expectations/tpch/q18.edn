@@ -33,7 +33,7 @@
          [:scan {:table #xt/table lineitem, :columns [l_orderkey l_quantity]}]]
         [:rename c.1 [:scan {:table #xt/table customer, :columns [_id c_name]}]]
         [:semi-join
-         [{o.2/_id l_orderkey}]
+         {:conditions [{o.2/_id l_orderkey}]}
          [:rename
           o.2
           [:scan

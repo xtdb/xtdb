@@ -3,7 +3,7 @@
  [:map
   [{_sq_2 true}]
   [:semi-join
-   [(> _needle z)]
+   {:conditions [(> _needle z)]}
    [:map
     [{_needle (== x.1/z 1)}]
     [:rename x.1 [:scan {:table #xt/table x, :columns [y z]}]]]

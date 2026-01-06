@@ -25,7 +25,7 @@
       [:mega-join
        [{ps.1/ps_partkey p.2/_id}]
        [[:anti-join
-         [{ps.1/ps_suppkey _id}]
+         {:conditions [{ps.1/ps_suppkey _id}]}
          [:rename
           ps.1
           [:scan {:table #xt/table partsupp, :columns [ps_partkey ps_suppkey]}]]
@@ -37,7 +37,7 @@
             {:table #xt/table supplier, :columns [{s_comment (like s_comment "%Customer%Complaints%")}
              _id]}]]]]
         [:semi-join
-         [{p.2/p_size xt.values.4/_column_1}]
+         {:conditions [{p.2/p_size xt.values.4/_column_1}]}
          [:rename
           p.2
           [:scan

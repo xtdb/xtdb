@@ -51,7 +51,7 @@
         _row_number_0
         {_min_out_12 (min ps.7/ps_supplycost)}]
        [:left-outer-join
-        [{p.1/_id ps.7/ps_partkey}]
+        {:conditions [{p.1/_id ps.7/ps_partkey}]}
         [:map
          [{_row_number_0 (row-number)}]
          [:mega-join

@@ -16,7 +16,7 @@
       _row_number_0
       {_avg_out_6 (avg l.4/l_quantity)}]
      [:left-outer-join
-      [{p.2/_id l.4/l_partkey}]
+      {:conditions [{p.2/_id l.4/l_partkey}]}
       [:map
        [{_row_number_0 (row-number)}]
        [:mega-join

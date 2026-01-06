@@ -7,7 +7,7 @@
    [:group-by
     [c.1/custkey _row_number_0 {_sum_out_5 (sum o.3/totalprice)}]
     [:left-outer-join
-     [{c.1/custkey o.3/custkey}]
+     {:conditions [{c.1/custkey o.3/custkey}]}
      [:map
       [{_row_number_0 (row-number)}]
       [:rename c.1 [:scan {:table #xt/table customer, :columns [custkey]}]]]

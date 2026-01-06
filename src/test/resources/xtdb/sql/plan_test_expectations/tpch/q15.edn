@@ -38,7 +38,7 @@
     [:select
      {:predicate (== revenue.6/total_revenue _sq_7)}
      [:single-join
-      []
+      {:conditions []}
       [:mega-join
        [{s.5/_id revenue.6/supplier_no}]
        [[:rename

@@ -1,7 +1,7 @@
 [:project
  [{_column_1 _sq_2}]
  [:single-join
-  []
+  {:conditions []}
   [:rename t2.1 [:scan {:table #xt/table t2, :columns []}]]
   [:project
    [{_sq_2 4}]

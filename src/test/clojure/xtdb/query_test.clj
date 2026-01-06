@@ -259,27 +259,27 @@
 
 (t/deftest test-join-theta
   (t/is (= [{:x3 "31" :x4 "13"} {:x3 "31" :x4 "31"}]
-           (tu/query-ra '[:join [(== x3 "31")]
+           (tu/query-ra '[:join {:conditions [(== x3 "31")]}
                           [:table [{x3 "13"} {x3 "31"}]]
                           [:table [{x4 "13"} {x4 "31"}]]]
                         {})))
 
   (t/is (= [{:x3 "31"}]
-           (tu/query-ra '[:join [{x3 x3} (== x3 "31")]
+           (tu/query-ra '[:join {:conditions [{x3 x3} (== x3 "31")]}
                           [:table [{x3 "13"} {x3 "31"}]]
                           [:table [{x3 "13"} {x3 "31"}]]]
                         {})))
 
   (t/is (= []
-           (tu/query-ra '[:join [false]
+           (tu/query-ra '[:join {:conditions [false]}
                           [:table [{x3 "13"} {x3 "31"}]]
                           [:table [{x4 "13"} {x4 "31"}]]]
                         {})))
 
   (t/is (= []
            (tu/query-ra '[:join
-                          [(== x1 x3)]
-                          [:join [false]
+                          {:conditions [(== x1 x3)]}
+                          [:join {:conditions [false]}
                            [:table [{x1 1}]]
                            [:table [{x2 2}]]]
                           [:table [{x3 1}]]]
@@ -314,7 +314,7 @@
   (t/is (= {:res [{{:a 12, :b 12, :c {:foo 1}} 1, {:a 12, :b 12, :c {:foo 2}} 1, {:a 0} 1}
                   {{:a 12, :b 12, :c {:foo 1}} 1, {:a 12, :b 12, :c {:foo 2}} 1, {:a 100, :b 100, :c {:foo 2}} 1}]
             :types '{a #xt/type :i64, c #xt/type [:? :struct {"foo" :i64}], b #xt/type [:? :i64]}}
-           (-> (tu/query-ra [:left-outer-join '[{a b}]
+           (-> (tu/query-ra [:left-outer-join '{:conditions [{a b}]}
                              [::tu/pages
                               [[{:a 12}, {:a 0}]
                                [{:a 12}, {:a 100}]]]
@@ -328,7 +328,7 @@
   (t/is (= {:res [{{:a 12, :c [1], :b 12} 1, {:a 12, :c [2], :b 12} 1, {:a 0} 1}
                   {{:a 12, :c [1], :b 12} 1, {:a 12, :c [2], :b 12} 1, {:a 100, :c [4], :b 100} 1}]
             :types '{a #xt/type :i64, b #xt/type [:? :i64], c #xt/type [:? :list :i64]}}
-           (-> (tu/query-ra [:left-outer-join '[{a b}]
+           (-> (tu/query-ra [:left-outer-join '{:conditions [{a b}]}
                              [::tu/pages
                               [[{:a 12}, {:a 0}]
                                [{:a 12}, {:a 100}]]]

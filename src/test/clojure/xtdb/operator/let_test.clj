@@ -23,7 +23,7 @@
 
   (t/is (= [{:a 1 :b 1}]
            (tu/query-ra '[:let [X [:table ?x]]
-                          [:let [Y [:join [{a b}]
+                          [:let [Y [:join {:conditions [{a b}]}
                                     [:relation X {:col-names [a]}]
                                     [:table ?y]]]
                            [:let [X [:relation Y {:col-names [a b]}]]

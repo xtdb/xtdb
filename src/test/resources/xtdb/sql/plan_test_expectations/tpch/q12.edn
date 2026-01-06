@@ -33,7 +33,7 @@
          o.1
          [:scan {:table #xt/table orders, :columns [o_orderpriority _id]}]]
         [:semi-join
-         [{l.2/l_shipmode xt.values.4/_column_1}]
+         {:conditions [{l.2/l_shipmode xt.values.4/_column_1}]}
          [:rename
           l.2
           [:select

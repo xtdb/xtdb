@@ -9,7 +9,7 @@
     [:map
      [{_sq_2 true}]
      [:semi-join
-      [{o.1/_id l_orderkey}]
+      {:conditions [{o.1/_id l_orderkey}]}
       [:rename
        o.1
        [:scan

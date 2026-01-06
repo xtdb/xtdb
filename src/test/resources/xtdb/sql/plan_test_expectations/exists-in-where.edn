@@ -3,7 +3,7 @@
  [:map
   [{_sq_2 true}]
   [:semi-join
-   [{x.1/y z}]
+   {:conditions [{x.1/y z}]}
    [:rename x.1 [:scan {:table #xt/table x, :columns [y {z (== z 10.0)}]}]]
    [:project
     [{z y.3/z}]

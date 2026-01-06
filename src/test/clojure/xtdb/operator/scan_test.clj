@@ -507,7 +507,7 @@
                                                                      res)))))]
       (t/is (= [{:col "toto"}]
                (tu/query-ra
-                '[:join [{col col}]
+                '[:join {:conditions [{col col}]}
                   [:scan {:table #xt/table xt_docs, :columns [col {col (== col "toto")}]}]
                   [:scan {:table #xt/table xt_docs, :columns [col]}]]
                 {:node tu/*node*})))

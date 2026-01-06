@@ -54,7 +54,7 @@
                   #{{:a 100, :b 100}
                     {:a 0, :b 0}}]
             :types '{a #xt/type :i64, b #xt/type :i64}}
-           (-> (tu/query-ra [:join '[{a b}]
+           (-> (tu/query-ra [:join '{:conditions [{a b}]}
                              [::tu/pages
                               [[{:a 12}, {:a 0}]
                                [{:a 100}]]]
@@ -67,7 +67,7 @@
   (t/is (= {:res [{{:a 12} 2}
                   {{:a 100} 1, {:a 0} 1}]
             :types '{a #xt/type :i64}}
-           (-> (tu/query-ra [:join '[{a a}]
+           (-> (tu/query-ra [:join '{:conditions [{a a}]}
                              [::tu/pages
                               [[{:a 12}, {:a 0}]
                                [{:a 12}, {:a 100}]]]
@@ -80,7 +80,7 @@
 
   (t/is (= {:res []
             :types '{a #xt/type :i64, b #xt/type :i64}}
-           (tu/query-ra [:join '[{a b}]
+           (tu/query-ra [:join '{:conditions [{a b}]}
                          [::tu/pages
                           [[{:a 12}, {:a 0}]
                            [{:a 100}]]]
@@ -91,7 +91,7 @@
 
   (t/is (= {:res []
             :types '{a #xt/type :i64, b #xt/type :i64, c #xt/type :i64}}
-           (tu/query-ra [:join '[{a b}]
+           (tu/query-ra [:join '{:conditions [{a b}]}
                          [::tu/pages
                           [[{:a 12}, {:a 0}]
                            [{:a 100}]]]
@@ -106,7 +106,7 @@
        (t/is (= [{{:a 12, :b 42, :c 12, :d 42, :e 0} 2}
                  {{:a 12, :b 42, :c 12, :d 42, :e 0} 4
                   {:a 12, :b 42, :c 12, :d 42, :e 1} 2}]
-                (->> (tu/query-ra [:join '[{a c} {b d}]
+                (->> (tu/query-ra [:join '{:conditions [{a c} {b d}]}
                                    [::tu/pages
                                     [[{:a 12, :b 42}
                                       {:a 12, :b 42}
@@ -124,7 +124,7 @@
 
 (t/deftest test-theta-inner-join
   (t/is (= [{{:a 12, :b 44, :c 12, :d 43} 1}]
-           (->> (tu/query-ra [:join '[{a c} (> b d)]
+           (->> (tu/query-ra [:join '{:conditions [{a c} (> b d)]}
                               [::tu/pages
                                [[{:a 12, :b 42}
                                  {:a 12, :b 44}
@@ -137,7 +137,7 @@
 
 (t/deftest test-semi-equi-join
   (t/is (= [{{:a 12} 2} {{:a 100} 1}]
-           (->> (tu/query-ra [:semi-join '[{a b}]
+           (->> (tu/query-ra [:semi-join '{:conditions [{a b}]}
                               [::tu/pages
                                [[{:a 12}, {:a 12}, {:a 0}]
                                 [{:a 100}]]]
@@ -148,19 +148,19 @@
                 (mapv frequencies))))
 
   (t/testing "empty input"
-    (t/is (empty? (tu/query-ra [:semi-join '[{a b}]
+    (t/is (empty? (tu/query-ra [:semi-join '{:conditions [{a b}]}
                                 [::tu/pages
                                  [[{:a 12}, {:a 0}]
                                   [{:a 100}]]]
                                 [::tu/pages '{b #xt/type :i64} []]])))
 
-    (t/is (empty? (tu/query-ra [:semi-join '[{a b}]
+    (t/is (empty? (tu/query-ra [:semi-join '{:conditions [{a b}]}
                                 [::tu/pages '{a #xt/type :i64} []]
                                 [::tu/pages
                                  [[{:b 12}, {:b 2}]
                                   [{:b 100} {:b 0}]]]])))
 
-    (t/is (empty? (tu/query-ra [:semi-join '[{a b}]
+    (t/is (empty? (tu/query-ra [:semi-join '{:conditions [{a b}]}
                                 [::tu/pages
                                  [[{:a 12}, {:a 0}]
                                   [{:a 100}]]]
@@ -169,21 +169,21 @@
 
   (t/testing "nulls"
     (t/is (= []
-             (tu/query-ra [:semi-join '[{a b}]
+             (tu/query-ra [:semi-join '{:conditions [{a b}]}
                            [:table [{:a nil}]]
                            [:table [{:b 12}, {:b 2}]]])))
 
     (t/is (= [{:a 12}]
-             (tu/query-ra [:semi-join '[{a b}]
+             (tu/query-ra [:semi-join '{:conditions [{a b}]}
                            [:table [{:a 12}]]
                            [:table [{:b 12}, {:b nil}]]])))
 
     (t/is (= []
-             (tu/query-ra [:semi-join '[{a b}]
+             (tu/query-ra [:semi-join '{:conditions [{a b}]}
                            [:table [{:a 4}]]
                            [:table [{:b 12}, {:b nil}]]]))))
 
-  (t/is (empty? (tu/query-ra [:semi-join '[{a b}]
+  (t/is (empty? (tu/query-ra [:semi-join '{:conditions [{a b}]}
                               [::tu/pages
                                [[{:a 12}, {:a 0}]
                                 [{:a 100}]]]
@@ -195,7 +195,7 @@
 (t/deftest test-semi-equi-join-multi-col
   (->> "multi column semi"
        (t/is (= [{{:a 12, :b 42} 2}]
-                (->> (tu/query-ra [:semi-join '[{a c} {b d}]
+                (->> (tu/query-ra [:semi-join '{:conditions [{a c} {b d}]}
                                    [::tu/pages
                                     [[{:a 12, :b 42}
                                       {:a 12, :b 42}
@@ -213,7 +213,7 @@
 
 (t/deftest test-theta-semi-join
   (t/is (= [{{:a 12, :b 44} 1}]
-           (->> (tu/query-ra [:semi-join '[{a c} (> b d)]
+           (->> (tu/query-ra [:semi-join '{:conditions [{a c} (> b d)]}
                               [::tu/pages
                                [[{:a 12, :b 42}
                                  {:a 12, :b 44}
@@ -349,7 +349,7 @@
   (t/is (= {:res [{{:a 12, :b 12, :c 2} 1, {:a 12, :b 12, :c 0} 1, {:a 0} 1}
                   {{:a 12, :b 12, :c 2} 1, {:a 100, :b 100, :c 3} 1, {:a 12, :b 12, :c 0} 1}]
             :types '{a #xt/type :i64, b #xt/type [:? :i64], c #xt/type [:? :i64]}}
-           (-> (tu/query-ra [:left-outer-join '[{a b}]
+           (-> (tu/query-ra [:left-outer-join '{:conditions [{a b}]}
                              [::tu/pages
                               [[{:a 12}, {:a 0}]
                                [{:a 12}, {:a 100}]]]
@@ -363,7 +363,7 @@
     (t/is (= {:res [#{{:a 12}, {:a 0}}
                     #{{:a 100}}]
               :types '{a #xt/type :i64, b #xt/type [:? :i64]}}
-             (-> (tu/query-ra [:left-outer-join '[{a b}]
+             (-> (tu/query-ra [:left-outer-join '{:conditions [{a b}]}
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
                                  [{:a 100}]]]
@@ -373,7 +373,7 @@
 
     (t/is (= {:res []
               :types '{a #xt/type :i64, b #xt/type [:? :i64]}}
-             (tu/query-ra [:left-outer-join '[{a b}]
+             (tu/query-ra [:left-outer-join '{:conditions [{a b}]}
                            [::tu/pages '{a #xt/type :i64} []]
                            [::tu/pages
                             [[{:b 12}, {:b 2}]
@@ -383,7 +383,7 @@
     (t/is (= {:res [#{{:a 12}, {:a 0}}
                     #{{:a 100}}]
               :types '{a #xt/type :i64, b #xt/type [:? :i64]}}
-             (-> (tu/query-ra [:left-outer-join '[{a b}]
+             (-> (tu/query-ra [:left-outer-join '{:conditions [{a b}]}
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
                                  [{:a 100}]]]
@@ -398,7 +398,7 @@
                   {:a 10, :b 42} 1
                   {:a 12, :b 42, :c 12, :d 42, :e 0} 6
                   {:a 12, :b 42, :c 12, :d 42, :e 1} 2}]
-                (->> (tu/query-ra [:left-outer-join '[{a c} {b d}]
+                (->> (tu/query-ra [:left-outer-join '{:conditions [{a c} {b d}]}
                                    [::tu/pages
                                     [[{:a 12, :b 42}
                                       {:a 12, :b 42}
@@ -427,28 +427,28 @@
     (t/is (= [{{:a 12, :b 42} 1
                {:a 12, :b 44, :c 12, :d 43} 1
                {:a 10, :b 42} 2}]
-             (->> (tu/query-ra [:left-outer-join '[{a c} (> b d)] left right]
+             (->> (tu/query-ra [:left-outer-join '{:conditions [{a c} (> b d)]} left right]
                                {:preserve-pages? true})
                   (mapv frequencies))))
 
     (t/is (= [{{:a 12, :b 42} 1
                {:a 12, :b 44} 1
                {:a 10, :b 42} 2}]
-             (->> (tu/query-ra [:left-outer-join '[{a c} (> b d) (== c -1)] left right]
+             (->> (tu/query-ra [:left-outer-join '{:conditions [{a c} (> b d) (== c -1)]} left right]
                                {:preserve-pages? true})
                   (mapv frequencies))))
 
     (t/is (= [{{:a 12, :b 42} 1
                {:a 12, :b 44} 1
                {:a 10, :b 42} 2}]
-             (->> (tu/query-ra [:left-outer-join '[{a c} (and (== c -1) (> b d))] left right]
+             (->> (tu/query-ra [:left-outer-join '{:conditions [{a c} (and (== c -1) (> b d))]} left right]
                                {:preserve-pages? true})
                   (mapv frequencies))))
 
     (t/is (= [{{:a 12, :b 42} 1
                {:a 12, :b 44} 1
                {:a 10, :b 42} 2}]
-             (->> (tu/query-ra [:left-outer-join '[{a c} {b d} (== c -1)] left right]
+             (->> (tu/query-ra [:left-outer-join '{:conditions [{a c} {b d} (== c -1)]} left right]
                                {:preserve-pages? true})
                   (mapv frequencies))))))
 
@@ -458,7 +458,7 @@
                     {{:a 12, :b 12, :c 2} 2, {:a 100, :b 100, :c 3} 1}
                     {{:a 0} 1}]
               :types '{a #xt/type [:? :i64], b #xt/type [:? :i64], c #xt/type [:? :i64]}}
-             (-> (tu/query-ra [:full-outer-join '[{a b}]
+             (-> (tu/query-ra [:full-outer-join '{:conditions [{a b}]}
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
                                  [{:a 12}, {:a 100}]]]
@@ -472,7 +472,7 @@
                     {{:a 100, :b 100, :c 3} 1}
                     {{:a 0} 1}]
               :types '{a #xt/type [:? :i64], b #xt/type [:? :i64], c #xt/type [:? :i64]}}
-             (-> (tu/query-ra [:full-outer-join '[{a b}]
+             (-> (tu/query-ra [:full-outer-join '{:conditions [{a b}]}
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
                                  [{:a 12}, {:a 100}]]]
@@ -486,7 +486,7 @@
     (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a 100, :b 100, :c 3} 1}
                     {{:a 12, :b 12, :c 2} 2}]
               :types '{a #xt/type [:? :i64], b #xt/type [:? :i64], c #xt/type [:? :i64]}}
-             (-> (tu/query-ra [:full-outer-join '[{a b}]
+             (-> (tu/query-ra [:full-outer-join '{:conditions [{a b}]}
                                [::tu/pages
                                 [[{:a 12}]
                                  [{:a 12}, {:a 100}]]]
@@ -499,7 +499,7 @@
     (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a 12, :b 12, :c 2} 2}
                     {{:a 100, :b 100, :c 3} 1}]
               :types '{a #xt/type [:? :i64], b #xt/type [:? :i64], c #xt/type [:? :i64]}}
-             (-> (tu/query-ra [:full-outer-join '[{a b}]
+             (-> (tu/query-ra [:full-outer-join '{:conditions [{a b}]}
                                [::tu/pages
                                 [[{:a 12}]
                                  [{:a 12}, {:a 100}]]]
@@ -512,7 +512,7 @@
   (t/testing "empty input"
     (t/is (= {:res [{{:a 0} 1, {:a 100} 1, {:a 12} 1}]
               :types '{a #xt/type [:? :i64], b #xt/type [:? :i64]}}
-             (-> (tu/query-ra [:full-outer-join '[{a b}]
+             (-> (tu/query-ra [:full-outer-join '{:conditions [{a b}]}
                                [::tu/pages
                                 [[{:a 12}, {:a 0}]
                                  [{:a 100}]]]
@@ -523,7 +523,7 @@
     (t/is (= {:res [{{:b 12} 1, {:b 2} 1}
                     {{:b 100} 1, {:b 0} 1}]
               :types '{a #xt/type [:? :i64], b #xt/type [:? :i64]}}
-             (-> (tu/query-ra [:full-outer-join '[{a b}]
+             (-> (tu/query-ra [:full-outer-join '{:conditions [{a b}]}
                                [::tu/pages '{a #xt/type :i64} []]
                                [::tu/pages
                                 [[{:b 12}, {:b 2}]
@@ -540,7 +540,7 @@
                   {:a 12 :b 42 :c 12 :d 42 :e 1} 2}
                  {{:a 10 :b 42} 1
                   {:a 11 :b 44} 1}]
-                (->> (tu/query-ra [:full-outer-join '[{a c} {b d}]
+                (->> (tu/query-ra [:full-outer-join '{:conditions [{a c} {b d}]}
                                    [::tu/pages
                                     [[{:a 12, :b 42}
                                       {:a 12, :b 42}
@@ -571,7 +571,7 @@
               {:a 10, :b 42} 2
               {:c 11, :d 42} 1}
 
-             (->> (tu/query-ra [:full-outer-join '[{a c} (not (== b 44))] left right])
+             (->> (tu/query-ra [:full-outer-join '{:conditions [{a c} (not (== b 44))]} left right])
                   (frequencies))))
 
     (t/is (= {{:a 12, :b 42} 1
@@ -579,13 +579,13 @@
               {:a 10, :b 42} 2
               {:c 12, :d 43} 1
               {:c 11, :d 42} 1}
-             (->> (tu/query-ra [:full-outer-join '[{a c} false] left right])
+             (->> (tu/query-ra [:full-outer-join '{:conditions [{a c} false]} left right])
                   (frequencies))))))
 
 (t/deftest test-anti-equi-join
   (t/is (= {:res [{{:a 0} 2}]
             :types '{a #xt/type :i64}}
-           (-> (tu/query-ra [:anti-join '[{a b}]
+           (-> (tu/query-ra [:anti-join '{:conditions [{a b}]}
                              [::tu/pages
                               [[{:a 12}, {:a 0}, {:a 0}]
                                [{:a 100}]]]
@@ -596,7 +596,7 @@
                (update :res (partial mapv frequencies)))))
 
   (t/testing "empty input"
-    (t/is (empty? (:res (tu/query-ra [:anti-join '[{a b}]
+    (t/is (empty? (:res (tu/query-ra [:anti-join '{:conditions [{a b}]}
                                       [::tu/pages '{a #xt/type :i64} []]
                                       [::tu/pages
                                        [[{:b 12}, {:b 2}]
@@ -604,7 +604,7 @@
 
     (t/is (= [#{{:a 12}, {:a 0}}
               #{{:a 100}}]
-             (->> (tu/query-ra [:anti-join '[{a b}]
+             (->> (tu/query-ra [:anti-join '{:conditions [{a b}]}
                                 [::tu/pages
                                  [[{:a 12}, {:a 0}]
                                   [{:a 100}]]]
@@ -614,21 +614,21 @@
 
   (t/testing "nulls"
     (t/is (= []
-             (tu/query-ra [:anti-join '[{a b}]
+             (tu/query-ra [:anti-join '{:conditions [{a b}]}
                            [:table [{:a nil}]]
                            [:table [{:b 12}, {:b 2}]]])))
 
     (t/is (= []
-             (tu/query-ra [:anti-join '[{a b}]
+             (tu/query-ra [:anti-join '{:conditions [{a b}]}
                            [:table [{:a 12}]]
                            [:table [{:b 12}, {:b nil}]]])))
 
     (t/is (= []
-             (tu/query-ra [:anti-join '[{a b}]
+             (tu/query-ra [:anti-join '{:conditions [{a b}]}
                            [:table [{:a 4}]]
                            [:table [{:b 12}, {:b nil}]]]))))
 
-  (t/is (empty? (tu/query-ra [:anti-join '[{a b}]
+  (t/is (empty? (tu/query-ra [:anti-join '{:conditions [{a b}]}
                               [::tu/pages
                                [[{:a 12}, {:a 2}]
                                 [{:a 100}]]]
@@ -641,7 +641,7 @@
   (->> "multi column anti"
        (t/is (= [{{:a 10 :b 42} 1
                   {:a 11 :b 44} 1}]
-                (->> (tu/query-ra [:anti-join '[{a c} {b d}]
+                (->> (tu/query-ra [:anti-join '{:conditions [{a c} {b d}]}
                                    [::tu/pages
                                     [[{:a 12, :b 42}
                                       {:a 12, :b 42}
@@ -670,18 +670,18 @@
     (t/is (= {{:a 12, :b 44} 1
               {:a 10, :b 42} 2}
 
-             (->> (tu/query-ra [:anti-join '[{a c} (not (== b 44))] left right])
+             (->> (tu/query-ra [:anti-join '{:conditions [{a c} (not (== b 44))]} left right])
                   (frequencies))))
 
     (t/is (= {{:a 12, :b 42} 1
               {:a 12, :b 44} 1
               {:a 10, :b 42} 2}
-             (->> (tu/query-ra [:anti-join '[{a c} false] left right])
+             (->> (tu/query-ra [:anti-join '{:conditions [{a c} false]} left right])
                   (frequencies))))))
 
 (t/deftest test-join-on-true
   (letfn [(run-join [left? right? theta-expr]
-            (->> (tu/query-ra [:join [theta-expr]
+            (->> (tu/query-ra [:join {:conditions [theta-expr]}
                                [::tu/pages '{a #xt/type :i64}
                                 (if left? [[{:a 12}, {:a 0}]] [])]
                                [::tu/pages '{b #xt/type :i64}
@@ -708,7 +708,7 @@
 
 (t/deftest test-loj-on-true
   (letfn [(run-loj [left? right? theta-expr]
-            (->> (tu/query-ra [:left-outer-join [theta-expr]
+            (->> (tu/query-ra [:left-outer-join {:conditions [theta-expr]}
                                [::tu/pages '{a #xt/type :i64}
                                 (if left? [[{:a 12}, {:a 0}]] [])]
                                [::tu/pages '{b #xt/type :i64}
@@ -745,7 +745,7 @@
 
 (t/deftest test-foj-on-true
   (letfn [(run-foj [left? right? theta-expr]
-            (->> (tu/query-ra [:full-outer-join [theta-expr]
+            (->> (tu/query-ra [:full-outer-join {:conditions [theta-expr]}
                                [::tu/pages '{a #xt/type :i64}
                                 (if left? [[{:a 12}, {:a 0}]] [])]
                                [::tu/pages '{b #xt/type :i64}
@@ -788,7 +788,7 @@
 
 (t/deftest test-semi-join-on-true
   (letfn [(run-semi [left? right? theta-expr]
-            (->> (tu/query-ra [:semi-join [theta-expr]
+            (->> (tu/query-ra [:semi-join {:conditions [theta-expr]}
                                [::tu/pages '{a #xt/type :i64}
                                 (if left? [[{:a 12}, {:a 0}]] [])]
 
@@ -807,7 +807,7 @@
 
 (t/deftest test-anti-join-on-true
   (letfn [(run-anti [left? right? theta-expr]
-            (->> (tu/query-ra [:anti-join [theta-expr]
+            (->> (tu/query-ra [:anti-join {:conditions [theta-expr]}
                                [::tu/pages '{a #xt/type :i64}
                                 (if left? [[{:a 12}, {:a 0}]] [])]
                                [::tu/pages '{b #xt/type :i64}
@@ -827,7 +827,7 @@
 
 (t/deftest test-equi-join-expr
   (letfn [(test-equi-join [join-specs left-vals right-vals]
-            (tu/query-ra [:join join-specs
+            (tu/query-ra [:join {:conditions join-specs}
                           [::tu/pages [left-vals]]
                           [::tu/pages [right-vals]]]
                          {}))]
@@ -844,25 +844,25 @@
 
 (t/deftest test-single-join
   (t/is (= [{:x 0, :y 0, :z 0} {:x 0, :y 1, :z 0} {:x 1, :y 2, :z 1}]
-           (tu/query-ra '[:single-join [{x z}]
+           (tu/query-ra '[:single-join {:conditions [{x z}]}
                           [::tu/pages [[{:x 0, :y 0}, {:x 0, :y 1}, {:x 1, :y 2}]]]
                           [::tu/pages [[{:z 0}, {:z 1}]]]])))
 
   (t/is (thrown-with-msg? RuntimeException
                           #"cardinality violation"
-                          (tu/query-ra '[:single-join [{x y}]
+                          (tu/query-ra '[:single-join {:conditions [{x y}]}
                                          [::tu/pages [[{:x 0}, {:x 0}, {:x 1}, {:x 2}]]]
                                          [::tu/pages [[{:y 0}, {:y 1}, {:y 1}]]]]))
         "throws on cardinality > 1")
 
   (t/testing "empty input"
     (t/is (= []
-             (tu/query-ra '[:single-join [{x y}]
+             (tu/query-ra '[:single-join {:conditions [{x y}]}
                             [::tu/pages {x #xt/type :i64} []]
                             [::tu/pages [[{:y 0}, {:y 1}, {:y 1}]]]])))
 
     (t/is (= [{:x 0}]
-             (tu/query-ra '[:single-join [{x y}]
+             (tu/query-ra '[:single-join {:conditions [{x y}]}
                             [::tu/pages [[{:x 0}]]]
                             [::tu/pages {y #xt/type :i64} []]])))))
 
@@ -1029,7 +1029,7 @@
 (t/deftest can-join-on-lists-491
   (t/is (= [{:id [1 2], :foo 0, :bar 5}]
            (tu/query-ra
-            '[:join [{id id}]
+            '[:join {:conditions [{id id}]}
               [::tu/pages [[{:id [1 2], :foo 0}
                             {:id [1 3], :foo 1}]]]
               [::tu/pages [[{:id [1 2], :bar 5}]]]]))))
@@ -1037,7 +1037,7 @@
 (t/deftest can-join-on-structs-491
   (t/is (= [{:id {:a 1, :b 2}, :foo 0, :bar 5}]
            (tu/query-ra
-            '[:join [{id id}]
+            '[:join {:conditions [{id id}]}
               [::tu/pages [[{:id {:a 1, :b 2}, :foo 0}
                             {:id {:a 1, :b 3}, :foo 1}]]]
               [::tu/pages [[{:id {:a 1, :b 2}, :bar 5}]]]]))))
@@ -1080,7 +1080,7 @@
               :types
               '{a #xt/type [:union :utf8 :i64 [:? :null]]
                 b #xt/type [:union :utf8 :i64 [:? :null]]}}
-             (tu/query-ra [:full-outer-join '[{a b}]
+             (tu/query-ra [:full-outer-join '{:conditions [{a b}]}
                            [::tu/pages
                             [[{:a 1}, {:a "2"}]]]
                            [::tu/pages
@@ -1092,7 +1092,7 @@
               :types
               '{a #xt/type [:union :utf8 :i64 [:? :null]]
                 b #xt/type [:union :utf8 :i64 [:? :null]]}}
-             (tu/query-ra [:full-outer-join '[{a b}]
+             (tu/query-ra [:full-outer-join '{:conditions [{a b}]}
                            [::tu/pages
                             [[{:a 1}, {:a "2"}]]]
                            [::tu/pages
@@ -1104,7 +1104,7 @@
               :types
               '{a #xt/type [:union :utf8 :i64 [:? :null]]
                 b #xt/type [:union :utf8 :i64 [:? :null]]}}
-             (tu/query-ra [:full-outer-join '[{a b}]
+             (tu/query-ra [:full-outer-join '{:conditions [{a b}]}
                            [::tu/pages
                             [[{:a 1}, {:a "2"}]]]
                            [::tu/pages
@@ -1149,29 +1149,29 @@
 (t/deftest test-left-side-built-left-outer-join
   (t/is (= [{:a 1, :b 1, :c 1} {:a 2, :b 2, :c 1} {:a 2, :b 2, :c 2}]
            (tu/query-ra
-            '[:left-outer-join [{a b}]
+            '[:left-outer-join {:conditions [{a b}]}
               [:table [{:a 1} {:a 2}]]
               [:table [{:b 1 :c 1} {:b 2 :c 1} {:b 2 :c 2}]]]))
         "left side built LOJ with all matched rows")
 
   (t/is (= [{:a 1, :b 1, :c 1} {:a 2, :b 2, :c 1}]
            (tu/query-ra
-            '[:left-outer-join [{a b}]
+            '[:left-outer-join {:conditions [{a b}]}
               [:table [{:a 1} {:a 2}]]
               [:table [{:b 1 :c 1} {:b 2 :c 1} {:b 3 :c 1}]]]))
         "left side built LOJ with some unmatched rows")
 
   (t/is (= [{:a 1} {:a 2}]
            (tu/query-ra
-            '[:left-outer-join [{a b}]
+            '[:left-outer-join {:conditions [{a b}]}
               [:table [{:a 1} {:a 2}]]
               [:table [{:b 3} {:b 4} {:b 5}]]]))
         "left side built LOJ with all unmatched rows")
 
-  (t/is (= (tu/query-ra '[:left-outer-join [{a b}]
+  (t/is (= (tu/query-ra '[:left-outer-join {:conditions [{a b}]}
                           [:table [{:a 1} {:a 2}]]
                           [:table [{:b 1} {:b 3} {:b 4}]]])
-           (tu/query-ra '[:left-outer-join [{a b}]
+           (tu/query-ra '[:left-outer-join {:conditions [{a b}]}
                           [:table [{:a 1} {:a 2}]]
                           [:table [{:b 1}]]]))
         "left side built LOJ should return same results as right built LOJ (with right side having mostly unmatched rows)"))
@@ -1203,7 +1203,7 @@
                                docs)]))
 
         (t/testing "inner"
-          (let [join (set (tu/query-ra '[:join [{foo bar}]
+          (let [join (set (tu/query-ra '[:join {:conditions [{foo bar}]}
                                          [:rename {_id foo} [:scan {:table #xt/table foo, :columns [_id]}]]
                                          [:rename {_id bar} [:scan {:table #xt/table bar, :columns [_id]}]]]
                                        {:node node}))]
@@ -1214,7 +1214,7 @@
             (t/is (false? (contains? join {:foo 99500, :bar 99500})))))
 
         (t/testing "LOJ"
-          (let [loj (set (tu/query-ra '[:left-outer-join [{foo bar}]
+          (let [loj (set (tu/query-ra '[:left-outer-join {:conditions [{foo bar}]}
                                         [:rename {_id foo}
                                          [:scan {:table #xt/table foo, :columns [_id]}]]
                                         [:rename {_id bar}
@@ -1232,7 +1232,7 @@
             (t/is (true? (contains? loj {:foo 99500})))))
 
         (t/testing "LOJ flipped"
-          (let [loj (set (tu/query-ra '[:left-outer-join [{bar foo}]
+          (let [loj (set (tu/query-ra '[:left-outer-join {:conditions [{bar foo}]}
                                         [:rename {_id bar} [:scan {:table #xt/table bar, :columns [_id]}]]
                                         [:rename {_id foo} [:scan {:table #xt/table foo, :columns [_id]}]]]
                                       {:node node}))
@@ -1248,7 +1248,7 @@
             (t/is (true? (contains? loj {:bar 99300})))))
 
         (t/testing "FOJ"
-          (let [foj (set (tu/query-ra '[:full-outer-join [{foo bar}]
+          (let [foj (set (tu/query-ra '[:full-outer-join {:conditions [{foo bar}]}
                                         [:rename {_id foo} [:scan {:table #xt/table foo, :columns [_id]}]]
                                         [:rename {_id bar} [:scan {:table #xt/table bar, :columns [_id]}]]]
                                       {:node node}))
@@ -1287,7 +1287,7 @@
 
       (t/is (= [{:foo id1, :bar id1, :a 1, :b 1} {:foo id2, :bar id2, :a 2, :b 2}]
                (tu/query-ra '[:order-by {:order-specs [[a]]}
-                              [:join [{foo bar}]
+                              [:join {:conditions [{foo bar}]}
                                [:rename {_id foo}
                                 [:scan {:table #xt/table foo, :columns [_id a]}]]
                                [:rename {_id bar}

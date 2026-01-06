@@ -488,7 +488,7 @@
        [:map tmp-expr-sym->expr-vec
         (wrap-expr-subqueries* plan arg-subqueries)]
        subquery]
-      [:single-join [true]
+      [:single-join {:conditions [true]}
        plan
        subquery])
     :exists
@@ -730,8 +730,8 @@
                 (wrap-select ra-plan))]
           (wrap-project (vec (into acc-provided-vars provided-vars)))))
        [:left-outer-join
-        (->> unifying-vars
-             (mapv (fn [v] {v v})))
+        {:conditions (->> unifying-vars
+                          (mapv (fn [v] {v v})))}
         (:ra-plan acc-plan)
         ra-plan])
      :provided-vars (set/union acc-provided-vars provided-vars)}))

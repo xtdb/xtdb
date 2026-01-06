@@ -200,10 +200,11 @@
     (let [{:keys [columns]} opts]
       (mapv ->projected-column columns))
 
-    [:join join-cond lhs rhs]
-    (into (vec (relation-columns lhs))
-          (remove (join-cond->common-cols join-cond))
-          (vec (relation-columns rhs)))
+    [:join opts lhs rhs]
+    (let [{:keys [conditions]} opts]
+      (into (vec (relation-columns lhs))
+            (remove (join-cond->common-cols conditions))
+            (vec (relation-columns rhs))))
 
     [:mega-join _ rels]
     (vec (mapcat relation-columns rels))
@@ -211,20 +212,22 @@
     [:cross-join lhs rhs]
     (vec (mapcat relation-columns [lhs rhs]))
 
-    [:left-outer-join join-cond lhs rhs]
-    (into (vec (relation-columns lhs))
-          (remove (join-cond->common-cols join-cond))
-          (vec (relation-columns rhs)))
+    [:left-outer-join opts lhs rhs]
+    (let [{:keys [conditions]} opts]
+      (into (vec (relation-columns lhs))
+            (remove (join-cond->common-cols conditions))
+            (vec (relation-columns rhs))))
 
-    [:full-outer-join join-cond lhs rhs]
-    (into (vec (relation-columns lhs))
-          (remove (join-cond->common-cols join-cond))
-          (vec (relation-columns rhs)))
+    [:full-outer-join opts lhs rhs]
+    (let [{:keys [conditions]} opts]
+      (into (vec (relation-columns lhs))
+            (remove (join-cond->common-cols conditions))
+            (vec (relation-columns rhs))))
 
-    [:semi-join _ lhs _]
+    [:semi-join _opts lhs _]
     (relation-columns lhs)
 
-    [:anti-join _ lhs _]
+    [:anti-join _opts lhs _]
     (relation-columns lhs)
 
     [:mark-join projection lhs _]
@@ -232,7 +235,7 @@
       (relation-columns lhs)
       (->projected-column projection))
 
-    [:single-join _ lhs rhs]
+    [:single-join _opts lhs rhs]
     (vec (mapcat relation-columns [lhs rhs]))
 
     [:rename prefix-or-columns relation]
@@ -380,13 +383,14 @@
     ;;=>
     (let [{:keys [predicate]} opts]
       (when (columns-in-both-relations? predicate lhs rhs)
-        [:join [predicate] lhs rhs]))))
+        [:join {:conditions [predicate]} lhs rhs]))))
 
 (defn- merge-joins-to-mega-join [z]
   (r/zmatch z
-    [:join jc r1 r2]
+    [:join opts r1 r2]
     ;;=>
-    [:mega-join jc [r1 r2]]
+    (let [{:keys [conditions]} opts]
+      [:mega-join conditions [r1 r2]])
 
     [:cross-join r1 r2]
     ;;=>
@@ -407,25 +411,28 @@
 (defn- promote-selection-to-join [z]
   (r/zmatch z
     [:select opts
-     [:join join-condition lhs rhs]]
+     [:join join-opts lhs rhs]]
     ;;=>
-    (let [{:keys [predicate]} opts]
+    (let [{:keys [predicate]} opts
+          {:keys [conditions]} join-opts]
       (when (columns-in-both-relations? predicate lhs rhs)
-        [:join (conj join-condition predicate) lhs rhs]))
+        [:join {:conditions (conj conditions predicate)} lhs rhs]))
 
     [:select opts
-     [:anti-join join-condition lhs rhs]]
+     [:anti-join join-opts lhs rhs]]
     ;;=>
-    (let [{:keys [predicate]} opts]
+    (let [{:keys [predicate]} opts
+          {:keys [conditions]} join-opts]
       (when (columns-in-both-relations? predicate lhs rhs)
-        [:anti-join (conj join-condition predicate) lhs rhs]))
+        [:anti-join {:conditions (conj conditions predicate)} lhs rhs]))
 
     [:select opts
-     [:semi-join join-condition lhs rhs]]
+     [:semi-join join-opts lhs rhs]]
     ;;=>
-    (let [{:keys [predicate]} opts]
+    (let [{:keys [predicate]} opts
+          {:keys [conditions]} join-opts]
       (when (columns-in-both-relations? predicate lhs rhs)
-        [:semi-join (conj join-condition predicate) lhs rhs]))))
+        [:semi-join {:conditions (conj conditions predicate)} lhs rhs]))))
 
 (defn columns-in-predicate-present-in-relation? [relation predicate]
   (set/superset? (set (relation-columns relation)) (expr-symbols predicate)))
@@ -878,17 +885,17 @@
       (when (not-empty (expr-correlated-symbols predicate))
         [:select {:predicate predicate} [join-op join-map lhs rhs]]))
 
-    [:join join-map lhs [:select opts rhs]]
+    [:join join-opts lhs [:select opts rhs]]
     ;;=>
     (let [{:keys [predicate]} opts]
       (when (not-empty (expr-correlated-symbols predicate))
-        [:select {:predicate predicate} [:join join-map lhs rhs]]))
+        [:select {:predicate predicate} [:join join-opts lhs rhs]]))
 
-    [:left-outer-join join-map lhs [:select opts rhs]] ;;TODO full-outer-join but also is this correct for LOJ
+    [:left-outer-join join-opts lhs [:select opts rhs]] ;;TODO full-outer-join but also is this correct for LOJ
     ;;=>
     (let [{:keys [predicate]} opts]
       (when (not-empty (expr-correlated-symbols predicate))
-        [:select {:predicate predicate} [:left-outer-join join-map lhs rhs]]))
+        [:select {:predicate predicate} [:left-outer-join join-opts lhs rhs]]))
 
     [:rename prefix-or-columns
      [:select opts
@@ -996,7 +1003,7 @@
       (when-not (parameters-referenced-in-relation? dependent-relation (vals columns))
         (case mode
           :cross-join [:cross-join independent-relation dependent-relation]
-          (:semi-join :anti-join :left-outer-join :single-join) [mode [] independent-relation dependent-relation]
+          (:semi-join :anti-join :left-outer-join :single-join) [mode {:conditions []} independent-relation dependent-relation]
           nil)))))
 
 (defn- apply-mark-join->mark-join
@@ -1044,12 +1051,12 @@
       (cond
         (= predicate mj-col)
         [:map [{mj-col true}]
-         [:semi-join (val (first projection))
+         [:semi-join {:conditions (val (first projection))}
           lhs rhs]]
 
         (= predicate (list 'not mj-col))
         [:map [{mj-col true}]
-         [:anti-join (val (first projection))
+         [:anti-join {:conditions (val (first projection))}
           lhs rhs]]))))
 
 (defn- apply-table-col->unnest [z]
@@ -1102,7 +1109,7 @@
             [(if (= mode :cross-join)
                :join
                mode)
-             [(w/postwalk-replace (set/map-invert columns) predicate)]
+             {:conditions [(w/postwalk-replace (set/map-invert columns) predicate)]}
              independent-relation dependent-relation]))))))
 
 (defn- decorrelate-apply-rule-3
@@ -1228,10 +1235,11 @@
         (when (not= new-join-expressions join-expressions)
           [:mark-join {projected-col new-join-expressions} lhs rhs]))
 
-      [join-type join-expressions lhs rhs]
-      (let [new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
-        (when (not= new-join-expressions join-expressions)
-          [join-type new-join-expressions lhs rhs])))
+      [join-type opts lhs rhs]
+      (let [{:keys [conditions]} opts
+            new-conditions (optimize-join-expression conditions lhs rhs)]
+        (when (not= new-conditions conditions)
+          [join-type {:conditions new-conditions} lhs rhs])))
 
     nil))
 
@@ -1246,17 +1254,17 @@
                  (every? symbol? projection))
         [:apply (->apply-opts opts) i dependent-relation]))
 
-    [:semi-join jc i
+    [:semi-join join-opts i
      [:project projection dependent-relation]]
     ;;=>
     (when (every? symbol? projection)
-      [:semi-join jc i dependent-relation])
+      [:semi-join join-opts i dependent-relation])
 
-    [:anti-join jc i
+    [:anti-join join-opts i
      [:project projection dependent-relation]]
      ;;=>
      (when (every? symbol? projection)
-       [:anti-join jc i dependent-relation])
+       [:anti-join join-opts i dependent-relation])
 
     [:group-by c
      [:project projection dependent-relation]]
@@ -1267,81 +1275,87 @@
 (defn push-semi-and-anti-joins-down [z]
   (r/zmatch
     z
-    [:semi-join join-condition
+    [:semi-join join-opts
      [:cross-join inner-lhs inner-rhs]
      rhs]
     ;;=>
-    (cond (all-columns-across-both-relations-with-one-in-each? join-condition inner-lhs rhs)
-          [:cross-join
-           [:semi-join join-condition inner-lhs rhs]
-           inner-rhs]
+    (let [{:keys [conditions]} join-opts]
+      (cond (all-columns-across-both-relations-with-one-in-each? conditions inner-lhs rhs)
+            [:cross-join
+             [:semi-join join-opts inner-lhs rhs]
+             inner-rhs]
 
-          (all-columns-across-both-relations-with-one-in-each? join-condition inner-rhs rhs)
-          [:cross-join
-           inner-lhs
-           [:semi-join join-condition inner-rhs rhs]])
+            (all-columns-across-both-relations-with-one-in-each? conditions inner-rhs rhs)
+            [:cross-join
+             inner-lhs
+             [:semi-join join-opts inner-rhs rhs]]))
 
-    [:anti-join join-condition
+    [:anti-join join-opts
      [:cross-join inner-lhs inner-rhs]
      rhs]
     ;;=>
-    (cond (all-columns-across-both-relations-with-one-in-each? join-condition inner-lhs rhs)
-          [:cross-join
-           [:anti-join join-condition inner-lhs rhs]
-           inner-rhs]
+    (let [{:keys [conditions]} join-opts]
+      (cond (all-columns-across-both-relations-with-one-in-each? conditions inner-lhs rhs)
+            [:cross-join
+             [:anti-join join-opts inner-lhs rhs]
+             inner-rhs]
 
-          (all-columns-across-both-relations-with-one-in-each? join-condition inner-rhs rhs)
-          [:cross-join
-           inner-lhs
-           [:anti-join join-condition inner-rhs rhs]])
+            (all-columns-across-both-relations-with-one-in-each? conditions inner-rhs rhs)
+            [:cross-join
+             inner-lhs
+             [:anti-join join-opts inner-rhs rhs]]))
 
-    [:semi-join join-condition
-     [:join inner-join-condition inner-lhs inner-rhs]
+    [:semi-join join-opts
+     [:join inner-join-opts inner-lhs inner-rhs]
      rhs]
     ;;=>
-    (cond (all-columns-across-both-relations-with-one-in-each? join-condition inner-lhs rhs)
-          [:join inner-join-condition
-           [:semi-join join-condition inner-lhs rhs]
-           inner-rhs]
+    (let [{:keys [conditions]} join-opts]
+      (cond (all-columns-across-both-relations-with-one-in-each? conditions inner-lhs rhs)
+            [:join inner-join-opts
+             [:semi-join join-opts inner-lhs rhs]
+             inner-rhs]
 
-          (all-columns-across-both-relations-with-one-in-each? join-condition inner-rhs rhs)
-          [:join inner-join-condition
-           inner-lhs
-           [:semi-join join-condition inner-rhs rhs]])
+            (all-columns-across-both-relations-with-one-in-each? conditions inner-rhs rhs)
+            [:join inner-join-opts
+             inner-lhs
+             [:semi-join join-opts inner-rhs rhs]]))
 
-    [:anti-join join-condition
-     [:join inner-join-condition inner-lhs inner-rhs]
+    [:anti-join join-opts
+     [:join inner-join-opts inner-lhs inner-rhs]
      rhs]
     ;;=>
-    (cond (all-columns-across-both-relations-with-one-in-each? join-condition inner-lhs rhs)
-          [:join inner-join-condition
-           [:anti-join join-condition inner-lhs rhs]
-           inner-rhs]
+    (let [{:keys [conditions]} join-opts]
+      (cond (all-columns-across-both-relations-with-one-in-each? conditions inner-lhs rhs)
+            [:join inner-join-opts
+             [:anti-join join-opts inner-lhs rhs]
+             inner-rhs]
 
-          (all-columns-across-both-relations-with-one-in-each? join-condition inner-rhs rhs)
-          [:join inner-join-condition
-           inner-lhs
-           [:anti-join join-condition inner-rhs rhs]])
+            (all-columns-across-both-relations-with-one-in-each? conditions inner-rhs rhs)
+            [:join inner-join-opts
+             inner-lhs
+             [:anti-join join-opts inner-rhs rhs]]))
 
-    [:semi-join join-condition
+    [:semi-join join-opts
      [:map projection
       inner-lhs]
      inner-rhs]
     ;; =>
-    (when-not (predicate-depends-on-calculated-column? join-condition projection)
-      [:map projection
-       [:semi-join (w/postwalk-replace (rename-map-for-projection-spec projection) join-condition)
-        inner-lhs inner-rhs]])
+    (let [{:keys [conditions]} join-opts]
+      (when-not (predicate-depends-on-calculated-column? conditions projection)
+        [:map projection
+         [:semi-join {:conditions (w/postwalk-replace (rename-map-for-projection-spec projection) conditions)}
+          inner-lhs inner-rhs]]))
 
-    [:anti-join join-condition
+    [:anti-join join-opts
      [:map projection
       inner-lhs]
      inner-rhs]
     ;; =>
-    (when-not (predicate-depends-on-calculated-column? join-condition projection)
-      [:map projection
-       [:anti-join (w/postwalk-replace (rename-map-for-projection-spec projection) join-condition)
-        inner-lhs inner-rhs]])))
+    (let [{:keys [conditions]} join-opts]
+      (when-not (predicate-depends-on-calculated-column? conditions projection)
+        [:map projection
+         [:anti-join {:conditions (w/postwalk-replace (rename-map-for-projection-spec projection) conditions)}
+          inner-lhs inner-rhs]]))))
 
 (defn- promote-selection-to-mega-join [z]
   (r/zmatch

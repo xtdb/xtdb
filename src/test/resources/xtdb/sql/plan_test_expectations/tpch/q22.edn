@@ -19,17 +19,17 @@
       [:select
        {:predicate (> c.1/c_acctbal _sq_4)}
        [:single-join
-        []
+        {:conditions []}
         [:map
          [{_sq_2 true}]
          [:semi-join
-          [{_needle xt.values.3/_column_1}]
+          {:conditions [{_needle xt.values.3/_column_1}]}
           [:map
            [{_needle (substring c.1/c_phone 1 2)}]
            [:map
             [{_sq_9 true}]
             [:anti-join
-             [{c.1/_id o_custkey}]
+             {:conditions [{c.1/_id o_custkey}]}
              [:rename
               c.1
               [:scan
@@ -74,7 +74,7 @@
           [:map
            [{_sq_6 true}]
            [:semi-join
-            [{_needle xt.values.7/_column_1}]
+            {:conditions [{_needle xt.values.7/_column_1}]}
             [:map
              [{_needle (substring c.5/c_phone 1 2)}]
              [:rename
