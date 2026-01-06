@@ -234,9 +234,9 @@
                                   (apply types/merge-types))]
 
     (map (->> (.getChildren vec-type)
-              (into {} (map (fn [^Field field]
-                              [(symbol (.getName field))
-                               field]))))
+              (into {} (map (fn [[field-name ^VectorType child-type]]
+                              [(symbol field-name)
+                               (.toField child-type field-name)]))))
          '[depth op explain])))
 
 (def ^:private explain-analyze-fields

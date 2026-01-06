@@ -5,13 +5,11 @@
              {"_valid_to" :instant}
              {"op"
               [:union
-               {"delete" [:? :null]}
-               {"erase" [:? :null]}
-               {"put"
+               {"delete" [:? :null],
+                "erase" [:? :null],
+                "put"
                 [:struct
-                 {"_id" :i64}
-                 {"bar" :i64}
-                 {"toto" [:? :utf8]}]}]}),
+                 {"_id" :i64, "bar" :i64, "toto" [:? :utf8]}]}]}),
  :batches
  ([{:xt/system-from #xt/zdt "2020-01-05T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "-290308-12-21T19:59:05.224192Z[UTC]",

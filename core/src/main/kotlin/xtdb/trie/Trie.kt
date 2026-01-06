@@ -10,6 +10,7 @@ import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.IID
 import xtdb.arrow.VectorType.Companion.NULL
 import xtdb.arrow.VectorType.Companion.INSTANT
+import xtdb.arrow.VectorType.Companion.asType
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.schema
 import xtdb.arrow.withName
@@ -116,9 +117,9 @@ object Trie {
             "_valid_to" ofType INSTANT,
             "op" ofType VectorType.unionOf(
                 *(listOfNotNull(
-                    putDocField?.withName("put"),
-                    "delete" ofType NULL,
-                    "erase" ofType NULL
+                    putDocField?.let { "put" to it.asType },
+                    "delete" to NULL,
+                    "erase" to NULL
                 ).toTypedArray())
             )
         )

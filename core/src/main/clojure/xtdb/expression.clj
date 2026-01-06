@@ -2073,8 +2073,8 @@
 
 (defn write-value-out-code [^VectorType return-type]
   (if (instance? ArrowType$Union (.getArrowType return-type))
-    (let [writer-syms (->> (.getChildren return-type)
-                           (into {} (map (juxt types/field->col-type (fn [_] (gensym 'out-writer))))))]
+    (let [writer-syms (->> (vals (.getChildren return-type))
+                           (into {} (map (juxt types/vec-type->col-type (fn [_] (gensym 'out-writer))))))]
       {:writer-bindings (into []
                               (mapcat (fn [[value-type writer-sym]]
                                         [writer-sym `(.vectorFor ~out-vec-sym

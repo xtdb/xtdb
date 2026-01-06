@@ -1643,7 +1643,7 @@
                                 :y [3.4 8.25]})]
     (t/is (= {:res [{:x 1.2, :y 3.4}
                     {:x 3.4, :y 8.25}]
-              :res-type #xt/type [:struct {"x" :f64} {"y" :f64}]}
+              :res-type #xt/type [:struct {"x" :f64, "y" :f64}]}
              (run-projection rel '{:x x, :y y})))
 
     (t/is (= {:res [3.4 8.25], :res-type #xt/type :f64}
@@ -1658,7 +1658,7 @@
                                 :y$y [3.4 8.25]})]
     (t/is (= {:res [{:x/x 1.2, :y/y 3.4}
                     {:x/x 3.4, :y/y 8.25}]
-              :res-type #xt/type [:struct {"x$x" :f64} {"y$y" :f64}]}
+              :res-type #xt/type [:struct {"x$x" :f64, "y$y" :f64}]}
              (run-projection rel '{:x$x x$x, :y$y y$y})))))
 
 (t/deftest test-nested-structs
@@ -1799,7 +1799,7 @@
   (with-open [rel (tu/open-rel {:x [{:a 42, :b 8}, {:a 12, :b 5}]})]
     (t/is (= {:res [{:a 42, :b 8, :sum 50}
                     {:a 12, :b 5, :sum 17}]
-              :res-type #xt/type [:struct {"a" :i64} {"b" :i64} {"sum" :i64}]}
+              :res-type #xt/type [:struct {"a" :i64, "b" :i64, "sum" :i64}]}
              (run-projection rel '{:a (. x a)
                                    :b (. x b)
                                    :sum (+ (. x a) (. x b))})))))
@@ -1817,7 +1817,8 @@
                     {:b 12}
                     {:a 15, :b 25.0}
                     10.0]
-              :res-type #xt/type [:union [:struct {"a" [:? :i64]} {"b" [:union [:? :i64] :f64]}] :f64]}
+              :res-type #xt/type [:union :f64 [:struct {"a" [:? :i64], 
+                                                        "b" [:union [:? :i64] :f64]}]]}
              (run-projection rel 'x)))
 
     (t/is (= {:res [42 12 nil nil 15 nil]
@@ -1830,7 +1831,8 @@
                     {:xb 12}
                     {:xa 15, :xb 25.0}
                     {}],
-              :res-type #xt/type [:struct {"xa" [:? :i64]} {"xb" [:union :f64 :i64 [:? :null]]}]}
+              :res-type #xt/type [:struct {"xa" [:? :i64], 
+                                           "xb" [:union :f64 :i64 [:? :null]]}]}
              (run-projection rel '{:xa (. x a),
                                    :xb (. x b)})))))
 
@@ -1880,14 +1882,15 @@
                     {:sums [nil 11.5]}
                     {:a 15, :sums [40 nil]}
                     {:sums [nil nil]}],
-              :res-type #xt/type [:struct {"a" [:union :f64 :i64 [:? :null]]}
-                                          {"sums" [:list [:union :f64 :i64 [:? :null]]]}]}
+              :res-type #xt/type [:struct {"a" [:union :f64 :i64 [:? :null]],
+                                           "sums" [:list [:union :f64 :i64 [:? :null]]]}]}
              (run-projection rel '{:a (. x a),
                                    :sums [(+ (. x a) (. x b))
                                           (+ (. x b) (nth (. x c) 1))]})))))
 
 (t/deftest absent-handling-2944
-  (with-open [rel (vr/rel-reader [(tu/open-vec #xt/field {"x" [:struct {"maybe-float" [:? :f64]} {"maybe-str" [:? :utf8]}]}
+  (with-open [rel (vr/rel-reader [(tu/open-vec #xt/field {"x" [:struct {"maybe-float" [:? :f64], 
+                                                                        "maybe-str" [:? :utf8]}]}
                                                [{}])])]
 
     (t/is (= {:res [nil], :res-type #xt/type [:? :f64]}

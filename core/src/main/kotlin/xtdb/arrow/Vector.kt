@@ -137,7 +137,8 @@ sealed class Vector : VectorReader, VectorWriter {
         fun open(al: BufferAllocator, field: Field) = field.openVector(al)
 
         @JvmStatic
-        fun open(al: BufferAllocator, name: FieldName, type: VectorType) = open(al, name ofType type)
+        @JvmName("open")
+        fun BufferAllocator.openVector(name: FieldName, type: VectorType) = open(this, name ofType type)
 
         fun Field.openVector(al: BufferAllocator): Vector {
             val name: String = this.name

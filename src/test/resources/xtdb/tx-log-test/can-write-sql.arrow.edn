@@ -3,7 +3,7 @@
               [:list
                [:union
                 {"sql"
-                 [:struct {"query" :utf8} {"args" [:? :varbinary]}]}]]}
+                 [:struct {"query" :utf8, "args" [:? :varbinary]}]}]]}
              {"system-time" [:? :instant]}
              {"default-tz" :utf8}
              {"user" [:? :utf8]}

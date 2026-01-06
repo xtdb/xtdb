@@ -3,16 +3,16 @@
               [:list
                [:union
                 {"sql"
-                 [:struct {"query" :utf8} {"args" [:? :varbinary]}]}]]}
+                 [:struct {"query" :utf8, "args" [:? :varbinary]}]}]]}
              {"system-time" [:? :instant]}
              {"default-tz" :utf8}
              {"user" [:? :utf8]}
              {"user-metadata"
               [:?
                :struct
-               {"source" :utf8}
-               {"tags" [:list :utf8]}
-               {"correlation_id" :utf8}]}),
+               {"source" :utf8,
+                "tags" [:list :utf8],
+                "correlation_id" :utf8}]}),
  :data
  [{:user-metadata
    {:source "mobile-app",

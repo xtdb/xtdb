@@ -34,9 +34,10 @@
 
 
        (with-open [rel (Relation/openFromArrowStream tu/*allocator* actual-bytes)]
-         (t/is (= (aet/read-arrow-edn-file file)
-                  (doto (aet/->arrow-edn rel)
-                    (aet/maybe-write-arrow-edn! file)))
+         (t/is (= (util/->clj (aet/read-arrow-edn-file file))
+                  (util/->clj (doto {:schema (.getSchema rel), 
+                                     :data (util/->clj (.getAsMaps rel))}
+                                (aet/maybe-write-arrow-edn! file))))
                (str "Mismatch in serialized tx-ops for " (.getName file))))))))
 
 (def devices-docs

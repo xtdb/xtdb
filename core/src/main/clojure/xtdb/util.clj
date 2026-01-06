@@ -20,7 +20,9 @@
            (java.util Collection Collections LinkedHashMap Map Set UUID WeakHashMap)
            (java.util.concurrent ExecutionException Executors ThreadFactory)
            (org.apache.arrow.memory BufferAllocator)
+           (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb Bytes TaggedValue)
+           (xtdb.arrow VectorType)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.util Iid NormalForm)))
 
@@ -47,6 +49,13 @@
                     (TaggedValue. (.getTag ^TaggedValue v) (->clj (.getValue ^TaggedValue v)))
 
                     (bytes? v) (Bytes. v)
+
+                    (instance? Schema v)
+                    (->> (.getFields ^Schema v)
+                         (into {} (map (juxt Field/.getName VectorType/fromField))))
+
+                    (instance? Field v)
+                    {(Field/.getName v) (VectorType/fromField v)}
 
                     :else v))
                 v))

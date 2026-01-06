@@ -242,7 +242,7 @@ class StructVectorTest {
             assertEquals(els, structVec.asList)
 
             assertEquals(
-                "struct".asStructOf("i32" ofType maybe(I32), "utf8" ofType maybe(UTF8)),
+                "struct" ofType structOf("i32" to maybe(I32), "utf8" to maybe(UTF8)),
                 structVec.field
             )
         }
@@ -260,7 +260,7 @@ class StructVectorTest {
             )
 
             assertEquals(
-                "struct" ofType maybe(structOf("i32" ofType I32, "utf8" ofType UTF8)),
+                "struct" ofType maybe(structOf("i32" to I32, "utf8" to UTF8)),
                 structVec.field
             )
         }

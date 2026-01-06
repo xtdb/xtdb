@@ -1,25 +1,25 @@
 {:schema
  #xt/schema ({"nodes"
               [:union
-               {"nil" [:? :null]}
-               {"branch-iid" [:list [:? :i32]]}
-               {"leaf"
+               {"nil" [:? :null],
+                "branch-iid" [:list [:? :i32]],
+                "leaf"
                 [:struct
-                 {"data-page-idx" :i32}
-                 {"columns"
+                 {"data-page-idx" :i32,
+                  "columns"
                   [:list
                    {"col"
                     [:struct
-                     {"col-name" :utf8}
-                     {"root-col?" :bool}
-                     {"count" :i64}
-                     {"bytes" [:? :struct {"bloom" [:? :varbinary]}]}
-                     {"date-times"
-                      [:? :struct {"min" :f64} {"max" :f64}]}
-                     {"numbers" [:? :struct {"min" :f64} {"max" :f64}]}
-                     {"bool" [:? :bool]}
-                     {"struct" [:? :list :i32]}
-                     {"transit" [:? :bool]}]}]}]}]}),
+                     {"col-name" :utf8,
+                      "transit" [:? :bool],
+                      "count" :i64,
+                      "bool" [:? :bool],
+                      "bytes" [:? :struct {"bloom" [:? :varbinary]}],
+                      "numbers" [:? :struct {"min" :f64, "max" :f64}],
+                      "date-times"
+                      [:? :struct {"min" :f64, "max" :f64}],
+                      "struct" [:? :list :i32],
+                      "root-col?" :bool}]}]}]}]}),
  :batches
  ([{:nodes
     #xt/tagged [:leaf

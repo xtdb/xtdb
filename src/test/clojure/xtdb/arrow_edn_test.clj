@@ -18,10 +18,7 @@
       ))
 
 (defn read-arrow-edn-file [path-ish]
-  (util/->clj (read-string (slurp (.toFile (util/->path path-ish))))))
-
-(defn ->arrow-edn [^Relation rel]
-  {:schema (.getSchema rel), :data (util/->clj (.getAsMaps rel))})
+  (read-string (slurp (.toFile (util/->path path-ish)))))
 
 (defn- write-arrow-edn-file! [^Path path, data]
   (with-open [out (io/writer (.toFile path))]

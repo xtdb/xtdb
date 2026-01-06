@@ -10,9 +10,9 @@ import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation.Companion.loader
 import xtdb.kw
 import xtdb.arrow.VectorType.Companion.asListOf
-import xtdb.arrow.VectorType.Companion.asUnionOf
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.arrow.VectorType.Companion.unionOf
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 
@@ -253,8 +253,8 @@ class RelationTest {
             assertEquals(
                 schema(
                     "foo" ofType maybe(VectorType.I32),
-                    "bar".asUnionOf(
-                        "utf8" ofType maybe(VectorType.UTF8),
+                    "bar" ofType unionOf(
+                        "utf8" to maybe(VectorType.UTF8),
                         "list" asListOf VectorType.UTF8
                     )
                 ),

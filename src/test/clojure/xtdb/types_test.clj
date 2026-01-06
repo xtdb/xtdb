@@ -100,31 +100,29 @@
                                  #xt/field [:list :i64]))))
 
   (t/testing "merges struct types"
-    (t/is (= #xt/field [:struct {"a" :utf8} {"b" :utf8}]
-             (types/merge-fields #xt/field [:struct {"a" :utf8} {"b" :utf8}]
-                                 #xt/field [:struct {"a" :utf8} {"b" :utf8}])))
+    (t/is (= #xt/field [:struct {"a" :utf8, "b" :utf8}]
+             (types/merge-fields #xt/field [:struct {"a" :utf8, "b" :utf8}]
+                                 #xt/field [:struct {"a" :utf8, "b" :utf8}])))
 
-    (t/is (= #xt/field [:struct {"a" :utf8} {"b" [:union :utf8 :i64]}]
-             (types/merge-fields #xt/field [:struct {"a" :utf8} {"b" :utf8}]
-                                 #xt/field [:struct {"a" :utf8} {"b" :i64}])))
+    (t/is (= #xt/field [:struct {"a" :utf8, "b" [:union :utf8 :i64]}]
+             (types/merge-fields #xt/field [:struct {"a" :utf8, "b" :utf8}]
+                                 #xt/field [:struct {"a" :utf8, "b" :i64}])))
 
-    (t/is (= #xt/field {"a" [:? :struct {"a" :utf8} {"b" [:union :utf8 :i64]}]}
-             (types/merge-fields #xt/field {"a" [:union [:? :null] [:struct {"a" :utf8} {"b" :utf8}]]}
-                                 #xt/field {"a" [:struct {"a" :utf8} {"b" :i64}]})))
+    (t/is (= #xt/field {"a" [:? :struct {"a" :utf8, "b" [:union :utf8 :i64]}]}
+             (types/merge-fields #xt/field {"a" [:union [:? :null] [:struct {"a" :utf8, "b" :utf8}]]}
+                                 #xt/field {"a" [:struct {"a" :utf8, "b" :i64}]})))
 
-    (t/is (= #xt/field [:struct {"a" [:? :utf8]} {"b" :utf8} {"c" [:? :i64]}]
-             (types/merge-fields #xt/field [:struct {"a" :utf8} {"b" :utf8}]
-                                 #xt/field [:struct {"b" :utf8} {"c" :i64}])))
+    (t/is (= #xt/field [:struct {"a" [:? :utf8], "b" :utf8, "c" [:? :i64]}]
+             (types/merge-fields #xt/field [:struct {"a" :utf8, "b" :utf8}]
+                                 #xt/field [:struct {"b" :utf8, "c" :i64}])))
 
     (t/is (= #xt/field [:union :f64 [:struct {"a" [:union :i64 :utf8]}]]
              (types/merge-fields #xt/field [:union :f64 [:struct {"a" :i64}]]
                                  #xt/field [:struct {"a" :utf8}])))
 
-    (t/is (= #xt/field [:struct
-                        {"a" [:union :i64 :bool]}
-                        {"b" [:union :utf8 [:struct {"c" :utf8} {"d" :utf8}]]}]
-             (types/merge-fields #xt/field [:struct {"a" :i64} {"b" [:struct {"c" :utf8} {"d" :utf8}]}]
-                                 #xt/field [:struct {"a" :bool} {"b" :utf8}]))))
+    (t/is (= #xt/field [:struct {"a" [:union :i64 :bool], "b" [:union :utf8 [:struct {"c" :utf8, "d" :utf8}]]}]
+             (types/merge-fields #xt/field [:struct {"a" :i64, "b" [:struct {"c" :utf8, "d" :utf8}]}]
+                                 #xt/field [:struct {"a" :bool, "b" :utf8}]))))
 
   (t/testing "null behaviour"
     (t/is (= #xt/field [:? :null]
@@ -165,9 +163,9 @@
     (t/is (= #xt/field [:struct {"foo" [:struct {"bibble" :bool}]}]
              (types/merge-fields #xt/field [:struct {"foo" [:struct {"bibble" :bool}]}])))
 
-    (t/is (= #xt/field [:struct {"foo" [:union :utf8 [:struct {"bibble" :bool}]]} {"bar" [:? :i64]}]
+    (t/is (= #xt/field [:struct {"foo" [:union :utf8 [:struct {"bibble" :bool}]], "bar" [:? :i64]}]
              (types/merge-fields #xt/field [:struct {"foo" [:struct {"bibble" :bool}]}]
-                                 #xt/field [:struct {"foo" :utf8} {"bar" :i64}])))))
+                                 #xt/field [:struct {"foo" :utf8, "bar" :i64}])))))
 
 (t/deftest test-npe-on-empty-list-children-4721
   (t/testing "merge fields with empty list children shouldn't throw NPE"

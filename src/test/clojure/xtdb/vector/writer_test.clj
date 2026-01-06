@@ -56,9 +56,8 @@
         (.vectorFor a-wtr "utf8" (FieldType/notNullable (.getType Types$MinorType/VARCHAR)))
 
         (t/is (= #xt/field {"my-duv" [:union
-                                       {"struct" [:struct
-                                                  {"a" [:union {"i64" :i64} {"utf8" :utf8}]}
-                                                  {"b" [:union {"f64" :f64}]}]}]}
+                                       {"struct" [:struct {"a" [:union {"i64" :i64, "utf8" :utf8}],
+                                                           "b" [:union {"f64" :f64}]}]}]}
 
                  (.getField duv)))))))
 
@@ -141,7 +140,7 @@
                  (.getField)))
           "new type promotes the struct key")
 
-    (t/is (= #xt/field {"my-struct" [:struct {"foo" :f64} {"bar" :i64}]}
+    (t/is (= #xt/field {"my-struct" [:struct {"foo" :f64, "bar" :i64}]}
              (-> struct-vec
                  (doto (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :i64)))
                  (doto (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :i64)))
@@ -157,7 +156,7 @@
                  (.vectorFor "bar")
                  (.getField))))
 
-    (t/is (= #xt/field {"my-struct" [:struct {"foo" :f64} {"bar" [:union :i64 :f64]}]}
+    (t/is (= #xt/field {"my-struct" [:struct {"foo" :f64, "bar" [:union :i64 :f64]}]}
              (-> struct-vec
                  (doto (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :f64)))
                  (.getField)))))

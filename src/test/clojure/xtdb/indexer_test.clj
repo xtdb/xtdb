@@ -235,12 +235,11 @@
           (t/is (= #xt/field {"list" [:? :list [:union :f64 :utf8 :instant :bool]]}
                    (.getField tc #xt/table xt_docs "list")))
 
-          (t/is (= #xt/field {"struct" [:? :struct
-                                        {"a" [:union :i64 :bool]}
-                                        {"b" [:union
-                                              :utf8
-                                              ;; TODO these shouldn't be optional strings, really. #4988
-                                              [:struct {"c" [:? :utf8]} {"d" [:? :utf8]}]]}]}
+          (t/is (= #xt/field {"struct" [:? :struct {"a" [:union :i64 :bool],
+                                                      "b" [:union
+                                                           :utf8
+                                                           ;; TODO these shouldn't be optional strings, really. #4988
+                                                           [:struct {"c" [:? :utf8], "d" [:? :utf8]}]]}]}
                    (.getField tc #xt/table xt_docs "struct"))))))))
 
 (t/deftest drops-nils-on-round-trip

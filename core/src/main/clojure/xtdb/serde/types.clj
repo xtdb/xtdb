@@ -1,7 +1,6 @@
 (ns xtdb.serde.types
   (:require [clojure.pprint :as pp])
   (:import (java.io Writer)
-           [java.util List]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
            (xtdb.arrow ArrowTypes VectorType)
@@ -188,7 +187,23 @@
 
     :iid (.getArrowType VectorType/IID)))
 
-(declare render-field)
+(declare render-field render-type)
+
+(defn- render-children
+  "Renders children map to shorthand format.
+   Returns: (optionally) a map of non-matching entries, then bare types for matching ones."
+  [children ctx]
+  (let [{matching true, non-matching false}
+        (group-by (fn [[field-name ^VectorType child-type]]
+                    (case ctx
+                      (:union :sparse-union) (= field-name (ArrowTypes/toLeg (.getArrowType child-type)))
+                      (:list :set) (= "$data$" field-name)
+                      false))
+                  children)]
+    (concat
+     (when (seq non-matching)
+       [(into {} (map (fn [[k v]] [k (render-type v)]) non-matching))])
+     (map (fn [[_ v]] (render-type v)) matching))))
 
 (defn render-type
   ([^VectorType type]
@@ -198,13 +213,13 @@
    (let [arrow-type-spec (<-arrow-type arrow-type)]
      (if (and (not nullable?) (empty? children))
        arrow-type-spec
-       
+
        (as-> [] type-spec
          (cond-> type-spec nullable? (conj :?))
          (if (keyword? arrow-type-spec)
            (conj type-spec arrow-type-spec)
            (into type-spec arrow-type-spec))
-         (into type-spec (map #(render-field % arrow-type-spec) children)))))))
+         (into type-spec (render-children children arrow-type-spec)))))))
 
 (defn render-field
   ([field] (render-field field nil))
@@ -227,20 +242,36 @@
 
 (declare ^xtdb.arrow.VectorType ->type)
 
-(defn- ->field* ^org.apache.arrow.vector.types.pojo.Field [field-spec ctx]
-   (cond
+(defn- ->child-entries
+  "Converts child specs to map entries {name -> VectorType}.
+   Accepts: bare types (use leg name), singleton maps, or multi-entry maps."
+  [child-specs ctx]
+  (reduce (fn [acc child-spec]
+            (cond
+              (instance? Field child-spec)
+              (let [^Field f child-spec]
+                (assoc acc (.getName f) (VectorType/fromField f)))
+
+              (map? child-spec)
+              (reduce-kv (fn [m k v] (assoc m k (->type v))) acc child-spec)
+
+              :else
+              (case ctx
+                (:set :list) (assoc acc "$data$" (->type child-spec))
+                (let [vec-type (->type child-spec)]
+                  (assoc acc (ArrowTypes/toLeg (.getArrowType vec-type)) vec-type)))))
+          {}
+          child-specs))
+
+(defn ->field ^org.apache.arrow.vector.types.pojo.Field [field-spec]
+  (cond
     (instance? Field field-spec) field-spec
 
     (and (map? field-spec) (= 1 (count field-spec)))
     (let [[field-name type-spec] (first field-spec)]
       (VectorType/field field-name (->type type-spec)))
 
-    :else (case ctx
-            (:set :list) (VectorType/field "$data$" (->type field-spec))
-            (VectorType/field (->type field-spec)))))
-
-(defn ->field ^org.apache.arrow.vector.types.pojo.Field [field-spec]
-  (->field* field-spec nil))
+    :else (VectorType/field (->type field-spec))))
 
 (defmethod print-dup Schema [^Schema s, ^Writer w]
   (.write w "#xt/schema ")
@@ -261,6 +292,10 @@
   (.write w "#xt/type ")
   (.write w (pr-str (render-type t))))
 
+(defmethod pp/simple-dispatch VectorType [^VectorType v]
+  (.write *out* "#xt/type ")
+  (pp/write-out (render-type v)))
+
 (defmethod print-method VectorType [t w]
   (print-dup t w))
 
@@ -269,10 +304,10 @@
   (cond
     (instance? VectorType type-spec) type-spec
     (instance? Field type-spec) (VectorType/fromField type-spec)
-    (instance? ArrowType type-spec) (VectorType. type-spec false [])
+    (instance? ArrowType type-spec) (VectorType. type-spec false {})
     (keyword? type-spec) (case type-spec
                            :tstz-range VectorType/TSTZ_RANGE
-                           (VectorType. (->arrow-type type-spec) false ^List (vector)))
+                           (VectorType. (->arrow-type type-spec) false {}))
 
     :else (let [[first-elem & more-opts] type-spec
                 [nullable? more-opts] (if (= :? first-elem)
@@ -283,11 +318,11 @@
               (:union :set :list :struct :sparse-union :tstz-range)
               (VectorType. (->arrow-type arrow-type-head)
                            nullable?
-                           ^List (mapv #(->field* % arrow-type-head) more-opts))
+                           (->child-entries more-opts arrow-type-head))
 
               (VectorType. (->arrow-type (cons arrow-type-head more-opts))
                            nullable?
-                           ^List (vector))))))
+                           {})))))
 
 (defmethod print-dup ArrowType [arrow-type, ^Writer w]
   (.write w "#xt.arrow/type ")

@@ -5,175 +5,195 @@
              {"_valid_to" :instant}
              {"op"
               [:union
-               {"put" [:struct {"_id" :i64}]}
-               {"delete" [:? :null]}
-               {"erase" [:? :null]}]}),
+               {"put" [:struct {"_id" :i64}],
+                "delete" [:? :null],
+                "erase" [:? :null]}]}),
  :batches
- ([{:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
+ ([{:xt/system-from #xt/zdt "2020-02-18T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-18T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 410}],
-    :xt/iid #bytes "c5c5ea28b27d81898c571a88382405e6"}
+    :op #xt/tagged [:put #:xt{:id 383}],
+    :xt/iid #bytes "02b8c2b7673c15a95dfd6913f32e8f09"}
    {:xt/system-from #xt/zdt "2020-02-23T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-02-23T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 416}],
-    :xt/iid #bytes "cb96947163d263dd6202d400873a0b0e"}
-   {:xt/system-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-19T00:00Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 419}],
+    :xt/iid #bytes "08d2b357054853321ffdb148ceb10caf"}
+   {:xt/system-from #xt/zdt "2020-02-23T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-23T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 390}],
-    :xt/iid #bytes "cc455aadcaefd61b6feb78e13676303c"}
-   {:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 417}],
+    :xt/iid #bytes "0f97f3f68271564778a57aa781be1f1e"}
+   {:xt/system-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-21T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 409}],
-    :xt/iid #bytes "d1774c643b3195d04e97f4cea573f097"}
-   {:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 413}],
-    :xt/iid #bytes "d215be82a2ee12542ffcca5897e714df"}
+    :op #xt/tagged [:put #:xt{:id 400}],
+    :xt/iid #bytes "1b1b79a35aeafbc06592176f573e0042"}
    {:xt/system-from #xt/zdt "2020-02-18T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-02-18T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 377}],
-    :xt/iid #bytes "d7cf450e4e0f3674c3b16e04ccc2fa5b"}
-   {:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 411}],
-    :xt/iid #bytes "d8ae3f4f6b239bf530e282e2400d3dcf"}
-   {:xt/system-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 388}],
-    :xt/iid #bytes "da706a0e0a0913f0c1325339a0af3123"}
+    :op #xt/tagged [:put #:xt{:id 376}],
+    :xt/iid #bytes "24834573b46c64c14e8e12b64330ba30"}
    {:xt/system-from #xt/zdt "2020-02-23T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-02-23T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 418}],
-    :xt/iid #bytes "dc83a6d8062b13624fba06a8b7ee5b66"}
+    :op #xt/tagged [:put #:xt{:id 420}],
+    :xt/iid #bytes "2adafd3da744bcf5467845ab755d211f"}
    {:xt/system-from #xt/zdt "2020-02-19T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-02-19T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 386}],
-    :xt/iid #bytes "dcfe83f89f01bf7858bac6f03be1c14a"}
+    :op #xt/tagged [:put #:xt{:id 389}],
+    :xt/iid #bytes "2bad149c85071b2be11a2a67e2af1e58"}
    {:xt/system-from #xt/zdt "2020-02-20T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-02-20T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 399}],
-    :xt/iid #bytes "dd5bfa7db6d104e157973ef63d0ac3cb"}]
-  [{:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 395}],
+    :xt/iid #bytes "306b41bc873028f8e5b0642580fb4521"}
+   {:xt/system-from #xt/zdt "2020-02-20T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-20T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 410}],
-    :xt/iid #bytes "c5c5ea28b27d81898c571a88382405e6"}
-   {:xt/system-from #xt/zdt "2020-02-23T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-23T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 416}],
-    :xt/iid #bytes "cb96947163d263dd6202d400873a0b0e"}
-   {:xt/system-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 390}],
-    :xt/iid #bytes "cc455aadcaefd61b6feb78e13676303c"}
-   {:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 409}],
-    :xt/iid #bytes "d1774c643b3195d04e97f4cea573f097"}
-   {:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 413}],
-    :xt/iid #bytes "d215be82a2ee12542ffcca5897e714df"}
+    :op #xt/tagged [:put #:xt{:id 398}],
+    :xt/iid #bytes "32981be2d8883ebc7c548aafe6b666f9"}
    {:xt/system-from #xt/zdt "2020-02-18T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-02-18T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 377}],
-    :xt/iid #bytes "d7cf450e4e0f3674c3b16e04ccc2fa5b"}
+    :op #xt/tagged [:put #:xt{:id 379}],
+    :xt/iid #bytes "332e02ea44f791f2334e44bf431d6bd4"}
+   {:xt/system-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 405}],
+    :xt/iid #bytes "3ddce117a8c205f5fd859a607dcdb05a"}]
+  [{:xt/system-from #xt/zdt "2020-02-20T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-20T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 392}],
+    :xt/iid #bytes "4319f3203c52e94f9cd2d55bdc6b1a57"}
    {:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 411}],
-    :xt/iid #bytes "d8ae3f4f6b239bf530e282e2400d3dcf"}
-   {:xt/system-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 388}],
-    :xt/iid #bytes "da706a0e0a0913f0c1325339a0af3123"}
-   {:xt/system-from #xt/zdt "2020-02-23T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-23T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 418}],
-    :xt/iid #bytes "dc83a6d8062b13624fba06a8b7ee5b66"}
-   {:xt/system-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 386}],
-    :xt/iid #bytes "dcfe83f89f01bf7858bac6f03be1c14a"}
+    :op #xt/tagged [:put #:xt{:id 412}],
+    :xt/iid #bytes "4881948f6493423b6f873950d4ab23f1"}
    {:xt/system-from #xt/zdt "2020-02-20T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-02-20T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 399}],
-    :xt/iid #bytes "dd5bfa7db6d104e157973ef63d0ac3cb"}]
-  [{:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 410}],
-    :xt/iid #bytes "c5c5ea28b27d81898c571a88382405e6"}
-   {:xt/system-from #xt/zdt "2020-02-23T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-23T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 416}],
-    :xt/iid #bytes "cb96947163d263dd6202d400873a0b0e"}
-   {:xt/system-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 390}],
-    :xt/iid #bytes "cc455aadcaefd61b6feb78e13676303c"}
-   {:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 409}],
-    :xt/iid #bytes "d1774c643b3195d04e97f4cea573f097"}
-   {:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 413}],
-    :xt/iid #bytes "d215be82a2ee12542ffcca5897e714df"}
+    :op #xt/tagged [:put #:xt{:id 397}],
+    :xt/iid #bytes "49a612e5c77e92f21a04cd506048d201"}
    {:xt/system-from #xt/zdt "2020-02-18T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-02-18T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 377}],
-    :xt/iid #bytes "d7cf450e4e0f3674c3b16e04ccc2fa5b"}
-   {:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 411}],
-    :xt/iid #bytes "d8ae3f4f6b239bf530e282e2400d3dcf"}
-   {:xt/system-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 388}],
-    :xt/iid #bytes "da706a0e0a0913f0c1325339a0af3123"}
-   {:xt/system-from #xt/zdt "2020-02-23T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-23T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 418}],
-    :xt/iid #bytes "dc83a6d8062b13624fba06a8b7ee5b66"}
-   {:xt/system-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-02-19T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 386}],
-    :xt/iid #bytes "dcfe83f89f01bf7858bac6f03be1c14a"}
+    :op #xt/tagged [:put #:xt{:id 380}],
+    :xt/iid #bytes "4c78ac06bb228d9e4844029f45591a11"}
    {:xt/system-from #xt/zdt "2020-02-20T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-02-20T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op #xt/tagged [:put #:xt{:id 399}],
-    :xt/iid #bytes "dd5bfa7db6d104e157973ef63d0ac3cb"}]
+    :op #xt/tagged [:put #:xt{:id 394}],
+    :xt/iid #bytes "50526f18ac2803b7328d2d03c1792bdf"}
+   {:xt/system-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 406}],
+    :xt/iid #bytes "537ed1967c0ccdfa9971c7cde00136a1"}
+   {:xt/system-from #xt/zdt "2020-02-18T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-18T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 382}],
+    :xt/iid #bytes "5a0a91139ab680056b334c3b47d76fc1"}
+   {:xt/system-from #xt/zdt "2020-02-23T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-23T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 421}],
+    :xt/iid #bytes "5da82c952ba1706c2df8f7c60f4f9431"}
+   {:xt/system-from #xt/zdt "2020-02-19T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-19T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 385}],
+    :xt/iid #bytes "5e11e8c2103098519bb75c1be90cbb17"}
+   {:xt/system-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 403}],
+    :xt/iid #bytes "65346aea0c1af23d419e60b7abdf30c6"}
+   {:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 408}],
+    :xt/iid #bytes "6601cf81fa0ec225d224620a8038ce2f"}
+   {:xt/system-from #xt/zdt "2020-02-23T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-23T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 423}],
+    :xt/iid #bytes "68432f5d7e1f8a46862f216459b1a55c"}
+   {:xt/system-from #xt/zdt "2020-02-19T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-19T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 384}],
+    :xt/iid #bytes "6ca4e00614e81073425d212ab2f70616"}
+   {:xt/system-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 402}],
+    :xt/iid #bytes "6d5cde261c8cb3a43ed42f6f73c1e2b8"}
+   {:xt/system-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 404}],
+    :xt/iid #bytes "6fdb9dcfaef2d10ea97210a5144530ad"}
+   {:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 415}],
+    :xt/iid #bytes "70dfa5a5ebdad27d07b6592700f1a97f"}
+   {:xt/system-from #xt/zdt "2020-02-20T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-20T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 396}],
+    :xt/iid #bytes "77b2d5e712ea307e65d8bc8c24b84a0c"}
+   {:xt/system-from #xt/zdt "2020-02-19T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-19T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 391}],
+    :xt/iid #bytes "7bd1c224fb28704a51e5de0b8e096bc3"}
+   {:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 414}],
+    :xt/iid #bytes "7dfeb11b35b179970aad43bbd9b328dc"}]
+  [{:xt/system-from #xt/zdt "2020-02-18T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-18T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 381}],
+    :xt/iid #bytes "80d23f470a73bf8ccd8cd2d9dcad9e19"}
+   {:xt/system-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 407}],
+    :xt/iid #bytes "86c532555d67c47fd793ecd666951da1"}
+   {:xt/system-from #xt/zdt "2020-02-20T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-20T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 393}],
+    :xt/iid #bytes "96d10f2161cfbd2b058021591719b1b3"}
+   {:xt/system-from #xt/zdt "2020-02-23T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-23T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 422}],
+    :xt/iid #bytes "97af2f69b47d2dc2d3fbcd3cf72d8b05"}
+   {:xt/system-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-21T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 401}],
+    :xt/iid #bytes "994d44aa22e97b07c7ce68afe33aee17"}
+   {:xt/system-from #xt/zdt "2020-02-18T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-18T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 378}],
+    :xt/iid #bytes "9d8582da7355a018dedeff22a1941300"}
+   {:xt/system-from #xt/zdt "2020-02-19T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-02-19T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op #xt/tagged [:put #:xt{:id 387}],
+    :xt/iid #bytes "a215a70114030c1c2b1bea5237cca6bb"}]
   [{:xt/system-from #xt/zdt "2020-02-22T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-02-22T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",

@@ -878,7 +878,7 @@ sealed class PgType(
         })
 
         private fun listPgType(xtType: VectorType): PgType {
-            val elType = xtType.children.firstOrNull()?.type ?: return Default
+            val elType = xtType.firstChildOrNull?.arrowType ?: return Default
 
             return when (elType) {
                 is ArrowType.Int -> when (elType.bitWidth) {

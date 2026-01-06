@@ -12,8 +12,9 @@ import xtdb.arrow.VectorType.Companion.I64
 import xtdb.arrow.VectorType.Companion.NULL
 import xtdb.arrow.VectorType.Companion.UTF8
 import xtdb.arrow.VectorType.Companion.asListOf
-import xtdb.arrow.VectorType.Companion.asStructOf
 import xtdb.arrow.VectorType.Companion.asUnionOf
+import xtdb.arrow.VectorType.Companion.structOf
+import xtdb.arrow.VectorType.Companion.unionOf
 import xtdb.arrow.VectorType.Companion.just
 import xtdb.arrow.VectorType.Companion.listTypeOf
 import xtdb.arrow.VectorType.Companion.maybe
@@ -27,7 +28,7 @@ class PromotionTest {
         ("i64" ofType I64).openVector(al)
             .use { v -> assertEquals(v, v.maybePromote(al, I64.fieldType)) }
 
-        "struct".asStructOf("a" ofType I64, "b" ofType UTF8).openVector(al)
+        al.openVector("struct", structOf("a" to I64, "b" to UTF8))
             .use { v -> assertEquals(v, v.maybePromote(al, just(STRUCT).fieldType)) }
     }
 
@@ -56,13 +57,13 @@ class PromotionTest {
         }.use { promoted ->
             promoted.writeAll(listOf("4", 5, "6"))
             assertEquals(
-                "v".asUnionOf("i32" ofType I32, "utf8" ofType UTF8),
+                "v" ofType unionOf("i32" to I32, "utf8" to UTF8),
                 promoted.field
             )
             assertEquals(listOf(1, 2, 3, "4", 5, "6"), promoted.asList)
         }
 
-        "v".asListOf(I32).openVector(al)
+        al.openVector("v", listTypeOf(I32))
             .closeOnCatch { v ->
                 v.writeAll(listOf(listOf(1, 2), listOf(3)))
                 v.maybePromote(al, UTF8.fieldType)
@@ -72,7 +73,7 @@ class PromotionTest {
 
                 assertEquals(listOf(listOf(1, 2), listOf(3), "hello", listOf(4, 5), "world"), promoted.asList)
                 assertEquals(
-                    "v".asUnionOf("list" asListOf I32, "utf8" ofType UTF8),
+                    "v" ofType unionOf("list" asListOf I32, "utf8" to UTF8),
                     promoted.field
                 )
             }
@@ -98,8 +99,8 @@ class PromotionTest {
 
     @Test
     fun `rowCopier within a struct promotes the child-vecs`(al: BufferAllocator) {
-        "src".asStructOf("a" ofType I32).openVector(al).use { src ->
-            "dest".asStructOf("a" ofType UTF8).openVector(al).use { dest ->
+        al.openVector("src", structOf("a" to I32)).use { src ->
+            al.openVector("dest", structOf("a" to UTF8)).use { dest ->
                 src.writeObject(mapOf("a" to 1))
                 dest.writeObject(mapOf("a" to "hello"))
                 val copier = src.rowCopier(dest)
@@ -109,14 +110,14 @@ class PromotionTest {
             }
         }
 
-        "src".asStructOf("a" ofType I32).openVector(al).use { src ->
-            "dest".asStructOf("b" ofType I32).openVector(al).use { dest ->
+        al.openVector("src", structOf("a" to I32)).use { src ->
+            al.openVector("dest", structOf("b" to I32)).use { dest ->
                 src.writeObject(mapOf("a" to 4))
                 dest.writeObject(mapOf("b" to 10))
                 val copier = src.rowCopier(dest)
 
                 assertEquals(
-                    "dest".asStructOf("b" ofType maybe(I32), "a" ofType maybe(I32)),
+                    "dest" ofType structOf("b" to maybe(I32), "a" to maybe(I32)),
                     dest.field
                 )
 

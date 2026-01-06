@@ -4,19 +4,19 @@
                [:union
                 {"put-docs"
                  [:struct
-                  {"iids" [:list [:fixed-size-binary 16]]}
-                  {"documents"
+                  {"iids" [:list [:fixed-size-binary 16]],
+                   "documents"
                    [:union
                     {"public/foo"
                      [:list
                       [:struct
-                       {"_id" [:union :keyword :utf8]}
-                       {"a" [:? :i64]}
-                       {"b" [:? :i64]}]]}
-                    {"public/bar"
-                     [:list [:struct {"_id" :i64} {"c" :i64}]]}]}
-                  {"_valid_from" [:? :instant]}
-                  {"_valid_to" [:? :instant]}]}]]}
+                       {"_id" [:union :keyword :utf8],
+                        "a" [:? :i64],
+                        "b" [:? :i64]}]],
+                     "public/bar"
+                     [:list [:struct {"_id" :i64, "c" :i64}]]}],
+                   "_valid_from" [:? :instant],
+                   "_valid_to" [:? :instant]}]}]]}
              {"system-time" [:? :instant]}
              {"default-tz" :utf8}
              {"user" [:? :utf8]}

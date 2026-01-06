@@ -256,12 +256,12 @@
                     #xt.arrow/type :instant instant-gen
                     #xt.arrow/type [:date :day] local-date-gen
                     #xt.arrow/type [:time-local :nano] local-time-gen
-                    #xt.arrow/type :list (gen/vector (vec-type->value-generator (first (.getChildren vec-type))) 0 10)
-                    #xt.arrow/type :set (gen/set (vec-type->value-generator (first (.getChildren vec-type))) {:min-elements 0 :max-elements 10})
-                    #xt.arrow/type :union (gen/one-of (map vec-type->value-generator (.getChildren vec-type)))
-                    #xt.arrow/type :struct (gen/let [entries (apply gen/tuple (map (fn [^Field child-field]
-                                                                                     (gen/let [v (vec-type->value-generator child-field)]
-                                                                                       (when v [(keyword (.getName child-field)) v])))
+                    #xt.arrow/type :list (gen/vector (vec-type->value-generator (.firstChildOrNull vec-type)) 0 10)
+                    #xt.arrow/type :set (gen/set (vec-type->value-generator (.firstChildOrNull vec-type)) {:min-elements 0 :max-elements 10})
+                    #xt.arrow/type :union (gen/one-of (map vec-type->value-generator (vals (.getChildren vec-type))))
+                    #xt.arrow/type :struct (gen/let [entries (apply gen/tuple (map (fn [[child-name child-type]]
+                                                                                     (gen/let [v (vec-type->value-generator child-type)]
+                                                                                       (when v [(keyword child-name) v])))
                                                                                    (.getChildren vec-type)))]
                                              (->> (filter some? entries)
                                                   (into {})))

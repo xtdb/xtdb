@@ -4,9 +4,13 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.arrow.VectorType.Companion.asType
-import xtdb.arrow.VectorType.Companion.ofType
-import xtdb.trie.ColumnName
+import xtdb.arrow.VectorType.Companion.fixedSizeList
+import xtdb.arrow.VectorType.Companion.listTypeOf
 import xtdb.arrow.VectorType.Companion.maybe
+import xtdb.arrow.VectorType.Companion.setTypeOf
+import xtdb.arrow.VectorType.Companion.structOf
+import xtdb.arrow.VectorType.Companion.unionOf
+import xtdb.trie.ColumnName
 import xtdb.vector.extensions.*
 
 data class MergeTypes(
@@ -27,15 +31,15 @@ data class MergeTypes(
         scalars.compute(arrowType) { _, existing -> (existing ?: false) || nullable }
     }
 
-    private fun mergeList(nullable: Boolean, elType: Field?) {
+    private fun mergeList(nullable: Boolean, elType: VectorType?) {
         if (nullable) nullableList = true
         listElType = (listElType ?: MergeTypes()).merge(elType)
     }
 
-    private fun Pair<MergeTypes, Boolean>.merge(nullable: Boolean, type: Field?) =
+    private fun Pair<MergeTypes, Boolean>.merge(nullable: Boolean, type: VectorType?) =
         Pair(first.merge(type), second || nullable)
 
-    private fun mergeFixedSizeList(size: Int, nullable: Boolean, elType: Field?) {
+    private fun mergeFixedSizeList(size: Int, nullable: Boolean, elType: VectorType?) {
         fixedSizeLists = (fixedSizeLists ?: mutableMapOf()).apply {
             compute(size) { _, existing ->
                 (existing ?: Pair(MergeTypes(), false)).merge(nullable, elType)
@@ -43,51 +47,53 @@ data class MergeTypes(
         }
     }
 
-    private fun mergeSet(nullable: Boolean, elType: Field?) {
+    private fun mergeSet(nullable: Boolean, elType: VectorType?) {
         if (nullable) nullableSet = true
         setElType = (setElType ?: MergeTypes()).merge(elType)
     }
 
-    private fun mergeTsTzRange(nullable: Boolean, elType: Field?) {
+    private fun mergeTsTzRange(nullable: Boolean, elType: VectorType?) {
         if (nullable) nullableTsTzRange = true
         tstzRangeElType = (tstzRangeElType ?: MergeTypes()).merge(elType)
     }
 
-    private fun mergeStruct(nullable: Boolean, children: Collection<Field>) {
+    private fun mergeStruct(nullable: Boolean, children: Map<String, VectorType>) {
         if (nullable) nullableStruct = true
 
         val existingKeys = structs?.keys
         val default = { MergeTypes().also { if (existingKeys != null) it.nullable = true } }
 
         structs = (structs ?: mutableMapOf()).also { structs ->
-            for (child in children) {
-                structs.compute(child.name) { _, existing -> (existing ?: default()).merge(child) }
+            for ((name, type) in children) {
+                structs.compute(name) { _, existing -> (existing ?: default()).merge(type) }
             }
 
-            for (absent in existingKeys?.minus(children.map { it.name }.toSet()).orEmpty()) {
+            for (absent in existingKeys?.minus(children.keys).orEmpty()) {
                 structs[absent]?.nullable = true
             }
         }
     }
 
-    private fun mergeUnion(children: Collection<Field>) {
-        for (child in children)
-            merge(child.type, child.isNullable, child.children)
+    private fun mergeUnion(children: Map<String, VectorType>) {
+        for ((_, type) in children)
+            merge(type)
     }
 
-    fun merge(arrowType: ArrowType, nullable: Boolean, children: Collection<Field>?): MergeTypes = apply {
+    private fun Map<FieldName, VectorType>.firstValueOrNull() = entries.firstOrNull()?.value
+
+    fun merge(arrowType: ArrowType, nullable: Boolean, children: Map<String, VectorType>): MergeTypes = apply {
         arrowType.accept(object : ArrowType.ArrowTypeVisitor<Unit> {
             override fun visit(arrowType: ArrowType.Null) {
                 this@MergeTypes.nullable = true
             }
 
-            override fun visit(arrowType: ArrowType.Struct) = mergeStruct(nullable, children.orEmpty())
-            override fun visit(arrowType: ArrowType.List) = mergeList(nullable, children?.firstOrNull())
+            override fun visit(arrowType: ArrowType.Struct) = mergeStruct(nullable, children)
+            override fun visit(arrowType: ArrowType.List) = mergeList(nullable, children.firstValueOrNull())
             override fun visit(arrowType: ArrowType.LargeList) = unsupported("LargeList")
             override fun visit(arrowType: ArrowType.FixedSizeList) =
-                mergeFixedSizeList(arrowType.listSize, nullable, children?.firstOrNull())
+                mergeFixedSizeList(arrowType.listSize, nullable, children.firstValueOrNull())
 
-            override fun visit(arrowType: ArrowType.Union) = mergeUnion(children.orEmpty())
+            override fun visit(arrowType: ArrowType.Union) = mergeUnion(children)
 
             override fun visit(arrowType: ArrowType.Map) = TODO("Not yet implemented")
             override fun visit(arrowType: ArrowType.Int) = mergeScalar(arrowType, nullable)
@@ -112,8 +118,8 @@ data class MergeTypes(
 
             override fun visit(arrowType: ArrowType.ExtensionType) =
                 when (arrowType) {
-                    SetType -> mergeSet(nullable, children?.firstOrNull())
-                    TsTzRangeType -> mergeTsTzRange(nullable, children?.firstOrNull())
+                    SetType -> mergeSet(nullable, children.firstValueOrNull())
+                    TsTzRangeType -> mergeTsTzRange(nullable, children.firstValueOrNull())
 
                     TransitType, UriType, UuidType, KeywordType,
                     IntervalMDMType,
@@ -125,53 +131,36 @@ data class MergeTypes(
         })
     }
 
-    fun merge(field: Field?) = apply { field?.let { merge(it.type, it.isNullable, it.children) } }
+    fun merge(field: Field?) = apply { field?.let { merge(it.type, it.isNullable, it.children.associate { c -> c.name to c.asType }) } }
     fun merge(type: VectorType?) = apply { type?.let { merge(it.arrowType, it.nullable, it.children) } }
 
     val asType: VectorType
         get() {
-            val listType = listElType?.let {
-                VectorType.Companion.maybe(
-                    VectorType.Companion.listTypeOf(it.asType),
-                    nullableList
-                )
-            }
+            val listType = listElType?.let { maybe(listTypeOf(it.asType), nullableList) }
 
             val fixedSizeListTypes = fixedSizeLists
-                ?.map { (size, tm) ->
-                    VectorType.fixedSizeList(size, maybe(tm.first.asType, tm.second))
-                }
+                ?.map { (size, tm) -> fixedSizeList(size, maybe(tm.first.asType, tm.second)) }
                 .orEmpty()
 
-            val setType = setElType?.let { VectorType.setTypeOf(it.asType) }?.let {
-                VectorType.Companion.maybe(
-                    it,
-                    nullableSet
-                )
-            }
+            val setType = setElType?.let { maybe(setTypeOf(it.asType), nullableSet) }
+
             val tstzRangeType = tstzRangeElType?.let {
-                VectorType.Companion.maybe(TsTzRangeType, nullableTsTzRange, listOf(LIST_ELS_NAME ofType it.asType))
+                maybe(TsTzRangeType, nullableTsTzRange, LIST_ELS_NAME to it.asType)
             }
 
-            val structType =
-                structs?.let { structs ->
-                    VectorType.Companion.maybe(
-                        VectorType.Companion.structOf(structs.map { it.key ofType it.value.asType }),
-                        nullableStruct
-                    )
-                }
+            val structType = structs?.let { maybe(structOf(it.mapValues { e -> e.value.asType }), nullableStruct) }
 
             val nullType = if (nullable) VectorType.NULL else null
 
             val types =
-                scalars.map { VectorType.Companion.maybe(VectorType(it.key), it.value) }
+                scalars.map { maybe(VectorType(it.key), it.value) }
                     .plus(fixedSizeListTypes)
                     .plus(listOfNotNull(listType, setType, structType, tstzRangeType))
 
             return when (types.size) {
                 0 -> VectorType.NULL
-                1 -> types.first().let { if (nullable) VectorType.Companion.maybe(it) else it }
-                else -> VectorType.unionOf((types + listOfNotNull(nullType)).map { t -> t.asLegField })
+                1 -> types.first().let { if (nullable) maybe(it) else it }
+                else -> unionOf((types + listOfNotNull(nullType)).associateBy { t -> t.arrowType.toLeg() })
             }
         }
 

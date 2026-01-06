@@ -8,7 +8,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.arrow.VectorType.Companion.asListOf
+import xtdb.arrow.VectorType.Companion.listTypeOf
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.VectorType.Companion.unionOf
 
@@ -34,7 +34,7 @@ class ListVectorTest {
             assertEquals(listOf(listOf(1, 2, 3), listOf(4, 5, "6")), listVec.asList)
 
             assertEquals(
-                "list" asListOf unionOf("i32" ofType VectorType.I32, "utf8" ofType VectorType.UTF8),
+                "list" ofType listTypeOf(unionOf("i32" to VectorType.I32, "utf8" to VectorType.UTF8)),
                 listVec.field
             )
         }

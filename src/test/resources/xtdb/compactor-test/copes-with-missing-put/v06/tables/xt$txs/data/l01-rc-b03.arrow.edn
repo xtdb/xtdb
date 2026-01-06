@@ -7,13 +7,13 @@
               [:union
                {"put"
                 [:struct
-                 {"_id" :i64}
-                 {"system_time" :instant}
-                 {"committed" :bool}
-                 {"user_metadata" [:? :struct]}
-                 {"error" [:? :transit]}]}
-               {"delete" [:? :null]}
-               {"erase" [:? :null]}]}),
+                 {"_id" :i64,
+                  "system_time" :instant,
+                  "committed" :bool,
+                  "user_metadata" [:? :struct],
+                  "error" [:? :transit]}],
+                "delete" [:? :null],
+                "erase" [:? :null]}]}),
  :batches
  ([{:xt/system-from #xt/zdt "2020-01-03T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-03T00:00Z[UTC]",

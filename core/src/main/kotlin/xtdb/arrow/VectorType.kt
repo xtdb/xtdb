@@ -39,16 +39,20 @@ data class VectorType(
     val arrowType: ArrowType,
     @get:JvmName("isNullable")
     val nullable: Boolean = false,
-    val children: List<Field> = emptyList()
+    val children: Map<FieldName, VectorType> = emptyMap()
 ) {
 
     val fieldType get() = FieldType(nullable, arrowType, null)
 
-    val asLegField get() = Field(arrowType.toLeg(), fieldType, children)
+    fun toField(name: FieldName): Field = Field(name, fieldType, children.map { (n, t) -> t.toField(n) })
+
+    val asLegField get() = toField(arrowType.toLeg())
 
     // NOTE: the col-types version of this expands nulls out into the list; this keeps them within the individual types
     // not sure which I want yet.
-    val unionLegs get() = if (arrowType is ArrowType.Union) children.map { it.asType } else listOf(this)
+    val unionLegs get() = if (arrowType is ArrowType.Union) children.values.toList() else listOf(this)
+
+    val firstChildOrNull get() = children.entries.firstOrNull()?.value
 
     val splitNull get() = when {
         arrowType is ArrowType.Null -> listOf(this)
@@ -63,13 +67,10 @@ data class VectorType(
         fun maybe(type: VectorType, nullable: Boolean = true) = type.copy(nullable = nullable)
 
         @JvmStatic
-        @JvmOverloads
-        fun maybe(type: ArrowType, nullable: Boolean = true, children: List<Field> = emptyList()) =
-            VectorType(type, nullable, children)
+        fun maybe(type: ArrowType, nullable: Boolean = true, vararg children: Pair<FieldName, VectorType>) =
+            VectorType(type, nullable, children.toMap())
 
-        fun maybe(type: ArrowType, vararg children: Field) = maybe(type, children = children.toList())
-        fun just(type: ArrowType, children: List<Field> = emptyList()) = VectorType(type, false, children)
-        fun just(type: ArrowType, vararg children: Field) = just(type, children.toList())
+        fun just(type: ArrowType, vararg children: Pair<FieldName, VectorType>) = VectorType(type, false, children.toMap())
 
         @JvmField
         val NULL = VectorType(MinorType.NULL.type, true)
@@ -126,7 +127,7 @@ data class VectorType(
         val REG_PROC = VectorType(RegProcType)
 
         @JvmField
-        val TSTZ_RANGE = VectorType(TsTzRangeType, false, listOf($$"$data$" ofType INSTANT))
+        val TSTZ_RANGE = VectorType(TsTzRangeType, false, mapOf(LIST_ELS_NAME to INSTANT))
 
         @JvmField
         val TIMESTAMP_MICRO = VectorType(ArrowType.Timestamp(MICROSECOND, null))
@@ -161,44 +162,44 @@ data class VectorType(
         @JvmField
         val UNION_TYPE: ArrowType = MinorType.DENSEUNION.type
 
-        fun unionOf(vararg legs: Field) = unionOf(legs.toList())
-        fun unionOf(legs: List<Field>) = VectorType(ArrowType.Union(UnionMode.Dense, null), children = legs)
-        fun FieldName.asUnionOf(vararg legs: Field) = asUnionOf(legs.toList())
-        infix fun FieldName.asUnionOf(legs: List<Field>) = ofType(unionOf(legs))
+        fun unionOf(vararg legs: Pair<FieldName, VectorType>) = unionOf(legs.toMap())
+        fun unionOf(legs: Map<FieldName, VectorType>) = VectorType(ArrowType.Union(UnionMode.Dense, null), children = legs)
 
-        fun structOf(vararg fields: Field) = structOf(fields.toList())
-        fun structOf(fields: List<Field>) = VectorType(STRUCT_TYPE, children = fields)
-        fun FieldName.asStructOf(vararg fields: Field) = asStructOf(fields.toList())
-        infix fun FieldName.asStructOf(fields: List<Field>) = ofType(structOf(fields))
+        fun structOf(vararg fields: Pair<FieldName, VectorType>) = structOf(fields.toMap())
+        fun structOf(fields: Map<FieldName, VectorType>) = VectorType(STRUCT_TYPE, children = fields)
 
         fun listTypeOf(el: VectorType, elName: FieldName = LIST_ELS_NAME) =
-            just(LIST_TYPE, elName ofType el)
+            just(LIST_TYPE, elName to el)
 
-        infix fun FieldName.asListOf(el: VectorType) = this ofType listTypeOf(el)
+        infix fun FieldName.asListOf(el: VectorType) = this to listTypeOf(el)
 
         fun fixedSizeList(size: Int, el: VectorType, elName: FieldName = LIST_ELS_NAME) =
-            just(ArrowType.FixedSizeList(size), elName ofType el)
+            just(ArrowType.FixedSizeList(size), elName to el)
 
         fun setTypeOf(el: VectorType, nullable: Boolean = false, elName: FieldName = LIST_ELS_NAME) =
-            maybe(SetType, nullable, listOf(elName ofType el))
+            maybe(SetType, nullable, elName to el)
 
         fun mapTypeOf(
-            key: Field, value: Field,
+            keyType: VectorType, valueType: VectorType,
             sorted: Boolean = true, entriesName: FieldName = $$"$entries$",
+            keyName: FieldName = "key", valueName: FieldName = "value",
         ) =
-            just(ArrowType.Map(sorted), entriesName.asStructOf(key, value))
+            just(ArrowType.Map(sorted), entriesName to structOf(keyName to keyType, valueName to valueType))
 
         @JvmStatic
-        fun field(name: FieldName, type: VectorType) = Field(name, type.fieldType, type.children)
+        fun field(name: FieldName, type: VectorType) = type.toField(name)
 
         @JvmStatic
         fun field(type: VectorType) = type.asLegField
 
-        infix fun FieldName.ofType(type: VectorType) = field(this, type)
+        infix fun FieldName.ofType(type: VectorType) = type.toField(this)
+
+        fun FieldName.asStructOf(vararg fields: Pair<FieldName, VectorType>) = this to structOf(*fields)
+        fun FieldName.asUnionOf(vararg legs: Pair<FieldName, VectorType>) = this to unionOf(*legs)
 
         @JvmStatic
         @get:JvmName("fromField")
-        val Field.asType get() = VectorType(type, isNullable, children)
+        val Field.asType: VectorType get() = VectorType(type, isNullable, children.associate { it.name to it.asType })
 
         @JvmStatic
         @get:JvmName("fromValue")
@@ -251,13 +252,13 @@ data class VectorType(
                 // TODO support for Type maps
                 is Map<*, *> ->
                     if (keys.all { it is String || it is Keyword }) {
-                        structOf(map { (k, v) ->
+                        structOf(entries.associate { (k, v) ->
                             val normalK = when (k) {
                                 is String -> k
                                 is Keyword -> normalForm(k).sym.toString()
                                 else -> error("k is of type ${k?.javaClass}")
                             }
-                            normalK ofType v.asVectorType
+                            normalK to v.asVectorType
                         })
                     } else {
                         throw UnsupportedOperationException("Type Maps currently not supported")

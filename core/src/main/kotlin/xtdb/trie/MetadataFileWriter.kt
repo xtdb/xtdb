@@ -19,6 +19,7 @@ import xtdb.arrow.VectorType.Companion.asListOf
 import xtdb.arrow.VectorType.Companion.asStructOf
 import xtdb.arrow.VectorType.Companion.asUnionOf
 import xtdb.arrow.VectorType.Companion.listTypeOf
+import xtdb.arrow.VectorType.Companion.unionOf
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.schema
@@ -32,21 +33,21 @@ class MetadataFileWriter(
     companion object {
         private val metadataField = listTypeOf(
             VectorType.structOf(
-                "col-name" ofType UTF8,
-                "root-col?" ofType BOOL,
-                "count" ofType I64
+                "col-name" to UTF8,
+                "root-col?" to BOOL,
+                "count" to I64
             ),
             elName = "col"
         )
 
         @JvmField
         val metaRelSchema = schema(
-            "nodes".asUnionOf(
-                "nil" ofType NULL,
+            "nodes" ofType unionOf(
+                "nil" to NULL,
                 "branch-iid" asListOf maybe(I32),
                 "leaf".asStructOf(
-                    "data-page-idx" ofType I32,
-                    "columns" ofType metadataField
+                    "data-page-idx" to I32,
+                    "columns" to metadataField
                 )
             )
         )

@@ -40,7 +40,7 @@
                          :with-types? true}))))
 
 (t/deftest test-project-star
-  (t/is (= {:types '{ret #xt/type [:struct {"b" :i64} {"a" :i64}]}
+  (t/is (= {:types '{ret #xt/type [:struct {"b" :i64, "a" :i64}]}
             :res [[{:ret {:a 12, :b 10}}
                    {:ret {:a 0, :b 15}}]
                   [{:ret {:a 100, :b 83}}]]}
