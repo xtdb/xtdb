@@ -429,11 +429,13 @@
                                                    (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))
                                                  output-projections)))))}))
 
-(defn emit-join-expr-and-children {:style/indent 2} [{:keys [opts condition] :as join-expr} args join-impl]
-  (let [{:keys [conditions]} opts]
-    (emit-join-expr (-> (emit-join-children join-expr args)
-                        (assoc :condition (or condition conditions)))
-                    args join-impl)))
+(defn determine-build-side [left right default-side]
+  (let [^long left-row-count (or (:row-count (:stats left)) Long/MAX_VALUE)
+        ^long right-row-count (or (:row-count (:stats right)) Long/MAX_VALUE)]
+    (cond
+      (< left-row-count right-row-count) :left
+      (< right-row-count left-row-count) :right
+      :else default-side)))
 
 (defn emit-inner-join-expr [join-expr args]
   (emit-join-expr join-expr args
@@ -447,14 +449,6 @@
     (emit-inner-join-expr (-> (emit-join-children join-expr args)
                               (assoc :condition conditions))
                           args)))
-
-(defn determine-build-side [left right default-side]
-  (let [^long left-row-count (or (:row-count (:stats left)) Long/MAX_VALUE)
-        ^long right-row-count (or (:row-count (:stats right)) Long/MAX_VALUE)]
-    (cond
-      (< left-row-count right-row-count) :left
-      (< right-row-count left-row-count) :right
-      :else default-side)))
 
 (defmethod lp/emit-expr :left-outer-join [{:keys [opts] :as join-expr} args]
   (let [{:keys [conditions]} opts
@@ -474,44 +468,58 @@
                        :track-unmatched-build-idxs? true
                        :pushdown-blooms? true}))))
 
-(defmethod lp/emit-expr :full-outer-join [join-expr args]
-  (emit-join-expr-and-children join-expr args
-                               {:build-side :left
-                                :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields (types/with-nullable-fields left-fields) (types/with-nullable-fields right-fields)))
-                                :join-type ::full-outer-join
-                                :with-nil-row? true
-                                :track-unmatched-build-idxs? true}))
+(defmethod lp/emit-expr :full-outer-join [{:keys [opts] :as join-expr} args]
+  (let [{:keys [conditions]} opts]
+    (emit-join-expr (-> (emit-join-children join-expr args)
+                        (assoc :condition conditions))
+                    args
+                    {:build-side :left
+                     :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields (types/with-nullable-fields left-fields) (types/with-nullable-fields right-fields)))
+                     :join-type ::full-outer-join
+                     :with-nil-row? true
+                     :track-unmatched-build-idxs? true})))
 
-(defmethod lp/emit-expr :semi-join [join-expr args]
-  (emit-join-expr-and-children join-expr args
-                               {:build-side :right
-                                :merge-fields-fn (fn [left-fields _] left-fields)
-                                :join-type ::semi-join
-                                :pushdown-blooms? true}))
+(defmethod lp/emit-expr :semi-join [{:keys [opts] :as join-expr} args]
+  (let [{:keys [conditions]} opts]
+    (emit-join-expr (-> (emit-join-children join-expr args)
+                        (assoc :condition conditions))
+                    args
+                    {:build-side :right
+                     :merge-fields-fn (fn [left-fields _] left-fields)
+                     :join-type ::semi-join
+                     :pushdown-blooms? true})))
 
-(defmethod lp/emit-expr :anti-join [join-expr args]
-  (emit-join-expr-and-children join-expr args
-                               {:build-side :right
-                                :merge-fields-fn (fn [left-fields _] left-fields)
-                                :join-type ::anti-semi-join}))
+(defmethod lp/emit-expr :anti-join [{:keys [opts] :as join-expr} args]
+  (let [{:keys [conditions]} opts]
+    (emit-join-expr (-> (emit-join-children join-expr args)
+                        (assoc :condition conditions))
+                    args
+                    {:build-side :right
+                     :merge-fields-fn (fn [left-fields _] left-fields)
+                     :join-type ::anti-semi-join})))
 
 (defmethod lp/emit-expr :mark-join [{:keys [opts] :as join-expr} args]
   (let [{:keys [mark-spec]} opts
         [mark-col-name mark-condition] (first mark-spec)]
-    (emit-join-expr-and-children (assoc join-expr :condition mark-condition) args
-                                 {:build-side :right
-                                  :merge-fields-fn (fn [left-fields _] (assoc left-fields mark-col-name (types/->field [:? :bool] mark-col-name)))
-                                  :mark-col-name mark-col-name
-                                  :join-type ::mark-join
-                                  :track-unmatched-build-idxs? true
-                                  :pushdown-blooms? true})))
+    (emit-join-expr (-> (emit-join-children join-expr args)
+                        (assoc :condition mark-condition))
+                    args
+                    {:build-side :right
+                     :merge-fields-fn (fn [left-fields _] (assoc left-fields mark-col-name (types/->field [:? :bool] mark-col-name)))
+                     :mark-col-name mark-col-name
+                     :join-type ::mark-join
+                     :track-unmatched-build-idxs? true
+                     :pushdown-blooms? true})))
 
-(defmethod lp/emit-expr :single-join [join-expr args]
-  (emit-join-expr-and-children join-expr args
-                               {:build-side :right
-                                :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
-                                :join-type ::single-join
-                                :with-nil-row? true}))
+(defmethod lp/emit-expr :single-join [{:keys [opts] :as join-expr} args]
+  (let [{:keys [conditions]} opts]
+    (emit-join-expr (-> (emit-join-children join-expr args)
+                        (assoc :condition conditions))
+                    args
+                    {:build-side :right
+                     :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
+                     :join-type ::single-join
+                     :with-nil-row? true})))
 
 
 (defn columns [relation]
