@@ -1,7 +1,7 @@
 [:project
  [{_column_1 (not _sq_2)}]
  [:mark-join
-  {_sq_2 [(> x.1/z z)]}
+  {:mark-spec {_sq_2 [(> x.1/z z)]}}
   [:rename x.1 [:scan {:table #xt/table x, :columns [z]}]]
   [:project
    [{z y.3/z}]

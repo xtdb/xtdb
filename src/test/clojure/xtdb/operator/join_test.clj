@@ -228,7 +228,7 @@
 (t/deftest test-mark-equi-join
   (t/is (= {:res [{{:a 12, :m true} 2, {:a 0, :m false} 1} {{:a 100, :m true} 1}]
             :types '{a #xt/type :i64, m #xt/type [:? :bool]}}
-           (-> (tu/query-ra [:mark-join '{m [{a b}]}
+           (-> (tu/query-ra [:mark-join '{:mark-spec {m [{a b}]}}
                              [::tu/pages
                               [[{:a 12}, {:a 12}, {:a 0}]
                                [{:a 100}]]]
@@ -241,14 +241,14 @@
   (t/testing "empty input"
     (t/is (= [[{:a 12, :m false}, {:a 0, :m false}]
               [{:a 100, :m false}, {:m false}]]
-             (tu/query-ra [:mark-join '{m [{a b}]}
+             (tu/query-ra [:mark-join '{:mark-spec {m [{a b}]}}
                            [::tu/pages
                             [[{:a 12}, {:a 0}]
                              [{:a 100}, {:a nil}]]]
                            [::tu/pages '{b #xt/type :i64} []]]
                           {:preserve-pages? true})))
 
-    (t/is (empty? (tu/query-ra [:mark-join '{m [{a b}]}
+    (t/is (empty? (tu/query-ra [:mark-join '{:mark-spec {m [{a b}]}}
                                 [::tu/pages '{a #xt/type :i64} []]
                                 [::tu/pages
                                  [[{:b 12}, {:b 2}]
@@ -256,7 +256,7 @@
 
   (t/is (= [[{:a 12, :m false}, {:a 0, :m false}]
             [{:a 100, :m false}]]
-           (tu/query-ra [:mark-join '{m [{a b}]}
+           (tu/query-ra [:mark-join '{:mark-spec {m [{a b}]}}
                          [::tu/pages
                           [[{:a 12}, {:a 0}]
                            [{:a 100}]]]
@@ -268,14 +268,14 @@
 
 (t/deftest test-mark-join-nils
   (t/is (= [{:a 12, :m true}, {:a 14, :m false}, {}]
-           (tu/query-ra [:mark-join '{m [{a b}]}
+           (tu/query-ra [:mark-join '{:mark-spec {m [{a b}]}}
                          [::tu/pages
                           [[{:a 12}, {:a 14}, {}]]]
                          [::tu/pages
                           [[{:b 12}]]]])))
 
   (t/is (= [{:a 12, :m true}, {:a 14} {}]
-           (tu/query-ra [:mark-join '{m [{a b}]}
+           (tu/query-ra [:mark-join '{:mark-spec {m [{a b}]}}
                          [::tu/pages
                           [[{:a 12}, {:a 14}, {:a nil}]]]
                          [::tu/pages
@@ -283,14 +283,14 @@
 
 (t/deftest test-mark-join-theta
   (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {}]
-           (tu/query-ra [:mark-join '{m [(>= a b)]}
+           (tu/query-ra [:mark-join '{:mark-spec {m [(>= a b)]}}
                          [::tu/pages
                           [[{:a 12}, {:a 14}, {:a nil}]]]
                          [::tu/pages
                           [[{:b 12}]]]])))
 
   (t/is (= [{:a 12}, {:a 14, :m true} {}]
-           (tu/query-ra [:mark-join '{m [(> a b)]}
+           (tu/query-ra [:mark-join '{:mark-spec {m [(> a b)]}}
                          [::tu/pages
                           [[{:a 12}, {:a 14}, {:a nil}]]]
                          [::tu/pages
@@ -301,21 +301,21 @@
   ;;but prove that exist/not-exists can be expressed via mark-join (and a negation)
   (t/testing "exists"
     (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:m true}]
-             (tu/query-ra [:mark-join '{m [true]}
+             (tu/query-ra [:mark-join '{:mark-spec {m [true]}}
                            [::tu/pages
                             [[{:a 12}, {:a 14}, {:a nil}]]]
                            [::tu/pages
                             [[{:b 1} {:c 2}]]]])))
 
     (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:m true}]
-             (tu/query-ra [:mark-join '{m [true]}
+             (tu/query-ra [:mark-join '{:mark-spec {m [true]}}
                            [::tu/pages
                             [[{:a 12}, {:a 14}, {:a nil}]]]
                            [::tu/pages
                             [[{:a nil}]]]])))
 
     (t/is (= [{:a 12, :m false}, {:a 14, :m false}, {:m false}]
-             (tu/query-ra [:mark-join '{m [true]}
+             (tu/query-ra [:mark-join '{:mark-spec {m [true]}}
                            [::tu/pages
                             [[{:a 12}, {:a 14}, {:a nil}]]]
                            [::tu/pages
@@ -323,7 +323,7 @@
   (t/testing "not-exists"
     (t/is (= [{:a 12, :m false}, {:a 14, :m false}, {:m false}]
              (tu/query-ra '[:project [a {m (not m)}]
-                            [:mark-join {m [true]}
+                            [:mark-join {:mark-spec {m [true]}}
                              [::tu/pages
                               [[{:a 12}, {:a 14}, {:a nil}]]]
                              [::tu/pages
@@ -331,7 +331,7 @@
 
     (t/is (= [{:a 12, :m false}, {:a 14, :m false}, {:m false}]
              (tu/query-ra '[:project [a {m (not m)}]
-                            [:mark-join {m [true]}
+                            [:mark-join {:mark-spec {m [true]}}
                              [::tu/pages
                               [[{:a 12}, {:a 14}, {:a nil}]]]
                              [::tu/pages
@@ -339,7 +339,7 @@
 
     (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:m true}]
              (tu/query-ra '[:project [a {m (not m)}]
-                            [:mark-join {m [true]}
+                            [:mark-join {:mark-spec {m [true]}}
                              [::tu/pages
                               [[{:a 12}, {:a 14}, {:a nil}]]]
                              [::tu/pages

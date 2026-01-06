@@ -230,10 +230,11 @@
     [:anti-join _opts lhs _]
     (relation-columns lhs)
 
-    [:mark-join projection lhs _]
-    (conj
-      (relation-columns lhs)
-      (->projected-column projection))
+    [:mark-join opts lhs _]
+    (let [{:keys [mark-spec]} opts]
+      (conj
+        (relation-columns lhs)
+        (->projected-column mark-spec)))
 
     [:single-join _opts lhs rhs]
     (vec (mapcat relation-columns [lhs rhs]))
@@ -1018,7 +1019,7 @@
       (when (and (= mode :mark-join)
                  (not (parameters-referenced-in-relation? dependent-relation (vals columns))))
         [:mark-join
-         (w/postwalk-replace (set/map-invert columns) (update-vals mark-join-projection vector))
+         {:mark-spec (w/postwalk-replace (set/map-invert columns) (update-vals mark-join-projection vector))}
          independent-relation
          dependent-relation]))))
 
@@ -1044,19 +1045,20 @@
 (defn- select-mark-join->semi-join [z]
   (r/zmatch z
     [:select opts
-     [:mark-join projection lhs rhs]]
+     [:mark-join mark-join-opts lhs rhs]]
     ;; =>
     (let [{:keys [predicate]} opts
-          mj-col (key (first projection))]
+          {:keys [mark-spec]} mark-join-opts
+          mj-col (key (first mark-spec))]
       (cond
         (= predicate mj-col)
         [:map [{mj-col true}]
-         [:semi-join {:conditions (val (first projection))}
+         [:semi-join {:conditions (val (first mark-spec))}
           lhs rhs]]
 
         (= predicate (list 'not mj-col))
         [:map [{mj-col true}]
-         [:anti-join {:conditions (val (first projection))}
+         [:anti-join {:conditions (val (first mark-spec))}
           lhs rhs]]))))
 
 (defn- apply-table-col->unnest [z]
@@ -1228,12 +1230,13 @@
     (:join :semi-join :anti-join :left-outer-join :single-join :mark-join :full-outer-join)
     (r/zmatch
       z
-      [:mark-join projection lhs rhs]
-      (let [projected-col (first (keys projection))
-            join-expressions (first (vals projection))
+      [:mark-join opts lhs rhs]
+      (let [{:keys [mark-spec]} opts
+            projected-col (first (keys mark-spec))
+            join-expressions (first (vals mark-spec))
             new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
         (when (not= new-join-expressions join-expressions)
-          [:mark-join {projected-col new-join-expressions} lhs rhs]))
+          [:mark-join {:mark-spec {projected-col new-join-expressions}} lhs rhs]))
 
       [join-type opts lhs rhs]
       (let [{:keys [conditions]} opts

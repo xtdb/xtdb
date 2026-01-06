@@ -35,6 +35,7 @@
   (s/coll-of ::join-condition-clause :kind vector?))
 
 (s/def ::conditions ::join-condition)
+(s/def ::mark-spec (s/map-of ::lp/column ::join-condition, :count 1, :conform-keys true))
 
 (defmethod lp/ra-expr :join [_]
   (s/cat :op #{:⋈ :join}
@@ -68,7 +69,7 @@
 
 (defmethod lp/ra-expr :mark-join [_]
   (s/cat :op #{:mark-join}
-         :mark-spec (s/map-of ::lp/column ::join-condition, :count 1, :conform-keys true)
+         :opts (s/keys :req-un [::mark-spec])
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
@@ -494,8 +495,9 @@
                                 :merge-fields-fn (fn [left-fields _] left-fields)
                                 :join-type ::anti-semi-join}))
 
-(defmethod lp/emit-expr :mark-join [{:keys [mark-spec] :as join-expr} args]
-  (let [[mark-col-name mark-condition] (first mark-spec)]
+(defmethod lp/emit-expr :mark-join [{:keys [opts] :as join-expr} args]
+  (let [{:keys [mark-spec]} opts
+        [mark-col-name mark-condition] (first mark-spec)]
     (emit-join-expr-and-children (assoc join-expr :condition mark-condition) args
                                  {:build-side :right
                                   :merge-fields-fn (fn [left-fields _] (assoc left-fields mark-col-name (types/->field [:? :bool] mark-col-name)))

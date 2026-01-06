@@ -497,7 +497,7 @@
        [:map tmp-expr-sym->expr-vec
         (wrap-expr-subqueries* plan arg-subqueries)]
        subquery]
-      [:mark-join {placeholder [true]}
+      [:mark-join {:mark-spec {placeholder [true]}}
        plan
        subquery])))
 

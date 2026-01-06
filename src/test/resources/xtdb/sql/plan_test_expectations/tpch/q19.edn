@@ -41,17 +41,17 @@
                    _sq_13)
                   (== l.1/l_shipinstruct "DELIVER IN PERSON")))}
     [:mark-join
-     {_sq_13 [{l.1/l_shipmode xt.values.14/_column_1}]}
+     {:mark-spec {_sq_13 [{l.1/l_shipmode xt.values.14/_column_1}]}}
      [:mark-join
-      {_sq_11 [{p.2/p_container xt.values.12/_column_1}]}
+      {:mark-spec {_sq_11 [{p.2/p_container xt.values.12/_column_1}]}}
       [:mark-join
-       {_sq_5 [{l.1/l_shipmode xt.values.6/_column_1}]}
+       {:mark-spec {_sq_5 [{l.1/l_shipmode xt.values.6/_column_1}]}}
        [:mark-join
-        {_sq_3 [{p.2/p_container xt.values.4/_column_1}]}
+        {:mark-spec {_sq_3 [{p.2/p_container xt.values.4/_column_1}]}}
         [:mark-join
-         {_sq_7 [{p.2/p_container xt.values.8/_column_1}]}
+         {:mark-spec {_sq_7 [{p.2/p_container xt.values.8/_column_1}]}}
          [:mark-join
-          {_sq_9 [{l.1/l_shipmode xt.values.10/_column_1}]}
+          {:mark-spec {_sq_9 [{l.1/l_shipmode xt.values.10/_column_1}]}}
           [:mega-join
            [{l.1/l_partkey p.2/_id}]
            [[:rename
