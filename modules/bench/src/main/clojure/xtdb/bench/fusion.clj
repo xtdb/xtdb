@@ -149,17 +149,69 @@
                WHERE r._valid_from >= ? AND r._valid_from < ?
                LIMIT 1000" start end] opts))
 
+;; Production-inspired queries from design partner usage patterns
+
+(defn query-system-settings [node system-id opts]
+  "Simple point-in-time system lookup - common query pattern"
+  (xt/q node ["SELECT *, _valid_from, _system_from FROM system WHERE _id = ?" system-id] opts))
+
+(defn query-readings-for-system [node system-id start end opts]
+  "Time-series scan for specific system - production metabase query"
+  (xt/q node ["SELECT readings._valid_to as reading_time, readings.value::float AS reading_value
+               FROM readings FOR ALL VALID_TIME
+               JOIN system ON system._id = readings.system_id AND system._valid_time CONTAINS readings._valid_from
+               WHERE system._id = ? AND readings._valid_from >= ? AND readings._valid_from < ?
+               ORDER BY reading_time" system-id start end] opts))
+
+(defn query-system-count-with-joins [node start end opts]
+  "Complex temporal aggregation with multi-table joins - production analytics query"
+  (xt/q node ["WITH dates AS (
+                 SELECT d::timestamptz AS d
+                 FROM generate_series(?::timestamptz, ?::timestamptz, INTERVAL 'PT1H') AS x(d)
+               )
+               SELECT dates.d, COUNT(DISTINCT system._id) AS c
+               FROM dates
+               LEFT OUTER JOIN system ON system._valid_time CONTAINS dates.d
+               LEFT OUTER JOIN device ON device.system_id = system._id AND device._valid_time CONTAINS dates.d
+               LEFT OUTER JOIN device_model ON device_model._id = device.device_model_id AND device_model._valid_time CONTAINS dates.d
+               LEFT OUTER JOIN site ON site._id = system.nmi AND site._valid_time CONTAINS dates.d
+               GROUP BY dates.d
+               ORDER BY dates.d" start end] opts))
+
+(defn query-readings-range-bins [node start end opts]
+  "Hourly aggregation using range_bins - production power readings query"
+  (xt/q node ["WITH corrected_readings AS (
+                 SELECT r.*, r._valid_from, r._valid_to,
+                        (bin)._from AS corrected_from,
+                        (bin)._weight AS corrected_weight,
+                        r.value * (bin)._weight AS corrected_portion
+                 FROM readings AS r, UNNEST(range_bins(INTERVAL 'PT1H', r._valid_time)) AS b(bin)
+                 WHERE r._valid_from >= ? AND r._valid_from < ?
+               )
+               SELECT corrected_from AS t, SUM(corrected_portion) / SUM(corrected_weight) AS value
+               FROM corrected_readings
+               GROUP BY corrected_from
+               ORDER BY t" start end] opts))
+
 (defn ->query-stage [query-type]
   {:t :call
    :stage (keyword (str "query-" (name query-type)))
    :f (fn [{:keys [node !state]}]
-        (let [{:keys [latest-completed-tx max-valid-time min-valid-time]} @!state
-              opts {:current-time (:system-time latest-completed-tx)}]
+        (let [{:keys [latest-completed-tx max-valid-time min-valid-time system-ids]} @!state
+              opts {:current-time (:system-time latest-completed-tx)}
+              sample-system-id (first system-ids)]
           (case query-type
+            ;; Original simple queries
             :readings-aggregate (query-readings-aggregate node min-valid-time max-valid-time opts)
             :system-count-over-time (query-system-count-over-time node min-valid-time max-valid-time opts)
             :system-device-join (query-system-device-join node max-valid-time opts)
-            :readings-with-system (query-readings-with-system node min-valid-time max-valid-time opts))))})
+            :readings-with-system (query-readings-with-system node min-valid-time max-valid-time opts)
+
+            ;; Production-inspired queries
+            :system-settings (query-system-settings node sample-system-id opts)
+            :readings-for-system (query-readings-for-system node sample-system-id min-valid-time max-valid-time opts)
+            :system-count-with-joins (query-system-count-with-joins node min-valid-time max-valid-time opts)
+            :readings-range-bins (query-readings-range-bins node min-valid-time max-valid-time opts))))})
 
 (defmethod b/cli-flags :fusion [_]
   [[nil "--devices DEVICES" "Number of systems" :parse-fn parse-long :default 10000]
@@ -207,10 +259,17 @@
                                           :max-valid-time max-vt
                                           :min-valid-time min-vt})))}]
 
-             [(->query-stage :readings-aggregate)
+             [;; Original simple queries
+              (->query-stage :readings-aggregate)
               (->query-stage :system-count-over-time)
               (->query-stage :system-device-join)
-              (->query-stage :readings-with-system)])}))
+              (->query-stage :readings-with-system)
+
+              ;; Production-inspired queries from design partner
+              (->query-stage :system-settings)
+              (->query-stage :readings-for-system)
+              (->query-stage :system-count-with-joins)
+              (->query-stage :readings-range-bins)])}))
 
 (t/deftest ^:benchmark run-fusion
   (let [path (util/->path "/tmp/fusion-bench")]
