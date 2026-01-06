@@ -218,6 +218,10 @@
   (->> tries
        (into [] (mapcat (comp :live val)))))
 
+(defn live-and-nascent-tries [{:keys [tries]}]
+  (->> tries
+       (into [] (mapcat (comp (fn [{:keys [live nascent]}] (concat live nascent)) val)))))
+
 (defn all-tries [{:keys [tries]}]
   (->> (into [] (mapcat (comp (fn [{:keys [live nascent garbage]}] (concat live nascent garbage)) val)) tries)
        ;; the sort is needed as the table blocks need the current tries to be in the total order for restart
@@ -384,6 +388,9 @@
 
   (listAllTrieKeys [this table]
     (mapv :trie-key (all-tries (trie-state this table))))
+
+  (listLiveAndNascentTrieKeys [this table]
+    (mapv :trie-key (live-and-nascent-tries (trie-state this table))))
 
   (refresh [_]
     ;; HACK this is duplicated in `load-tries`
