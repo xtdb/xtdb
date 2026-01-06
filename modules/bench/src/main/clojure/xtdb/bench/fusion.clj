@@ -8,6 +8,84 @@
   (:import (java.time Duration Instant)
            (java.util UUID)))
 
+;; ============================================================================
+;; FUSION BENCHMARK
+;; ============================================================================
+;;
+;; A benchmark based on actual design partner usage patterns (both intended
+;; and emergent) to catch regressions and enable optimization.
+;;
+;; ## Data Model (9 tables)
+;;
+;; Core tables:
+;;   1. device_model    - Reference data (10 rows)
+;;   2. site            - Location data (NMI meter IDs, ~= system count)
+;;   3. system          - Main table, constantly updated (configurable count, default 10k)
+;;   4. device          - Links systems to device models (2× system count)
+;;   5. readings        - High volume time-series (system_id, value, valid_time)
+;;
+;; Registration test tables (for cumulative registration query):
+;;   6. test_suite      - Test suite definitions (1 suite)
+;;   7. test_case       - Test cases within suites (5 cases per suite)
+;;   8. test_suite_run  - Suite executions per system (1 per system, 80% pass rate)
+;;   9. test_case_run   - Case execution results (5 per suite run)
+;;
+;; ## Workload Characteristics (matching production patterns)
+;;
+;; Readings ingestion:
+;;   - Batch size: ~1000 (production pattern, was <30 historically)
+;;   - Insert frequency: every 5min of valid_time
+;;   - System-time lag: bimodal distribution
+;;     * 80%: 0-2ms delay (near real-time)
+;;     * 20%: 0-50ms delay (delayed batch processing)
+;;   - Expected overhead: ~6s for 1k readings (~0.6% of total runtime)
+;;
+;; System updates:
+;;   - Small-batch UPDATEs: batch size <30 (production pattern)
+;;   - Simulates constant trickle of system state changes (~every 5min)
+;;   - Update frequency: configurable rounds (default 10)
+;;
+;; ## Query Suite (9 queries: 4 simple + 5 production)
+;;
+;; Simple queries (sanity checks):
+;;   1. readings-aggregate        - Basic GROUP BY aggregation
+;;   2. system-count-over-time    - generate_series + CONTAINS
+;;   3. system-device-join        - Multi-table temporal join
+;;   4. readings-with-system      - Join readings with system
+;;
+;; Production-inspired queries (from design partner):
+;;   5. system-settings           - Point-in-time system lookup
+;;   6. readings-for-system       - Time-series scan with temporal join
+;;   7. system-count-with-joins   - Complex 4-table temporal aggregation
+;;   8. readings-range-bins       - Hourly aggregation using range_bins()
+;;   9. cumulative-registration   - 5 CTEs + window functions + 6-way join
+;;                                 Tests registration status (Success/Failed/Pending)
+;;
+;; ## Key Production Pathologies Captured
+;;
+;; - Constant small-batch UPDATEs to frequently-queried table (system)
+;; - Large-batch INSERT workload (readings)
+;; - Temporal scatter: data arriving with variable system-time lag
+;; - Complex multi-CTE queries with window functions
+;; - range_bins temporal aggregation patterns
+;; - Multi-table temporal joins with CONTAINS predicates
+;;
+;; ## Usage
+;;
+;; Default (10k systems × 10k readings):
+;;   ./gradlew fusion
+;;
+;; Custom scale:
+;;   ./gradlew fusion -PdeviceCount=1000 -PreadingCount=1000
+;;
+;; Large scale (needs 12GB JVM):
+;;   ./gradlew fusion -PdeviceCount=10000 -PreadingCount=10000 -PtwelveGBJvm
+;;
+;; Expected runtime: ~17-25 minutes for 10k×1k scale
+;; Memory: 6GB default (2GB heap + 3GB direct), 12GB for large scale
+;;
+;; ============================================================================
+
 (defn random-float [min max] (+ min (* (rand) (- max min))))
 (defn random-int [min max] (+ min (rand-int (- max min))))
 (defn random-nth [coll] (nth coll (rand-int (count coll))))
