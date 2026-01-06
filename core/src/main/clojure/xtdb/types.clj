@@ -223,8 +223,7 @@
   (str (name type-head) "-" precision "-" scale "-" bit-width))
 
 (defmethod col-type->vec-type :tstz-range [nullable? _col-type]
-  (VectorType. TsTzRangeType/INSTANCE nullable?
-               [(->field temporal-type "$data$")]))
+  (VectorType/maybe VectorType/TSTZ_RANGE (boolean nullable?)))
 
 (defn col-type->field
   (^org.apache.arrow.vector.types.pojo.Field [col-type]

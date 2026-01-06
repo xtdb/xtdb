@@ -1,6 +1,5 @@
 (ns xtdb.serde.types
-  (:require [clojure.pprint :as pp]
-            [xtdb.error :as err])
+  (:require [clojure.pprint :as pp])
   (:import (java.io Writer)
            [java.util List]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
@@ -271,7 +270,9 @@
     (instance? VectorType type-spec) type-spec
     (instance? Field type-spec) (VectorType/fromField type-spec)
     (instance? ArrowType type-spec) (VectorType. type-spec false [])
-    (keyword? type-spec) (VectorType. (->arrow-type type-spec) false ^List (vector))
+    (keyword? type-spec) (case type-spec
+                           :tstz-range VectorType/TSTZ_RANGE
+                           (VectorType. (->arrow-type type-spec) false ^List (vector)))
 
     :else (let [[first-elem & more-opts] type-spec
                 [nullable? more-opts] (if (= :? first-elem)
@@ -279,7 +280,7 @@
                                         [false (cons first-elem more-opts)])
                 [arrow-type-head & more-opts] more-opts]
             (case arrow-type-head
-              (:union :set :list :struct :sparse-union)
+              (:union :set :list :struct :sparse-union :tstz-range)
               (VectorType. (->arrow-type arrow-type-head)
                            nullable?
                            ^List (mapv #(->field* % arrow-type-head) more-opts))

@@ -126,7 +126,7 @@ data class VectorType(
         val REG_PROC = VectorType(RegProcType)
 
         @JvmField
-        val TSTZ_RANGE = VectorType(TsTzRangeType)
+        val TSTZ_RANGE = VectorType(TsTzRangeType, false, listOf($$"$data$" ofType INSTANT))
 
         @JvmField
         val TIMESTAMP_MICRO = VectorType(ArrowType.Timestamp(MICROSECOND, null))

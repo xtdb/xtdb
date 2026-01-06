@@ -22,8 +22,9 @@
 
 (t/use-fixtures :each tu/with-allocator)
 
-(defmethod expr/codegen-call [:dbg :any] [{:keys [tag], [arg-type] :arg-types}]
-  {:return-col-type arg-type
+(defmethod expr/codegen-call [:dbg :any] [{:keys [tag], [arg-col-type] :arg-col-types, [arg-type] :arg-types}]
+  {:return-col-type arg-col-type
+   :return-type arg-type
    :->call-code (fn [[arg]]
                   `(doto ~arg
                      (->> pr-str (log/debugf "%s: %s" ~(if tag (format " (%s)" tag) "")))))})

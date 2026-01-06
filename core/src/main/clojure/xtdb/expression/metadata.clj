@@ -202,25 +202,25 @@
                                 (> (.getLong ~count-vec ~expr/idx-sym) 0))))))}))
 
 (defmethod expr/codegen-call [:_meta_double :num] [_expr]
-  {:return-col-type :f64, :->call-code #(do `(double ~@%))})
+  {:return-type #xt/type :f64, :return-col-type :f64, :->call-code #(do `(double ~@%))})
 
-(defmethod expr/codegen-call [:_meta_double :timestamp-tz] [{[[_ts-tz ts-unit _zone]] :arg-types}]
-  {:return-col-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+(defmethod expr/codegen-call [:_meta_double :timestamp-tz] [{[[_ts-tz ts-unit _zone]] :arg-col-types}]
+  {:return-type #xt/type :f64, :return-col-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
 
-(defmethod expr/codegen-call [:_meta_double :timestamp-local] [{[[_ts-local ts-unit]] :arg-types}]
-  {:return-col-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+(defmethod expr/codegen-call [:_meta_double :timestamp-local] [{[[_ts-local ts-unit]] :arg-col-types}]
+  {:return-type #xt/type :f64, :return-col-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
 
 (defmethod expr/codegen-call [:_meta_double :date] [_]
-  {:return-col-type :f64, :->call-code #(do `(* ~@% 86400.0))})
+  {:return-type #xt/type :f64, :return-col-type :f64, :->call-code #(do `(* ~@% 86400.0))})
 
-(defmethod expr/codegen-call [:_meta_double :time-local] [{[[_time-local ts-unit]] :arg-types}]
-  {:return-col-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+(defmethod expr/codegen-call [:_meta_double :time-local] [{[[_time-local ts-unit]] :arg-col-types}]
+  {:return-type #xt/type :f64, :return-col-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
 
-(defmethod expr/codegen-call [:_meta_double :duration] [{[[_duration ts-unit]] :arg-types}]
-  {:return-col-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+(defmethod expr/codegen-call [:_meta_double :duration] [{[[_duration ts-unit]] :arg-col-types}]
+  {:return-type #xt/type :f64, :return-col-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
 
 (defmethod expr/codegen-call [:_meta_double :any] [_]
-  {:return-col-type :null, :->call-code (fn [& _args] nil)})
+  {:return-type #xt/type [:? :null], :return-col-type :null, :->call-code (fn [& _args] nil)})
 
 (defmethod expr/codegen-expr :test-minmax [{:keys [f min-or-max col val-sym dbl-sym]} opts]
   (case (get-in opts [:local-types dbl-sym])
