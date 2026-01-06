@@ -48,8 +48,36 @@
    :serial-number (str "SN-" (UUID/randomUUID))
    :installed-at (Instant/parse "2020-01-01T00:00:00Z")})
 
+;; Registration test tables - for cumulative registration query
+
+(defn generate-test-suite [suite-id]
+  {:xt/id suite-id
+   :purpose "REGISTRATION"
+   :name "System Registration Test Suite"})
+
+(defn generate-test-case [case-id suite-id case-num]
+  {:xt/id case-id
+   :test-suite-id suite-id
+   :name (str "Test Case " case-num)
+   :description (str "Registration check " case-num)})
+
+(defn generate-test-suite-run [run-id system-id suite-id passed?]
+  {:xt/id run-id
+   :system-id system-id
+   :test-suite-id suite-id
+   :status (if passed? "DONE" "FAILED")
+   :started-at (Instant/parse "2020-01-01T12:00:00Z")
+   :completed-at (Instant/parse "2020-01-01T12:05:00Z")})
+
+(defn generate-test-case-run [run-id suite-run-id case-id passed?]
+  {:xt/id run-id
+   :test-suite-run-id suite-run-id
+   :test-case-id case-id
+   :status (if passed? "OK" "FAILED")
+   :executed-at (Instant/parse "2020-01-01T12:00:00Z")})
+
 (defn ->init-tables-stage
-  [system-ids site-ids device-model-ids device-ids batch-size]
+  [system-ids site-ids device-model-ids device-ids test-suite-id test-case-ids batch-size]
   {:t :call, :stage :init-tables
    :f (fn [{:keys [node]}]
         (log/infof "Inserting %d device_model records" (count device-model-ids))
@@ -72,7 +100,31 @@
           (xt/submit-tx node [(into [:put-docs :device]
                                     (map #(generate-device % (random-nth system-ids)
                                                            (random-nth device-model-ids))
-                                         batch))])))})
+                                         batch))]))
+
+        ;; Insert test suite and test cases for registration tracking
+        (log/infof "Inserting test suite and %d test cases" (count test-case-ids))
+        (xt/submit-tx node [(into [:put-docs :test_suite] [(generate-test-suite test-suite-id)])])
+        (xt/submit-tx node [(into [:put-docs :test_case]
+                                  (map-indexed #(generate-test-case %2 test-suite-id %1) test-case-ids))])
+
+        ;; Insert test suite runs and case runs for each system
+        ;; Simulate 80% pass rate
+        (log/infof "Inserting test suite runs for %d systems" (count system-ids))
+        (doseq [system-id system-ids]
+          (let [suite-run-id (UUID/randomUUID)
+                passed? (< (rand) 0.8)]
+            (xt/submit-tx node [(into [:put-docs :test_suite_run]
+                                      [(generate-test-suite-run suite-run-id system-id test-suite-id passed?)])])
+            (xt/submit-tx node [(into [:put-docs :test_case_run]
+                                      (map-indexed (fn [idx case-id]
+                                                     ;; If suite passed, all cases pass; else random fails
+                                                     (let [case-passed? (or passed? (< (rand) 0.7))]
+                                                       (generate-test-case-run (UUID/randomUUID)
+                                                                               suite-run-id
+                                                                               case-id
+                                                                               case-passed?)))
+                                                   test-case-ids))]))))})
 
 (defn ->readings-docs [system-ids reading-idx start end]
   (into [:put-docs {:into :readings :valid-from start :valid-to end}]
@@ -193,6 +245,86 @@
                GROUP BY corrected_from
                ORDER BY t" start end] opts))
 
+(defn query-cumulative-registration [node start end opts]
+  "Complex registration tracking query with 4 CTEs, window functions, and multi-table temporal joins"
+  (xt/q node ["WITH gen AS (
+                 SELECT d::timestamptz AS t
+                 FROM generate_series(?::timestamptz, ?::timestamptz, INTERVAL 'PT1H') AS x(d)
+               ),
+               latest_test_suite_run AS (
+                 SELECT ranked.* FROM (
+                   SELECT gen.t,
+                          test_suite_run.*,
+                          ROW_NUMBER() OVER (
+                            PARTITION BY gen.t, test_suite_run.system_id
+                            ORDER BY test_suite_run._system_from DESC
+                          ) AS rn
+                   FROM gen
+                   JOIN test_suite_run ON test_suite_run._valid_time CONTAINS gen.t
+                   JOIN test_suite ON test_suite._id = test_suite_run.test_suite_id
+                                   AND test_suite._valid_time CONTAINS gen.t
+                 ) ranked WHERE ranked.rn = 1
+               ),
+               expected_test_cases AS (
+                 SELECT latest_test_suite_run.t AS t,
+                        latest_test_suite_run._id AS test_suite_run_id,
+                        COUNT(*) AS count
+                 FROM latest_test_suite_run
+                 JOIN test_suite ON test_suite._id = latest_test_suite_run.test_suite_id
+                                 AND test_suite._valid_time CONTAINS latest_test_suite_run.t
+                 JOIN test_case ON test_case.test_suite_id = test_suite._id
+                                AND test_case._valid_time CONTAINS latest_test_suite_run.t
+                 GROUP BY latest_test_suite_run.t, latest_test_suite_run._id
+               ),
+               passing_test_cases AS (
+                 SELECT latest_test_suite_run.t AS t,
+                        latest_test_suite_run._id AS test_suite_run_id,
+                        COUNT(*) AS count
+                 FROM latest_test_suite_run
+                 JOIN test_case_run ON test_case_run.test_suite_run_id = latest_test_suite_run._id
+                                    AND test_case_run._valid_time CONTAINS latest_test_suite_run.t
+                 WHERE test_case_run.status = 'OK'
+                 GROUP BY latest_test_suite_run.t, latest_test_suite_run._id
+               ),
+               data AS (
+                 SELECT gen.t,
+                        system._id AS system_id,
+                        system.created_at AS created_at,
+                        site._id IS NOT NULL AS site_linked,
+                        COUNT(device._id) >= 1 AS devices_linked,
+                        COALESCE(latest_test_suite_run.status = 'DONE', FALSE) AS test_suite_run_ok,
+                        COALESCE(expected_test_cases.count, 0) AS expected_test_cases,
+                        COALESCE(passing_test_cases.count, 0) AS passing_test_cases
+                 FROM gen
+                 JOIN system ON system._valid_time CONTAINS gen.t
+                 LEFT OUTER JOIN site ON site._id = system.nmi AND site._valid_time CONTAINS gen.t
+                 LEFT OUTER JOIN device ON device.system_id = system._id AND device._valid_time CONTAINS gen.t
+                 LEFT OUTER JOIN latest_test_suite_run ON latest_test_suite_run.system_id = system._id
+                                                       AND latest_test_suite_run.t = gen.t
+                 LEFT OUTER JOIN expected_test_cases ON expected_test_cases.test_suite_run_id = latest_test_suite_run._id
+                                                     AND expected_test_cases.t = gen.t
+                 LEFT OUTER JOIN passing_test_cases ON passing_test_cases.test_suite_run_id = latest_test_suite_run._id
+                                                    AND passing_test_cases.t = gen.t
+                 GROUP BY gen.t, system._id, system.created_at, site._id, latest_test_suite_run.status,
+                          expected_test_cases.count, passing_test_cases.count
+               ),
+               data_with_status AS (
+                 SELECT t,
+                        system_id,
+                        CASE
+                          WHEN (site_linked AND devices_linked AND test_suite_run_ok
+                                AND expected_test_cases = passing_test_cases) THEN 'Success'
+                          WHEN (created_at + INTERVAL 'PT48H' < t) THEN 'Failed'
+                          ELSE 'Pending'
+                        END AS registration_status
+                 FROM data
+               )
+               SELECT gen.t, registration_status, COUNT(system_id) AS c
+               FROM gen
+               LEFT OUTER JOIN data_with_status ON data_with_status.t = gen.t
+               GROUP BY gen.t, registration_status
+               ORDER BY gen.t, registration_status" start end] opts))
+
 (defn ->query-stage [query-type]
   {:t :call
    :stage (keyword (str "query-" (name query-type)))
@@ -211,7 +343,8 @@
             :system-settings (query-system-settings node sample-system-id opts)
             :readings-for-system (query-readings-for-system node sample-system-id min-valid-time max-valid-time opts)
             :system-count-with-joins (query-system-count-with-joins node min-valid-time max-valid-time opts)
-            :readings-range-bins (query-readings-range-bins node min-valid-time max-valid-time opts))))})
+            :readings-range-bins (query-readings-range-bins node min-valid-time max-valid-time opts)
+            :cumulative-registration (query-cumulative-registration node min-valid-time max-valid-time opts))))})
 
 (defmethod b/cli-flags :fusion [_]
   [[nil "--devices DEVICES" "Number of systems" :parse-fn parse-long :default 10000]
@@ -228,7 +361,9 @@
   (let [system-ids (generate-ids devices)
         site-ids (mapv #(str "NMI-" %) (range devices))
         device-model-ids (generate-ids 10)
-        device-ids (generate-ids (* devices 2))]
+        device-ids (generate-ids (* devices 2))
+        test-suite-id (UUID/randomUUID)
+        test-case-ids (generate-ids 5)] ; 5 test cases per suite
     (log/info {:devices devices :readings readings :batch-size batch-size
                :update-batch-size update-batch-size :updates-per-device updates-per-device})
     {:title "Fusion benchmark"
@@ -239,7 +374,7 @@
      :->state #(do {:!state (atom {:system-ids system-ids})})
      :tasks (concat
              (when-not no-load?
-               [(->init-tables-stage system-ids site-ids device-model-ids device-ids update-batch-size)
+               [(->init-tables-stage system-ids site-ids device-model-ids device-ids test-suite-id test-case-ids update-batch-size)
                 (->ingest-readings-stage system-ids readings batch-size)
                 (->update-system-stage system-ids updates-per-device update-batch-size)
                 (->sync-stage)
@@ -269,7 +404,8 @@
               (->query-stage :system-settings)
               (->query-stage :readings-for-system)
               (->query-stage :system-count-with-joins)
-              (->query-stage :readings-range-bins)])}))
+              (->query-stage :readings-range-bins)
+              (->query-stage :cumulative-registration)])}))
 
 (t/deftest ^:benchmark run-fusion
   (let [path (util/->path "/tmp/fusion-bench")]
