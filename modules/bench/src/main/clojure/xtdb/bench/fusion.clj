@@ -146,7 +146,13 @@
             (when (zero? (mod idx 1000))
               (log/infof "Readings batch %d" idx))
             (doseq [batch batches]
-              (xt/submit-tx node [(->readings-docs (vec batch) idx start end)])))))})
+              (xt/submit-tx node [(->readings-docs (vec batch) idx start end)]))
+            ;; Bimodal system-time lag: 80% near real-time, 20% delayed
+            ;; Creates temporal scatter without significant overhead (~6s for 1k readings)
+            (let [delay-ms (if (< (rand) 0.8)
+                             (rand-int 2)       ;; 80%: 0-2ms (barely noticeable)
+                             (rand-int 50))]    ;; 20%: 0-50ms (cluster gaps)
+              (Thread/sleep delay-ms)))))})
 
 (defn ->update-system-stage [system-ids updates-per-device update-batch-size]
   {:t :call, :stage :update-system
