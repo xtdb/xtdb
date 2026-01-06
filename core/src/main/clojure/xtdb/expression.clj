@@ -17,6 +17,7 @@
            (java.util.regex Pattern)
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration)
+           (org.apache.arrow.vector.types.pojo ArrowType$Union)
            (org.apache.commons.codec.binary Hex)
            (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorReader VectorType)
            (xtdb.operator ProjectionSpec SelectionSpec)
@@ -2010,22 +2011,21 @@
            batch-binding)
          (sequence (comp (distinct) cat)))))
 
-(defn write-value-out-code [return-col-type]
-  (let [field (types/col-type->field return-col-type)]
-    (if (= (.getType field) #xt.arrow/type :union)
-      (let [writer-syms (->> (.getChildren field)
-                             (into {} (map (juxt types/field->col-type (fn [_] (gensym 'out-writer))))))]
-        {:writer-bindings (into []
-                                (mapcat (fn [[value-type writer-sym]]
-                                          [writer-sym `(.vectorFor ~out-vec-sym
-                                                                   ~(types/arrow-type->leg (st/->arrow-type value-type)))]))
-                                writer-syms)
+(defn write-value-out-code [^VectorType return-type]
+  (if (instance? ArrowType$Union (.getArrowType return-type))
+    (let [writer-syms (->> (.getChildren return-type)
+                           (into {} (map (juxt types/field->col-type (fn [_] (gensym 'out-writer))))))]
+      {:writer-bindings (into []
+                              (mapcat (fn [[value-type writer-sym]]
+                                        [writer-sym `(.vectorFor ~out-vec-sym
+                                                                 ~(types/arrow-type->leg (st/->arrow-type value-type)))]))
+                              writer-syms)
 
-         :write-value-out! (fn [value-type code]
-                             (write-value-code value-type (get writer-syms value-type) code))})
+       :write-value-out! (fn [value-type code]
+                           (write-value-code value-type (get writer-syms value-type) code))})
 
-      {:write-value-out! (fn [value-type code]
-                           (write-value-code value-type out-vec-sym code))})))
+    {:write-value-out! (fn [value-type code]
+                         (write-value-code value-type out-vec-sym code))}))
 
 (defn wrap-zone-id-cache-buster [f]
   (fn [expr opts]
@@ -2051,8 +2051,7 @@
   (-> (fn [expr opts]
         (let [expr (prepare-expr expr)
               {:keys [return-type continue] :as emitted-expr} (codegen-expr expr opts)
-              return-col-type (types/vec-type->col-type return-type)
-              {:keys [writer-bindings write-value-out!]} (write-value-out-code return-col-type)]
+              {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]
           (assert return-type (pr-str expr))
           {:!projection-fn (delay
                              (-> `(fn [~(-> rel-sym (with-tag RelationReader))

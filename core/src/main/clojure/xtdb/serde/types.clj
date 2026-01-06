@@ -237,11 +237,8 @@
       (VectorType/field field-name (->type type-spec)))
 
     :else (case ctx
-            :union (.getAsLegField (->type field-spec))
             (:set :list) (VectorType/field "$data$" (->type field-spec))
-
-            (throw (err/incorrect :invalid-field (str "invalid field spec: " (pr-str field-spec))
-                                  {:field-spec field-spec})))))
+            (VectorType/field (->type field-spec)))))
 
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [field-spec]
   (->field* field-spec nil))

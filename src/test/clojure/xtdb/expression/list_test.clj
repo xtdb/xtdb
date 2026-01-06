@@ -18,8 +18,8 @@
                :size (some-> res (.getSize))
                :value (when res
                         (util/with-open [out-vec (Vector/open tu/*allocator* field)]
-                                        (.writeTo res out-vec 0 (.getSize res))
-                                        (vec (.getAsList out-vec))))}))]
+                          (.writeTo res out-vec 0 (.getSize res))
+                          (vec (.getAsList out-vec))))}))]
     (t/is (= {:field #xt/field {"$data$" :i64}
               :size 10
               :value [1 2 3 4 5 6 7 8 9 10]}

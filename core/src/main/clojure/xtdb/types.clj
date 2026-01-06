@@ -313,7 +313,7 @@
     ArrowType$List (first (.getChildren field))
     SetType (first (.getChildren field))
     ArrowType$FixedSizeList (first (.getChildren field))
-    (col-type->field :null)))
+    #xt/field [:? :null]))
 
 ;;; struct
 
