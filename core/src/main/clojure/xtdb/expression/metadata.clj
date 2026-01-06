@@ -160,7 +160,7 @@
 
 (defmethod expr/codegen-expr :test-bloom [{:keys [col bloom-hash-sym]} _opts]
   (let [bloom-vec-sym (gensym "bloom-vec")]
-    {:return-col-type :bool
+    {:return-type #xt/type :bool
      :batch-bindings [[bloom-vec-sym `(some-> (.vectorForOrNull ~col-rdr-sym "bytes")
                                               (.vectorForOrNull "bloom"))]]
      :continue (fn [cont]
@@ -177,7 +177,7 @@
 
 (defmethod expr/codegen-expr :test-presence [{:keys [col ^VectorType value-type]} _opts]
   (let [presence-vec (gensym 'presence)]
-    {:return-col-type :bool
+    {:return-type #xt/type :bool
      :batch-bindings [[presence-vec `(.vectorForOrNull ~col-rdr-sym ~(types/arrow-type->leg (.getArrowType value-type)))]]
      :continue (fn [cont]
                  (cont :bool
@@ -190,7 +190,7 @@
 
 (defmethod expr/codegen-expr :test-not-null [{:keys [col]} _opts]
   (let [count-vec (gensym 'count)]
-    {:return-col-type :bool
+    {:return-type #xt/type :bool
      :batch-bindings [[count-vec `(.vectorForOrNull ~col-rdr-sym "count")]]
      :continue (fn [cont]
                  (cont :bool
@@ -224,13 +224,13 @@
 
 (defmethod expr/codegen-expr :test-minmax [{:keys [f min-or-max col val-sym dbl-sym]} opts]
   (case (get-in opts [:local-types dbl-sym])
-    :null {:return-col-type :bool, :continue (fn [cont] (cont :bool true))}
+    :null {:return-type #xt/type :bool, :continue (fn [cont] (cont :bool true))}
 
     :f64 (let [col-name (str col)
                col-sym (gensym 'meta_col)
                val-type (get-in opts [:local-types val-sym])
                flavour-col (MetadataFlavour/getMetaColName (MetadataFlavour/getMetadataFlavour (st/->arrow-type val-type)))]
-           {:return-col-type :bool,
+           {:return-type #xt/type :bool
             :batch-bindings [[(-> col-sym (expr/with-tag VectorReader))
                               `(some-> (.vectorForOrNull ~col-rdr-sym ~flavour-col)
                                        (.vectorForOrNull ~(name min-or-max)))]]

@@ -2894,7 +2894,7 @@ UNION ALL
           {:keys [res res-type]} (tu/q-sql tu/*node* "SELECT d + 1 AS v FROM docs")
           res (map :v res)]
 
-      (t/is (= [["v" #xt/type [:union [:decimal 32 2 128] [:decimal 32 1 128]]]]
+      (t/is (= [["v" #xt/type [:union [:decimal 32 1 128] [:decimal 32 2 128]]]]
                res-type))
 
       (doseq [[expected result] (map vector expected-res res)]

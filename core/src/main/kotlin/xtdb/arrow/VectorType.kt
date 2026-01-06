@@ -50,6 +50,12 @@ data class VectorType(
     // not sure which I want yet.
     val unionLegs get() = if (arrowType is ArrowType.Union) children.map { it.asType } else listOf(this)
 
+    val splitNull get() = when {
+        arrowType is ArrowType.Null -> listOf(this)
+        nullable -> listOf(NULL, copy(nullable = false))
+        else -> listOf(this)
+    }
+
     companion object {
 
         @JvmStatic

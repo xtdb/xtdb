@@ -270,6 +270,9 @@
 (defn vec-type->col-type [^VectorType vec-type]
   (field->col-type (VectorType/field vec-type)))
 
+(defn nullable-vec-type? [^VectorType vec-type]
+  (boolean (some VectorType/.isNullable (.getUnionLegs vec-type))))
+
 ;;; fixed size binary
 
 (defmethod arrow-type->col-type ArrowType$FixedSizeBinary [^ArrowType$FixedSizeBinary fsb-type]

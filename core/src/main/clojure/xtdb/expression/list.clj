@@ -10,8 +10,8 @@
 (def compile-list-expr
   (-> (fn [expr opts]
         (let [expr (expr/prepare-expr expr)
-              {:keys [return-col-type continue] :as emitted-expr} (expr/codegen-expr expr opts)
-              field (types/unnest-field (types/col-type->field return-col-type))
+              {:keys [return-type continue] :as emitted-expr} (expr/codegen-expr expr opts)
+              field (types/unnest-field (types/->field return-type))
               lvr-sym (gensym 'lvr)]
           {:field field
            :->list-expr (eval `(fn [~(-> expr/schema-sym (expr/with-tag IPersistentMap))

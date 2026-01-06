@@ -160,12 +160,12 @@
                         {:with-types? true})))
 
   (t/is (= '{:res [{:x5 1} {:x5 2.0} {:x5 3}],
-             :types {x5 #xt/type [:union :f64 :i64]}}
+             :types {x5 #xt/type [:union :i64 :f64]}}
            (tu/query-ra '[:table {x5 [1 2.0 3]}]
                         {:with-types? true})))
 
   (t/is (= {:res [{:unnest-param 12.4} {} {:unnest-param 100} {:unnest-param 83.0}],
-            :types '{unnest-param #xt/type [:union :f64 [:? :null] :i64]}}
+            :types '{unnest-param #xt/type [:union [:? :f64] :i64]}}
 
            (tu/query-ra '[:table {unnest-param ?coll}]
                         {:args {:coll [12.4, nil, 100, 83.0]}
