@@ -210,9 +210,8 @@
                           (update [(dec level) recency (cond-> part (seq part) pop)] supersede-by-block-idx block-idx opts)))))))))
 
 (defn apply-trie-notification [table-cat trie opts]
-  (let [trie (-> trie (update :part vec))]
-    (cond-> table-cat
-      (not (stale-msg? table-cat trie)) (insert-trie trie opts))))
+  (cond-> table-cat
+    (not (stale-msg? table-cat trie)) (insert-trie trie opts)))
 
 (defn current-tries [{:keys [tries]}]
   (->> tries
@@ -247,7 +246,7 @@
 
 (defn remove-garbage [table-cat garbage-trie-keys]
   (let [garbage-by-path (-> (->> (map trie/parse-trie-key garbage-trie-keys)
-                                 (group-by (fn [{:keys [level recency part]}] [level recency (vec part)])))
+                                 (group-by (juxt :level :recency :part)))
                             (update-vals #(map :trie-key %)))]
 
     (update table-cat :tries
