@@ -292,10 +292,16 @@
   (xt/q node ["SELECT *, _valid_from, _system_from FROM system WHERE _id = ?" system-id] opts))
 
 (defn query-readings-for-system [node system-id start end opts]
-  "Time-series scan for specific system - production metabase query"
+  "Time-series scan for specific system - production metabase query
+
+  NOTE: Production query is missing temporal join constraint (CONTAINS predicate).
+  Without 'system._valid_time CONTAINS readings._valid_from', this produces a cartesian
+  product - each reading is joined with ALL versions of the system. If a system has been
+  updated N times, each reading appears N times in the result. Benchmarking the actual
+  production query to capture realistic performance characteristics."
   (xt/q node ["SELECT readings._valid_to as reading_time, readings.value::float AS reading_value
                FROM readings FOR ALL VALID_TIME
-               JOIN system ON system._id = readings.system_id AND system._valid_time CONTAINS readings._valid_from
+               JOIN system FOR ALL VALID_TIME ON system._id = readings.system_id
                WHERE system._id = ? AND readings._valid_from >= ? AND readings._valid_from < ?
                ORDER BY reading_time" system-id start end] opts))
 
