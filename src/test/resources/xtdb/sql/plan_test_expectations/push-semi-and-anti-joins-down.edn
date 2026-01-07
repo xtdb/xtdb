@@ -1,5 +1,5 @@
 [:project
- [{foo x.1/foo}]
+ {:projections [{foo x.1/foo}]}
  [:select
   {:predicate _sq_3}
   [:apply
@@ -9,7 +9,7 @@
     [[:rename x.1 [:scan {:table #xt/table x, :columns [foo]}]]
      [:rename y.2 [:scan {:table #xt/table y, :columns [biz]}]]]]
    [:project
-    [{bar z.4/bar}]
+    {:projections [{bar z.4/bar}]}
     [:rename
      z.4
      [:scan

@@ -1,17 +1,17 @@
 [:project
- [{l_shipmode l.2/l_shipmode} high_line_count low_line_count]
+ {:projections [{l_shipmode l.2/l_shipmode} high_line_count low_line_count]}
  [:order-by
   {:order-specs [[l.2/l_shipmode {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
-   [l.2/l_shipmode
+   {:projections [l.2/l_shipmode
     {high_line_count _sum_out_5}
-    {low_line_count _sum_out_7}]
+    {low_line_count _sum_out_7}]}
    [:group-by
     [l.2/l_shipmode
      {_sum_out_7 (sum _sum_in_8)}
      {_sum_out_5 (sum _sum_in_6)}]
     [:map
-     [{_sum_in_8
+     {:projections [{_sum_in_8
        (cond
         (and
          (<> o.1/o_orderpriority "1-URGENT")
@@ -24,9 +24,9 @@
          (== o.1/o_orderpriority "1-URGENT")
          (== o.1/o_orderpriority "2-HIGH"))
         1
-        0)}]
+        0)}]}
      [:map
-      [{_sq_3 true}]
+      {:projections [{_sq_3 true}]}
       [:mega-join
        {:conditions [{o.1/_id l.2/l_orderkey}]}
        [[:rename

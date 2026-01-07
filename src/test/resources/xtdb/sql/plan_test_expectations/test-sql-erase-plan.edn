@@ -1,6 +1,6 @@
 [:distinct {}
  [:project
-  [{_iid u.1/_iid}]
+  {:projections [{_iid u.1/_iid}]}
   [:rename
    u.1
    [:scan

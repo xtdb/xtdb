@@ -3,8 +3,8 @@
  [:distinct {}
   [:union-all {}
    [:project
-    [{name si.1/name}]
+    {:projections [{name si.1/name}]}
     [:rename si.1 [:scan {:table stars_in, :columns [name]}]]]
    [:project
-    [{name si.2/name}]
+    {:projections [{name si.2/name}]}
     [:rename si.2 [:scan {:table stars_in, :columns [name]}]]]]]]

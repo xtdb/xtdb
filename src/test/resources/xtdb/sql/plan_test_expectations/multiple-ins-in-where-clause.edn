@@ -1,9 +1,9 @@
 [:project
- [{a f.1/a}]
+ {:projections [{a f.1/a}]}
  [:map
-  [{_sq_4 true}]
+  {:projections [{_sq_4 true}]}
   [:map
-   [{_sq_2 true}]
+   {:projections [{_sq_2 true}]}
    [:semi-join
     {:conditions [{f.1/b xt.values.5/_column_1}]}
     [:semi-join

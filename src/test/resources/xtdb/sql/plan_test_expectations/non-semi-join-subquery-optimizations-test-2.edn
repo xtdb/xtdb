@@ -1,10 +1,10 @@
 [:project
- [{a f.1/a}]
+ {:projections [{a f.1/a}]}
  [:select
   {:predicate (== true _sq_2)}
   [:mark-join
    {:mark-spec {_sq_2 [true]}}
    [:rename f.1 [:scan {:table #xt/table foo, :columns [a]}]]
    [:project
-    [{c foo.3/c}]
+    {:projections [{c foo.3/c}]}
     [:rename foo.3 [:scan {:table #xt/table foo, :columns [c]}]]]]]]

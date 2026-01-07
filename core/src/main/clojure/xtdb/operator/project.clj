@@ -10,29 +10,36 @@
 
 (s/def ::append-columns? boolean?)
 
+(s/def ::projections
+  (s/coll-of (s/or :column ::lp/column
+                   :row-number-column (s/map-of ::lp/column #{'(row-number)}, :conform-keys true, :count 1)
+                   :local-row-number-column (s/map-of ::lp/column #{'(local-row-number)}, :conform-keys true, :count 1)
+                   :star (s/map-of ::lp/column #{'*}, :conform-keys true, :count 1)
+                   ;; don't do this for args, because they aren't real cols
+                   ;; the EE handles these through `:extend`
+                   :rename (s/map-of ::lp/column (s/and ::lp/column
+                                                        #(not (str/starts-with? (name %) "?"))
+                                                        (complement '#{xtdb/postgres-server-version xtdb/xtdb-server-version xtdb/end-of-time}))
+                                     :conform-keys true, :count 1)
+                   :extend ::lp/column-expression)))
+
 (defmethod lp/ra-expr :project [_]
   (s/cat :op #{:π :pi :project}
-         :opts (s/? (s/keys :req-un [::append-columns?]))
-         :projections (s/coll-of (s/or :column ::lp/column
-                                       :row-number-column (s/map-of ::lp/column #{'(row-number)}, :conform-keys true, :count 1)
-                                       :local-row-number-column (s/map-of ::lp/column #{'(local-row-number)}, :conform-keys true, :count 1)
-                                       :star (s/map-of ::lp/column #{'*}, :conform-keys true, :count 1)
-                                       ;; don't do this for args, because they aren't real cols
-                                       ;; the EE handles these through `:extend`
-                                       :rename (s/map-of ::lp/column (s/and ::lp/column
-                                                                            #(not (str/starts-with? (name %) "?"))
-                                                                            (complement '#{xtdb/postgres-server-version xtdb/xtdb-server-version xtdb/end-of-time}))
-                                                         :conform-keys true, :count 1)
-                                       :extend ::lp/column-expression))
+         :opts (s/keys :req-un [::projections]
+                       :opt-un [::append-columns?])
          :relation ::lp/ra-expression))
+
+;; :explicit ns to allow distinct spec with same key name
+(s/def :xtdb.operator.project.map/projections
+  (s/coll-of (s/or :row-number-column (s/map-of ::lp/column #{'(row-number)}, :conform-keys true, :count 1)
+                   :local-row-number-column (s/map-of ::lp/column #{'(local-row-number)}, :conform-keys true, :count 1)
+                   :star (s/map-of ::lp/column #{'*}, :conform-keys true, :count 1)
+                   :extend ::lp/column-expression)
+             :min-count 1))
 
 (defmethod lp/ra-expr :map [_]
   (s/cat :op #{:ⲭ :chi :map}
-         :projections (s/coll-of (s/or :row-number-column (s/map-of ::lp/column #{'(row-number)}, :conform-keys true, :count 1)
-                                       :local-row-number-column (s/map-of ::lp/column #{'(local-row-number)}, :conform-keys true, :count 1)
-                                       :star (s/map-of ::lp/column #{'*}, :conform-keys true, :count 1)
-                                       :extend ::lp/column-expression)
-                                 :min-count 1)
+         :opts (s/keys :req-un [:xtdb.operator.project.map/projections])
          :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -43,7 +50,7 @@
 (defn ->project-cursor [{:keys [allocator args schema]} in-cursor projection-specs]
   (ProjectCursor. allocator in-cursor projection-specs schema args))
 
-(defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-fields] :as args}]
+(defmethod lp/emit-expr :project [{:keys [relation], {:keys [projections append-columns?]} :opts} {:keys [param-fields] :as args}]
   (let [emitted-child-relation (lp/emit-expr relation args)]
     (lp/unary-expr emitted-child-relation
       (fn [{inner-fields :fields, :as inner-rel}]
@@ -87,6 +94,6 @@
                        (cond-> (->project-cursor opts in-cursor projection-specs)
                          (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))
 
-(defmethod lp/emit-expr :map [op args]
-  (lp/emit-expr (assoc op :op :project :opts {:append-columns? true}) args))
+(defmethod lp/emit-expr :map [{:keys [opts] :as op} args]
+  (lp/emit-expr (assoc op :op :project :opts (assoc opts :append-columns? true)) args))
 

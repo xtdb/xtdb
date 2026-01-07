@@ -1,5 +1,5 @@
 [:project
- [{s docs.1/_id}]
+ {:projections [{s docs.1/_id}]}
  [:rename
   docs.1
   [:select {:predicate (> nil 1)} [:scan {:table #xt/table docs, :columns [_id]}]]]]

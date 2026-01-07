@@ -1,7 +1,7 @@
 [:rename
  {x2 _column_1}
  [:project
-  [{x2 4}]
+  {:projections [{x2 4}]}
   [:rename
    {}
    [:scan

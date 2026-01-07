@@ -1,5 +1,5 @@
 [:project
- [{_id xt.values.1/_id}
+ {:projections [{_id xt.values.1/_id}
   {c_custkey xt.values.1/c_custkey}
   {c_name xt.values.1/c_name}
   {c_address xt.values.1/c_address}
@@ -7,7 +7,7 @@
   {c_phone xt.values.1/c_phone}
   {c_acctbal xt.values.1/c_acctbal}
   {c_mktsegment xt.values.1/c_mktsegment}
-  {c_comment xt.values.1/c_comment}]
+  {c_comment xt.values.1/c_comment}]}
  [:rename
   xt.values.1
   [:table

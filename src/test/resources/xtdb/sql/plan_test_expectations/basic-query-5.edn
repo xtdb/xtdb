@@ -1,5 +1,5 @@
 [:project
- [{movie_title si.2/movie_title}]
+ {:projections [{movie_title si.2/movie_title}]}
  [:mega-join
   {:conditions [{m.1/title si.2/movie_title} {m.1/movie_year si.2/year}]}
   [[:rename m.1 [:scan {:table #xt/table movie, :columns [movie_year title]}]]

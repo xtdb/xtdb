@@ -1,5 +1,5 @@
 [:project
- [{a f.1/a}]
+ {:projections [{a f.1/a}]}
  [:select
   {:predicate (or _sq_2 (== f.1/b 42))}
   [:mark-join

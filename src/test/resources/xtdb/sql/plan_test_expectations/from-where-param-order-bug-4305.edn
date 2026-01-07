@@ -1,5 +1,5 @@
 [:project
- [{_id foo.1/_id}]
+ {:projections [{_id foo.1/_id}]}
  [:rename
   foo.1
   [:scan

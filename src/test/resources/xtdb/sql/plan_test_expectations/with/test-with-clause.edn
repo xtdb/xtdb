@@ -1,16 +1,16 @@
 [:project
- [{foo_id foo.3/_id} {baz_id baz.4/_id}]
+ {:projections [{foo_id foo.3/_id} {baz_id baz.4/_id}]}
  [:mega-join
   {:conditions []}
   [[:rename
     foo.3
     [:project
-     [{_id bar.1/_id}]
+     {:projections [{_id bar.1/_id}]}
      [:rename bar.1 [:scan {:table #xt/table bar, :columns [{_id (== _id 5)}]}]]]]
    [:rename
     baz.4
     [:project
-     [{_id bar.1/_id}]
+     {:projections [{_id bar.1/_id}]}
      [:rename
       bar.1
       [:scan {:table #xt/table bar, :columns [{_id (== _id 5)}]}]]]]]]]

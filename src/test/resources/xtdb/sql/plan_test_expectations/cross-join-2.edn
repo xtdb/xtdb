@@ -1,5 +1,5 @@
 [:project
- [{c1 c.3/c1}]
+ {:projections [{c1 c.3/c1}]}
  [:mega-join
   {:conditions []}
   [[:rename a.1 [:scan {:table #xt/table a, :columns []}]]

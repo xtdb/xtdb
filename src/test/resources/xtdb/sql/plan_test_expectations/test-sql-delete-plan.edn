@@ -1,16 +1,16 @@
 [:project
- [_iid
+ {:projections [_iid
   {_valid_from
    (greatest
     _valid_from
     (cast
      (coalesce #xt/date "2020-05-01" xtdb/start-of-time)
      [:timestamp-tz :micro "UTC"]))}
-  {_valid_to _valid_to}]
+  {_valid_to _valid_to}]}
  [:project
-  [{_iid u.1/_iid}
+  {:projections [{_iid u.1/_iid}
    {_valid_from u.1/_valid_from}
-   {_valid_to u.1/_valid_to}]
+   {_valid_to u.1/_valid_to}]}
   [:rename
    u.1
    [:scan

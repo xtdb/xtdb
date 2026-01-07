@@ -1,5 +1,5 @@
 [:project
- [_iid
+ {:projections [_iid
   {_valid_from
    (greatest
     _valid_from
@@ -12,12 +12,12 @@
     (coalesce
      (cast xtdb/end-of-time [:timestamp-tz :micro "UTC"])
      xtdb/end-of-time))}
-  col1]
+  col1]}
  [:project
-  [{_iid u.1/_iid}
+  {:projections [{_iid u.1/_iid}
    {_valid_from u.1/_valid_from}
    {_valid_to u.1/_valid_to}
-   {col1 30}]
+   {col1 30}]}
   [:rename
    u.1
    [:scan

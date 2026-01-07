@@ -1,13 +1,13 @@
 [:project
- [{o_orderpriority o.1/o_orderpriority} order_count]
+ {:projections [{o_orderpriority o.1/o_orderpriority} order_count]}
  [:order-by
   {:order-specs [[o.1/o_orderpriority {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
-   [o.1/o_orderpriority {order_count _row_count_5}]
+   {:projections [o.1/o_orderpriority {order_count _row_count_5}]}
    [:group-by
     [o.1/o_orderpriority {_row_count_5 (row-count)}]
     [:map
-     [{_sq_2 true}]
+     {:projections [{_sq_2 true}]}
      [:semi-join
       {:conditions [{o.1/_id l_orderkey}]}
       [:rename
@@ -24,7 +24,7 @@
              (single-field-interval "3" "MONTH" 2 6)))
            (>= o_orderdate #xt/date "1993-07-01"))}]}]]
       [:project
-       [{_id l.3/_id}
+       {:projections [{_id l.3/_id}
         {l_comment l.3/l_comment}
         {l_commitdate l.3/l_commitdate}
         {l_discount l.3/l_discount}
@@ -40,7 +40,7 @@
         {l_shipinstruct l.3/l_shipinstruct}
         {l_shipmode l.3/l_shipmode}
         {l_suppkey l.3/l_suppkey}
-        {l_tax l.3/l_tax}]
+        {l_tax l.3/l_tax}]}
        [:rename
         l.3
         [:select

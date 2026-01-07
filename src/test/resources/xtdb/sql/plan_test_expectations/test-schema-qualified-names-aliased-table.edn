@@ -1,5 +1,5 @@
 [:project
- [{column_name f.1/column_name}]
+ {:projections [{column_name f.1/column_name}]}
  [:rename
   f.1
   [:scan {:table #xt/table information_schema/columns, :columns [column_name]}]]]

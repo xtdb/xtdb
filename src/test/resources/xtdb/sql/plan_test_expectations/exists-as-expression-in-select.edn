@@ -1,8 +1,8 @@
 [:project
- [{_column_1 _sq_2}]
+ {:projections [{_column_1 _sq_2}]}
  [:mark-join
   {:mark-spec {_sq_2 [{x.1/y z}]}}
   [:rename x.1 [:scan {:table #xt/table x, :columns [y {z (== z 10)}]}]]
   [:project
-   [{z y.3/z}]
+   {:projections [{z y.3/z}]}
    [:rename y.3 [:scan {:table #xt/table y, :columns [z]}]]]]]

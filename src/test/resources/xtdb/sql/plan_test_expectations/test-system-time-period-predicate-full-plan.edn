@@ -1,5 +1,5 @@
 [:project
- [{foo_name foo.1/name} {bar_name bar.2/name}]
+ {:projections [{foo_name foo.1/name} {bar_name bar.2/name}]}
  [:mega-join
   {:conditions [(<
     (lower foo.1/_system_time)
@@ -10,16 +10,16 @@
   [[:rename
     foo.1
     [:project
-     [name
+     {:projections [name
       _system_from
       _system_to
-      {_system_time (period _system_from _system_to)}]
+      {_system_time (period _system_from _system_to)}]}
      [:scan {:table #xt/table foo, :columns [name _system_from _system_to]}]]]
    [:rename
     bar.2
     [:project
-     [name
+     {:projections [name
       _system_from
       _system_to
-      {_system_time (period _system_from _system_to)}]
+      {_system_time (period _system_from _system_to)}]}
      [:scan {:table #xt/table bar, :columns [name _system_from _system_to]}]]]]]]

@@ -1,27 +1,27 @@
 [:project
- [{p_brand p.2/p_brand}
+ {:projections [{p_brand p.2/p_brand}
   {p_type p.2/p_type}
   {p_size p.2/p_size}
-  supplier_cnt]
+  supplier_cnt]}
  [:order-by
   {:order-specs [[supplier_cnt {:direction :desc, :null-ordering :nulls-first}]
    [p.2/p_brand {:direction :asc, :null-ordering :nulls-last}]
    [p.2/p_type {:direction :asc, :null-ordering :nulls-last}]
    [p.2/p_size {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
-   [p.2/p_brand
+   {:projections [p.2/p_brand
     p.2/p_type
     p.2/p_size
-    {supplier_cnt _count_distinct_out_7}]
+    {supplier_cnt _count_distinct_out_7}]}
    [:group-by
     [p.2/p_brand
      p.2/p_type
      p.2/p_size
      {_count_distinct_out_7 (count_distinct ps.1/ps_suppkey)}]
     [:map
-     [{_sq_5 true}]
+     {:projections [{_sq_5 true}]}
      [:map
-      [{_sq_3 true}]
+      {:projections [{_sq_3 true}]}
       [:mega-join
        {:conditions [{ps.1/ps_partkey p.2/_id}]}
        [[:anti-join
@@ -30,7 +30,7 @@
           ps.1
           [:scan {:table #xt/table partsupp, :columns [ps_partkey ps_suppkey]}]]
          [:project
-          [{_id s.6/_id}]
+          {:projections [{_id s.6/_id}]}
           [:rename
            s.6
            [:scan

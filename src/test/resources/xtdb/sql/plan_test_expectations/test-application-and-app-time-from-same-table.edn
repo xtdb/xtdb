@@ -1,7 +1,7 @@
 [:rename
  {x1 name}
  [:project
-  [x1]
+  {:projections [x1]}
   [:rename
    {name x1, _valid_from x2, _valid_to x3}
    [:select

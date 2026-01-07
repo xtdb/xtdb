@@ -86,7 +86,7 @@
 
   '[:top {:limit 10}
     [:order-by {:order-specs [[time {:direction :desc}]]}
-     [:project [time device-id battery-temperature]
+     [:project {:projections [time device-id battery-temperature]}
       [:scan {:table device-readings
               :columns [time device-id battery-temperature
                         {battery-status (= battery-status "discharging")}]}]]]])
@@ -129,8 +129,8 @@
      [:group-by [hour
                  {min-battery-level (min battery-level)}
                  {max-battery-level (max battery-level)}]
-      [:project [{hour (date-trunc "HOUR" time)}
-                 battery-level]
+      [:project {:projections [{hour (date-trunc "HOUR" time)}
+                                battery-level]}
        [:semi-join {device-id device-id}
         [:scan {:table device-readings
                 :columns [device-id time battery-level]}]

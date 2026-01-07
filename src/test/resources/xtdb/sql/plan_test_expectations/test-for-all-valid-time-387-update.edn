@@ -1,8 +1,8 @@
 [:project
- [{_iid users.1/_iid}
+ {:projections [{_iid users.1/_iid}
   {_valid_from users.1/_valid_from}
   {_valid_to users.1/_valid_to}
-  {first_name "Sue"}]
+  {first_name "Sue"}]}
  [:rename
   users.1
   [:scan

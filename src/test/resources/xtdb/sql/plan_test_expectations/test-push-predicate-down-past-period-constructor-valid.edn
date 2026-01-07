@@ -1,5 +1,5 @@
 [:project
- [{_valid_time (period _valid_from _valid_to)}]
+ {:projections [{_valid_time (period _valid_from _valid_to)}]}
  [:select
   {:predicate (and
                (<=

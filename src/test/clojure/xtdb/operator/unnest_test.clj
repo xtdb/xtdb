@@ -50,21 +50,21 @@
                         {:args {:x [{:a 1, :b [1 2]} {:a 2, :b [3 4 5]}]}})))
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
-           (tu/query-ra '[:project [a b*]
+           (tu/query-ra '[:project {:projections [a b*]}
                           [:unnest {b* b}
                            [:table ?x]]]
                         {:args {:x [{:a 1, :b [1 2]} {:a 2, :b []}]}}))
         "skips rows with empty lists")
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
-           (tu/query-ra '[:project [a b*]
+           (tu/query-ra '[:project {:projections [a b*]}
                           [:unnest {b* b}
                            [:table ?x]]]
                         {:args {:x [{:a 2, :b 1} {:a 1, :b [1 2]}]}}))
         "skips rows with non-list unnest column")
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* "foo"}]
-           (tu/query-ra '[:project [a b*]
+           (tu/query-ra '[:project {:projections [a b*]}
                           [:unnest {b* b}
                            [:table ?x]]]
                         {:args {:x [{:a 1, :b [1 "foo"]}]}}))
@@ -72,7 +72,7 @@
 
   (t/is (= {{:a 1, :b* 1} 1, {:a 1, :b* "foo"} 1}
            (frequencies
-            (tu/query-ra '[:project [a b*]
+            (tu/query-ra '[:project {:projections [a b*]}
                            [:unnest {b* b}
                             [:table ?x]]]
                          {:args {:x [{:a 1, :b #{1 "foo"}}]}})))
@@ -80,7 +80,7 @@
 
   (t/is (= {{:a 1, :b* 1} 1, {:a 1, :b* "foo"} 1, {:a 3, :b* 2} 1, {:a 3, :b* "bar"} 1}
            (frequencies
-            (tu/query-ra '[:project [a b*]
+            (tu/query-ra '[:project {:projections [a b*]}
                            [:unnest {b* b}
                             [:table ?x]]]
                          {:args {:x [{:a 1, :b #{1 "foo"}}
@@ -93,7 +93,7 @@
             {:a 2, :b* 3, :ordinal 1}
             {:a 2, :b* 4, :ordinal 2}
             {:a 2, :b* 5, :ordinal 3}]
-           (tu/query-ra '[:project [a b* ordinal]
+           (tu/query-ra '[:project {:projections [a b* ordinal]}
                           [:unnest {b* b} {:ordinality-column ordinal}
                            [:table ?x]]]
                         {:args {:x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}
@@ -103,7 +103,7 @@
   (t/is (= [{:ordinal 1, :s 4}
             {:ordinal 2, :s 6}
             {:ordinal 3, :s 5}]
-           (tu/query-ra '[:project [ordinal s]
+           (tu/query-ra '[:project {:projections [ordinal s]}
                           [:group-by [ordinal {s (sum b*)}]
                            [:unnest {b* b} {:ordinality-column ordinal}
                             [:table ?x]]]]
@@ -124,14 +124,14 @@
 
   (t/is (= [{:o1 1, :o2 1} {:o1 2, :o2 2} {:o1 3, :o2 3}]
            (tu/query-ra
-            '[:project [o1 o2]
+            '[:project {:projections [o1 o2]}
               [:map
-               [{o2 o1}]
+               {:projections [{o2 o1}]}
                [:unnest
                 {x1 unnest}
                 {:ordinality-column o1}
                 [:map
-                 [{unnest xs}]
+                 {:projections [{unnest xs}]}
                  [:scan {:table #xt/table r1, :columns [xs]}]]]]]
             {:node tu/*node*}))))
 

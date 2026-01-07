@@ -1,5 +1,5 @@
 [:project
- [{a u.1/a}
+ {:projections [{a u.1/a}
   {_column_2 (current-time)}
   {_column_3 (current-time 2)}
   {_column_4 (current-date)}
@@ -8,5 +8,5 @@
   {_column_7 (local-time)}
   {_column_8 (local-time 6)}
   {_column_9 (local-timestamp)}
-  {_column_10 (local-timestamp 9)}]
+  {_column_10 (local-timestamp 9)}]}
  [:rename u.1 [:scan {:table #xt/table u, :columns [a]}]]]

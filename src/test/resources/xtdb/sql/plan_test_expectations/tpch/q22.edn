@@ -1,12 +1,12 @@
 [:project
- [{cntrycode custsale.12/cntrycode} numcust totacctbal]
+ {:projections [{cntrycode custsale.12/cntrycode} numcust totacctbal]}
  [:order-by
   {:order-specs [[custsale.12/cntrycode
     {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
-   [custsale.12/cntrycode
+   {:projections [custsale.12/cntrycode
     {numcust _row_count_13}
-    {totacctbal _sum_out_14}]
+    {totacctbal _sum_out_14}]}
    [:group-by
     [custsale.12/cntrycode
      {_row_count_13 (row-count)}
@@ -14,20 +14,20 @@
     [:rename
      custsale.12
      [:project
-      [{cntrycode (substring c.1/c_phone 1 2)}
-       {c_acctbal c.1/c_acctbal}]
+      {:projections [{cntrycode (substring c.1/c_phone 1 2)}
+       {c_acctbal c.1/c_acctbal}]}
       [:select
        {:predicate (> c.1/c_acctbal _sq_4)}
        [:single-join
         {:conditions []}
         [:map
-         [{_sq_2 true}]
+         {:projections [{_sq_2 true}]}
          [:semi-join
           {:conditions [{_needle xt.values.3/_column_1}]}
           [:map
-           [{_needle (substring c.1/c_phone 1 2)}]
+           {:projections [{_needle (substring c.1/c_phone 1 2)}]}
            [:map
-            [{_sq_9 true}]
+            {:projections [{_sq_9 true}]}
             [:anti-join
              {:conditions [{c.1/_id o_custkey}]}
              [:rename
@@ -35,7 +35,7 @@
               [:scan
                {:table #xt/table customer, :columns [c_phone c_acctbal _id]}]]
              [:project
-              [{_id o.10/_id}
+              {:projections [{_id o.10/_id}
                {o_clerk o.10/o_clerk}
                {o_comment o.10/o_comment}
                {o_custkey o.10/o_custkey}
@@ -43,7 +43,7 @@
                {o_orderpriority o.10/o_orderpriority}
                {o_orderstatus o.10/o_orderstatus}
                {o_shippriority o.10/o_shippriority}
-               {o_totalprice o.10/o_totalprice}]
+               {o_totalprice o.10/o_totalprice}]}
               [:rename
                o.10
                [:scan
@@ -68,15 +68,15 @@
              {:_column_1 "18"}
              {:_column_1 "17"}]]]]]
         [:project
-         [{_sq_4 _avg_out_8}]
+         {:projections [{_sq_4 _avg_out_8}]}
          [:group-by
           [{_avg_out_8 (avg c.5/c_acctbal)}]
           [:map
-           [{_sq_6 true}]
+           {:projections [{_sq_6 true}]}
            [:semi-join
             {:conditions [{_needle xt.values.7/_column_1}]}
             [:map
-             [{_needle (substring c.5/c_phone 1 2)}]
+             {:projections [{_needle (substring c.5/c_phone 1 2)}]}
              [:rename
               c.5
               [:scan

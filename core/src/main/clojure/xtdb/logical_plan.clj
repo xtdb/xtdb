@@ -245,11 +245,11 @@
              (symbol (str prefix-or-columns) (name c))))
       (replace prefix-or-columns (relation-columns relation)))
 
-    [:project projection _]
-    (mapv ->projected-column projection)
+    [:project opts _]
+    (mapv ->projected-column (:projections opts))
 
-    [:map projection relation]
-    (into (relation-columns relation) (map ->projected-column projection))
+    [:map opts relation]
+    (into (relation-columns relation) (map ->projected-column (:projections opts)))
 
     [:group-by columns _]
     (mapv ->projected-column columns)
@@ -533,12 +533,13 @@
   ;;that the cost of repeating the cost of the expression is worth it.
   (r/zmatch z
     [:select opts
-     [:project projection
+     [:project project-opts
       relation]]
     ;;=>
-    (let [{:keys [predicate]} opts]
+    (let [{:keys [predicate]} opts
+          {:keys [projections]} project-opts]
       (when (or push-correlated? (no-correlated-columns? predicate))
-        (let [period-projections (->> projection
+        (let [period-projections (->> projections
                                       (keep period-extends-projection?)
                                       (into {}))
               cols-referenced-in-predicate (expr-symbols predicate)]
@@ -552,7 +553,7 @@
                                 (set/difference
                                  cols-referenced-in-predicate
                                  (set (keys period-projections)))))
-            [:project projection
+            [:project {:projections projections}
              [:select {:predicate (w/postwalk-replace period-projections predicate)}
               relation]]))))))
 
@@ -613,25 +614,27 @@
 (defn- push-selection-down-past-project [push-correlated? z]
   (r/zmatch z
     [:select opts
-     [:project projection
+     [:project project-opts
       relation]]
     ;;=>
-    (let [{:keys [predicate]} opts]
+    (let [{:keys [predicate]} opts
+          {:keys [projections]} project-opts]
       (when (and (or push-correlated? (no-correlated-columns? predicate))
-                 (not (predicate-depends-on-calculated-column? predicate projection)))
-        [:project projection
-         [:select {:predicate (w/postwalk-replace (rename-map-for-projection-spec projection) predicate)}
+                 (not (predicate-depends-on-calculated-column? predicate projections)))
+        [:project {:projections projections}
+         [:select {:predicate (w/postwalk-replace (rename-map-for-projection-spec projections) predicate)}
           relation]]))
 
     [:select opts
-     [:map projection
+     [:map map-opts
       relation]]
     ;;=>
-    (let [{:keys [predicate]} opts]
+    (let [{:keys [predicate]} opts
+          {:keys [projections]} map-opts]
       (when (and (or push-correlated? (no-correlated-columns? predicate))
-                 (not (predicate-depends-on-calculated-column? predicate projection)))
-        [:map projection
-         [:select {:predicate (w/postwalk-replace (rename-map-for-projection-spec projection) predicate)}
+                 (not (predicate-depends-on-calculated-column? predicate projections)))
+        [:map {:projections projections}
+         [:select {:predicate (w/postwalk-replace (rename-map-for-projection-spec projections) predicate)}
           relation]]))))
 
 (defn- push-selection-down-past-group-by [push-correlated? z]
@@ -682,11 +685,13 @@
 
 (defn- remove-superseded-projects [z]
   (r/zmatch z
-    [:project projections-1
-     [:project projections-2
+    [:project opts-1
+     [:project opts-2
       relation]]
     ;;=>
-    (let [p1-map (for [p projections-1]
+    (let [{projections-1 :projections} opts-1
+          {projections-2 :projections} opts-2
+          p1-map (for [p projections-1]
                    (cond
                      (column? p) (MapEntry/create p p)
                      (map? p) (first p)))]
@@ -699,21 +704,22 @@
                               (column? p) (MapEntry/create p p)
                               (map? p) p))
                           (into {}))]
-          [:project (vec (for [[col expr] p1-map]
-                           {col (get p2-map expr)}))
+          [:project {:projections (vec (for [[col expr] p1-map]
+                                          {col (get p2-map expr)}))}
            relation])
 
         (and (every? symbol? projections-1)
              (not (every? symbol? projections-2))
              (= projections-1 (mapv ->projected-column projections-2)))
-        [:project projections-2 relation]))
+        [:project {:projections projections-2} relation]))
 
-    [:project projections
+    [:project opts
      relation]
     ;;=>
-    (when (and (every? symbol? projections)
-               (= (set projections) (set (relation-columns relation))))
-      relation)))
+    (let [{:keys [projections]} opts]
+      (when (and (every? symbol? projections)
+                 (= (set projections) (set (relation-columns relation))))
+        relation))))
 
 (defn- merge-selections-around-scan [z]
   (r/zmatch z
@@ -833,30 +839,32 @@
          [:select {:predicate predicate-1}
           relation]]))
 
-    [:project projection
+    [:project project-opts
      [:select opts
       relation]]
     ;;=>
-    (let [{:keys [predicate]} opts]
+    (let [{:keys [predicate]} opts
+          {:keys [projections]} project-opts]
       (when (not-empty (expr-correlated-symbols predicate))
-        (let [p-map (->> (for [p projection]
+        (let [p-map (->> (for [p projections]
                            (cond
                              (map? p) [(val (first p)) (key (first p))]
                              (symbol? p) [p p]))
                          (into {}))]
           (when (every? p-map (expr-symbols predicate))
             [:select {:predicate (w/postwalk-replace p-map predicate)}
-             [:project projection
+             [:project {:projections projections}
               relation]]))))
 
-    [:map projection
+    [:map map-opts
      [:select opts
       relation]]
     ;;=>
-    (let [{:keys [predicate]} opts]
+    (let [{:keys [predicate]} opts
+          {:keys [projections]} map-opts]
       (when (not-empty (expr-correlated-symbols predicate))
         [:select {:predicate predicate}
-         [:map projection
+         [:map {:projections projections}
           relation]]))
 
     [:cross-join _cross-join-opts lhs [:select opts rhs]]
@@ -966,16 +974,16 @@
                                                         %) group-by-columns)
                                                 group-by-columns))))
               [:apply (->apply-opts {:mode apply-mode, :columns columns})
-               [:map [{row-number-sym '(row-number)}]
+               [:map {:projections [{row-number-sym '(row-number)}]}
                 independent-relation]
                (if count-star?
-                 [:map [{dep-countable-sym 1}]
+                 [:map {:projections [{dep-countable-sym 1}]}
                   dependent-relation]
                  dependent-relation)]]
       (not-empty post-group-by-projection)
-      (conj [:map (vec (w/postwalk-replace
-                        smap
-                        post-group-by-projection))]))))
+      (conj [:map {:projections (vec (w/postwalk-replace
+                                          smap
+                                          post-group-by-projection))}]))))
 
 (defn- decorrelate-apply-rule-1
   "R A⊗ E = R ⊗true E
@@ -1037,12 +1045,12 @@
           mj-col (key (first mark-spec))]
       (cond
         (= predicate mj-col)
-        [:map [{mj-col true}]
+        [:map {:projections [{mj-col true}]}
          [:semi-join {:conditions (val (first mark-spec))}
           lhs rhs]]
 
         (= predicate (list 'not mj-col))
-        [:map [{mj-col true}]
+        [:map {:projections [{mj-col true}]}
          [:anti-join {:conditions (val (first mark-spec))}
           lhs rhs]]))))
 
@@ -1057,24 +1065,25 @@
         (let [[unnest-col unnest-expr] (first col-spec)
               unnest-expr (w/postwalk-replace (set/map-invert columns) unnest-expr)]
           [:unnest {unnest-col 'unnest}
-           [:map [{'unnest unnest-expr}]
+           [:map {:projections [{'unnest unnest-expr}]}
             lhs]])))
 
     [:apply opts
      lhs
-     [:map projection
+     [:map map-opts
       [:table col-spec]]]
     ;; =>
-    (let [{:keys [mode columns]} opts]
+    (let [{:keys [mode columns]} opts
+          {:keys [projections]} map-opts]
       (when (and (= mode :cross-join)
                  (map? col-spec)
-                 (= 1 (count projection))
-                 (map? (first projection))
-                 (= '(local-row-number) (val (ffirst projection))))
+                 (= 1 (count projections))
+                 (map? (first projections))
+                 (= '(local-row-number) (val (ffirst projections))))
         (let [[unnest-col unnest-expr] (first col-spec)
               unnest-expr (w/postwalk-replace (set/map-invert columns) unnest-expr)]
-          [:unnest {unnest-col 'unnest} {:ordinality-column (key (ffirst projection))}
-           [:map [{'unnest unnest-expr}]
+          [:unnest {unnest-col 'unnest} {:ordinality-column (key (ffirst projections))}
+           [:map {:projections [{'unnest unnest-expr}]}
             lhs]])))))
 
 (defn- decorrelate-apply-rule-2
@@ -1117,12 +1126,13 @@
   "R A× (πv E) = πv ∪ columns(R) (R A× E)"
   [z]
   (r/zmatch z
-    [:apply opts independent-relation [:project projection dependent-relation]]
+    [:apply opts independent-relation [:project project-opts dependent-relation]]
     ;;=>
-    (let [{:keys [mode columns]} opts]
+    (let [{:keys [mode columns]} opts
+          {:keys [projections]} project-opts]
       (when (= mode :cross-join)
-        [:project (vec (concat (relation-columns independent-relation)
-                               (w/postwalk-replace (set/map-invert columns) projection)))
+        [:project {:projections (vec (concat (relation-columns independent-relation)
+                                             (w/postwalk-replace (set/map-invert columns) projections)))}
          (let [columns (remove-unused-correlated-columns columns dependent-relation)]
            [:apply (->apply-opts {:mode :cross-join, :columns columns}) independent-relation dependent-relation])]))))
 
@@ -1131,13 +1141,14 @@
   [z]
   (r/zmatch z
     [:apply opts independent-relation
-     [:project post-group-by-projection
+     [:project project-opts
       [:group-by group-by-columns
        dependent-relation]]]
     ;;=>
-    (let [{:keys [mode columns]} opts]
+    (let [{:keys [mode columns]} opts
+          {:keys [projections]} project-opts]
       (when (= mode :cross-join)
-        (decorrelate-group-by-apply post-group-by-projection group-by-columns
+        (decorrelate-group-by-apply projections group-by-columns
                                     :cross-join columns independent-relation dependent-relation)))
 
     [:apply opts independent-relation
@@ -1167,14 +1178,15 @@
   (r/zmatch z
     [:apply opts
      independent-relation
-     [:project post-group-by-projection
+     [:project project-opts
       [:group-by group-by-columns
        dependent-relation]]]
     ;;=>
-    (let [{:keys [mode columns]} opts]
+    (let [{:keys [mode columns]} opts
+          {:keys [projections]} project-opts]
       (when (and (= mode :single-join)
                  (not (contains-invalid-rule-9-agg-fns? group-by-columns)))
-        (decorrelate-group-by-apply post-group-by-projection group-by-columns
+        (decorrelate-group-by-apply projections group-by-columns
                                     :left-outer-join columns independent-relation dependent-relation)))
 
     [:apply opts
@@ -1235,30 +1247,34 @@
   ;; assumes you wont ever have a project like [] whos job is to return an empty rel
   (r/zmatch z
     [:apply opts i
-     [:project projection dependent-relation]]
+     [:project project-opts dependent-relation]]
     ;;=>
-    (let [{:keys [mode]} opts]
+    (let [{:keys [mode]} opts
+          {:keys [projections]} project-opts]
       (when (and (contains? #{:semi-join :anti-join} mode)
-                 (every? symbol? projection))
+                 (every? symbol? projections))
         [:apply (->apply-opts opts) i dependent-relation]))
 
     [:semi-join join-opts i
-     [:project projection dependent-relation]]
+     [:project project-opts dependent-relation]]
     ;;=>
-    (when (every? symbol? projection)
-      [:semi-join join-opts i dependent-relation])
+    (let [{:keys [projections]} project-opts]
+      (when (every? symbol? projections)
+        [:semi-join join-opts i dependent-relation]))
 
     [:anti-join join-opts i
-     [:project projection dependent-relation]]
+     [:project project-opts dependent-relation]]
      ;;=>
-     (when (every? symbol? projection)
-       [:anti-join join-opts i dependent-relation])
+     (let [{:keys [projections]} project-opts]
+       (when (every? symbol? projections)
+         [:anti-join join-opts i dependent-relation]))
 
     [:group-by c
-     [:project projection dependent-relation]]
+     [:project project-opts dependent-relation]]
      ;;=>
-     (when (every? symbol? projection)
-       [:group-by c dependent-relation])))
+     (let [{:keys [projections]} project-opts]
+       (when (every? symbol? projections)
+         [:group-by c dependent-relation]))))
 
 (defn push-semi-and-anti-joins-down [z]
   (r/zmatch
@@ -1324,25 +1340,27 @@
              [:anti-join join-opts inner-rhs rhs]]))
 
     [:semi-join join-opts
-     [:map projection
+     [:map map-opts
       inner-lhs]
      inner-rhs]
     ;; =>
-    (let [{:keys [conditions]} join-opts]
-      (when-not (predicate-depends-on-calculated-column? conditions projection)
-        [:map projection
-         [:semi-join {:conditions (w/postwalk-replace (rename-map-for-projection-spec projection) conditions)}
+    (let [{:keys [conditions]} join-opts
+          {:keys [projections]} map-opts]
+      (when-not (predicate-depends-on-calculated-column? conditions projections)
+        [:map {:projections projections}
+         [:semi-join {:conditions (w/postwalk-replace (rename-map-for-projection-spec projections) conditions)}
           inner-lhs inner-rhs]]))
 
     [:anti-join join-opts
-     [:map projection
+     [:map map-opts
       inner-lhs]
      inner-rhs]
     ;; =>
-    (let [{:keys [conditions]} join-opts]
-      (when-not (predicate-depends-on-calculated-column? conditions projection)
-        [:map projection
-         [:anti-join {:conditions (w/postwalk-replace (rename-map-for-projection-spec projection) conditions)}
+    (let [{:keys [conditions]} join-opts
+          {:keys [projections]} map-opts]
+      (when-not (predicate-depends-on-calculated-column? conditions projections)
+        [:map {:projections projections}
+         [:anti-join {:conditions (w/postwalk-replace (rename-map-for-projection-spec projections) conditions)}
           inner-lhs inner-rhs]]))))
 
 (defn- promote-selection-to-mega-join [z]

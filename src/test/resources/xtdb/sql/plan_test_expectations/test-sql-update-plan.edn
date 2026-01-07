@@ -1,5 +1,5 @@
 [:project
- [_iid
+ {:projections [_iid
   {_valid_from
    (greatest
     _valid_from
@@ -9,14 +9,14 @@
   {_valid_to _valid_to}
   first_name
   id
-  last_name]
+  last_name]}
  [:project
-  [{_iid u.1/_iid}
+  {:projections [{_iid u.1/_iid}
    {_valid_from u.1/_valid_from}
    {_valid_to u.1/_valid_to}
    {first_name "Sue"}
    {id u.1/id}
-   {last_name u.1/last_name}]
+   {last_name u.1/last_name}]}
   [:rename
    u.1
    [:scan

@@ -1,13 +1,13 @@
 [:project
- [{n_name n.5/n_name} revenue]
+ {:projections [{n_name n.5/n_name} revenue]}
  [:order-by
   {:order-specs [[revenue {:direction :desc, :null-ordering :nulls-first}]]}
   [:project
-   [n.5/n_name {revenue _sum_out_7}]
+   {:projections [n.5/n_name {revenue _sum_out_7}]}
    [:group-by
     [n.5/n_name {_sum_out_7 (sum _sum_in_8)}]
     [:map
-     [{_sum_in_8 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]
+     {:projections [{_sum_in_8 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]}
      [:mega-join
       {:conditions [{n.5/n_regionkey r.6/_id}
        {s.4/s_nationkey n.5/_id}

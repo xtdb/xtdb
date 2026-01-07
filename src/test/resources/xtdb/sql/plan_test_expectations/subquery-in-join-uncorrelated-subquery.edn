@@ -1,5 +1,5 @@
 [:project
- [{a foo.1/a}]
+ {:projections [{a foo.1/a}]}
  [:mega-join
   {:conditions []}
   [[:rename foo.1 [:scan {:table #xt/table foo, :columns [a]}]]
@@ -9,5 +9,5 @@
      {:conditions []}
      [:rename bar.2 [:scan {:table #xt/table bar, :columns [c]}]]
      [:project
-      [{_sq_3 foo.4/b}]
+      {:projections [{_sq_3 foo.4/b}]}
       [:rename foo.4 [:scan {:table #xt/table foo, :columns [b]}]]]]]]]]

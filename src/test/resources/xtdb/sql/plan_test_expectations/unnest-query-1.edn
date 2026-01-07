@@ -1,8 +1,8 @@
 [:project
- [{films si.1/films} {film film.3/film} {film_ord film.3/film_ord}]
+ {:projections [{films si.1/films} {film film.3/film} {film_ord film.3/film_ord}]}
  [:unnest
   {film.3/film unnest}
   {:ordinality-column film.3/film_ord}
   [:map
-   [{unnest si.1/films}]
+   {:projections [{unnest si.1/films}]}
    [:rename si.1 [:scan {:table #xt/table stars_in, :columns [films]}]]]]]

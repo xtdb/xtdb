@@ -1,22 +1,22 @@
 [:top
  {:skip nil, :limit 100}
  [:project
-  [{c_name c.1/c_name}
+  {:projections [{c_name c.1/c_name}
    c_custkey
    o_orderkey
    {o_orderdate o.2/o_orderdate}
    {o_totalprice o.2/o_totalprice}
-   sum_qty]
+   sum_qty]}
   [:order-by
    {:order-specs [[o.2/o_totalprice {:direction :desc, :null-ordering :nulls-first}]
     [o.2/o_orderdate {:direction :asc, :null-ordering :nulls-last}]]}
    [:project
-    [c.1/c_name
+    {:projections [c.1/c_name
      {c_custkey c.1/_id}
      {o_orderkey o.2/_id}
      o.2/o_orderdate
      o.2/o_totalprice
-     {sum_qty _sum_out_7}]
+     {sum_qty _sum_out_7}]}
     [:group-by
      [c.1/c_name
       c.1/_id
@@ -25,7 +25,7 @@
       o.2/o_totalprice
       {_sum_out_7 (sum l.3/l_quantity)}]
      [:map
-      [{_sq_4 true}]
+      {:projections [{_sq_4 true}]}
       [:mega-join
        {:conditions [{o.2/_id l.3/l_orderkey} {c.1/_id o.2/o_custkey}]}
        [[:rename
@@ -39,7 +39,7 @@
           [:scan
            {:table #xt/table orders, :columns [o_totalprice _id o_orderdate o_custkey]}]]
          [:project
-          [{l_orderkey l.5/l_orderkey}]
+          {:projections [{l_orderkey l.5/l_orderkey}]}
           [:select
            {:predicate (> _sum_out_6 300)}
            [:group-by

@@ -1,21 +1,21 @@
 [:top
  {:skip nil, :limit 100}
  [:project
-  [{s_acctbal s.2/s_acctbal}
+  {:projections [{s_acctbal s.2/s_acctbal}
    {s_name s.2/s_name}
    {n_name n.4/n_name}
    {p_partkey p_partkey}
    {p_mfgr p.1/p_mfgr}
    {s_address s.2/s_address}
    {s_phone s.2/s_phone}
-   {s_comment s.2/s_comment}]
+   {s_comment s.2/s_comment}]}
   [:order-by
    {:order-specs [[s.2/s_acctbal {:direction :desc, :null-ordering :nulls-first}]
     [n.4/n_name {:direction :asc, :null-ordering :nulls-last}]
     [s.2/s_name {:direction :asc, :null-ordering :nulls-last}]
     [_ob13 {:direction :asc, :null-ordering :nulls-last}]]}
    [:project
-    [s.2/s_acctbal
+    {:projections [s.2/s_acctbal
      s.2/s_name
      n.4/n_name
      {p_partkey p.1/_id}
@@ -23,9 +23,9 @@
      s.2/s_address
      s.2/s_phone
      s.2/s_comment
-     {_ob13 p.1/_id}]
+     {_ob13 p.1/_id}]}
     [:map
-     [{_sq_6 _min_out_12}]
+     {:projections [{_sq_6 _min_out_12}]}
      [:select
       {:predicate (== ps.3/ps_supplycost _min_out_12)}
       [:group-by
@@ -53,7 +53,7 @@
        [:left-outer-join
         {:conditions [{p.1/_id ps.7/ps_partkey}]}
         [:map
-         [{_row_number_0 (row-number)}]
+         {:projections [{_row_number_0 (row-number)}]}
          [:mega-join
           {:conditions [{n.4/n_regionkey r.5/_id}
            {s.2/s_nationkey n.4/_id}

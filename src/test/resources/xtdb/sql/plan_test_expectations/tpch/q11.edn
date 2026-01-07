@@ -1,9 +1,9 @@
 [:project
- [{ps_partkey ps.1/ps_partkey} value]
+ {:projections [{ps_partkey ps.1/ps_partkey} value]}
  [:order-by
   {:order-specs [[value {:direction :desc, :null-ordering :nulls-first}]]}
   [:project
-   [ps.1/ps_partkey {value _sum_out_12}]
+   {:projections [ps.1/ps_partkey {value _sum_out_12}]}
    [:select
     {:predicate (> _sum_out_4 _sq_6)}
     [:single-join
@@ -13,8 +13,8 @@
        {_sum_out_12 (sum _sum_in_13)}
        {_sum_out_4 (sum _sum_in_5)}]
       [:map
-       [{_sum_in_13 (* ps.1/ps_supplycost ps.1/ps_availqty)}
-        {_sum_in_5 (* ps.1/ps_supplycost ps.1/ps_availqty)}]
+       {:projections [{_sum_in_13 (* ps.1/ps_supplycost ps.1/ps_availqty)}
+        {_sum_in_5 (* ps.1/ps_supplycost ps.1/ps_availqty)}]}
        [:mega-join
         {:conditions [{s.2/s_nationkey n.3/_id} {ps.1/ps_suppkey s.2/_id}]}
         [[:rename
@@ -29,11 +29,11 @@
           s.2
           [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]]]]]
      [:project
-      [{_sq_6 (* _sum_out_10 1.0E-4)}]
+      {:projections [{_sq_6 (* _sum_out_10 1.0E-4)}]}
       [:group-by
        [{_sum_out_10 (sum _sum_in_11)}]
        [:map
-        [{_sum_in_11 (* ps.7/ps_supplycost ps.7/ps_availqty)}]
+        {:projections [{_sum_in_11 (* ps.7/ps_supplycost ps.7/ps_availqty)}]}
         [:mega-join
          {:conditions [{s.8/s_nationkey n.9/_id} {ps.7/ps_suppkey s.8/_id}]}
          [[:rename

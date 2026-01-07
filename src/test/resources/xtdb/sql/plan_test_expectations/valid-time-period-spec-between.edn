@@ -1,5 +1,5 @@
 [:project
- [{_column_1 4}]
+ {:projections [{_column_1 4}]}
  [:rename
   t1.1
   [:scan

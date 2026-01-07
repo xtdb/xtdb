@@ -1,5 +1,5 @@
 [:project
- [{_iid foo.1/_iid}
+ {:projections [{_iid foo.1/_iid}
   {_valid_from foo.1/_valid_from}
   {_valid_to foo.1/_valid_to}
   {bar
@@ -10,7 +10,7 @@
     (>
      (coalesce (upper foo.1/_system_time) xtdb/end-of-time)
      (lower foo.1/_valid_time)))}
-  {baz foo.1/baz}]
+  {baz foo.1/baz}]}
  [:rename
   foo.1
   [:select

@@ -1,18 +1,18 @@
 [:top
  {:skip nil, :limit 100}
  [:project
-  [{s_name s.1/s_name} numwait]
+  {:projections [{s_name s.1/s_name} numwait]}
   [:order-by
    {:order-specs [[numwait {:direction :desc, :null-ordering :nulls-first}]
     [s.1/s_name {:direction :asc, :null-ordering :nulls-last}]]}
    [:project
-    [s.1/s_name {numwait _row_count_13}]
+    {:projections [s.1/s_name {numwait _row_count_13}]}
     [:group-by
      [s.1/s_name {_row_count_13 (row-count)}]
      [:map
-      [{_sq_5 true}]
+      {:projections [{_sq_5 true}]}
       [:map
-       [{_sq_9 true}]
+       {:projections [{_sq_9 true}]}
        [:mega-join
         {:conditions [{s.1/s_nationkey n.4/_id}
          {l1.2/l_orderkey o.3/_id}
@@ -39,7 +39,7 @@
              [:scan
               {:table #xt/table lineitem, :columns [l_receiptdate l_commitdate l_orderkey l_suppkey]}]]]
            [:project
-            [{_id l3.10/_id}
+            {:projections [{_id l3.10/_id}
              {l_comment l3.10/l_comment}
              {l_commitdate l3.10/l_commitdate}
              {l_discount l3.10/l_discount}
@@ -55,7 +55,7 @@
              {l_shipinstruct l3.10/l_shipinstruct}
              {l_shipmode l3.10/l_shipmode}
              {l_suppkey l3.10/l_suppkey}
-             {l_tax l3.10/l_tax}]
+             {l_tax l3.10/l_tax}]}
             [:rename
              l3.10
              [:select
@@ -79,7 +79,7 @@
                 l_discount
                 l_partkey]}]]]]]
           [:project
-           [{_id l2.6/_id}
+           {:projections [{_id l2.6/_id}
             {l_comment l2.6/l_comment}
             {l_commitdate l2.6/l_commitdate}
             {l_discount l2.6/l_discount}
@@ -95,7 +95,7 @@
             {l_shipinstruct l2.6/l_shipinstruct}
             {l_shipmode l2.6/l_shipmode}
             {l_suppkey l2.6/l_suppkey}
-            {l_tax l2.6/l_tax}]
+            {l_tax l2.6/l_tax}]}
            [:rename
             l2.6
             [:scan

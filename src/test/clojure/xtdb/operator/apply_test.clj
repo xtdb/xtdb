@@ -66,7 +66,7 @@
   (t/is (= [{:x 0, :match false} {:x 1, :match false}]
            (tu/query-ra '[:apply {:mode :mark-join, :columns {}, :mark-join-projection {match (== nil z)}}
                           [:table [{:x 0}, {:x 1}]]
-                          [:project [{z 1}]
+                          [:project {:projections [{z 1}]}
                            [:select {:predicate false}
                             [:table [{:y 0}, {:y 1}]]]]]))
         "NULL IN {}"))
@@ -112,7 +112,7 @@
                 {:with-types? true}))))
 
   (t/is (= {:res [], :types '{x1 #xt/type :i64, x2 #xt/type :i64}}
-           (-> (tu/query-ra '[:project [x1 x2]
+           (-> (tu/query-ra '[:project {:projections [x1 x2]}
                               [:apply {:mode :cross-join, :columns {}}
                                [:table [{x1 15}]]
                                [:select {:predicate false}

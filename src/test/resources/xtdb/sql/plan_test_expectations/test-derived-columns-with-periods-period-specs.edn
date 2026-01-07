@@ -1,5 +1,5 @@
 [:project
- [{bar f.1/bar}]
+ {:projections [{bar f.1/bar}]}
  [:rename
   f.1
   [:scan

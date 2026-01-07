@@ -1,27 +1,27 @@
 [:project
- [{_column_1 _sq_2}]
+ {:projections [{_column_1 _sq_2}]}
  [:apply
   {:mode :single-join, :columns {bar.1/_valid_time ?_sq__valid_time_3}}
   [:rename
    bar.1
    [:project
-    [_valid_from
+    {:projections [_valid_from
      _valid_to
-     {_valid_time (period _valid_from _valid_to)}]
+     {_valid_time (period _valid_from _valid_to)}]}
     [:scan {:table #xt/table bar, :columns [_valid_from _valid_to]}]]]
   [:project
-   [{_sq_2
+   {:projections [{_sq_2
      (and
       (<
        (lower foo.3/_valid_time)
        (coalesce (upper ?_sq__valid_time_3) xtdb/end-of-time))
       (>
        (coalesce (upper foo.3/_valid_time) xtdb/end-of-time)
-       (lower ?_sq__valid_time_3)))}]
+       (lower ?_sq__valid_time_3)))}]}
    [:rename
     foo.3
     [:project
-     [_valid_from
+     {:projections [_valid_from
       _valid_to
-      {_valid_time (period _valid_from _valid_to)}]
+      {_valid_time (period _valid_from _valid_to)}]}
      [:scan {:table #xt/table foo, :columns [_valid_from _valid_to]}]]]]]]

@@ -1,5 +1,5 @@
 [:project
- [{name me.1/name} {_column_2 _sum_out_4}]
+ {:projections [{name me.1/name} {_column_2 _sum_out_4}]}
  [:select
   {:predicate (< _min_out_3 1930)}
   [:group-by

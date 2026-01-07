@@ -107,7 +107,7 @@
   Usage: (project '(+ a b) [{:a 1, :b 2}, {:a 3, :b 4}]) ;; => [3, 7]"
   [expr docs]
   (let [docs (map-indexed #(assoc %2 :_id %1) docs)
-        lp [:project [{'ret expr}] [:table docs]]]
+        lp [:project {:projections [{'ret expr}]} [:table docs]]]
     (mapv :ret (tu/query-ra lp {:default-tz #xt/zone "Z"}))))
 
 (defn project1 [expr doc] (first (project expr [doc])))
@@ -2052,7 +2052,7 @@
 
 (t/deftest test-cast-null
   (letfn [(test-null-cast [tgt-type]
-            (let [{:keys [res types]} (tu/query-ra [:project [{'res (list 'cast nil tgt-type)}]
+            (let [{:keys [res types]} (tu/query-ra [:project {:projections [{'res (list 'cast nil tgt-type)}]}
                                                     [:table [{}]]]
                                                    {:with-types? true})]
               {:res (:res (first res))
@@ -2131,8 +2131,8 @@
                      {:a1 3, :a2 "3"}]))))
 
 (t/deftest list-equality-batch-bindings-5047
-  (t/is (false? (->> (tu/query-ra '[:project [{ret (== [#xt/instant "1970-01-01T00:00:00Z"]
-                                                      [#xt/ldt "1970-01-01T00:00"])}]
+  (t/is (false? (->> (tu/query-ra '[:project {:projections [{ret (== [#xt/instant "1970-01-01T00:00:00Z"]
+                                                                     [#xt/ldt "1970-01-01T00:00"])}]}
                                     [:table [{}]]]
                                   {:default-tz #xt/zone "America/New_York"})
                      first :ret))))

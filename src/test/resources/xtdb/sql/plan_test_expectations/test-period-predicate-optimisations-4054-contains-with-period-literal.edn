@@ -1,12 +1,12 @@
 [:project
- [{name foo.1/name}]
+ {:projections [{name foo.1/name}]}
  [:rename
   foo.1
   [:project
-   [name
+   {:projections [name
     _valid_from
     _valid_to
-    {_valid_time (period _valid_from _valid_to)}]
+    {_valid_time (period _valid_from _valid_to)}]}
    [:scan
     {:table #xt/table foo, :columns [name
      {_valid_from (<= _valid_from #xt/zdt "2000-01-01T00:00Z")}

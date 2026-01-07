@@ -46,9 +46,9 @@
                         #xt/zoned-date-time "2001-01-01T00:00Z"))
                       xtdb/end-of-time)))}
        [:project
-        [{~(sql/->col-sym '_valid_time)
-          (period ~(sql/->col-sym '_valid_from)
-                  ~(sql/->col-sym '_valid_to))}]
+        {:projections [{~(sql/->col-sym '_valid_time)
+                        (period ~(sql/->col-sym '_valid_from)
+                                ~(sql/->col-sym '_valid_to))}]}
         [:scan {:table public/docs
                 :columns [~(sql/->col-sym '_valid_from) ~(sql/->col-sym '_valid_to)]}]]]))))
 
@@ -75,7 +75,7 @@
                             #xt/zoned-date-time "2001-01-01T00:00Z"))
                           xtdb/end-of-time)))}
            [:project
-            [{~(sql/->col-sym '_valid_time) (+ 1 ~(sql/->col-sym '_valid_from))}]
+            {:projections [{~(sql/->col-sym '_valid_time) (+ 1 ~(sql/->col-sym '_valid_from))}]}
             [:scan {:table public/docs
                     :columns [~(sql/->col-sym '_valid_from) ~(sql/->col-sym '_valid_to)]}]]])))))
 
@@ -89,10 +89,10 @@
         [:select
          {:predicate '(== ~(sql/->col-sym '_valid_time) 1)}
          [:project
-          [{~(sql/->col-sym '_foo) 4}
-           {~(sql/->col-sym '_valid_time)
-            (period ~(sql/->col-sym '_valid_from)
-                    ~(sql/->col-sym '_valid_to))}]
+          {:projections [{~(sql/->col-sym '_foo) 4}
+                         {~(sql/->col-sym '_valid_time)
+                          (period ~(sql/->col-sym '_valid_from)
+                                  ~(sql/->col-sym '_valid_to))}]}
           [:scan {:table public/docs, :columns [~(sql/->col-sym '_bar)]}]]])))))
 
   (t/testing "only push predicate if all columns referenced (aside from the new period) present in inner rel"
@@ -104,10 +104,10 @@
         [:select
          {:predicate '(== ~(sql/->col-sym '_valid_time) ~(sql/->col-sym '_foo))}
          [:project
-          [{~(sql/->col-sym '_foo) 4}
-           {~(sql/->col-sym '_valid_time)
-            (period ~(sql/->col-sym '_valid_from)
-                    ~(sql/->col-sym '_valid_to))}]
+          {:projections [{~(sql/->col-sym '_foo) 4}
+                         {~(sql/->col-sym '_valid_time)
+                          (period ~(sql/->col-sym '_valid_from)
+                                  ~(sql/->col-sym '_valid_to))}]}
           [:scan {:table public/docs, :columns [~(sql/->col-sym '_bar)]}]]]))))))
 
 (t/deftest test-remove-redundant-period-constructors

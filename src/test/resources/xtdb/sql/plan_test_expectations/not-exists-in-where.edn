@@ -1,10 +1,10 @@
 [:project
- [{y x.1/y}]
+ {:projections [{y x.1/y}]}
  [:map
-  [{_sq_2 true}]
+  {:projections [{_sq_2 true}]}
   [:anti-join
    {:conditions [{x.1/y z}]}
    [:rename x.1 [:scan {:table #xt/table x, :columns [y {z (== z 10)}]}]]
    [:project
-    [{z y.3/z}]
+    {:projections [{z y.3/z}]}
     [:rename y.3 [:scan {:table #xt/table y, :columns [z]}]]]]]]

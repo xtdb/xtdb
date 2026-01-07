@@ -215,14 +215,14 @@
 
 (t/deftest test-project-row-number
   (t/is (= [{:a 12, :row-num 1}, {:a 0, :row-num 2}, {:a 100, :row-num 3}]
-           (tu/query-ra '[:project [a {row-num (row-number)}]
+           (tu/query-ra '[:project {:projections [a {row-num (row-number)}]}
                           [:table ?a]]
 
                         {:args {:a [{:a 12} {:a 0} {:a 100}]}}))))
 
 (t/deftest test-project-append-columns
   (t/is (= [{:a 12, :row-num 1}, {:a 0, :row-num 2}, {:a 100, :row-num 3}]
-           (tu/query-ra '[:project {:append-columns? true} [{row-num (row-number)}]
+           (tu/query-ra '[:project {:append-columns? true, :projections [{row-num (row-number)}]}
                           [:table ?a]]
 
                         {:args {:a [{:a 12} {:a 0} {:a 100}]}}))))
@@ -247,8 +247,8 @@
             [false false] [false false]
             [true true] [false true]]
            (map (juxt :b :bs)
-                (tu/query-ra '[:project [{b (between x l r)}
-                                         {bs (between-symmetric x l r)}]
+                (tu/query-ra '[:project {:projections [{b (between x l r)}
+                                                       {bs (between-symmetric x l r)}]}
                                [:table ?xlr]]
                              {:args {:xlr (map #(zipmap [:x :l :r] %)
                                                [[5 0 10] [5 10 0]
@@ -287,13 +287,13 @@
 
 (t/deftest test-current-times-111
   (t/is (= 1
-           (->> (tu/query-ra '[:project [{ts (current-timestamp)}]
+           (->> (tu/query-ra '[:project {:projections [{ts (current-timestamp)}]}
                                [:table [{} {} {}]]]
                              {})
                 (into #{} (map :ts))
                 count)))
 
-  (let [times (->> (tu/query-ra '[:project [{ts (local-time 1)}]
+  (let [times (->> (tu/query-ra '[:project {:projections [{ts (local-time 1)}]}
                                   [:table [{}]]]
                                 {})
                    (into #{} (map :ts)))]

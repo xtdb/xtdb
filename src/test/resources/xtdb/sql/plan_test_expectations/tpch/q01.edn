@@ -1,5 +1,5 @@
 [:project
- [{l_returnflag l.1/l_returnflag}
+ {:projections [{l_returnflag l.1/l_returnflag}
   {l_linestatus l.1/l_linestatus}
   sum_qty
   sum_base_price
@@ -8,12 +8,12 @@
   avg_qty
   avg_price
   avg_disc
-  count_order]
+  count_order]}
  [:order-by
   {:order-specs [[l.1/l_returnflag {:direction :asc, :null-ordering :nulls-last}]
    [l.1/l_linestatus {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
-   [l.1/l_returnflag
+   {:projections [l.1/l_returnflag
     l.1/l_linestatus
     {sum_qty _sum_out_2}
     {sum_base_price _sum_out_3}
@@ -22,7 +22,7 @@
     {avg_qty _avg_out_8}
     {avg_price _avg_out_9}
     {avg_disc _avg_out_10}
-    {count_order _row_count_11}]
+    {count_order _row_count_11}]}
    [:group-by
     [l.1/l_returnflag
      l.1/l_linestatus
@@ -35,11 +35,11 @@
      {_sum_out_3 (sum l.1/l_extendedprice)}
      {_avg_out_9 (avg l.1/l_extendedprice)}]
     [:map
-     [{_sum_in_7
+     {:projections [{_sum_in_7
        (*
         (* l.1/l_extendedprice (- 1 l.1/l_discount))
         (+ 1 l.1/l_tax))}
-      {_sum_in_5 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]
+      {_sum_in_5 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]}
      [:rename
       l.1
       [:scan

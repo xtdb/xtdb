@@ -1,7 +1,7 @@
 [:rename
  {x1 a, x2 b}
  [:project
-  [x1 x2]
+  {:projections [x1 x2]}
   [:apply
    {:mode :semi-join, :columns {x2 ?x13, x4 ?x14}}
    [:mega-join

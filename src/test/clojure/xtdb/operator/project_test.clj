@@ -8,7 +8,7 @@
   (t/is (= {:types '{a #xt/type :i64, c #xt/type :i64}
             :res [[{:a 12, :c 22}, {:a 0, :c 15}]
                   [{:a 100, :c 183}]]}
-           (tu/query-ra [:project '[a {c (+ a b)}]
+           (tu/query-ra [:project '{:projections [a {c (+ a b)}]}
                          [::tu/pages
                           [[{:a 12, :b 10}
                             {:a 0, :b 15}]
@@ -19,7 +19,7 @@
   (t/testing "param"
     (t/is (= [[{:a 12, :b 52}, {:a 0, :b 57}]
               [{:a 100, :b 125}]]
-             (tu/query-ra [:project '[a {b (+ b ?p)}]
+             (tu/query-ra [:project '{:projections [a {b (+ b ?p)}]}
                            [::tu/pages
                             [[{:a 12, :b 10}
                               {:a 0, :b 15}]
@@ -31,7 +31,7 @@
   (t/is (= {:types '{a #xt/type :i64, row-num #xt/type :i64}
             :res [[{:a 12, :row-num 1}, {:a 0, :row-num 2}]
                   [{:a 100, :row-num 3}]]}
-           (tu/query-ra [:project '[a, {row-num (row-number)}]
+           (tu/query-ra [:project '{:projections [a, {row-num (row-number)}]}
                          [::tu/pages
                           [[{:a 12, :b 10}
                             {:a 0, :b 15}]
@@ -44,7 +44,7 @@
             :res [[{:ret {:a 12, :b 10}}
                    {:ret {:a 0, :b 15}}]
                   [{:ret {:a 100, :b 83}}]]}
-           (tu/query-ra [:project '[{ret *}]
+           (tu/query-ra [:project '{:projections [{ret *}]}
                          [::tu/pages
                           [[{:a 12, :b 10}
                             {:a 0, :b 15}]
@@ -55,7 +55,7 @@
 (t/deftest test-identity-projection-not-closed
   (t/is (= [{:b 12} {:b 2} {:a 12} {:a 0}]
            (tu/query-ra
-             '[:project [a b]
+             '[:project {:projections [a b]}
                [:full-outer-join {:conditions [false]}
                 [:table [{:a 12}, {:a 0}]]
                 [:table [{:b 12}, {:b 2}]]]]

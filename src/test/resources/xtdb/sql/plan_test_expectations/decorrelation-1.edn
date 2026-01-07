@@ -1,7 +1,7 @@
 [:project
- [{custkey c.1/custkey}]
+ {:projections [{custkey c.1/custkey}]}
  [:map
-  [{_sq_2 _sum_out_5}]
+  {:projections [{_sq_2 _sum_out_5}]}
   [:select
    {:predicate (< 1000000 _sum_out_5)}
    [:group-by
@@ -9,7 +9,7 @@
     [:left-outer-join
      {:conditions [{c.1/custkey o.3/custkey}]}
      [:map
-      [{_row_number_0 (row-number)}]
+      {:projections [{_row_number_0 (row-number)}]}
       [:rename c.1 [:scan {:table #xt/table customer, :columns [custkey]}]]]
      [:rename
       o.3

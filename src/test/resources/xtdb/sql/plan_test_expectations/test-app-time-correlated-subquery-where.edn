@@ -1,14 +1,14 @@
 [:rename
  {x4 name}
  [:project
-  [x4]
+  {:projections [x4]}
   [:apply
    {:mode :single-join, :columns {x1 ?x8, x2 ?x9}}
    [:rename
     {_valid_from x1, _valid_to x2}
     [:scan {:table bar, :columns [_valid_from _valid_to]}]]
    [:project
-    [x4]
+    {:projections [x4]}
     [:rename
      {name x4, _valid_from x5, _valid_to x6}
      [:scan

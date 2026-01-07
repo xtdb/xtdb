@@ -787,7 +787,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/is (= [{:v (RegClass. 904292726)}]
            (tu/query-ra
-            '[:project [{v (cast "bar" :regclass)}]
+            '[:project {:projections [{v (cast "bar" :regclass)}]}
               [:table [{}]]]
             {:node tu/*node*}))
         "project")
@@ -1048,7 +1048,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (c/compact-all! node #xt/duration "PT1S")
 
     (t/is (= [{:foo "foo1", :bar "bar1"}]
-             (tu/query-ra '[:project [{bar _id} {foo foo/_id}]
+             (tu/query-ra '[:project {:projections [{bar _id} {foo foo/_id}]}
                             [:semi-join {:conditions [{_id vals/_column_1}]}
                              [:rename {bar/_id _id}
                               [:join {:conditions [{foo/_id bar/foo}]}

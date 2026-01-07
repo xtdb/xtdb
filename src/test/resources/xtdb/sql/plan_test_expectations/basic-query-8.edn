@@ -1,5 +1,5 @@
 [:project
- [{title si.2/title}]
+ {:projections [{title si.2/title}]}
  [:left-outer-join
   {:conditions [{m.1/title si.2/title}]}
   [:rename m.1 [:scan {:table #xt/table movie, :columns [title]}]]

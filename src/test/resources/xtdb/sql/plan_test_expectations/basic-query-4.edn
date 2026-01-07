@@ -1,5 +1,5 @@
 [:project
- [{movie_title si.1/movie_title}]
+ {:projections [{movie_title si.1/movie_title}]}
  [:mega-join
   {:conditions [{si.1/star_name m.3/name}]}
   [[:rename
@@ -8,7 +8,7 @@
    [:rename
     m.3
     [:project
-     [{name ms.2/name}]
+     {:projections [{name ms.2/name}]}
      [:rename
       ms.2
       [:scan

@@ -177,22 +177,22 @@
                (case sq-type
                  :scalar [:apply {:mode :single-join, :columns sq-refs}
                           plan
-                          [:project [{sq-sym (first (:col-syms query-plan))}]
+                          [:project {:projections [{sq-sym (first (:col-syms query-plan))}]}
                            (:plan query-plan)]]
 
                  :nest-one [:apply {:mode :single-join, :columns sq-refs}
                             plan
-                            [:project [{sq-sym (->> (for [col-sym (:col-syms query-plan)]
+                            [:project {:projections [{sq-sym (->> (for [col-sym (:col-syms query-plan)]
                                                       (MapEntry/create (keyword col-sym) col-sym))
-                                                    (into {}))}]
+                                                    (into {}))}]}
                              (:plan query-plan)]]
 
                  :nest-many [:apply {:mode :single-join, :columns sq-refs}
                              plan
                              [:group-by [{sq-sym (list 'array_agg sq-sym)}]
-                              [:project [{sq-sym (->> (for [col-sym (:col-syms query-plan)]
+                              [:project {:projections [{sq-sym (->> (for [col-sym (:col-syms query-plan)]
                                                         (MapEntry/create (keyword col-sym) col-sym))
-                                                      (into {}))}]
+                                                      (into {}))}]}
                                (:plan query-plan)]]]
 
                  :array-by-query [:apply {:mode :single-join, :columns sq-refs}
@@ -223,7 +223,7 @@
                                              {:mode :mark-join
                                               :columns (assoc sq-refs (->col-sym '_needle) needle-param)
                                               :mark-join-projection {sq-sym (list op needle-param (first (:col-syms query-plan)))}}
-                                             [:map [{'_needle expr}]
+                                             [:map {:projections [{'_needle expr}]}
                                               plan]
                                              (:plan query-plan)]))))
              plan
@@ -300,9 +300,9 @@
 
 (defn wrap-temporal-periods [plan scan-cols valid-time-col? sys-time-col?]
   [:project
-   (cond-> scan-cols
-     valid-time-col? (conj {(->col-sym '_valid_time) (list 'period (->col-sym '_valid_from) (->col-sym '_valid_to))})
-     sys-time-col? (conj {(->col-sym '_system_time) (list 'period (->col-sym '_system_from) (->col-sym '_system_to))}))
+   {:projections (cond-> scan-cols
+                   valid-time-col? (conj {(->col-sym '_valid_time) (list 'period (->col-sym '_valid_from) (->col-sym '_valid_to))})
+                   sys-time-col? (conj {(->col-sym '_system_time) (list 'period (->col-sym '_system_from) (->col-sym '_system_to))}))}
    plan])
 
 (defrecord BaseTable [env, ^TableRef table-ref
@@ -475,9 +475,9 @@
         plan
 
       (if ordinality-col
-        [:map [{(-> (->col-sym (str unique-table-alias) (str ordinality-col))
-                    (with-meta (meta ordinality-col)))
-                '(local-row-number)}]
+        [:map {:projections [{(-> (->col-sym (str unique-table-alias) (str ordinality-col))
+                                   (with-meta (meta ordinality-col)))
+                               '(local-row-number)}]}
          plan]
         plan))))
 
@@ -503,9 +503,9 @@
         plan
 
       (if ordinality-col
-        [:map [{(-> (->col-sym (str unique-table-alias) (str ordinality-col))
-                    (with-meta (meta ordinality-col)))
-                '(local-row-number)}]
+        [:map {:projections [{(-> (->col-sym (str unique-table-alias) (str ordinality-col))
+                                   (with-meta (meta ordinality-col)))
+                               '(local-row-number)}]}
          plan]
         plan))))
 
@@ -526,7 +526,7 @@
   PlanRelation
   (plan-rel [_]
     [:rename unique-table-alias
-     [:project (vec !table-cols)
+     [:project {:projections (vec !table-cols)}
       [:arrow url]]]))
 
 (defn- ->table-projection [^ParserRuleContext ctx]
@@ -583,7 +583,7 @@
   (let [in-projs (not-empty (into [] (keep (comp :projection :in-projection)) (vals aggs)))]
     (as-> plan plan
       (if in-projs
-        [:map in-projs plan]
+        [:map {:projections in-projs} plan]
         plan)
 
       [:group-by (vec (concat group-invariant-cols
@@ -592,7 +592,7 @@
        plan]
 
       (if in-projs
-        [:project (concat group-invariant-cols (vec (keys aggs)))
+        [:project {:projections (concat group-invariant-cols (vec (keys aggs)))}
          plan]
         plan))))
 
@@ -2064,28 +2064,28 @@
   (let [in-projs (not-empty (into [] (keep :in-projection) ob-specs))]
     (as-> plan plan
       (if in-projs
-        [:map in-projs plan]
+        [:map {:projections in-projs} plan]
         plan)
 
       [:order-by {:order-specs (mapv :order-by-spec ob-specs)}
        plan]
 
       (if in-projs
-        [:project outer-col-syms plan]
+        [:project {:projections outer-col-syms} plan]
         plan))))
 
 (defn- wrap-integrated-ob [plan projected-cols ob-specs]
   (let [in-projs (not-empty (into [] (keep :in-projection) ob-specs))]
     (as-> plan plan
-      [:project (into (mapv :projection projected-cols)
-                      in-projs)
+      [:project {:projections (into (mapv :projection projected-cols)
+                      in-projs)}
        plan]
 
       [:order-by {:order-specs (mapv :order-by-spec ob-specs)}
        plan]
 
       (if in-projs
-        [:project (mapv :col-sym projected-cols) plan]
+        [:project {:projections (mapv :col-sym projected-cols)} plan]
         plan))))
 
 (defn- wrap-windows [plan windows]
@@ -2101,7 +2101,7 @@
 
     (as-> plan plan
       (if in-projs
-        [:map in-projs plan]
+        [:map {:projections in-projs} plan]
         plan)
 
       [:window window-opts
@@ -2133,7 +2133,7 @@
     (if duplicate-col-syms
       (doseq [sym duplicate-col-syms]
         (add-err! env (->DuplicateColumnProjection sym)))
-      (->QueryExpr [:project (mapv :projection out-projections) plan] out-col-syms))))
+      (->QueryExpr [:project {:projections (mapv :projection out-projections)} plan] out-col-syms))))
 
 (defrecord SetOperationColumnCountMismatch [operation-type lhs-count rhs-count]
   PlanError
@@ -2333,7 +2333,7 @@
       (plan-rel [_]
         (as-> (plan-rel scope) plan
           (if-let [unresolved-cr (not-empty (into #{} !unresolved-cr))]
-            [:map (mapv #(hash-map % nil) unresolved-cr)
+            [:map {:projections (mapv #(hash-map % nil) unresolved-cr)}
              plan]
             plan)
 
@@ -2358,7 +2358,7 @@
             (-> plan
                 (wrap-integrated-ob projected-cols ob-plan))
 
-            [:project (mapv :projection projected-cols)
+            [:project {:projections (mapv :projection projected-cols)}
              plan])
 
           (if (some-> select-clause .setQuantifier (.getText) (str/upper-case) (= "DISTINCT"))
@@ -2519,7 +2519,7 @@
           projections (->> (find-cols rel nil)
                            (into [] (map-indexed ->projected-col-expr)))
 
-          plan [:project (mapv :projection projections)
+          plan [:project {:projections (mapv :projection projections)}
                 (plan-rel rel)]
 
           col-syms (mapv :col-sym projections)]
@@ -2581,12 +2581,12 @@
       (remove-ns-qualifiers query-expr env)
 
       (if (some types/temporal-col-name? col-syms)
-        (->QueryExpr [:project (mapv (fn [col-sym]
+        (->QueryExpr [:project {:projections (mapv (fn [col-sym]
                                        {col-sym
                                         (if (types/temporal-col-name? col-sym)
                                           (list 'cast col-sym types/temporal-col-type)
                                           col-sym)})
-                                     col-syms)
+                                     col-syms)}
                       plan]
                      col-syms)
 
@@ -2603,12 +2603,12 @@
         (remove-ns-qualifiers query-expr env)
 
         (if (some (comp types/temporal-col-name? str) col-syms)
-          (->QueryExpr [:project (mapv (fn [col-sym]
+          (->QueryExpr [:project {:projections (mapv (fn [col-sym]
                                          {col-sym
                                           (if (types/temporal-col-name? (str col-sym))
                                             (list 'cast col-sym types/temporal-col-type)
                                             col-sym)})
-                                       col-syms)
+                                       col-syms)}
                         plan]
                        col-syms)
 
@@ -2622,12 +2622,12 @@
                                                 (.accept (cond-> this
                                                            out-col-syms (assoc :out-col-syms out-col-syms))))]
       (if (some (comp types/temporal-col-name? str) col-syms)
-        (->QueryExpr [:project (mapv (fn [col-sym]
+        (->QueryExpr [:project {:projections (mapv (fn [col-sym]
                                        {col-sym
                                         (if (types/temporal-col-name? (str col-sym))
                                           (list 'cast col-sym types/temporal-col-type)
                                           col-sym)})
-                                     col-syms)
+                                     col-syms)}
                       plan]
                      col-syms)
         inner))))
@@ -2740,19 +2740,19 @@
 (defn plan-patch [{:keys [table-info]} {:keys [table valid-from valid-to patch-rel]}]
   (let [known-cols (mapv symbol (get table-info table))]
     (xt/template
-     [:project [{_iid new/_iid}
+     [:project {:projections [{_iid new/_iid}
                 {_valid_from (cast (coalesce old/_valid_from ~valid-from (current-timestamp))
                                    ~types/temporal-col-type)}
                 {_valid_to (cast (coalesce old/_valid_to ~valid-to xtdb/end-of-time)
                                  ~types/temporal-col-type)}
-                {doc (_patch old/doc new/doc)}]
+                {doc (_patch old/doc new/doc)}]}
       [:left-outer-join {:conditions [{new/_iid old/_iid}]}
        [:rename new
         ~(:plan patch-rel)]
        [:rename old
         [:patch-gaps {:valid-from ~valid-from, :valid-to ~valid-to}
-         [:project [_iid _valid_from _valid_to
-                    {doc ~(into {} (map (juxt keyword identity)) known-cols)}]
+         [:project {:projections [_iid _valid_from _valid_to
+                    {doc ~(into {} (map (juxt keyword identity)) known-cols)}]}
           [:order-by {:order-specs [[_iid] [_valid_from]]}
            [:scan {:table ~table
                    :for-valid-time [:in ~valid-from ~valid-to]
@@ -2833,8 +2833,8 @@
                                       (remove-ns-qualifiers env))]
       (if-let [forbidden-cols (seq (filter forbidden-patch-col? col-syms))]
         (add-err! env (->ForbiddenColumnPatch forbidden-cols))
-        (->QueryExpr [:project ['{_iid (_iid _id)}
-                                {'doc (into {} (map (juxt keyword identity)) col-syms)}]
+        (->QueryExpr [:project {:projections ['{_iid (_iid _id)}
+                                {'doc (into {} (map (juxt keyword identity)) col-syms)}]}
                       plan]
                      '[_iid doc]))))
 
@@ -2896,12 +2896,12 @@
                            (wrap-predicates predicate))
                        plan)
                      
-                     [:project (vec (concat '[_iid] vt-projection set-clauses-cols unset-cols))
+                     [:project {:projections (vec (concat '[_iid] vt-projection set-clauses-cols unset-cols))}
                       [:select {:predicate (let [existing-cols (into {} (map (juxt (comp symbol name) identity)) existing-cols)]
                                               (list* 'or (for [col set-clauses-cols]
                                                            (xt/template
                                                             (not (boolean (=== ~col ~(get existing-cols col))))))))}
-                       [:project (vec (concat aliased-cols set-clauses (map :projection unset-col-projs)))
+                       [:project {:projections (vec (concat aliased-cols set-clauses (map :projection unset-col-projs)))}
                         plan]]])
 
                    (vec (concat internal-cols set-clauses-cols unset-cols)))))
@@ -2936,7 +2936,7 @@
 
           projection (into '[_iid] vt-projection)]
 
-      (->QueryExpr [:project projection
+      (->QueryExpr [:project {:projections projection}
                     (as-> (plan-rel dml-scope) plan
 
                       (if-let [{:keys [predicate subqs]} where-selection]
@@ -2945,7 +2945,7 @@
                             (wrap-predicates predicate))
                         plan)
 
-                      [:project aliased-cols plan])]
+                      [:project {:projections aliased-cols} plan])]
                    internal-cols)))
 
   (visitEraseStatement [{{:keys [!id-count table-info default-db]} :env} ctx]
@@ -2973,7 +2973,7 @@
                                :subqs (not-empty (into {} !subqs))}))]
 
       (->QueryExpr [:distinct {}
-                    [:project internal-cols
+                    [:project {:projections internal-cols}
                      (as-> (plan-rel dml-scope) plan
 
                        (if-let [{:keys [predicate subqs]} where-selection]
@@ -2982,7 +2982,7 @@
                              (wrap-predicates predicate))
                          plan)
 
-                       [:project aliased-cols plan])]]
+                       [:project {:projections aliased-cols} plan])]]
                    internal-cols)))
 
   (visitAssertStatement [_ ctx]

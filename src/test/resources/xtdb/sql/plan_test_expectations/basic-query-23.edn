@@ -1,5 +1,5 @@
 [:project
- [{movie_title si.1/movie_title}]
+ {:projections [{movie_title si.1/movie_title}]}
  [:order-by
   {:order-specs [[si.1/movie_title {:direction :asc, :null-ordering :nulls-last}]]}
   [:rename si.1 [:scan {:table #xt/table stars_in, :columns [movie_title]}]]]]

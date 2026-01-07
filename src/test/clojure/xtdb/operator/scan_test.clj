@@ -69,7 +69,7 @@
 
     (t/is (= {{:bar 42} 20, {:bar "forty-two"} 20}
              (frequencies (tu/query-ra
-                           '[:project [{bar (. foo :bar)}]
+                           '[:project {:projections [{bar (. foo :bar)}]}
                              [:scan {:table #xt/table xt_docs, :columns [foo]}]]
                            {:node node}))))
 
@@ -77,7 +77,7 @@
 
     (t/is (= {{:bar 42} 20, {:bar "forty-two"} 20}
              (frequencies (tu/query-ra
-                           '[:project [{bar (. foo :bar)}]
+                           '[:project {:projections [{bar (. foo :bar)}]}
                              [:scan {:table #xt/table xt_docs, :columns [foo]}]]
                            {:node node}))))))
 
@@ -276,9 +276,9 @@
              (dissoc res :xt/system-from :xt/system-to))))
 
   (t/is (= {:xt/id :doc, :app-time-start (time/->zdt #inst "2021"), :app-time-end (time/->zdt #inst "3000")}
-           (-> (first (tu/query-ra '[:project [_id
-                                               {app_time_start _valid_from}
-                                               {app_time_end _valid_to}]
+           (-> (first (tu/query-ra '[:project {:projections [_id
+                                                             {app_time_start _valid_from}
+                                                             {app_time_end _valid_to}]}
                                      [:scan {:table #xt/table xt_docs, :columns [_id _valid_from _valid_to]}]]
                                    {:node tu/*node*}))
                (dissoc :xt/system-from :xt/system-to)))))

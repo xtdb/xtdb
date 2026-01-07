@@ -1,7 +1,7 @@
 [:rename
  {x3 _column_1}
  [:project
-  [{x3 1}]
+  {:projections [{x3 1}]}
   [:rename
    {bar x1}
    [:scan {:table foo, :for-system-time :all-time, :columns [bar]}]]]]

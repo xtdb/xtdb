@@ -1,9 +1,9 @@
 [:project
- [{_column_1 _sum_out_2}]
+ {:projections [{_column_1 _sum_out_2}]}
  [:group-by
   [xt$missing_column4 {_sum_out_2 (sum _sum_in_3)}]
   [:map
-   [{_sum_in_3 (+ docs.1/_id 1)}]
+   {:projections [{_sum_in_3 (+ docs.1/_id 1)}]}
    [:map
-    [{xt$missing_column4 nil}]
+    {:projections [{xt$missing_column4 nil}]}
     [:rename docs.1 [:scan {:table #xt/table docs, :columns [_id]}]]]]]]

@@ -1,9 +1,9 @@
 [:project
- [{_column_1 1}]
+ {:projections [{_column_1 1}]}
  [:rename
   tmp.2
   [:project
-   [{bar foo.1/bar}]
+   {:projections [{bar foo.1/bar}]}
    [:rename
     foo.1
     [:scan {:table #xt/table foo, :for-system-time :all-time, :columns [bar]}]]]]]

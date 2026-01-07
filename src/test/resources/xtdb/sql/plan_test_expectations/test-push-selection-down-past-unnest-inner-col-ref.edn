@@ -1,7 +1,7 @@
 [:project
- [{_id f.1/_id} {t (. uvs.3/v :t)} {v (. uvs.3/v :v)}]
+ {:projections [{_id f.1/_id} {t (. uvs.3/v :t)} {v (. uvs.3/v :v)}]}
  [:unnest
   {uvs.3/v unnest}
   [:map
-   [{unnest f.1/vs}]
+   {:projections [{unnest f.1/vs}]}
    [:rename f.1 [:scan {:table #xt/table foo, :columns [vs {_id (< _id 2)}]}]]]]]

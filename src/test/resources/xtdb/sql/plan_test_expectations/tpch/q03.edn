@@ -1,25 +1,25 @@
 [:top
  {:skip nil, :limit 10}
  [:project
-  [{l_orderkey l.3/l_orderkey}
+  {:projections [{l_orderkey l.3/l_orderkey}
    revenue
    {o_orderdate o.2/o_orderdate}
-   {o_shippriority o.2/o_shippriority}]
+   {o_shippriority o.2/o_shippriority}]}
   [:order-by
    {:order-specs [[revenue {:direction :desc, :null-ordering :nulls-first}]
     [o.2/o_orderdate {:direction :asc, :null-ordering :nulls-last}]]}
    [:project
-    [l.3/l_orderkey
+    {:projections [l.3/l_orderkey
      {revenue _sum_out_4}
      o.2/o_orderdate
-     o.2/o_shippriority]
+     o.2/o_shippriority]}
     [:group-by
      [l.3/l_orderkey
       o.2/o_orderdate
       o.2/o_shippriority
       {_sum_out_4 (sum _sum_in_5)}]
      [:map
-      [{_sum_in_5 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]
+      {:projections [{_sum_in_5 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]}
       [:mega-join
        {:conditions [{o.2/_id l.3/l_orderkey} {c.1/_id o.2/o_custkey}]}
        [[:rename

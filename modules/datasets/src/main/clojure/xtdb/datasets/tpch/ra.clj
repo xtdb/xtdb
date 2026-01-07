@@ -15,10 +15,10 @@
                     {avg_price (avg l_extendedprice)}
                     {avg_disc (avg l_discount)}
                     {count_order (row-count)}]
-         [:project [l_returnflag l_linestatus l_shipdate l_quantity l_extendedprice l_discount l_tax
-                    {disc_price (* l_extendedprice (- 1 l_discount))}
-                    {charge (* (* l_extendedprice (- 1 l_discount))
-                               (+ 1 l_tax))}]
+         [:project {:projections [l_returnflag l_linestatus l_shipdate l_quantity l_extendedprice l_discount l_tax
+                                   {disc_price (* l_extendedprice (- 1 l_discount))}
+                                   {charge (* (* l_extendedprice (- 1 l_discount))
+                                              (+ 1 l_tax))}]}
           [:scan {:table #xt/table lineitem, :columns [l_returnflag l_linestatus
             {l_shipdate (<= l_shipdate ?ship_date)}
             l_quantity l_extendedprice l_discount l_tax]}]]]]
@@ -37,7 +37,7 @@
                         [:scan {:table #xt/table partsupp, :columns [ps_suppkey ps_partkey ps_supplycost]}]]]
         [:top {:limit 100}
          [:order-by {:order-specs [[s_acctbal {:direction :desc}] [n_name] [s_name] [p_partkey]]}
-          [:project [s_acctbal s_name n_name p_partkey p_mfgr s_address s_phone s_comment]
+          [:project {:projections [s_acctbal s_name n_name p_partkey p_mfgr s_address s_phone s_comment]}
            [:join {:conditions [{ps_partkey ps_partkey} {ps_supplycost min_ps_supplycost}]}
             [:join {:conditions [{ps_partkey p_partkey}]}
              [:relation PartSupp {:col-names [ps_partkey ps_supplycost]}]
@@ -56,8 +56,8 @@
                      {revenue (sum disc_price)}
                      o_orderdate
                      o_shippriority]
-          [:project [l_orderkey o_orderdate o_shippriority
-                     {disc_price (* l_extendedprice (- 1 l_discount))}]
+          [:project {:projections [l_orderkey o_orderdate o_shippriority
+                                    {disc_price (* l_extendedprice (- 1 l_discount))}]}
            [:join {:conditions [{o_orderkey l_orderkey}]}
             [:join {:conditions [{c_custkey o_custkey}]}
              [:rename {_id c_custkey}
@@ -87,7 +87,7 @@
 (def q5-local-supplier-volume
   (-> '[:order-by {:order-specs [[revenue {:direction :desc}]]}
         [:group-by [n_name {revenue (sum disc_price)}]
-         [:project [n_name {disc_price (* l_extendedprice (- 1 l_discount))}]
+         [:project {:projections [n_name {disc_price (* l_extendedprice (- 1 l_discount))}]}
           [:join {:conditions [{o_orderkey l_orderkey} {s_suppkey l_suppkey}]}
            [:join {:conditions [{s_nationkey c_nationkey}]}
             [:join {:conditions [{n_nationkey s_nationkey}]}
@@ -111,7 +111,7 @@
 
 (def q6-forecasting-revenue-change
   (-> '[:group-by [{revenue (sum disc_price)}]
-        [:project [{disc_price (* l_extendedprice l_discount)}]
+        [:project {:projections [{disc_price (* l_extendedprice l_discount)}]}
          [:scan {:table #xt/table lineitem, :columns [{l_shipdate (and (>= l_shipdate ?start_date)
                             (< l_shipdate ?end_date))}
            l_extendedprice
@@ -126,9 +126,9 @@
 (def q7-volume-shipping
   (-> '[:order-by {:order-specs [[supp_nation] [cust_nation] [l_year]]}
         [:group-by [supp_nation cust_nation l_year {revenue (sum volume)}]
-         [:project [supp_nation cust_nation
-                    {l_year (extract "YEAR" l_shipdate)}
-                    {volume (* l_extendedprice (- 1 l_discount))}]
+         [:project {:projections [supp_nation cust_nation
+                                   {l_year (extract "YEAR" l_shipdate)}
+                                   {volume (* l_extendedprice (- 1 l_discount))}]}
           [:rename {n1/n_name supp_nation, n2/n_name cust_nation}
            [:join {:conditions [{c_nationkey n2/n_nationkey}
                    (or (and (== n1/n_name ?nation1)
@@ -161,14 +161,14 @@
 
 (def q8-national-market-share
   (-> '[:order-by {:order-specs [[o_year]]}
-        [:project [o_year {mkt_share (/ brazil_revenue revenue)}]
+        [:project {:projections [o_year {mkt_share (/ brazil_revenue revenue)}]}
          [:group-by [o_year {brazil_revenue (sum brazil_volume)} {revenue (sum volume)}]
-          [:project [{o_year (extract "YEAR" o_orderdate)}
-                     {brazil_volume (if (== nation ?nation)
-                                      (* l_extendedprice (- 1 l_discount))
-                                      0.0)}
-                     {volume (* l_extendedprice (- 1 l_discount))}
-                     nation]
+          [:project {:projections [{o_year (extract "YEAR" o_orderdate)}
+                                   {brazil_volume (if (== nation ?nation)
+                                                    (* l_extendedprice (- 1 l_discount))
+                                                    0.0)}
+                                   {volume (* l_extendedprice (- 1 l_discount))}
+                                   nation]}
            [:rename {n2/n_name nation}
             [:join {:conditions [{s_nationkey n2/n_nationkey}]}
              [:join {:conditions [{c_nationkey n1/n_nationkey}]}
@@ -206,10 +206,10 @@
   (-> '[:order-by {:order-specs [[nation] [o_year {:direction :desc}]]}
         [:group-by [nation o_year {sum_profit (sum amount)}]
          [:rename {n_name nation}
-          [:project [n_name
-                     {o_year (extract "YEAR" o_orderdate)}
-                     {amount (- (* l_extendedprice (- 1 l_discount))
-                                (* ps_supplycost l_quantity))}]
+          [:project {:projections [n_name
+                                    {o_year (extract "YEAR" o_orderdate)}
+                                    {amount (- (* l_extendedprice (- 1 l_discount))
+                                               (* ps_supplycost l_quantity))}]}
            [:join {:conditions [{s_nationkey n_nationkey}]}
             [:join {:conditions [{l_orderkey o_orderkey}]}
              [:join {:conditions [{l_suppkey s_suppkey}]}
@@ -232,8 +232,8 @@
         [:order-by {:order-specs [[revenue {:direction :desc}]]}
          [:group-by [c_custkey c_name c_acctbal c_phone n_name c_address c_comment
                      {revenue (sum disc_price)}]
-          [:project [c_custkey c_name c_acctbal c_phone n_name c_address c_comment
-                     {disc_price (* l_extendedprice (- 1 l_discount))}]
+          [:project {:projections [c_custkey c_name c_acctbal c_phone n_name c_address c_comment
+                                    {disc_price (* l_extendedprice (- 1 l_discount))}]}
            [:join {:conditions [{c_nationkey n_nationkey}]}
             [:join {:conditions [{o_orderkey l_orderkey}]}
              [:join {:conditions [{c_custkey o_custkey}]}
@@ -250,7 +250,7 @@
                   :end-date (LocalDate/parse "1994-01-01")})))
 
 (def q11-important-stock-identification
-  (-> '[:let [PartSupp [:project [ps_partkey {value (* ps_supplycost ps_availqty)}]
+  (-> '[:let [PartSupp [:project {:projections [ps_partkey {value (* ps_supplycost ps_availqty)}]}
                         [:join {:conditions [{s_suppkey ps_suppkey}]}
                          [:join {:conditions [{n_nationkey s_nationkey}]}
                           [:rename {_id n_nationkey}
@@ -259,11 +259,11 @@
                            [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]]
                          [:scan {:table #xt/table partsupp, :columns [ps_partkey ps_suppkey ps_supplycost ps_availqty]}]]]]
         [:order-by {:order-specs [[value {:direction :desc}]]}
-         [:project [ps_partkey value]
+         [:project {:projections [ps_partkey value]}
           [:join {:conditions [(> value total)]}
            [:group-by [ps_partkey {value (sum value)}]
             [:relation PartSupp {:col-names [ps_partkey value]}]]
-           [:project [{total (* total ?fraction)}]
+           [:project {:projections [{total (* total ?fraction)}]}
             [:group-by [{total (sum value)}]
              [:relation PartSupp {:col-names [ps_partkey value]}]]]]]]]
       (with-args {:nation "GERMANY"
@@ -274,15 +274,15 @@
         [:group-by [l_shipmode
                     {high_line_count (sum high_line)}
                     {low_line_count (sum low_line)}]
-         [:project [l_shipmode
-                    {high_line (if (or (== o_orderpriority "1-URGENT")
-                                       (== o_orderpriority "2-HIGH"))
-                                 1
-                                 0)}
-                    {low_line (if (and (<> o_orderpriority "1-URGENT")
-                                       (<> o_orderpriority "2-HIGH"))
-                                1
-                                0)}]
+         [:project {:projections [l_shipmode
+                                   {high_line (if (or (== o_orderpriority "1-URGENT")
+                                                      (== o_orderpriority "2-HIGH"))
+                                                1
+                                                0)}
+                                   {low_line (if (and (<> o_orderpriority "1-URGENT")
+                                                      (<> o_orderpriority "2-HIGH"))
+                                               1
+                                               0)}]}
           [:join {:conditions [{o_orderkey l_orderkey}]}
            [:rename {_id o_orderkey}
             [:scan {:table #xt/table orders, :columns [_id o_orderpriority]}]]
@@ -311,13 +311,13 @@
                       :word2 "requests"})))
 
 (def q14-promotion-effect
-  (-> '[:project [{promo_revenue (* 100 (/ promo_revenue revenue))}]
+  (-> '[:project {:projections [{promo_revenue (* 100 (/ promo_revenue revenue))}]}
         [:group-by [{promo_revenue (sum promo_disc_price)}
                     {revenue (sum disc_price)}]
-         [:project [{promo_disc_price (if (like p_type "PROMO%")
-                                        (* l_extendedprice (- 1 l_discount))
-                                        0.0)}
-                    {disc_price (* l_extendedprice (- 1 l_discount))}]
+         [:project {:projections [{promo_disc_price (if (like p_type "PROMO%")
+                                                      (* l_extendedprice (- 1 l_discount))
+                                                      0.0)}
+                                  {disc_price (* l_extendedprice (- 1 l_discount))}]}
           [:join {:conditions [{p_partkey l_partkey}]}
            [:rename {_id p_partkey}
             [:scan {:table #xt/table part, :columns [_id p_type]}]]
@@ -330,11 +330,11 @@
 (def q15-top-supplier
   (-> '[:let [Revenue [:group-by [supplier_no {total_revenue (sum disc_price)}]
                        [:rename {l_suppkey supplier_no}
-                        [:project [l_suppkey {disc_price (* l_extendedprice (- 1 l_discount))}]
+                        [:project {:projections [l_suppkey {disc_price (* l_extendedprice (- 1 l_discount))}]}
                          [:scan {:table #xt/table lineitem, :columns [l_suppkey l_extendedprice l_discount
                            {l_shipdate (and (>= l_shipdate ?start_date)
                                             (< l_shipdate ?end_date))}]}]]]]]
-        [:project [s_suppkey s_name s_address s_phone total_revenue]
+        [:project {:projections [s_suppkey s_name s_address s_phone total_revenue]}
          [:join {:conditions [{total_revenue max_total_revenue}]}
           [:join {:conditions [{supplier_no s_suppkey}]}
            [:relation Revenue {:col-names [supplier_no total_revenue]}]
@@ -349,7 +349,7 @@
   (-> '[:order-by {:order-specs [[supplier_cnt {:direction :desc}] [p_brand] [p_type] [p_size]]}
         [:group-by [p_brand p_type p_size {supplier_cnt (count ps_suppkey)}]
          [:distinct {}
-          [:project [p_brand p_type p_size ps_suppkey]
+          [:project {:projections [p_brand p_type p_size ps_suppkey]}
            [:join {:conditions [{p_partkey ps_partkey}]}
             [:semi-join {:conditions [{p_size p_size}]}
              [:rename {_id p_partkey}
@@ -372,13 +372,13 @@
                           {:p_size 9}]})))
 
 (def q17-small-quantity-order-revenue
-  (-> '[:project [{avg_yearly (/ sum_extendedprice 7)}]
+  (-> '[:project {:projections [{avg_yearly (/ sum_extendedprice 7)}]}
         [:group-by [{sum_extendedprice (sum l_extendedprice)}]
          [:join {:conditions [{p_partkey l_partkey} (< l_quantity small_avg_qty)]}
           [:rename {_id p_partkey}
            [:scan {:table #xt/table part, :columns [_id {p_brand (== p_brand ?brand)} {p_container (== p_container ?container)}]}]]
           [:join {:conditions [{l_partkey l_partkey}]}
-           [:project [l_partkey {small_avg_qty (* 0.2 avg_qty)}]
+           [:project {:projections [l_partkey {small_avg_qty (* 0.2 avg_qty)}]}
             [:group-by [l_partkey {avg_qty (avg l_quantity)}]
              [:scan {:table #xt/table lineitem, :columns [l_partkey l_quantity]}]]]
            [:scan {:table #xt/table lineitem, :columns [l_partkey l_quantity]}]]]]]
@@ -404,7 +404,7 @@
 
 (def q19-discounted-revenue
   (-> '[:group-by [{revenue (sum disc_price)}]
-        [:project [{disc_price (* l_extendedprice (- 1 l_discount))}]
+        [:project {:projections [{disc_price (* l_extendedprice (- 1 l_discount))}]}
          [:select {:predicate (or (and (== p_brand ?brand1)
                                        (or (== p_container "SM CASE")
                                            (== p_container "SM BOX")
@@ -443,7 +443,7 @@
 
 (def q20-potential-part-promotion
   (-> '[:order-by {:order-specs [[s_name]]}
-        [:project [s_name s_address]
+        [:project {:projections [s_name s_address]}
          [:semi-join {:conditions [{s_suppkey ps_suppkey}]}
           [:join {:conditions [{n_nationkey s_nationkey}]}
            [:rename {_id n_nationkey}
@@ -455,7 +455,7 @@
             [:scan {:table #xt/table partsupp, :columns [ps_suppkey ps_partkey ps_availqty]}]
             [:rename {_id p_partkey}
              [:scan {:table #xt/table part, :columns [_id {p_name (like p_name "forest%")}]}]]]
-           [:project [l_partkey l_suppkey {sum_qty (* 0.5 sum_qty)}]
+           [:project {:projections [l_partkey l_suppkey {sum_qty (* 0.5 sum_qty)}]}
             [:group-by [l_partkey l_suppkey {sum_qty (sum l_quantity)}]
              [:scan {:table #xt/table lineitem, :columns [l_partkey l_suppkey l_quantity
                {l_shipdate (and (>= l_shipdate ?start_date)
@@ -485,7 +485,7 @@
          [:order-by {:order-specs [[numwait {:direction :desc}] [s_name]]}
           [:group-by [s_name {numwait (row-count)}]
            [:distinct {}
-            [:project [s_name l1/l_orderkey]
+            [:project {:projections [s_name l1/l_orderkey]}
              [:anti-join {:conditions [{l1/l_orderkey l3/l_orderkey}]}
               [:relation L1 {:col-names [l_orderkey l_suppkey l_receiptdate l_commitdate]}]
               [:join {:conditions [{l1/l_orderkey l3/l_orderkey} (<> l3/l_suppkey l1/l_suppkey)]}
@@ -497,7 +497,7 @@
 
 (def q22-global-sales-opportunity
   (-> '[:let [Customer [:semi-join {:conditions [{cntrycode cntrycode}]}
-                        [:project [c_custkey {cntrycode (substring c_phone 1 2)} c_acctbal]
+                        [:project {:projections [c_custkey {cntrycode (substring c_phone 1 2)} c_acctbal]}
                          [:rename {_id c_custkey}
                           [:scan {:for-valid-time [:at :now], :table #xt/table customer, :columns [_id c_phone c_acctbal]}]]]
                         [:table ?cntrycodes]]]

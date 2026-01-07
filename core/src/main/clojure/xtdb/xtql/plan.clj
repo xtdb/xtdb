@@ -195,7 +195,7 @@
              (merge {:type :scalar
                      :placeholder placeholder
                      :provided-vars provided-vars
-                     :subquery [:project [{placeholder (first provided-vars)}]
+                     :subquery [:project {:projections [{placeholder (first provided-vars)}]}
                                 ra-plan]}
                     (plan-arg-bindings (.args this))))
       placeholder))
@@ -211,7 +211,7 @@
              (merge {:type :scalar
                      :placeholder placeholder
                      :provided-vars provided-vars
-                     :subquery [:project [{placeholder '*}]
+                     :subquery [:project {:projections [{placeholder '*}]}
                                 ra-plan]}
                     (plan-arg-bindings (.args this))))
       placeholder))
@@ -229,7 +229,7 @@
                      :placeholder placeholder
                      :provided-vars provided-vars
                      :subquery [:group-by [{placeholder (list 'array-agg struct-col)}]
-                                [:project [{struct-col '*}]
+                                [:project {:projections [{struct-col '*}]}
                                  ra-plan]]}
                     (plan-arg-bindings (.args this))))
       placeholder))
@@ -278,9 +278,9 @@
 (defn- wrap-unify [{:keys [ra-plan]} var->cols]
   ;; wrap-unify doesn't depend on provided/required vars it will
   ;; return provided-vars based on var->cols
-  {:ra-plan [:project (vec (for [[lv cols] var->cols]
-                             (or (cols lv)
-                                 {(col-sym lv) (first cols)})))
+  {:ra-plan [:project {:projections (vec (for [[lv cols] var->cols]
+                                           (or (cols lv)
+                                               {(col-sym lv) (first cols)})))}
              (-> ra-plan
                  (wrap-select (unify-preds var->cols)))]
 
@@ -390,7 +390,7 @@
   ;;currently callers job to handle updating :provided-vars etc. as this returns unested plan
   ;;decicsion based off wrap-select and current caller
   (if (seq projections)
-    [:map (vec projections)
+    [:map {:projections (vec projections)}
      plan]
     plan))
 
@@ -446,7 +446,7 @@
 
 (defn wrap-out-binding-projection [{:keys [ra-plan _provided-vars]} out-bindings]
   ;;TODO check subquery provided vars line up with bindings (although maybe this isn't an error?)
-  [:project (mapv (fn [{:keys [l r]}] {r l}) out-bindings)
+  [:project {:projections (mapv (fn [{:keys [l r]}] {r l}) out-bindings)}
    ra-plan])
 
 (defn- plan-rel [rel-expr out-bindings]
@@ -485,7 +485,7 @@
     :scalar
     (if (seq tmp-expr-sym->expr-vec)
       [:apply {:mode :single-join, :columns tmp-expr-sym->apply-param-sym}
-       [:map tmp-expr-sym->expr-vec
+       [:map {:projections tmp-expr-sym->expr-vec}
         (wrap-expr-subqueries* plan arg-subqueries)]
        subquery]
       [:single-join {:conditions [true]}
@@ -494,7 +494,7 @@
     :exists
     (if (seq tmp-expr-sym->expr-vec)
       [:apply {:mode :mark-join, :columns tmp-expr-sym->apply-param-sym, :mark-join-projection {placeholder true}}
-       [:map tmp-expr-sym->expr-vec
+       [:map {:projections tmp-expr-sym->expr-vec}
         (wrap-expr-subqueries* plan arg-subqueries)]
        subquery]
       [:mark-join {:mark-spec {placeholder [true]}}
@@ -508,7 +508,7 @@
                plan)))
 
 (defn- wrap-project [plan projection]
-  [:project projection plan])
+  [:project {:projections projection} plan])
 
 (defn- wrap-expr-subqueries [plan provided-vars subqueries]
   (-> (wrap-expr-subqueries* plan subqueries)
@@ -553,8 +553,8 @@
           return-vars (set/union
                        provided-vars
                        (set (map :l projections)))]
-      {:ra-plan [:project (vec return-vars)
-                 [:map (mapv (fn [{:keys [l r]}] {l r}) projections)
+      {:ra-plan [:project {:projections (vec return-vars)}
+                 [:map {:projections (mapv (fn [{:keys [l r]}] {l r}) projections)}
                   (-> ra-plan
                       (wrap-expr-subqueries provided-vars (mapcat :subqueries projections)))]]
        :provided-vars return-vars}))
@@ -563,7 +563,7 @@
   (plan-query-tail [{:keys [without-cols]} {:keys [ra-plan provided-vars]}]
     (let [cols-to-be-removed (into #{} (map col-sym) without-cols)
           output-projection (set/difference provided-vars cols-to-be-removed)]
-      {:ra-plan [:project (vec output-projection) ra-plan]
+      {:ra-plan [:project {:projections (vec output-projection)} ra-plan]
        :provided-vars output-projection}))
 
   Return
@@ -573,7 +573,7 @@
                                    (let [expr (.getExpr ^Binding col)]
                                      (required-vars-available? expr provided-vars)
                                      {(col-sym (.getBinding ^Binding col)) (plan-expr expr)}))))]
-      {:ra-plan [:project projections ra-plan]
+      {:ra-plan [:project {:projections projections} ra-plan]
        :provided-vars (set (map #(first (keys %)) projections))}))
 
   Unnest
@@ -581,9 +581,9 @@
     (let [{:keys [l r subqueries]} (plan-col-spec unnest-binding provided-vars)
           pre-col (gen-col)
           return-vars (conj provided-vars l)]
-      {:ra-plan [:project (vec return-vars)
+      {:ra-plan [:project {:projections (vec return-vars)}
                  [:unnest {l pre-col}
-                  [:map [{pre-col r}]
+                  [:map {:projections [{pre-col r}]}
                    (wrap-expr-subqueries ra-plan provided-vars subqueries)]]]
        :provided-vars return-vars})))
 
@@ -672,8 +672,8 @@
                       (->> (group-by first))
                       (update-vals #(into #{} (map second) %)))]
 
-    (-> {:ra-plan [:map (vec (for [{:keys [expr renamed-provided-var]} renamed-withs]
-                               {renamed-provided-var expr}))
+    (-> {:ra-plan [:map {:projections (vec (for [{:keys [expr renamed-provided-var]} renamed-withs]
+                                         {renamed-provided-var expr}))}
                    (-> ra-plan
                        (wrap-expr-subqueries provided-vars (mapcat :subqueries renamed-withs)))]}
         (wrap-unify var->cols))))
@@ -687,7 +687,7 @@
     (wrap-unify
      {:ra-plan
       [:unnest {unnested-col pre-col}
-       [:map [{pre-col expr}]
+       [:map {:projections [{pre-col expr}]}
         (wrap-expr-subqueries acc-plan acc-provided-vars subqueries)]]}
      (update var->cols original-unnested-col (fnil conj #{}) unnested-col))))
 
@@ -702,7 +702,7 @@
            {join-subquery-plan-with-unique-cols :ra-plan}] rels]
       (wrap-unify
        {:ra-plan [:apply {:mode :cross-join, :columns tmp-expr-sym->apply-param-sym}
-                  [:map tmp-expr-sym->expr-vec
+                  [:map {:projections tmp-expr-sym->expr-vec}
                    (wrap-expr-subqueries acc-plan-with-unique-cols acc-provided-vars arg-subqueries)]
                   join-subquery-plan-with-unique-cols]}
        var->cols))
@@ -722,7 +722,7 @@
                    :columns (merge
                              tmp-expr-sym->apply-param-sym
                              unifying-vars-apply-param-mapping)}
-           [:map tmp-expr-sym->expr-vec
+           [:map {:projections tmp-expr-sym->expr-vec}
             (wrap-expr-subqueries (:ra-plan acc-plan) acc-provided-vars arg-subqueries)]
            (->> unifying-vars-apply-param-mapping
                 (map (fn [[var param-for-var]]
@@ -863,7 +863,7 @@
             {:expr (str expr) :required-vars required-vars :grouping-cols grouping-cols-set
              ::err/message "Variables outside of aggregate expressions must be grouping columns"}))))
 
-      {:ra-plan  [:project (vec output-projections)
+      {:ra-plan  [:project {:projections (vec output-projections)}
                   [:group-by
                    (vec (concat
                          grouping-cols
@@ -874,7 +874,7 @@
                             (seq (mapcat #(for [{:keys [sub-expr-placeholder expr]} (:sub-exprs %)]
                                             {sub-expr-placeholder expr})
                                          aggregate-specs))]
-                     [:map (vec sub-expr-projections)
+                     [:map {:projections (vec sub-expr-projections)}
                       ra-plan]
                      ra-plan)]]
        :provided-vars (set (map :l planned-specs))}))

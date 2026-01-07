@@ -1,14 +1,14 @@
 [:project
- [{customer_id c.1/_id} {name c.1/name} {orders _sq_2}]
+ {:projections [{customer_id c.1/_id} {name c.1/name} {orders _sq_2}]}
  [:apply
   {:mode :single-join, :columns {c.1/_id ?_sq__id_3}}
   [:rename c.1 [:scan {:table #xt/table customers, :columns [_id name]}]]
   [:group-by
    [{_sq_2 (array_agg _sq_2)}]
    [:project
-    [{_sq_2 {:order_id order_id, :value value}}]
+    {:projections [{_sq_2 {:order_id order_id, :value value}}]}
     [:project
-     [{order_id o.3/_id} {value o.3/value}]
+     {:projections [{order_id o.3/_id} {value o.3/value}]}
      [:rename
       o.3
       [:scan

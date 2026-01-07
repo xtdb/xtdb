@@ -1,7 +1,7 @@
 [:project
- [{y x.1/y}]
+ {:projections [{y x.1/y}]}
  [:map
-  [{_sq_2 true}]
+  {:projections [{_sq_2 true}]}
   [:semi-join
    {:conditions [{x.1/z xt.values.3/_column_1}]}
    [:rename x.1 [:scan {:table #xt/table x, :columns [y z]}]]

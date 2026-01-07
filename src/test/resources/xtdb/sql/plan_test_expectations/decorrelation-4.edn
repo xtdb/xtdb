@@ -1,7 +1,7 @@
 [:project
- [{name s.1/name} {course e.2/course}]
+ {:projections [{name s.1/name} {course e.2/course}]}
  [:map
-  [{_sq_3 _min_out_6}]
+  {:projections [{_sq_3 _min_out_6}]}
   [:select
    {:predicate (== e.2/grade _min_out_6)}
    [:group-by
@@ -15,7 +15,7 @@
     [:left-outer-join
      {:conditions [{s.1/id e2.4/sid}]}
      [:map
-      [{_row_number_0 (row-number)}]
+      {:projections [{_row_number_0 (row-number)}]}
       [:mega-join
        {:conditions [{s.1/id e.2/sid}]}
        [[:rename s.1 [:scan {:table #xt/table students, :columns [name id]}]]

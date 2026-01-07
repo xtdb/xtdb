@@ -1,9 +1,9 @@
 [:project
- [{revenue _sum_out_2}]
+ {:projections [{revenue _sum_out_2}]}
  [:group-by
   [{_sum_out_2 (sum _sum_in_3)}]
   [:map
-   [{_sum_in_3 (* l.1/l_extendedprice l.1/l_discount)}]
+   {:projections [{_sum_in_3 (* l.1/l_extendedprice l.1/l_discount)}]}
    [:rename
     l.1
     [:scan

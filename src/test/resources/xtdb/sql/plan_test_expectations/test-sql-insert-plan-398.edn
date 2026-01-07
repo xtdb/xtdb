@@ -1,8 +1,8 @@
 [:project
- [{_id _id}
-  {_valid_from (cast _valid_from [:timestamp-tz :micro "UTC"])}]
+ {:projections [{_id _id}
+  {_valid_from (cast _valid_from [:timestamp-tz :micro "UTC"])}]}
  [:project
-  [{_id xt.values.1/_id} {_valid_from xt.values.1/_valid_from}]
+  {:projections [{_id xt.values.1/_id} {_valid_from xt.values.1/_valid_from}]}
   [:rename
    xt.values.1
    [:table

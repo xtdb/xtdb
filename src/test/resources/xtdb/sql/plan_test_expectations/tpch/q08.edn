@@ -1,26 +1,26 @@
 [:project
- [{o_year all_nations.9/o_year} mkt_share]
+ {:projections [{o_year all_nations.9/o_year} mkt_share]}
  [:order-by
   {:order-specs [[all_nations.9/o_year
     {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
-   [all_nations.9/o_year {mkt_share (/ _sum_out_10 _sum_out_12)}]
+   {:projections [all_nations.9/o_year {mkt_share (/ _sum_out_10 _sum_out_12)}]}
    [:group-by
     [all_nations.9/o_year
      {_sum_out_10 (sum _sum_in_11)}
      {_sum_out_12 (sum all_nations.9/volume)}]
     [:map
-     [{_sum_in_11
+     {:projections [{_sum_in_11
        (cond
         (== all_nations.9/nation "BRAZIL")
         all_nations.9/volume
-        0)}]
+        0)}]}
      [:rename
       all_nations.9
       [:project
-       [{o_year (extract "YEAR" o.4/o_orderdate)}
+       {:projections [{o_year (extract "YEAR" o.4/o_orderdate)}
         {volume (* l.3/l_extendedprice (- 1 l.3/l_discount))}
-        {nation n2.7/n_name}]
+        {nation n2.7/n_name}]}
        [:mega-join
         {:conditions [{n1.6/n_regionkey r.8/_id}
          {s.2/s_nationkey n2.7/_id}

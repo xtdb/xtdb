@@ -1,8 +1,8 @@
 [:project
- [{supp_nation shipping.7/supp_nation}
+ {:projections [{supp_nation shipping.7/supp_nation}
   {cust_nation shipping.7/cust_nation}
   {l_year shipping.7/l_year}
-  revenue]
+  revenue]}
  [:order-by
   {:order-specs [[shipping.7/supp_nation
     {:direction :asc, :null-ordering :nulls-last}]
@@ -10,10 +10,10 @@
     {:direction :asc, :null-ordering :nulls-last}]
    [shipping.7/l_year {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
-   [shipping.7/supp_nation
+   {:projections [shipping.7/supp_nation
     shipping.7/cust_nation
     shipping.7/l_year
-    {revenue _sum_out_8}]
+    {revenue _sum_out_8}]}
    [:group-by
     [shipping.7/supp_nation
      shipping.7/cust_nation
@@ -22,10 +22,10 @@
     [:rename
      shipping.7
      [:project
-      [{supp_nation n1.5/n_name}
+      {:projections [{supp_nation n1.5/n_name}
        {cust_nation n2.6/n_name}
        {l_year (extract "YEAR" l.2/l_shipdate)}
-       {volume (* l.2/l_extendedprice (- 1 l.2/l_discount))}]
+       {volume (* l.2/l_extendedprice (- 1 l.2/l_discount))}]}
       [:mega-join
        {:conditions [{c.4/c_nationkey n2.6/_id}
         (or

@@ -1,20 +1,20 @@
 [:project
- [{_column_1
+ {:projections [{_column_1
    (and
     (<
      (lower f.1/_valid_time)
      (coalesce (upper f.1/_system_time) xtdb/end-of-time))
     (>
      (coalesce (upper f.1/_valid_time) xtdb/end-of-time)
-     (lower f.1/_system_time)))}]
+     (lower f.1/_system_time)))}]}
  [:rename
   f.1
   [:project
-   [_valid_from
+   {:projections [_valid_from
     _valid_to
     _system_from
     _system_to
     {_valid_time (period _valid_from _valid_to)}
-    {_system_time (period _system_from _system_to)}]
+    {_system_time (period _system_from _system_to)}]}
    [:scan
     {:table #xt/table foo, :columns [_valid_from _valid_to _system_from _system_to]}]]]]

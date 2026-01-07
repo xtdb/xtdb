@@ -1,25 +1,25 @@
 [:top
  {:skip nil, :limit 20}
  [:project
-  [c_custkey
+  {:projections [c_custkey
    {c_name c.1/c_name}
    revenue
    {c_acctbal c.1/c_acctbal}
    {n_name n.4/n_name}
    {c_address c.1/c_address}
    {c_phone c.1/c_phone}
-   {c_comment c.1/c_comment}]
+   {c_comment c.1/c_comment}]}
   [:order-by
    {:order-specs [[revenue {:direction :desc, :null-ordering :nulls-first}]]}
    [:project
-    [{c_custkey c.1/_id}
+    {:projections [{c_custkey c.1/_id}
      c.1/c_name
      {revenue _sum_out_5}
      c.1/c_acctbal
      n.4/n_name
      c.1/c_address
      c.1/c_phone
-     c.1/c_comment]
+     c.1/c_comment]}
     [:group-by
      [n.4/n_name
       c.1/_id
@@ -30,7 +30,7 @@
       c.1/c_address
       {_sum_out_5 (sum _sum_in_6)}]
      [:map
-      [{_sum_in_6 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]
+      {:projections [{_sum_in_6 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]}
       [:mega-join
        {:conditions [{c.1/c_nationkey n.4/_id}
         {o.2/_id l.3/l_orderkey}

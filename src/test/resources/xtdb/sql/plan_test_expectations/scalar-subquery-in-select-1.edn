@@ -1,8 +1,8 @@
 [:project
- [{some_column (== 1 _sq_2)}]
+ {:projections [{some_column (== 1 _sq_2)}]}
  [:single-join
   {:conditions []}
   [:rename x.1 [:scan {:table #xt/table x, :columns [{y (== y 1)}]}]]
   [:project
-   [{_sq_2 foo.3/bar}]
+   {:projections [{_sq_2 foo.3/bar}]}
    [:rename foo.3 [:scan {:table #xt/table foo, :columns [bar]}]]]]]

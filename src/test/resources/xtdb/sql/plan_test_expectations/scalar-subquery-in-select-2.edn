@@ -1,10 +1,10 @@
 [:project
- [{some_column (== 1 _sq_2)}]
+ {:projections [{some_column (== 1 _sq_2)}]}
  [:single-join
   {:conditions []}
   [:rename x.1 [:scan {:table #xt/table x, :columns [{y (== y 1)}]}]]
   [:project
-   [{_sq_2 _max_out_4}]
+   {:projections [{_sq_2 _max_out_4}]}
    [:group-by
     [{_max_out_4 (max foo.3/bar)}]
     [:rename foo.3 [:scan {:table #xt/table foo, :columns [bar]}]]]]]]

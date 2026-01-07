@@ -1,12 +1,12 @@
 [:project
- [{y x.1/y}]
+ {:projections [{y x.1/y}]}
  [:map
-  [{_sq_2 true}]
+  {:projections [{_sq_2 true}]}
   [:semi-join
    {:conditions [(> _needle z)]}
    [:map
-    [{_needle (== x.1/z 1)}]
+    {:projections [{_needle (== x.1/z 1)}]}
     [:rename x.1 [:scan {:table #xt/table x, :columns [y z]}]]]
    [:project
-    [{z y.3/z}]
+    {:projections [{z y.3/z}]}
     [:rename y.3 [:scan {:table #xt/table y, :columns [z]}]]]]]]

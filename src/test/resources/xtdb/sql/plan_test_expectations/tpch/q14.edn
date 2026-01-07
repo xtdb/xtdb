@@ -1,14 +1,14 @@
 [:project
- [{promo_revenue (/ (* 100.0 _sum_out_3) _sum_out_5)}]
+ {:projections [{promo_revenue (/ (* 100.0 _sum_out_3) _sum_out_5)}]}
  [:group-by
   [{_sum_out_5 (sum _sum_in_6)} {_sum_out_3 (sum _sum_in_4)}]
   [:map
-   [{_sum_in_6 (* l.1/l_extendedprice (- 1 l.1/l_discount))}
+   {:projections [{_sum_in_6 (* l.1/l_extendedprice (- 1 l.1/l_discount))}
     {_sum_in_4
      (cond
       (like p.2/p_type "PROMO%")
       (* l.1/l_extendedprice (- 1 l.1/l_discount))
-      0)}]
+      0)}]}
    [:mega-join
     {:conditions [{l.1/l_partkey p.2/_id}]}
     [[:rename

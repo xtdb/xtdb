@@ -18,7 +18,7 @@
 ;; equality may well remain incorrect for now, it is not the goal
 (t/deftest clock-influences-equality-of-ambiguous-datetimes-test
   (t/are [expected a b zone-id]
-      (= expected (-> (tu/query-ra [:project [{'res '(== ?a ?b)}]
+      (= expected (-> (tu/query-ra [:project {:projections [{'res '(== ?a ?b)}]}
                                     [:table [{}]]]
                                    {:args {:a a, :b b}
                                     :current-time Instant/EPOCH
@@ -50,7 +50,7 @@
     (letfn [(test-cast
               ([src-value tgt-type] (test-cast src-value tgt-type {}))
               ([src-value tgt-type {:keys [default-tz], :or {default-tz ZoneOffset/UTC}}]
-               (-> (tu/query-ra [:project [{'res (list 'cast '?arg tgt-type)}]
+               (-> (tu/query-ra [:project {:projections [{'res (list 'cast '?arg tgt-type)}]}
                                  [:table [{}]]]
                                 {:current-time current-time
                                  :default-tz default-tz
@@ -192,7 +192,7 @@
     (letfn [(test-cast
               ([src-value tgt-type] (test-cast src-value tgt-type nil))
               ([src-value tgt-type cast-opts]
-               (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]
+               (-> (tu/query-ra [:project {:projections [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]}
                                  [:table [{}]]]
                                 {:current-time current-time})
                    first :res)))]
@@ -272,7 +272,7 @@
   (letfn [(test-cast
             ([src-value tgt-type] (test-cast src-value tgt-type nil))
             ([src-value tgt-type cast-opts]
-             (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]
+             (-> (tu/query-ra [:project {:projections [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]}
                                [:table [{}]]])
                  first :res)))]
 
@@ -306,7 +306,7 @@
   (t/testing "without interval qualifier"
     (letfn [(test-cast
               [src-value tgt-type]
-              (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type)}]
+              (-> (tu/query-ra [:project {:projections [{'res `(~'cast ~src-value ~tgt-type)}]}
                                 [:table [{}]]])
                   first :res))]
 
@@ -320,7 +320,7 @@
   (t/testing "with interval qualifier"
     (letfn [(test-cast
               [src-value tgt-type iq]
-              (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~iq)}]
+              (-> (tu/query-ra [:project {:projections [{'res `(~'cast ~src-value ~tgt-type ~iq)}]}
                                 [:table [{}]]])
                   first :res))]
 
@@ -348,18 +348,18 @@
   (t/testing "with invalid interval qualifier"
     (t/is (anomalous? [:incorrect nil
                        #"Cannot cast a duration to a year-month interval"]
-                      (tu/query-ra [:project [{'res `(~'cast #xt/duration "PT3H1M1.111S" :interval {:start-field "YEAR" :end-field "MONTH" :leading-precision 2 :fractional-precision 0})}]
+                      (tu/query-ra [:project {:projections [{'res `(~'cast #xt/duration "PT3H1M1.111S" :interval {:start-field "YEAR" :end-field "MONTH" :leading-precision 2 :fractional-precision 0})}]}
                                     [:table [{}]]])))
 
     (t/is (anomalous? [:incorrect nil
                        #"The maximum fractional seconds precision is 9."]
-                      (tu/query-ra [:project [{'res `(~'cast #xt/duration "PT3H1M1.111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 11})}]
+                      (tu/query-ra [:project {:projections [{'res `(~'cast #xt/duration "PT3H1M1.111S" :interval {:start-field "DAY" :end-field "SECOND" :leading-precision 2 :fractional-precision 11})}]}
                                     [:table [{}]]])))))
 
 (t/deftest cast-int-to-interval
   (letfn [(test-cast
             [src-value tgt-type cast-opts]
-            (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]
+            (-> (tu/query-ra [:project {:projections [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]}
                               [:table [{}]]])
 
                 first :res))]
@@ -378,7 +378,7 @@
 (t/deftest cast-utf8-to-interval-without-qualifier
   (letfn [(test-cast
             [src-value tgt-type]
-            (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type)}]
+            (-> (tu/query-ra [:project {:projections [{'res `(~'cast ~src-value ~tgt-type)}]}
                               [:table [{}]]])
                 first :res))]
 
@@ -395,7 +395,7 @@
 (t/deftest cast-utf8-to-interval-with-qualifier
   (letfn [(test-cast
             [src-value tgt-type cast-opts]
-            (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]
+            (-> (tu/query-ra [:project {:projections [{'res `(~'cast ~src-value ~tgt-type ~cast-opts)}]}
                               [:table [{}]]])
                 first :res))]
 
@@ -437,7 +437,7 @@
 (t/deftest cast-interval-to-string
   (letfn [(test-cast
             [src-value tgt-type]
-            (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type)}]
+            (-> (tu/query-ra [:project {:projections [{'res `(~'cast ~src-value ~tgt-type)}]}
                               [:table [{}]]])
                 first :res))]
     (t/testing "year-month interval -> string"
@@ -468,7 +468,7 @@
 (t/deftest cast-interval-to-interval
   (letfn [(test-cast
             [src-value tgt-type iq]
-            (-> (tu/query-ra [:project [{'res `(~'cast ~src-value ~tgt-type ~iq)}]
+            (-> (tu/query-ra [:project {:projections [{'res `(~'cast ~src-value ~tgt-type ~iq)}]}
                               [:table [{}]]])
                 first :res))]
     (t/testing "casting interval to interval without qualifier is a no-op"
@@ -536,7 +536,7 @@
       (t/is (= #xt/interval "P1DT0H" (test-cast #xt/interval "PT36H" :interval {:start-field "DAY" :leading-precision 2 :fractional-precision 0}))))))
 
 (defn age [dt1 dt2]
-  (-> (tu/query-ra [:project [{'res `(~'age ~dt1 ~dt2)}]
+  (-> (tu/query-ra [:project {:projections [{'res `(~'age ~dt1 ~dt2)}]}
                     [:table [{}]]])
       first :res))
 
@@ -632,28 +632,28 @@
 (t/deftest test-age-with-nano-ts
 
   (t/is (= [{:res #xt/interval "PT0.023456789S"}]
-           (tu/query-ra [:project [{'res '(age (cast "2000-01-01T00:00:00.123456789" [:timestamp-local :nano] {:precision 9})
-                                               (cast "2000-01-01T00:00:00.100000000" [:timestamp-local :nano] {:precision 9}))}]
+           (tu/query-ra [:project {:projections [{'res '(age (cast "2000-01-01T00:00:00.123456789" [:timestamp-local :nano] {:precision 9})
+                                                             (cast "2000-01-01T00:00:00.100000000" [:timestamp-local :nano] {:precision 9}))}]}
                          [:table [{}]]])))
 
   (t/is (= [{:res #xt/interval "PT0.0234567S"}]
-           (tu/query-ra [:project [{'res '(age (cast "2000-01-01T00:00:00.123456700" [:timestamp-local :nano] {:precision 9})
-                                               (cast "2000-01-01T00:00:00.100000000" [:timestamp-local :nano] {:precision 9}))}]
+           (tu/query-ra [:project {:projections [{'res '(age (cast "2000-01-01T00:00:00.123456700" [:timestamp-local :nano] {:precision 9})
+                                                             (cast "2000-01-01T00:00:00.100000000" [:timestamp-local :nano] {:precision 9}))}]}
                          [:table [{}]]])))
 
   (t/is (= [ {:res #xt/interval "PT0.023S"}]
-           (tu/query-ra [:project [{'res '(age (cast "2000-01-01T00:00:00.123456789" [:timestamp-local :nano] {:precision 3})
-                                               (cast "2000-01-01T00:00:00.100000000" [:timestamp-local :nano] {:precision 3}))}]
+           (tu/query-ra [:project {:projections [{'res '(age (cast "2000-01-01T00:00:00.123456789" [:timestamp-local :nano] {:precision 3})
+                                                             (cast "2000-01-01T00:00:00.100000000" [:timestamp-local :nano] {:precision 3}))}]}
                          [:table [{}]]])))
 
   (t/is (= [{:res #xt/interval "PT0.023456789S"}]
-           (tu/query-ra [:project [{'res '(age (cast "2000-01-01T00:00:00.123456789" [:timestamp-local :nano] {:precision 9})
-                                               (cast "2000-01-01T00:00:00.100000" [:timestamp-local :micro] {:precision 6}))}]
+           (tu/query-ra [:project {:projections [{'res '(age (cast "2000-01-01T00:00:00.123456789" [:timestamp-local :nano] {:precision 9})
+                                                             (cast "2000-01-01T00:00:00.100000" [:timestamp-local :micro] {:precision 6}))}]}
                          [:table [{}]]])))
 
   (t/is (= [{:res #xt/interval "PT-0.023456789S"}]
-           (tu/query-ra [:project [{'res '(age (cast "2000-01-01T00:00:00.100000" [:timestamp-local :micro] {:precision 6})
-                                               (cast "2000-01-01T00:00:00.123456789" [:timestamp-local :nano] {:precision 9}))}]
+           (tu/query-ra [:project {:projections [{'res '(age (cast "2000-01-01T00:00:00.100000" [:timestamp-local :micro] {:precision 6})
+                                                             (cast "2000-01-01T00:00:00.123456789" [:timestamp-local :nano] {:precision 9}))}]}
                          [:table [{}]]]))))
 
 (def ^:private instant-gen
@@ -715,7 +715,7 @@
                 default-tz zone-id-gen
                 now instant-gen]
     (= (LocalDate/ofInstant (->inst t1 now default-tz) default-tz)
-       (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:date :day])}]
+       (->> (tu/query-ra [:project {:projections [{'res (list 'cast '?t1 [:date :day])}]}
                           [:table [{}]]]
                          {:args {:t1 t1}
                           :default-tz default-tz})
@@ -728,7 +728,7 @@
     (= (if (instance? LocalTime t1) ; see #372
          t1
          (LocalTime/ofInstant (->inst t1 now default-tz) default-tz))
-       (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:time-local :micro])}]
+       (->> (tu/query-ra [:project {:projections [{'res (list 'cast '?t1 [:time-local :micro])}]}
                           [:table [{}]]]
                          {:args {:t1 t1}
                           :current-time now
@@ -742,7 +742,7 @@
     (= (if (instance? LocalDate t1) ; see fix for #371
          (.atStartOfDay ^LocalDate t1)
          (LocalDateTime/ofInstant (->inst t1 now default-tz) default-tz))
-       (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:timestamp-local :micro])}]
+       (->> (tu/query-ra [:project {:projections [{'res (list 'cast '?t1 [:timestamp-local :micro])}]}
                           [:table [{}]]]
                          {:args {:t1 t1}
                           :current-time now
@@ -755,7 +755,7 @@
                 zdt-tz zone-id-gen
                 now instant-gen]
     (= (ZonedDateTime/ofInstant (->inst t1 now default-tz) zdt-tz)
-       (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:timestamp-tz :micro (str zdt-tz)])}]
+       (->> (tu/query-ra [:project {:projections [{'res (list 'cast '?t1 [:timestamp-tz :micro (str zdt-tz)])}]}
                           [:table [{}]]]
                          {:args {:t1 t1}
                           :current-time now
@@ -766,7 +766,7 @@
   (letfn [(test-arithmetic
             ([f x y] (test-arithmetic f x y {}))
             ([f x y {:keys [default-tz], :or {default-tz #xt/zone "America/Los_Angeles"}}]
-             (-> (tu/query-ra [:project [{'res (list f '?x '?y)}]
+             (-> (tu/query-ra [:project {:projections [{'res (list f '?x '?y)}]}
                                [:table [{}]]]
                               {:default-tz default-tz
                                :args {:x x, :y y}})
@@ -883,7 +883,7 @@
                 now instant-gen]
     (= (neg? (compare (->inst t1 now default-tz)
                       (->inst t2 now default-tz)))
-       (->> (tu/query-ra [:project [{'res '(< ?t1 ?t2)}]
+       (->> (tu/query-ra [:project {:projections [{'res '(< ?t1 ?t2)}]}
                           [:table [{}]]]
                          {:args {:t1 t1, :t2 t2}
                           :current-time now
@@ -897,7 +897,7 @@
                 now instant-gen]
     (= (not (pos? (compare (->inst t1 now default-tz)
                            (->inst t2 now default-tz))))
-       (->> (tu/query-ra [:project [{'res '(<= ?t1 ?t2)}]
+       (->> (tu/query-ra [:project {:projections [{'res '(<= ?t1 ?t2)}]}
                           [:table [{}]]]
                          {:args {:t1 t1, :t2 t2}
                           :current-time now
@@ -911,7 +911,7 @@
                 now instant-gen]
     (= (= (->inst t1 now default-tz)
           (->inst t2 now default-tz))
-       (->> (tu/query-ra [:project [{'res '(== ?t1 ?t2)}]
+       (->> (tu/query-ra [:project {:projections [{'res '(== ?t1 ?t2)}]}
                           [:table [{}]]]
                          {:args {:t1 t1, :t2 t2}
                           :current-time now
@@ -925,7 +925,7 @@
                 now instant-gen]
     (= (not= (->inst t1 now default-tz)
              (->inst t2 now default-tz))
-       (->> (tu/query-ra [:project [{'res '(<> ?t1 ?t2)}]
+       (->> (tu/query-ra [:project {:projections [{'res '(<> ?t1 ?t2)}]}
                           [:table [{}]]]
                          {:args {:t1 t1, :t2 t2}
                           :current-time now
@@ -939,7 +939,7 @@
                 now instant-gen]
     (= (not (neg? (compare (->inst t1 now default-tz)
                            (->inst t2 now default-tz))))
-       (->> (tu/query-ra [:project [{'res '(>= ?t1 ?t2)}]
+       (->> (tu/query-ra [:project {:projections [{'res '(>= ?t1 ?t2)}]}
                           [:table [{}]]]
                          {:args {:t1 t1, :t2 t2}
                           :current-time now
@@ -953,7 +953,7 @@
                 now instant-gen]
     (= (pos? (compare (->inst t1 now default-tz)
                       (->inst t2 now default-tz)))
-       (->> (tu/query-ra [:project [{'res '(> ?t1 ?t2)}]
+       (->> (tu/query-ra [:project {:projections [{'res '(> ?t1 ?t2)}]}
                           [:table [{}]]]
                          {:args {:t1 t1, :t2 t2}
                           :current-time now

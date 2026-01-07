@@ -322,7 +322,7 @@
                             [[]]]]))))
   (t/testing "not-exists"
     (t/is (= [{:a 12, :m false}, {:a 14, :m false}, {:m false}]
-             (tu/query-ra '[:project [a {m (not m)}]
+             (tu/query-ra '[:project {:projections [a {m (not m)}]}
                             [:mark-join {:mark-spec {m [true]}}
                              [::tu/pages
                               [[{:a 12}, {:a 14}, {:a nil}]]]
@@ -330,7 +330,7 @@
                               [[{:b 1} {:c 2}]]]]])))
 
     (t/is (= [{:a 12, :m false}, {:a 14, :m false}, {:m false}]
-             (tu/query-ra '[:project [a {m (not m)}]
+             (tu/query-ra '[:project {:projections [a {m (not m)}]}
                             [:mark-join {:mark-spec {m [true]}}
                              [::tu/pages
                               [[{:a 12}, {:a 14}, {:a nil}]]]
@@ -338,7 +338,7 @@
                               [[{:a nil}]]]]])))
 
     (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:m true}]
-             (tu/query-ra '[:project [a {m (not m)}]
+             (tu/query-ra '[:project {:projections [a {m (not m)}]}
                             [:mark-join {:mark-spec {m [true]}}
                              [::tu/pages
                               [[{:a 12}, {:a 14}, {:a nil}]]]

@@ -90,7 +90,7 @@
            (tu/query-ra '[:top {:limit 1}
                           [:union-all {}
                            [:project
-                            [{x50 true}]
+                            {:projections [{x50 true}]}
                             [:select {:predicate (== ?x53 x48)} [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
                            [:table [{x50 false}]]]]
                         {:args {:x53 "AIR"}})))
@@ -99,7 +99,7 @@
            (tu/query-ra '[:top {:limit 1}
                           [:union-all {}
                            [:project
-                            [{x50 true}]
+                            {:projections [{x50 true}]}
                             [:select {:predicate (== ?x53 x48)} [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
                            [:table [{x50 false}]]]]
                         {:args {:x53 "AIR REG"}})))
@@ -108,7 +108,7 @@
            (tu/query-ra '[:top {:limit 1}
                           [:union-all {}
                            [:project
-                            [{x50 true}]
+                            {:projections [{x50 true}]}
                             [:select {:predicate (== ?x53 x48)} [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
                            [:table [{x50 false}]]]]
                         {:args {:x53 "RAIL"}}))))
