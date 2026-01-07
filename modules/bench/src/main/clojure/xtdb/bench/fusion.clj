@@ -485,16 +485,10 @@
                                           :max-valid-time max-vt
                                           :min-valid-time min-vt})))}]
 
-             [;; Original simple queries
-              (->query-stage :readings-aggregate)
-              (->query-stage :system-count-over-time)
-              (->query-stage :system-device-join)
-              (->query-stage :readings-with-system)
-
-              ;; Production-inspired queries from design partner
+             [;; Production queries from design partner
               (->query-stage :system-settings)
               (->query-stage :readings-for-system)
-              (->query-stage :system-count-with-joins)
+              (->query-stage :system-count-over-time)
               (->query-stage :readings-range-bins)
               (->query-stage :cumulative-registration)])}))
 
