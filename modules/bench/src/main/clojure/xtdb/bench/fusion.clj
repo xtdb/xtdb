@@ -3,6 +3,7 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
+            [xtdb.bench.random :as random]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (java.time Duration Instant)
@@ -12,8 +13,8 @@
 ;; FUSION BENCHMARK
 ;; ============================================================================
 ;;
-;; A benchmark based on actual design partner usage patterns (both intended
-;; and emergent) to catch regressions and enable optimization.
+;; A benchmark based on actual design partner usage patterns to catch
+;; regressions and enable optimization.
 ;;
 ;; ## Data Model (11 tables)
 ;;
@@ -35,15 +36,14 @@
 ;; ## Workload Characteristics (matching production patterns)
 ;;
 ;; Readings ingestion:
-;;   - Batch size: ~1000 (production pattern, was <30 historically)
+;;   - Batch size: ~1000
 ;;   - Insert frequency: every 5min of valid_time
-;;   - System-time lag: bimodal distribution
+;;   - System-time lag:
 ;;     * 80%: 0-2ms delay (near real-time)
 ;;     * 20%: 0-50ms delay (delayed batch processing)
-;;   - Expected overhead: ~6s for 1k readings (~0.6% of total runtime)
 ;;
 ;; System updates:
-;;   - Small-batch UPDATEs: batch size <30 (production pattern)
+;;   - Small-batch UPDATEs: batch size <30
 ;;   - Simulates constant trickle of system state changes (~every 5min)
 ;;   - Update frequency: configurable rounds (default 10)
 ;;
@@ -88,15 +88,18 @@
 ;;
 ;; ============================================================================
 
-(defn random-float [min max] (+ min (* (rand) (- max min))))
-(defn random-int [min max] (+ min (rand-int (- max min))))
-(defn random-nth [coll] (nth coll (rand-int (count coll))))
-
 (def organisation-names ["AlphaCorp" "BetaTech" "GammaGrid" "DeltaPower" "EpsilonEnergy"])
 (def series-names ["Series-A" "Series-B" "Series-C" "Series-D" "Series-E"])
 (def model-names ["Model-1" "Model-2"])
 
-(defn generate-ids [n] (vec (repeatedly n #(UUID/randomUUID))))
+(defn random-float [rng min max]
+  (+ min (* (.nextDouble rng) (- max min))))
+
+(defn random-int [rng min max]
+  (+ min (random/next-int rng (- max min))))
+
+(defn generate-ids [rng n]
+  (vec (repeatedly n #(random/next-uuid rng))))
 
 (defn generate-organisation [org-id name]
   {:xt/id org-id
@@ -107,35 +110,35 @@
    :organisation-id org-id
    :name series-name})
 
-(defn generate-device-model [model-id series-id model-name]
+(defn generate-device-model [rng model-id series-id model-name]
   {:xt/id model-id
    :device-series-id series-id
    :name model-name
-   :capacity-kw (random-float 5 15)})
+   :capacity-kw (random-float rng 5 15)})
 
-(defn generate-site [nmi]
+(defn generate-site [rng nmi]
   {:xt/id nmi
-   :address (str (random-int 1 999) " Solar Street")
-   :postcode (str (random-int 1000 9999))
-   :state (random-nth ["NSW" "VIC" "QLD" "SA" "WA"])})
+   :address (str (random-int rng 1 999) " Solar Street")
+   :postcode (str (random-int rng 1000 9999))
+   :state (random/uniform-nth rng ["NSW" "VIC" "QLD" "SA" "WA"])})
 
-(defn generate-system-record [system-id nmi]
+(defn generate-system-record [rng system-id nmi]
   {:xt/id system-id
    :nmi nmi
-   :type (rand-int 10)
+   :type (random/next-int rng 10)
    :created-at (Instant/parse "2020-01-01T00:00:00Z")
    :registration-date (Instant/parse "2020-01-01T00:00:00Z")
-   :rtg-max-w (random-float 1000 10000)
-   :rtg-max-wh (random-float 5000 50000)
-   :set-max-w (random-float 500 5000)
+   :rtg-max-w (random-float rng 1000 10000)
+   :rtg-max-wh (random-float rng 5000 50000)
+   :set-max-w (random-float rng 500 5000)
    :modes-enabled "default,eco"
    :updated-time (double (System/currentTimeMillis))})
 
-(defn generate-device [device-id system-id device-model-id]
+(defn generate-device [rng device-id system-id device-model-id]
   {:xt/id device-id
    :system-id system-id
    :device-model-id device-model-id
-   :serial-number (str "SN-" (UUID/randomUUID))
+   :serial-number (str "SN-" (random/next-uuid rng))
    :installed-at (Instant/parse "2020-01-01T00:00:00Z")})
 
 ;; Registration test tables - for cumulative registration query
@@ -151,25 +154,28 @@
    :name (str "Test Case " case-num)
    :description (str "Registration check " case-num)})
 
-(defn generate-test-suite-run [run-id system-id suite-id passed?]
-  {:xt/id run-id
-   :system-id system-id
-   :test-suite-id suite-id
-   :status (if passed? "DONE" "FAILED")
-   :started-at (Instant/parse "2020-01-01T12:00:00Z")
-   :completed-at (Instant/parse "2020-01-01T12:05:00Z")})
+(defn generate-test-suite-run [rng run-id system-id suite-id]
+  (let [passed? (random/chance? rng 0.8)]
+    {:xt/id run-id
+     :system-id system-id
+     :test-suite-id suite-id
+     :status (if passed? "DONE" "FAILED")
+     :passed? passed?
+     :started-at (Instant/parse "2020-01-01T12:00:00Z")
+     :completed-at (Instant/parse "2020-01-01T12:05:00Z")}))
 
-(defn generate-test-case-run [run-id suite-run-id case-id passed?]
-  {:xt/id run-id
-   :test-suite-run-id suite-run-id
-   :test-case-id case-id
-   :status (if passed? "OK" "FAILED")
-   :executed-at (Instant/parse "2020-01-01T12:00:00Z")})
+(defn generate-test-case-run [rng run-id suite-run-id case-id suite-passed?]
+  (let [case-passed? (or suite-passed? (random/chance? rng 0.7))]
+    {:xt/id run-id
+     :test-suite-run-id suite-run-id
+     :test-case-id case-id
+     :status (if case-passed? "OK" "FAILED")
+     :executed-at (Instant/parse "2020-01-01T12:00:00Z")}))
 
 (defn ->init-tables-stage
   [system-ids site-ids organisation-ids device-series-ids device-model-ids device-ids test-suite-id test-case-ids batch-size]
   {:t :call, :stage :init-tables
-   :f (fn [{:keys [node]}]
+   :f (fn [{:keys [node random]}]
         (log/infof "Inserting %d organisation records" (count organisation-ids))
         (xt/submit-tx node [(into [:put-docs :organisation]
                                   (map-indexed (fn [idx org-id]
@@ -191,25 +197,27 @@
                                                  (let [series-idx (quot idx (count model-names))
                                                        series-id (nth device-series-ids series-idx)
                                                        model-name (nth model-names (mod idx (count model-names)))]
-                                                   (generate-device-model model-id series-id model-name)))
+                                                   (generate-device-model random model-id series-id model-name)))
                                                device-model-ids))])
 
         (log/infof "Inserting %d site records" (count site-ids))
         (doseq [batch (partition-all batch-size site-ids)]
-          (xt/submit-tx node [(into [:put-docs :site] (map generate-site batch))]))
+          (xt/submit-tx node [(into [:put-docs :site] (map #(generate-site random %) batch))]))
 
         (log/infof "Inserting %d system records" (count system-ids))
         (doseq [[sys-batch site-batch] (map vector
                                             (partition-all batch-size system-ids)
                                             (partition-all batch-size site-ids))]
           (xt/submit-tx node [(into [:put-docs :system]
-                                    (map generate-system-record sys-batch site-batch))]))
+                                    (map (fn [sid nmi] (generate-system-record random sid nmi))
+                                         sys-batch site-batch))]))
 
         (log/infof "Inserting %d device records" (count device-ids))
         (doseq [batch (partition-all batch-size device-ids)]
           (xt/submit-tx node [(into [:put-docs :device]
-                                    (map #(generate-device % (random-nth system-ids)
-                                                           (random-nth device-model-ids))
+                                    (map #(generate-device random %
+                                                           (random/uniform-nth random system-ids)
+                                                           (random/uniform-nth random device-model-ids))
                                          batch))]))
 
         ;; Insert test suite and test cases for registration tracking
@@ -222,31 +230,31 @@
         ;; Simulate 80% pass rate
         (log/infof "Inserting test suite runs for %d systems" (count system-ids))
         (doseq [system-id system-ids]
-          (let [suite-run-id (UUID/randomUUID)
-                passed? (< (rand) 0.8)]
+          (let [suite-run-id (random/next-uuid random)
+                suite-run (generate-test-suite-run random suite-run-id system-id test-suite-id)
+                suite-passed? (:passed? suite-run)]
             (xt/submit-tx node [(into [:put-docs :test_suite_run]
-                                      [(generate-test-suite-run suite-run-id system-id test-suite-id passed?)])])
+                                      [(dissoc suite-run :passed?)])])
             (xt/submit-tx node [(into [:put-docs :test_case_run]
-                                      (map-indexed (fn [idx case-id]
-                                                     ;; If suite passed, all cases pass; else random fails
-                                                     (let [case-passed? (or passed? (< (rand) 0.7))]
-                                                       (generate-test-case-run (UUID/randomUUID)
-                                                                               suite-run-id
-                                                                               case-id
-                                                                               case-passed?)))
-                                                   test-case-ids))]))))})
+                                      (map (fn [case-id]
+                                             (generate-test-case-run random
+                                                                     (random/next-uuid random)
+                                                                     suite-run-id
+                                                                     case-id
+                                                                     suite-passed?))
+                                           test-case-ids))]))))})
 
-(defn ->readings-docs [system-ids reading-idx start end]
+(defn ->readings-docs [rng system-ids reading-idx start end]
   (into [:put-docs {:into :readings :valid-from start :valid-to end}]
         (for [system-id system-ids]
           {:xt/id (str system-id "-" reading-idx)
            :system-id system-id
-           :value (random-float -100 100)
+           :value (random-float rng -100 100)
            :duration 300})))
 
 (defn ->ingest-readings-stage [system-ids readings batch-size]
   {:t :call, :stage :ingest-readings
-   :f (fn [{:keys [node]}]
+   :f (fn [{:keys [node random]}]
         (log/infof "Inserting %d readings for %d systems" readings (count system-ids))
         (let [intervals (->> (tu/->instants :minute 5 #inst "2020-01-01")
                              (partition 2 1)
@@ -256,17 +264,17 @@
             (when (zero? (mod idx 1000))
               (log/infof "Readings batch %d" idx))
             (doseq [batch batches]
-              (xt/submit-tx node [(->readings-docs (vec batch) idx start end)]))
+              (xt/submit-tx node [(->readings-docs random (vec batch) idx start end)]))
             ;; Bimodal system-time lag: 80% near real-time, 20% delayed
             ;; Creates temporal scatter without significant overhead (~6s for 1k readings)
-            (let [delay-ms (if (< (rand) 0.8)
-                             (rand-int 2)       ;; 80%: 0-2ms (barely noticeable)
-                             (rand-int 50))]    ;; 20%: 0-50ms (cluster gaps)
+            (let [delay-ms (if (random/chance? random 0.8)
+                             (random/next-int random 2)       ;; 80%: 0-2ms (barely noticeable)
+                             (random/next-int random 50))]    ;; 20%: 0-50ms (cluster gaps)
               (Thread/sleep delay-ms)))))})
 
 (defn ->update-system-stage [system-ids updates-per-device update-batch-size]
   {:t :call, :stage :update-system
-   :f (fn [{:keys [node]}]
+   :f (fn [{:keys [node random]}]
         (log/infof "Running %d UPDATE rounds" updates-per-device)
         (dotimes [round updates-per-device]
           (doseq [batch (partition-all update-batch-size system-ids)]
@@ -274,7 +282,7 @@
               (xt/execute-tx node
                              [[:sql "UPDATE system SET updated_time = ?, set_max_w = ? WHERE _id = ?"
                                [(double (System/currentTimeMillis))
-                                (random-float 500 5000)
+                                (random-float random 500 5000)
                                 sid]]])))))})
 
 (defn ->sync-stage []
@@ -447,14 +455,15 @@
                                             updates-per-device seed no-load?]
                                      :or {seed 0 batch-size 1000 update-batch-size 30
                                           updates-per-device 10}}]
-  (let [system-ids (generate-ids devices)
+  (let [setup-rng (java.util.Random. seed)
+        system-ids (generate-ids setup-rng devices)
         site-ids (mapv #(str "NMI-" %) (range devices))
-        organisation-ids (generate-ids 5)
-        device-series-ids (generate-ids 25) ; 5 series per org
-        device-model-ids (generate-ids 50) ; 2 models per series
-        device-ids (generate-ids (* devices 2))
-        test-suite-id (UUID/randomUUID)
-        test-case-ids (generate-ids 5)] ; 5 test cases per suite
+        organisation-ids (generate-ids setup-rng 5)
+        device-series-ids (generate-ids setup-rng 25) ; 5 series per org
+        device-model-ids (generate-ids setup-rng 50) ; 2 models per series
+        device-ids (generate-ids setup-rng (* devices 2))
+        test-suite-id (random/next-uuid setup-rng)
+        test-case-ids (generate-ids setup-rng 5)] ; 5 test cases per suite
     (log/info {:devices devices :readings readings :batch-size batch-size
                :update-batch-size update-batch-size :updates-per-device updates-per-device})
     {:title "Fusion benchmark"
