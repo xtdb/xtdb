@@ -72,7 +72,7 @@
 ;;
 ;; ## Usage
 ;;
-;; Default (10k systems × 10k readings):
+;; Default (10k systems × 1k readings):
 ;;   ./gradlew fusion
 ;;
 ;; Custom scale:
@@ -432,7 +432,7 @@
 
 (defmethod b/cli-flags :fusion [_]
   [[nil "--devices DEVICES" "Number of systems" :parse-fn parse-long :default 10000]
-   [nil "--readings READINGS" "Readings per system" :parse-fn parse-long :default 10000]
+   [nil "--readings READINGS" "Readings per system" :parse-fn parse-long :default 1000]
    [nil "--batch-size BATCH" "Insert batch size" :parse-fn parse-long :default 1000]
    [nil "--update-batch-size BATCH" "Update batch size" :parse-fn parse-long :default 30]
    [nil "--updates-per-device UPDATES" "UPDATE rounds" :parse-fn parse-long :default 10]
