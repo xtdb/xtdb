@@ -287,38 +287,6 @@
         (b/finish-block! node)
         (b/compact! node))})
 
-(defn query-readings-aggregate [node start end opts]
-  (xt/q node ["SELECT system_id, AVG(value) AS avg, MIN(value) AS min, MAX(value) AS max
-               FROM readings FOR VALID_TIME BETWEEN ? AND ?
-               GROUP BY system_id" start end] opts))
-
-(defn query-system-count-over-time [node start end opts]
-  (xt/q node ["WITH dates AS (
-                 SELECT d::timestamptz AS d
-                 FROM generate_series(?::timestamptz, ?::timestamptz, INTERVAL 'PT1H') AS x(d)
-               )
-               SELECT dates.d, COUNT(DISTINCT system._id) AS c
-               FROM dates
-               LEFT OUTER JOIN system ON system._valid_time CONTAINS dates.d
-               GROUP BY dates.d
-               ORDER BY dates.d" start end] opts))
-
-(defn query-system-device-join [node point-in-time opts]
-  (xt/q node ["SELECT s._id AS system_id, s.nmi, d._id AS device_id, dm.manufacturer, dm.model
-               FROM system s
-               JOIN device d ON d.system_id = s._id AND d._valid_time CONTAINS ?
-               JOIN device_model dm ON dm._id = d.device_model_id AND dm._valid_time CONTAINS ?
-               WHERE s._valid_time CONTAINS ?" point-in-time point-in-time point-in-time] opts))
-
-(defn query-readings-with-system [node start end opts]
-  (xt/q node ["SELECT s._id AS system_id, s.nmi, r.value, r._valid_from, r._valid_to
-               FROM readings r
-               JOIN system s ON s._id = r.system_id AND s._valid_time CONTAINS r._valid_from
-               WHERE r._valid_from >= ? AND r._valid_from < ?
-               LIMIT 1000" start end] opts))
-
-;; Production-inspired queries from design partner usage patterns
-
 (defn query-system-settings [node system-id opts]
   "Simple point-in-time system lookup - common query pattern"
   (xt/q node ["SELECT *, _valid_from, _system_from FROM system WHERE _id = ?" system-id] opts))
@@ -337,7 +305,7 @@
                WHERE system._id = ? AND readings._valid_from >= ? AND readings._valid_from < ?
                ORDER BY reading_time" system-id start end] opts))
 
-(defn query-system-count-with-joins [node start end opts]
+(defn query-system-count-over-time [node start end opts]
   "Complex temporal aggregation with multi-table joins - production analytics query
 
   Matches production 'System count over a period' query with full table hierarchy:
@@ -460,16 +428,10 @@
               opts {:current-time (:system-time latest-completed-tx)}
               sample-system-id (first system-ids)]
           (case query-type
-            ;; Original simple queries
-            :readings-aggregate (query-readings-aggregate node min-valid-time max-valid-time opts)
-            :system-count-over-time (query-system-count-over-time node min-valid-time max-valid-time opts)
-            :system-device-join (query-system-device-join node max-valid-time opts)
-            :readings-with-system (query-readings-with-system node min-valid-time max-valid-time opts)
-
-            ;; Production-inspired queries
+            ;; Production queries
             :system-settings (query-system-settings node sample-system-id opts)
             :readings-for-system (query-readings-for-system node sample-system-id min-valid-time max-valid-time opts)
-            :system-count-with-joins (query-system-count-with-joins node min-valid-time max-valid-time opts)
+            :system-count-over-time (query-system-count-over-time node min-valid-time max-valid-time opts)
             :readings-range-bins (query-readings-range-bins node min-valid-time max-valid-time opts)
             :cumulative-registration (query-cumulative-registration node min-valid-time max-valid-time opts))))})
 
