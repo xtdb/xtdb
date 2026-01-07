@@ -15,20 +15,22 @@
 ;; A benchmark based on actual design partner usage patterns (both intended
 ;; and emergent) to catch regressions and enable optimization.
 ;;
-;; ## Data Model (9 tables)
+;; ## Data Model (11 tables)
 ;;
 ;; Core tables:
-;;   1. device_model    - Reference data (10 rows)
-;;   2. site            - Location data (NMI meter IDs, ~= system count)
-;;   3. system          - Main table, constantly updated (configurable count, default 10k)
-;;   4. device          - Links systems to device models (2× system count)
-;;   5. readings        - High volume time-series (system_id, value, valid_time)
+;;   1. organisation    - Manufacturers (5 rows)
+;;   2. device_series   - Device series per org (25 rows, 5 per org)
+;;   3. device_model    - Reference data (50 rows, 2 per series)
+;;   4. site            - Location data (NMI meter IDs, ~= system count)
+;;   5. system          - Main table, constantly updated (configurable count, default 10k)
+;;   6. device          - Links systems to device models (2× system count)
+;;   7. readings        - High volume time-series (system_id, value, valid_time)
 ;;
 ;; Registration test tables (for cumulative registration query):
-;;   6. test_suite      - Test suite definitions (1 suite)
-;;   7. test_case       - Test cases within suites (5 cases per suite)
-;;   8. test_suite_run  - Suite executions per system (1 per system, 80% pass rate)
-;;   9. test_case_run   - Case execution results (5 per suite run)
+;;   8. test_suite      - Test suite definitions (1 suite)
+;;   9. test_case       - Test cases within suites (5 cases per suite)
+;;   10. test_suite_run - Suite executions per system (1 per system, 80% pass rate)
+;;   11. test_case_run  - Case execution results (5 per suite run)
 ;;
 ;; ## Workload Characteristics (matching production patterns)
 ;;
@@ -90,15 +92,25 @@
 (defn random-int [min max] (+ min (rand-int (- max min))))
 (defn random-nth [coll] (nth coll (rand-int (count coll))))
 
-(def manufacturers ["AlphaCorp" "BetaTech" "GammaGrid" "DeltaPower" "EpsilonEnergy"])
-(def models ["Model-A" "Model-B" "Model-C" "Model-D" "Model-E"])
+(def organisation-names ["AlphaCorp" "BetaTech" "GammaGrid" "DeltaPower" "EpsilonEnergy"])
+(def series-names ["Series-A" "Series-B" "Series-C" "Series-D" "Series-E"])
+(def model-names ["Model-1" "Model-2"])
 
 (defn generate-ids [n] (vec (repeatedly n #(UUID/randomUUID))))
 
-(defn generate-device-model [model-id]
+(defn generate-organisation [org-id name]
+  {:xt/id org-id
+   :name name})
+
+(defn generate-device-series [series-id org-id series-name]
+  {:xt/id series-id
+   :organisation-id org-id
+   :name series-name})
+
+(defn generate-device-model [model-id series-id model-name]
   {:xt/id model-id
-   :manufacturer (random-nth manufacturers)
-   :model (random-nth models)
+   :device-series-id series-id
+   :name model-name
    :capacity-kw (random-float 5 15)})
 
 (defn generate-site [nmi]
@@ -155,12 +167,32 @@
    :executed-at (Instant/parse "2020-01-01T12:00:00Z")})
 
 (defn ->init-tables-stage
-  [system-ids site-ids device-model-ids device-ids test-suite-id test-case-ids batch-size]
+  [system-ids site-ids organisation-ids device-series-ids device-model-ids device-ids test-suite-id test-case-ids batch-size]
   {:t :call, :stage :init-tables
    :f (fn [{:keys [node]}]
+        (log/infof "Inserting %d organisation records" (count organisation-ids))
+        (xt/submit-tx node [(into [:put-docs :organisation]
+                                  (map-indexed (fn [idx org-id]
+                                                 (generate-organisation org-id (nth organisation-names idx)))
+                                               organisation-ids))])
+
+        (log/infof "Inserting %d device_series records" (count device-series-ids))
+        (xt/submit-tx node [(into [:put-docs :device_series]
+                                  (map-indexed (fn [idx series-id]
+                                                 (let [org-idx (quot idx (count series-names))
+                                                       org-id (nth organisation-ids org-idx)
+                                                       series-name (nth series-names (mod idx (count series-names)))]
+                                                   (generate-device-series series-id org-id series-name)))
+                                               device-series-ids))])
+
         (log/infof "Inserting %d device_model records" (count device-model-ids))
         (xt/submit-tx node [(into [:put-docs :device_model]
-                                  (map generate-device-model device-model-ids))])
+                                  (map-indexed (fn [idx model-id]
+                                                 (let [series-idx (quot idx (count model-names))
+                                                       series-id (nth device-series-ids series-idx)
+                                                       model-name (nth model-names (mod idx (count model-names)))]
+                                                   (generate-device-model model-id series-id model-name)))
+                                               device-model-ids))])
 
         (log/infof "Inserting %d site records" (count site-ids))
         (doseq [batch (partition-all batch-size site-ids)]
@@ -306,7 +338,10 @@
                ORDER BY reading_time" system-id start end] opts))
 
 (defn query-system-count-with-joins [node start end opts]
-  "Complex temporal aggregation with multi-table joins - production analytics query"
+  "Complex temporal aggregation with multi-table joins - production analytics query
+
+  Matches production 'System count over a period' query with full table hierarchy:
+  system -> device -> device_model -> device_series -> organisation, plus site."
   (xt/q node ["WITH dates AS (
                  SELECT d::timestamptz AS d
                  FROM generate_series(?::timestamptz, ?::timestamptz, INTERVAL 'PT1H') AS x(d)
@@ -316,6 +351,8 @@
                LEFT OUTER JOIN system ON system._valid_time CONTAINS dates.d
                LEFT OUTER JOIN device ON device.system_id = system._id AND device._valid_time CONTAINS dates.d
                LEFT OUTER JOIN device_model ON device_model._id = device.device_model_id AND device_model._valid_time CONTAINS dates.d
+               LEFT OUTER JOIN device_series ON device_series._id = device_model.device_series_id AND device_series._valid_time CONTAINS dates.d
+               LEFT OUTER JOIN organisation ON organisation._id = device_series.organisation_id AND organisation._valid_time CONTAINS dates.d
                LEFT OUTER JOIN site ON site._id = system.nmi AND site._valid_time CONTAINS dates.d
                GROUP BY dates.d
                ORDER BY dates.d" start end] opts))
@@ -450,7 +487,9 @@
                                           updates-per-device 10}}]
   (let [system-ids (generate-ids devices)
         site-ids (mapv #(str "NMI-" %) (range devices))
-        device-model-ids (generate-ids 10)
+        organisation-ids (generate-ids 5)
+        device-series-ids (generate-ids 25) ; 5 series per org
+        device-model-ids (generate-ids 50) ; 2 models per series
         device-ids (generate-ids (* devices 2))
         test-suite-id (UUID/randomUUID)
         test-case-ids (generate-ids 5)] ; 5 test cases per suite
@@ -464,7 +503,7 @@
      :->state #(do {:!state (atom {:system-ids system-ids})})
      :tasks (concat
              (when-not no-load?
-               [(->init-tables-stage system-ids site-ids device-model-ids device-ids test-suite-id test-case-ids update-batch-size)
+               [(->init-tables-stage system-ids site-ids organisation-ids device-series-ids device-model-ids device-ids test-suite-id test-case-ids update-batch-size)
                 (->ingest-readings-stage system-ids readings batch-size)
                 (->update-system-stage system-ids updates-per-device update-batch-size)
                 (->sync-stage)
