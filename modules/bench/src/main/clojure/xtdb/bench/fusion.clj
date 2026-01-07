@@ -344,7 +344,7 @@
   system -> device -> device_model -> device_series -> organisation, plus site."
   (xt/q node ["WITH dates AS (
                  SELECT d::timestamptz AS d
-                 FROM generate_series(?::timestamptz, ?::timestamptz, INTERVAL 'PT1H') AS x(d)
+                 FROM generate_series(DATE_BIN(INTERVAL 'PT1H', ?::timestamptz), ?::timestamptz, INTERVAL 'PT1H') AS x(d)
                )
                SELECT dates.d, COUNT(DISTINCT system._id) AS c
                FROM dates
