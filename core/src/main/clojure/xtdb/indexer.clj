@@ -103,7 +103,7 @@
            (throw (ex-info msg# data# e#)))))))
 
 (defn- assert-timestamp-col-type [^VectorReader rdr]
-  (when-not (or (nil? rdr) (= types/temporal-arrow-type (.getType (.getField rdr))))
+  (when-not (or (nil? rdr) (= types/temporal-arrow-type (.getArrowType rdr)))
     (throw (err/illegal-arg :xtdb/invalid-timestamp-col-type
                             {:col-name (.getName rdr)
                              :col-type (types/->type (.getField rdr))}))))

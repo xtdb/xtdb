@@ -40,7 +40,7 @@
                                    (let [out-cols (LinkedList.)
 
                                          vec-rdr (.vectorForOrNull in-rel from-column-name)
-                                         vec-type (.getType (.getField vec-rdr))
+                                         vec-type (.getArrowType vec-rdr)
 
                                          rdrs+copiers
                                          (condp instance? vec-type

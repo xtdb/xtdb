@@ -178,10 +178,10 @@
      :->out-rel (fn [{:keys [^BufferAllocator allocator, ^RelationReader args]}]
                   (let [vec-rdr (.vectorForOrNull args (str (symbol param)))
                         list-rdr (cond-> vec-rdr
-                                   (instance? ArrowType$Union (.getType (.getField vec-rdr))) (.vectorFor "list"))
+                                   (instance? ArrowType$Union (.getArrowType vec-rdr)) (.vectorFor "list"))
                         el-rdr (some-> list-rdr (.getListElements))
                         el-struct-rdr (cond-> el-rdr
-                                              (instance? ArrowType$Union (.getType (.getField el-rdr))) (.vectorFor "struct"))]
+                                              (instance? ArrowType$Union (.getArrowType el-rdr)) (.vectorFor "struct"))]
 
                     (Relation. allocator
                                ^List (vec (for [k (some-> el-struct-rdr .getKeyNames)

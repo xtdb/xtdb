@@ -131,7 +131,7 @@ fun readBinaryTextArray(ba: ByteArray): List<String> {
 // Vector utilities
 
 fun VectorReader.getUnixMicros(idx: Int): Long {
-    val arrowType = field.type
+    val arrowType = this.arrowType
     val micros = getLong(idx)
 
     return if (arrowType is ArrowType.Timestamp && arrowType.unit == TimeUnit.NANOSECOND) {
