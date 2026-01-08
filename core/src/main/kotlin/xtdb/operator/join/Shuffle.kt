@@ -41,7 +41,7 @@ class Shuffle private constructor(
     fun shuffle() {
         val selections = Array(partCount) { IntArrayList(approxRowsPerPart) }
 
-        HASH_COL_NAME.ofType(I32).openVector(al).use { tmpHashCol ->
+        al.openVector(HASH_COL_NAME, I32).use { tmpHashCol ->
             repeat(inDataRel.rowCount) { inIdx ->
                 val hashCode = hasher.hashCode(inIdx)
                 tmpHashCol.writeInt(hashCode)

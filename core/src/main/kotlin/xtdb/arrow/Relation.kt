@@ -14,7 +14,6 @@ import org.apache.arrow.vector.ipc.message.MessageChannelReader
 import org.apache.arrow.vector.ipc.message.MessageSerializer
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
-import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ArrowWriter
 import xtdb.ICursor
@@ -44,7 +43,7 @@ class Relation(
             : this(al, vectors.associateByTo(linkedMapOf()) { it.name }, rowCount)
 
     constructor(al: BufferAllocator, schema: Schema) : this(al, schema.fields)
-    constructor(al: BufferAllocator, fields: List<Field>) : this(al, fields.safeMap { it.openVector(al) }, 0)
+    constructor(al: BufferAllocator, fields: List<Field>) : this(al, fields.safeMap { al.openVector(it) }, 0)
     constructor(al: BufferAllocator, vararg fields: Field) : this(al, fields.toList())
 
     override fun vectorForOrNull(name: String) = vecs[name]
@@ -54,7 +53,7 @@ class Relation(
     override fun vectorFor(name: String, arrowType: ArrowType, nullable: Boolean): Vector =
         vecs.compute(name) { _, v ->
             v?.maybePromote(al, arrowType, nullable)
-                ?: Field(name, FieldType(nullable, arrowType, null), null).openVector(al)
+                ?: al.openVector(name, arrowType, nullable)
                     .also { vec -> repeat(rowCount) { vec.writeNull() } }
         }!!
 

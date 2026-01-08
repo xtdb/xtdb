@@ -69,7 +69,7 @@ class StructVector private constructor(
         childWriters.compute(name) { _, existingChild ->
             when {
                 existingChild == null ->
-                    Field(name, FieldType(nullable, arrowType, null), emptyList()).openVector(allocator).also { newVec ->
+                    allocator.openVector(name, arrowType, nullable).also { newVec ->
                         repeat(valueCount) { if (isNull(it)) newVec.writeUndefined() else newVec.writeNull() }
                     }
 

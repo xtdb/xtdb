@@ -115,7 +115,7 @@ class ListVector private constructor(
             elVector.arrowType == arrowType && elVector.nullable == nullable -> elVector
 
             elVector is NullVector && elVector.valueCount == 0 ->
-                Field("\$data\$", FieldType(nullable, arrowType, null), emptyList()).openVector(al).also { elVector = it }
+                al.openVector("\$data\$", arrowType, nullable).also { elVector = it }
 
             else -> elVector.maybePromote(al, arrowType, nullable).also { elVector = it }
         }

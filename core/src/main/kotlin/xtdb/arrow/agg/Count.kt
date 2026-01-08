@@ -5,6 +5,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import xtdb.arrow.FieldName
 import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector
+import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.arrow.VectorType.Companion.ofType
 
@@ -16,7 +17,7 @@ class Count(
     override val field: Field = outColName ofType I64
 
     override fun build(al: BufferAllocator): AggregateSpec {
-        val outVec = Vector.open(al, field)
+        val outVec = al.openVector(field)
         return object : AggregateSpec {
 
             override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping) {

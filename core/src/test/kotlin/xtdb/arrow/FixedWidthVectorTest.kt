@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.I32
 import xtdb.test.AllocatorResolver
 import xtdb.arrow.VectorType.Companion.ofType
@@ -78,7 +79,7 @@ class FixedWidthVectorTest {
             val idxs = (0..<ints.size).shuffled(rand).toIntArray()
 
             Vector.fromList(al, "foo" ofType I32, ints).use { src ->
-                Vector.open(al, src.field).use { dest ->
+                al.openVector(src.field).use { dest ->
                     val copier = src.rowCopier(dest)
                     copier.copyRows(idxs)
 
@@ -97,7 +98,7 @@ class FixedWidthVectorTest {
             Triple(ints, offset, len)
         }) { (ints, offset, len) ->
             Vector.fromList(al, "foo" ofType I32, ints).use { src ->
-                Vector.open(al, src.field).use { dest ->
+                al.openVector(src.field).use { dest ->
                     val copier = src.rowCopier(dest)
                     copier.copyRange(offset, len)
 

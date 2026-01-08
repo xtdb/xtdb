@@ -11,7 +11,6 @@ import xtdb.arrow.VectorReader
 import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.arrow.FieldName
 import xtdb.arrow.VectorType.Companion.I32
-import xtdb.arrow.VectorType.Companion.ofType
 import java.util.function.IntUnaryOperator
 
 class BuildSide(
@@ -23,7 +22,7 @@ class BuildSide(
     val inMemoryThreshold: Long = 100_000,
 ) : AutoCloseable {
     val dataRel = Relation(al, schema)
-    private val hashCol = "hashes".ofType(I32).openVector(al)
+    private val hashCol = al.openVector("hashes", I32)
 
     var buildMap: BuildSideMap? = null; private set
 

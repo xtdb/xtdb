@@ -4,6 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.arrow.*
+import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.error.Incorrect
@@ -23,7 +24,7 @@ class Sum(
     }
 
     override fun build(al: BufferAllocator) = object : AggregateSpec {
-        private val outVec = Vector.open(al, field)
+        private val outVec = al.openVector(field)
 
         override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping) {
             val inVec = inRel.vectorForOrNull(fromName) ?: return

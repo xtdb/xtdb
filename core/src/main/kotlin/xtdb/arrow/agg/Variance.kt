@@ -40,7 +40,7 @@ sealed class Variance(
         }
 
         override fun openFinishedVector(): Vector {
-            val outVec = Vector.open(al, field) as DoubleVector
+            val outVec = al.openVector(field) as DoubleVector
 
             sumxAgg.openFinishedVector().use { sumxVec ->
                 sumx2Agg.openFinishedVector().use { sumx2Vec ->

@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import xtdb.test.AllocatorResolver
+import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.ofType
 import kotlin.random.Random
 
@@ -58,7 +59,7 @@ class VariableWidthVectorTest {
             val idxs = (0..<strs.size).shuffled(rand).toIntArray()
 
             Vector.fromList(al, "foo" ofType VectorType.UTF8, strs).use { src ->
-                Vector.open(al, src.field).use { dest ->
+                al.openVector(src.field).use { dest ->
                     val copier = src.rowCopier(dest)
                     copier.copyRows(idxs)
 
@@ -77,7 +78,7 @@ class VariableWidthVectorTest {
             Triple(strs, offset, len)
         }) { (strs, offset, len) ->
             Vector.fromList(al, "foo" ofType VectorType.UTF8, strs).use { src ->
-                Vector.open(al, src.field).use { dest ->
+                al.openVector(src.field).use { dest ->
                     val copier = src.rowCopier(dest)
                     copier.copyRange(offset, len)
 

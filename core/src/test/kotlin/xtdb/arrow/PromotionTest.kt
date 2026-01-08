@@ -25,7 +25,7 @@ import xtdb.util.closeOnCatch
 class PromotionTest {
     @Test
     fun `no-op if the type matches`(al: BufferAllocator) {
-        ("i64" ofType I64).openVector(al)
+        al.openVector("i64", I64)
             .use { v -> assertEquals(v, v.maybePromote(al, I64.arrowType, false)) }
 
         al.openVector("struct", structOf("a" to I64, "b" to UTF8))
@@ -35,14 +35,14 @@ class PromotionTest {
     @Test
     fun `adds nullable, but otherwise same vec`(al: BufferAllocator) {
         val field = "v" ofType I64
-        field.openVector(al).use { v ->
+        al.openVector(field).use { v ->
             assertEquals(field, v.field)
             v.maybePromote(al, I64.arrowType, true)
             assertEquals("v" ofType maybe(I64), v.field)
         }
 
         val field2 = "v" ofType maybe(I64)
-        field2.openVector(al).use { v ->
+        al.openVector(field2).use { v ->
             assertEquals(field2, v.field)
             v.maybePromote(al, I64.arrowType, true)
             assertEquals(field2, v.field)
@@ -51,7 +51,7 @@ class PromotionTest {
 
     @Test
     fun `promotes to union`(al: BufferAllocator) {
-        ("v" ofType I32).openVector(al).closeOnCatch { v ->
+        al.openVector("v", I32).closeOnCatch { v ->
             v.writeAll(listOf(1, 2, 3))
             v.maybePromote(al, UTF8.arrowType, false)
         }.use { promoted ->
@@ -81,8 +81,8 @@ class PromotionTest {
 
     @Test
     fun `rowCopier throws on invalid-copy-source`(al: BufferAllocator) {
-        ("src" ofType I32).openVector(al).use { src ->
-            ("dest" ofType UTF8).openVector(al).closeOnCatch { dest ->
+        al.openVector("src", I32).use { src ->
+            al.openVector("dest", UTF8).closeOnCatch { dest ->
                 dest.writeAll(listOf("hello", "world"))
                 src.writeAll(listOf(1, 2))
                 assertThrows<InvalidCopySourceException> { src.rowCopier(dest) }
@@ -131,7 +131,7 @@ class PromotionTest {
     @Test
     fun `rowCopier in a list-vec promotes the el-vector`(al: BufferAllocator) {
         Vector.fromList(al, "src", listOf(listOf(1))).use { srcVec ->
-            "dest".ofType(listTypeOf(NULL)).openVector(al).use { destVec ->
+            al.openVector("dest", listTypeOf(NULL)).use { destVec ->
                 srcVec.rowCopier(destVec).copyRow(0)
 
                 assertEquals(listOf(listOf(1)), destVec.asList)

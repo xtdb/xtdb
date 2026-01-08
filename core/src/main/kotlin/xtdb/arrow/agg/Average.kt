@@ -4,6 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.arrow.*
+import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.F64
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.ofType
@@ -29,7 +30,7 @@ class Average(val fromName: FieldName, fromType: VectorType, toName: FieldName, 
         }
 
         override fun openFinishedVector(): Vector =
-            Vector.open(al, field).closeOnCatch { outVec ->
+            al.openVector(field).closeOnCatch { outVec ->
                 sumAgg.openFinishedVector().use { sumVec ->
                     countAgg.openFinishedVector().use { countVec ->
                         sumVec.divideInto(countVec, outVec)

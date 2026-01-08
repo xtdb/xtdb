@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.F64
 import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.VectorType.Companion.maybe
@@ -29,7 +30,7 @@ class DoubleVectorTest {
     fun `divideInto divides doubles by longs`() {
         Vector.fromList(allocator, "dividend" ofType F64, listOf(100.0, 50.0, 75.0)).use { dividendVec ->
             Vector.fromList(allocator, "divisor" ofType I32, listOf(4, 2, 3)).use { divisorVec ->
-                Vector.open(allocator, "res" ofType F64).use { resultVec ->
+                allocator.openVector("res", F64).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
                     assertEquals(3, resultVec.valueCount)
@@ -45,7 +46,7 @@ class DoubleVectorTest {
     fun `divideInto handles null dividend`() {
         Vector.fromList(allocator, "dividend" ofType maybe(F64), listOf(null, 50.0)).use { dividendVec ->
             Vector.fromList(allocator, "divisor" ofType I32, listOf(4, 2)).use { divisorVec ->
-                Vector.open(allocator, "result" ofType maybe(F64)).use { resultVec ->
+                allocator.openVector("result", maybe(F64)).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
                     assertEquals(2, resultVec.valueCount)
@@ -60,7 +61,7 @@ class DoubleVectorTest {
     fun `divideInto handles null divisor`() {
         Vector.fromList(allocator, "dividend" ofType F64, listOf(100.0, 50.0)).use { dividendVec ->
             Vector.fromList(allocator, "divisor" ofType maybe(I32), listOf(4, null)).use { divisorVec ->
-                Vector.open(allocator, "result" ofType maybe(F64)).use { resultVec ->
+                allocator.openVector("result", maybe(F64)).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
                     assertEquals(2, resultVec.valueCount)
@@ -75,7 +76,7 @@ class DoubleVectorTest {
     fun `divideInto handles division by zero`() {
         Vector.fromList(allocator, "dividend" ofType F64, listOf(100.0, 50.0, 75.0)).use { dividendVec ->
             Vector.fromList(allocator, "divisor" ofType I32, listOf(0, 2, 0)).use { divisorVec ->
-                Vector.open(allocator, "result" ofType maybe(F64)).use { resultVec ->
+                allocator.openVector("result", maybe(F64)).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
                     assertEquals(3, resultVec.valueCount)
@@ -90,7 +91,7 @@ class DoubleVectorTest {
     @Test
     fun `squareInto squares values`() {
         Vector.fromList(allocator, "input" ofType F64, listOf(2.0, 3.0, 5.0)).use { inVec ->
-            Vector.open(allocator, "result" ofType F64).use { resultVec ->
+            allocator.openVector("result", F64).use { resultVec ->
                 inVec.squareInto(resultVec)
 
                 assertEquals(3, resultVec.valueCount)
@@ -104,7 +105,7 @@ class DoubleVectorTest {
     @Test
     fun `squareInto handles nulls`() {
         Vector.fromList(allocator, "input" ofType maybe(F64), listOf(2.0, null, 5.0)).use { inVec ->
-            Vector.open(allocator, "result" ofType maybe(F64)).use { resultVec ->
+            allocator.openVector("result", maybe(F64)).use { resultVec ->
                 inVec.squareInto(resultVec)
 
                 assertEquals(3, resultVec.valueCount)
@@ -118,7 +119,7 @@ class DoubleVectorTest {
     @Test
     fun `sqrtInto takes square root of values`() {
         Vector.fromList(allocator, "input" ofType F64, listOf(4.0, 9.0, 25.0)).use { inVec ->
-            Vector.open(allocator, "result" ofType F64).use { resultVec ->
+            allocator.openVector("result", F64).use { resultVec ->
                 inVec.sqrtInto(resultVec)
 
                 assertEquals(3, resultVec.valueCount)
@@ -132,7 +133,7 @@ class DoubleVectorTest {
     @Test
     fun `sqrtInto handles nulls`() {
         Vector.fromList(allocator, "input" ofType maybe(F64), listOf(4.0, null, 25.0)).use { inVec ->
-            Vector.open(allocator, "result" ofType maybe(F64)).use { resultVec ->
+            allocator.openVector("result", maybe(F64)).use { resultVec ->
                 inVec.sqrtInto(resultVec)
 
                 assertEquals(3, resultVec.valueCount)

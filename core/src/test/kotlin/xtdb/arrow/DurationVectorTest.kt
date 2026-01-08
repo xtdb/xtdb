@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.DURATION_MICRO
 import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.VectorType.Companion.maybe
@@ -31,7 +32,7 @@ class DurationVectorTest {
         Vector.fromList(allocator, "dividend" ofType DURATION_MICRO,
             listOf(Duration.ofSeconds(100), Duration.ofSeconds(50), Duration.ofSeconds(75))).use { dividendVec ->
             Vector.fromList(allocator, "divisor" ofType I32, listOf(4, 2, 3)).use { divisorVec ->
-                Vector.open(allocator, "result" ofType DURATION_MICRO).use { resultVec ->
+                allocator.openVector("result", DURATION_MICRO).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
                     assertEquals(3, resultVec.valueCount)
@@ -48,7 +49,7 @@ class DurationVectorTest {
         Vector.fromList(allocator, "dividend" ofType maybe(DURATION_MICRO),
             listOf(null, Duration.ofSeconds(50))).use { dividendVec ->
             Vector.fromList(allocator, "divisor" ofType I32, listOf(4, 2)).use { divisorVec ->
-                Vector.open(allocator, "result" ofType maybe(DURATION_MICRO)).use { resultVec ->
+                allocator.openVector("result", maybe(DURATION_MICRO)).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
                     assertEquals(2, resultVec.valueCount)
@@ -64,7 +65,7 @@ class DurationVectorTest {
         Vector.fromList(allocator, "dividend" ofType DURATION_MICRO,
             listOf(Duration.ofSeconds(100), Duration.ofSeconds(50))).use { dividendVec ->
             Vector.fromList(allocator, "divisor" ofType maybe(I32), listOf(4, null)).use { divisorVec ->
-                Vector.open(allocator, "result" ofType maybe(DURATION_MICRO)).use { resultVec ->
+                allocator.openVector("result", maybe(DURATION_MICRO)).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
                     assertEquals(2, resultVec.valueCount)
@@ -80,7 +81,7 @@ class DurationVectorTest {
         Vector.fromList(allocator, "dividend" ofType DURATION_MICRO,
             listOf(Duration.ofSeconds(100), Duration.ofSeconds(50), Duration.ofSeconds(75))).use { dividendVec ->
             Vector.fromList(allocator, "divisor" ofType I32, listOf(0, 2, 0)).use { divisorVec ->
-                Vector.open(allocator, "result" ofType maybe(DURATION_MICRO)).use { resultVec ->
+                allocator.openVector("result", maybe(DURATION_MICRO)).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
                     assertEquals(3, resultVec.valueCount)

@@ -7,7 +7,6 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
-import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
@@ -60,7 +59,7 @@ class NullVector(
     override fun maybePromote(al: BufferAllocator, targetType: ArrowType, targetNullable: Boolean): Vector =
         if (targetType == arrowType) this
         else
-            Field(this.name, FieldType(targetNullable, targetType, null), emptyList()).openVector(al)
+            al.openVector(this.name, targetType, targetNullable)
                 .also { newVec ->
                     repeat(this.valueCount) {
                         // if we've only ever written undefined, write undefineds in the new vec

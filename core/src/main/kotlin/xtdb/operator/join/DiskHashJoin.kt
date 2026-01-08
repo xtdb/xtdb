@@ -9,7 +9,6 @@ import xtdb.arrow.Vector.Companion.openVector
 import xtdb.operator.join.ComparatorFactory.Companion.build
 import xtdb.arrow.FieldName
 import xtdb.arrow.VectorType.Companion.I32
-import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.closeOnCatch
 import java.util.function.Consumer
 
@@ -42,7 +41,7 @@ class DiskHashJoin(
     private var partIdx: Int = -1
     private val probeRel = Relation(al, probeShuffle.schema)
     private val probeColNames = probeRel.schema.fields.map { it.name }
-    private val hashCol = "hashes".ofType(I32).openVector(al)
+    private val hashCol = al.openVector("hashes", I32)
 
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
         while (true) {

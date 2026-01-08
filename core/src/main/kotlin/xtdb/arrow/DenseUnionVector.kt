@@ -274,7 +274,7 @@ class DenseUnionVector private constructor(
         }
 
         val typeId = legVectors.size.toByte()
-        val legVec = Field(name, FieldType(nullable, arrowType, null), emptyList()).openVector(allocator).also { legVectors.add(it) }
+        val legVec = allocator.openVector(name, arrowType, nullable).also { legVectors.add(it) }
         return LegVector(typeId, legVec)
     }
 

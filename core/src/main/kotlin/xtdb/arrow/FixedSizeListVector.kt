@@ -7,7 +7,6 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
-import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
@@ -85,7 +84,7 @@ class FixedSizeListVector private constructor(
             elVector.arrowType == arrowType && elVector.nullable == nullable -> elVector
 
             elVector is NullVector && elVector.valueCount == 0 ->
-                Field("\$data\$", FieldType(nullable, arrowType, null), emptyList()).openVector(al).also { elVector = it }
+                al.openVector("\$data\$", arrowType, nullable).also { elVector = it }
 
             else -> TODO("promote elVector")
         }
