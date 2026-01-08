@@ -53,7 +53,9 @@
                        :healthz {:port 8081
                                  :host "*"}
                        :flight-sql {:port 52358
-                                    :host "*"}}}})
+                                    :host "*"}
+                       :tracer {:enabled? false
+                                :endpoint "http://localhost:4318/v1/traces"}}}})
 
 (comment
   (do

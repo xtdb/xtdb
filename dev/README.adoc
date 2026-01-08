@@ -133,16 +133,21 @@ This assumes YourKit is installed under `/opt/yourkit` (as it does from the AUR)
 
 == Monitoring local dev
 
-We can use our own local monitoring stack to see a number of metrics from the dev node - assuming you have a node with a healthz server available on port 8080, from the the base of the repo:
+The `monitoring/` directory contains a Docker Compose stack for local observability:
+
+* *Prometheus* - metrics collection (scrapes `:8081/metrics`)
+* *Grafana* - visualization with preloaded dashboards (http://localhost:3000, login `admin/admin`)
+* *Tempo* - distributed tracing backend for OpenTelemetry traces
+
+Starting it from root:
 
 ```
-cd monitoring
-docker-compose up -d
+docker-compose -f ./monitoring/docker-compose.yml up -d
 ```
 
-If you then go to http://localhost:3000/dashboards - you can log in (`admin/admin`) and see the prebuilt dashboards.
+The dev node includes a tracer (disabled by default). To enable tracing, set `:tracer {:enabled? true}` in your node config - traces will be sent to Tempo and viewable in Grafana's Explore view.
 
-If you wish to make changes to these dashboards, see the guide in monitoring/README.adoc.
+See link:../monitoring/README.adoc[] for full configuration details, including how to export dashboards and scrape multiple nodes.
 
 == Using Metabase locally
 
