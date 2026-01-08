@@ -78,7 +78,7 @@ class DoubleVector private constructor(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getDouble(idx)
 
     override fun writeObject0(value: Any) {
-        if (value is Double) writeDouble(value) else throw InvalidWriteObjectException(arrowType, nullable, value)
+        if (value is Double) writeDouble(value) else throw InvalidWriteObjectException(this, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeDouble(v.readDouble())

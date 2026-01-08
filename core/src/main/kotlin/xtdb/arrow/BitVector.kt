@@ -72,7 +72,7 @@ class BitVector private constructor(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getBoolean(idx)
 
     override fun writeObject0(value: Any) {
-        if (value is Boolean) writeBoolean(value) else throw InvalidWriteObjectException(arrowType, nullable, value)
+        if (value is Boolean) writeBoolean(value) else throw InvalidWriteObjectException(this, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeBoolean(v.readBoolean())

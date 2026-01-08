@@ -32,7 +32,7 @@ class DateDayVector private constructor(
 
     override fun writeObject0(value: Any) {
         if (value is LocalDate) writeInt(value.toEpochDay().toInt())
-        else throw InvalidWriteObjectException(arrowType, nullable, value)
+        else throw InvalidWriteObjectException(this, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeInt(v.readInt())
@@ -65,7 +65,7 @@ class DateMilliVector internal constructor(
 
     override fun writeObject0(value: Any) {
         if (value is LocalDate) writeLong(value.toEpochDay())
-        else throw InvalidWriteObjectException(arrowType, nullable, value)
+        else throw InvalidWriteObjectException(this, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeLong(v.readLong())

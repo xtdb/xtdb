@@ -106,7 +106,7 @@ class StructVector private constructor(
     }
 
     override fun writeObject0(value: Any) =
-        if (value !is Map<*, *>) throw InvalidWriteObjectException(arrowType, nullable, value)
+        if (value !is Map<*, *>) throw InvalidWriteObjectException(this, value)
         else {
             value.forEach {
                 val key = keyString(it.key)

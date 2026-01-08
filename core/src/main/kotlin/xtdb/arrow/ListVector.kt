@@ -99,7 +99,7 @@ class ListVector private constructor(
             }
         }
 
-        else -> throw InvalidWriteObjectException(arrowType, nullable, value)
+        else -> throw InvalidWriteObjectException(this, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())

@@ -42,7 +42,7 @@ class NullVector(
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = error("NullVector getObject0")
 
-    override fun writeObject0(value: Any) = throw InvalidWriteObjectException(arrowType, nullable, value)
+    override fun writeObject0(value: Any) = throw InvalidWriteObjectException(this, value)
 
     override fun writeValue0(v: ValueReader) = writeNull()
 

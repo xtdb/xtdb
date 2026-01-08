@@ -37,7 +37,7 @@ class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector
 
         is ListValueReader -> inner.writeObject(value)
 
-        else -> throw InvalidWriteObjectException(arrowType, nullable, value)
+        else -> throw InvalidWriteObjectException(this, value)
     }
 
     override val metadataFlavours get() = listOf(this)

@@ -26,7 +26,7 @@ class TransitVector(override val inner: VarBinaryVector) : ExtensionVector(), Me
             is ClojureForm, is Anomaly,
             -> inner.writeObject(requiringResolve("xtdb.serde/write-transit")(value) as ByteArray)
 
-            else -> throw InvalidWriteObjectException(arrowType, nullable, value)
+            else -> throw InvalidWriteObjectException(this, value)
         }
 
     override val metadataFlavours get() = listOf(this)

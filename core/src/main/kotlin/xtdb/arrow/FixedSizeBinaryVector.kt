@@ -29,7 +29,7 @@ class FixedSizeBinaryVector private constructor(
     override fun writeObject0(value: Any) = when (value) {
         is ByteBuffer -> writeBytes(value)
         is ByteArray -> writeBytes(ByteBuffer.wrap(value))
-        else -> throw InvalidWriteObjectException(arrowType, nullable, value)
+        else -> throw InvalidWriteObjectException(this, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeBytes(v.readBytes())

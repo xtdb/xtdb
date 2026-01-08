@@ -20,7 +20,7 @@ class SetVector(override val inner: ListVector) : ExtensionVector(), MetadataFla
         when (value) {
             is Set<*> -> inner.writeObject(value.toList())
             is ListValueReader -> inner.writeObject(value)
-            else -> throw InvalidWriteObjectException(arrowType, nullable, value)
+            else -> throw InvalidWriteObjectException(this, value)
         }
 
     override fun hashCode0(idx: Int, hasher: Hasher): Int {

@@ -4,18 +4,20 @@ import clojure.lang.IExceptionInfo
 import clojure.lang.IPersistentMap
 import clojure.lang.PersistentArrayMap
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.kw
 import java.nio.ByteBuffer
 
-internal data class InvalidWriteObjectException(val arrowType: ArrowType, val nullable: Boolean, val obj: Any?) :
-    IllegalStateException("invalid writeObject"), IExceptionInfo {
+internal data class InvalidWriteObjectException(
+    val vec: VectorWriter, val obj: Any?
+) : IllegalStateException("invalid writeObject"), IExceptionInfo {
     override fun getData(): IPersistentMap =
-        PersistentArrayMap.create(mapOf("field-type".kw to arrowType, "obj".kw to obj))
+        PersistentArrayMap.create(mapOf("target".kw to vec::class.simpleName, "obj".kw to obj))
 }
 
-internal data class InvalidCopySourceException(val srcType: ArrowType, val srcIsNullable: Boolean,
-                                               val destType: ArrowType, val destIsNullable: Boolean) :
+internal data class InvalidCopySourceException(
+    val srcType: ArrowType, val srcIsNullable: Boolean,
+    val destType: ArrowType, val destIsNullable: Boolean
+) :
     IllegalStateException(buildString {
         append("illegal copy src vector: ")
         append("$srcType ${if (srcIsNullable) "nullable" else "not null"}")

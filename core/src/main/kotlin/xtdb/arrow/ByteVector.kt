@@ -31,7 +31,7 @@ class ByteVector private constructor(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getByte(idx)
 
     override fun writeObject0(value: Any) {
-        if (value is Byte) writeByte(value) else throw InvalidWriteObjectException(arrowType, nullable, value)
+        if (value is Byte) writeByte(value) else throw InvalidWriteObjectException(this, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeByte(v.readByte())

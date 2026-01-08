@@ -44,7 +44,7 @@ class LongVector private constructor(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getLong(idx)
 
     override fun writeObject0(value: Any) {
-        if (value is Long) writeLong(value) else throw InvalidWriteObjectException(arrowType, nullable, value)
+        if (value is Long) writeLong(value) else throw InvalidWriteObjectException(this, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeLong(v.readLong())

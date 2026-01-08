@@ -56,7 +56,7 @@ class DecimalVector private constructor(
     override fun writeObject0(value: Any) {
         if (value is BigDecimal) {
             if (value.precision() > precision || value.scale() != scale) {
-                throw InvalidWriteObjectException(arrowType, nullable, value)
+                throw InvalidWriteObjectException(this, value)
             }
 
             // HACK, we throw unsupported here, but it should likely be dealt with in the EE if an object doesn't fit
@@ -66,7 +66,7 @@ class DecimalVector private constructor(
                 throw Unsupported(e.message, DECIMAL_ERROR_KEY, cause = e)
             }
             writeNotNull()
-        } else throw InvalidWriteObjectException(arrowType, nullable, value)
+        } else throw InvalidWriteObjectException(this, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())

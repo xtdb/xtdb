@@ -50,7 +50,7 @@ class Time32Vector private constructor(
 
     override fun writeObject0(value: Any) {
         if (value is LocalTime) writeInt(unit.toInt(value))
-        else throw InvalidWriteObjectException(arrowType, nullable, value)
+        else throw InvalidWriteObjectException(this, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeInt(v.readInt())
@@ -85,7 +85,7 @@ class Time64Vector private constructor(
 
     override fun writeObject0(value: Any) {
         if (value is LocalTime) writeLong(unit.toLong(value.toSecondOfDay().toLong(), value.nano))
-        else throw InvalidWriteObjectException(arrowType, nullable, value)
+        else throw InvalidWriteObjectException(this, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeLong(v.readLong())

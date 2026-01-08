@@ -49,7 +49,7 @@ class IntervalYearMonthVector private constructor(
             }
 
             is Interval if (value.days == 0 && value.nanos == 0L) -> writeInt(value.months)
-            else -> throw InvalidWriteObjectException(arrowType, nullable, value)
+            else -> throw InvalidWriteObjectException(this, value)
         }
     }
 
@@ -108,7 +108,7 @@ class IntervalDayTimeVector private constructor(
                 }
             }
 
-            else -> throw InvalidWriteObjectException(arrowType, nullable, value)
+            else -> throw InvalidWriteObjectException(this, value)
         }
 
     override fun valueReader(): ValueReader = IntervalValueReader(this)
@@ -175,7 +175,7 @@ class IntervalMonthDayNanoVector private constructor(
                 }
             }
 
-            else -> throw InvalidWriteObjectException(arrowType, nullable, value)
+            else -> throw InvalidWriteObjectException(this, value)
         }
 
     override fun valueReader(): ValueReader = IntervalValueReader(this)
