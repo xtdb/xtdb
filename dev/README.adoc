@@ -144,6 +144,32 @@ If you then go to http://localhost:3000/dashboards - you can log in (`admin/admi
 
 If you wish to make changes to these dashboards, see the guide in monitoring/README.adoc.
 
+== Using Metabase locally
+
+https://www.metabase.com/[Metabase] is included in the root `docker-compose.yml` for local development.
+
+1. Start Metabase:
++
+```
+docker-compose up metabase
+```
+
+2. Open http://localhost:3001 and complete the initial setup (create your admin username and password).
+
+3. Add XTDB as a database connection:
+** Database type: *PostgreSQL*
+** Display name: `XTDB` (or your preference)
+** Host: `172.17.0.1` (Docker bridge network, to reach your host machine)
+** Port: `5432` (or whichever port your dev node's pgwire server is on)
+** Database name: `xtdb`
+** Username: `xtdb`
+** Password: (leave blank)
+
+4. Click "Connect database" - you should now be able to query XTDB from Metabase.
+
+NOTE: Your settings and login are persisted in a Docker volume, so they'll be retained when you restart Metabase.
+To clear all Metabase data and start fresh, stop the container and run `docker volume rm xtdb2_metabase-data`.
+
 == Releasing XT2
 
 See link:RELEASING.adoc[].
