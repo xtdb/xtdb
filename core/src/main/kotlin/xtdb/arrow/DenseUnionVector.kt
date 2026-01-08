@@ -56,7 +56,6 @@ class DenseUnionVector private constructor(
         override val name get() = inner.name
         override val nullable get() = inner.nullable
         override val arrowType: ArrowType get() = inner.arrowType
-        val fieldType get() = inner.type.fieldType
         override val field get() = inner.field
         override val childFields get() = inner.childFields
 
