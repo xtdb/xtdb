@@ -111,7 +111,7 @@
               (let [input-opts {:var-types (->> in-rel
                                                 (into {acc-sym (types/->type to-field)}
                                                       (map (juxt #(symbol (.getName ^VectorReader %))
-                                                                 #(types/->type (.getField ^VectorReader %))))))}
+                                                                 #(.getType ^VectorReader %)))))}
                     {:keys [eval-agg]} (emit-agg agg-opts input-opts)]
                 (eval-agg out-vec in-rel group-mapping)))
 

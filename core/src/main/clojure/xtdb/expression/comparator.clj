@@ -98,9 +98,7 @@
       (util/lru-memoize)))
 
 (defn ->comparator ^java.util.function.IntBinaryOperator [^VectorReader left-col, ^VectorReader right-col, null-ordering]
-  (let [left-field (.getField left-col)
-        right-field (.getField right-col)
-        f (build-comparator (types/->type left-field)
-                            (types/->type right-field)
+  (let [f (build-comparator (.getType left-col)
+                            (.getType right-col)
                             null-ordering)]
     (f left-col right-col)))

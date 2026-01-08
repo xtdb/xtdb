@@ -332,7 +332,7 @@
     (with-open [out-ivec (.project (expr/->expression-projection-spec "out" expr input-types)
                                    tu/*allocator* rel {} vw/empty-args)]
       {:res (.toList out-ivec #xt/key-fn :kebab-case-keyword)
-       :res-type (types/->type (.getField out-ivec))})))
+       :res-type (.getType out-ivec)})))
 
 (t/deftest test-nils
   (with-open [rel (tu/open-rel {:x [1 1 nil nil]

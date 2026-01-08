@@ -2142,7 +2142,7 @@
        (into {} (map (fn [^VectorReader col]
                        (MapEntry/create
                         (symbol (.getName col))
-                        (types/->type (.getField col))))))))
+                        (.getType col)))))))
 
 (defn ->expression-projection-spec ^xtdb.operator.ProjectionSpec [col-name expr {:keys [vec-fields param-fields]}]
   (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
@@ -2157,7 +2157,7 @@
         (let [var-types (->> in-rel
                              (into {} (map (fn [^VectorReader iv]
                                              [(symbol (.getName iv))
-                                              (types/->type (.getField iv))]))))
+                                              (.getType iv)]))))
 
               {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
                                                                           :var-types var-types})]
