@@ -15,7 +15,7 @@ class UriVector(override val inner: Utf8Vector) : ExtensionVector(), MetadataFla
 
     override fun writeObject0(value: Any) = when (value) {
         is URI -> inner.writeObject(value.toString())
-        else -> throw InvalidWriteObjectException(fieldType, value)
+        else -> throw InvalidWriteObjectException(arrowType, nullable, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())

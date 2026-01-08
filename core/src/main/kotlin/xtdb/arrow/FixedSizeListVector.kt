@@ -6,7 +6,6 @@ import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
@@ -72,7 +71,7 @@ class FixedSizeListVector private constructor(
             writeNotNull()
         }
 
-        else -> throw InvalidWriteObjectException(fieldType, value)
+        else -> throw InvalidWriteObjectException(arrowType, nullable, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())

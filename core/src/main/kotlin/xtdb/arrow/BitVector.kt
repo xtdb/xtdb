@@ -11,8 +11,6 @@ import xtdb.util.Hasher
 import org.apache.arrow.vector.BitVector as ArrowBitVector
 import org.apache.arrow.vector.types.pojo.ArrowType.Bool.INSTANCE as BIT_TYPE
 
-internal val BOOL_TYPE: ArrowType = ArrowType.Bool.INSTANCE
-
 class BitVector private constructor(
     private val al: BufferAllocator,
     override var name: String, override var valueCount: Int,
@@ -74,7 +72,7 @@ class BitVector private constructor(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getBoolean(idx)
 
     override fun writeObject0(value: Any) {
-        if (value is Boolean) writeBoolean(value) else throw InvalidWriteObjectException(fieldType, value)
+        if (value is Boolean) writeBoolean(value) else throw InvalidWriteObjectException(arrowType, nullable, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeBoolean(v.readBoolean())

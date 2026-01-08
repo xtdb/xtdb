@@ -3,7 +3,6 @@ package xtdb.arrow
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.TimeUnit.MICROSECOND
 import org.apache.arrow.vector.types.pojo.ArrowType.Timestamp
-import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.time.microsAsInstant
@@ -38,7 +37,7 @@ class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector
 
         is ListValueReader -> inner.writeObject(value)
 
-        else -> throw InvalidWriteObjectException(fieldType, value)
+        else -> throw InvalidWriteObjectException(arrowType, nullable, value)
     }
 
     override val metadataFlavours get() = listOf(this)

@@ -32,7 +32,7 @@ class ShortVector private constructor(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getShort(idx)
 
     override fun writeObject0(value: Any) {
-        if (value is Short) writeShort(value) else throw InvalidWriteObjectException(fieldType, value)
+        if (value is Short) writeShort(value) else throw InvalidWriteObjectException(arrowType, nullable, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeShort(v.readShort())

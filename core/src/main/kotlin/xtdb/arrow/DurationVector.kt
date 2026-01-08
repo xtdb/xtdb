@@ -48,7 +48,7 @@ class DurationVector private constructor(
 
     override fun writeObject0(value: Any) = when (value) {
         is Duration -> writeLong(unit.toLong(value.seconds, value.nano))
-        else -> throw InvalidWriteObjectException(fieldType, value)
+        else -> throw InvalidWriteObjectException(arrowType, nullable, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeLong(v.readLong())

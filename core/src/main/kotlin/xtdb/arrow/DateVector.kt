@@ -6,8 +6,6 @@ import org.apache.arrow.vector.types.DateUnit.MILLISECOND
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
-import xtdb.arrow.metadata.MetadataFlavour.Numeric
-import xtdb.time.MILLI_HZ
 import xtdb.util.Hasher
 import java.time.Duration
 import java.time.LocalDate
@@ -34,7 +32,7 @@ class DateDayVector private constructor(
 
     override fun writeObject0(value: Any) {
         if (value is LocalDate) writeInt(value.toEpochDay().toInt())
-        else throw InvalidWriteObjectException(fieldType, value)
+        else throw InvalidWriteObjectException(arrowType, nullable, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeInt(v.readInt())
@@ -67,7 +65,7 @@ class DateMilliVector internal constructor(
 
     override fun writeObject0(value: Any) {
         if (value is LocalDate) writeLong(value.toEpochDay())
-        else throw InvalidWriteObjectException(fieldType, value)
+        else throw InvalidWriteObjectException(arrowType, nullable, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeLong(v.readLong())

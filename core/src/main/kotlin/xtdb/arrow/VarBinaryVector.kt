@@ -24,7 +24,7 @@ class VarBinaryVector private constructor(
     override fun writeObject0(value: Any) = when (value) {
         is ByteArray -> writeBytes(ByteBuffer.wrap(value))
         is ByteBuffer -> writeBytes(value)
-        else -> throw InvalidWriteObjectException(fieldType, value)
+        else -> throw InvalidWriteObjectException(arrowType, nullable, value)
     }
 
     override val metadataFlavours get() = listOf(this)

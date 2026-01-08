@@ -24,7 +24,7 @@ class UuidVector(override val inner: FixedSizeBinaryVector) : ExtensionVector(),
                 flip()
             })
 
-        else -> throw InvalidWriteObjectException(fieldType, value)
+        else -> throw InvalidWriteObjectException(arrowType, nullable, value)
     }
 
     override val metadataFlavours get() = listOf(this)

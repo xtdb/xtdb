@@ -26,7 +26,7 @@ class Utf8Vector private constructor(
 
     override fun writeObject0(value: Any) = when {
         value is String -> writeBytes(ByteBuffer.wrap(value.toByteArray()))
-        else -> throw InvalidWriteObjectException(fieldType, value)
+        else -> throw InvalidWriteObjectException(arrowType, nullable, value)
     }
 
     override val metadataFlavours get() = listOf(this)

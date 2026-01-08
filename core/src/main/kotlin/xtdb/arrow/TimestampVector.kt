@@ -44,7 +44,7 @@ class TimestampLocalVector private constructor(
     override fun writeObject0(value: Any) = writeLong(
         when (value) {
             is LocalDateTime -> unit.toLong(value.toEpochSecond(UTC), value.nano)
-            else -> throw InvalidWriteObjectException(fieldType, value)
+            else -> throw InvalidWriteObjectException(arrowType, nullable, value)
         }
     )
 
@@ -91,14 +91,14 @@ class TimestampTzVector private constructor(
             is Instant -> value
             is ZonedDateTime ->
                 if (value.zone == zone) value.toInstant()
-                else throw InvalidWriteObjectException(fieldType, value)
+                else throw InvalidWriteObjectException(arrowType, nullable, value)
 
             is OffsetDateTime ->
                 if (value.offset == zone) value.toInstant()
-                else throw InvalidWriteObjectException(fieldType, value)
+                else throw InvalidWriteObjectException(arrowType, nullable, value)
 
             is Date -> value.toInstant()
-            else -> throw InvalidWriteObjectException(fieldType, value)
+            else -> throw InvalidWriteObjectException(arrowType, nullable, value)
         }.let {
             writeLong(unit.toLong(it.epochSecond, it.nano))
         }

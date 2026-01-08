@@ -16,7 +16,7 @@ class RegProcVector(override val inner: IntVector) : ExtensionVector(), Metadata
 
     override fun writeObject0(value: Any) = when (value) {
         is RegProc -> inner.writeInt(value.oid)
-        else -> throw InvalidWriteObjectException(fieldType, value)
+        else -> throw InvalidWriteObjectException(arrowType, nullable, value)
     }
 
     override val metadataFlavours get() = listOf(this)

@@ -8,8 +8,6 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.complex.NonNullableStructVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
-import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Incorrect
@@ -108,7 +106,7 @@ class StructVector private constructor(
     }
 
     override fun writeObject0(value: Any) =
-        if (value !is Map<*, *>) throw InvalidWriteObjectException(fieldType, value)
+        if (value !is Map<*, *>) throw InvalidWriteObjectException(arrowType, nullable, value)
         else {
             value.forEach {
                 val key = keyString(it.key)

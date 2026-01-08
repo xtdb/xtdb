@@ -1,12 +1,10 @@
 package xtdb.arrow
 
-import clojure.core.Vec
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
@@ -44,7 +42,7 @@ class NullVector(
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = error("NullVector getObject0")
 
-    override fun writeObject0(value: Any) = throw InvalidWriteObjectException(fieldType, value)
+    override fun writeObject0(value: Any) = throw InvalidWriteObjectException(arrowType, nullable, value)
 
     override fun writeValue0(v: ValueReader) = writeNull()
 

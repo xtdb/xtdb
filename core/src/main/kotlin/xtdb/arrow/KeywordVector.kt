@@ -4,7 +4,6 @@ import clojure.lang.Keyword
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
-import xtdb.util.Hasher
 import xtdb.vector.extensions.KeywordType
 
 class KeywordVector(override val inner: Utf8Vector): ExtensionVector(), MetadataFlavour.Bytes {
@@ -15,7 +14,7 @@ class KeywordVector(override val inner: Utf8Vector): ExtensionVector(), Metadata
 
     override fun writeObject0(value: Any) = when(value) {
         is Keyword -> inner.writeObject(value.sym.toString())
-        else -> throw InvalidWriteObjectException(fieldType, value)
+        else -> throw InvalidWriteObjectException(arrowType, nullable, value)
     }
 
     override val metadataFlavours get() = listOf(this)

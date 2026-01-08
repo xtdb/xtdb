@@ -62,7 +62,7 @@ class IntVector private constructor(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = getInt(idx)
 
     override fun writeObject0(value: Any) {
-        if (value is Int) writeInt(value) else throw InvalidWriteObjectException(fieldType, value)
+        if (value is Int) writeInt(value) else throw InvalidWriteObjectException(arrowType, nullable, value)
     }
 
     override fun writeValue0(v: ValueReader) = writeInt(v.readInt())
