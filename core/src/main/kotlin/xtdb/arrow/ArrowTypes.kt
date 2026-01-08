@@ -86,6 +86,6 @@ fun ArrowType.toLeg(): String = accept(object : ArrowTypeVisitor<String> {
     }
 })
 
-internal fun Any?.toFieldType() = asVectorType.fieldType
+internal fun Any?.toArrowType() = asVectorType.arrowType
 
 fun Field.withName(name: FieldName) = Field(name, fieldType, children)

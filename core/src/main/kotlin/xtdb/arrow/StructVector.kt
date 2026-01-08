@@ -115,8 +115,7 @@ class StructVector private constructor(
                 if (obj is ValueReader) {
                     // Handle ValueReader (e.g. ValueBox) - read the object and infer type
                     val actualObj = obj.readObject()
-                    val objType = actualObj.toFieldType()
-                    val childWriter = childWriters[key] ?: vectorFor(key, objType.type, objType.isNullable)
+                    val childWriter = childWriters[key] ?: vectorFor(key, actualObj.toArrowType(), actualObj == null)
 
                     if (childWriter.valueCount != this.valueCount)
                         throw Incorrect(
@@ -127,14 +126,12 @@ class StructVector private constructor(
                     try {
                         childWriter.writeValue(obj)
                     } catch (e: InvalidWriteObjectException) {
-                        val errType = e.obj.toFieldType()
-                        val newWriter = childWriter.maybePromote(allocator, errType.type, errType.isNullable)
+                        val newWriter = childWriter.maybePromote(allocator, e.obj.toArrowType(), e.obj == null)
                         childWriters[key] = newWriter
                         newWriter.writeValue(obj)
                     }
                 } else {
-                    val objType = obj.toFieldType()
-                    val childWriter = childWriters[key] ?: vectorFor(key, objType.type, objType.isNullable)
+                    val childWriter = childWriters[key] ?: vectorFor(key, obj.toArrowType(), obj == null)
 
                     if (childWriter.valueCount != this.valueCount)
                         throw Incorrect(
@@ -145,8 +142,7 @@ class StructVector private constructor(
                     try {
                         childWriter.writeObject(obj)
                     } catch (e: InvalidWriteObjectException) {
-                        val errType = e.obj.toFieldType()
-                        val newWriter = childWriter.maybePromote(allocator, errType.type, errType.isNullable)
+                        val newWriter = childWriter.maybePromote(allocator, e.obj.toArrowType(), e.obj == null)
                         childWriters[key] = newWriter
                         newWriter.writeObject(obj)
                     }

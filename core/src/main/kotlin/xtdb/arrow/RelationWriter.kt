@@ -33,14 +33,12 @@ interface RelationWriter : RelationReader {
                 else -> throw IllegalArgumentException("Column name must be a string, keyword or symbol")
             }
 
-            val vType = v.toFieldType()
-            val vector = vectorForOrNull(normalKey) ?: vectorFor(normalKey, vType.type, vType.isNullable)
+            val vector = vectorForOrNull(normalKey) ?: vectorFor(normalKey, v.toArrowType(), v == null)
 
             try {
                 vector.writeObject(v)
             } catch (_: InvalidWriteObjectException) {
-                val errType = v.toFieldType()
-                vectorFor(normalKey, errType.type, errType.isNullable).writeObject(v)
+                vectorFor(normalKey, v.toArrowType(), v == null).writeObject(v)
             }
         }
 

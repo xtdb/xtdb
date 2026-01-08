@@ -280,8 +280,7 @@ sealed class Vector : VectorReader, VectorWriter {
                     try {
                         vec.writeObject(value)
                     } catch (_: InvalidWriteObjectException) {
-                        val valueType = value.toFieldType()
-                        vec = vec.maybePromote(al, valueType.type, valueType.isNullable)
+                        vec = vec.maybePromote(al, value.toArrowType(), value == null)
                         vec.writeObject(value)
                     }
                 }

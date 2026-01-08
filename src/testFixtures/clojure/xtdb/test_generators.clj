@@ -121,9 +121,9 @@
   ([length {:keys [exclude-gens] :or {exclude-gens #{}}}]
    (gen/vector-distinct (recursive-value-gen {:exclude-gens exclude-gens}) {:num-elements length})))
 
-(def field-type-gen
+(def arrow-type-gen
   (gen/let [v (recursive-value-gen)]
-    (ArrowTypes/toFieldType v)))
+    (ArrowTypes/toArrowType v)))
 
 ;; TODO: Generating simple keys here for now, trying to ensure some overlap between records
 (defn generate-record

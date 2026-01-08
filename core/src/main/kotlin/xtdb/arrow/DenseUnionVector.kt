@@ -238,7 +238,7 @@ class DenseUnionVector private constructor(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = throw UnsupportedOperationException()
 
     override fun writeObject0(value: Any) =
-        value.toFieldType().let { legWriter(it.type, it.isNullable) }.writeObject(value)
+        legWriter(value.toArrowType(), false).writeObject(value)
 
     // DUV overrides the nullable one because DUVs themselves can't be null.
     override fun writeValue(v: ValueReader) {

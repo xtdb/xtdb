@@ -4,7 +4,6 @@
             [clojure.test.check.properties :as prop]
             [xtdb.test-generators :as tg]
             [xtdb.test-util :as tu]
-            [xtdb.types :as types]
             [xtdb.util :as util])
   (:import [org.apache.arrow.memory BufferAllocator]
            (xtdb.arrow Vector)))
@@ -88,15 +87,15 @@
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
    (prop/for-all [vec-gen tg/vector-vs-gen
-                  field-types (gen/vector tg/field-type-gen 1 4)]
+                  arrow-types (gen/vector tg/arrow-type-gen 1 4)]
                  (with-open [^Vector promoted-vec (reduce
-                                                   (fn [^Vector old-vec field-type]
+                                                   (fn [^Vector old-vec arrow-type]
                                                      (util/with-close-on-catch [old-vec old-vec]
                                                        (.maybePromote$xtdb_core old-vec tu/*allocator*
-                                                                                (.getType field-type)
-                                                                                (.isNullable field-type))))
+                                                                                arrow-type
+                                                                                (= #xt.arrow/type :null arrow-type))))
                                                    (tg/vec-gen->arrow-vec tu/*allocator* vec-gen)
-                                                   field-types)]
+                                                   arrow-types)]
                    promoted-vec))))
 
 (t/deftest ^:property multiple-open-slice-calls

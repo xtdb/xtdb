@@ -78,8 +78,7 @@ class ListVector private constructor(
                 try {
                     elVector.writeObject(el)
                 } catch (e: InvalidWriteObjectException) {
-                    val errType = e.obj.toFieldType()
-                    elVector = elVector.maybePromote(al, errType.type, errType.isNullable)
+                    elVector = elVector.maybePromote(al, e.obj.toArrowType(), e.obj == null)
                     elVector.writeObject(el)
                 }
             }
@@ -94,8 +93,7 @@ class ListVector private constructor(
                 try {
                     elVector.writeValue(el)
                 } catch (e: InvalidWriteObjectException) {
-                    val errType = e.obj.toFieldType()
-                    elVector = elVector.maybePromote(al, errType.type, errType.isNullable)
+                    elVector = elVector.maybePromote(al, e.obj.toArrowType(), e.obj == null)
                     elVector.writeValue(el)
                 }
             }
