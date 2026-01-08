@@ -15,15 +15,8 @@ internal data class InvalidWriteObjectException(
 }
 
 internal data class InvalidCopySourceException(
-    val srcType: ArrowType, val srcIsNullable: Boolean,
-    val destType: ArrowType, val destIsNullable: Boolean
-) :
-    IllegalStateException(buildString {
-        append("illegal copy src vector: ")
-        append("$srcType ${if (srcIsNullable) "nullable" else "not null"}")
-        append(" -> ")
-        append("$destType ${if (destIsNullable) "nullable" else "not null"}")
-    })
+    val src: VectorReader, val dest: VectorWriter
+) : IllegalStateException("illegal copy src vector: ${src.type} -> ${dest.type}")
 
 interface VectorWriter : VectorReader, AutoCloseable {
 

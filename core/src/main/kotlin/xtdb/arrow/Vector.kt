@@ -122,11 +122,8 @@ sealed class Vector : VectorReader, VectorWriter {
         if (dest is DenseUnionVector) return dest.rowCopier0(this)
 
         check(dest is Vector) { "can only copy to another Vector, got ${dest::class}" }
-        if (arrowType != dest.arrowType) 
-            throw InvalidCopySourceException(
-                srcType = arrowType, srcIsNullable = nullable,
-                destType = dest.arrowType, destIsNullable = dest.nullable
-            )
+        
+        if (arrowType != dest.arrowType) throw InvalidCopySourceException(this, dest)
 
         return dest.rowCopier0(this)
     }
