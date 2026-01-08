@@ -274,7 +274,7 @@ data class VectorType(
                 }
 
                 is PeriodDuration -> when {
-                    period.days == 0 && duration == java.time.Duration.ZERO -> INTERVAL_YEAR
+                    period.days == 0 && duration.equals(Duration.ZERO) -> INTERVAL_YEAR
                     period.toTotalMonths() == 0L && duration.toNanos() % 1_000_000 == 0L -> INTERVAL_MDM
                     else -> INTERVAL_MDN
                 }

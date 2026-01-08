@@ -4,6 +4,7 @@ package xtdb.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
