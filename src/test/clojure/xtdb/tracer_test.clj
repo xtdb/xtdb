@@ -106,6 +106,16 @@
                        :children []}]}]
                    (build-span-tree @!spans))))))))
 
+(t/deftest EXPLAIN_works_with_tracer_enabled__issue-5091
+  (let [!spans (atom [])
+        exporter (test-span-exporter !spans)
+        span-processor (SimpleSpanProcessor/create exporter)]
+    (with-open [node (xtn/start-node {:tracer {:enabled? true
+                                               :service-name "xtdb-test"
+                                               :span-processor span-processor}})]
+      (t/is (seq (xt/q node "EXPLAIN SELECT 1")))
+      (t/is (seq (xt/q node "EXPLAIN ANALYZE SELECT 1"))))))
+
 (t/deftest test-scan-span-includes-table-name
   (t/testing "scan span includes the table name as an attribute"
     (let [!spans (atom [])

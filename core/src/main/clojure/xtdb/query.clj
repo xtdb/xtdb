@@ -397,7 +397,7 @@
                         (let [explain-plan (->explain-plan emitted-query)]
                           (-> (PagesCursor. allocator nil [explain-plan])
                               (wrap-result-fields (explain-plan-fields explain-plan))
-                              (wrap-closeables ref-ctr (cond-> [snaps allocator]
+                              (wrap-closeables ref-ctr (cond->> [snaps allocator]
                                                          close-args? (cons args)
                                                          closeable-query-span (cons closeable-query-span)))))
 
