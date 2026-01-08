@@ -50,7 +50,7 @@
                                       :keystore-password "password123"}}
                        :log [:local {:path (io/file dev-node-dir "log")}]
                        :storage [:local {:path (io/file dev-node-dir "objects")}]
-                       :healthz {:port 8080
+                       :healthz {:port 8081
                                  :host "*"}
                        :flight-sql {:port 52358
                                     :host "*"}}}})
