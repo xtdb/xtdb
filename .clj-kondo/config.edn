@@ -8,7 +8,8 @@
            clojure.test.check.properties/for-all clojure.core/for}
 :hooks {:analyze-call {xtdb.sql/def-sql-fns hooks/sql-def-sql-fns
                        xtdb.pgwire.io/def-msg hooks/pgwire-def-msg
-                       xtdb.util/with-tmp-dirs hooks/with-tmp-dirs}}
+                       xtdb.util/with-tmp-dirs hooks/with-tmp-dirs
+                       xtdb.test-util/with-tmp-dirs hooks/with-tmp-dirs}}
  :linters {:not-empty? {:level :off}
            :unresolved-symbol {:level :error
                                :exclude [(clojure.test/is [=plan-file])
