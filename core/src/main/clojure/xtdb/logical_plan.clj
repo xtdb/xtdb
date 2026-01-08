@@ -266,10 +266,10 @@
     [:distinct _opts relation]
     (relation-columns relation)
 
-    [:intersect lhs _]
+    [:intersect _opts lhs _]
     (relation-columns lhs)
 
-    [:difference lhs _]
+    [:difference _opts lhs _]
     (relation-columns lhs)
 
     [:union-all _opts lhs _]

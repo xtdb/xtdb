@@ -12,6 +12,7 @@
 
 (defmethod lp/ra-expr :intersect [_]
   (s/cat :op #{:∩ :intersect}
+         :opts map?
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
@@ -23,6 +24,7 @@
 
 (defmethod lp/ra-expr :difference [_]
   (s/cat :op #{:− :except :difference}
+         :opts map?
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
@@ -121,7 +123,7 @@
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
-(defmethod lp/emit-expr :intersect [{:keys [left right]} args]
+(defmethod lp/emit-expr :intersect [{:keys [_opts left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
                   (fn [{left-vec-types :vec-types :as left-rel} {right-vec-types :vec-types :as right-rel}]
                     (let [out-vec-types (union-vec-types left-vec-types right-vec-types)
@@ -141,7 +143,7 @@
                                                                   false false)
                                        (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))))
 
-(defmethod lp/emit-expr :difference [{:keys [left right]} args]
+(defmethod lp/emit-expr :difference [{:keys [_opts left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
                   (fn [{left-vec-types :vec-types :as left-rel} {right-vec-types :vec-types :as right-rel}]
                     (let [out-vec-types (union-vec-types left-vec-types right-vec-types)

@@ -1,5 +1,5 @@
 [:distinct {}
- [:intersect
+ [:intersect {}
   [:project
    {:projections [{name si.1/name}]}
    [:rename si.1 [:scan {:table #xt/table stars_in, :columns [name]}]]]

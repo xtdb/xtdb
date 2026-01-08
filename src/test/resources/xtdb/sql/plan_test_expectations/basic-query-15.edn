@@ -1,4 +1,4 @@
-[:difference
+[:difference {}
  [:distinct {}
   [:project
    {:projections [{name si.1/name}]}

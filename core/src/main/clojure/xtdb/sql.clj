@@ -2473,7 +2473,7 @@
                             [:distinct {} plan]
                             plan))]
 
-      (->QueryExpr [:difference
+      (->QueryExpr [:difference {}
                     (wrap-distinct l-plan)
                     (rename-col-syms (wrap-distinct r-plan))]
                    l-col-syms)))
@@ -2493,7 +2493,7 @@
                               [:rename (zipmap r-col-syms l-col-syms) plan]
                               plan))
 
-          plan [:intersect l-plan (rename-col-syms r-plan)]]
+          plan [:intersect {} l-plan (rename-col-syms r-plan)]]
       (->QueryExpr (if-not (.ALL ctx)
                      [:distinct {} plan]
                      plan)
