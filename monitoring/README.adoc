@@ -32,12 +32,12 @@ Grafana is preconfigured to:
 * Include Tempo as a tracing data source
 * Automatically load dashboards from `monitoring/public-dashboards/`
 
-Prometheus is configured to scrape metrics from `localhost:8080`.  
+Prometheus is configured to scrape metrics from `localhost:8081`.  
 This assumes the monitored service:
 
-* Exposes metrics at `:8080/metrics`
+* Exposes metrics at `:8081/metrics`
 * Is reachable *from inside the Prometheus container* at:
-** `172.17.0.1:8080`
+** `172.17.0.1:8081`
 
 Tempo is configured to:
 
@@ -120,5 +120,5 @@ Example (`prometheus.yml`):
 scrape_configs:
   - job_name: 'xtdb-nodes'
     static_configs:
-      - targets: ['172.17.0.1:8080', '172.17.0.1:8081']
+      - targets: ['172.17.0.1:8081', '172.17.0.1:8082']
 ----
