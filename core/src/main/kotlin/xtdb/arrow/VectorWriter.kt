@@ -14,12 +14,13 @@ internal data class InvalidWriteObjectException(val arrowType: ArrowType, val nu
         PersistentArrayMap.create(mapOf("field-type".kw to arrowType, "obj".kw to obj))
 }
 
-internal data class InvalidCopySourceException(val src: FieldType, val dest: FieldType) :
+internal data class InvalidCopySourceException(val srcType: ArrowType, val srcIsNullable: Boolean,
+                                               val destType: ArrowType, val destIsNullable: Boolean) :
     IllegalStateException(buildString {
         append("illegal copy src vector: ")
-        append("${src.type} ${if (src.isNullable) "nullable" else "not null"}")
+        append("$srcType ${if (srcIsNullable) "nullable" else "not null"}")
         append(" -> ")
-        append("${dest.type} ${if (dest.isNullable) "nullable" else "not null"}")
+        append("$destType ${if (destIsNullable) "nullable" else "not null"}")
     })
 
 interface VectorWriter : VectorReader, AutoCloseable {

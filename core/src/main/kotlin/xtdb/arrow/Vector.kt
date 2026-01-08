@@ -123,7 +123,10 @@ sealed class Vector : VectorReader, VectorWriter {
 
         check(dest is Vector) { "can only copy to another Vector, got ${dest::class}" }
         if (arrowType != dest.arrowType) 
-            throw InvalidCopySourceException(FieldType(nullable, arrowType, null), FieldType(dest.nullable, dest.arrowType, null))
+            throw InvalidCopySourceException(
+                srcType = arrowType, srcIsNullable = nullable,
+                destType = dest.arrowType, destIsNullable = dest.nullable
+            )
 
         return dest.rowCopier0(this)
     }
