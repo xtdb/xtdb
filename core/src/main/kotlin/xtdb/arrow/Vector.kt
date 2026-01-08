@@ -93,10 +93,10 @@ sealed class Vector : VectorReader, VectorWriter {
     internal abstract fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
     internal abstract fun loadFromArrow(vec: ValueVector)
 
-    internal open fun maybePromote(al: BufferAllocator, target: FieldType): Vector =
+    internal open fun maybePromote(al: BufferAllocator, targetType: ArrowType, targetNullable: Boolean): Vector =
         // if it's a NullVector coming in, don't promote - we can just set ourselves to nullable. #4675
         when {
-            target.type != arrowType && target.type != NULL_TYPE ->
+            targetType != arrowType && targetType != NULL_TYPE ->
                 DenseUnionVector(al, name, listOf(this), valueCount)
                     .apply {
                         repeat(this.valueCount) { idx ->
@@ -104,14 +104,14 @@ sealed class Vector : VectorReader, VectorWriter {
                             offsetBuffer.writeInt(idx)
                         }
 
-                        maybePromote(al, target)
+                        maybePromote(al, targetType, targetNullable)
                     }
                     .also {
-                        this@Vector.name = fieldType.type.toLeg()
+                        this@Vector.name = arrowType.toLeg()
                     }
 
             else -> {
-                nullable = nullable || target.isNullable
+                nullable = nullable || targetNullable
                 this
             }
         }
@@ -277,7 +277,8 @@ sealed class Vector : VectorReader, VectorWriter {
                     try {
                         vec.writeObject(value)
                     } catch (_: InvalidWriteObjectException) {
-                        vec = vec.maybePromote(al, value.toFieldType())
+                        val valueType = value.toFieldType()
+                        vec = vec.maybePromote(al, valueType.type, valueType.isNullable)
                         vec.writeObject(value)
                     }
                 }

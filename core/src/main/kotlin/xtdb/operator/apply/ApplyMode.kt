@@ -8,7 +8,6 @@ import xtdb.arrow.RelationWriter
 import xtdb.error.Incorrect
 import xtdb.trie.ColumnName
 import xtdb.arrow.VectorType.Companion.BOOL
-import xtdb.arrow.VectorType.Companion.maybe
 
 sealed interface ApplyMode {
     fun accept(
@@ -21,7 +20,7 @@ sealed interface ApplyMode {
             idxs: IntArrayList, inIdx: Int
         ) {
             idxs.add(inIdx)
-            val outWriter = dependentOutWriter.vectorFor(columnName, maybe(BOOL).fieldType)
+            val outWriter = dependentOutWriter.vectorFor(columnName, BOOL.arrowType, true)
             var match = -1
             while (match != 1) {
                 dependentCursor.tryAdvance { depRel ->
@@ -43,7 +42,7 @@ sealed interface ApplyMode {
             dependentCursor: ICursor, dependentOutWriter: RelationWriter,
             idxs: IntArrayList, inIdx: Int
         ) {
-            dependentFields.forEach { dependentOutWriter.vectorFor(it.name, it.fieldType) }
+            dependentFields.forEach { dependentOutWriter.vectorFor(it.name, it.type, it.isNullable) }
 
             dependentCursor.forEachRemaining { depRel ->
                 dependentOutWriter.append(depRel)
@@ -57,7 +56,7 @@ sealed interface ApplyMode {
             dependentCursor: ICursor, dependentOutWriter: RelationWriter,
             idxs: IntArrayList, inIdx: Int
         ) {
-            dependentFields.forEach { dependentOutWriter.vectorFor(it.name, it.fieldType) }
+            dependentFields.forEach { dependentOutWriter.vectorFor(it.name, it.type, it.isNullable) }
 
             var match = false
             dependentCursor.forEachRemaining { depRel ->
@@ -71,7 +70,7 @@ sealed interface ApplyMode {
             if (!match) {
                 idxs.add(inIdx)
                 for (field in dependentFields) {
-                    dependentOutWriter.vectorFor(field.name, field.fieldType)
+                    dependentOutWriter.vectorFor(field.name, field.type, field.isNullable)
                         .append(NullVector(field.name).also { it.valueCount = 1 })
                 }
             }
@@ -121,7 +120,7 @@ sealed interface ApplyMode {
             dependentCursor: ICursor, dependentOutWriter: RelationWriter,
             idxs: IntArrayList, inIdx: Int
         ) {
-            dependentFields.forEach { dependentOutWriter.vectorFor(it.name, it.fieldType) }
+            dependentFields.forEach { dependentOutWriter.vectorFor(it.name, it.type, it.isNullable) }
 
             var match = false
 
@@ -141,7 +140,7 @@ sealed interface ApplyMode {
             if (!match) {
                 idxs.add(inIdx)
                 for (field in dependentFields) {
-                    dependentOutWriter.vectorFor(field.name, field.fieldType)
+                    dependentOutWriter.vectorFor(field.name, field.type, field.isNullable)
                         .append(NullVector(field.name).also { it.valueCount = 1 })
                 }
             }

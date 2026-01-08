@@ -6,9 +6,9 @@ import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.VectorType.Companion.F64
 import xtdb.arrow.VectorType.Companion.I32
+import xtdb.arrow.VectorType.Companion.LIST_TYPE
+import xtdb.arrow.VectorType.Companion.STRUCT_TYPE
 import xtdb.arrow.VectorType.Companion.VAR_BINARY
-import xtdb.arrow.VectorType.Companion.maybe
-import xtdb.arrow.VectorType.Companion.structOf
 import xtdb.arrow.VectorWriter
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.arrow.metadata.MetadataFlavour.*
@@ -26,9 +26,9 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
 
     private fun writeNumericMetadata(flavours: List<Numeric>, type: KClass<out Numeric>) {
         if (flavours.isNotEmpty()) {
-            val typeVec = colsVec.vectorFor(type.java.metaColName, maybe(structOf()).fieldType)
-            val minVec = typeVec.vectorFor("min", F64.fieldType)
-            val maxVec = typeVec.vectorFor("max", F64.fieldType)
+            val typeVec = colsVec.vectorFor(type.java.metaColName, STRUCT_TYPE, true)
+            val minVec = typeVec.vectorFor("min", F64.arrowType, false)
+            val maxVec = typeVec.vectorFor("max", F64.arrowType, false)
 
             var minValue = Double.POSITIVE_INFINITY
             var maxValue = Double.NEGATIVE_INFINITY
@@ -51,8 +51,8 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
 
     private fun writeBytesMetadata(flavours: List<Bytes>, calculateBlooms: Boolean) {
         if (flavours.isNotEmpty()) {
-            val typeVec = colsVec.vectorFor(Bytes::class.java.metaColName, structOf().fieldType)
-            val bloomVec = typeVec.vectorFor("bloom", maybe(VAR_BINARY).fieldType)
+            val typeVec = colsVec.vectorFor(Bytes::class.java.metaColName, STRUCT_TYPE, false)
+            val bloomVec = typeVec.vectorFor("bloom", VAR_BINARY.arrowType, true)
 
             if (calculateBlooms) {
                 val bloomBuilder = BloomBuilder()
@@ -66,7 +66,7 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
 
     private fun writePresenceMetadata(flavours: List<Presence>) {
         flavours.forEach {
-            colsVec.vectorFor(it.arrowType.toLeg(), maybe(BOOL).fieldType).writeBoolean(true)
+            colsVec.vectorFor(it.arrowType.toLeg(), BOOL.arrowType, true).writeBoolean(true)
         }
     }
 
@@ -98,11 +98,11 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
                 is Bytes -> bytes.add(flavour)
 
                 is MetadataFlavour.List ->
-                    colsVec.vectorFor("list", maybe(I32).fieldType)
+                    colsVec.vectorFor("list", I32.arrowType, true)
                         .writeInt(childIdxs[childIdx++])
 
                 is MetadataFlavour.Set ->
-                    colsVec.vectorFor("set", maybe(I32).fieldType)
+                    colsVec.vectorFor("set", I32.arrowType, true)
                         .writeInt(childIdxs[childIdx++])
 
                 is DateTime -> dateTimes.add(flavour)
@@ -111,8 +111,8 @@ class ColumnMetadata(private val colsVec: VectorWriter, private val calculateBlo
                 is TimeOfDay -> times.add(flavour)
 
                 is Struct -> {
-                    val keysVec = colsVec.vectorFor("struct", maybe(VectorType.LIST_TYPE).fieldType)
-                    val keyVec = keysVec.getListElements(I32.fieldType)
+                    val keysVec = colsVec.vectorFor("struct", LIST_TYPE, true)
+                    val keyVec = keysVec.getListElements(I32.arrowType, false)
 
                     repeat(flavour.vectors.count()) { keyVec.writeInt(childIdxs[childIdx++]) }
 

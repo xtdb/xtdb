@@ -57,10 +57,10 @@ class NullVector(
         outVec.ensureCapacity(groupIdx + 1)
     }
 
-    override fun maybePromote(al: BufferAllocator, target: FieldType): Vector =
-        if (target.type == arrowType) this
+    override fun maybePromote(al: BufferAllocator, targetType: ArrowType, targetNullable: Boolean): Vector =
+        if (targetType == arrowType) this
         else
-            Field(this.name, target, emptyList()).openVector(al)
+            Field(this.name, FieldType(targetNullable, targetType, null), emptyList()).openVector(al)
                 .also { newVec ->
                     repeat(this.valueCount) {
                         // if we've only ever written undefined, write undefineds in the new vec

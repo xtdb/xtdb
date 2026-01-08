@@ -3,6 +3,7 @@
 package xtdb.arrow
 
 import clojure.lang.Keyword
+import org.apache.arrow.vector.PeriodDuration
 import org.apache.arrow.vector.types.FloatingPointPrecision.DOUBLE
 import org.apache.arrow.vector.types.FloatingPointPrecision.SINGLE
 import org.apache.arrow.vector.types.TimeUnit.MICROSECOND
@@ -206,6 +207,8 @@ data class VectorType(
         val Any?.asVectorType: VectorType
             get() = when (this) {
                 null -> NULL
+                is ValueReader -> readObject().asVectorType
+                is ListValueReader -> listTypeOf(mergeTypes((0 until size()).map { nth(it).readObject().asVectorType }))
                 is Boolean -> BOOL
                 is Byte -> I8
                 is Short -> I16
@@ -268,6 +271,12 @@ data class VectorType(
                     nanos % (NANO_HZ / MICRO_HZ) != 0L -> INTERVAL_MDN
                     nanos != 0L || days != 0 -> INTERVAL_MDM
                     else -> INTERVAL_YEAR
+                }
+
+                is PeriodDuration -> when {
+                    period.days == 0 && duration == java.time.Duration.ZERO -> INTERVAL_YEAR
+                    period.toTotalMonths() == 0L && duration.toNanos() % 1_000_000 == 0L -> INTERVAL_MDM
+                    else -> INTERVAL_MDN
                 }
 
                 is ZonedDateTimeRange -> TSTZ_RANGE

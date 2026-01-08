@@ -538,16 +538,16 @@
 
     (.logPut live-table (ByteBuffer/wrap (util/->iid user)) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
-               (doto (.vectorFor doc-writer "_id" (FieldType/notNullable #xt.arrow/type :utf8))
+               (doto (.vectorFor doc-writer "_id" #xt.arrow/type :utf8 false)
                  (.writeObject user))
 
-               (doto (.vectorFor doc-writer "username" (FieldType/notNullable #xt.arrow/type :utf8))
+               (doto (.vectorFor doc-writer "username" #xt.arrow/type :utf8 false)
                  (.writeObject user))
 
-               (doto (.vectorFor doc-writer "usesuper" (FieldType/notNullable #xt.arrow/type :bool))
+               (doto (.vectorFor doc-writer "usesuper" #xt.arrow/type :bool false)
                  (.writeObject false))
 
-               (doto (.vectorFor doc-writer "passwd" (FieldType/nullable #xt.arrow/type :utf8))
+               (doto (.vectorFor doc-writer "passwd" #xt.arrow/type :utf8 true)
                  (.writeObject (authn.crypt/encrypt-pw password)))
 
                (.endStruct doc-writer)))))
@@ -608,19 +608,19 @@
 
     (.logPut live-table (ByteBuffer/wrap (util/->iid tx-id)) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
-               (doto (.vectorFor doc-writer "_id" (FieldType/notNullable #xt.arrow/type :i64))
+               (doto (.vectorFor doc-writer "_id" #xt.arrow/type :i64 false)
                  (.writeLong tx-id))
 
-               (doto (.vectorFor doc-writer "system_time" (FieldType/notNullable (st/->arrow-type types/temporal-col-type)))
+               (doto (.vectorFor doc-writer "system_time" (st/->arrow-type types/temporal-col-type) false)
                  (.writeLong system-time-µs))
 
-               (doto (.vectorFor doc-writer "committed" (FieldType/notNullable #xt.arrow/type :bool))
+               (doto (.vectorFor doc-writer "committed" #xt.arrow/type :bool false)
                  (.writeBoolean (nil? t)))
 
-               (doto (.vectorFor doc-writer "user_metadata" (.getFieldType #xt/type [:? :struct]))
+               (doto (.vectorFor doc-writer "user_metadata" #xt.arrow/type :struct true)
                  (.writeObject user-metadata))
 
-               (let [e-wtr (.vectorFor doc-writer "error" (FieldType/nullable #xt.arrow/type :transit))]
+               (let [e-wtr (.vectorFor doc-writer "error" #xt.arrow/type :transit true)]
                  (if (nil? t)
                    (.writeNull e-wtr)
                    (try

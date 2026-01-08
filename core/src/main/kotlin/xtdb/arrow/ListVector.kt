@@ -80,7 +80,8 @@ class ListVector private constructor(
                 try {
                     elVector.writeObject(el)
                 } catch (e: InvalidWriteObjectException) {
-                    elVector = elVector.maybePromote(al, e.obj.toFieldType())
+                    val errType = e.obj.toFieldType()
+                    elVector = elVector.maybePromote(al, errType.type, errType.isNullable)
                     elVector.writeObject(el)
                 }
             }
@@ -95,7 +96,8 @@ class ListVector private constructor(
                 try {
                     elVector.writeValue(el)
                 } catch (e: InvalidWriteObjectException) {
-                    elVector = elVector.maybePromote(al, e.obj.toFieldType())
+                    val errType = e.obj.toFieldType()
+                    elVector = elVector.maybePromote(al, errType.type, errType.isNullable)
                     elVector.writeValue(el)
                 }
             }
@@ -108,14 +110,14 @@ class ListVector private constructor(
 
     override val listElements get() = elVector
 
-    override fun getListElements(fieldType: FieldType): VectorWriter =
+    override fun getListElements(arrowType: ArrowType, nullable: Boolean): VectorWriter =
         when {
-            elVector.field.fieldType == fieldType -> elVector
+            elVector.arrowType == arrowType && elVector.nullable == nullable -> elVector
 
             elVector is NullVector && elVector.valueCount == 0 ->
-                Field("\$data\$", fieldType, emptyList()).openVector(al).also { elVector = it }
+                Field("\$data\$", FieldType(nullable, arrowType, null), emptyList()).openVector(al).also { elVector = it }
 
-            else -> elVector.maybePromote(al, fieldType).also { elVector = it }
+            else -> elVector.maybePromote(al, arrowType, nullable).also { elVector = it }
         }
 
     override fun endList() = writeNotNull(elVector.valueCount - lastOffset)
@@ -137,7 +139,7 @@ class ListVector private constructor(
         val elCopier = try {
             src.elVector.rowCopier(elVector)
         } catch (_: InvalidCopySourceException) {
-            elVector = elVector.maybePromote(al, src.elVector.fieldType)
+            elVector = elVector.maybePromote(al, src.elVector.arrowType, src.elVector.nullable)
             src.elVector.rowCopier(elVector)
         }
 

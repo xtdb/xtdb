@@ -65,16 +65,16 @@ class StructVector private constructor(
 
     override fun vectorFor(name: String) = childWriters[name] ?: error("missing child vector: $name")
 
-    override fun vectorFor(name: String, fieldType: FieldType) =
+    override fun vectorFor(name: String, arrowType: ArrowType, nullable: Boolean) =
         childWriters.compute(name) { _, existingChild ->
             when {
                 existingChild == null ->
-                    Field(name, fieldType, emptyList()).openVector(allocator).also { newVec ->
+                    Field(name, FieldType(nullable, arrowType, null), emptyList()).openVector(allocator).also { newVec ->
                         repeat(valueCount) { if (isNull(it)) newVec.writeUndefined() else newVec.writeNull() }
                     }
 
-                existingChild.fieldType.type != fieldType.type || (!existingChild.nullable && fieldType.isNullable) ->
-                    existingChild.maybePromote(allocator, fieldType)
+                existingChild.arrowType != arrowType || (!existingChild.nullable && nullable) ->
+                    existingChild.maybePromote(allocator, arrowType, nullable)
 
                 else -> existingChild
             }
@@ -113,20 +113,45 @@ class StructVector private constructor(
             value.forEach {
                 val key = keyString(it.key)
                 val obj = it.value
-                val childWriter = childWriters[key] ?: vectorFor(key, obj.toFieldType())
 
-                if (childWriter.valueCount != this.valueCount)
-                    throw Incorrect(
-                        errorCode = "xtdb/key-already-set",
-                        data = mapOf("ks" to value.keys, "k" to key)
-                    )
+                if (obj is ValueReader) {
+                    // Handle ValueReader (e.g. ValueBox) - read the object and infer type
+                    val actualObj = obj.readObject()
+                    val objType = actualObj.toFieldType()
+                    val childWriter = childWriters[key] ?: vectorFor(key, objType.type, objType.isNullable)
 
-                try {
-                    childWriter.writeObject(obj)
-                } catch (e: InvalidWriteObjectException) {
-                    val newWriter = childWriter.maybePromote(allocator, e.obj.toFieldType())
-                    childWriters[key] = newWriter
-                    newWriter.writeObject(obj)
+                    if (childWriter.valueCount != this.valueCount)
+                        throw Incorrect(
+                            errorCode = "xtdb/key-already-set",
+                            data = mapOf("ks" to value.keys, "k" to key)
+                        )
+
+                    try {
+                        childWriter.writeValue(obj)
+                    } catch (e: InvalidWriteObjectException) {
+                        val errType = e.obj.toFieldType()
+                        val newWriter = childWriter.maybePromote(allocator, errType.type, errType.isNullable)
+                        childWriters[key] = newWriter
+                        newWriter.writeValue(obj)
+                    }
+                } else {
+                    val objType = obj.toFieldType()
+                    val childWriter = childWriters[key] ?: vectorFor(key, objType.type, objType.isNullable)
+
+                    if (childWriter.valueCount != this.valueCount)
+                        throw Incorrect(
+                            errorCode = "xtdb/key-already-set",
+                            data = mapOf("ks" to value.keys, "k" to key)
+                        )
+
+                    try {
+                        childWriter.writeObject(obj)
+                    } catch (e: InvalidWriteObjectException) {
+                        val errType = e.obj.toFieldType()
+                        val newWriter = childWriter.maybePromote(allocator, errType.type, errType.isNullable)
+                        childWriters[key] = newWriter
+                        newWriter.writeObject(obj)
+                    }
                 }
             }
             endStruct()
@@ -161,7 +186,7 @@ class StructVector private constructor(
 
         val childCopiers = colNames.map { colName ->
             val srcVec = src.vectorForOrNull(colName) ?: NullVector(colName, true, src.valueCount)
-            srcVec.rowCopier(vectorFor(colName, srcVec.fieldType))
+            srcVec.rowCopier(vectorFor(colName, srcVec.arrowType, srcVec.nullable))
         }
 
         return RowCopier { srcIdx ->

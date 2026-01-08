@@ -51,7 +51,7 @@ class MultiIidSelectorTest {
         val selector = MultiIidSelector(iidSet)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             iids.writeUuid(Uuid.parse("80000000-0000-0000-0000-000000000000"))
             rel.endRow()
@@ -71,7 +71,7 @@ class MultiIidSelectorTest {
         val selector = MultiIidSelector(iidSet)
 
         Relation(al).use { rel ->
-            rel.vectorFor("_iid", IID.fieldType)
+            rel.vectorFor("_iid", IID.arrowType, false)
             val result = selector.select(al, rel, emptyMap(), RelationReader.from(emptyList(), 0))
             assertArrayEquals(IntArray(0), result, "empty relation should match nothing")
         }
@@ -84,7 +84,7 @@ class MultiIidSelectorTest {
         val selector = MultiIidSelector(iidSet)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             iids.writeUuid(Uuid.parse("70000000-0000-0000-0000-000000000000"))
             rel.endRow()
@@ -108,7 +108,7 @@ class MultiIidSelectorTest {
         val selector = MultiIidSelector(iidSet)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             iids.writeUuid(Uuid.parse("10000000-0000-0000-0000-000000000000"))
             rel.endRow()
@@ -133,7 +133,7 @@ class MultiIidSelectorTest {
         val selector = MultiIidSelector(iidSet)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             iids.writeUuid(searchUuid)
             rel.endRow()
@@ -156,7 +156,7 @@ class MultiIidSelectorTest {
         val selector = MultiIidSelector(iidSet)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             iids.writeUuid(Uuid.parse("10000000-0000-0000-0000-000000000000"))
             rel.endRow()
@@ -178,7 +178,7 @@ class MultiIidSelectorTest {
         val path = ByteArray(0)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             iids.writeUuid(Uuid.parse("80000000-0000-0000-0000-000000000000"))
             rel.endRow()
@@ -196,7 +196,7 @@ class MultiIidSelectorTest {
         val path = ByteArray(0)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             iids.writeUuid(Uuid.parse("70000000-0000-0000-0000-000000000000"))
             rel.endRow()
@@ -221,7 +221,7 @@ class MultiIidSelectorTest {
         val path = ByteArray(0)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             iids.writeUuid(Uuid.parse("10000000-0000-0000-0000-000000000000"))
             rel.endRow()
@@ -255,7 +255,7 @@ class MultiIidSelectorTest {
         val path = byteArrayOf(0)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             iids.writeUuid(uuid1)
             rel.endRow()
@@ -280,7 +280,7 @@ class MultiIidSelectorTest {
         val path = ByteArray(0)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             iids.writeUuid(uuid)
             rel.endRow()
@@ -306,7 +306,7 @@ class MultiIidSelectorTest {
         val path = ByteArray(0)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             // Create 1000 sorted rows where every 10th row matches
             // Row i gets UUID with value i in hex, ensuring natural sort order
@@ -335,7 +335,7 @@ class MultiIidSelectorTest {
         val path = ByteArray(0)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             iids.writeUuid(Uuid.parse("10000000-0000-0000-0000-000000000000"))
             rel.endRow()
@@ -369,7 +369,7 @@ class MultiIidSelectorTest {
         val path = ByteArray(0)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             // Create 1000 rows where the UUID matches the row index in hex
             // This ensures natural sorting and makes positions predictable
@@ -394,7 +394,7 @@ class MultiIidSelectorTest {
         val path = ByteArray(0)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             iids.writeUuid(Uuid.parse("10000000-0000-0000-0000-000000000000"))
             rel.endRow()
@@ -417,7 +417,7 @@ class MultiIidSelectorTest {
         val path = ByteArray(0)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             iids.writeUuid(Uuid.parse("80000000-0000-0000-0000-000000000000"))
             rel.endRow()
@@ -440,7 +440,7 @@ class MultiIidSelectorTest {
         val path = ByteArray(0)
 
         Relation(al).use { rel ->
-            val iids = rel.vectorFor("_iid", IID.fieldType)
+            val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
             iids.writeUuid(Uuid.parse("10000000-0000-0000-0000-000000000000"))
             rel.endRow()

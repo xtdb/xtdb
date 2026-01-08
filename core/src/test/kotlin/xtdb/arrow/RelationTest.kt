@@ -217,13 +217,13 @@ class RelationTest {
     @Test
     fun testPromotion() {
         Relation(allocator).use { rel ->
-            val intVec = rel.vectorFor("foo", VectorType.I32.fieldType)
+            val intVec = rel.vectorFor("foo", VectorType.I32.arrowType, false)
             intVec.writeInt(32)
             rel.endRow()
 
             assertEquals(listOf(mapOf("foo".kw to 32)), rel.asMaps)
 
-            val strVec = rel.vectorFor("bar", VectorType.UTF8.fieldType)
+            val strVec = rel.vectorFor("bar", VectorType.UTF8.arrowType, false)
             strVec.writeObject("hello")
             rel.endRow()
 

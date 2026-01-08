@@ -29,7 +29,7 @@ class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector
 
     override fun writeObject0(value: Any) = when (value) {
         is ZonedDateTimeRange -> {
-            inner.getListElements(FieldType.notNullable(Timestamp(MICROSECOND, "UTC"))).let { elVec ->
+            inner.getListElements(Timestamp(MICROSECOND, "UTC"), false).let { elVec ->
                 if (value.from != null) elVec.writeObject(value.from) else elVec.writeLong(Long.MIN_VALUE)
                 if (value.to != null) elVec.writeObject(value.to) else elVec.writeLong(Long.MAX_VALUE)
             }

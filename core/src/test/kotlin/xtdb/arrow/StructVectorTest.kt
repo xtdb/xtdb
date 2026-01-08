@@ -88,12 +88,12 @@ class StructVectorTest {
     @Test
     fun createsMissingVectors() {
         StructVector(allocator, "struct", false).use { structVec ->
-            val i32Writer = structVec.vectorFor("i32", 4.toFieldType())
+            val i32Writer = structVec.vectorFor("i32", I32.arrowType, false)
 
             i32Writer.writeInt(4)
             structVec.endStruct()
 
-            val utf8Writer = structVec.vectorFor("utf8", "foo".toFieldType())
+            val utf8Writer = structVec.vectorFor("utf8", UTF8.arrowType, false)
 
             i32Writer.writeInt(8)
             utf8Writer.writeObject("Hello")

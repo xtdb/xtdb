@@ -29,7 +29,7 @@ class RelationAsStructReader(
     override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any = rel[idx, keyFn]
 
     override fun rowCopier(dest: VectorWriter): RowCopier {
-        val copiers = rel.vectors.map { it.rowCopier(dest.vectorFor(it.name, it.fieldType)) }
+        val copiers = rel.vectors.map { it.rowCopier(dest.vectorFor(it.name, it.arrowType, it.nullable)) }
         return RowCopier { idx ->
             copiers.forEach { it.copyRow(idx) }
             dest.endStruct()

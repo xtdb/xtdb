@@ -106,12 +106,12 @@
 (defn- write-col! [^Relation rel, ^TpchColumn col, entities]
   (let [col-name (.getColumnName col)
         [^VectorType vec-type, write-cell!] (cell-writer col)
-        out-col (.vectorFor rel col-name (.getFieldType vec-type))]
+        out-col (.vectorFor rel col-name (.getArrowType vec-type) (.isNullable vec-type))]
     (doseq [^TpchEntity e entities]
       (write-cell! out-col e))))
 
 (defn- write-pk-col! [^Relation rel, ^TpchTable table, entities]
-  (let [out-col (.vectorFor rel "_id" (.getFieldType #xt/type :uuid))
+  (let [out-col (.vectorFor rel "_id" #xt.arrow/type :uuid false)
         pk-cols (table->pkey (keyword (.getTableName table)))]
     (if (= 1 (count pk-cols))
       (let [pk-col (.getColumn table (name (first pk-cols)))

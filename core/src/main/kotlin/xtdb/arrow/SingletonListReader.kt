@@ -25,7 +25,7 @@ class SingletonListReader(override val name: String, private val elReader: Vecto
     override fun getListCount(idx: Int) = elReader.valueCount
 
     override fun rowCopier(dest: VectorWriter): RowCopier {
-        val elCopier = elReader.rowCopier(dest.getListElements(elReader.field.fieldType))
+        val elCopier = elReader.rowCopier(dest.getListElements(elReader.arrowType, elReader.nullable))
 
         return RowCopier { idx ->
             check(idx == 0)

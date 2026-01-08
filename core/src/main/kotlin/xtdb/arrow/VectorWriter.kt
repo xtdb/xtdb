@@ -3,6 +3,7 @@ package xtdb.arrow
 import clojure.lang.IExceptionInfo
 import clojure.lang.IPersistentMap
 import clojure.lang.PersistentArrayMap
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.kw
 import java.nio.ByteBuffer
@@ -50,18 +51,18 @@ interface VectorWriter : VectorReader, AutoCloseable {
     /**
      * @return a vector with the given name, creating/promoting if necessary
      */
-    fun vectorFor(name: String, fieldType: FieldType): VectorWriter = unsupported("vectorFor")
+    fun vectorFor(name: String, arrowType: ArrowType, nullable: Boolean): VectorWriter = unsupported("vectorFor")
 
     fun endStruct(): Unit = unsupported("endStruct")
 
     override val listElements: VectorWriter get() = unsupported("listElements")
-    fun getListElements(fieldType: FieldType): VectorWriter = unsupported("getListElements")
+    fun getListElements(arrowType: ArrowType, nullable: Boolean): VectorWriter = unsupported("getListElements")
     fun endList(): Unit = unsupported("endList")
 
     override val mapKeys: VectorWriter get() = unsupported("mapKeys")
-    fun getMapKeys(fieldType: FieldType): VectorWriter = unsupported("mapKeys")
+    fun getMapKeys(arrowType: ArrowType, nullable: Boolean): VectorWriter = unsupported("mapKeys")
     override val mapValues: VectorWriter get() = unsupported("mapValues")
-    fun getMapValues(fieldType: FieldType): VectorWriter = unsupported("getMapValues")
+    fun getMapValues(arrowType: ArrowType, nullable: Boolean): VectorWriter = unsupported("getMapValues")
 
     fun clear()
 

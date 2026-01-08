@@ -80,12 +80,12 @@ class FixedSizeListVector private constructor(
 
     override val listElements get() = elVector
 
-    override fun getListElements(fieldType: FieldType): VectorWriter =
+    override fun getListElements(arrowType: ArrowType, nullable: Boolean): VectorWriter =
         when {
-            elVector.field.fieldType == fieldType -> elVector
+            elVector.arrowType == arrowType && elVector.nullable == nullable -> elVector
 
             elVector is NullVector && elVector.valueCount == 0 ->
-                Field("\$data\$", fieldType, emptyList()).openVector(al).also { elVector = it }
+                Field("\$data\$", FieldType(nullable, arrowType, null), emptyList()).openVector(al).also { elVector = it }
 
             else -> TODO("promote elVector")
         }
@@ -127,7 +127,7 @@ class FixedSizeListVector private constructor(
         val elCopier = try {
             src.elVector.rowCopier(elVector)
         } catch (_: InvalidCopySourceException) {
-            elVector = elVector.maybePromote(al, src.elVector.fieldType)
+            elVector = elVector.maybePromote(al, src.elVector.arrowType, src.elVector.nullable)
             src.elVector.rowCopier(elVector)
         }
 

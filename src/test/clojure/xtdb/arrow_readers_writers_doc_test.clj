@@ -1,7 +1,6 @@
 (ns xtdb.arrow-readers-writers-doc-test
   (:require [clojure.test :as t])
   (:import (org.apache.arrow.memory RootAllocator)
-           (org.apache.arrow.vector.types.pojo FieldType)
            (xtdb.arrow DenseUnionVector Relation Vector)))
 
 (t/deftest arrow-readers-writers-demo
@@ -43,14 +42,14 @@
   #xt.arrow/type :union
   ;; => #xt.arrow/type :union
 
-  ;; FieldType adds nullability to ArrowTypes
-  (FieldType/notNullable #xt.arrow/type :i64)
-  ;; => <FieldType #xt.arrow/type :i64 not-null>
+  ;; VectorType combines ArrowType with nullability
+  #xt/type :i64
+  ;; => <VectorType #xt.arrow/type :i64 not-null>
 
-  (FieldType/nullable #xt.arrow/type :union)
-  ;; => <FieldType #xt.arrow/type :union null>
+  #xt/type [:? :union]
+  ;; => <VectorType #xt.arrow/type :union null>
 
-  ;; Fields are essentially FieldType + naming + potential child Fields
+  ;; Fields are essentially ArrowType + nullable + naming + potential child Fields
   #xt/field {"my-int" [:? :i64]}
   ;; => <Field "my-int" #xt.arrow/type :i64 null>
 
@@ -88,21 +87,21 @@
                  (.vectorFor "foo")
                  (.getField)))))
 
-  ;; You can also ask for a writer specifying a field type. In this case it works as the writer matches the
+  ;; You can also ask for a writer specifying an arrow type. In this case it works as the writer matches the
   ;; previously specified field type.
   (with-open [allocator (RootAllocator.)
               struct-vec (Vector/open allocator #xt/field {"my-struct" [:struct {"foo" :i64}]})]
     (t/is (= #xt/field {"foo" :i64}
              (-> struct-vec
-                 (.vectorFor "foo" (FieldType/notNullable #xt.arrow/type :i64))
+                 (.vectorFor "foo" #xt.arrow/type :i64 false)
                  (.getField)))))
 
-  ;; You can also create a struct key by providing a field-type
+  ;; You can also create a struct key by providing an arrow type
   (with-open [allocator (RootAllocator.)
               struct-vec (Vector/open allocator #xt/field {"my-struct" :struct})]
     (t/is (= #xt/field {"bar" :utf8}
              (-> struct-vec
-                 (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :utf8))
+                 (.vectorFor "bar" #xt.arrow/type :utf8 false)
                  (.getField)))))
 
   ;; Lets also look at how one would write to a duv.
@@ -122,17 +121,17 @@
   (with-open [allocator (RootAllocator.)
               rel (Relation. allocator)]
     (-> rel
-        (.vectorFor "my-i64" (FieldType/notNullable #xt.arrow/type :i64))
+        (.vectorFor "my-i64" #xt.arrow/type :i64 false)
         (.writeLong 42))
 
     (-> rel
-        (.vectorFor "my-union" (FieldType/notNullable #xt.arrow/type :union))
+        (.vectorFor "my-union" #xt.arrow/type :union false)
         (.writeObject 42))
 
     (.endRow rel)
 
     (-> rel
-        (.vectorFor "my-i64" (FieldType/notNullable #xt.arrow/type :i64))
+        (.vectorFor "my-i64" #xt.arrow/type :i64 false)
         (.writeLong 43))
 
     (-> rel
@@ -150,10 +149,10 @@
 
   (with-open [allocator (RootAllocator.)
               rel (Relation. allocator)]
-    (.writeObject (.vectorFor rel "my-first-column" (FieldType/nullable #xt.arrow/type :i64)) 42)
+    (.writeObject (.vectorFor rel "my-first-column" #xt.arrow/type :i64 true) 42)
     (.endRow rel)
 
-    (.writeObject (.vectorFor rel "my-second-column" (FieldType/nullable #xt.arrow/type :utf8)) "forty-three")
+    (.writeObject (.vectorFor rel "my-second-column" #xt.arrow/type :utf8 true) "forty-three")
     (.endRow rel)
 
     (t/is (= [{:my-first-column 42} {:my-second-column "forty-three"}]
@@ -187,11 +186,11 @@
               rel (Relation. allocator)]
 
     ;; populating rel1 and rel2
-    (let [my-column1 (.vectorFor rel1 "my-column" (FieldType/notNullable #xt.arrow/type :union))
-          my-column2 (.vectorFor rel2 "my-column" (FieldType/notNullable #xt.arrow/type :union))]
-      (-> (.vectorFor my-column1 "i64" (FieldType/notNullable #xt.arrow/type :i64))
+    (let [my-column1 (.vectorFor rel1 "my-column" #xt.arrow/type :union false)
+          my-column2 (.vectorFor rel2 "my-column" #xt.arrow/type :union false)]
+      (-> (.vectorFor my-column1 "i64" #xt.arrow/type :i64 false)
           (.writeLong 42))
-      (-> (.vectorFor my-column2 "utf8" (FieldType/notNullable #xt.arrow/type :utf8))
+      (-> (.vectorFor my-column2 "utf8" #xt.arrow/type :utf8 false)
           (.writeObject "forty-two")))
 
     ;; copying to rel3

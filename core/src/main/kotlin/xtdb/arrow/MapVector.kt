@@ -86,14 +86,14 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
     override fun writeValue0(v: ValueReader) = writeObject(v.readObject())
 
     override val listElements get() = listVector.listElements
-    override fun getListElements(fieldType: FieldType) = listVector.getListElements(fieldType)
+    override fun getListElements(arrowType: ArrowType, nullable: Boolean) = listVector.getListElements(arrowType, nullable)
 
     override fun endList() = listVector.endList()
 
     override val mapKeys get() = listElements.mapKeys
-    override fun getMapKeys(fieldType: FieldType) = listElements.getMapKeys(fieldType)
+    override fun getMapKeys(arrowType: ArrowType, nullable: Boolean) = listElements.getMapKeys(arrowType, nullable)
     override val mapValues get() = listElements.mapValues
-    override fun getMapValues(fieldType: FieldType) = listElements.getMapValues(fieldType)
+    override fun getMapValues(arrowType: ArrowType, nullable: Boolean) = listElements.getMapValues(arrowType, nullable)
 
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) =
         listVector.unloadPage(nodes, buffers)

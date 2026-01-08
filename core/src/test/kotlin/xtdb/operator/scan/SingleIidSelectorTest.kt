@@ -42,7 +42,7 @@ class SingleIidSelectorTest {
 
         fun testUuids(vararg uuids: Uuid) =
             Relation(al).use { rel ->
-                val iids = rel.vectorFor("_iid", IID.fieldType)
+                val iids = rel.vectorFor("_iid", IID.arrowType, false)
 
                 for (uuid in uuids) {
                     iids.writeUuid(uuid)

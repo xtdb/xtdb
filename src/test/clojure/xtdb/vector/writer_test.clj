@@ -2,7 +2,6 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.test-util :as tu])
   (:import (org.apache.arrow.vector.types Types$MinorType)
-           (org.apache.arrow.vector.types.pojo FieldType)
            (xtdb.arrow DenseUnionVector ListVector StructVector Vector)))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
@@ -16,44 +15,44 @@
                  (.getField)))))
 
   (with-open [duv (DenseUnionVector. tu/*allocator* "my-duv")]
-    (let [my-list-wtr (.vectorFor duv "list" (FieldType/notNullable #xt.arrow/type :list))
-          my-set-wtr (.vectorFor duv "set" (FieldType/notNullable #xt.arrow/type :set))]
+    (let [my-list-wtr (.vectorFor duv "list" #xt.arrow/type :list false)
+          my-set-wtr (.vectorFor duv "set" #xt.arrow/type :set false)]
 
       (t/is (= #xt/field {"my-duv" [:union [:list :null] [:set :null]]}
                (.getField duv))
 
             "vectorFor creates lists/sets with uninitialized data vectors")
 
-      (.getListElements my-list-wtr (.getFieldType #xt/type :i64))
+      (.getListElements my-list-wtr #xt.arrow/type :i64 false)
 
-      (.getListElements my-set-wtr (.getFieldType #xt/type :f64))
+      (.getListElements my-set-wtr #xt.arrow/type :f64 false)
 
       (t/is (= #xt/field {"my-duv" [:union [:list :i64] [:set :f64]]}
                (.getField duv)))
 
-      (.getListElements my-list-wtr (.getFieldType #xt/type :f64))
+      (.getListElements my-list-wtr #xt.arrow/type :f64 false)
 
       (t/is (= #xt/field {"my-duv" [:union [:list [:union :i64 :f64]] [:set :f64]]}
                (.getField duv)))))
 
   (with-open [duv (DenseUnionVector. tu/*allocator* "my-duv")]
-    (let [my-struct-wtr (.vectorFor duv "struct" (FieldType/notNullable #xt.arrow/type :struct))]
+    (let [my-struct-wtr (.vectorFor duv "struct" #xt.arrow/type :struct false)]
       (t/is (= #xt/field {"my-duv" [:union :struct]}
                (.getField duv)))
 
-      (let [a-wtr (.vectorFor my-struct-wtr "a" (FieldType/notNullable #xt.arrow/type :union))]
+      (let [a-wtr (.vectorFor my-struct-wtr "a" #xt.arrow/type :union false)]
         (t/is (= #xt/field {"my-duv" [:union [:struct {"a" :union}]]}
                  (.getField duv)))
 
-        (.vectorFor a-wtr "i64" (FieldType/notNullable (.getType Types$MinorType/BIGINT)))
+        (.vectorFor a-wtr "i64" (.getType Types$MinorType/BIGINT) false)
 
         (t/is (= #xt/field {"my-duv" [:union [:struct {"a" [:union :i64]}]]}
                  (.getField duv)))
 
-        (-> (.vectorFor my-struct-wtr "b" (FieldType/notNullable #xt.arrow/type :union))
-            (.vectorFor "f64" (FieldType/notNullable (.getType Types$MinorType/FLOAT8))))
+        (-> (.vectorFor my-struct-wtr "b" #xt.arrow/type :union false)
+            (.vectorFor "f64" (.getType Types$MinorType/FLOAT8) false))
 
-        (.vectorFor a-wtr "utf8" (FieldType/notNullable (.getType Types$MinorType/VARCHAR)))
+        (.vectorFor a-wtr "utf8" (.getType Types$MinorType/VARCHAR) false)
 
         (t/is (= #xt/field {"my-duv" [:union
                                        {"struct" [:struct {"a" [:union {"i64" :i64, "utf8" :utf8}],
@@ -75,15 +74,15 @@
 
       (t/is (= #xt/field {"my-list" [:list :i64]}
                (-> list-vec
-                   (doto (.getListElements (FieldType/notNullable #xt.arrow/type :i64)))
+                   (doto (.getListElements #xt.arrow/type :i64 false))
                    (.getField)))
             "asking for an i64 with an empty data vec swaps for a mono")))
 
   (with-open [list-vec (ListVector. tu/*allocator* "my-list" false)]
     (t/is (= #xt/field {"my-list" [:list :i64]}
              (-> list-vec
-                 (doto (.getListElements (FieldType/notNullable #xt.arrow/type :i64)))
-                 (doto (.getListElements (FieldType/notNullable #xt.arrow/type :i64)))
+                 (doto (.getListElements #xt.arrow/type :i64 false))
+                 (doto (.getListElements #xt.arrow/type :i64 false))
                  (.getField)))
           "explicit monomorphic :i64 requested")
 
@@ -95,7 +94,7 @@
 
     (t/is (= #xt/field {"my-list" [:list [:union :i64 :f64]]}
              (-> list-vec
-                 (doto (.getListElements (FieldType/notNullable #xt.arrow/type :f64)))
+                 (doto (.getListElements #xt.arrow/type :f64 false))
                  (.getField)))
           "asking for an f64 promotes"))
 
@@ -113,13 +112,13 @@
 
       (t/is (= #xt/field {"$data$" :i64}
                (-> list-vec
-                   (.getListElements (FieldType/notNullable #xt.arrow/type :i64))
+                   (.getListElements #xt.arrow/type :i64 false)
                    (.getField)))
             "can ask for :i64")
 
       (t/is (= #xt/field {"my-list" [:list [:union :i64 :f64]]}
                (-> list-vec
-                   (doto (.getListElements (FieldType/notNullable #xt.arrow/type :f64)))
+                   (doto (.getListElements #xt.arrow/type :f64 false))
                    (.getField)))
             "asking for f64 promotes"))))
 
@@ -130,25 +129,25 @@
 
     (t/is (= #xt/field {"foo" [:? :null]}
              (-> struct-vec
-                 (.vectorFor "foo" (FieldType/nullable #xt.arrow/type :null))
+                 (.vectorFor "foo" #xt.arrow/type :null true)
                  (.getField)))
           "call to vectorFor with a field-type creates the key")
 
     (t/is (= #xt/field {"my-struct" [:struct {"foo" :f64}]}
              (-> struct-vec
-                 (doto (.vectorFor "foo" (FieldType/notNullable #xt.arrow/type :f64)))
+                 (doto (.vectorFor "foo" #xt.arrow/type :f64 false))
                  (.getField)))
           "new type promotes the struct key")
 
     (t/is (= #xt/field {"my-struct" [:struct {"foo" :f64, "bar" :i64}]}
              (-> struct-vec
-                 (doto (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :i64)))
-                 (doto (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :i64)))
+                 (doto (.vectorFor "bar" #xt.arrow/type :i64 false))
+                 (doto (.vectorFor "bar" #xt.arrow/type :i64 false))
                  (.getField))))
 
     (t/is (= #xt/field {"bar" :i64}
              (-> struct-vec
-                 (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :i64))
+                 (.vectorFor "bar" #xt.arrow/type :i64 false)
                  (.getField))))
 
     (t/is (= #xt/field {"bar" :i64}
@@ -158,7 +157,7 @@
 
     (t/is (= #xt/field {"my-struct" [:struct {"foo" :f64, "bar" [:union :i64 :f64]}]}
              (-> struct-vec
-                 (doto (.vectorFor "bar" (FieldType/notNullable #xt.arrow/type :f64)))
+                 (doto (.vectorFor "bar" #xt.arrow/type :f64 false))
                  (.getField)))))
 
   (with-open [struct-vec (Vector/open tu/*allocator* #xt/field {"my-struct" [:struct {"baz" :i64}]})]
@@ -173,13 +172,13 @@
 
     (t/is (= #xt/field {"baz" :i64}
              (-> struct-vec
-                 (.vectorFor "baz" (FieldType/notNullable #xt.arrow/type :i64))
+                 (.vectorFor "baz" #xt.arrow/type :i64 false)
                  (.getField)))
           "call to vectorFor with correct field should not throw")
 
     (t/is (= #xt/field {"my-struct" [:struct {"baz" [:union :i64 :f64]}]}
              (-> struct-vec
-                 (doto (.vectorFor "baz" (FieldType/notNullable #xt.arrow/type :f64)))
+                 (doto (.vectorFor "baz" #xt.arrow/type :f64 false))
                  (.getField)))
           "vectorFor promotes non pre-existing union type")))
 
@@ -187,33 +186,33 @@
   (with-open [rel (tu/open-rel)]
     (t/is (= #xt/field {"my-union" :union}
              (-> rel
-                 (.vectorFor "my-union" (FieldType/notNullable #xt.arrow/type :union))
+                 (.vectorFor "my-union" #xt.arrow/type :union false)
                  (.getField))))
 
     (t/is (= #xt/field {"my-union" :union}
              (-> rel
-                 (.vectorFor "my-union" (FieldType/notNullable #xt.arrow/type :union))
+                 (.vectorFor "my-union" #xt.arrow/type :union false)
                  (.getField))))
 
     (t/is (= #xt/field {"my-union" [:union :i64]}
              (-> rel
-                 (.vectorFor "my-union" (FieldType/notNullable #xt.arrow/type :i64))
+                 (.vectorFor "my-union" #xt.arrow/type :i64 false)
                  (.getField))))
 
     (t/is (= #xt/field {"my-i64" :i64}
              (-> rel
-                 (doto (.vectorFor "my-i64" (FieldType/notNullable #xt.arrow/type :i64)))
-                 (.vectorFor "my-i64" (FieldType/notNullable #xt.arrow/type :i64))
+                 (doto (.vectorFor "my-i64" #xt.arrow/type :i64 false))
+                 (.vectorFor "my-i64" #xt.arrow/type :i64 false)
                  (.getField))))
 
     (t/is (= #xt/field {"my-i64" [:union :i64 :f64]}
              (-> rel
-                 (.vectorFor "my-i64" (FieldType/notNullable #xt.arrow/type :f64))
+                 (.vectorFor "my-i64" #xt.arrow/type :f64 false)
                  (.getField)))))
 
   (with-open [rel (tu/open-rel)]
-    (let [int-wtr (.vectorFor rel "my-int" (FieldType/notNullable #xt.arrow/type :i64))
-          _str-wtr (.vectorFor rel "my-str" (FieldType/notNullable #xt.arrow/type :utf8))]
+    (let [int-wtr (.vectorFor rel "my-int" #xt.arrow/type :i64 false)
+          _str-wtr (.vectorFor rel "my-str" #xt.arrow/type :utf8 false)]
       (.writeObject int-wtr 42)
       (.endRow rel)
 
@@ -225,8 +224,8 @@
   (with-open [rel (tu/open-rel)]
     (let [some-nested-structs [{:foo {:bibble true} :bar {:baz -4113466} :flib {:true false}}
                                {:foo {:bibble true}  :bar {:baz 1001}}]
-          col-writer (.vectorFor rel "my-column" (FieldType/notNullable #xt.arrow/type :union))
-          struct-wtr (.vectorFor col-writer "struct" (FieldType/notNullable #xt.arrow/type :struct))]
+          col-writer (.vectorFor rel "my-column" #xt.arrow/type :union false)
+          struct-wtr (.vectorFor col-writer "struct" #xt.arrow/type :struct false)]
       (.writeObject struct-wtr (first some-nested-structs))
       (.endRow rel)
       (.writeObject struct-wtr (second some-nested-structs))

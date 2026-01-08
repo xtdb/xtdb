@@ -86,13 +86,15 @@
 
 (t/deftest ^:property multiple-type-promotions
   (tu/run-property-test
-   {:num-tests tu/property-test-iterations} 
+   {:num-tests tu/property-test-iterations}
    (prop/for-all [vec-gen tg/vector-vs-gen
                   field-types (gen/vector tg/field-type-gen 1 4)]
                  (with-open [^Vector promoted-vec (reduce
                                                    (fn [^Vector old-vec field-type]
                                                      (util/with-close-on-catch [old-vec old-vec]
-                                                       (.maybePromote$xtdb_core old-vec tu/*allocator* field-type)))
+                                                       (.maybePromote$xtdb_core old-vec tu/*allocator*
+                                                                                (.getType field-type)
+                                                                                (.isNullable field-type))))
                                                    (tg/vec-gen->arrow-vec tu/*allocator* vec-gen)
                                                    field-types)]
                    promoted-vec))))

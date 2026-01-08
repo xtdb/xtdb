@@ -12,7 +12,7 @@ class VectorTest {
     @Test
     fun `doesn't promote if source is a null-vec #4675`(al: BufferAllocator) {
         LongVector(al, "i64", true).use { vec ->
-            val maybePromoted = vec.maybePromote(al, VectorType.NULL.fieldType)
+            val maybePromoted = vec.maybePromote(al, VectorType.NULL.arrowType, VectorType.NULL.nullable)
             assertSame(vec, maybePromoted)
         }
     }

@@ -148,8 +148,8 @@ class DenseUnionVector private constructor(
         override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
         override fun get(name: String) = vectorFor(name)
 
-        override fun vectorFor(name: String, fieldType: FieldType) =
-            LegVector(typeId, inner.vectorFor(name, fieldType), true)
+        override fun vectorFor(name: String, arrowType: ArrowType, nullable: Boolean) =
+            LegVector(typeId, inner.vectorFor(name, arrowType, nullable), true)
 
         override val mapKeys get() = inner.mapKeys
         override val mapValues get() = inner.mapValues
@@ -182,11 +182,11 @@ class DenseUnionVector private constructor(
 
         override fun endStruct() = writeValueThen().endStruct()
 
-        override fun getListElements(fieldType: FieldType) = inner.getListElements(fieldType)
+        override fun getListElements(arrowType: ArrowType, nullable: Boolean) = inner.getListElements(arrowType, nullable)
         override fun endList() = writeValueThen().endList()
 
-        override fun getMapKeys(fieldType: FieldType) = inner.getMapKeys(fieldType)
-        override fun getMapValues(fieldType: FieldType) = inner.getMapValues(fieldType)
+        override fun getMapKeys(arrowType: ArrowType, nullable: Boolean) = inner.getMapKeys(arrowType, nullable)
+        override fun getMapValues(arrowType: ArrowType, nullable: Boolean) = inner.getMapValues(arrowType, nullable)
 
         override fun openSlice(al: BufferAllocator) = reader.openSlice(al)
         override fun valueReader() = reader.valueReader()
@@ -226,7 +226,7 @@ class DenseUnionVector private constructor(
     }
 
     override fun writeNull() {
-        legWriter(FieldType.nullable(NULL_TYPE)).writeNull()
+        legWriter(NULL_TYPE, true).writeNull()
     }
 
     override fun getObject(idx: Int, keyFn: IKeyFn<*>): Any? {
@@ -240,7 +240,7 @@ class DenseUnionVector private constructor(
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = throw UnsupportedOperationException()
 
     override fun writeObject0(value: Any) =
-        legWriter(value.toFieldType()).writeObject(value)
+        value.toFieldType().let { legWriter(it.type, it.isNullable) }.writeObject(value)
 
     // DUV overrides the nullable one because DUVs themselves can't be null.
     override fun writeValue(v: ValueReader) {
@@ -262,27 +262,26 @@ class DenseUnionVector private constructor(
         return null
     }
 
-    private fun legVectorFor(name: String, fieldType: FieldType): LegVector {
+    private fun legVectorFor(name: String, arrowType: ArrowType, nullable: Boolean): LegVector {
         for (i in legVectors.indices) {
             val leg = legVectors[i]
             if (leg.name == name) {
-                val legFieldType = leg.fieldType
-                if (legFieldType.type != fieldType.type) throw Unsupported("cannot promote DUV leg")
-                leg.nullable = leg.nullable || fieldType.isNullable
+                if (leg.arrowType != arrowType) throw Unsupported("cannot promote DUV leg")
+                leg.nullable = leg.nullable || nullable
 
                 return LegVector(i.toByte(), leg)
             }
         }
 
         val typeId = legVectors.size.toByte()
-        val legVec = Field(name, fieldType, emptyList()).openVector(allocator).also { legVectors.add(it) }
+        val legVec = Field(name, FieldType(nullable, arrowType, null), emptyList()).openVector(allocator).also { legVectors.add(it) }
         return LegVector(typeId, legVec)
     }
 
-    override fun vectorFor(name: String, fieldType: FieldType): VectorWriter = legVectorFor(name, fieldType)
-    fun vectorFor(fieldType: FieldType) = vectorFor(fieldType.type.toLeg(), fieldType)
+    override fun vectorFor(name: String, arrowType: ArrowType, nullable: Boolean): VectorWriter = legVectorFor(name, arrowType, nullable)
+    fun vectorFor(arrowType: ArrowType, nullable: Boolean) = vectorFor(arrowType.toLeg(), arrowType, nullable)
 
-    private fun legWriter(fieldType: FieldType) = vectorFor(fieldType.type.toLeg(), fieldType)
+    private fun legWriter(arrowType: ArrowType, nullable: Boolean) = vectorFor(arrowType.toLeg(), arrowType, nullable)
 
     override fun valueReader(): ValueReader {
         val legReaders = legVectors
@@ -322,7 +321,7 @@ class DenseUnionVector private constructor(
         when {
             src is DenseUnionVector -> {
                 val copierMapping = src.legVectors.map { childVec ->
-                    childVec.rowCopier(legVectorFor(childVec.name, childVec.fieldType))
+                    childVec.rowCopier(legVectorFor(childVec.name, childVec.arrowType, childVec.nullable))
                 }
 
                 RowCopier { srcIdx ->
@@ -335,7 +334,7 @@ class DenseUnionVector private constructor(
                 }
             }
 
-            else -> src.rowCopier(legVectorFor(src.fieldType.type.toLeg(), src.fieldType))
+            else -> src.rowCopier(legVectorFor(src.arrowType.toLeg(), src.arrowType, src.nullable))
         }
 
     override fun rowCopier(dest: VectorWriter) =
@@ -408,9 +407,9 @@ class DenseUnionVector private constructor(
             }
         }
 
-    override fun maybePromote(al: BufferAllocator, target: FieldType) = apply {
-        if (target.type != arrowType)
-            legWriter(target)
+    override fun maybePromote(al: BufferAllocator, targetType: ArrowType, targetNullable: Boolean) = apply {
+        if (targetType != arrowType)
+            legWriter(targetType, targetNullable)
     }
 
     override fun clear() {

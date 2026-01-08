@@ -48,9 +48,9 @@ private fun interface TxOpWriter<O : TxOp> {
 }
 
 private class SqlWriter(val al: BufferAllocator, ops: VectorWriter) : TxOpWriter<TxOp.Sql> {
-    private val sqlVec = ops.vectorFor("sql", structOf().fieldType)
-    private val queryVec = sqlVec.vectorFor("query", UTF8.fieldType)
-    private val argsVec = sqlVec.vectorFor("args", VAR_BINARY.fieldType)
+    private val sqlVec = ops.vectorFor("sql", STRUCT_TYPE, false)
+    private val queryVec = sqlVec.vectorFor("query", UTF8.arrowType, false)
+    private val argsVec = sqlVec.vectorFor("args", VAR_BINARY.arrowType, false)
 
     override fun writeOp(op: TxOp.Sql) {
         queryVec.writeObject(op.sql)
@@ -64,12 +64,12 @@ private class SqlWriter(val al: BufferAllocator, ops: VectorWriter) : TxOpWriter
 }
 
 private class PutDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.PutDocs> {
-    private val putVec = ops.vectorFor("put-docs", structOf().fieldType)
-    private val iidsVec = putVec.vectorFor("iids", listTypeOf(IID).fieldType)
-    private val iidWriter = iidsVec.getListElements(IID.fieldType)
-    private val docsVec = putVec.vectorFor("documents", unionOf().fieldType)
-    private val validFromVec = putVec.vectorFor("_valid_from", maybe(INSTANT).fieldType)
-    private val validToVec = putVec.vectorFor("_valid_to", maybe(INSTANT).fieldType)
+    private val putVec = ops.vectorFor("put-docs", STRUCT_TYPE, false)
+    private val iidsVec = putVec.vectorFor("iids", LIST_TYPE, false)
+    private val iidWriter = iidsVec.getListElements(IID.arrowType, false)
+    private val docsVec = putVec.vectorFor("documents", unionOf().arrowType, false)
+    private val validFromVec = putVec.vectorFor("_valid_from", INSTANT.arrowType, true)
+    private val validToVec = putVec.vectorFor("_valid_to", INSTANT.arrowType, true)
     private val tableDocWriters = mutableMapOf<String, VectorWriter>()
 
     override fun writeOp(op: TxOp.PutDocs) {
@@ -77,10 +77,10 @@ private class PutDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.PutDocs> {
 
         val schemaAndTable = "${op.schema}/${op.table}"
         val tableDocsWriter = tableDocWriters.getOrPut(schemaAndTable) {
-            docsVec.vectorFor(schemaAndTable, just(LIST_TYPE).fieldType)
+            docsVec.vectorFor(schemaAndTable, LIST_TYPE, false)
         }
 
-        val tableDocWriter = tableDocsWriter.getListElements(just(STRUCT_TYPE).fieldType)
+        val tableDocWriter = tableDocsWriter.getListElements(STRUCT_TYPE, false)
 
         val idVec = op.docs["_id"]
         for (idx in 0 until op.docs.rowCount) {
@@ -100,12 +100,12 @@ private class PutDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.PutDocs> {
 }
 
 private class PatchDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.PatchDocs> {
-    private val patchVec = ops.vectorFor("patch-docs", structOf().fieldType)
-    private val iidsVec = patchVec.vectorFor("iids", listTypeOf(IID).fieldType)
-    private val iidWriter = iidsVec.getListElements(IID.fieldType)
-    private val docsVec = patchVec.vectorFor("documents", unionOf().fieldType)
-    private val validFromVec = patchVec.vectorFor("_valid_from", maybe(INSTANT).fieldType)
-    private val validToVec = patchVec.vectorFor("_valid_to", maybe(INSTANT).fieldType)
+    private val patchVec = ops.vectorFor("patch-docs", STRUCT_TYPE, false)
+    private val iidsVec = patchVec.vectorFor("iids", LIST_TYPE, false)
+    private val iidWriter = iidsVec.getListElements(IID.arrowType, false)
+    private val docsVec = patchVec.vectorFor("documents", unionOf().arrowType, false)
+    private val validFromVec = patchVec.vectorFor("_valid_from", INSTANT.arrowType, true)
+    private val validToVec = patchVec.vectorFor("_valid_to", INSTANT.arrowType, true)
     private val tableDocWriters = mutableMapOf<String, VectorWriter>()
 
     override fun writeOp(op: TxOp.PatchDocs) {
@@ -113,8 +113,8 @@ private class PatchDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.PatchDocs> {
 
         val schemaAndTable = "${op.schema}/${op.table}"
         val tableDocWriter = tableDocWriters.getOrPut(schemaAndTable) {
-            docsVec.vectorFor(schemaAndTable, listTypeOf(structOf()).fieldType)
-                .also { it.getListElements(structOf().fieldType) }
+            docsVec.vectorFor(schemaAndTable, LIST_TYPE, false)
+                .also { it.getListElements(STRUCT_TYPE, false) }
         }
 
         val idVec = op.patches["_id"]
@@ -134,12 +134,12 @@ private class PatchDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.PatchDocs> {
 }
 
 private class DeleteDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.DeleteDocs> {
-    private val deleteVec = ops.vectorFor("delete-docs", structOf().fieldType)
-    private val tableVec = deleteVec.vectorFor("table", UTF8.fieldType)
-    private val iidsVec = deleteVec.vectorFor("iids", listTypeOf(IID).fieldType)
-    private val iidWriter = iidsVec.getListElements(IID.fieldType)
-    private val validFromVec = deleteVec.vectorFor("_valid_from", maybe(INSTANT).fieldType)
-    private val validToVec = deleteVec.vectorFor("_valid_to", maybe(INSTANT).fieldType)
+    private val deleteVec = ops.vectorFor("delete-docs", STRUCT_TYPE, false)
+    private val tableVec = deleteVec.vectorFor("table", UTF8.arrowType, false)
+    private val iidsVec = deleteVec.vectorFor("iids", LIST_TYPE, false)
+    private val iidWriter = iidsVec.getListElements(IID.arrowType, false)
+    private val validFromVec = deleteVec.vectorFor("_valid_from", INSTANT.arrowType, true)
+    private val validToVec = deleteVec.vectorFor("_valid_to", INSTANT.arrowType, true)
 
     override fun writeOp(op: TxOp.DeleteDocs) {
         checkNotForbidden(op.schema, op.table)
@@ -162,10 +162,10 @@ private class DeleteDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.DeleteDocs> 
 }
 
 private class EraseDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.EraseDocs> {
-    private val eraseVec = ops.vectorFor("erase-docs", structOf().fieldType)
-    private val tableVec = eraseVec.vectorFor("table", UTF8.fieldType)
-    private val iidsVec = eraseVec.vectorFor("iids", listTypeOf(IID).fieldType)
-    private val iidWriter = iidsVec.getListElements(IID.fieldType)
+    private val eraseVec = ops.vectorFor("erase-docs", STRUCT_TYPE, false)
+    private val tableVec = eraseVec.vectorFor("table", UTF8.arrowType, false)
+    private val iidsVec = eraseVec.vectorFor("iids", LIST_TYPE, false)
+    private val iidWriter = iidsVec.getListElements(IID.arrowType, false)
 
     override fun writeOp(op: TxOp.EraseDocs) {
         checkNotForbidden(op.schema, op.table)

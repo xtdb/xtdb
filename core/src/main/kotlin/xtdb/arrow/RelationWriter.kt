@@ -2,6 +2,7 @@ package xtdb.arrow
 
 import clojure.lang.Keyword
 import clojure.lang.Symbol
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.util.closeAll
 import xtdb.util.normalForm
@@ -13,13 +14,13 @@ interface RelationWriter : RelationReader {
     override val vectors: Collection<VectorWriter>
     override fun vectorForOrNull(name: String): VectorWriter?
     override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
-    fun vectorFor(name: String, fieldType: FieldType): VectorWriter = unsupported("vectorFor/2")
+    fun vectorFor(name: String, arrowType: ArrowType, nullable: Boolean): VectorWriter = unsupported("vectorFor/2")
     override fun get(name: String) = vectorFor(name)
 
     fun endRow()
 
     fun append(rel: RelationReader) {
-        rel.vectors.forEach { vectorFor(it.name, it.fieldType).append(it) }
+        rel.vectors.forEach { vectorFor(it.name, it.arrowType, it.nullable).append(it) }
         rowCount += rel.rowCount
     }
 
@@ -32,12 +33,14 @@ interface RelationWriter : RelationReader {
                 else -> throw IllegalArgumentException("Column name must be a string, keyword or symbol")
             }
 
-            val vector = vectorForOrNull(normalKey) ?: vectorFor(normalKey, v.toFieldType())
+            val vType = v.toFieldType()
+            val vector = vectorForOrNull(normalKey) ?: vectorFor(normalKey, vType.type, vType.isNullable)
 
             try {
                 vector.writeObject(v)
             } catch (_: InvalidWriteObjectException) {
-                vectorFor(normalKey, v.toFieldType()).writeObject(v)
+                val errType = v.toFieldType()
+                vectorFor(normalKey, errType.type, errType.isNullable).writeObject(v)
             }
         }
 

@@ -41,7 +41,7 @@ interface RelationReader : ILookup, Seqable, Counted, AutoCloseable {
 
         val copiers = colNames.map { colName ->
             val srcVec = vectorForOrNull(colName) ?: NullVector(colName, true, rowCount)
-            srcVec.rowCopier(dest.vectorForOrNull(colName) ?: dest.vectorFor(colName, srcVec.fieldType))
+            srcVec.rowCopier(dest.vectorForOrNull(colName) ?: dest.vectorFor(colName, srcVec.arrowType, srcVec.nullable))
         }
 
         return object : RowCopier {

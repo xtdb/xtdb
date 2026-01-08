@@ -12,6 +12,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import org.apache.arrow.vector.ipc.message.MessageChannelReader
 import org.apache.arrow.vector.ipc.message.MessageSerializer
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
@@ -50,10 +51,10 @@ class Relation(
     override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
     override operator fun get(name: String) = vectorFor(name)
 
-    override fun vectorFor(name: String, fieldType: FieldType): Vector =
+    override fun vectorFor(name: String, arrowType: ArrowType, nullable: Boolean): Vector =
         vecs.compute(name) { _, v ->
-            v?.maybePromote(al, fieldType)
-                ?: Field(name, fieldType, null).openVector(al)
+            v?.maybePromote(al, arrowType, nullable)
+                ?: Field(name, FieldType(nullable, arrowType, null), null).openVector(al)
                     .also { vec -> repeat(rowCount) { vec.writeNull() } }
         }!!
 

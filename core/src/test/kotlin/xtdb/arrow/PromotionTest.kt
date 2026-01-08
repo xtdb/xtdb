@@ -26,10 +26,10 @@ class PromotionTest {
     @Test
     fun `no-op if the type matches`(al: BufferAllocator) {
         ("i64" ofType I64).openVector(al)
-            .use { v -> assertEquals(v, v.maybePromote(al, I64.fieldType)) }
+            .use { v -> assertEquals(v, v.maybePromote(al, I64.arrowType, false)) }
 
         al.openVector("struct", structOf("a" to I64, "b" to UTF8))
-            .use { v -> assertEquals(v, v.maybePromote(al, just(STRUCT).fieldType)) }
+            .use { v -> assertEquals(v, v.maybePromote(al, STRUCT, false)) }
     }
 
     @Test
@@ -37,14 +37,14 @@ class PromotionTest {
         val field = "v" ofType I64
         field.openVector(al).use { v ->
             assertEquals(field, v.field)
-            v.maybePromote(al, maybe(I64).fieldType)
+            v.maybePromote(al, I64.arrowType, true)
             assertEquals("v" ofType maybe(I64), v.field)
         }
 
         val field2 = "v" ofType maybe(I64)
         field2.openVector(al).use { v ->
             assertEquals(field2, v.field)
-            v.maybePromote(al, maybe(I64).fieldType)
+            v.maybePromote(al, I64.arrowType, true)
             assertEquals(field2, v.field)
         }
     }
@@ -53,7 +53,7 @@ class PromotionTest {
     fun `promotes to union`(al: BufferAllocator) {
         ("v" ofType I32).openVector(al).closeOnCatch { v ->
             v.writeAll(listOf(1, 2, 3))
-            v.maybePromote(al, UTF8.fieldType)
+            v.maybePromote(al, UTF8.arrowType, false)
         }.use { promoted ->
             promoted.writeAll(listOf("4", 5, "6"))
             assertEquals(
@@ -66,7 +66,7 @@ class PromotionTest {
         al.openVector("v", listTypeOf(I32))
             .closeOnCatch { v ->
                 v.writeAll(listOf(listOf(1, 2), listOf(3)))
-                v.maybePromote(al, UTF8.fieldType)
+                v.maybePromote(al, UTF8.arrowType, false)
             }
             .use { promoted ->
                 promoted.writeAll(listOf("hello", listOf(4, 5), "world"))
@@ -86,7 +86,7 @@ class PromotionTest {
                 dest.writeAll(listOf("hello", "world"))
                 src.writeAll(listOf(1, 2))
                 assertThrows<InvalidCopySourceException> { src.rowCopier(dest) }
-                dest.maybePromote(al, src.fieldType)
+                dest.maybePromote(al, src.arrowType, src.nullable)
             }.use { newDest ->
                 val copier = src.rowCopier(newDest)
                 copier.copyRow(0)

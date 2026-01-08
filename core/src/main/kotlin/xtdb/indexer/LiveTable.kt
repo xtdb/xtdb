@@ -12,6 +12,7 @@ import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.*
 import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.Companion.STRUCT_TYPE
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.HLL
 import xtdb.util.RowCounter
@@ -48,7 +49,7 @@ constructor(
     var liveTrie: MemoryHashTrie = liveTrieFactory(iidVec)
 
     private val opVec = liveRelation["op"]
-    private val putVec by lazy { opVec.vectorFor("put", VectorType.structOf().fieldType) }
+    private val putVec by lazy { opVec.vectorFor("put", STRUCT_TYPE, false) }
     private val deleteVec = opVec["delete"]
     private val eraseVec = opVec["erase"]
 
