@@ -6,9 +6,9 @@
   [:project
    {:projections [profit.7/nation profit.7/o_year {sum_profit _sum_out_8}]}
    [:group-by
-    [profit.7/nation
+    {:columns [profit.7/nation
      profit.7/o_year
-     {_sum_out_8 (sum profit.7/amount)}]
+     {_sum_out_8 (sum profit.7/amount)}]}
     [:rename
      profit.7
      [:project

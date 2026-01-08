@@ -14,10 +14,10 @@
      o.2/o_orderdate
      o.2/o_shippriority]}
     [:group-by
-     [l.3/l_orderkey
+     {:columns [l.3/l_orderkey
       o.2/o_orderdate
       o.2/o_shippriority
-      {_sum_out_4 (sum _sum_in_5)}]
+      {_sum_out_4 (sum _sum_in_5)}]}
      [:map
       {:projections [{_sum_in_5 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]}
       [:mega-join

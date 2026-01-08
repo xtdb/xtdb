@@ -5,7 +5,7 @@
   [:project
    {:projections [n.5/n_name {revenue _sum_out_7}]}
    [:group-by
-    [n.5/n_name {_sum_out_7 (sum _sum_in_8)}]
+    {:columns [n.5/n_name {_sum_out_7 (sum _sum_in_8)}]}
     [:map
      {:projections [{_sum_in_8 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]}
      [:mega-join

@@ -14,10 +14,10 @@
     p.2/p_size
     {supplier_cnt _count_distinct_out_7}]}
    [:group-by
-    [p.2/p_brand
+    {:columns [p.2/p_brand
      p.2/p_type
      p.2/p_size
-     {_count_distinct_out_7 (count_distinct ps.1/ps_suppkey)}]
+     {_count_distinct_out_7 (count_distinct ps.1/ps_suppkey)}]}
     [:map
      {:projections [{_sq_5 true}]}
      [:map

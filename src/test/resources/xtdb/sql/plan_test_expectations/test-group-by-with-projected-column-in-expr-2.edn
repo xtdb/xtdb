@@ -1,7 +1,7 @@
 [:project
  {:projections [{bar _sum_out_2}]}
  [:group-by
-  [{_sum_out_2 (sum _sum_in_3)}]
+  {:columns [{_sum_out_2 (sum _sum_in_3)}]}
   [:map
    {:projections [{_sum_in_3 (- foo.1/a 4)}]}
    [:rename foo.1 [:scan {:table #xt/table foo, :columns [a]}]]]]]

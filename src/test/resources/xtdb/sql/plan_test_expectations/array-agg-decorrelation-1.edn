@@ -3,7 +3,7 @@
  [:map
   {:projections [{_sq_2 _sum_out_6}]}
   [:group-by
-   [tab0.1/z _row_number_0 {_sum_out_6 (sum x.5/y)}]
+   {:columns [tab0.1/z _row_number_0 {_sum_out_6 (sum x.5/y)}]}
    [:apply
     {:mode :left-outer-join, :columns {tab0.1/z ?_sq_z_3}}
     [:map

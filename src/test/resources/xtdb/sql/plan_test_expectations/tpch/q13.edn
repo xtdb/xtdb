@@ -4,11 +4,11 @@
  [:project
   {:projections [c_count {custdist _row_count_4}]}
   [:group-by
-   [c_count {_row_count_4 (row-count)}]
+   {:columns [c_count {_row_count_4 (row-count)}]}
    [:project
     {:projections [{c_custkey c.1/_id} {c_count _count_out_3}]}
     [:group-by
-     [c.1/_id {_count_out_3 (count o.2/_id)}]
+     {:columns [c.1/_id {_count_out_3 (count o.2/_id)}]}
      [:left-outer-join
       {:conditions [{c.1/_id o.2/o_custkey}
        (not (like o.2/o_comment "%special%requests%"))]}

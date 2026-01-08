@@ -3,7 +3,7 @@
   [:project
    {:projections [{supplier_no l.1/l_suppkey} {total_revenue _sum_out_2}]}
    [:group-by
-    [l.1/l_suppkey {_sum_out_2 (sum _sum_in_3)}]
+    {:columns [l.1/l_suppkey {_sum_out_2 (sum _sum_in_3)}]}
     [:map
      {:projections [{_sum_in_3 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]}
      [:rename
@@ -53,7 +53,7 @@
       [:project
        {:projections [{_sq_7 _max_out_9}]}
        [:group-by
-        [{_max_out_9 (max revenue.8/total_revenue)}]
+        {:columns [{_max_out_9 (max revenue.8/total_revenue)}]}
         [:rename
          revenue.8
          [:relation

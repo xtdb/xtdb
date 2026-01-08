@@ -3,12 +3,12 @@
  [:map
   {:projections [{_sq_4 _row_count_7}]}
   [:group-by
-   [customers.1/country
+   {:columns [customers.1/country
     customers.1/custno
     customers.1/name
     _sq_2
     _row_number_0
-    {_row_count_7 (count _dep_countable_1)}]
+    {_row_count_7 (count _dep_countable_1)}]}
    [:left-outer-join
     {:conditions [{customers.1/custno orders.5/custno}]}
     [:map

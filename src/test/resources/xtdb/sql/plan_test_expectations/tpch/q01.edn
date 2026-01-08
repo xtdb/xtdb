@@ -24,7 +24,7 @@
     {avg_disc _avg_out_10}
     {count_order _row_count_11}]}
    [:group-by
-    [l.1/l_returnflag
+    {:columns [l.1/l_returnflag
      l.1/l_linestatus
      {_avg_out_10 (avg l.1/l_discount)}
      {_avg_out_8 (avg l.1/l_quantity)}
@@ -33,7 +33,7 @@
      {_sum_out_4 (sum _sum_in_5)}
      {_sum_out_2 (sum l.1/l_quantity)}
      {_sum_out_3 (sum l.1/l_extendedprice)}
-     {_avg_out_9 (avg l.1/l_extendedprice)}]
+     {_avg_out_9 (avg l.1/l_extendedprice)}]}
     [:map
      {:projections [{_sum_in_7
        (*

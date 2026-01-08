@@ -189,7 +189,7 @@
 
                  :nest-many [:apply {:mode :single-join, :columns sq-refs}
                              plan
-                             [:group-by [{sq-sym (list 'array_agg sq-sym)}]
+                             [:group-by {:columns [{sq-sym (list 'array_agg sq-sym)}]}
                               [:project {:projections [{sq-sym (->> (for [col-sym (:col-syms query-plan)]
                                                         (MapEntry/create (keyword col-sym) col-sym))
                                                       (into {}))}]}
@@ -197,7 +197,7 @@
 
                  :array-by-query [:apply {:mode :single-join, :columns sq-refs}
                                   plan
-                                  [:group-by [{sq-sym (list 'vec_agg (first (:col-syms query-plan)))}]
+                                  [:group-by {:columns [{sq-sym (list 'vec_agg (first (:col-syms query-plan)))}]}
                                    (:plan query-plan)]]
 
 
@@ -586,9 +586,9 @@
         [:map {:projections in-projs} plan]
         plan)
 
-      [:group-by (vec (concat group-invariant-cols
-                              (for [[agg-sym {:keys [agg-expr]}] aggs]
-                                {agg-sym agg-expr})))
+      [:group-by {:columns (vec (concat group-invariant-cols
+                                        (for [[agg-sym {:keys [agg-expr]}] aggs]
+                                          {agg-sym agg-expr})))}
        plan]
 
       (if in-projs

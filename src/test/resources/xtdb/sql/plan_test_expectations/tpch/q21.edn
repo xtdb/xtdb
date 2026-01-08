@@ -8,7 +8,7 @@
    [:project
     {:projections [s.1/s_name {numwait _row_count_13}]}
     [:group-by
-     [s.1/s_name {_row_count_13 (row-count)}]
+     {:columns [s.1/s_name {_row_count_13 (row-count)}]}
      [:map
       {:projections [{_sq_5 true}]}
       [:map

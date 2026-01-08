@@ -4,7 +4,7 @@
   {:mode :single-join, :columns {c.1/_id ?_sq__id_3}}
   [:rename c.1 [:scan {:table #xt/table customers, :columns [_id name]}]]
   [:group-by
-   [{_sq_2 (array_agg _sq_2)}]
+   {:columns [{_sq_2 (array_agg _sq_2)}]}
    [:project
     {:projections [{_sq_2 {:order_id order_id, :value value}}]}
     [:project

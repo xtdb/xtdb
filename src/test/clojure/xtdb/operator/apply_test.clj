@@ -104,7 +104,7 @@
 (t/deftest test-apply-empty-rel-bug-237
   (t/is (= {:res [{}], :types '{x3 #xt/type [:? :i64]}}
            (-> (tu/query-ra
-                '[:group-by [{x3 (sum x2)}]
+                '[:group-by {:columns [{x3 (sum x2)}]}
                   [:apply {:mode :cross-join, :columns {}}
                    [:table [{x1 15}]]
                    [:select {:predicate false}

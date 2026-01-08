@@ -18,12 +18,12 @@
      o.2/o_totalprice
      {sum_qty _sum_out_7}]}
     [:group-by
-     [c.1/c_name
+     {:columns [c.1/c_name
       c.1/_id
       o.2/_id
       o.2/o_orderdate
       o.2/o_totalprice
-      {_sum_out_7 (sum l.3/l_quantity)}]
+      {_sum_out_7 (sum l.3/l_quantity)}]}
      [:map
       {:projections [{_sq_4 true}]}
       [:mega-join
@@ -43,7 +43,7 @@
           [:select
            {:predicate (> _sum_out_6 300)}
            [:group-by
-            [l.5/l_orderkey {_sum_out_6 (sum l.5/l_quantity)}]
+            {:columns [l.5/l_orderkey {_sum_out_6 (sum l.5/l_quantity)}]}
             [:rename
              l.5
              [:scan

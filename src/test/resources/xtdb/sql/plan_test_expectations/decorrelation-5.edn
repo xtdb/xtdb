@@ -5,7 +5,7 @@
   [:map
    {:projections [{_sq_3 (+ _avg_out_8 1)}]}
    [:group-by
-    [s.1/name
+    {:columns [s.1/name
      s.1/year
      s.1/major
      s.1/id
@@ -13,7 +13,7 @@
      e.2/grade
      e.2/course
      _row_number_0
-     {_avg_out_8 (avg e2.4/grade)}]
+     {_avg_out_8 (avg e2.4/grade)}]}
     [:left-outer-join
      {:conditions [(or
        (== s.1/id e2.4/sid)

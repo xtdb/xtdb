@@ -104,7 +104,7 @@
             {:ordinal 2, :s 6}
             {:ordinal 3, :s 5}]
            (tu/query-ra '[:project {:projections [ordinal s]}
-                          [:group-by [ordinal {s (sum b*)}]
+                          [:group-by {:columns [ordinal {s (sum b*)}]}
                            [:unnest {b* b} {:ordinality-column ordinal}
                             [:table ?x]]]]
                         {:args {:x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}}))

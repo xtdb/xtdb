@@ -6,7 +6,7 @@
   [:project
    {:projections [{_sq_2 _array_agg_out6}]}
    [:group-by
-    [{_array_agg_out6 (array-agg x.5/y)}]
+    {:columns [{_array_agg_out6 (array-agg x.5/y)}]}
     [:rename
      x.5
      [:project

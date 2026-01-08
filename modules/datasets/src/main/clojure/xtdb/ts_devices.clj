@@ -126,9 +126,9 @@
 
   '[:top {:limit 12}
     [:order-by {:order-specs [[hour]]}
-     [:group-by [hour
+     [:group-by {:columns [hour
                  {min-battery-level (min battery-level)}
-                 {max-battery-level (max battery-level)}]
+                 {max-battery-level (max battery-level)}]}
       [:project {:projections [{hour (date-trunc "HOUR" time)}
                                 battery-level]}
        [:semi-join {device-id device-id}

@@ -5,13 +5,13 @@
   [:select
    {:predicate (== e.2/grade _min_out_6)}
    [:group-by
-    [s.1/name
+    {:columns [s.1/name
      s.1/id
      e.2/sid
      e.2/grade
      e.2/course
      _row_number_0
-     {_min_out_6 (min e2.4/grade)}]
+     {_min_out_6 (min e2.4/grade)}]}
     [:left-outer-join
      {:conditions [{s.1/id e2.4/sid}]}
      [:map

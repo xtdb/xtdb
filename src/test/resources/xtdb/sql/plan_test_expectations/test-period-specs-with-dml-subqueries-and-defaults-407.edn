@@ -21,7 +21,7 @@
     [:project
      {:projections [{app_start _min_out_2}]}
      [:group-by
-      [{_min_out_2 (min prop_owner.1/_system_from)}]
+      {:columns [{_min_out_2 (min prop_owner.1/_system_from)}]}
       [:rename
        prop_owner.1
        [:scan

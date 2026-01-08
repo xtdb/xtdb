@@ -228,7 +228,7 @@
              (merge {:type :scalar
                      :placeholder placeholder
                      :provided-vars provided-vars
-                     :subquery [:group-by [{placeholder (list 'array-agg struct-col)}]
+                     :subquery [:group-by {:columns [{placeholder (list 'array-agg struct-col)}]}
                                 [:project {:projections [{struct-col '*}]}
                                  ra-plan]]}
                     (plan-arg-bindings (.args this))))
@@ -865,11 +865,11 @@
 
       {:ra-plan  [:project {:projections (vec output-projections)}
                   [:group-by
-                   (vec (concat
-                         grouping-cols
-                         (mapv (fn [{:keys [agg-fn placeholder]}]
-                                 {placeholder agg-fn})
-                               aggregate-specs)))
+                   {:columns (vec (concat
+                                   grouping-cols
+                                   (mapv (fn [{:keys [agg-fn placeholder]}]
+                                           {placeholder agg-fn})
+                                         aggregate-specs)))}
                    (if-let [sub-expr-projections ;;Handles agg-fns with no-sub-exprs such as row-count
                             (seq (mapcat #(for [{:keys [sub-expr-placeholder expr]} (:sub-exprs %)]
                                             {sub-expr-placeholder expr})

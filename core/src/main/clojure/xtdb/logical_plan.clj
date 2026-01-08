@@ -251,8 +251,8 @@
     [:map opts relation]
     (into (relation-columns relation) (map ->projected-column (:projections opts)))
 
-    [:group-by columns _]
-    (mapv ->projected-column columns)
+    [:group-by opts _]
+    (mapv ->projected-column (:columns opts))
 
     [:select _opts relation]
     (relation-columns relation)
@@ -640,13 +640,14 @@
 (defn- push-selection-down-past-group-by [push-correlated? z]
   (r/zmatch z
     [:select opts
-     [:group-by group-by-columns
+     [:group-by group-by-opts
       relation]]
     ;;=>
-    (let [{:keys [predicate]} opts]
+    (let [{:keys [predicate]} opts
+          {:keys [columns]} group-by-opts]
       (when (and (or push-correlated? (no-correlated-columns? predicate))
-                 (not (predicate-depends-on-calculated-column? predicate group-by-columns)))
-        [:group-by group-by-columns
+                 (not (predicate-depends-on-calculated-column? predicate columns)))
+        [:group-by group-by-opts
          [:select {:predicate predicate}
           relation]]))))
 
@@ -907,7 +908,7 @@
            [:rename prefix-or-columns
             relation]])))
 
-    [:group-by group-by-columns
+    [:group-by group-by-opts
      [:select opts
       relation]]
     ;;=>
@@ -915,9 +916,9 @@
       (when (and (not-empty (expr-correlated-symbols predicate))
                  (set/subset?
                   (expr-symbols predicate)
-                  (set (relation-columns [:group-by group-by-columns nil]))))
+                  (set (relation-columns [:group-by group-by-opts nil]))))
         [:select {:predicate predicate}
-         [:group-by group-by-columns
+         [:group-by group-by-opts
           relation]]))))
 
 (defn- squash-correlated-selects [z]
@@ -963,16 +964,16 @@
         post-group-by-projection (remove symbol? post-group-by-projection)
         count-star? (seq (filter #(= '(row-count) (val (first %))) group-by-columns))
         dep-countable-sym (symbol (str "_" (*gensym* "dep_countable")))]
-    (cond->> [:group-by (vec
-                         (concat
-                          independent-projection
-                          [row-number-sym]
-                          (w/postwalk-replace smap
-                                              (if count-star?
-                                                (map #(if (= '(row-count) (val (first %)))
-                                                        {(key (first %)) (list 'count dep-countable-sym)}
-                                                        %) group-by-columns)
-                                                group-by-columns))))
+    (cond->> [:group-by {:columns (vec
+                                   (concat
+                                    independent-projection
+                                    [row-number-sym]
+                                    (w/postwalk-replace smap
+                                                        (if count-star?
+                                                          (map #(if (= '(row-count) (val (first %)))
+                                                                  {(key (first %)) (list 'count dep-countable-sym)}
+                                                                  %) group-by-columns)
+                                                          group-by-columns))))}
               [:apply (->apply-opts {:mode apply-mode, :columns columns})
                [:map {:projections [{row-number-sym '(row-number)}]}
                 independent-relation]
@@ -1142,20 +1143,22 @@
   (r/zmatch z
     [:apply opts independent-relation
      [:project project-opts
-      [:group-by group-by-columns
+      [:group-by group-by-opts
        dependent-relation]]]
     ;;=>
     (let [{:keys [mode columns]} opts
-          {:keys [projections]} project-opts]
+          {:keys [projections]} project-opts
+          group-by-columns (:columns group-by-opts)]
       (when (= mode :cross-join)
         (decorrelate-group-by-apply projections group-by-columns
                                     :cross-join columns independent-relation dependent-relation)))
 
     [:apply opts independent-relation
-     [:group-by group-by-columns
+     [:group-by group-by-opts
       dependent-relation]]
     ;;=>
-    (let [{:keys [mode columns]} opts]
+    (let [{:keys [mode columns]} opts
+          group-by-columns (:columns group-by-opts)]
       (when (= mode :cross-join)
         (decorrelate-group-by-apply nil group-by-columns
                                     :cross-join columns independent-relation dependent-relation)))))
@@ -1179,11 +1182,12 @@
     [:apply opts
      independent-relation
      [:project project-opts
-      [:group-by group-by-columns
+      [:group-by group-by-opts
        dependent-relation]]]
     ;;=>
     (let [{:keys [mode columns]} opts
-          {:keys [projections]} project-opts]
+          {:keys [projections]} project-opts
+          group-by-columns (:columns group-by-opts)]
       (when (and (= mode :single-join)
                  (not (contains-invalid-rule-9-agg-fns? group-by-columns)))
         (decorrelate-group-by-apply projections group-by-columns
@@ -1191,10 +1195,11 @@
 
     [:apply opts
      independent-relation
-     [:group-by group-by-columns
+     [:group-by group-by-opts
       dependent-relation]]
     ;;=>
-    (let [{:keys [mode columns]} opts]
+    (let [{:keys [mode columns]} opts
+          group-by-columns (:columns group-by-opts)]
       (when (and (= mode :single-join)
                  (not (contains-invalid-rule-9-agg-fns? group-by-columns)))
         (decorrelate-group-by-apply nil group-by-columns

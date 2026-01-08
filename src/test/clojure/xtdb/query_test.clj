@@ -231,7 +231,7 @@
   (t/is (= [{:a 1, :bs [1 3 6]}
             {:a 2, :bs [2 4]}
             {:a 3, :bs [5]}]
-           (tu/query-ra '[:group-by [a {bs (array-agg b)}]
+           (tu/query-ra '[:group-by {:columns [a {bs (array-agg b)}]}
                           [:table ?ab]]
                         {:args {:ab [{:a 1, :b 1}
                                      {:a 2, :b 2}

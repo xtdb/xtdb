@@ -32,9 +32,11 @@
 (s/def ::aggregate
   (s/map-of ::lp/column ::aggregate-expr :conform-keys true :count 1))
 
+(s/def ::columns (s/coll-of (s/or :group-by ::lp/column :aggregate ::aggregate), :min-count 1))
+
 (defmethod lp/ra-expr :group-by [_]
   (s/cat :op #{:γ :gamma :group-by}
-         :columns (s/coll-of (s/or :group-by ::lp/column :aggregate ::aggregate), :min-count 1)
+         :opts (s/keys :req-un [::columns])
          :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -365,8 +367,9 @@
     (util/close in-cursor)
     (util/close group-mapper)))
 
-(defmethod lp/emit-expr :group-by [{:keys [columns relation]} args]
-  (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)
+(defmethod lp/emit-expr :group-by [{:keys [opts relation]} args]
+  (let [{:keys [columns]} opts
+        {group-cols :group-by, aggs :aggregate} (group-by first columns)
         group-cols (mapv second group-cols)]
     (lp/unary-expr (lp/emit-expr relation args)
       (fn [{:keys [fields], :as inner-rel}]

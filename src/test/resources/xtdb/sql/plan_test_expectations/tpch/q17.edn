@@ -1,20 +1,20 @@
 [:project
  {:projections [{avg_yearly (/ _sum_out_7 7.0)}]}
  [:group-by
-  [{_sum_out_7 (sum l.1/l_extendedprice)}]
+  {:columns [{_sum_out_7 (sum l.1/l_extendedprice)}]}
   [:select
    {:predicate (< l.1/l_quantity _sq_3)}
    [:map
     {:projections [{_sq_3 (* 0.2 _avg_out_6)}]}
     [:group-by
-     [l.1/l_extendedprice
+     {:columns [l.1/l_extendedprice
       l.1/l_quantity
       l.1/l_partkey
       p.2/_id
       p.2/p_brand
       p.2/p_container
       _row_number_0
-      {_avg_out_6 (avg l.4/l_quantity)}]
+      {_avg_out_6 (avg l.4/l_quantity)}]}
      [:left-outer-join
       {:conditions [{p.2/_id l.4/l_partkey}]}
       [:map

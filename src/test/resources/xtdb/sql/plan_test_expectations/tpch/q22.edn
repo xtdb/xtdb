@@ -8,9 +8,9 @@
     {numcust _row_count_13}
     {totacctbal _sum_out_14}]}
    [:group-by
-    [custsale.12/cntrycode
+    {:columns [custsale.12/cntrycode
      {_row_count_13 (row-count)}
-     {_sum_out_14 (sum custsale.12/c_acctbal)}]
+     {_sum_out_14 (sum custsale.12/c_acctbal)}]}
     [:rename
      custsale.12
      [:project
@@ -70,7 +70,7 @@
         [:project
          {:projections [{_sq_4 _avg_out_8}]}
          [:group-by
-          [{_avg_out_8 (avg c.5/c_acctbal)}]
+          {:columns [{_avg_out_8 (avg c.5/c_acctbal)}]}
           [:map
            {:projections [{_sq_6 true}]}
            [:semi-join

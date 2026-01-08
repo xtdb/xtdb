@@ -21,14 +21,14 @@
      c.1/c_phone
      c.1/c_comment]}
     [:group-by
-     [n.4/n_name
+     {:columns [n.4/n_name
       c.1/_id
       c.1/c_comment
       c.1/c_acctbal
       c.1/c_phone
       c.1/c_name
       c.1/c_address
-      {_sum_out_5 (sum _sum_in_6)}]
+      {_sum_out_5 (sum _sum_in_6)}]}
      [:map
       {:projections [{_sum_in_6 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]}
       [:mega-join

@@ -5,7 +5,7 @@
   [:select
    {:predicate (< 1000000 _sum_out_5)}
    [:group-by
-    [c.1/custkey _row_number_0 {_sum_out_5 (sum o.3/totalprice)}]
+    {:columns [c.1/custkey _row_number_0 {_sum_out_5 (sum o.3/totalprice)}]}
     [:left-outer-join
      {:conditions [{c.1/custkey o.3/custkey}]}
      [:map

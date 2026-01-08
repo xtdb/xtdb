@@ -5,7 +5,7 @@
   [:project
    {:projections [o.1/o_orderpriority {order_count _row_count_5}]}
    [:group-by
-    [o.1/o_orderpriority {_row_count_5 (row-count)}]
+    {:columns [o.1/o_orderpriority {_row_count_5 (row-count)}]}
     [:map
      {:projections [{_sq_2 true}]}
      [:semi-join

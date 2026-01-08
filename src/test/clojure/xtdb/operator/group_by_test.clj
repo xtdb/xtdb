@@ -12,7 +12,7 @@
 
 (t/deftest test-group-by
   (letfn [(run-test [group-by-spec batches]
-            (-> (tu/query-ra [:group-by group-by-spec
+            (-> (tu/query-ra [:group-by {:columns group-by-spec}
                               [::tu/pages '{a #xt/type :i64, b #xt/type :i64} batches]]
                              {:with-types? true})
                 (update :res set)))]
@@ -61,11 +61,11 @@
     (t/is (= #{{:a 1, :var-pop 25.0, :var-samp 50.0, :stddev-pop 5.0, :stddev-samp 7.0710678118654755}
                {:a 2, :var-pop 0.0, :stddev-pop 0.0}
                {:a 3}}
-             (set (tu/query-ra [:group-by '[a
+             (set (tu/query-ra [:group-by '{:columns [a
                                             {var-pop (var-pop b)}
                                             {var-samp (var-samp b)}
                                             {stddev-pop (stddev-pop b)}
-                                            {stddev-samp (stddev-samp b)}]
+                                            {stddev-samp (stddev-samp b)}]}
                                 [::tu/pages '{a #xt/type :i64, b #xt/type [:? :i64]}
                                  [[{:a 1 :b 20}
                                    {:a 1 :b 10}
@@ -139,139 +139,139 @@
 
 (t/deftest test-row-count
   (t/is (= [{:n 0}]
-           (tu/query-ra '[:group-by [{n (row-count)}]
+           (tu/query-ra '[:group-by {:columns [{n (row-count)}]}
                           [::tu/pages {a #xt/type [:? :i64]}
                            []]])))
 
   (t/is (= [{:n 2}]
-           (tu/query-ra '[:group-by [{n (row_count)}]
+           (tu/query-ra '[:group-by {:columns [{n (row_count)}]}
                           [::tu/pages {a #xt/type [:? :i64]}
                            [[{:a nil}
                              {:a 1}]]]])))
 
   (t/is (= [{:a 1, :n 1}, {:a 2, :n 2}]
-           (tu/query-ra '[:group-by [a {n (row-count)}]
+           (tu/query-ra '[:group-by {:columns [a {n (row-count)}]}
                           [::tu/pages {a #xt/type :i64, b #xt/type [:? :i64]}
                            [[{:a 1, :b nil}
                              {:a 2, :b 1}
                              {:a 2, :b nil}]]]])))
 
   (t/is (= []
-           (tu/query-ra '[:group-by [a {bs (row-count)}]
+           (tu/query-ra '[:group-by {:columns [a {bs (row-count)}]}
                           [::tu/pages {a #xt/type :i64, b #xt/type [:? :i64]}
                            []]]))
         "empty if there's a grouping key"))
 
 (t/deftest test-count-empty-null-behaviour
   (t/is (= [{:n 0}]
-           (tu/query-ra '[:group-by [{n (count a)}]
+           (tu/query-ra '[:group-by {:columns [{n (count a)}]}
                           [::tu/pages {a #xt/type [:? :i64]}
                            []]])))
 
   (t/is (= [{:n 0}]
-           (tu/query-ra '[:group-by [{n (count a)}]
+           (tu/query-ra '[:group-by {:columns [{n (count a)}]}
                           [::tu/pages {a #xt/type [:? :i64]}
                            [[{:a nil}]]]])))
 
   (t/is (= [{:n 1}]
-           (tu/query-ra '[:group-by [{n (count a)}]
+           (tu/query-ra '[:group-by {:columns [{n (count a)}]}
                           [::tu/pages {a #xt/type [:? :i64]}
                            [[{:a nil}
                              {:a 1}]]]])))
 
   (t/is (= [{:a 1, :n 0}, {:a 2, :n 1}]
-           (tu/query-ra '[:group-by [a {n (count b)}]
+           (tu/query-ra '[:group-by {:columns [a {n (count b)}]}
                           [::tu/pages
                            [[{:a 1, :b nil}
                              {:a 2, :b 1}
                              {:a 2, :b nil}]]]])))
 
   (t/is (= []
-           (tu/query-ra '[:group-by [a {bs (count b)}]
+           (tu/query-ra '[:group-by {:columns [a {bs (count b)}]}
                           [::tu/pages {a #xt/type :i64, b #xt/type [:? :i64]}
                            []]]))
         "empty if there's a grouping key"))
 
 (t/deftest test-sum-empty-null-behaviour
   (t/is (= [{}]
-           (tu/query-ra '[:group-by [{n (sum a)}]
+           (tu/query-ra '[:group-by {:columns [{n (sum a)}]}
                           [:table []]]))
         "sum empty returns null")
 
   (t/is (= []
-           (tu/query-ra '[:group-by [b {n (sum a)}]
+           (tu/query-ra '[:group-by {:columns [b {n (sum a)}]}
                           [::tu/pages {a #xt/type :f64, b #xt/type :utf8} []]]))
         "sum empty returns empty when there are groups")
 
   (t/is (= [{}]
-           (tu/query-ra '[:group-by [{n (sum a)}]
+           (tu/query-ra '[:group-by {:columns [{n (sum a)}]}
                           [:table [{:a nil}]]]))
         "sum all nulls returns null")
 
   (t/testing "summed group all null"
     (t/is (= [{:a 42}]
-             (tu/query-ra '[:group-by [a {n (sum b)}]
+             (tu/query-ra '[:group-by {:columns [a {n (sum b)}]}
                             [:table [{:a 42, :b nil}]]])))
 
     (t/is (= [{:a 42} {:a 45, :n 1}]
-             (tu/query-ra '[:group-by [a {n (sum b)}]
+             (tu/query-ra '[:group-by {:columns [a {n (sum b)}]}
                             [:table [{:a 42, :b nil} {:a 45, :b 1}]]])))))
 
 (t/deftest test-avg-empty-null-behaviour
   (t/is (= [{}]
-           (tu/query-ra '[:group-by [{n (avg a)}]
+           (tu/query-ra '[:group-by {:columns [{n (avg a)}]}
                           [:table []]]))
         "avg empty returns null")
 
   (t/is (= []
-           (tu/query-ra '[:group-by [b {n (avg a)}]
+           (tu/query-ra '[:group-by {:columns [b {n (avg a)}]}
                           [::tu/pages {a #xt/type :f64, b #xt/type :utf8} []]]))
         "avg empty returns empty when there are groups")
 
   (t/is (= [{}]
-           (tu/query-ra '[:group-by [{n (avg a)}]
+           (tu/query-ra '[:group-by {:columns [{n (avg a)}]}
                           [:table [{:a nil}]]]))
         "avg all nulls returns null")
 
   (t/testing "averaged group all null"
     (t/is (= [{:a 42}]
-             (tu/query-ra '[:group-by [a {n (avg b)}]
+             (tu/query-ra '[:group-by {:columns [a {n (avg b)}]}
                             [:table [{:a 42, :b nil}]]])))
 
     (t/is (= [{:a 42} {:a 45, :n 1.0}]
-             (tu/query-ra '[:group-by [a {n (avg b)}]
+             (tu/query-ra '[:group-by {:columns [a {n (avg b)}]}
                             [:table [{:a 42, :b nil} {:a 45, :b 1}]]])))))
 
 (t/deftest test-min-of-empty-rel-returns-nil
   (t/is (= [{}]
-           (tu/query-ra '[:group-by [{n (min a)}]
+           (tu/query-ra '[:group-by {:columns [{n (min a)}]}
                           [:table []]]))
         "min empty returns null")
 
   (t/is (= []
-           (tu/query-ra '[:group-by [b {n (min a)}]
+           (tu/query-ra '[:group-by {:columns [b {n (min a)}]}
                           [::tu/pages {a #xt/type :f64, b #xt/type :utf8} []]]))
         "min empty returns empty when there are groups")
 
   (t/is (= [{}]
-           (tu/query-ra '[:group-by [{n (min a)}]
+           (tu/query-ra '[:group-by {:columns [{n (min a)}]}
                           [:table [{:a nil}]]]))
         "min all nulls returns null")
 
   (t/testing "min'd group all null"
     (t/is (= [{:a 42}]
-             (tu/query-ra '[:group-by [a {n (min b)}]
+             (tu/query-ra '[:group-by {:columns [a {n (min b)}]}
                             [:table [{:a 42, :b nil}]]])))
 
     (t/is (= [{:a 42} {:a 45, :n 1}]
-             (tu/query-ra '[:group-by [a {n (min b)}]
+             (tu/query-ra '[:group-by {:columns [a {n (min b)}]}
                             [:table [{:a 42, :b nil} {:a 45, :b 1}]]])))))
 
 (t/deftest test-min-max-temporal-399
   (t/is (= [{:min #xt/duration "PT0.0001S"
              :max #xt/duration "PT15M"}]
-           (tu/query-ra '[:group-by [{min (min a)}
-                                     {max (max a)}]
+           (tu/query-ra '[:group-by {:columns [{min (min a)}
+                                     {max (max a)}]}
                           [:table [{:a #xt/duration "PT10S"}
                                    {:a #xt/duration "PT0.0001S"}
                                    {:a #xt/duration "PT15M"}]]]))
@@ -279,8 +279,8 @@
 
   (t/is (= [{:min #xt/date "2018-05-01",
              :max #xt/date "2022-01-01"}]
-           (tu/query-ra '[:group-by [{min (min a)}
-                                     {max (max a)}]
+           (tu/query-ra '[:group-by {:columns [{min (min a)}
+                                     {max (max a)}]}
                           [:table [{:a #xt/date "2022-01-01"}
                                    {:a #xt/date "2022-01-01"}
                                    {:a #xt/date "2018-05-01"}]]]))
@@ -288,8 +288,8 @@
 
   (t/is (= [{:min #xt/date-time "2018-05-01T12:00",
              :max #xt/date-time "2022-01-01T15:34:24.523286"}]
-           (tu/query-ra '[:group-by [{min (min a)}
-                                     {max (max a)}]
+           (tu/query-ra '[:group-by {:columns [{min (min a)}
+                                     {max (max a)}]}
                           [:table [{:a #xt/date-time "2022-01-01T15:34:24.523284"}
                                    {:a #xt/date-time "2022-01-01T15:34:24.523286"}
                                    {:a #xt/date-time "2018-05-01T12:00"}]]]))
@@ -298,8 +298,8 @@
   (t/testing "tstzs"
     (t/is (= [{:min #xt/zoned-date-time "2018-05-01T12:00+01:00[Europe/London]",
                :max #xt/zoned-date-time "2022-08-01T13:34+01:00[Europe/London]"}]
-             (tu/query-ra '[:group-by [{min (min a)}
-                                       {max (max a)}]
+             (tu/query-ra '[:group-by {:columns [{min (min a)}
+                                       {max (max a)}]}
                             [:table [{:a #xt/zoned-date-time "2022-08-01T13:34+01:00[Europe/London]"}
                                      {:a #xt/zoned-date-time "2022-08-01T12:58+01:00[Europe/London]"}
                                      {:a #xt/zoned-date-time "2018-05-01T12:00+01:00[Europe/London]"}]]]))
@@ -307,16 +307,16 @@
 
     (t/is (= [{:min #xt/zoned-date-time "2018-05-01T19:00Z",
                :max #xt/zoned-date-time "2022-08-01T11:58Z"}]
-             (tu/query-ra '[:group-by [{min (min a)}
-                                       {max (max a)}]
+             (tu/query-ra '[:group-by {:columns [{min (min a)}
+                                       {max (max a)}]}
                             [:table [{:a #xt/zoned-date-time "2022-08-01T13:34+02:00[Europe/Stockholm]"}
                                      {:a #xt/zoned-date-time "2022-08-01T12:58+01:00[Europe/London]"}
                                      {:a #xt/zoned-date-time "2018-05-01T12:00-07:00[America/Los_Angeles]"}]]]))
           "chooses Z if there are different TZs"))
 
   (t/is (anomalous? [:incorrect nil #"Incomparable types in min/max aggregate"]
-                    (tu/query-ra '[:group-by [{min (min a)}
-                                              {max (max a)}]
+                    (tu/query-ra '[:group-by {:columns [{min (min a)}
+                                              {max (max a)}]}
                                    [:table [{:a #xt/date-time "2022-08-01T13:34"}
                                             {:a #xt/zoned-date-time "2022-08-01T12:58+01:00[Europe/London]"}
                                             {:a 12}]]]))))
@@ -340,52 +340,52 @@
 
 (t/deftest test-array-agg-of-empty-rel-returns-empty-array-3819
   (t/is (= [{}]
-           (tu/query-ra '[:group-by [{arr-out (array-agg a)}]
+           (tu/query-ra '[:group-by {:columns [{arr-out (array-agg a)}]}
                           [::tu/pages {a #xt/type :i64} []]]))
         "array agg empty returns null")
 
   (t/is (= []
-           (tu/query-ra '[:group-by [b {arr-out (array-agg a)}]
+           (tu/query-ra '[:group-by {:columns [b {arr-out (array-agg a)}]}
                           [::tu/pages {a #xt/type :i64, b #xt/type :utf8} []]]))
         "array-agg empty returns empty when there are groups")
 
   (t/is (= [{:arr-out [nil]}]
-           (tu/query-ra '[:group-by [{arr-out (array-agg a)}]
+           (tu/query-ra '[:group-by {:columns [{arr-out (array-agg a)}]}
                           [:table [{:a nil}]]]))
         "array-agg preserves nulls")
 
   (t/testing "array-agg group all null"
     (t/is (= [{:a 42, :arr-out [nil]}]
-             (tu/query-ra '[:group-by [a {arr-out (array-agg b)}]
+             (tu/query-ra '[:group-by {:columns [a {arr-out (array-agg b)}]}
                             [:table [{:a 42, :b nil}]]]))))
 
   (t/is (= [{:a 42, :arr-out [nil]} {:a 45, :arr-out [1 nil]}]
-           (tu/query-ra '[:group-by [a {arr-out (array-agg b)}]
+           (tu/query-ra '[:group-by {:columns [a {arr-out (array-agg b)}]}
                           [:table [{:a 42, :b nil} {:a 45, :b 1} {:a 45, :b nil}]]]))))
 
 (t/deftest test-vec-agg
   (t/is (= [{:vec-out []}]
-           (tu/query-ra '[:group-by [{vec-out (vec-agg a)}]
+           (tu/query-ra '[:group-by {:columns [{vec-out (vec-agg a)}]}
                           [:table []]]))
         "array agg empty returns null")
 
   (t/is (= []
-           (tu/query-ra '[:group-by [b {vec-out (vec-agg a)}]
+           (tu/query-ra '[:group-by {:columns [b {vec-out (vec-agg a)}]}
                           [::tu/pages {a #xt/type :f64, b #xt/type :utf8} []]]))
         "vec-agg empty returns empty when there are groups")
 
   (t/is (= [{:vec-out [nil]}]
-           (tu/query-ra '[:group-by [{vec-out (vec-agg a)}]
+           (tu/query-ra '[:group-by {:columns [{vec-out (vec-agg a)}]}
                           [:table [{:a nil}]]]))
         "vec-agg preserves nulls")
 
   (t/testing "vec-agg group all null"
     (t/is (= [{:a 42, :vec-out [nil]}]
-             (tu/query-ra '[:group-by [a {vec-out (vec-agg b)}]
+             (tu/query-ra '[:group-by {:columns [a {vec-out (vec-agg b)}]}
                             [:table [{:a 42, :b nil}]]]))))
 
   (t/is (= [{:a 42, :vec-out [nil]} {:a 45, :vec-out [1 nil]}]
-           (tu/query-ra '[:group-by [a {vec-out (vec-agg b)}]
+           (tu/query-ra '[:group-by {:columns [a {vec-out (vec-agg b)}]}
                           [:table [{:a 42, :b nil} {:a 45, :b 1} {:a 45, :b nil}]]]))))
 
 (t/deftest test-bool-aggs
@@ -398,7 +398,7 @@
                    {:k "tfn", :all-vs false, :any-vs true}}
             :types '{k #xt/type :utf8, all-vs #xt/type [:? :bool], any-vs #xt/type [:? :bool]}}
 
-           (-> (tu/query-ra [:group-by '[k {all-vs (bool-and v)} {any-vs (bool-or v)}]
+           (-> (tu/query-ra [:group-by '{:columns [k {all-vs (bool-and v)} {any-vs (bool-or v)}]}
                              [::tu/pages
                               [[{:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
                                 {:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
@@ -410,17 +410,17 @@
                (update :res set))))
 
   (t/is (= []
-           (tu/query-ra [:group-by '[k {all-vs (bool-and v)} {any-vs (bool-or v)}]
+           (tu/query-ra [:group-by '{:columns [k {all-vs (bool-and v)} {any-vs (bool-or v)}]}
                          [::tu/pages '{k #xt/type :utf8, v #xt/type [:? :bool]}
                           []]])))
 
   (t/is (= [{}]
-           (tu/query-ra [:group-by '[{all-vs (bool-and v)} {any-vs (bool-or v)}]
+           (tu/query-ra [:group-by '{:columns [{all-vs (bool-and v)} {any-vs (bool-or v)}]}
                          [::tu/pages '{v #xt/type [:? :bool]}
                           []]])))
 
   (t/is (= [{}]
-           (tu/query-ra '[:group-by [{n (bool-and b)}]
+           (tu/query-ra '[:group-by {:columns [{n (bool-and b)}]}
                           [::tu/pages
                            [[{:b nil}]]]]))))
 
@@ -443,7 +443,7 @@
                      array-agg #xt/type [:list :i64],
                      array-agg-distinct #xt/type [:list :i64]}}
 
-           (util/->clj (-> (tu/query-ra [:group-by '[k
+           (util/->clj (-> (tu/query-ra [:group-by '{:columns [k
                                                      {cnt (count v)}
                                                      {cnt-distinct (count-distinct v)}
                                                      {sum (sum v)}
@@ -451,7 +451,7 @@
                                                      {avg (avg v)}
                                                      {avg-distinct (avg-distinct v)}
                                                      {array-agg (array-agg v)}
-                                                     {array-agg-distinct (array-agg-distinct v)}]
+                                                     {array-agg-distinct (array-agg-distinct v)}]}
                                          [::tu/pages
                                           [[{:k :a, :v 10}
                                             {:k :b, :v 12}
@@ -466,7 +466,7 @@
 (t/deftest test-group-by-with-nils-coerce-to-boolean-npe-regress
   (t/is (= {:res #{{:a 42} {}}
             :types '{a #xt/type [:? :i64]}}
-           (-> (tu/query-ra '[:group-by [a]
+           (-> (tu/query-ra '[:group-by {:columns [a]}
                               [:table [{:a 42, :b 42}, {:a nil, :b 42}, {:a nil, :b 42}]]]
                             {:with-types? true})
                (update :res set)))))
@@ -474,7 +474,7 @@
 (t/deftest test-group-by-groups-nils
   (t/is (= {:res #{{:b 1, :n 85}}
             :types '{a #xt/type [:? :null], b #xt/type :i64, n #xt/type [:? :i64]}}
-           (-> (tu/query-ra '[:group-by [a b {n (sum c)}]
+           (-> (tu/query-ra '[:group-by {:columns [a b {n (sum c)}]}
                               [:table [{:a nil, :b 1, :c 42}
                                        {:a nil, :b 1, :c 43}]]]
                             {:with-types? true})
@@ -483,11 +483,11 @@
 (t/deftest test-throws-for-variable-width-minmax-340
   ;; HACK only for now, until we support it properly
   (t/is (thrown-with-msg? RuntimeException #"Incomparable types in min/max aggregate"
-                          (tu/query-ra '[:group-by [{min (min a)}]
+                          (tu/query-ra '[:group-by {:columns [{min (min a)}]}
                                          [:table [{:a 32} {:a "foo"}]]])))
 
   (t/is (thrown-with-msg? RuntimeException #"Unsupported type in min/max aggregate"
-                          (tu/query-ra '[:group-by [{min (min a)}]
+                          (tu/query-ra '[:group-by {:columns [{min (min a)}]}
                                          [:table [{:a "32"} {:a "foo"}]]]))))
 
 (t/deftest test-handles-absent-3057
@@ -519,14 +519,14 @@
 (t/deftest test-sum-duration-types
   (t/testing "SUM on duration types"
     (t/is (= [{:sum-dur #xt/duration "PT25S"}]
-             (tu/query-ra '[:group-by [{sum-dur (sum dur)}]
+             (tu/query-ra '[:group-by {:columns [{sum-dur (sum dur)}]}
                             [:table [{:dur #xt/duration "PT10S"}
                                      {:dur #xt/duration "PT15S"}]]]))
           "sum of durations")
 
     (t/is (= [{:a 1, :sum-dur #xt/duration "PT25S"}
               {:a 2, :sum-dur #xt/duration "PT30S"}]
-             (tu/query-ra '[:group-by [a {sum-dur (sum dur)}]
+             (tu/query-ra '[:group-by {:columns [a {sum-dur (sum dur)}]}
                             [:table [{:a 1, :dur #xt/duration "PT10S"}
                                      {:a 1, :dur #xt/duration "PT15S"}
                                      {:a 2, :dur #xt/duration "PT20S"}
@@ -534,26 +534,26 @@
           "sum of durations grouped")
 
     (t/is (= [{}]
-             (tu/query-ra '[:group-by [{sum-dur (sum dur)}]
+             (tu/query-ra '[:group-by {:columns [{sum-dur (sum dur)}]}
                             [:table [{:dur nil}]]]))
           "sum of null durations")
 
     (t/is (= [{}]
-             (tu/query-ra '[:group-by [{sum-dur (sum dur)}]
+             (tu/query-ra '[:group-by {:columns [{sum-dur (sum dur)}]}
                             [:table []]]))
           "sum of empty duration set")))
 
 (t/deftest test-avg-duration-types
   (t/testing "AVG on duration types"
     (t/is (= [{:avg-dur #xt/duration "PT12S"}]
-             (tu/query-ra '[:group-by [{avg-dur (avg dur)}]
+             (tu/query-ra '[:group-by {:columns [{avg-dur (avg dur)}]}
                             [:table [{:dur #xt/duration "PT10S"}
                                      {:dur #xt/duration "PT14S"}]]]))
           "avg of durations")
 
     (t/is (= [{:a 1, :avg-dur #xt/duration "PT12S"}
               {:a 2, :avg-dur #xt/duration "PT15S"}]
-             (tu/query-ra '[:group-by [a {avg-dur (avg dur)}]
+             (tu/query-ra '[:group-by {:columns [a {avg-dur (avg dur)}]}
                             [:table [{:a 1, :dur #xt/duration "PT10S"}
                                      {:a 1, :dur #xt/duration "PT14S"}
                                      {:a 2, :dur #xt/duration "PT20S"}
@@ -561,11 +561,11 @@
           "avg of durations grouped")
 
     (t/is (= [{}]
-             (tu/query-ra '[:group-by [{avg-dur (avg dur)}]
+             (tu/query-ra '[:group-by {:columns [{avg-dur (avg dur)}]}
                             [:table [{:dur nil}]]]))
           "avg of null durations")
 
     (t/is (= [{}]
-             (tu/query-ra '[:group-by [{avg-dur (avg dur)}]
+             (tu/query-ra '[:group-by {:columns [{avg-dur (avg dur)}]}
                             [:table []]]))
           "avg of empty duration set")))

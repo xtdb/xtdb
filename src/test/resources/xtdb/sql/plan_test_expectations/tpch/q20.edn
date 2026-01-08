@@ -25,11 +25,11 @@
            [:map
             {:projections [{_sq_7 (* 0.5 _sum_out_11)}]}
             [:group-by
-             [ps.4/ps_partkey
+             {:columns [ps.4/ps_partkey
               ps.4/ps_availqty
               ps.4/ps_suppkey
               _row_number_0
-              {_sum_out_11 (sum l.8/l_quantity)}]
+              {_sum_out_11 (sum l.8/l_quantity)}]}
              [:left-outer-join
               {:conditions [{ps.4/ps_partkey l.8/l_partkey}
                {ps.4/ps_suppkey l.8/l_suppkey}]}

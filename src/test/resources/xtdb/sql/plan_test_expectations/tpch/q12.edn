@@ -7,9 +7,9 @@
     {high_line_count _sum_out_5}
     {low_line_count _sum_out_7}]}
    [:group-by
-    [l.2/l_shipmode
+    {:columns [l.2/l_shipmode
      {_sum_out_7 (sum _sum_in_8)}
-     {_sum_out_5 (sum _sum_in_6)}]
+     {_sum_out_5 (sum _sum_in_6)}]}
     [:map
      {:projections [{_sum_in_8
        (cond

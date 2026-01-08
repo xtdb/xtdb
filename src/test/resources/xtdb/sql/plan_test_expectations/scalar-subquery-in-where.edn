@@ -8,5 +8,5 @@
    [:project
     {:projections [{_sq_2 _max_out_4}]}
     [:group-by
-     [{_max_out_4 (max foo.3/bar)}]
+     {:columns [{_max_out_4 (max foo.3/bar)}]}
      [:rename foo.3 [:scan {:table #xt/table foo, :columns [bar]}]]]]]]]
