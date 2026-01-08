@@ -45,8 +45,7 @@ sealed class Vector : VectorReader, VectorWriter {
     abstract val vectors: Iterable<Vector>
 
     override val childFields get() = vectors.map { it.field }
-    final override val fieldType: FieldType get() = FieldType(nullable, arrowType, null)
-    final override val field: Field get() = Field(name, fieldType, vectors.map { it.field })
+    final override val field: Field get() = Field(name, FieldType(nullable, arrowType, null), vectors.map { it.field })
 
     abstract override var valueCount: Int; internal set
 
@@ -123,7 +122,8 @@ sealed class Vector : VectorReader, VectorWriter {
         if (dest is DenseUnionVector) return dest.rowCopier0(this)
 
         check(dest is Vector) { "can only copy to another Vector, got ${dest::class}" }
-        if (fieldType.type != dest.arrowType) throw InvalidCopySourceException(fieldType, dest.fieldType)
+        if (arrowType != dest.arrowType) 
+            throw InvalidCopySourceException(FieldType(nullable, arrowType, null), FieldType(dest.nullable, dest.arrowType, null))
 
         return dest.rowCopier0(this)
     }

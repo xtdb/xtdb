@@ -16,7 +16,7 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
     override val valueCount: Int get() = sel.valueCount()
     override val nullable: Boolean get() = inner.nullable
     override val arrowType: ArrowType get() = inner.arrowType
-    override val fieldType: FieldType get() = inner.fieldType
+    val fieldType: FieldType get() = inner.type.fieldType
     override val field: Field get() = inner.field
     override val childFields: List<Field> get() = inner.childFields
 

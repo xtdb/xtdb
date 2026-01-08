@@ -26,7 +26,6 @@ interface VectorReader : ILookup, AutoCloseable {
     val arrowType: ArrowType
     val childFields: List<Field>
     val type get() = VectorType(arrowType, nullable, childFields.associate { it.name to it.asType })
-    val fieldType: FieldType get() = type.fieldType
     val field get() = name ofType type
 
     private class RenamedVector(private val inner: VectorReader, override val name: String) : VectorReader by inner {

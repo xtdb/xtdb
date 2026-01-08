@@ -5,8 +5,6 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
-import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.TaggedValue
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.agg.VectorSummer
@@ -58,7 +56,7 @@ class DenseUnionVector private constructor(
         override val name get() = inner.name
         override val nullable get() = inner.nullable
         override val arrowType: ArrowType get() = inner.arrowType
-        override val fieldType get() = inner.fieldType
+        val fieldType get() = inner.type.fieldType
         override val field get() = inner.field
         override val childFields get() = inner.childFields
 
