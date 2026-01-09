@@ -40,12 +40,12 @@
 
     (lp/unary-expr (lp/emit-expr independent-relation args)
       (fn [{independent-fields :fields, :as indep-rel}]
-        (let [{:keys [param-fields] :as dependent-args} (-> args
-                                                          (update :param-fields
+        (let [{:keys [param-types] :as dependent-args} (-> args
+                                                          (update :param-types
                                                                   (fnil into {})
                                                                   (map (fn [[ik dk]]
                                                                          (if-let [field (get independent-fields ik)]
-                                                                           [dk field]
+                                                                           [dk (types/->type field)]
                                                                            (throw
                                                                             (err/illegal-arg
                                                                              :xtdb.apply/missing-column
@@ -80,8 +80,8 @@
                          open-dependent-cursor
                          (if (= mode :mark-join)
                            (let [[_col-name form] (first mark-join-projection)
-                                 input-types {:vec-fields dependent-fields
-                                              :param-fields param-fields}
+                                 input-types {:var-types (update-vals dependent-fields types/->type)
+                                              :param-types param-types}
                                  projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
                              (fn [{:keys [allocator args explain-analyze? tracer query-span] :as query-opts}]
                                (let [^ICursor dep-cursor (->dependent-cursor query-opts)]

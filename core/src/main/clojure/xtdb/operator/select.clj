@@ -16,12 +16,12 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defmethod lp/emit-expr :select [{:keys [opts relation]} {:keys [param-fields] :as args}]
+(defmethod lp/emit-expr :select [{:keys [opts relation]} {:keys [param-types] :as args}]
   (let [{:keys [predicate]} opts]
     (lp/unary-expr (lp/emit-expr relation args)
       (fn [{inner-fields :fields, inner-stats :stats :as inner-rel}]
-        (let [input-types {:vec-fields inner-fields
-                           :param-fields param-fields}
+        (let [input-types {:var-types (update-vals inner-fields types/->type)
+                           :param-types param-types}
               selector (expr/->expression-selection-spec (expr/form->expr predicate input-types) input-types)]
           {:op :select
            :stats inner-stats

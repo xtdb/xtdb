@@ -14,7 +14,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema)
            (xtdb ICursor)
-           (xtdb.arrow ListExpression Relation RelationReader RelationWriter Vector VectorWriter)))
+           (xtdb.arrow ListExpression Relation RelationReader RelationWriter Vector VectorType VectorWriter)))
 
 (defmethod lp/ra-expr :table [_]
   (s/cat :op #{:table}
@@ -50,25 +50,24 @@
     explicit-col-names (-> (->> (merge (zipmap explicit-col-names (repeat types/null-field))))
                            (select-keys explicit-col-names))))
 
-(defn- emit-rows-table [rows table-expr {:keys [param-fields schema] :as opts}]
-  (let [param-types (update-vals param-fields types/->type)
-        field-sets (HashMap.)
+(defn- emit-rows-table [rows table-expr {:keys [param-types schema] :as opts}]
+  (let [field-sets (HashMap.)
         out-rows (->> rows
                       (mapv (fn [[row-tag row-arg]]
                               (case row-tag
-                                :param (let [^Field struct-field (-> (for [^Field child-field (-> (or (get param-fields row-arg)
-                                                                                                      (throw (UnsupportedOperationException. "missing param")))
-                                                                                                  (types/flatten-union-field))
-                                                                           :when (= #xt.arrow/type :struct (.getType child-field))]
-                                                                       child-field)
-                                                                     (->> (apply types/merge-fields)))
-                                             ks (->> (.getChildren struct-field)
-                                                     (into #{} (map #(symbol (.getName ^Field %)))))]
+                                :param (let [^VectorType struct-type (-> (for [^VectorType leg-type (-> (or (get param-types row-arg)
+                                                                                                            (throw (UnsupportedOperationException. "missing param")))
+                                                                                                        .getUnionLegs)
+                                                                               :when (= #xt.arrow/type :struct (.getArrowType leg-type))]
+                                                                           leg-type)
+                                                                         (->> (apply types/merge-types)))
+                                             children (.getChildren struct-type)
+                                             ks (into #{} (map symbol) (keys children))]
 
-                                         (doseq [^Field struct-key (.getChildren struct-field)
-                                                 :let [^Set field-set (.computeIfAbsent field-sets (symbol (.getName struct-key))
+                                         (doseq [[child-name ^VectorType child-type] children
+                                                 :let [^Set field-set (.computeIfAbsent field-sets (symbol child-name)
                                                                                         (fn [_] (HashSet.)))]]
-                                           (.add field-set struct-key))
+                                           (.add field-set (.toField child-type child-name)))
 
                                          {:ks ks
                                           :write-row! (fn write-param-row! [{:keys [^RelationReader args]}, ^RelationWriter out-rel]
@@ -91,8 +90,9 @@
                                                                                     (MapEntry/create k (fn write-literal! [_ ^VectorWriter out-col]
                                                                                                          (.writeObject out-col v))))
 
-                                                                         :param (let [{:keys [param]} expr]
-                                                                                  (.add field-set (get param-fields param))
+                                                                         :param (let [{:keys [param]} expr
+                                                                                        ^VectorType param-type (get param-types param)]
+                                                                                  (.add field-set (.toField param-type (str param)))
                                                                                   (MapEntry/create k (fn write-param! [{:keys [^RelationReader args]} ^VectorWriter out-col]
                                                                                                        (.writeObject out-col
                                                                                                                      (-> (.vectorForOrNull args (str param))
@@ -136,11 +136,10 @@
 
                         out-rel))))}))
 
-(defn- emit-col-table [col-spec table-expr {:keys [param-fields schema] :as opts}]
+(defn- emit-col-table [col-spec table-expr {:keys [param-types schema] :as opts}]
   (let [[out-col v] (first col-spec)
-        param-types (update-vals param-fields types/->type)
-        expr (expr/form->expr v (assoc opts :param-types param-types))
-        input-types (assoc opts :param-types param-types)
+        expr (expr/form->expr v opts)
+        input-types opts
         {:keys [field ->list-expr]} (expr-list/compile-list-expr expr input-types)
         named-field (types/field-with-name field (str out-col))]
     {:fields (-> {(symbol (.getName named-field)) named-field}
@@ -152,25 +151,25 @@
                         (.writeTo list-expr out-vec 0 (.getSize list-expr)))
                       (Relation. allocator ^List (vector out-vec) (.getValueCount out-vec)))))}))
 
-(defn- emit-arg-table [param table-expr {:keys [param-fields]}]
-  (let [fields (-> (into {} (for [^Field field (-> (or (get param-fields param)
-                                                       (throw (err/illegal-arg :unknown-table
-                                                                               {::err/message "Table refers to unknown param"
-                                                                                :param param, :params (set (keys param-fields))})))
-                                                   (types/flatten-union-field))
-                                  :when (or (= #xt.arrow/type :list (.getType field))
+(defn- emit-arg-table [param table-expr {:keys [param-types]}]
+  (let [fields (-> (into {} (for [^VectorType leg-type (-> (or (get param-types param)
+                                                               (throw (err/illegal-arg :unknown-table
+                                                                                       {::err/message "Table refers to unknown param"
+                                                                                        :param param, :params (set (keys param-types))})))
+                                                           .getUnionLegs)
+                                  :when (or (= #xt.arrow/type :list (.getArrowType leg-type))
                                             (throw (err/illegal-arg :illegal-param-type
                                                                     {::err/message "Table param must be of type struct list"
                                                                      :param param})))
-                                  :let [^Field el-field (first (.getChildren field))]
-                                  ^Field el-leg (types/flatten-union-field el-field)
-                                  :when (or (= #xt.arrow/type :struct (.getType el-leg))
-                                            (= #xt.arrow/type :null (.getType el-leg))
+                                  :let [el-type (first (vals (.getChildren leg-type)))]
+                                  ^VectorType el-leg-type (.getUnionLegs el-type)
+                                  :when (or (= #xt.arrow/type :struct (.getArrowType el-leg-type))
+                                            (= #xt.arrow/type :null (.getArrowType el-leg-type))
                                             (throw (err/illegal-arg :illegal-param-type
                                                                     {::err/message "Table param must be of type struct list"
                                                                      :param param})))
-                                  ^Field field (.getChildren el-leg)]
-                              (MapEntry/create (symbol (.getName field)) field)))
+                                  [child-name ^VectorType child-type] (.getChildren el-leg-type)]
+                              (MapEntry/create (symbol child-name) (.toField child-type child-name))))
 
                    (restrict-cols table-expr))]
 

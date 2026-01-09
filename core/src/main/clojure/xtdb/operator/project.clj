@@ -50,7 +50,7 @@
 (defn ->project-cursor [{:keys [allocator args schema]} in-cursor projection-specs]
   (ProjectCursor. allocator in-cursor projection-specs schema args))
 
-(defmethod lp/emit-expr :project [{:keys [relation], {:keys [projections append-columns?]} :opts} {:keys [param-fields] :as args}]
+(defmethod lp/emit-expr :project [{:keys [relation], {:keys [projections append-columns?]} :opts} {:keys [param-types] :as args}]
   (let [emitted-child-relation (lp/emit-expr relation args)]
     (lp/unary-expr emitted-child-relation
       (fn [{inner-fields :fields, :as inner-rel}]
@@ -79,7 +79,8 @@
                                                      (ProjectionSpec$Rename. (str from-name) field))
 
                                            :extend (let [[col-name form] (first arg)
-                                                         input-types {:vec-fields inner-fields, :param-fields param-fields}
+                                                         input-types {:var-types (update-vals inner-fields types/->type)
+                                                                      :param-types param-types}
                                                          expr (expr/form->expr form input-types)]
                                                      (expr/->expression-projection-spec col-name expr input-types)))))]
           {:op :project

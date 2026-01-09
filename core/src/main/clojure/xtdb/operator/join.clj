@@ -267,14 +267,15 @@
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
-(defn- equi-spec [idx condition left-fields right-fields param-fields]
+(defn- equi-spec [idx condition left-fields right-fields param-types]
   (let [[left-expr right-expr] (first condition)]
     (letfn [(equi-projection [side form fields]
               (if (symbol? form)
                 {:key-col-name form}
 
                 (let [col-name (symbol (format "?join-expr-%s-%d" (name side) idx))
-                      input-types {:vec-fields fields, :param-fields param-fields}]
+                      input-types {:var-types (update-vals fields types/->type)
+                                   :param-types param-types}]
                   {:key-col-name col-name
                    :projection (expr/->expression-projection-spec col-name (expr/form->expr form input-types)
                                                                   input-types)})))]
@@ -302,12 +303,12 @@
                 (boolean with-nil-row?)
                 *disk-join-threshold-rows*)))
 
-(defn ->cmp-factory [{:keys [build-fields probe-fields theta-expr param-fields args with-nil-row?]}]
+(defn ->cmp-factory [{:keys [build-fields probe-fields theta-expr param-types args with-nil-row?]}]
   (reify ComparatorFactory
     (buildEqui [_ build-col probe-col]
       (emap/->equi-comparator build-col probe-col args
                               {:nil-keys-equal? with-nil-row?
-                               :param-fields param-fields}))
+                               :param-types param-types}))
 
     (buildTheta [_ build-rel probe-rel]
       (when theta-expr
@@ -315,11 +316,11 @@
                                  {:nil-keys-equal? with-nil-row?
                                   :build-fields build-fields
                                   :probe-fields probe-fields
-                                  :param-fields param-fields})))))
+                                  :param-types param-types})))))
 
 (defn- emit-join-expr {:style/indent 2}
   [{:keys [condition left right]}
-   {:keys [param-fields]}
+   {:keys [param-types]}
    {:keys [build-side merge-fields-fn join-type
            with-nil-row? pushdown-blooms? track-unmatched-build-idxs? mark-col-name]}]
   (let [{left-fields :fields, ->left-cursor :->cursor} left
@@ -331,7 +332,7 @@
 
         equi-specs (->> (map last equis)
                         (map-indexed (fn [idx condition]
-                                       (equi-spec idx condition left-fields right-fields param-fields)))
+                                       (equi-spec idx condition left-fields right-fields param-types)))
                         vec)
 
         left-projections (vec (concat
@@ -408,7 +409,7 @@
                                                        :with-nil-row? with-nil-row?
                                                        :key-col-names probe-key-col-names
                                                        :theta-expr theta-expr
-                                                       :param-fields param-fields
+                                                       :param-types param-types
                                                        :args args})]
                        (project/->project-cursor opts
                                                  (cond-> (if (= join-type ::mark-join)

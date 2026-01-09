@@ -248,8 +248,7 @@
 
 (def ^:private compile-meta-expr
   (-> (fn [expr opts]
-        (let [{:keys [param-fields]} opts
-              opts {:param-types (update-vals param-fields types/->type)}
+        (let [{:keys [param-types]} opts
               expr (or (-> expr (expr/prepare-expr) (meta-expr opts) (expr/prepare-expr))
                        (expr/prepare-expr {:op :literal, :literal true}))
               {:keys [continue] :as emitted-expr} (expr/codegen-expr expr opts)]
@@ -270,13 +269,13 @@
 
       (util/lru-memoize)))
 
-(defn ->metadata-selector ^xtdb.metadata.MetadataPredicate [allocator form vec-fields params]
-  (let [param-fields (expr/->param-fields params)
-        {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-fields param-fields,
-                                                                   :vec-fields vec-fields})
-                                            {:param-fields param-fields
-                                             :vec-fields vec-fields})
-        bloom-hashes (->bloom-hashes allocator expr params)]
+(defn ->metadata-selector ^xtdb.metadata.MetadataPredicate [allocator form var-types args]
+  (let [param-types (expr/->param-types args)
+        {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types param-types,
+                                                                   :var-types var-types})
+                                            {:param-types param-types
+                                             :var-types var-types})
+        bloom-hashes (->bloom-hashes allocator expr args)]
     (reify MetadataPredicate
       (build [_ table-metadata]
-        (f table-metadata params bloom-hashes)))))
+        (f table-metadata args bloom-hashes)))))

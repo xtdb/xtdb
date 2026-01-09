@@ -52,11 +52,9 @@
    {:keys [key-col-names store-full-build-rel?
            build-fields
            nil-keys-equal?
-           param-fields args]
+           param-types args]
     :as opts}]
-  (let [param-types (-> param-fields
-                        (update-keys str)
-                        (update-vals types/->type))
+  (let [param-types (update-keys param-types str)
         build-key-col-names (get opts :build-key-col-names key-col-names)
 
         schema (Schema. (-> build-fields

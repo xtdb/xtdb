@@ -51,7 +51,7 @@
                        :opt-un [::lp/for-valid-time ::lp/for-system-time])))
 
 (definterface IScanEmitter
-  (emitScan [^xtdb.database.Database$Catalog db-cat scan-expr scan-fields param-fields]))
+  (emitScan [^xtdb.database.Database$Catalog db-cat scan-expr scan-fields param-types]))
 
 (defn ->scan-cols [{:keys [opts]}]
   (let [{:keys [table columns]} opts]
@@ -74,10 +74,10 @@
                                   (time/sql-temporal->micros expr/*default-tz*))
                           default)
                :now (-> (expr/current-time) (time/instant->micros))
-               :expr (let [param-fields (expr/->param-fields args)
+               :expr (let [param-types (expr/->param-types args)
                            projection (expr/->expression-projection-spec "_temporal_expression"
-                                                                         (expr/form->expr (list 'cast_tstz arg) {:param-fields param-fields})
-                                                                         {:param-fields param-fields})]
+                                                                         (expr/form->expr (list 'cast_tstz arg) {:param-types param-types})
+                                                                         {:param-types param-types})]
                        (util/with-open [res (.project projection alloc vw/empty-args {} args)]
                          (if-let [inst-like (.getObject res 0)]
                            (do
@@ -193,7 +193,7 @@
 
 (defmethod ig/init-key ::scan-emitter [_ {:keys [info-schema]}]
   (reify IScanEmitter
-    (emitScan [_ db-cat {:keys [opts]} scan-fields param-fields]
+    (emitScan [_ db-cat {:keys [opts]} scan-fields param-types]
       (let [{:keys [^TableRef table columns] :as scan-opts} opts
             db-name (.getDbName table)
             db (.databaseOrNull db-cat db-name)
@@ -221,7 +221,8 @@
 
             col-preds (->> (for [[col-name select-form] selects]
                              ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
-                             (let [input-types {:vec-fields fields, :param-fields param-fields}]
+                             (let [input-types {:var-types (update-vals fields types/->type)
+                                                :param-types param-types}]
                                (MapEntry/create col-name
                                                 (expr/->expression-selection-spec (expr/form->expr select-form input-types)
                                                                                   input-types))))
@@ -260,7 +261,7 @@
                                            (assoc "_iid" (if (= 1 (count iid-set))
                                                            (SingleIidSelector. (first iid-set))
                                                            (MultiIidSelector. iid-set))))
-                               metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) fields args)
+                               metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) (update-vals fields types/->type) args)
                                metadata-pred (reify MetadataPredicate
                                                (build [_ page-metadata]
                                                  (-> (.build metadata-pred page-metadata)
@@ -308,6 +309,6 @@
                                                                                                      "db.name" (.getDbName table)}
                                                                                                     (format "query.cursor.scan.%s" (.getTableName table))))))))))}))))
 
-(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-fields, param-fields]}]
+(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-fields, param-types]}]
   (assert db-cat)
-  (.emitScan scan-emitter db-cat scan-expr scan-fields param-fields))
+  (.emitScan scan-emitter db-cat scan-expr scan-fields param-types))

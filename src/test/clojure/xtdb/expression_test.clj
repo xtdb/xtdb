@@ -38,7 +38,7 @@
 (t/deftest test-simple-projection
   (with-open [in-rel (tu/open-rel (->data-vecs))]
     (letfn [(project [form]
-              (let [input-types {:vec-fields {'a #xt/field {"a" :f64}, 'b #xt/field {"b" :f64}, 'd #xt/field {"d" :i64}}, :param-fields {}}
+              (let [input-types {:var-types {'a #xt/type :f64, 'b #xt/type :f64, 'd #xt/type :i64}, :param-types {}}
                     expr (expr/form->expr form input-types)]
                 (with-open [project-col (.project (expr/->expression-projection-spec "c" expr input-types)
                                                   tu/*allocator* in-rel
@@ -77,23 +77,23 @@
 
 (t/deftest can-compile-simple-expression
   (with-open [in-rel (tu/open-rel (->data-vecs))]
-    (letfn [(select-relation [form vec-fields args-map]
+    (letfn [(select-relation [form var-types args-map]
               (with-open [arg-rel (tu/open-args args-map)]
-                (let [input-types {:vec-fields vec-fields,
-                                   :param-fields (->> arg-rel
-                                                      (into {} (map (fn [^VectorReader col]
-                                                                      [(symbol (.getName col))
-                                                                       (.getField col)]))))}]
+                (let [input-types {:var-types var-types,
+                                   :param-types (->> arg-rel
+                                                     (into {} (map (fn [^VectorReader col]
+                                                                     [(symbol (.getName col))
+                                                                      (.getType col)]))))}]
                   (alength (.select (expr/->expression-selection-spec (expr/form->expr form input-types) input-types)
                                     tu/*allocator* in-rel {} arg-rel)))))]
 
       (t/testing "selector"
-        (t/is (= 500 (select-relation '(>= a 500) '{a #xt/field {"a" :f64}} {})))
-        (t/is (= 500 (select-relation '(>= e "0500") '{e #xt/field {"e" :utf8}} {}))))
+        (t/is (= 500 (select-relation '(>= a 500) '{a #xt/type :f64} {})))
+        (t/is (= 500 (select-relation '(>= e "0500") '{e #xt/type :utf8} {}))))
 
       (t/testing "parameter"
-        (t/is (= 500 (select-relation '(>= a ?a) '{a #xt/field {"a" :f64}} {:a 500})))
-        (t/is (= 500 (select-relation '(>= e ?e) '{e #xt/field {"e" :utf8}} {:e "0500"})))))))
+        (t/is (= 500 (select-relation '(>= a ?a) '{a #xt/type :f64} {:a 500})))
+        (t/is (= 500 (select-relation '(>= e ?e) '{e #xt/type :utf8} {:e "0500"})))))))
 
 (t/deftest nil-selection-doesnt-yield-the-row
   (t/is (= 0
@@ -324,10 +324,10 @@
                           (extract "TIMEZONE_MINUTE" ld)))))))
 
 (defn run-projection [^RelationReader rel form]
-  (let [vec-fields (->> rel
-                        (into {} (map (juxt #(symbol (.getName ^VectorReader %))
-                                            #(.getField ^VectorReader %)))))
-        input-types {:vec-fields vec-fields, :param-fields {}}
+  (let [var-types (->> rel
+                       (into {} (map (juxt #(symbol (.getName ^VectorReader %))
+                                           #(.getType ^VectorReader %)))))
+        input-types {:var-types var-types, :param-types {}}
         expr (expr/form->expr form input-types)]
     (with-open [out-ivec (.project (expr/->expression-projection-spec "out" expr input-types)
                                    tu/*allocator* rel {} vw/empty-args)]

@@ -133,10 +133,10 @@
          (mapv (fn [[field-name field]]
                  (types/field-with-name field (str field-name)))))))
 
-(defn ->arg-fields [^RelationReader args]
+(defn ->arg-types [^RelationReader args]
   (->> args
        (into {} (map (fn [^VectorReader col]
-                       (MapEntry/create (symbol (.getName col)) (.getField col)))))))
+                       (MapEntry/create (symbol (.getName col)) (.getType col)))))))
 
 (defn expr->value [expr {:keys [^RelationReader args]}]
   (if (symbol? expr)
@@ -194,7 +194,7 @@
 
 (defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache, explain-analyze?]},
                    scan-emitter, ^Database$Catalog db-cat, snaps
-                   param-fields, {:keys [default-tz]}]
+                   param-types, {:keys [default-tz]}]
   (.get emit-cache {:scan-fields (scan/scan-fields db-cat snaps scan-cols)
 
                     ;; this one is just to reset the cache for up-to-date stats
@@ -203,15 +203,15 @@
                                               [db-name (some-> (.databaseOrNull db-cat db-name) .getBlockCatalog .getCurrentBlockIndex)]))
 
                     :default-tz default-tz
-                    :param-fields param-fields
+                    :param-types param-types
                     :explain-analyze? explain-analyze?}
 
-        (fn [{:keys [scan-fields param-fields default-tz]}]
+        (fn [{:keys [scan-fields param-types default-tz]}]
           (binding [expr/*default-tz* default-tz]
             (-> (lp/emit-expr conformed-plan
                               {:scan-fields scan-fields
                                :default-tz default-tz
-                               :param-fields param-fields
+                               :param-types param-types
                                :db-cat db-cat
                                :scan-emitter scan-emitter})
                 (update :fields (fn [fs]
@@ -337,7 +337,8 @@
                 (util/with-open [snaps (open-snaps)]
                   (let [emitted-query (emit-query planned-query scan-emitter db-cat snaps
                                                   (->> param-fields
-                                                       (into {} (map (juxt (comp symbol #(.getName ^Field %)) identity))))
+                                                       (into {} (map (fn [^Field f]
+                                                                       [(symbol (.getName f)) (types/->type f)]))))
                                                   query-opts)]
                     (cond
                       (:explain? planned-query) (explain-plan-fields (->explain-plan emitted-query))
@@ -363,7 +364,7 @@
                              :else (throw (ex-info "invalid args"
                                                    {:type (class args)})))
 
-                      {:keys [fields ->cursor] :as emitted-query} (emit-query planned-query scan-emitter db-cat snaps (->arg-fields args) query-opts)
+                      {:keys [fields ->cursor] :as emitted-query} (emit-query planned-query scan-emitter db-cat snaps (->arg-types args) query-opts)
                       current-time (or (some-> (or (:current-time planned-query) current-time)
                                                (expr->value {:args args})
                                                (time/->instant {:default-tz default-tz}))
