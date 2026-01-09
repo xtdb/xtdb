@@ -9,6 +9,7 @@
             [xtdb.util :as util])
   (:import (clojure.lang IPersistentMap Keyword MapEntry)
            (java.lang NumberFormatException)
+           (xtdb.expression PgFormat)
            (java.math RoundingMode)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
@@ -289,14 +290,15 @@
 
 (defn resolve-string ^String [x]
   (cond
+    (nil? x) nil
+
     (instance? ByteBuffer x)
     (str (.decode StandardCharsets/UTF_8 (.duplicate ^ByteBuffer x)))
 
     (bytes? x)
     (String. ^bytes x StandardCharsets/UTF_8)
 
-    (string? x)
-    x))
+    :else (str x)))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti read-value-code
@@ -715,7 +717,7 @@
                                (reverse emitted-args))]
                    (build-args-then-call [] [])))}))
 
-(declare codegen-concat)
+(declare codegen-concat codegen-format)
 
 (defmethod codegen-expr :call [{:keys [f args] :as expr} opts]
   (let [emitted-args (for [arg args]
@@ -725,6 +727,7 @@
           :and (codegen-and emitted-args)
           :or (codegen-or emitted-args)
           :concat (codegen-concat expr)
+          :format (codegen-format expr)
           (codegen-call* expr))
 
         (update :children (fnil into []) emitted-args)
@@ -1426,6 +1429,39 @@
   (if (instance? ByteBuffer s-or-buf)
     s-or-buf
     (ByteBuffer/wrap (.getBytes ^String s-or-buf StandardCharsets/UTF_8))))
+
+(defn- codegen-format [{:keys [emitted-args] :as expr}]
+  (when (< (count emitted-args) 1)
+    (throw (err/incorrect :xtdb.expression/arity-error
+                          "Arity error, format requires at least one argument (the format string)"
+                          {:expr (dissoc expr :emitted-args :arg-types)})))
+
+  (let [[fmt-emitted & _arg-emitted] emitted-args
+        fmt-col-type (types/vec-type->col-type (:return-type fmt-emitted))]
+    (when-not (or (= :utf8 fmt-col-type) (= :null fmt-col-type)
+                  (and (vector? fmt-col-type) (= :union (first fmt-col-type))
+                       (some #{:utf8} (second fmt-col-type))))
+      (throw (err/incorrect :xtdb.expression/type-error "First argument to `format` must be a string"
+                            {:type fmt-col-type}))))
+
+  {:return-type #xt/type :utf8
+   :continue (fn continue-format [handle-emitted-expr]
+               (let [build-args-then-call
+                     (reduce (fn step [build-next-arg {continue-this-arg :continue}]
+                               (fn continue-building-args [built-args]
+                                 (continue-this-arg (fn [_arg-type emitted-arg]
+                                                      (build-next-arg (conj built-args emitted-arg))))))
+                             (fn call-with-built-args [built-args]
+                               (let [[fmt-code & arg-codes] built-args
+                                     resolved-args (map (fn [arg]
+                                                          `(resolve-string ~arg))
+                                                        arg-codes)]
+                                 (handle-emitted-expr :utf8
+                                                      `(resolve-utf8-buf
+                                                         (PgFormat/pgFormat (resolve-string ~fmt-code)
+                                                                            [~@resolved-args])))))
+                             (reverse emitted-args))]
+                 (build-args-then-call [])))})
 
 ;; concat is not a simple mono-call, as it permits a variable number of arguments so we can avoid intermediate alloc
 (defn- codegen-concat [{:keys [emitted-args] :as expr}]
