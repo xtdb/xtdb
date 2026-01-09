@@ -110,3 +110,16 @@
   {:return-type #xt/type :oid
    :return-col-type target-type
    :->call-code first})
+
+;;; col_description
+
+(defmethod expr/codegen-call [:col_description :int :int] [expr]
+  (expr/codegen-call (-> expr
+                         (assoc-in [:arg-col-types 0] :oid)
+                         (assoc-in [:arg-types 0] #xt/type :oid))))
+
+(defmethod expr/codegen-call [:col_description :oid :int] [_]
+  {:return-type #xt/type :null
+   :return-col-type :null
+   :->call-code (fn [[_regoid-code _int-code]]
+                  nil)})
