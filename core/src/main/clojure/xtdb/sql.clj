@@ -605,8 +605,7 @@
   (available-cols [_] [])
 
   (-find-cols [_ chain _excl-cols]
-    (throw (err/illegal-arg ::no-column-refs-allowed
-                            {::err/message (str msg (first chain))}))))
+    (throw (err/incorrect ::no-column-refs-allowed (str msg (first chain))))))
 
 (defrecord TableRefVisitor [env scope left-scope]
   SqlVisitor
@@ -2203,8 +2202,7 @@
           col-syms (or out-col-syms
                        (letfn [(emit-param [param-idx]
                                  (when-not arg-fields
-                                   (throw (err/illegal-arg ::records-param-outside-DML
-                                                           {::err/message "RECORDS ? not supported outside of DML"})))
+                                   (throw (err/incorrect ::records-param-outside-DML "RECORDS ? not supported outside of DML")))
 
                                  (if-let [arg-field (nth arg-fields param-idx nil)]
                                    (vec (for [^Field child-field (types/flatten-union-field arg-field)
@@ -3127,10 +3125,10 @@
 
           stmt (.accept ctx (->StmtVisitor env scope))]
       (if-let [errs (not-empty @!errors)]
-        (throw (err/illegal-arg :xtdb/sql-error
-                                {::err/message (str "Errors planning SQL statement:\n  - "
-                                                    (str/join "\n  - " (map #(error-string %) errs)))
-                                 :errors errs}))
+        (throw (err/incorrect :xtdb/sql-error
+                              (str "Errors planning SQL statement:\n  - "
+                                   (str/join "\n  - " (map #(error-string %) errs)))
+                              {:errors errs}))
         (do
           (log-warnings !warnings)
           (let [{:keys [col-syms plan] :as stmt} (-> stmt

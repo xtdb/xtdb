@@ -674,7 +674,7 @@
   (t/is (= [{:itvl #xt/interval "P24M"}]
            (xt/q tu/*node* "SELECT CAST(2 AS INTERVAL YEAR) as itvl")))
 
-  (t/is (anomalous? [:incorrect nil #"Cannot cast integer to a multi field interval"]
+  (t/is (anomalous? [:unsupported nil #"Cannot cast integer to a multi field interval"]
                     (xt/q tu/*node* "SELECT CAST(2 AS INTERVAL YEAR TO MONTH) as itvl"))))
 
 (t/deftest test-cast-string-to-interval-with-qualifier
@@ -1031,7 +1031,7 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= [{:x 2021}]
              (xt/q tu/*node* "SELECT EXTRACT(YEAR FROM TIMESTAMP '2021-10-21T12:34:56') as x")))
 
-    (t/is (anomalous? [:incorrect nil
+    (t/is (anomalous? [:unsupported nil
                        #"Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"]
                       (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56') as x"))))
 
@@ -1046,7 +1046,7 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= [{:x 3}]
              (xt/q tu/*node* "SELECT EXTRACT(MONTH FROM DATE '2001-03-11') as x")))
 
-    (t/is (anomalous? [:incorrect nil
+    (t/is (anomalous? [:unsupported nil
                        #"Extract \"TIMEZONE_HOUR\" not supported for type date"]
                       (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM DATE '2001-03-11') as x"))))
 
@@ -1057,7 +1057,7 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= [{:x 12}]
              (xt/q tu/*node* "SELECT EXTRACT(HOUR FROM TIME '12:34:56') as x")))
 
-    (t/is (anomalous? [:incorrect nil
+    (t/is (anomalous? [:unsupported nil
                        #"Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"]
                       (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM TIMESTAMP '2021-10-21T12:34:56') as x"))))
 
@@ -1068,7 +1068,7 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= [{:x 47}]
              (xt/q tu/*node* "SELECT EXTRACT(MINUTE FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x")))
 
-    (t/is (anomalous? [:incorrect nil
+    (t/is (anomalous? [:unsupported nil
                        #"Extract \"TIMEZONE_HOUR\" not supported for type interval"]
                       (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x")))))
 

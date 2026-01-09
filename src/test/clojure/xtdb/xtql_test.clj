@@ -49,7 +49,7 @@
     (t/is (= '(. foo bar) (roundtrip-expr '(. foo bar))))
 
     (t/is
-     (anomalous? [:incorrect nil #"malformed-get"]
+     (anomalous? [:incorrect nil #"Malformed get"]
                  (roundtrip-expr '(. foo))))))
 
 (t/deftest test-expr-subquery
@@ -173,7 +173,7 @@
            (roundtrip-unify-clause '(join (from :foo [a c])
                                           [{:a b} c]))))
 
-  (t/is (anomalous? [:incorrect nil #"malformed-bind"]
+  (t/is (anomalous? [:incorrect nil #"Malformed bind"]
                     (roundtrip-unify-clause '(join (fn [x]
                                                      (from :foo [x]))
                                                    {:baz x})))))
@@ -192,13 +192,13 @@
   (t/is (anomalous? [:incorrect nil #"Invalid keys provided to option map"]
                     (roundtrip-q-tail '(order-by {:foo y :nulls :last}))))
 
-  (t/is (anomalous? [:incorrect nil #"order-by-val-missing"]
+  (t/is (anomalous? [:incorrect nil #"order-by :val missing"]
                     (roundtrip-q-tail '(order-by {:nulls :last}))))
 
-  (t/is (anomalous? [:incorrect nil #"malformed-order-by-direction"]
+  (t/is (anomalous? [:incorrect nil #"Malformed order-by direction"]
                     (roundtrip-q-tail '(order-by {:val x :dir "d"}))))
 
-  (t/is (anomalous? [:incorrect nil #"malformed-order-by-nulls"]
+  (t/is (anomalous? [:incorrect nil #"Malformed order-by nulls"]
                     (roundtrip-q-tail '(order-by {:val x :nulls :fish})))))
 
 (t/deftest test-parse-union-all

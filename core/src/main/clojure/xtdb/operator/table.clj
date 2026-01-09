@@ -153,21 +153,18 @@
 
 (defn- emit-arg-table [param table-expr {:keys [param-types]}]
   (let [fields (-> (into {} (for [^VectorType leg-type (-> (or (get param-types param)
-                                                               (throw (err/illegal-arg :unknown-table
-                                                                                       {::err/message "Table refers to unknown param"
-                                                                                        :param param, :params (set (keys param-types))})))
+                                                               (throw (err/incorrect :unknown-table "Table refers to unknown param"
+                                                                                     {:param param, :params (set (keys param-types))})))
                                                            .getUnionLegs)
                                   :when (or (= #xt.arrow/type :list (.getArrowType leg-type))
-                                            (throw (err/illegal-arg :illegal-param-type
-                                                                    {::err/message "Table param must be of type struct list"
-                                                                     :param param})))
+                                            (throw (err/incorrect :illegal-param-type "Table param must be of type struct list"
+                                                                  {:param param})))
                                   :let [el-type (first (vals (.getChildren leg-type)))]
                                   ^VectorType el-leg-type (.getUnionLegs el-type)
                                   :when (or (= #xt.arrow/type :struct (.getArrowType el-leg-type))
                                             (= #xt.arrow/type :null (.getArrowType el-leg-type))
-                                            (throw (err/illegal-arg :illegal-param-type
-                                                                    {::err/message "Table param must be of type struct list"
-                                                                     :param param})))
+                                            (throw (err/incorrect :illegal-param-type "Table param must be of type struct list"
+                                                                  {:param param})))
                                   [child-name ^VectorType child-type] (.getChildren el-leg-type)]
                               (MapEntry/create (symbol child-name) (.toField child-type child-name))))
 

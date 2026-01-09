@@ -46,11 +46,9 @@
                                                                   (map (fn [[ik dk]]
                                                                          (if-let [field (get independent-fields ik)]
                                                                            [dk (types/->type field)]
-                                                                           (throw
-                                                                            (err/illegal-arg
-                                                                             :xtdb.apply/missing-column
-                                                                             {::err/message (str "Column missing from independent relation: " ik)
-                                                                              :column ik})))))
+                                                                           (throw (err/incorrect :xtdb.apply/missing-column
+                                                                                                 (str "Column missing from independent relation: " ik)
+                                                                                                 {:column ik})))))
                                                                   columns))
             {dependent-fields :fields, ->dependent-cursor :->cursor, :as dep-rel} (lp/emit-expr dependent-relation dependent-args)
             out-dependent-fields (case mode

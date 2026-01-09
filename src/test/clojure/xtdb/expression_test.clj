@@ -260,7 +260,7 @@
 
     (t/testing "java.time.LocalDate"
       (let [ld (LocalDate/of 2022 03 21)]
-        (t/is (anomalous? [:incorrect nil
+        (t/is (anomalous? [:unsupported nil
                            #"Extract \"SECOND\" not supported for type date"]
                           (extract "SECOND" ld)))
         (t/is (= 21 (extract "DAY" ld)))
@@ -293,11 +293,11 @@
       (t/is (= 23 (extract "MINUTE" tm)))
       (t/is (= 3 (extract "HOUR" tm)))
 
-      (t/is (anomalous? [:incorrect nil
+      (t/is (anomalous? [:unsupported nil
                          #"Extract \"DAY\" not supported for type time without timezone"]
                         (extract "DAY" tm)))
-      
-      (t/is (anomalous? [:incorrect nil
+
+      (t/is (anomalous? [:unsupported nil
                          #"Extract \"TIMEZONE_HOUR\" not supported for type time without timezone"]
                         (extract "TIMEZONE_HOUR" tm))))))
 
@@ -316,10 +316,10 @@
 
     (t/testing "type that doesn't support timezone fields"
       (let [ld (LocalDate/of 2022 03 21)]
-        (t/is (anomalous? [:incorrect nil
+        (t/is (anomalous? [:unsupported nil
                            #"Extract \"TIMEZONE_HOUR\" not supported for type date"]
                           (extract "TIMEZONE_HOUR" ld)))
-        (t/is (anomalous? [:incorrect nil
+        (t/is (anomalous? [:unsupported nil
                            #"Extract \"TIMEZONE_MINUTE\" not supported for type date"]
                           (extract "TIMEZONE_MINUTE" ld)))))))
 

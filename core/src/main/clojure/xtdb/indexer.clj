@@ -104,9 +104,8 @@
 
 (defn- assert-timestamp-col-type [^VectorReader rdr]
   (when-not (or (nil? rdr) (= types/temporal-arrow-type (.getArrowType rdr)))
-    (throw (err/illegal-arg :xtdb/invalid-timestamp-col-type
-                            {:col-name (.getName rdr)
-                             :col-type (.getType rdr)}))))
+    (throw (err/fault :xtdb/invalid-timestamp-col-type "Invalid timestamp col type"
+                      {:col-name (.getName rdr), :col-type (.getType rdr)}))))
 
 (defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
                                                    ^Database db, ^Instant system-time
@@ -664,10 +663,9 @@
         (if (and system-time lc-tx
                  (neg? (compare system-time (.getSystemTime lc-tx))))
           (let [tx-key (serde/->TxKey msg-id default-system-time)
-                err (err/illegal-arg :invalid-system-time
-                                     {::err/message "specified system-time older than current tx"
-                                      :tx-key (serde/->TxKey msg-id system-time)
-                                      :latest-completed-tx (.getLatestCompletedTx live-index)})]
+                err (err/incorrect :invalid-system-time "specified system-time older than current tx"
+                                   {:tx-key (serde/->TxKey msg-id system-time)
+                                    :latest-completed-tx (.getLatestCompletedTx live-index)})]
             (log/warnf "specified system-time '%s' older than current tx '%s'"
                        (pr-str system-time)
                        (pr-str (.getLatestCompletedTx live-index)))

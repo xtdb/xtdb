@@ -60,35 +60,33 @@
 (defn- ensure-interval-precision-valid [^long precision]
   (cond
     (< precision 1)
-    (throw (err/illegal-arg :xtdb.expression/invalid-interval-precision
-                            {::err/message "The minimum leading field precision is 1."
-                             :precision precision}))
+    (throw (err/incorrect :xtdb.expression/invalid-interval-precision
+                          "The minimum leading field precision is 1."
+                          {:precision precision}))
 
     (< 8 precision)
-    (throw (err/illegal-arg :xtdb.expression/invalid-interval-precision
-                            {::err/message "The maximum leading field precision is 8."
-                             :precision precision}))))
+    (throw (err/incorrect :xtdb.expression/invalid-interval-precision
+                          "The maximum leading field precision is 8."
+                          {:precision precision}))))
 
 (defn- ensure-interval-fractional-precision-valid [^long fractional-precision]
   (cond
     (< fractional-precision 0)
-    (throw (err/illegal-arg :xtdb.expression/invalid-interval-fractional-precision
-                            {::err/message "The minimum fractional seconds precision is 0."
-                             :fractional-precision fractional-precision}))
+    (throw (err/incorrect :xtdb.expression/invalid-interval-fractional-precision
+                          "The minimum fractional seconds precision is 0."
+                          {:fractional-precision fractional-precision}))
 
     (< 9 fractional-precision)
-    (throw (err/illegal-arg :xtdb.expression/invalid-interval-fractional-precision
-                            {::err/message "The maximum fractional seconds precision is 9."
-                             :fractional-precision fractional-precision}))))
+    (throw (err/incorrect :xtdb.expression/invalid-interval-fractional-precision
+                          "The maximum fractional seconds precision is 9."
+                          {:fractional-precision fractional-precision}))))
 
 (defn- ensure-interval-units-valid [unit1 unit2]
   ;; This function overwhelming likely to be applied as a const-expr so not concerned about vectorized perf.
   ;; these rules are not strictly necessary but are specified by SQL2011
   (letfn [(->iae [msg]
-                 (err/illegal-arg :xtdb.expression/invalid-interval-units
-                                  {::err/message msg
-                                   :start-unit unit1
-                                   :end-unit unit2}))]
+                 (err/incorrect :xtdb.expression/invalid-interval-units msg
+                                {:start-unit unit1, :end-unit unit2}))]
     (when (and (= unit1 "YEAR") (not= unit2 "MONTH"))
       (throw (->iae "If YEAR specified as the interval start field, MONTH must be the end field.")))
 
@@ -260,14 +258,14 @@
 (defn- ensure-fractional-precision-valid [^long fractional-precision]
   (cond
     (< fractional-precision 0)
-    (throw (err/illegal-arg :xtdb.expression/invalid-fractional-precision
-                            {::err/message "The minimum fractional seconds precision is 0."
-                             :fractional-precision fractional-precision}))
+    (throw (err/incorrect :xtdb.expression/invalid-fractional-precision
+                          "The minimum fractional seconds precision is 0."
+                          {:fractional-precision fractional-precision}))
 
     (< 9 fractional-precision)
-    (throw (err/illegal-arg :xtdb.expression/invalid-fractional-precision
-                            {::err/message "The maximum fractional seconds precision is 9."
-                             :fractional-precision fractional-precision}))))
+    (throw (err/incorrect :xtdb.expression/invalid-fractional-precision
+                          "The maximum fractional seconds precision is 9."
+                          {:fractional-precision fractional-precision}))))
 
 (defn parse-with-error-handling
   ([date-type parse-fn s]
@@ -444,9 +442,9 @@
 (defmethod expr/codegen-cast [:interval :duration] [{[_ iunit] :source-type [_ tgt-tsunit :as target-type] :target-type {:keys [precision]} :cast-opts}]
   (when-not (or (= iunit :month-day-nano)
                 (= iunit :month-day-micro))
-    (throw (err/illegal-arg ::expr/invalid-cast
-                            {::err/message (format "Cannot cast a %s interval to a duration" (name iunit))
-                             :interval-unit iunit})))
+    (throw (err/incorrect ::expr/invalid-cast
+                          (format "Cannot cast a %s interval to a duration" (name iunit))
+                          {:interval-unit iunit})))
 
   (when precision (ensure-fractional-precision-valid precision))
 
@@ -573,14 +571,12 @@
       (when (= "SECOND" end-field) (ensure-interval-fractional-precision-valid fractional-precision))
       ;; Assert that we are not casting year-month intervals to month-day-* intervals and vice versa
       (when (and ym-cast? (not= source-type [:interval :year-month]))
-        (throw (err/illegal-arg ::expr/unsupported-cast
-                                {::err/message "Cannot cast a non Year-Month interval with a Year-Month interval qualifier"
-                                 :source-type source-type})))
+        (throw (err/unsupported ::expr/unsupported-cast "Cannot cast a non Year-Month interval with a Year-Month interval qualifier"
+                                {:source-type source-type})))
 
       (when (and (not ym-cast?) (= source-type [:interval :year-month]))
-        (throw (err/illegal-arg ::expr/unsupported-cast
-                                {::err/message "Cannot cast a Year-Month interval with a non Year-Month interval qualifier"
-                                 :source-type source-type})))
+        (throw (err/unsupported ::expr/unsupported-cast "Cannot cast a Year-Month interval with a non Year-Month interval qualifier"
+                                {:source-type source-type})))
 
 
       ;;TODO logic to cast any arbitrary mdm to mdn and vice versa, would just be changing the precision of the seconds
@@ -595,10 +591,9 @@
         {:return-type #xt/type [:interval :month-day-micro], :return-col-type [:interval :month-day-micro], :->call-code (fn [[pd]] `(normalize-interval-to-md*-iq ~pd ~interval-qualifier))}))))
 
 (defmethod expr/codegen-cast [:int :interval] [{{:keys [start-field end-field]} :cast-opts}]
-  (when end-field (throw (err/illegal-arg :xtdb.expression/attempting-to-cast-int-to-multi-field-interval
-                                          {::err/message "Cannot cast integer to a multi field interval"
-                                           :start-field start-field
-                                           :end-field end-field})))
+  (when end-field (throw (err/unsupported :xtdb.expression/attempting-to-cast-int-to-multi-field-interval
+                                         "Cannot cast integer to a multi field interval"
+                                         {:start-field start-field, :end-field end-field})))
   (let [ret-col-type (if (#{"YEAR" "MONTH"} start-field)
                        [:interval :year-month]
                        [:interval :month-day-micro])]
@@ -936,9 +931,9 @@
 
 (defmethod expr/codegen-call [:compare :interval :interval] [{[[_x x-unit] [_y y-unit]] :arg-col-types}]
   (cond
-    (not= x-unit y-unit) (throw (err/illegal-arg :xtdb.expression/cannot-cannot-different-unit-intervals
-                                                 {::err/message "Cannot compare intervals with different units"
-                                                  :x-unit x-unit, :y-unit y-unit})))
+    (not= x-unit y-unit) (throw (err/incorrect :xtdb.expression/cannot-compare-different-unit-intervals
+                                               "Cannot compare intervals with different units"
+                                               {:x-unit x-unit, :y-unit y-unit})))
 
   {:return-type #xt/type :i32, :return-col-type :i32
    :->call-code (cond
@@ -1133,7 +1128,7 @@
         days (.getDays p)
         nanos (.toNanos (.getDuration pd))]
     (if (mixed-interval? months days nanos)
-      (throw (err/illegal-arg ::expr/cannot-divide-mixed-intervals {::err/message "Cannot divide mixed (month, day, time) intervals"}))
+      (throw (err/unsupported ::expr/cannot-divide-mixed-intervals "Cannot divide mixed (month, day, time) intervals"))
       (PeriodDuration.
        (Period/of 0 (quot months divisor) (quot days divisor))
        (Duration/ofNanos (quot nanos divisor))))))
@@ -1156,8 +1151,7 @@
         days (.getDays p)
         nanos (.toNanos (.getDuration pd))]
     (if (mixed-interval? months days nanos)
-      (throw (err/illegal-arg ::expr/cannot-abs-mixed-intervals
-                              {::err/message "Cannot ABS mixed intervals (month, day, time)"}))
+      (throw (err/unsupported ::expr/cannot-abs-mixed-intervals "Cannot ABS mixed intervals (month, day, time)"))
       (PeriodDuration. (Period/of 0 (Math/abs months) (Math/abs days))
                        (Duration/ofNanos (Math/abs nanos))))))
 
@@ -1194,9 +1188,9 @@
     (try
       (Integer/valueOf interval-str)
       (catch NumberFormatException _
-        (throw (err/illegal-arg :xtdb.expression/invalid-interval
-                                {::err/message "Parse error. Single field INTERVAL string must contain a positive or negative integer."
-                                 :interval interval-str}))))))
+        (throw (err/incorrect :xtdb.expression/invalid-interval
+                              "Parse error. Single field INTERVAL string must contain a positive or negative integer."
+                              {:interval interval-str}))))))
 
 (defn second-interval-fractional-duration
   "Takes a string or UTF8 ByteBuffer and returns Duration for a fractional seconds INTERVAL literal.
@@ -1213,9 +1207,9 @@
             nanos (.longValueExact (.setScale (.multiply (.subtract bd secs) 1e9M) 0 BigDecimal/ROUND_DOWN))]
         (Duration/ofSeconds (.longValueExact secs) nanos))
       (catch NumberFormatException _
-        (throw (err/illegal-arg :xtdb.expression/invalid-interval
-                                {::err/message "Parse error. SECOND INTERVAL string must contain a positive or negative integer or decimal."
-                                 :interval interval-str}))))))
+        (throw (err/incorrect :xtdb.expression/invalid-interval
+                              "Parse error. SECOND INTERVAL string must contain a positive or negative integer or decimal."
+                              {:interval interval-str}))))))
 
 (defmethod expr/codegen-call [:single_field_interval :utf8 :utf8 :int :int] [{:keys [args]}]
   (let [[_ unit precision fractional-precision] (map :literal args)]
@@ -1330,10 +1324,8 @@
   (or (if (= "YEAR" unit1)
         (parse-year-month-literal s)
         (parse-day-to-second-literal s unit1 unit2 fractional-precision))
-      (throw (err/illegal-arg :xtdb.expression/invalid-interval-string
-                              {::err/message "Cannot parse interval, incorrect format."
-                               :start-unit unit1
-                               :end-unit unit2}))))
+      (throw (err/incorrect :xtdb.expression/invalid-interval-string "Cannot parse interval, incorrect format."
+                            {:start-unit unit1, :end-unit unit2}))))
 
 (defmethod expr/codegen-call [:multi_field_interval :utf8 :utf8 :int :utf8 :int] [{:keys [args]}]
   (let [[_ unit1 precision unit2 ^long fractional-precision] (map :literal args)]
@@ -1379,12 +1371,12 @@
    :->call-code (fn [[_ x]]
                   `(-> ~(ts->ldt x ts-unit)
                        ~(case field
-                          "TIMEZONE_HOUR" (throw (err/illegal-arg ::expr/extract-not-supported
-                                                                  {::err/message "Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"
-                                                                   :field :timezone-hour, :source-type :timestamp-local}))
-                          "TIMEZONE_MINUTE" (throw (err/illegal-arg ::expr/extract-not-supported
-                                                                    {::err/message "Extract \"TIMEZONE_MINUTE\" not supported for type timestamp without timezone"
-                                                                     :field :timezone-minute, :source-type :timestamp-local}))
+                          "TIMEZONE_HOUR" (throw (err/unsupported ::expr/extract-not-supported
+                                                                "Extract \"TIMEZONE_HOUR\" not supported for type timestamp without timezone"
+                                                                {:field :timezone-hour, :source-type :timestamp-local}))
+                          "TIMEZONE_MINUTE" (throw (err/unsupported ::expr/extract-not-supported
+                                                                   "Extract \"TIMEZONE_MINUTE\" not supported for type timestamp without timezone"
+                                                                   {:field :timezone-minute, :source-type :timestamp-local}))
                           `(.get ~(time-field->ChronoField field)))))})
 
 (defmethod expr/codegen-call [:extract :utf8 :date] [{[{field :literal} _] :args}]
@@ -1395,9 +1387,9 @@
                     "YEAR" `(.getYear (LocalDate/ofEpochDay ~epoch-day-code))
                     "MONTH" `(.getMonthValue (LocalDate/ofEpochDay ~epoch-day-code))
                     "DAY" `(.getDayOfMonth (LocalDate/ofEpochDay ~epoch-day-code))
-                    (throw (err/illegal-arg ::expr/extract-not-supported
-                                            {::err/message (format "Extract \"%s\" not supported for type date" field)
-                                             :field field, :source-type :date}))))})
+                    (throw (err/unsupported ::expr/extract-not-supported
+                                           (format "Extract \"%s\" not supported for type date" field)
+                                           {:field field, :source-type :date}))))})
 
 (defmethod expr/codegen-call [:extract :utf8 :interval] [{[{field :literal} _] :args}]
   {:return-type #xt/type :i32, :return-col-type :i32
@@ -1411,9 +1403,9 @@
                       "HOUR" `(-> (.toHours ~duration) (int))
                       "MINUTE" `(-> (.toMinutes ~duration) (rem 60) (int))
                       "SECOND" `(-> (.toSeconds ~duration) (rem 60) (int))
-                      (throw (err/illegal-arg ::expr/extract-not-supported
-                                              {::err/message (format "Extract \"%s\" not supported for type interval" field)
-                                               :field field, :source-type :interval})))))})
+                      (throw (err/unsupported ::expr/extract-not-supported
+                                             (format "Extract \"%s\" not supported for type interval" field)
+                                             {:field field, :source-type :interval})))))})
 
 (defmethod expr/codegen-call [:extract :utf8 :time-local] [{[{field :literal} _] :args [_ [_tm tm-unit]] :arg-col-types}]
   {:return-type #xt/type :i32, :return-col-type :i32
@@ -1423,9 +1415,9 @@
                       "HOUR" `(.getHour ~local-time)
                       "MINUTE" `(.getMinute ~local-time)
                       "SECOND" `(.getSecond ~local-time)
-                      (throw (err/illegal-arg ::expr/extract-not-supported
-                                              {::err/message (format "Extract \"%s\" not supported for type time without timezone" field)
-                                               :field field, :source-type :time-local})))))})
+                      (throw (err/unsupported ::expr/extract-not-supported
+                                             (format "Extract \"%s\" not supported for type time without timezone" field)
+                                             {:field field, :source-type :time-local})))))})
 
 (defn field->truncate-fn
   [field]
@@ -1481,10 +1473,9 @@
      :batch-bindings [[trunc-zone-id-sym (try
                                            (ZoneId/of trunc-tz)
                                            (catch DateTimeException e
-                                             (throw (err/illegal-arg ::expr/invalid-timezone
-                                                                     {::err/message (ex-message e)
-                                                                      :timezone trunc-tz}
-                                                                     e))))]]
+                                             (throw (err/incorrect ::expr/invalid-timezone (ex-message e)
+                                                                     {:timezone trunc-tz
+                                                                      ::err/cause e}))))]]
      :->call-code (fn [[_ x]]
                     (-> `(-> ~(ts->zdt x ts-unit trunc-zone-id-sym)
                              ~(field->truncate-fn field))
@@ -2040,12 +2031,10 @@
 
 (defmethod expr/codegen-call [:generate_series :date :date :interval] [{[from-type to-type [_interval i-unit :as i-type]] :arg-col-types, :as expr}]
   (when-not (= from-type [:date :day])
-    (throw (err/illegal-arg ::expr/unsupported
-                            {::err/message "generate_series with date-from of type date-milli"})))
+    (throw (err/unsupported ::expr/unsupported "generate_series with date-from of type date-milli")))
 
   (when-not (= to-type [:date :day])
-    (throw (err/illegal-arg ::expr/unsupported
-                            {::err/message "generate_series with date-to of type date-milli"})))
+    (throw (err/unsupported ::expr/unsupported "generate_series with date-to of type date-milli")))
 
   (case i-unit
     :year-month {:return-type #xt/type [:list [:date :day]], :return-col-type [:list [:date :day]]

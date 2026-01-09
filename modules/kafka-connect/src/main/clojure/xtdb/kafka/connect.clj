@@ -54,8 +54,7 @@
           (map->edn payload)
 
           :else
-          (throw (err/illegal-arg :unknown-json-payload-type
-                                  {::err/message (str "Unknown JSON payload type: " record)}))))
+          (throw (err/incorrect :unknown-json-payload-type (str "Unknown JSON payload type: " record)))))
 
       (instance? Map value)
       (map->edn value)
@@ -64,30 +63,25 @@
       (json/parse-string value true)
 
       :else
-      (throw (err/illegal-arg :unknown-message-type
-                              {::err/message (str "Unknown message type: " record)})))))
+      (throw (err/incorrect :unknown-message-type (str "Unknown message type: " record))))))
 
 (defn- find-record-key-eid [^XtdbSinkConfig conf, ^SinkRecord record]
   (let [r-key (.key record)
         id-field (.getIdField conf)]
     (if (nil? r-key)
-      (throw (err/illegal-arg :missing-id
-                              {::err/message (str "Missing key in record: " record)}))
+      (throw (err/incorrect :missing-id (str "Missing key in record: " record)))
       (if (instance? Struct r-key)
         (if (= "" id-field)
-          (throw (err/illegal-arg :invalid-key-type
-                                  {::err/message (str "Invalid key type in record: " record)}))
+          (throw (err/incorrect :invalid-key-type (str "Invalid key type in record: " record)))
           (let [r-doc (struct->edn r-key)
                 id (get r-doc (keyword id-field))]
             (when-not id
-              (throw (err/illegal-arg :missing-id
-                                      {::err/message (str "Missing ID in record: " record)})))
+              (throw (err/incorrect :missing-id (str "Missing ID in record: " record))))
             id))
         (if (not= "" id-field)
           (do
             (log/debug "id-field:" id-field)
-            (throw (err/illegal-arg :invalid-key-type
-                                    {::err/message (str "Expected struct key found primitive: " record)})))
+            (throw (err/incorrect :invalid-key-type (str "Expected struct key found primitive: " record))))
           ;; TODO: Check if valid primitive type
           r-key)))))
 
@@ -95,8 +89,7 @@
   (let [id-field (.getIdField conf)
         id (get doc (keyword id-field))]
     (when-not id
-      (throw (err/illegal-arg :missing-id
-                              {::err/message (str "Missing ID in record: " record)})))
+      (throw (err/incorrect :missing-id (str "Missing ID in record: " record))))
     id))
 
 (defn- find-eid [^XtdbSinkConfig conf ^SinkRecord record doc]
@@ -128,8 +121,7 @@
             (let [id (find-record-key-eid conf record)]
               [(format "DELETE FROM %s WHERE _id = ?" table) id])
 
-            :else (throw (err/illegal-arg :unsupported-tombstone-mode
-                                          {::err/message (str "Unsupported tombstone mode: " record)})))
+            :else (throw (err/unsupported :unsupported-tombstone-mode (str "Unsupported tombstone mode: " record))))
 
       (->> (log/debug "tx op:")))))
 

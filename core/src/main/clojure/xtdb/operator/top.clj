@@ -56,9 +56,8 @@
   (let [v (some-> args (.vectorForOrNull (str param)) (.getObject 0))]
     (if (nat-int? v)
       v
-      (throw (err/illegal-arg :xtdb/expected-number
-                              {::err/message (format "Expected: number, got: %s" v)
-                               :v v, :param param})))))
+      (throw (err/incorrect :xtdb/expected-number (format "Expected: number, got: %s" v)
+                            {:v v, :param param})))))
 
 (defmethod lp/emit-expr :top [{:keys [relation], {[skip-tag skip-arg] :skip, [limit-tag limit-arg] :limit} :top} args]
   (lp/unary-expr (lp/emit-expr relation args)

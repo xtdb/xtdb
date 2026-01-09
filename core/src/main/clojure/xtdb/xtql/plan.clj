@@ -187,10 +187,9 @@
     (let [placeholder (expr-subquery-placeholder)
           {:keys [ra-plan provided-vars]} (plan-query (.query this))]
       (when-not (= (count provided-vars) 1)
-        (throw (err/illegal-arg
-                :xtql/invalid-scalar-subquery
-                {:subquery (str (.query this)) :provided-vars provided-vars
-                 ::err/message "Scalar subquery must only return a single column"})))
+        (throw (err/incorrect :xtql/invalid-scalar-subquery
+                              "Scalar subquery must only return a single column"
+                              {:subquery (str (.query this)), :provided-vars provided-vars})))
       (swap! *subqueries* conj
              (merge {:type :scalar
                      :placeholder placeholder
@@ -250,10 +249,9 @@
 (defn- required-vars-available? [expr provided-vars]
   (let [required-vars (required-vars expr)]
     (when (not (set/subset? required-vars provided-vars))
-      (throw (err/illegal-arg
-              :xtql/invalid-expression
-              {:expr (str expr) :required-vars required-vars :available-vars provided-vars
-               ::err/message "Not all variables in expression are in scope"})))))
+      (throw (err/incorrect :xtql/invalid-expression
+                            "Not all variables in expression are in scope"
+                            {:expr (str expr), :required-vars required-vars, :available-vars provided-vars})))))
 
 (defn- wrap-select [ra-plan predicates]
   (case (count predicates)
@@ -604,10 +602,9 @@
   From
   (plan-unify-clause [{:keys [project-all-cols?] :as from}]
     (when project-all-cols?
-      (throw (err/illegal-arg
-              :xtql/invalid-from
-              {:from (str from)
-               ::err/message "* is not a valid in from when inside a unify context"})))
+      (throw (err/incorrect :xtql/invalid-from
+                            "* is not a valid in from when inside a unify context"
+                            {:from (str from)})))
     [[:from (plan-from from)]])
 
   DocsRelation
@@ -782,12 +779,12 @@
                     {available-unnests true, unavailable-unnests false} (->> unnests (group-by available?))]
 
                 (if (and (empty? available-wheres) (empty? available-withs) (empty? available-joins) (empty? available-unnests))
-                  (throw (err/illegal-arg :no-available-clauses
-                                          {:available-vars available-vars
-                                           :unavailable-wheres unavailable-wheres
-                                           :unavailable-withs unavailable-withs
-                                           :unavailable-joins unavailable-joins
-                                           :unavailable-unnests unavailable-unnests}))
+                  (throw (err/incorrect :no-available-clauses "No available clauses"
+                                        {:available-vars available-vars
+                                         :unavailable-wheres unavailable-wheres
+                                         :unavailable-withs unavailable-withs
+                                         :unavailable-joins unavailable-joins
+                                         :unavailable-unnests unavailable-unnests}))
 
                   (recur (cond-> plan
                            available-wheres (wrap-wheres available-wheres)
@@ -836,11 +833,9 @@
                                                       (throw
                                                        (UnsupportedOperationException. "TODO: Add support for subqueries in aggr expr")))
                                                     (when (seq agg-fns)
-                                                      (throw
-                                                       (err/illegal-arg
-                                                        :xtql/invalid-expression
-                                                        {:expr (str sub-expr)
-                                                         ::err/message "Aggregate functions cannot be nested"})))
+                                                      (throw (err/incorrect :xtql/invalid-expression
+                                                                            "Aggregate functions cannot be nested"
+                                                                            {:expr (str sub-expr)})))
                                                     {:sub-expr-placeholder (expr-subquery-placeholder)
                                                      :expr expr}))]]
                                       {:sub-exprs planned-sub-exprs
@@ -857,11 +852,9 @@
 
       (doseq [{:keys [required-vars expr]} planned-specs]
         (when-not (set/subset? required-vars grouping-cols-set)
-          (throw
-           (err/illegal-arg
-            :xtql/invalid-expression
-            {:expr (str expr) :required-vars required-vars :grouping-cols grouping-cols-set
-             ::err/message "Variables outside of aggregate expressions must be grouping columns"}))))
+          (throw (err/incorrect :xtql/invalid-expression
+                                "Variables outside of aggregate expressions must be grouping columns"
+                                {:expr (str expr), :required-vars required-vars, :grouping-cols grouping-cols-set}))))
 
       {:ra-plan  [:project {:projections (vec output-projections)}
                   [:group-by

@@ -24,26 +24,6 @@
                    (dissoc ::cause))
                (::cause data))))
 
-(defn ^:deprecated illegal-arg
-  ;; replace with `incorrect`
-  ([k] (illegal-arg k {}))
-
-  ([k data]
-   (illegal-arg k data nil))
-
-  ([k {::keys [^String message] :as data} cause]
-   (incorrect k (or message (format "Illegal argument: '%s'" (symbol k))) (-> data (assoc ::cause cause) (dissoc ::message)))))
-
-(defn ^:deprecated runtime-err
-  ;; replace with `incorrect`
-  ([k] (runtime-err k {}))
-
-  ([k data]
-   (runtime-err k data nil))
-
-  ([k {::keys [^String message] :as data} cause]
-   (incorrect k (or message (format "Runtime error: '%s'" (symbol k))) (-> data (assoc ::cause cause) (dissoc ::message)))))
-
 (defn conflict
   (^xtdb.error.Conflict [error-code msg] (conflict error-code msg {}))
   (^xtdb.error.Conflict [error-code msg data]

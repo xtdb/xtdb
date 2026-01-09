@@ -104,7 +104,7 @@
   (if (instance? IKeyFn k)
     k
     (or (get key-fns k)
-        (throw (err/illegal-arg :xtdb/invalid-key-fn {:key k})))))
+        (throw (err/incorrect :xtdb/invalid-key-fn "Invalid key-fn" {:key k})))))
 
 (defmethod print-dup IKeyFn$KeyFn [key-fn ^Writer w]
   (.write w (str "#xt/key-fn " (write-key-fn key-fn))))
@@ -120,10 +120,10 @@
   (print-dup tx-key w))
 
 (defn iae-reader [[k message data cause]]
-  (err/illegal-arg k (-> (or data {}) (assoc ::err/message message )) cause))
+  (err/incorrect k message (cond-> (or data {}) cause (assoc ::err/cause cause))))
 
 (defn runex-reader [[k message data cause]]
-  (err/runtime-err k (-> data (assoc ::err/message message)) cause))
+  (err/incorrect k message (cond-> (or data {}) cause (assoc ::err/cause cause))))
 
 (defmethod print-dup Path [^Path p, ^Writer w]
   (.write w "#xt/path ")

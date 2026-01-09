@@ -119,9 +119,8 @@
     (if-let [record (or (parse-create-table statement)
                         (parse-create-view statement))]
       (execute-record node record)
-      (throw (err/illegal-arg :xtdb.sql/parse-error
-                              {::err/message (str ctx)
-                               :statement statement}))))
+      (throw (err/incorrect :xtdb.sql/parse-error (str ctx)
+                               {:statement statement}))))
 
   (visitInsertStatement [_ ctx]
     (let [ops (.accept ctx (->InsertOpsVisitor node statement))]

@@ -30,10 +30,9 @@
 
 (defn- union-fields [left-fields right-fields]
   (when-not (= (set (keys left-fields)) (set (keys right-fields)))
-    (throw (err/illegal-arg :union-incompatible-cols
-                            {::err/message "union incompatible cols"
-                             :left-col-names (set (keys left-fields))
-                             :right-col-names (set (keys right-fields))})))
+    (throw (err/incorrect :union-incompatible-cols "union incompatible cols"
+                          {:left-col-names (set (keys left-fields))
+                           :right-col-names (set (keys right-fields))})))
 
   ;; NOTE: this overestimates types for intersection - if one side's string and the other int,
   ;; they statically can't intersect - but maybe that's one step too far for now.

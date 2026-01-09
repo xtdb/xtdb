@@ -370,7 +370,7 @@
     (t/is (= #xt/interval "PT10H" (test-cast 10 :interval {:start-field "HOUR"})))
     (t/is (= #xt/interval "PT10M" (test-cast 10 :interval {:start-field "MINUTE"})))
     (t/is (= #xt/interval "PT10S" (test-cast 10 :interval {:start-field "SECOND"})))
-    (t/is (anomalous? [:incorrect nil
+    (t/is (anomalous? [:unsupported nil
                        #"Cannot cast integer to a multi field interval"]
                       (test-cast 10 :interval {:start-field "DAY"
                                                :end-field "HOUR"})))))
@@ -477,12 +477,12 @@
       (t/is (= #xt/interval "PT1H" (test-cast #xt/interval "PT1H" :interval {}))))
 
     (t/testing "casting YM interval to non YM interval should fail"
-      (t/is (anomalous? [:incorrect nil
+      (t/is (anomalous? [:unsupported nil
                          #"Cannot cast a Year-Month interval with a non Year-Month interval qualifier"]
                         (test-cast #xt/interval "P12M" :interval {:start-field "DAY", :leading-precision 2, :fractional-precision 0}))))
 
     (t/testing "casting non YM interval to YM interval should fail"
-      (t/is (anomalous? [:incorrect nil
+      (t/is (anomalous? [:unsupported nil
                          #"Cannot cast a non Year-Month interval with a Year-Month interval qualifier"]
                         (test-cast #xt/interval "P1M1DT1H" :interval {:start-field "YEAR", :end-field "MONTH", :leading-precision 2, :fractional-precision 0}))))
 
@@ -1183,9 +1183,9 @@
       true '(>= (multi-field-interval "1 2" "DAY" 2 "HOUR" 2) (multi-field-interval "1 0" "DAY" 2 "HOUR" 2)))))
 
 (t/deftest test-uoe-thrown-for-unsupported-div
-  (t/is (anomalous? [:incorrect nil]
+  (t/is (anomalous? [:unsupported nil]
                     (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "MINUTE" 2 0)) 3) {})))
-  (t/is (anomalous? [:incorrect nil]
+  (t/is (anomalous? [:unsupported nil]
                     (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "DAY" 2 0)) 3) {}))))
 
 (def period-gen

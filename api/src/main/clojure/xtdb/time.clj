@@ -36,9 +36,7 @@
   (when-not (or (instance? Instant instant)
                 (instance? Date instant)
                 (instance? ZonedDateTime instant))
-    (throw (err/illegal-arg :xtdb/invalid-date-time
-                            {::err/message "expected date-time"
-                             :timestamp instant})))
+    (throw (err/incorrect :xtdb/invalid-date-time "expected date-time" {:timestamp instant})))
 
   (->instant instant))
 
@@ -135,10 +133,9 @@
   (try
     (Time/asSqlTimestamp ts-str)
     (catch DateTimeParseException e
-      (throw (err/illegal-arg :xtdb/invalid-date-time
-                              {::err/message (str "invalid timestamp: " (ex-message e))
-                               :timestamp ts-str}
-                              e)))))
+      (throw (err/incorrect :xtdb/invalid-date-time
+                            (str "invalid timestamp: " (ex-message e))
+                            {:timestamp ts-str, ::err/cause e})))))
 
 (defn alter-duration-precision ^Duration [^long precision ^Duration duration]
   (if (= precision 0)

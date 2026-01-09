@@ -19,7 +19,7 @@
   (cond
     (symbol? form) `'~form
     (unquote? form) (second form)
-    (unquote-splicing? form) (throw (err/illegal-arg ::splice-not-in-list {::err/message "splice not in list", :form form}))
+    (unquote-splicing? form) (throw (err/incorrect ::splice-not-in-list "splice not in list" {:form form}))
     (record? form) `'~form
     (coll? form)
       (let [parts (for [x (if (map? form)
@@ -34,6 +34,6 @@
           (map? form) `(apply hash-map ~cat)
           (set? form) `(set ~cat)
           (seq? form) `(apply list ~cat)
-          :else (throw (err/illegal-arg ::unknown-coll-type {::err/message "Unknown collection type", :form form}))))
+          :else (throw (err/incorrect ::unknown-coll-type "Unknown collection type" {:form form}))))
     :else `'~form))
 

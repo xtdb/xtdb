@@ -229,8 +229,7 @@
    (generate-match-tree clauses false))
   ([clauses zip?]
    (if (empty? clauses)
-     (throw (err/illegal-arg ::non-exhaustive-pattern
-                             {::err/message "Non-exhaustive pattern"}))
+     (throw (err/fault ::non-exhaustive-pattern "Non-exhaustive pattern"))
      (let [[[patterns body] :as clauses] (for [clause clauses]
                                            (add-bindings clause zip?))]
        (if (empty? patterns)
@@ -297,9 +296,9 @@
         zip-matches? (some (comp :z meta) variables)
         shadowed-locals (filter (set variables) (keys &env))]
     (when-not (empty? shadowed-locals)
-      (throw (err/illegal-arg ::shadowed-locals
-                              {::err/message (str "Match variables shadow locals: " (set shadowed-locals))
-                               :shadowed-locals shadowed-locals})))
+      (throw (err/fault ::shadowed-locals
+                        (str "Match variables shadow locals: " (set shadowed-locals))
+                        {:shadowed-locals shadowed-locals})))
     (if-not zip-matches?
       `(let [z# ~z
              node# (if (zip? z#)

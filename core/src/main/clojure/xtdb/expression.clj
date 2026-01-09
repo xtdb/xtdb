@@ -56,15 +56,15 @@
                      (contains? param-types form) {:op :param, :param form,
                                                    :param-type (get param-types form)}
                      (contains? var-types form) {:op :variable, :variable form}
-                     :else (throw (err/illegal-arg :xtdb.expression/unknown-symbol
-                                                   {::err/message (format "Unknown symbol: '%s'" form)
-                                                    :symbol form})))
+                     :else (throw (err/incorrect :xtdb.expression/unknown-symbol
+                                                 (format "Unknown symbol: '%s'" form)
+                                                 {:symbol form})))
 
     (map? form) (do
                   (when-not (every? keyword? (keys form))
-                    (throw (err/illegal-arg :xtdb.expression/parse-error
-                                            {::err/message (str "keys to struct must be keywords: " (pr-str form))
-                                             :form form})))
+                    (throw (err/incorrect :xtdb.expression/parse-error
+                                          (str "keys to struct must be keywords: " (pr-str form))
+                                          {:form form})))
                   {:op :struct,
                    :entries (->> (for [[k v-form] form]
                                    (MapEntry/create k (form->expr v-form env)))
@@ -79,9 +79,9 @@
 
 (defmethod parse-list-form 'if [[_ & args :as form] env]
   (when-not (= 3 (count args))
-    (throw (err/illegal-arg :xtdb.expression/arity-error
-                            {::err/message (str "'if' expects 3 args: " (pr-str form))
-                             :form form})))
+    (throw (err/incorrect :xtdb.expression/arity-error
+                          (str "'if' expects 3 args: " (pr-str form))
+                          {:form form})))
 
   (let [[pred then else] args]
     {:op :if,
@@ -91,25 +91,22 @@
 
 (defmethod parse-list-form 'let [[_ & args :as form] env]
   (when-not (= 2 (count args))
-    (throw (err/illegal-arg :xtdb.expression/arity-error
-                            {::err/message (str "'let' expects 2 args - bindings + body"
-                                                 (pr-str form))
-                             :form form})))
+    (throw (err/incorrect :xtdb.expression/arity-error
+                          (str "'let' expects 2 args - bindings + body" (pr-str form))
+                          {:form form})))
 
   (let [[bindings body] args]
     (when-not (or (nil? bindings) (sequential? bindings))
-      (throw (err/illegal-arg :xtdb.expression/parse-error
-                              {::err/message (str "'let' expects a sequence of bindings: "
-                                                   (pr-str form))
-                               :form form})))
+      (throw (err/incorrect :xtdb.expression/parse-error
+                            (str "'let' expects a sequence of bindings: " (pr-str form))
+                            {:form form})))
 
     (if-let [[local expr-form & more-bindings] (seq bindings)]
       (do
         (when-not (symbol? local)
-          (throw (err/illegal-arg :xtdb.expression/parse-error
-                                  {::err/message (str "bindings in `let` should be symbols: "
-                                                       (pr-str local))
-                                   :binding local})))
+          (throw (err/incorrect :xtdb.expression/parse-error
+                                (str "bindings in `let` should be symbols: " (pr-str local))
+                                {:binding local})))
         {:op :let
          :local local
          :expr (form->expr expr-form env)
@@ -120,15 +117,15 @@
 
 (defmethod parse-list-form '. [[_ & args :as form] env]
   (when-not (= 2 (count args))
-    (throw (err/illegal-arg :xtdb.expression/arity-error
-                            {::err/message (str "'.' expects 2 args: " (pr-str form))
-                             :form form})))
+    (throw (err/incorrect :xtdb.expression/arity-error
+                          (str "'.' expects 2 args: " (pr-str form))
+                          {:form form})))
 
   (let [[struct field] args]
     (when-not (or (symbol? field) (keyword? field))
-      (throw (err/illegal-arg :xtdb.expression/arity-error
-                              {::err/message (str "'.' expects symbol or keyword fields: " (pr-str form))
-                               :form form})))
+      (throw (err/incorrect :xtdb.expression/arity-error
+                            (str "'.' expects symbol or keyword fields: " (pr-str form))
+                            {:form form})))
 
     {:op :call
      :f :get-field
@@ -138,13 +135,13 @@
 (defmethod parse-list-form '.. [[_ & args :as form] env]
   (let [[struct & fields] args]
     (when-not (seq fields)
-      (throw (err/illegal-arg :xtdb.expression/arity-error
-                              {::err/message (str "'..' expects at least 2 args: " (pr-str form))
-                               :form form})))
+      (throw (err/incorrect :xtdb.expression/arity-error
+                            (str "'..' expects at least 2 args: " (pr-str form))
+                            {:form form})))
     (when-not (every? #(or (symbol? %) (keyword? %)) fields)
-      (throw (err/illegal-arg :xtdb.expression/parse-error
-                              {::err/message (str "'..' expects symbol or keyword fields: " (pr-str form))
-                               :form form})))
+      (throw (err/incorrect :xtdb.expression/parse-error
+                            (str "'..' expects symbol or keyword fields: " (pr-str form))
+                            {:form form})))
     (reduce (fn [struct-expr field]
               {:op :call
                :f :get-field
@@ -234,11 +231,9 @@
   (if (= source-type target-type)
     {:return-type (types/col-type->vec-type false target-type), :return-col-type target-type
      :->call-code first}
-    (throw (err/illegal-arg :xtdb.expression/cast-error
-                            {::err/message (format "Unsupported cast: '%s' -> '%s'"
-                                                   (pr-str source-type) (pr-str target-type))
-                             :source-type source-type
-                             :target-type target-type}))))
+    (throw (err/incorrect :xtdb.expression/cast-error
+                          (format "Unsupported cast: '%s' -> '%s'" (pr-str source-type) (pr-str target-type))
+                          {:source-type source-type, :target-type target-type}))))
 
 (doseq [int-type [:int :uint]]
   (defmethod codegen-cast [int-type :bool] [_]
@@ -251,8 +246,8 @@
 (defn- precision->bit-width [^long p]
   (cond (<= p 32) (int 128)
         (<= p 64) (int 256)
-        :else (throw (err/illegal-arg :xtdb.expression/unsupported-precision
-                                      {::err/message (format "Unsupported precision: %d" p)}))))
+        :else (throw (err/incorrect :xtdb.expression/unsupported-precision
+                                    (format "Unsupported precision: %d" p)))))
 
 (defmethod codegen-cast [:num :decimal] [{{:keys [precision scale]} :cast-opts}]
   (let [scale (if precision (or scale 0) 9)
@@ -607,12 +602,12 @@
   :default ::default)
 
 (defmethod codegen-call ::default [{:keys [f arg-col-types]}]
-  (throw (err/illegal-arg :xtdb.expression/function-type-mismatch
-                          {::err/message (apply str (name (normalise-fn-name f)) " not applicable to types "
-                                                (let [types (map (comp name types/col-type-head) arg-col-types)]
-                                                  (concat (interpose ", " (butlast types))
-                                                          (when (seq (butlast types)) [" and "])
-                                                          [(last types)])))})))
+  (throw (err/incorrect :xtdb.expression/function-type-mismatch
+                        (apply str (name (normalise-fn-name f)) " not applicable to types "
+                               (let [types (map (comp name types/col-type-head) arg-col-types)]
+                                 (concat (interpose ", " (butlast types))
+                                         (when (seq (butlast types)) [" and "])
+                                         [(last types)]))))))
 
 (def ^:private shortcut-null-args?
   (complement (comp #{:is_true :is_false :is_null :true? :false? :nil? :boolean
@@ -1112,8 +1107,7 @@
         re-sym (gensym 're)]
 
     (when (or start n)
-      (throw (err/illegal-arg ::unsupported
-                              {::err/message "regexp_replace does not yet support `start` or `n` arguments"})))
+      (throw (err/unsupported ::unsupported "regexp_replace does not yet support `start` or `n` arguments")))
 
     {:return-type #xt/type :utf8
      :return-col-type :utf8
@@ -1436,17 +1430,15 @@
 ;; concat is not a simple mono-call, as it permits a variable number of arguments so we can avoid intermediate alloc
 (defn- codegen-concat [{:keys [emitted-args] :as expr}]
   (when (< (count emitted-args) 2)
-    (throw (err/illegal-arg :xtdb.expression/arity-error
-                            {::err/message "Arity error, concat requires at least two arguments"
-                             :expr (dissoc expr :emitted-args :arg-col-types)})))
+    (throw (err/incorrect :xtdb.expression/arity-error "Arity error, concat requires at least two arguments"
+                          {:expr (dissoc expr :emitted-args :arg-col-types)})))
   (let [return-type (apply types/merge-types (map :return-type emitted-args))
         return-col-type (types/vec-type->col-type return-type)
         possible-types (types/flatten-union-types return-col-type)
         value-types (disj possible-types :null)
         _ (when (< 1 (count value-types))
-            (throw (err/illegal-arg :xtdb.expression/type-error
-                                    {::err/message "All arguments to `concat` must be of the same type."
-                                     :types value-types})))
+            (throw (err/incorrect :xtdb.expression/type-error "All arguments to `concat` must be of the same type."
+                                  {:types value-types})))
         value-type (first value-types)
         ->concat-code (case value-type
                         :utf8 #(do `(buf-concat (mapv resolve-utf8-buf [~@%])))
@@ -1556,8 +1548,7 @@
   (let [[_ scale-arg] args
         scale-literal (:literal scale-arg)]
     (when-not (integer? scale-literal)
-      (throw (err/illegal-arg ::non-literal-scale
-                              {::err/message "ROUND(INTEGER, INTEGER) with non-constant scale is not supported. Use ROUND(val::DOUBLE, scale) for dynamic scales."})))
+      (throw (err/unsupported ::non-literal-scale "ROUND(INTEGER, INTEGER) with non-constant scale is not supported. Use ROUND(val::DOUBLE, scale) for dynamic scales.")))
     (let [bit-width 128
           precision (case int-type
                       :i32 10
@@ -1611,8 +1602,7 @@
   (let [[_ scale-arg] args
         scale-literal (:literal scale-arg)]
     (when-not (integer? scale-literal)
-      (throw (err/illegal-arg ::non-literal-scale
-                              {::err/message "ROUND(DECIMAL, INTEGER) with non-constant scale is not supported. Use ROUND(val::DOUBLE, scale) for dynamic scales."})))
+      (throw (err/unsupported ::non-literal-scale "ROUND(DECIMAL, INTEGER) with non-constant scale is not supported. Use ROUND(val::DOUBLE, scale) for dynamic scales.")))
     (let [ret-col-type [:decimal precision scale-literal bit-width]]
       {:return-type (types/col-type->vec-type false ret-col-type), :return-col-type ret-col-type
        :->call-code (fn [[value scale-code]]

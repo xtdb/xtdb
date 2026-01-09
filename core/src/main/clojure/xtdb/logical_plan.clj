@@ -306,9 +306,9 @@
      (->> specs :projections (map ->projected-column))
      (relation-columns relation))
 
-    (throw (err/illegal-arg ::cannot-calculate-relation-cols
-                            {::err/message (str "cannot calculate columns for: " (pr-str relation-in))
-                             :relation relation-in}))))
+    (throw (err/fault ::cannot-calculate-relation-cols
+                      (str "cannot calculate columns for: " (pr-str relation-in))
+                      {:relation relation-in}))))
 
 (defn expr-symbols [expr]
   (set (for [x (flatten (if (coll? expr)
@@ -1514,7 +1514,6 @@
 
 (defn validate-plan [plan]
   (when-not (s/valid? ::logical-plan plan)
-    (throw (err/illegal-arg ::invalid-plan
-                            {::err/message (s/explain-str ::logical-plan plan)
-                             :plan plan
-                             :explain-data (s/explain-data ::logical-plan plan)}))))
+    (throw (err/fault ::invalid-plan
+                      (s/explain-str ::logical-plan plan)
+                      {:plan plan, :explain-data (s/explain-data ::logical-plan plan)}))))
