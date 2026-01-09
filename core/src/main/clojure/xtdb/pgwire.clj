@@ -541,6 +541,10 @@
                                            (->> (into {} (filter (comp some? val))))))
                                  (assoc :await-token await-token))))))))))
 
+(defn close-transaction [{:keys [conn-state] :as conn}]
+  (swap! conn-state dissoc :transaction)
+  (close-all-portals conn))
+
 (defn cmd-commit [{:keys [^Xtdb node conn-state default-db ^BufferAllocator allocator, tx-error-counter] :as conn}]
   (let [{:keys [transaction session]} @conn-state
         {:keys [failed dml-buf system-time access-mode default-tz async? user-metadata]} transaction
@@ -579,11 +583,10 @@
           (metrics/inc-counter! tx-error-counter)
           (throw t))
         (finally
-          (swap! conn-state dissoc :transaction)
-          (close-all-portals conn))))))
+          (close-transaction conn))))))
 
-(defn cmd-rollback [{:keys [conn-state]}]
-  (swap! conn-state dissoc :transaction))
+(defn cmd-rollback [conn]
+  (close-transaction conn))
 
 (defn- fallback-type [session]
   (case (get-in session [:parameters "fallback_output_format"] :json)
