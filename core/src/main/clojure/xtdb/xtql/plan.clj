@@ -580,7 +580,7 @@
           pre-col (gen-col)
           return-vars (conj provided-vars l)]
       {:ra-plan [:project {:projections (vec return-vars)}
-                 [:unnest {l pre-col}
+                 [:unnest {:columns {l pre-col}}
                   [:map {:projections [{pre-col r}]}
                    (wrap-expr-subqueries ra-plan provided-vars subqueries)]]]
        :provided-vars return-vars})))
@@ -683,7 +683,7 @@
         unnested-col (col-sym (*gensym* original-unnested-col))]
     (wrap-unify
      {:ra-plan
-      [:unnest {unnested-col pre-col}
+      [:unnest {:columns {unnested-col pre-col}}
        [:map {:projections [{pre-col expr}]}
         (wrap-expr-subqueries acc-plan acc-provided-vars subqueries)]]}
      (update var->cols original-unnested-col (fnil conj #{}) unnested-col))))

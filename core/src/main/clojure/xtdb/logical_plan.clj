@@ -275,12 +275,10 @@
     [:union-all _opts lhs _]
     (relation-columns lhs)
 
-    [:unnest columns relation]
-    (conj (relation-columns relation) (key (first columns)))
-
-    [:unnest columns opts relation]
-    (cond-> (conj (relation-columns relation) (val (first columns)))
-      (:ordinality-column opts) (conj (:ordinality-column opts)))
+    [:unnest opts relation]
+    (let [{:keys [columns ordinality-column]} opts]
+      (cond-> (conj (relation-columns relation) (key (first columns)))
+        ordinality-column (conj ordinality-column)))
 
     [:let _ relation]
     (relation-columns relation)
@@ -474,24 +472,13 @@
 (defn- push-selection-down-past-unnest [push-correlated? z]
   (r/zmatch z
     [:select opts
-     [:unnest _columns relation]]
+     [:unnest unnest-opts relation]]
     ;;=>
     (let [{:keys [predicate]} opts]
       (when (and (or push-correlated? (no-correlated-columns? predicate))
                  (columns-in-predicate-present-in-relation? relation predicate))
 
-        [:unnest _columns
-         [:select {:predicate predicate}
-          relation]]))
-
-    [:select opts
-     [:unnest _columns _ordinality_column relation]]
-    ;;=>
-    (let [{:keys [predicate]} opts]
-      (when (and (or push-correlated? (no-correlated-columns? predicate))
-                 (columns-in-predicate-present-in-relation? relation predicate))
-
-        [:unnest _columns _ordinality_column
+        [:unnest unnest-opts
          [:select {:predicate predicate}
           relation]]))))
 
@@ -1065,7 +1052,7 @@
       (when (and (= mode :cross-join) (map? col-spec))
         (let [[unnest-col unnest-expr] (first col-spec)
               unnest-expr (w/postwalk-replace (set/map-invert columns) unnest-expr)]
-          [:unnest {unnest-col 'unnest}
+          [:unnest {:columns {unnest-col 'unnest}}
            [:map {:projections [{'unnest unnest-expr}]}
             lhs]])))
 
@@ -1083,7 +1070,7 @@
                  (= '(local-row-number) (val (ffirst projections))))
         (let [[unnest-col unnest-expr] (first col-spec)
               unnest-expr (w/postwalk-replace (set/map-invert columns) unnest-expr)]
-          [:unnest {unnest-col 'unnest} {:ordinality-column (key (ffirst projections))}
+          [:unnest {:columns {unnest-col 'unnest}, :ordinality-column (key (ffirst projections))}
            [:map {:projections [{'unnest unnest-expr}]}
             lhs]])))))
 

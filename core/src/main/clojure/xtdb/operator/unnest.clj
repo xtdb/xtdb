@@ -13,11 +13,11 @@
            xtdb.vector.extensions.SetType))
 
 (s/def ::ordinality-column ::lp/column)
+(s/def ::columns (s/map-of ::lp/column ::lp/column, :conform-keys true, :count 1))
 
 (defmethod lp/ra-expr :unnest [_]
   (s/cat :op #{:ω :unnest}
-         :columns (s/map-of ::lp/column ::lp/column, :conform-keys true, :count 1)
-         :opts (s/? (s/keys :opt-un [::ordinality-column]))
+         :opts (s/keys :req-un [::columns] :opt-un [::ordinality-column])
          :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -95,8 +95,9 @@
   (close [_]
     (.close in-cursor)))
 
-(defmethod lp/emit-expr :unnest [{:keys [columns relation], {:keys [ordinality-column]} :opts}, op-args]
-  (let [[to-col from-col] (first columns)]
+(defmethod lp/emit-expr :unnest [{:keys [opts relation]} op-args]
+  (let [{:keys [columns ordinality-column]} opts
+        [to-col from-col] (first columns)]
     (lp/unary-expr (lp/emit-expr relation op-args)
                    (fn [{:keys [vec-types] :as inner-rel}]
                      (let [unnest-type (->> (get vec-types from-col)
