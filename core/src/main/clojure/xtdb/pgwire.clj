@@ -661,14 +661,12 @@
 (defmethod handle-msg* :msg-sync [{:keys [conn-state] :as conn} _]
   ;; Sync commands are sent by the client to commit transactions
   ;; and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)
-
   (let [{:keys [implicit? failed]} (:transaction @conn-state)]
     (try
-      (if implicit?
+      (when implicit?
         (if failed
           (cmd-rollback conn)
-          (cmd-commit conn))
-        (close-all-portals conn))
+          (cmd-commit conn)))
       (catch Throwable t
         (send-ex conn t))))
 
