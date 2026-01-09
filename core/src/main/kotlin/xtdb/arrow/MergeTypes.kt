@@ -123,7 +123,7 @@ data class MergeTypes(
 
                     TransitType, UriType, UuidType, KeywordType,
                     IntervalMDMType,
-                    RegClassType, RegProcType
+                    OidType, RegClassType, RegProcType
                         -> mergeScalar(arrowType, nullable)
 
                     else -> unsupported("extension: $arrowType")

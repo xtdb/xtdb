@@ -19,6 +19,7 @@ import xtdb.time.Interval
 import xtdb.time.MICRO_HZ
 import xtdb.time.NANO_HZ
 import xtdb.types.ClojureForm
+import xtdb.types.Oid
 import xtdb.types.RegClass
 import xtdb.types.RegProc
 import xtdb.types.ZonedDateTimeRange
@@ -120,6 +121,9 @@ data class VectorType(
 
         @JvmField
         val TRANSIT = VectorType(TransitType)
+
+        @JvmField
+        val OID = VectorType(OidType)
 
         @JvmField
         val REG_CLASS = VectorType(RegClassType)

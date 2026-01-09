@@ -4,7 +4,7 @@
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
            (xtdb.arrow ArrowTypes VectorType)
-           (xtdb.vector.extensions IntervalMDMType KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
+           (xtdb.vector.extensions IntervalMDMType KeywordType OidType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (defprotocol FromArrowType
   (<-arrow-type [arrow-type]))
@@ -114,6 +114,7 @@
 
   TsTzRangeType (<-arrow-type [_] :tstz-range)
   KeywordType (<-arrow-type [_] :keyword)
+  OidType (<-arrow-type [_] :oid)
   RegClassType (<-arrow-type [_] :regclass)
   RegProcType (<-arrow-type [_] :regproc)
   UuidType (<-arrow-type [_] :uuid)
@@ -140,6 +141,7 @@
     :instant (.getArrowType VectorType/INSTANT)
     :tstz-range TsTzRangeType/INSTANCE
     :keyword KeywordType/INSTANCE
+    :oid OidType/INSTANCE
     :regclass RegClassType/INSTANCE
     :regproc RegProcType/INSTANCE
     :uuid UuidType/INSTANCE

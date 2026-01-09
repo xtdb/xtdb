@@ -16,6 +16,7 @@ import xtdb.arrow.VectorType.Companion.I16
 import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.arrow.VectorType.Companion.KEYWORD
+import xtdb.arrow.VectorType.Companion.OID
 import xtdb.arrow.VectorType.Companion.REG_CLASS
 import xtdb.arrow.VectorType.Companion.REG_PROC
 import xtdb.arrow.VectorType.Companion.TSTZ_RANGE
@@ -696,6 +697,21 @@ sealed class PgType(
         override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray = writeBinary(env, rdr, idx)
     }
 
+    data object PgOid : PgType(
+        typname = "oid",
+        xtType = OID,
+        oid = 26,
+        typcategory = NUMERIC,
+        typsend = "oidsend",
+        typreceive = "oidrecv",
+    ) {
+        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
+            utf8(Integer.toUnsignedString(rdr.getInt(idx)))
+
+        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
+            utf8(Integer.toUnsignedString(rdr.getInt(idx)))
+    }
+
     data object RegClass : PgType(
         typname = "regclass",
         xtType = REG_CLASS,
@@ -802,6 +818,7 @@ sealed class PgType(
         @JvmField val PG_TEXTS = Texts
         @JvmField val PG_UUID = Uuid
         @JvmField val PG_KEYWORD = Keyword
+        @JvmField val PG_OID = PgOid
         @JvmField val PG_REG_CLASS = RegClass
         @JvmField val PG_REG_PROC = RegProc
         @JvmField val PG_JSON = Json
@@ -814,7 +831,7 @@ sealed class PgType(
             Int8, Int4, Int2, Float4, Float8, Bool, Text, VarChar, Numeric,
             Timestamp, TimestampTz, Date, Time, PgInterval, PgDuration, TsTzRange,
             Bytes, Int4s, Int8s, Texts,
-            Uuid, Keyword, RegClass, RegProc, Json, Jsonb, Transit,
+            Uuid, Keyword, PgOid, RegClass, RegProc, Json, Jsonb, Transit,
         )
 
         private val byOid: Map<Oid, PgType> = (values + Default).associateBy { it.oid }
@@ -866,6 +883,7 @@ sealed class PgType(
             override fun visit(type: ArrowType.ExtensionType) = when (type) {
                 is UuidType -> Uuid
                 is KeywordType -> Keyword
+                is OidType -> PgOid
                 is RegClassType -> RegClass
                 is RegProcType -> RegProc
                 is TsTzRangeType -> TsTzRange

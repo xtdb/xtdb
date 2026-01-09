@@ -1041,6 +1041,7 @@
   (visitUriType [_ _] {:cast-type :uri})
   (visitVarbinaryType [_ _] {:cast-type :varbinary})
 
+  (visitOidType [_ _] {:cast-type :oid})
   (visitRegClassType [_ _] {:cast-type :regclass, :cast-opts {}})
   (visitRegProcType [_ _] {:cast-type :regproc, :cast-opts {}})
 

@@ -244,6 +244,7 @@ OCTETS : 'OCTETS' ;
 OF : 'OF' ;
 OFF : 'OFF' ;
 OFFSET : 'OFFSET' ;
+OID : 'OID' ;
 ON : 'ON' ;
 ONLY : 'ONLY' ;
 OR : 'OR' ;

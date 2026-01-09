@@ -5,6 +5,7 @@ import org.postgresql.core.BaseConnection
 import org.postgresql.jdbc.PgConnection
 import org.postgresql.util.PGobject
 import xtdb.time.*
+import xtdb.types.Oid
 import xtdb.types.RegClass
 import xtdb.types.RegProc
 import xtdb.types.ZonedDateTimeRange
@@ -51,6 +52,7 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                 "time" -> getObject(columnIndex, LocalTime::class.java)
                 "duration" -> getObject(columnIndex, Duration::class.java)
                 "interval" -> getObject(columnIndex, Interval::class.java)
+                "oid" -> getObject(columnIndex, Oid::class.java)
                 "regclass" -> getObject(columnIndex, RegClass::class.java)
                 "regproc" -> getObject(columnIndex, RegProc::class.java)
 
@@ -78,6 +80,7 @@ internal class XtConnection(private val conn: PgConnection) : BaseConnection by 
                             Duration::class.java -> Duration.parse(s)
                             Interval::class.java -> s.asInterval()
                             ZonedDateTimeRange::class.java -> s.asZonedDateTimeRange()
+                            Oid::class.java -> Oid(s.toInt())
                             RegClass::class.java -> RegClass(s.toInt())
                             RegProc::class.java -> RegProc(s.toInt())
 

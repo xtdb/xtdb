@@ -9,7 +9,7 @@
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb.arrow ArrowTypes MergeTypes VectorType)
-           (xtdb.vector.extensions IntervalMDMType KeywordType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
+           (xtdb.vector.extensions IntervalMDMType KeywordType OidType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -111,7 +111,7 @@
 
       (derive :keyword :any) (derive :uri :any) (derive :uuid :any) (derive :transit :any)
 
-      (derive :regclass :regoid) (derive :regproc :regoid) (derive :regoid :any)
+      (derive :oid :any) (derive :regclass :oid) (derive :regproc :oid)
 
       (derive :list :any) (derive :struct :any) (derive :set :any) (derive :map :any)))
 
@@ -415,6 +415,7 @@
 
 (defmethod arrow-type->col-type TsTzRangeType [_ _] :tstz-range)
 (defmethod arrow-type->col-type KeywordType [_] :keyword)
+(defmethod arrow-type->col-type OidType [_] :oid)
 (defmethod arrow-type->col-type RegClassType [_] :regclass)
 (defmethod arrow-type->col-type RegProcType [_] :regproc)
 (defmethod arrow-type->col-type UriType [_] :uri)

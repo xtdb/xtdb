@@ -145,7 +145,7 @@ identifier
         | 'ROLE'
         | 'USER' | 'PASSWORD'
         | 'VARBINARY' | 'BYTEA'
-        | 'URI'
+        | 'URI' | 'OID'
         | 'COPY' | 'FORMAT'
         | 'ATTACH' | 'DETACH' | 'DATABASE'
         | METADATA
@@ -175,6 +175,7 @@ dataType
     | ('CHAR' | 'VARCHAR' | 'TEXT') # CharacterStringType
     | 'DURATION' ('(' precision ')')? # DurationType
     | 'ROW' '(' fieldDefinition (',' fieldDefinition)* ')' # RowType
+    | 'OID' #OidType
     | 'REGCLASS' #RegClassType
     | 'REGPROC' #RegProcType
     | 'KEYWORD' #KeywordType

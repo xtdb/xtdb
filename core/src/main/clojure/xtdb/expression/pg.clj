@@ -88,3 +88,25 @@
   {:return-type #xt/type :regproc
    :return-col-type target-type
    :->call-code first})
+
+;;; oid casts
+
+(defmethod expr/codegen-cast [:int :oid] [{:keys [target-type]}]
+  {:return-type #xt/type :oid
+   :return-col-type target-type
+   :->call-code first})
+
+(defmethod expr/codegen-cast [:oid :int] [{:keys [target-type]}]
+  {:return-type #xt/type :i32
+   :return-col-type target-type
+   :->call-code first})
+
+(defmethod expr/codegen-cast [:regclass :oid] [{:keys [target-type]}]
+  {:return-type #xt/type :oid
+   :return-col-type target-type
+   :->call-code first})
+
+(defmethod expr/codegen-cast [:regproc :oid] [{:keys [target-type]}]
+  {:return-type #xt/type :oid
+   :return-col-type target-type
+   :->call-code first})

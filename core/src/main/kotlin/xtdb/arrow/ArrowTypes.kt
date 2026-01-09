@@ -77,6 +77,7 @@ fun ArrowType.toLeg(): String = accept(object : ArrowTypeVisitor<String> {
         TransitType -> "transit"
         UuidType -> "uuid"
         UriType -> "uri"
+        OidType -> "oid"
         RegClassType -> "regclass"
         RegProcType -> "regproc"
         SetType -> "set"

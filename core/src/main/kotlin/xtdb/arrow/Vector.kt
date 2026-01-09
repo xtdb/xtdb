@@ -252,6 +252,7 @@ sealed class Vector : VectorReader, VectorWriter {
                             ListVector(al, name, nullable, children.firstOrNull() ?: NullVector($$"$data$", false))
                         )
 
+                    OidType -> OidVector(IntVector.open(al, name, nullable))
                     RegClassType -> RegClassVector(IntVector.open(al, name, nullable))
                     RegProcType -> RegProcVector(IntVector.open(al, name, nullable))
 
