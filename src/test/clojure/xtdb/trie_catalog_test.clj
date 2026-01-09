@@ -652,6 +652,10 @@
                   (cat/current-tries)
                   (into #{} (map :trie-key)))))))
 
+(t/deftest max-block-index-always-set-test-5139
+  (let [{:keys [tries] :as _table-trie-cat} (apply-msgs ["l02-r20200203-b00" 10])]
+    (t/is (true? (every? (comp int? :max-block-idx) (vals tries))))))
+
 (t/deftest test-protobuf-additions
   ;; There have been (so far) two changes in the protobuffers that are relevant for the trie-catalog since 2.0.0
   ;; GCing - and hence trie states in the TrieDetails message

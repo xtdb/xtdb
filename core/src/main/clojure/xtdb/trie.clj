@@ -39,6 +39,7 @@
 
 (defn <-trie-details [^TrieDetails trie-details]
   (merge
+   {:live (), :garbage ()}
    (cond-> {:table-name (.getTableName trie-details)
             :data-file-size (.getDataFileSize trie-details)}
 
