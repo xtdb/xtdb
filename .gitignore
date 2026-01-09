@@ -24,6 +24,8 @@ buildRepl
 !.claude/commands/
 !.claude/skills/
 
+.tasks/
+
 /.calva/
 
 # idea

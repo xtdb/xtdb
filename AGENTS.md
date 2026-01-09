@@ -10,3 +10,4 @@ For example, even when we're working on a feature branch, we will often separate
 
 * This is a Gradle project - do not use Clojure CLI tools to run code within the project, they will not bring in the dependencies correctly.
 * Modules are named `xtdb-<directory>` - e.g. `:xtdb-core`, `:modules:xtdb-kafka` - so that the Maven artifacts have the `xtdb-` prefix.
+* If you need to create git worktrees, create them in the `.tasks` directory in the repo root.
