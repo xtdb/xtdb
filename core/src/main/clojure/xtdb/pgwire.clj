@@ -541,6 +541,10 @@
                                            (->> (into {} (filter (comp some? val))))))
                                  (assoc :await-token await-token))))))))))
 
+(defn close-transaction [{:keys [conn-state] :as conn}]
+  (swap! conn-state dissoc :transaction)
+  (close-all-portals conn))
+
 (defn cmd-commit [{:keys [^Xtdb node conn-state default-db ^BufferAllocator allocator, tx-error-counter] :as conn}]
   (let [{:keys [transaction session]} @conn-state
         {:keys [failed dml-buf system-time access-mode default-tz async? user-metadata]} transaction
@@ -579,11 +583,10 @@
           (metrics/inc-counter! tx-error-counter)
           (throw t))
         (finally
-          (swap! conn-state dissoc :transaction)
-          (close-all-portals conn))))))
+          (close-transaction conn))))))
 
-(defn cmd-rollback [{:keys [conn-state]}]
-  (swap! conn-state dissoc :transaction))
+(defn cmd-rollback [conn]
+  (close-transaction conn))
 
 (defn- fallback-type [session]
   (case (get-in session [:parameters "fallback_output_format"] :json)
@@ -658,14 +661,12 @@
 (defmethod handle-msg* :msg-sync [{:keys [conn-state] :as conn} _]
   ;; Sync commands are sent by the client to commit transactions
   ;; and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)
-
   (let [{:keys [implicit? failed]} (:transaction @conn-state)]
     (try
-      (if implicit?
+      (when implicit?
         (if failed
           (cmd-rollback conn)
-          (cmd-commit conn))
-        (close-all-portals conn))
+          (cmd-commit conn)))
       (catch Throwable t
         (send-ex conn t))))
 
@@ -1326,36 +1327,44 @@
       Future$State/FAILED (throw (.exceptionNow task)))))
 
 (defn cmd-exec-query [{:keys [conn-state !closing? query-error-counter] :as conn}
-                      {:keys [limit query ^IResultCursor cursor pg-cols] :as _portal}]
+                      {:keys [limit statement-type query ^IResultCursor cursor pg-cols] :as _portal}]
+  ;; Create an implicit transaction if one hasn't already been started
+  (let [transaction (get-in @conn-state [:transaction])]
+    (when (:failed transaction)
+      (throw (pgio/err-protocol-violation "current transaction is aborted, commands ignored until ROLLBACK is received")))
+    
+    (when-not (or transaction (= statement-type :show-variable))
+      (cmd-begin conn {:implicit? true :access-mode :read-only} {}))) 
+  
   (try
     (let [n-rows-out (volatile! 0)
           {session-params :parameters, :as session} (:session @conn-state)
           fallback (fallback-type session)]
       (run-cancellable-query!
-        conn
-        (fn []
-          (while (and (or (nil? limit) (< @n-rows-out limit))
-                      (.tryAdvance cursor
-                                   (fn [^RelationReader rel]
-                                     (log/trace "advancing cursor with rel count" (.getRowCount rel))
-                                     (cond
-                                       (Thread/interrupted) (throw (InterruptedException.))
+       conn
+       (fn []
+         (while (and (or (nil? limit) (< @n-rows-out limit))
+                     (.tryAdvance cursor
+                                  (fn [^RelationReader rel]
+                                    (log/trace "advancing cursor with rel count" (.getRowCount rel))
+                                    (cond
+                                      (Thread/interrupted) (throw (InterruptedException.))
 
-                                       @!closing? (log/trace "query result stream stopping (conn closing)")
+                                      @!closing? (log/trace "query result stream stopping (conn closing)")
 
-                                       :else (dotimes [idx (cond-> (.getRowCount rel)
-                                                                   limit (min (- limit @n-rows-out)))]
-                                               (let [row (mapv
-                                                           (fn [{:keys [^String col-name pg-type result-format]}]
-                                                             (let [^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) fallback pg-type)
-                                                                   rdr (.vectorForOrNull rel col-name)]
-                                                               (when-not (.isNull rdr idx)
-                                                                 (if (= :binary result-format)
-                                                                   (.writeBinary pg-type session-params rdr idx)
-                                                                   (.writeText pg-type session-params rdr idx)))))
-                                                           pg-cols)]
-                                                 (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
-                                                 (vswap! n-rows-out inc))))))))))
+                                      :else (dotimes [idx (cond-> (.getRowCount rel)
+                                                            limit (min (- limit @n-rows-out)))]
+                                              (let [row (mapv
+                                                         (fn [{:keys [^String col-name pg-type result-format]}]
+                                                           (let [^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) fallback pg-type)
+                                                                 rdr (.vectorForOrNull rel col-name)]
+                                                             (when-not (.isNull rdr idx)
+                                                               (if (= :binary result-format)
+                                                                 (.writeBinary pg-type session-params rdr idx)
+                                                                 (.writeText pg-type session-params rdr idx)))))
+                                                         pg-cols)]
+                                                (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
+                                                (vswap! n-rows-out inc))))))))))
 
       (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @n-rows-out)}))
 
