@@ -1,5 +1,6 @@
 (ns xtdb.time
   (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [xtdb.error :as err])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZonedDateTime)
            [java.time.format DateTimeParseException]
@@ -152,6 +153,27 @@
                (if d-str
                  (Duration/parse (str neg "PT" d-str))
                  Duration/ZERO))))
+
+(defn <-pg-interval-str
+  "Parses PostgreSQL-style interval strings like '30 day', '-30 day', '1 year 2 months'.
+   Returns an Interval or nil if parsing fails."
+  [i-str]
+  (let [pattern #"(-?\d+)\s*(years?|months?|weeks?|days?|hours?|minutes?|seconds?)"
+        matches (re-seq pattern (str/lower-case i-str))]
+    (when (seq matches)
+      (reduce (fn [^Interval interval [_ num-str unit]]
+                (let [n (Long/parseLong num-str)]
+                  (cond
+                    (str/starts-with? unit "year") (.plusYears interval n)
+                    (str/starts-with? unit "month") (.plusMonths interval n)
+                    (str/starts-with? unit "week") (.plusWeeks interval n)
+                    (str/starts-with? unit "day") (.plusDays interval n)
+                    (str/starts-with? unit "hour") (.plusHours interval n)
+                    (str/starts-with? unit "minute") (.plusMinutes interval n)
+                    (str/starts-with? unit "second") (.plusSeconds interval n)
+                    :else interval)))
+              Interval/ZERO
+              matches))))
 
 (defn alter-md*-interval-precision ^PeriodDuration [^long precision ^PeriodDuration pd]
   (PeriodDuration.

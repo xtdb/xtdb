@@ -894,6 +894,7 @@
 (defn parse-iso-interval-literal [i-str env]
   (try
     (or (time/<-iso-interval-str i-str)
+        (time/<-pg-interval-str i-str)
         (add-err! env (->CannotParseInterval i-str nil)))
     (catch Exception e
       (add-err! env (->CannotParseInterval i-str (.getMessage e))))))
