@@ -914,16 +914,16 @@
 (defn- show-var-query [variable]
   (case variable
     ("latest_completed_txs" "latest_submitted_msg_ids" "latest_processed_msg_ids")
-    (-> '[:table ?_0]
+    (-> '[:table {:param ?_0}]
         (with-meta {:param-count 1}))
 
     "latest_submitted_tx" (-> '[:select {:predicate (not (nil? tx_id))}
-                                [:table [{:tx_id ?_0, :system_time ?_1,
-                                          :committed ?_2, :error ?_3,
-                                          :await_token ?_4}]]]
+                                [:table {:rows [{:tx_id ?_0, :system_time ?_1,
+                                                 :committed ?_2, :error ?_3,
+                                                 :await_token ?_4}]}]]
                               (with-meta {:param-count 5}))
 
-    (-> (xt/template [:table [{~(keyword variable) ?_0}]])
+    (-> (xt/template [:table {:rows [{~(keyword variable) ?_0}]}])
         (with-meta {:param-count 1}))))
 
 (defn- show-var-param-types [variable]

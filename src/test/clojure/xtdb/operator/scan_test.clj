@@ -94,7 +94,7 @@
              (set (util/->clj (tu/query-ra
                                ;; the cross-join copies data from the underlying MultiVectorReader
                                '[:apply {:mode :cross-join, :columns {}}
-                                 [:table [{}]]
+                                 [:table {:rows [{}]}]
                                  [:scan {:table #xt/table xt_docs, :columns [foo]}]]
                                {:node node})))))))
 

@@ -46,27 +46,27 @@
             {:a 2, :b [3 4 5], :b* 4}
             {:a 2, :b [3 4 5], :b* 5}]
            (tu/query-ra '[:unnest {:columns {b* b}}
-                          [:table ?x]]
+                          [:table {:param ?x}]]
                         {:args {:x [{:a 1, :b [1 2]} {:a 2, :b [3 4 5]}]}})))
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
            (tu/query-ra '[:project {:projections [a b*]}
                           [:unnest {:columns {b* b}}
-                           [:table ?x]]]
+                           [:table {:param ?x}]]]
                         {:args {:x [{:a 1, :b [1 2]} {:a 2, :b []}]}}))
         "skips rows with empty lists")
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
            (tu/query-ra '[:project {:projections [a b*]}
                           [:unnest {:columns {b* b}}
-                           [:table ?x]]]
+                           [:table {:param ?x}]]]
                         {:args {:x [{:a 2, :b 1} {:a 1, :b [1 2]}]}}))
         "skips rows with non-list unnest column")
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* "foo"}]
            (tu/query-ra '[:project {:projections [a b*]}
                           [:unnest {:columns {b* b}}
-                           [:table ?x]]]
+                           [:table {:param ?x}]]]
                         {:args {:x [{:a 1, :b [1 "foo"]}]}}))
         "handles multiple types")
 
@@ -74,7 +74,7 @@
            (frequencies
             (tu/query-ra '[:project {:projections [a b*]}
                            [:unnest {:columns {b* b}}
-                            [:table ?x]]]
+                            [:table {:param ?x}]]]
                          {:args {:x [{:a 1, :b #{1 "foo"}}]}})))
         "handles sets")
 
@@ -82,7 +82,7 @@
            (frequencies
             (tu/query-ra '[:project {:projections [a b*]}
                            [:unnest {:columns {b* b}}
-                            [:table ?x]]]
+                            [:table {:param ?x}]]]
                          {:args {:x [{:a 1, :b #{1 "foo"}}
                                      {:a 2, :b "not-a-set"}
                                      {:a 3, :b #{2 "bar"}}]}})))
@@ -95,7 +95,7 @@
             {:a 2, :b* 5, :ordinal 3}]
            (tu/query-ra '[:project {:projections [a b* ordinal]}
                           [:unnest {:columns {b* b}, :ordinality-column ordinal}
-                           [:table ?x]]]
+                           [:table {:param ?x}]]]
                         {:args {:x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}
                          :key-fn :snake-case-keyword}))
         "with ordinality")
@@ -106,7 +106,7 @@
            (tu/query-ra '[:project {:projections [ordinal s]}
                           [:group-by {:columns [ordinal {s (sum b*)}]}
                            [:unnest {:columns {b* b}, :ordinality-column ordinal}
-                            [:table ?x]]]]
+                            [:table {:param ?x}]]]]
                         {:args {:x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}}))
         "group by ordinality"))
 

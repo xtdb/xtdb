@@ -216,14 +216,14 @@
 (t/deftest test-project-row-number
   (t/is (= [{:a 12, :row-num 1}, {:a 0, :row-num 2}, {:a 100, :row-num 3}]
            (tu/query-ra '[:project {:projections [a {row-num (row-number)}]}
-                          [:table ?a]]
+                          [:table {:param ?a}]]
 
                         {:args {:a [{:a 12} {:a 0} {:a 100}]}}))))
 
 (t/deftest test-project-append-columns
   (t/is (= [{:a 12, :row-num 1}, {:a 0, :row-num 2}, {:a 100, :row-num 3}]
            (tu/query-ra '[:project {:append-columns? true, :projections [{row-num (row-number)}]}
-                          [:table ?a]]
+                          [:table {:param ?a}]]
 
                         {:args {:a [{:a 12} {:a 0} {:a 100}]}}))))
 
@@ -232,7 +232,7 @@
             {:a 2, :bs [2 4]}
             {:a 3, :bs [5]}]
            (tu/query-ra '[:group-by {:columns [a {bs (array-agg b)}]}
-                          [:table ?ab]]
+                          [:table {:param ?ab}]]
                         {:args {:ab [{:a 1, :b 1}
                                      {:a 2, :b 2}
                                      {:a 1, :b 3}
@@ -249,7 +249,7 @@
            (map (juxt :b :bs)
                 (tu/query-ra '[:project {:projections [{b (between x l r)}
                                                        {bs (between-symmetric x l r)}]}
-                               [:table ?xlr]]
+                               [:table {:param ?xlr}]]
                              {:args {:xlr (map #(zipmap [:x :l :r] %)
                                                [[5 0 10] [5 10 0]
                                                 [0 0 10] [0 10 0]
@@ -260,41 +260,41 @@
 (t/deftest test-join-theta
   (t/is (= [{:x3 "31" :x4 "13"} {:x3 "31" :x4 "31"}]
            (tu/query-ra '[:join {:conditions [(== x3 "31")]}
-                          [:table [{x3 "13"} {x3 "31"}]]
-                          [:table [{x4 "13"} {x4 "31"}]]]
+                          [:table {:rows [{x3 "13"} {x3 "31"}]}]
+                          [:table {:rows [{x4 "13"} {x4 "31"}]}]]
                         {})))
 
   (t/is (= [{:x3 "31"}]
            (tu/query-ra '[:join {:conditions [{x3 x3} (== x3 "31")]}
-                          [:table [{x3 "13"} {x3 "31"}]]
-                          [:table [{x3 "13"} {x3 "31"}]]]
+                          [:table {:rows [{x3 "13"} {x3 "31"}]}]
+                          [:table {:rows [{x3 "13"} {x3 "31"}]}]]
                         {})))
 
   (t/is (= []
            (tu/query-ra '[:join {:conditions [false]}
-                          [:table [{x3 "13"} {x3 "31"}]]
-                          [:table [{x4 "13"} {x4 "31"}]]]
+                          [:table {:rows [{x3 "13"} {x3 "31"}]}]
+                          [:table {:rows [{x4 "13"} {x4 "31"}]}]]
                         {})))
 
   (t/is (= []
            (tu/query-ra '[:join
                           {:conditions [(== x1 x3)]}
                           [:join {:conditions [false]}
-                           [:table [{x1 1}]]
-                           [:table [{x2 2}]]]
-                          [:table [{x3 1}]]]
+                           [:table {:rows [{x1 1}]}]
+                           [:table {:rows [{x2 2}]}]]
+                          [:table {:rows [{x3 1}]}]]
                         {}))))
 
 (t/deftest test-current-times-111
   (t/is (= 1
            (->> (tu/query-ra '[:project {:projections [{ts (current-timestamp)}]}
-                               [:table [{} {} {}]]]
+                               [:table {:rows [{} {} {}]}]]
                              {})
                 (into #{} (map :ts))
                 count)))
 
   (let [times (->> (tu/query-ra '[:project {:projections [{ts (local-time 1)}]}
-                                  [:table [{}]]]
+                                  [:table {:rows [{}]}]]
                                 {})
                    (into #{} (map :ts)))]
     (t/is (= 1 (count times)))
@@ -307,7 +307,7 @@
 (t/deftest test-empty-rel-still-throws-149
   (t/is (anomalous? [:incorrect nil #"Unknown symbol: '\?x13'"]
                     (tu/query-ra '[:select {:predicate (== ?x13 x4)}
-                                   [:table []]]
+                                   [:table {:rows []}]]
                                  {}))))
 
 (t/deftest test-left-outer-join-with-composite-types-2393

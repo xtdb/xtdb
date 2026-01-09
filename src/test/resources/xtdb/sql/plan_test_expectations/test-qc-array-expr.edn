@@ -5,4 +5,4 @@
   [:semi-join
    {:conditions [{foo.1/a _qc_expr_3}]}
    [:rename {:prefix foo.1} [:scan {:table #xt/table foo, :columns [a]}]]
-   [:table {_qc_expr_3 (current-schemas true)}]]]]
+   [:table {:column {_qc_expr_3 (current-schemas true)}}]]]]

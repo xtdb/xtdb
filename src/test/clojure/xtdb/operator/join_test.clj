@@ -170,18 +170,18 @@
   (t/testing "nulls"
     (t/is (= []
              (tu/query-ra [:semi-join '{:conditions [{a b}]}
-                           [:table [{:a nil}]]
-                           [:table [{:b 12}, {:b 2}]]])))
+                           [:table {:rows [{:a nil}]}]
+                           [:table {:rows [{:b 12}, {:b 2}]}]])))
 
     (t/is (= [{:a 12}]
              (tu/query-ra [:semi-join '{:conditions [{a b}]}
-                           [:table [{:a 12}]]
-                           [:table [{:b 12}, {:b nil}]]])))
+                           [:table {:rows [{:a 12}]}]
+                           [:table {:rows [{:b 12}, {:b nil}]}]])))
 
     (t/is (= []
              (tu/query-ra [:semi-join '{:conditions [{a b}]}
-                           [:table [{:a 4}]]
-                           [:table [{:b 12}, {:b nil}]]]))))
+                           [:table {:rows [{:a 4}]}]
+                           [:table {:rows [{:b 12}, {:b nil}]}]]))))
 
   (t/is (empty? (tu/query-ra [:semi-join '{:conditions [{a b}]}
                               [::tu/pages
@@ -615,18 +615,18 @@
   (t/testing "nulls"
     (t/is (= []
              (tu/query-ra [:anti-join '{:conditions [{a b}]}
-                           [:table [{:a nil}]]
-                           [:table [{:b 12}, {:b 2}]]])))
+                           [:table {:rows [{:a nil}]}]
+                           [:table {:rows [{:b 12}, {:b 2}]}]])))
 
     (t/is (= []
              (tu/query-ra [:anti-join '{:conditions [{a b}]}
-                           [:table [{:a 12}]]
-                           [:table [{:b 12}, {:b nil}]]])))
+                           [:table {:rows [{:a 12}]}]
+                           [:table {:rows [{:b 12}, {:b nil}]}]])))
 
     (t/is (= []
              (tu/query-ra [:anti-join '{:conditions [{a b}]}
-                           [:table [{:a 4}]]
-                           [:table [{:b 12}, {:b nil}]]]))))
+                           [:table {:rows [{:a 4}]}]
+                           [:table {:rows [{:b 12}, {:b nil}]}]]))))
 
   (t/is (empty? (tu/query-ra [:anti-join '{:conditions [{a b}]}
                               [::tu/pages
@@ -910,8 +910,8 @@
              (tu/query-ra
               '[:mega-join
                 {:conditions [{bar (- ?foo 0)}]}
-                [[:table [{:bar 1}]]
-                 [:table [{:baz 10}]]]]
+                [[:table {:rows [{:bar 1}]}]
+                 [:table {:rows [{:baz 10}]}]]]
               {:args {:foo 1}}))))
 
   (t/testing "empty input"
@@ -932,10 +932,10 @@
               '[:mega-join
                 {:conditions [{name person}
                               {person foo}]}
-                [[:table [{:name 1}]]
-                 [:table [{:person 1}]]
-                 [:table [{:foo 1 :bar "woo"}
-                          {:foo 1 :bar "yay"}]]]])))
+                [[:table {:rows [{:name 1}]}]
+                 [:table {:rows [{:person 1}]}]
+                 [:table {:rows [{:foo 1 :bar "woo"}
+                                 {:foo 1 :bar "yay"}]}]]])))
 
     (t/testing "Unused join conditions are added as conditions to the outermost join"
       ;;currently mega-join starts with the smallest (in terms of row count) relation
@@ -950,20 +950,20 @@
                  (s/conform ::lp/logical-plan
                             '[:mega-join
                               {:conditions [(== (+ name person) foo)]}
-                              [[:table [{:name 1}]]
-                               [:table [{:person 1}]]
-                               [:table [{:foo 2 :bar "woo"}
-                                        {:foo 1 :bar "yay"}]]]])
+                              [[:table {:rows [{:name 1}]}]
+                               [:table {:rows [{:person 1}]}]
+                               [:table {:rows [{:foo 2 :bar "woo"}
+                                               {:foo 1 :bar "yay"}]}]]])
                  {}))))
 
       (t/is (= [{:person 1, :bar "woo", :name 1, :foo 2}]
                (tu/query-ra
                 '[:mega-join
                   {:conditions [(== (+ name person) foo)]}
-                  [[:table [{:name 1}]]
-                   [:table [{:person 1}]]
-                   [:table [{:foo 2 :bar "woo"}
-                            {:foo 1 :bar "yay"}]]]]))))))
+                  [[:table {:rows [{:name 1}]}]
+                   [:table {:rows [{:person 1}]}]
+                   [:table {:rows [{:foo 2 :bar "woo"}
+                                   {:foo 1 :bar "yay"}]}]]]))))))
 
 (t/deftest test-adjust-to-equi-condition
   (t/is
@@ -1046,8 +1046,8 @@
   (t/testing "non joining join conditions are added at the earliest possible point"
     (let [plan '[:mega-join
                  {:conditions [(== a b) (== b 1)]}
-                 [[:table [{:a 1}]]
-                  [:table [{:b 1}]]]]]
+                 [[:table {:rows [{:a 1}]}]
+                  [:table {:rows [{:b 1}]}]]]]
       (t/is (= '[[0 [[:equi-condition {a b}] [:pred-expr (== b 1)]] 1]]
                (:join-order (lp/emit-expr (s/conform ::lp/logical-plan plan) {}))))
       (t/is (= [{:a 1, :b 1}] (tu/query-ra plan))))))
@@ -1064,10 +1064,10 @@
   (t/testing "row table mega-join order"
     (let [plan '[:mega-join
                  {:conditions [{bar biff} {foo baz} {foo bar}]}
-                 [[:table [{:baz 1} {:baz 2} {:baz 2}]]
-                  [:table [{:biff 1} {:biff 2} {:biff 3} {:biff 4}]]
-                  [:table [{:foo 1}]]
-                  [:table [{:bar 1} {:bar 2}]]]]]
+                 [[:table {:rows [{:baz 1} {:baz 2} {:baz 2}]}]
+                  [:table {:rows [{:biff 1} {:biff 2} {:biff 3} {:biff 4}]}]
+                  [:table {:rows [{:foo 1}]}]
+                  [:table {:rows [{:bar 1} {:bar 2}]}]]]]
       (t/is (= '[[2 [[:equi-condition {foo bar}]]
                   3 [[:equi-condition {foo baz}]]
                   0 [[:equi-condition {bar biff}]]
@@ -1131,8 +1131,8 @@
         "both sides missing stats, fallback to default"))
 
 (t/deftest test-determine-build-side-with-emitted-relations
-  (let [smaller-table (lp/emit-expr (s/conform ::lp/logical-plan [:table [{:baz 1} {:baz 2} {:baz 2}]]) {})
-        bigger-table (lp/emit-expr (s/conform ::lp/logical-plan [:table [{:biff 1} {:biff 2}]]) {})]
+  (let [smaller-table (lp/emit-expr (s/conform ::lp/logical-plan [:table {:rows [{:baz 1} {:baz 2} {:baz 2}]}]) {})
+        bigger-table (lp/emit-expr (s/conform ::lp/logical-plan [:table {:rows [{:biff 1} {:biff 2}]}]) {})]
 
     (t/is (= :left
              (join/determine-build-side bigger-table smaller-table :right))
@@ -1150,30 +1150,30 @@
   (t/is (= [{:a 1, :b 1, :c 1} {:a 2, :b 2, :c 1} {:a 2, :b 2, :c 2}]
            (tu/query-ra
             '[:left-outer-join {:conditions [{a b}]}
-              [:table [{:a 1} {:a 2}]]
-              [:table [{:b 1 :c 1} {:b 2 :c 1} {:b 2 :c 2}]]]))
+              [:table {:rows [{:a 1} {:a 2}]}]
+              [:table {:rows [{:b 1 :c 1} {:b 2 :c 1} {:b 2 :c 2}]}]]))
         "left side built LOJ with all matched rows")
 
   (t/is (= [{:a 1, :b 1, :c 1} {:a 2, :b 2, :c 1}]
            (tu/query-ra
             '[:left-outer-join {:conditions [{a b}]}
-              [:table [{:a 1} {:a 2}]]
-              [:table [{:b 1 :c 1} {:b 2 :c 1} {:b 3 :c 1}]]]))
+              [:table {:rows [{:a 1} {:a 2}]}]
+              [:table {:rows [{:b 1 :c 1} {:b 2 :c 1} {:b 3 :c 1}]}]]))
         "left side built LOJ with some unmatched rows")
 
   (t/is (= [{:a 1} {:a 2}]
            (tu/query-ra
             '[:left-outer-join {:conditions [{a b}]}
-              [:table [{:a 1} {:a 2}]]
-              [:table [{:b 3} {:b 4} {:b 5}]]]))
+              [:table {:rows [{:a 1} {:a 2}]}]
+              [:table {:rows [{:b 3} {:b 4} {:b 5}]}]]))
         "left side built LOJ with all unmatched rows")
 
   (t/is (= (tu/query-ra '[:left-outer-join {:conditions [{a b}]}
-                          [:table [{:a 1} {:a 2}]]
-                          [:table [{:b 1} {:b 3} {:b 4}]]])
+                          [:table {:rows [{:a 1} {:a 2}]}]
+                          [:table {:rows [{:b 1} {:b 3} {:b 4}]}]])
            (tu/query-ra '[:left-outer-join {:conditions [{a b}]}
-                          [:table [{:a 1} {:a 2}]]
-                          [:table [{:b 1}]]]))
+                          [:table {:rows [{:a 1} {:a 2}]}]
+                          [:table {:rows [{:b 1}]}]]))
         "left side built LOJ should return same results as right built LOJ (with right side having mostly unmatched rows)"))
 
 (deftest ^:integration test-on-disk-joining

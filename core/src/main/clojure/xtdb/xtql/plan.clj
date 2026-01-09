@@ -305,7 +305,7 @@
 (defn- mega-join [plans]
   (let [{:keys [rels var->cols]} (with-unique-cols plans)]
     (-> (case (count rels)
-          0 {:ra-plan [:table [{}]]}
+          0 {:ra-plan [:table {:rows [{}]}]}
           1 (first rels)
           {:ra-plan [:mega-join {:conditions []} (mapv :ra-plan rels)]})
         (wrap-unify var->cols))))
@@ -447,10 +447,10 @@
   [:project {:projections (mapv (fn [{:keys [l r]}] {r l}) out-bindings)}
    ra-plan])
 
-(defn- plan-rel [rel-expr out-bindings]
+(defn- plan-rel [table-opts out-bindings]
   (when (some :literal? out-bindings)
     (throw (UnsupportedOperationException. "TODO what should literals in out specs do outside of scan")))
-  {:ra-plan (wrap-out-binding-projection {:ra-plan [:table rel-expr]} out-bindings)
+  {:ra-plan (wrap-out-binding-projection {:ra-plan [:table table-opts]} out-bindings)
    :provided-vars (set (map :r out-bindings))})
 
 (extend-protocol PlanQuery
@@ -467,13 +467,13 @@
 
   DocsRelation
   (plan-query [{:keys [documents bindings]}]
-    (plan-rel (mapv #(into {} (map (fn [[k v]] (MapEntry/create (util/kw->normal-form-kw (keyword k)) (plan-expr v)))) %)
-                    documents)
+    (plan-rel {:rows (mapv #(into {} (map (fn [[k v]] (MapEntry/create (util/kw->normal-form-kw (keyword k)) (plan-expr v)))) %)
+                           documents)}
               (mapv plan-out-spec bindings)))
 
   ParamRelation
   (plan-query [{:keys [param bindings]}]
-    (plan-rel (plan-expr param) (mapv plan-out-spec bindings))))
+    (plan-rel {:param (plan-expr param)} (mapv plan-out-spec bindings))))
 
 (declare wrap-expr-subqueries*)
 
@@ -609,13 +609,13 @@
 
   DocsRelation
   (plan-unify-clause [{:keys [documents bindings]}]
-    [[:from (plan-rel (mapv #(into {} (map (fn [[k v]] (MapEntry/create (util/kw->normal-form-kw (keyword k)) (plan-expr v)))) %)
-                            documents)
+    [[:from (plan-rel {:rows (mapv #(into {} (map (fn [[k v]] (MapEntry/create (util/kw->normal-form-kw (keyword k)) (plan-expr v)))) %)
+                                   documents)}
                       (mapv plan-out-spec bindings))]])
 
   ParamRelation
   (plan-unify-clause [{:keys [param bindings]}]
-    [[:from (plan-rel (plan-expr param)
+    [[:from (plan-rel {:param (plan-expr param)}
                       (mapv plan-out-spec bindings))]])
 
   Where

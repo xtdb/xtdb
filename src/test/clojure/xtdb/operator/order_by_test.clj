@@ -23,10 +23,10 @@
             {:a 83.0, :b 100}
             {:a 100, :b 83}]
            (tu/query-ra '[:order-by {:order-specs [[a]]}
-                          [:table [{:a 12.4, :b 10}
-                                   {:a 0, :b 15}
-                                   {:a 100, :b 83}
-                                   {:a 83.0, :b 100}]]]
+                          [:table {:rows [{:a 12.4, :b 10}
+                                          {:a 0, :b 15}
+                                          {:a 100, :b 83}
+                                          {:a 83.0, :b 100}]}]]
                         {}))
         "mixed numeric types")
 
@@ -41,19 +41,19 @@
   (let [table-with-nil [{:a 12.4, :b 10}, {:a nil, :b 15}, {:a 100, :b 83}, {:a 83.0, :b 100}]]
     (t/is (= [{:b 15}, {:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}]
              (tu/query-ra '[:order-by {:order-specs [[a {:null-ordering :nulls-first}]]}
-                          [:table ?table]]
+                          [:table {:param ?table}]]
                           {:args {:table table-with-nil}}))
           "nulls first")
 
     (t/is (= [{:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}, {:b 15}]
              (tu/query-ra '[:order-by {:order-specs [[a {:null-ordering :nulls-last}]]}
-                          [:table ?table]]
+                          [:table {:param ?table}]]
                           {:args {:table table-with-nil}}))
           "nulls last")
 
     (t/is (= [{:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}, {:b 15}]
              (tu/query-ra '[:order-by {:order-specs [[a]]}
-                          [:table ?table]]
+                          [:table {:param ?table}]]
                           {:args {:table table-with-nil}}))
           "default nulls last")))
 

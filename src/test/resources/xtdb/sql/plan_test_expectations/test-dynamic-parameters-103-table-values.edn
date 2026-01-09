@@ -2,4 +2,4 @@
  {:projections [{foo bar.2/foo}]}
  [:rename {:prefix bar.2} [:project
    {:projections [{foo xt.values.1/foo}]}
-   [:rename {:prefix xt.values.1} [:table [foo] [{:foo ?_0}]]]]]]
+   [:rename {:prefix xt.values.1} [:table {:output-cols [foo], :rows [{:foo ?_0}]}]]]]]

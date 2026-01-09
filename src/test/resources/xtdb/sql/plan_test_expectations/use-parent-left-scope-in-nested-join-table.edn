@@ -8,7 +8,7 @@
     [:rename {:prefix r2.2} [:scan {:table #xt/table r2, :columns [xs]}]]]]
   [:mega-join
    {:conditions [{u1.4/i1 u2.6/i2}]}
-   [[:map {:projections [{u1.4/i1 (local-row-number)}]} [:table {u1.4/x1 ?_sq_xs_2}]]
+   [[:map {:projections [{u1.4/i1 (local-row-number)}]} [:table {:column {u1.4/x1 ?_sq_xs_2}}]]
     [:map
      {:projections [{u2.6/i2 (local-row-number)}]}
-     [:table {u2.6/x2 ?_sq_xs_4}]]]]]]
+     [:table {:column {u2.6/x2 ?_sq_xs_4}}]]]]]]

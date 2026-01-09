@@ -1,3 +1,3 @@
 [:project
  {:projections [{x xt.values.1/x} {_id xt.values.1/_id}]}
- [:rename {:prefix xt.values.1} [:table [x _id] [{:x 1, :_id 1} {:x 2.0}]]]]
+ [:rename {:prefix xt.values.1} [:table {:output-cols [x _id], :rows [{:x 1, :_id 1} {:x 2.0}]}]]]

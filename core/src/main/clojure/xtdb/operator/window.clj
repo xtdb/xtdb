@@ -52,7 +52,7 @@
                                           :frame {}}}
                        :projections [{col-name {:window-name window1
                                                 :window-agg (row-number)}}]}
-              [:table [{}]]]))
+              [:table {:rows [{}]}]]))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWindowFnSpec

@@ -50,15 +50,7 @@
                  o_comment
                  o_shippriority
                  o_custkey]}]]]]]]
-          [:rename {:prefix xt.values.3} [:table
-            [_column_1]
-            [{:_column_1 "13"}
-             {:_column_1 "31"}
-             {:_column_1 "23"}
-             {:_column_1 "29"}
-             {:_column_1 "30"}
-             {:_column_1 "18"}
-             {:_column_1 "17"}]]]]]
+          [:rename {:prefix xt.values.3} [:table {:output-cols [_column_1], :rows [{:_column_1 "13"} {:_column_1 "31"} {:_column_1 "23"} {:_column_1 "29"} {:_column_1 "30"} {:_column_1 "18"} {:_column_1 "17"}]}]]]]
         [:project
          {:projections [{_sq_4 _avg_out_8}]}
          [:group-by
@@ -71,12 +63,4 @@
              {:projections [{_needle (substring c.5/c_phone 1 2)}]}
              [:rename {:prefix c.5} [:scan
                {:table #xt/table customer, :columns [c_phone {c_acctbal (> c_acctbal 0.0)}]}]]]
-            [:rename {:prefix xt.values.7} [:table
-              [_column_1]
-              [{:_column_1 "13"}
-               {:_column_1 "31"}
-               {:_column_1 "23"}
-               {:_column_1 "29"}
-               {:_column_1 "30"}
-               {:_column_1 "18"}
-               {:_column_1 "17"}]]]]]]]]]]]]]]]
+            [:rename {:prefix xt.values.7} [:table {:output-cols [_column_1], :rows [{:_column_1 "13"} {:_column_1 "31"} {:_column_1 "23"} {:_column_1 "29"} {:_column_1 "30"} {:_column_1 "18"} {:_column_1 "17"}]}]]]]]]]]]]]]]]

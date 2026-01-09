@@ -16,13 +16,16 @@
            (xtdb ICursor)
            (xtdb.arrow ListExpression Relation RelationReader RelationWriter Vector VectorType VectorWriter)))
 
+(s/def ::output-cols (s/coll-of ::lp/column :kind vector?))
+(s/def ::rows (s/coll-of (s/or :map (s/map-of simple-ident? any?)
+                               :param ::lp/param)))
+(s/def ::column (s/map-of ::lp/column any?, :count 1))
+(s/def ::param ::lp/param)
+
 (defmethod lp/ra-expr :table [_]
   (s/cat :op #{:table}
-         :explicit-col-names (s/? (s/coll-of ::lp/column :kind vector?))
-         :table (s/or :rows (s/coll-of (s/or :map (s/map-of simple-ident? any?)
-                                             :param ::lp/param))
-                      :column (s/map-of ::lp/column any?, :count 1)
-                      :param ::lp/param)))
+         :opts (s/and (s/keys :opt-un [::output-cols ::rows ::column ::param])
+                      #(= 1 (count (select-keys % [:rows :column :param]))))))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -45,12 +48,12 @@
   (close [_]
     (util/close out-rel)))
 
-(defn- restrict-cols [vec-types {:keys [explicit-col-names]}]
+(defn- restrict-cols [vec-types {:keys [output-cols]}]
   (cond-> vec-types
-    explicit-col-names (-> (->> (merge (zipmap explicit-col-names (repeat #xt/type :null))))
-                           (select-keys explicit-col-names))))
+    output-cols (-> (->> (merge (zipmap output-cols (repeat #xt/type :null))))
+                    (select-keys output-cols))))
 
-(defn- emit-rows-table [rows table-expr {:keys [param-types schema] :as opts}]
+(defn- emit-rows-table [rows table-opts {:keys [param-types schema] :as opts}]
   (let [type-sets (HashMap.)
         out-rows (->> rows
                       (mapv (fn [[row-tag row-arg]]
@@ -121,7 +124,7 @@
                                                      (when-not (= row-count (get key-freqs (symbol k)))
                                                        (.add !v-types #xt/type :null))
                                                      (apply types/merge-types !v-types))))))
-                      (restrict-cols table-expr))]
+                      (restrict-cols table-opts))]
 
     {:vec-types vec-types
      :row-count row-count
@@ -134,12 +137,12 @@
 
                         out-rel))))}))
 
-(defn- emit-col-table [col-spec table-expr {:keys [schema] :as input-types}]
+(defn- emit-col-table [col-spec table-opts {:keys [param-types schema] :as input-types}]
   (let [[out-col v] (first col-spec)
         expr (expr/form->expr v input-types)
         {:keys [vec-type ->list-expr]} (expr-list/compile-list-expr expr input-types)
         out-vec-types (-> {out-col vec-type}
-                          (restrict-cols table-expr))
+                          (restrict-cols table-opts))
         out-type (get out-vec-types out-col)]
     {:vec-types out-vec-types
      :->out-rel (fn [{:keys [^BufferAllocator allocator, ^RelationReader args]}]
@@ -149,7 +152,7 @@
                         (.writeTo list-expr out-vec 0 (.getSize list-expr)))
                       (Relation. allocator ^List (vector out-vec) (.getValueCount out-vec)))))}))
 
-(defn- emit-arg-table [param table-expr {:keys [param-types]}]
+(defn- emit-arg-table [param table-opts {:keys [param-types]}]
   (let [vec-types (-> (into {} (for [^VectorType leg-type (or (get param-types param)
                                                                (throw (err/incorrect :unknown-table "Table refers to unknown param"
                                                                                      {:param param, :params (set (keys param-types))})))
@@ -165,7 +168,7 @@
                                                                      {:param param})))
                                      [child-name ^VectorType child-type] (.getChildren el-leg-type)]
                                  (MapEntry/create (symbol child-name) child-type)))
-                      (restrict-cols table-expr))]
+                      (restrict-cols table-opts))]
 
     {:vec-types vec-types
      :->out-rel (fn [{:keys [^BufferAllocator allocator, ^RelationReader args]}]
@@ -182,16 +185,17 @@
                                             (.openSlice (.vectorFor el-struct-rdr k) allocator)))
                                (.getValueCount el-rdr))))}))
 
-(defmethod lp/emit-expr :table [{:keys [table] :as table-expr} opts]
-  (let [{:keys [vec-types ->out-rel row-count]} (zmatch table
-                                                  [:rows rows] (emit-rows-table rows table-expr opts)
-                                                  [:column col] (emit-col-table col table-expr opts)
-                                                  [:param param] (emit-arg-table param table-expr opts))]
+(defmethod lp/emit-expr :table [{:keys [opts]} emit-opts]
+  (let [{:keys [rows column param]} opts
+        {:keys [vec-types ->out-rel row-count]} (cond
+                                                  rows (emit-rows-table rows opts emit-opts)
+                                                  column (emit-col-table column opts emit-opts)
+                                                  param (emit-arg-table param opts emit-opts))]
 
     {:op :table
      :children []
      :vec-types vec-types
      :stats (when row-count {:row-count row-count})
-     :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span] :as opts}]
-                 (cond-> (TableCursor. allocator (->out-rel opts))
+     :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span] :as cursor-opts}]
+                 (cond-> (TableCursor. allocator (->out-rel cursor-opts))
                    (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))

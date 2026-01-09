@@ -498,8 +498,8 @@
                                                                               {:table table
                                                                                :valid-from valid-from
                                                                                :valid-to valid-to
-                                                                               :patch-rel (sql/->QueryExpr '[:table [_iid doc]
-                                                                                                             ?patch_docs]
+                                                                               :patch-rel (sql/->QueryExpr '[:table {:output-cols [_iid doc]
+                                                                                                                    :param ?patch_docs}]
                                                                                                            '[_iid doc])})
                                                               (lp/rewrite-plan))
                                                     db-cat tx-opts)

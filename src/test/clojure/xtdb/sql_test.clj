@@ -638,8 +638,8 @@
 (t/deftest parameters-referenced-in-relation-test
   (t/are [expected plan apply-columns]
       (= expected (lp/parameters-referenced-in-relation? plan (vals apply-columns)))
-    true '[:table [{x6 ?x8}]] '{x2 ?x8}
-    false '[:table [{x6 ?x4}]] '{x2 ?x8}))
+    true '[:table {:rows [{x6 ?x8}]}] '{x2 ?x8}
+    false '[:table {:rows [{x6 ?x4}]}] '{x2 ?x8}))
 
 (t/deftest non-semi-join-subquery-optimizations-test
   (t/is (=plan-file

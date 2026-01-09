@@ -49,6 +49,4 @@
              l_orderkey
              l_shipdate
              l_shipmode]}]]]
-         [:rename {:prefix xt.values.4} [:table
-           [_column_1]
-           [{:_column_1 "MAIL"} {:_column_1 "SHIP"}]]]]]]]]]]]]
+         [:rename {:prefix xt.values.4} [:table {:output-cols [_column_1], :rows [{:_column_1 "MAIL"} {:_column_1 "SHIP"}]}]]]]]]]]]]]

@@ -789,14 +789,14 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (t/is (= [{:v (RegClass. 904292726)}]
            (tu/query-ra
             '[:project {:projections [{v (cast "bar" :regclass)}]}
-              [:table [{}]]]
+              [:table {:rows [{}]}]]
             {:node tu/*node*}))
         "project")
 
   (t/is (= [{:v 904292726}]
            (tu/query-ra
             '[:select {:predicate (== (cast "bar" :regclass) v)}
-              [:table [{v 904292726} {v 111}]]]
+              [:table {:rows [{v 904292726} {v 111}]}]]
             {:node tu/*node*}))
         "select")
 
@@ -1054,8 +1054,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                              [:rename {:columns {bar/_id _id}} [:join {:conditions [{foo/_id bar/foo}]}
                                [:rename {:prefix foo} [:scan {:table #xt/table foo, :columns [_id]}]]
                                [:rename {:prefix bar} [:scan {:table #xt/table bar, :columns [_id foo]}]]]]
-                             [:rename {:prefix vals} [:table [_column_1]
-                               [{:_column_1 "bar1"}]]]]]
+                             [:rename {:prefix vals} [:table {:output-cols [_column_1], :rows [{:_column_1 "bar1"}]}]]]]
                           {:node node})))
 
     (t/is (= [{:xt/id "bar1"}]

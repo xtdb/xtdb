@@ -9,7 +9,7 @@
            (tu/query-ra '[:let [Foo [::tu/pages
                                      [[{:a 12}, {:a 0}]
                                       [{:a 12}, {:a 100}]]]]
-                          [:table [{:a 4}]]]))
+                          [:table {:rows [{:a 4}]}]]))
         "unused let")
 
   (t/is (= [[{:a 12}, {:a 0}]
@@ -22,10 +22,10 @@
         "normal usage")
 
   (t/is (= [{:a 1 :b 1}]
-           (tu/query-ra '[:let [X [:table ?x]]
+           (tu/query-ra '[:let [X [:table {:param ?x}]]
                           [:let [Y [:join {:conditions [{a b}]}
                                     [:relation X {:col-names [a]}]
-                                    [:table ?y]]]
+                                    [:table {:param ?y}]]]
                            [:let [X [:relation Y {:col-names [a b]}]]
                             [:relation X {:col-names [a b]}]]]]
 

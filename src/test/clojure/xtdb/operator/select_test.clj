@@ -30,13 +30,13 @@
 (deftest test-no-column-relation
   (t/is (= [{}]
            (tu/query-ra '[:select {:predicate true}
-                          [:table [{}]]])))
+                          [:table {:rows [{}]}]])))
   (t/is (= []
            (tu/query-ra
             '[:select {:predicate false}
-              [:table [{}]]])))
+              [:table {:rows [{}]}]])))
 
   (t/is (= [{} {} {}]
            (tu/query-ra '[:select {:predicate (== ?ap_n 2)}
-                          [:table [{} {} {}]]]
+                          [:table {:rows [{} {} {}]}]]
                         {:args {:ap-n 2}}))))

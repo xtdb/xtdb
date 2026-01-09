@@ -39,13 +39,4 @@
             {p_brand (<> p_brand "Brand#45")}
             p_size
             {p_type (not (like p_type "MEDIUM POLISHED%"))}]}]]
-         [:rename {:prefix xt.values.4} [:table
-           [_column_1]
-           [{:_column_1 49}
-            {:_column_1 14}
-            {:_column_1 23}
-            {:_column_1 45}
-            {:_column_1 19}
-            {:_column_1 3}
-            {:_column_1 36}
-            {:_column_1 9}]]]]]]]]]]]]
+         [:rename {:prefix xt.values.4} [:table {:output-cols [_column_1], :rows [{:_column_1 49} {:_column_1 14} {:_column_1 23} {:_column_1 45} {:_column_1 19} {:_column_1 3} {:_column_1 36} {:_column_1 9}]}]]]]]]]]]]]

@@ -307,7 +307,7 @@
            [:join {:conditions [{p_partkey ps_partkey}]}
             [:semi-join {:conditions [{p_size p_size}]}
              [:rename {:columns {_id p_partkey}} [:scan {:table #xt/table part, :columns [_id {p_brand (<> p_brand ?brand)} {p_type (not (like p_type "MEDIUM POLISHED%"))} p_size]}]]
-             [:table ?sizes]]
+             [:table {:param ?sizes}]]
             [:anti-join {:conditions [{ps_suppkey s_suppkey}]}
              [:scan {:table #xt/table partsupp, :columns [ps_partkey ps_suppkey]}]
              [:rename {:columns {_id s_suppkey}} [:scan {:table #xt/table supplier, :columns [_id {s_comment (like s_comment "%Customer%Complaints%")}]}]]]]]]]]
@@ -438,7 +438,7 @@
   (-> '[:let [Customer [:semi-join {:conditions [{cntrycode cntrycode}]}
                         [:project {:projections [c_custkey {cntrycode (substring c_phone 1 2)} c_acctbal]}
                          [:rename {:columns {_id c_custkey}} [:scan {:for-valid-time [:at :now], :table #xt/table customer, :columns [_id c_phone c_acctbal]}]]]
-                        [:table ?cntrycodes]]]
+                        [:table {:param ?cntrycodes}]]]
         [:order-by {:order-specs [[cntrycode]]}
          [:group-by {:columns [cntrycode {numcust (row-count)} {totacctbal (sum c_acctbal)}]}
           [:anti-join {:conditions [{c_custkey o_custkey}]}

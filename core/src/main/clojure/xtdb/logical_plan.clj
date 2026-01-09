@@ -180,13 +180,13 @@
 
 (defn relation-columns [relation-in]
   (r/zmatch relation-in
-    [:table explicit-column-names _]
-    (vec explicit-column-names)
-
-    [:table table]
-    (mapv symbol (if (map? table)
-                   (keys table)
-                   (keys (first table))))
+    [:table opts]
+    (let [{:keys [output-cols rows column]} opts]
+      (cond
+        output-cols (vec output-cols)
+        column (mapv symbol (keys column))
+        rows (mapv symbol (keys (first (filter map? rows))))
+        :else []))
             
     [:list explicit-column-names _]
     (vec explicit-column-names)
@@ -1049,11 +1049,12 @@
   (r/zmatch z
     [:apply opts
      lhs
-     [:table col-spec]]
+     [:table table-opts]]
     ;; =>
-    (let [{:keys [mode columns]} opts]
-      (when (and (= mode :cross-join) (map? col-spec))
-        (let [[unnest-col unnest-expr] (first col-spec)
+    (let [{:keys [mode columns]} opts
+          {:keys [column]} table-opts]
+      (when (and (= mode :cross-join) column)
+        (let [[unnest-col unnest-expr] (first column)
               unnest-expr (w/postwalk-replace (set/map-invert columns) unnest-expr)]
           [:unnest {:columns {unnest-col 'unnest}}
            [:map {:projections [{'unnest unnest-expr}]}
@@ -1062,16 +1063,17 @@
     [:apply opts
      lhs
      [:map map-opts
-      [:table col-spec]]]
+      [:table table-opts]]]
     ;; =>
     (let [{:keys [mode columns]} opts
-          {:keys [projections]} map-opts]
+          {:keys [projections]} map-opts
+          {:keys [column]} table-opts]
       (when (and (= mode :cross-join)
-                 (map? col-spec)
+                 column
                  (= 1 (count projections))
                  (map? (first projections))
                  (= '(local-row-number) (val (ffirst projections))))
-        (let [[unnest-col unnest-expr] (first col-spec)
+        (let [[unnest-col unnest-expr] (first column)
               unnest-expr (w/postwalk-replace (set/map-invert columns) unnest-expr)]
           [:unnest {:columns {unnest-col 'unnest}, :ordinality-column (key (ffirst projections))}
            [:map {:projections [{'unnest unnest-expr}]}

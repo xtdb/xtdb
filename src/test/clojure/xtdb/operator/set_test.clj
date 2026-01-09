@@ -33,7 +33,7 @@
     (t/is (= [{:a 10} {:a 15}]
              (tu/query-ra
               [:cross-join {}
-               [:table [{}]]
+               [:table {:rows [{}]}]
                [:union-all {}
                 [::tu/pages '{a #xt/type :i64} [[]]]
                 [::tu/pages [[{:a 10}, {:a 15}]]]]])))))
@@ -124,6 +124,6 @@
   (t/is
    (= {:res [{:x1 2}], :types '{x1 #xt/type :i64}}
       (tu/query-ra '[:difference {}
-                     [:table [{x1 1} {x1 2}]]
-                     [:table [{x1 1}]]]
+                     [:table {:rows [{x1 1} {x1 2}]}]
+                     [:table {:rows [{x1 1}]}]]
                    {:with-types? true}))))

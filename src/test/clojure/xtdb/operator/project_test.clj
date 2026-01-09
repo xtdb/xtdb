@@ -57,6 +57,6 @@
            (tu/query-ra
              '[:project {:projections [a b]}
                [:full-outer-join {:conditions [false]}
-                [:table [{:a 12}, {:a 0}]]
-                [:table [{:b 12}, {:b 2}]]]]
+                [:table {:rows [{:a 12}, {:a 0}]}]
+                [:table {:rows [{:b 12}, {:b 2}]}]]]
              {}))))
