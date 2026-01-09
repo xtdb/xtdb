@@ -4,25 +4,19 @@
   {property_number property_number}
   {_valid_from (cast _valid_from [:timestamp-tz :micro "UTC"])}
   {_valid_to (cast _valid_to [:timestamp-tz :micro "UTC"])}]}
- [:rename
-  {_column_1 _id,
+ [:rename {:columns {_column_1 _id,
    _column_2 customer_number,
    _column_3 property_number,
    _column_4 _valid_from,
-   tmp.3/app_start _valid_to}
-  [:project
+   tmp.3/app_start _valid_to}} [:project
    {:projections [{_column_1 1}
     {_column_2 145}
     {_column_3 7797}
     {_column_4 #xt/date "1998-01-03"}
     {tmp.3/app_start tmp.3/app_start}]}
-   [:rename
-    tmp.3
-    [:project
+   [:rename {:prefix tmp.3} [:project
      {:projections [{app_start _min_out_2}]}
      [:group-by
       {:columns [{_min_out_2 (min prop_owner.1/_system_from)}]}
-      [:rename
-       prop_owner.1
-       [:scan
+      [:rename {:prefix prop_owner.1} [:scan
         {:table #xt/table prop_owner, :for-system-time :all-time, :columns [_system_from {id (== id 1)}]}]]]]]]]]

@@ -1,7 +1,3 @@
-[:rename
- {x3 my_field}
- [:project
+[:rename {:columns {x3 my_field}} [:project
   {:projections [{x3 (. x1 :my_field)}]}
-  [:rename
-   {column_name x1}
-   [:scan {:table information_schema$columns, :columns [column_name]}]]]]
+  [:rename {:columns {column_name x1}} [:scan {:table information_schema$columns, :columns [column_name]}]]]]

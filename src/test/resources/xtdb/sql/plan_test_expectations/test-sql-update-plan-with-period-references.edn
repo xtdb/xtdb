@@ -11,9 +11,7 @@
      (coalesce (upper foo.1/_system_time) xtdb/end-of-time)
      (lower foo.1/_valid_time)))}
   {baz foo.1/baz}]}
- [:rename
-  foo.1
-  [:select
+ [:rename {:prefix foo.1} [:select
    {:predicate (or
                 (not
                  (boolean

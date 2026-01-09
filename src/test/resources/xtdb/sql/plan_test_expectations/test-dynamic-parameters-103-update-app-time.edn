@@ -20,9 +20,7 @@
    {_valid_to u.1/_valid_to}
    {first_name ?_2}
    {id u.1/id}]}
-  [:rename
-   u.1
-   [:scan
+  [:rename {:prefix u.1} [:scan
     {:table #xt/table users, :for-valid-time [:in ?_0 ?_1], :columns [_valid_to
      {id (== id ?_3)}
      _valid_from

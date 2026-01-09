@@ -4,7 +4,7 @@
   {:predicate (== true _sq_2)}
   [:mark-join
    {:mark-spec {_sq_2 [true]}}
-   [:rename f.1 [:scan {:table #xt/table foo, :columns [a]}]]
+   [:rename {:prefix f.1} [:scan {:table #xt/table foo, :columns [a]}]]
    [:project
     {:projections [{c foo.3/c}]}
-    [:rename foo.3 [:scan {:table #xt/table foo, :columns [c]}]]]]]]
+    [:rename {:prefix foo.3} [:scan {:table #xt/table foo, :columns [c]}]]]]]]

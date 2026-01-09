@@ -19,9 +19,7 @@
      shipping.7/cust_nation
      shipping.7/l_year
      {_sum_out_8 (sum shipping.7/volume)}]}
-    [:rename
-     shipping.7
-     [:project
+    [:rename {:prefix shipping.7} [:project
       {:projections [{supp_nation n1.5/n_name}
        {cust_nation n2.6/n_name}
        {l_year (extract "YEAR" l.2/l_shipdate)}
@@ -35,18 +33,12 @@
         {o.3/o_custkey c.4/_id}
         {l.2/l_orderkey o.3/_id}
         {s.1/_id l.2/l_suppkey}]}
-       [[:rename n2.6 [:scan {:table #xt/table nation, :columns [_id n_name]}]]
-        [:rename n1.5 [:scan {:table #xt/table nation, :columns [_id n_name]}]]
-        [:rename
-         c.4
-         [:scan {:table #xt/table customer, :columns [c_nationkey _id]}]]
-        [:rename o.3 [:scan {:table #xt/table orders, :columns [_id o_custkey]}]]
-        [:rename
-         s.1
-         [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]
-        [:rename
-         l.2
-         [:scan
+       [[:rename {:prefix n2.6} [:scan {:table #xt/table nation, :columns [_id n_name]}]]
+        [:rename {:prefix n1.5} [:scan {:table #xt/table nation, :columns [_id n_name]}]]
+        [:rename {:prefix c.4} [:scan {:table #xt/table customer, :columns [c_nationkey _id]}]]
+        [:rename {:prefix o.3} [:scan {:table #xt/table orders, :columns [_id o_custkey]}]]
+        [:rename {:prefix s.1} [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]
+        [:rename {:prefix l.2} [:scan
           {:table #xt/table lineitem, :columns [l_orderkey
            {l_shipdate
             (between

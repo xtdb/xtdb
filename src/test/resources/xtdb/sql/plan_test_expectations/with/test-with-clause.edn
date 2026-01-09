@@ -2,15 +2,9 @@
  {:projections [{foo_id foo.3/_id} {baz_id baz.4/_id}]}
  [:mega-join
   {:conditions []}
-  [[:rename
-    foo.3
-    [:project
+  [[:rename {:prefix foo.3} [:project
      {:projections [{_id bar.1/_id}]}
-     [:rename bar.1 [:scan {:table #xt/table bar, :columns [{_id (== _id 5)}]}]]]]
-   [:rename
-    baz.4
-    [:project
+     [:rename {:prefix bar.1} [:scan {:table #xt/table bar, :columns [{_id (== _id 5)}]}]]]]
+   [:rename {:prefix baz.4} [:project
      {:projections [{_id bar.1/_id}]}
-     [:rename
-      bar.1
-      [:scan {:table #xt/table bar, :columns [{_id (== _id 5)}]}]]]]]]]
+     [:rename {:prefix bar.1} [:scan {:table #xt/table bar, :columns [{_id (== _id 5)}]}]]]]]]]

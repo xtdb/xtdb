@@ -17,17 +17,11 @@
         {_sum_in_5 (* ps.1/ps_supplycost ps.1/ps_availqty)}]}
        [:mega-join
         {:conditions [{s.2/s_nationkey n.3/_id} {ps.1/ps_suppkey s.2/_id}]}
-        [[:rename
-          n.3
-          [:scan
+        [[:rename {:prefix n.3} [:scan
            {:table #xt/table nation, :columns [_id {n_name (== n_name "GERMANY")}]}]]
-         [:rename
-          ps.1
-          [:scan
+         [:rename {:prefix ps.1} [:scan
            {:table #xt/table partsupp, :columns [ps_partkey ps_supplycost ps_availqty ps_suppkey]}]]
-         [:rename
-          s.2
-          [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]]]]]
+         [:rename {:prefix s.2} [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]]]]]
      [:project
       {:projections [{_sq_6 (* _sum_out_10 1.0E-4)}]}
       [:group-by
@@ -36,15 +30,9 @@
         {:projections [{_sum_in_11 (* ps.7/ps_supplycost ps.7/ps_availqty)}]}
         [:mega-join
          {:conditions [{s.8/s_nationkey n.9/_id} {ps.7/ps_suppkey s.8/_id}]}
-         [[:rename
-           n.9
-           [:scan
+         [[:rename {:prefix n.9} [:scan
             {:table #xt/table nation, :columns [_id {n_name (== n_name "GERMANY")}]}]]
-          [:rename
-           ps.7
-           [:scan
+          [:rename {:prefix ps.7} [:scan
             {:table #xt/table partsupp, :columns [ps_supplycost ps_availqty ps_suppkey]}]]
-          [:rename
-           s.8
-           [:scan
+          [:rename {:prefix s.8} [:scan
             {:table #xt/table supplier, :columns [_id s_nationkey]}]]]]]]]]]]]]

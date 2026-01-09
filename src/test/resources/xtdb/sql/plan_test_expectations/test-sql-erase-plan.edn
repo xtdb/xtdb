@@ -1,9 +1,7 @@
 [:distinct {}
  [:project
   {:projections [{_iid u.1/_iid}]}
-  [:rename
-   u.1
-   [:scan
+  [:rename {:prefix u.1} [:scan
     {:table #xt/table users,
      :for-system-time :all-time,
      :for-valid-time :all-time, :columns [{id (== id ?_0)} _iid]}]]]]

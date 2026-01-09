@@ -8,7 +8,5 @@
     {_min_out_3 (min m.2/year)}]}
    [:mega-join
     {:conditions [{me.1/cert m.2/producer}]}
-    [[:rename me.1 [:scan {:table #xt/table movie_exec, :columns [name cert]}]]
-     [:rename
-      m.2
-      [:scan {:table #xt/table movie, :columns [producer year length]}]]]]]]]
+    [[:rename {:prefix me.1} [:scan {:table #xt/table movie_exec, :columns [name cert]}]]
+     [:rename {:prefix m.2} [:scan {:table #xt/table movie, :columns [producer year length]}]]]]]]]

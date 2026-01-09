@@ -239,11 +239,12 @@
     [:single-join _opts lhs rhs]
     (vec (mapcat relation-columns [lhs rhs]))
 
-    [:rename prefix-or-columns relation]
-    (if (symbol? prefix-or-columns)
-      (vec (for [c (relation-columns relation)]
-             (symbol (str prefix-or-columns) (name c))))
-      (replace prefix-or-columns (relation-columns relation)))
+    [:rename opts relation]
+    (let [{:keys [prefix columns]} opts
+          cols (relation-columns relation)]
+      (cond->> cols
+        columns (replace columns)
+        prefix (mapv #(symbol (str prefix) (name %)))))
 
     [:project opts _]
     (mapv ->projected-column (:projections opts))
@@ -484,21 +485,22 @@
 
 (defn- push-selection-down-past-rename [push-correlated? z]
   (r/zmatch z
-    [:select opts
-     [:rename prefix-or-columns
+    [:select select-opts
+     [:rename rename-opts
       relation]]
     ;;=>
-    (let [{:keys [predicate]} opts]
+    (let [{:keys [predicate]} select-opts
+          {:keys [prefix columns]} rename-opts]
       (when (or push-correlated? (no-correlated-columns? predicate))
-        (when-let [columns (cond
-                             (map? prefix-or-columns) (set/map-invert prefix-or-columns)
-                             (symbol? prefix-or-columns) (let [prefix (str prefix-or-columns)]
-                                                           (->> (for [c (relation-columns relation)]
-                                                                  [(symbol prefix (name c)) c])
-                                                                (into {}))))]
-          [:rename prefix-or-columns
-           [:select {:predicate (w/postwalk-replace columns predicate)}
-            relation]])))))
+        (let [col-mapping (cond-> {}
+                            columns (into (set/map-invert columns))
+                            prefix (into (->> (for [c (relation-columns relation)]
+                                                [(symbol (str prefix) (name c)) c])
+                                              (into {}))))]
+          (when (seq col-mapping)
+            [:rename rename-opts
+             [:select {:predicate (w/postwalk-replace col-mapping predicate)}
+              relation]]))))))
 
 (defn rename-map-for-projection-spec [projection-spec]
   (into {} (filter map?) projection-spec))
@@ -879,21 +881,22 @@
       (when (not-empty (expr-correlated-symbols predicate))
         [:select {:predicate predicate} [:left-outer-join join-opts lhs rhs]]))
 
-    [:rename prefix-or-columns
-     [:select opts
+    [:rename rename-opts
+     [:select select-opts
       relation]]
     ;;=>
-    (let [{:keys [predicate]} opts]
+    (let [{:keys [predicate]} select-opts
+          {:keys [prefix columns]} rename-opts]
       (when (not-empty (expr-correlated-symbols predicate))
-        (when-let [columns (cond
-                             (map? prefix-or-columns) (set/map-invert prefix-or-columns)
-                             (symbol? prefix-or-columns) (let [prefix (str prefix-or-columns)]
-                                                           (->> (for [c (relation-columns relation)]
-                                                                  [c (->col-sym prefix (name c)) ])
-                                                                (into {}))))]
-          [:select {:predicate (w/postwalk-replace columns predicate)}
-           [:rename prefix-or-columns
-            relation]])))
+        (let [col-mapping (cond-> {}
+                            columns (into (set/map-invert columns))
+                            prefix (into (->> (for [c (relation-columns relation)]
+                                                [c (->col-sym (str prefix) (name c))])
+                                              (into {}))))]
+          (when (seq col-mapping)
+            [:select {:predicate (w/postwalk-replace col-mapping predicate)}
+             [:rename rename-opts
+              relation]]))))
 
     [:group-by group-by-opts
      [:select opts

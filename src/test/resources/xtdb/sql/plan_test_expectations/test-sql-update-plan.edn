@@ -17,9 +17,7 @@
    {first_name "Sue"}
    {id u.1/id}
    {last_name u.1/last_name}]}
-  [:rename
-   u.1
-   [:scan
+  [:rename {:prefix u.1} [:scan
     {:table #xt/table users,
      :for-valid-time [:in #xt/date "2021-07-01" nil], :columns [_valid_to
      last_name

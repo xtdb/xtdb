@@ -18,8 +18,6 @@
       {:projections [{_row_number_0 (row-number)}]}
       [:mega-join
        {:conditions [{s.1/id e.2/sid}]}
-       [[:rename s.1 [:scan {:table #xt/table students, :columns [name id]}]]
-        [:rename
-         e.2
-         [:scan {:table #xt/table exams, :columns [sid grade course]}]]]]]
-     [:rename e2.4 [:scan {:table #xt/table exams, :columns [sid grade]}]]]]]]]
+       [[:rename {:prefix s.1} [:scan {:table #xt/table students, :columns [name id]}]]
+        [:rename {:prefix e.2} [:scan {:table #xt/table exams, :columns [sid grade course]}]]]]]
+     [:rename {:prefix e2.4} [:scan {:table #xt/table exams, :columns [sid grade]}]]]]]]]

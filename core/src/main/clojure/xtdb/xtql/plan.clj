@@ -292,7 +292,7 @@
                      (let [var->col (->> provided-vars
                                          (into {} (map (juxt col-sym (if (= idx 0) col-sym (partial col-sym (str "_r" idx)))))))]
                        ;;by not prefixing the leftmost rels columns, apply params need not be rewritten in the case its an apply binary join.
-                       {:ra-plan [:rename var->col
+                       {:ra-plan [:rename {:columns var->col}
                                   ra-plan]
                         :provided-vars (set (vals var->col))
                         :var->col var->col})))))

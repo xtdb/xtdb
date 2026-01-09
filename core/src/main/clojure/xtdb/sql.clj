@@ -337,7 +337,7 @@
           for-vt (or for-valid-time valid-time-default)
           for-st (or for-system-time sys-time-default)]
 
-      [:rename unique-table-alias
+      [:rename {:prefix unique-table-alias}
        (cond-> [:scan (cond-> {:table table-ref
                                :columns scan-cols}
                         for-vt (assoc :for-valid-time for-vt)
@@ -450,7 +450,7 @@
 
   PlanRelation
   (plan-rel [_]
-    [:rename unique-table-alias
+    [:rename {:prefix unique-table-alias}
      plan]))
 
 (defrecord UnnestTable [env table-alias unique-table-alias unnest-col unnest-expr ordinality-col]
@@ -525,7 +525,7 @@
 
   PlanRelation
   (plan-rel [_]
-    [:rename unique-table-alias
+    [:rename {:prefix unique-table-alias}
      [:project {:projections (vec !table-cols)}
       [:arrow url]]]))
 
@@ -2447,7 +2447,7 @@
 
           rename-col-syms (fn [plan]
                             (if (not= l-col-syms r-col-syms)
-                              [:rename (zipmap r-col-syms l-col-syms) plan]
+                              [:rename {:columns (zipmap r-col-syms l-col-syms)} plan]
                               plan))
 
           plan [:union-all {} l-plan (rename-col-syms r-plan)]]
@@ -2465,7 +2465,7 @@
 
           rename-col-syms (fn [plan]
                             (if (not= l-col-syms r-col-syms)
-                              [:rename (zipmap r-col-syms l-col-syms) plan]
+                              [:rename {:columns (zipmap r-col-syms l-col-syms)} plan]
                               plan))
 
           wrap-distinct (fn [plan]
@@ -2490,7 +2490,7 @@
 
           rename-col-syms (fn [plan]
                             (if (not= l-col-syms r-col-syms)
-                              [:rename (zipmap r-col-syms l-col-syms) plan]
+                              [:rename {:columns (zipmap r-col-syms l-col-syms)} plan]
                               plan))
 
           plan [:intersect {} l-plan (rename-col-syms r-plan)]]
@@ -2537,7 +2537,7 @@
           (if (not= out-count in-count)
             (add-err! env (->ColumnCountMismatch out-count in-count))
 
-            (->QueryExpr [:rename (zipmap col-syms out-col-syms)
+            (->QueryExpr [:rename {:columns (zipmap col-syms out-col-syms)}
                           plan]
                          out-col-syms)))
         (->QueryExpr plan col-syms))))
@@ -2548,7 +2548,7 @@
   (visitRowValueList [{{:keys [!id-count]} :env, :keys [out-col-syms]} ctx]
     (let [unique-table-alias (symbol (str "xt.values." (swap! !id-count inc)))
           {:keys [rows col-syms]} (.accept ctx (->TableRowsVisitor env scope out-col-syms))]
-      (->QueryExpr [:rename unique-table-alias
+      (->QueryExpr [:rename {:prefix unique-table-alias}
                     [:table col-syms
                      rows]]
 
@@ -2561,7 +2561,7 @@
   (visitRecordsValueList [{{:keys [!id-count]} :env, :keys [out-col-syms]} ctx]
     (let [unique-table-alias (symbol (str "xt.values." (swap! !id-count inc)))
           {:keys [rows col-syms]} (.accept ctx (->TableRowsVisitor env scope out-col-syms))]
-      (->QueryExpr [:rename unique-table-alias
+      (->QueryExpr [:rename {:prefix unique-table-alias}
                     [:table col-syms
                      rows]]
 
@@ -2657,7 +2657,7 @@
 
   PlanRelation
   (plan-rel [{{:keys [default-db]} :env}]
-    [:rename unique-table-alias
+    [:rename {:prefix unique-table-alias}
      [:scan (cond-> {:table (table/->ref default-db (symbol table-name))
                      :columns (vec (.keySet !reqd-cols))}
               for-valid-time (assoc :for-valid-time for-valid-time))]]))
@@ -2715,7 +2715,7 @@
 
   PlanRelation
   (plan-rel [{{:keys [default-db]} :env}]
-    [:rename unique-table-alias
+    [:rename {:prefix unique-table-alias}
      [:scan {:table (table/->ref default-db (symbol table-name))
              :for-system-time :all-time
              :for-valid-time :all-time
@@ -2754,9 +2754,9 @@
                                  ~types/temporal-col-type)}
                 {doc (_patch old/doc new/doc)}]}
       [:left-outer-join {:conditions [{new/_iid old/_iid}]}
-       [:rename new
+       [:rename {:prefix new}
         ~(:plan patch-rel)]
-       [:rename old
+       [:rename {:prefix old}
         [:patch-gaps {:valid-from ~valid-from, :valid-to ~valid-to}
          [:project {:projections [_iid _valid_from _valid_to
                     {doc ~(into {} (map (juxt keyword identity)) known-cols)}]}

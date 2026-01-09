@@ -18,9 +18,7 @@
    {_valid_from t1.1/_valid_from}
    {_valid_to t1.1/_valid_to}
    {col1 ?_0}]}
-  [:rename
-   t1.1
-   [:scan
+  [:rename {:prefix t1.1} [:scan
     {:table #xt/table t1,
      :for-valid-time [:in (current-timestamp) xtdb/end-of-time], :columns [{col1 (or (not (boolean (=== ?_0 col1))))}
      _valid_to

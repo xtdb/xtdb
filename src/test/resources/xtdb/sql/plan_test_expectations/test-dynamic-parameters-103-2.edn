@@ -2,15 +2,7 @@
  {:projections [{a foo.1/a}]}
  [:mega-join
   {:conditions []}
-  [[:rename
-    foo.1
-    [:scan {:table #xt/table foo, :columns [a {c (== c ?_2)} {b (== b ?_1)}]}]]
-   [:rename
-    bar.3
-    [:rename
-     {bar.2/b b}
-     [:project
+  [[:rename {:prefix foo.1} [:scan {:table #xt/table foo, :columns [a {c (== c ?_2)} {b (== b ?_1)}]}]]
+   [:rename {:prefix bar.3} [:rename {:columns {bar.2/b b}} [:project
       {:projections [{bar.2/b bar.2/b}]}
-      [:rename
-       bar.2
-       [:scan {:table #xt/table bar, :columns [{c (== c ?_0)} b]}]]]]]]]]
+      [:rename {:prefix bar.2} [:scan {:table #xt/table bar, :columns [{c (== c ?_0)} b]}]]]]]]]]

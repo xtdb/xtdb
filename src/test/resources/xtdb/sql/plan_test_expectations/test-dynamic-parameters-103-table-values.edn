@@ -1,7 +1,5 @@
 [:project
  {:projections [{foo bar.2/foo}]}
- [:rename
-  bar.2
-  [:project
+ [:rename {:prefix bar.2} [:project
    {:projections [{foo xt.values.1/foo}]}
-   [:rename xt.values.1 [:table [foo] [{:foo ?_0}]]]]]]
+   [:rename {:prefix xt.values.1} [:table [foo] [{:foo ?_0}]]]]]]

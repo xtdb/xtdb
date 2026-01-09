@@ -59,27 +59,17 @@
            {s.2/s_nationkey n.4/_id}
            {p.1/_id ps.3/ps_partkey}
            {s.2/_id ps.3/ps_suppkey}]}
-          [[:rename
-            r.5
-            [:scan
+          [[:rename {:prefix r.5} [:scan
              {:table #xt/table region, :columns [_id {r_name (== r_name "EUROPE")}]}]]
-           [:rename
-            n.4
-            [:scan {:table #xt/table nation, :columns [_id n_name n_regionkey]}]]
-           [:rename
-            ps.3
-            [:scan
+           [:rename {:prefix n.4} [:scan {:table #xt/table nation, :columns [_id n_name n_regionkey]}]]
+           [:rename {:prefix ps.3} [:scan
              {:table #xt/table partsupp, :columns [ps_partkey ps_supplycost ps_suppkey]}]]
-           [:rename
-            p.1
-            [:scan
+           [:rename {:prefix p.1} [:scan
              {:table #xt/table part, :columns [_id
               {p_size (== p_size 15)}
               p_mfgr
               {p_type (like p_type "%BRASS")}]}]]
-           [:rename
-            s.2
-            [:scan
+           [:rename {:prefix s.2} [:scan
              {:table #xt/table supplier, :columns [s_comment
               s_name
               s_address
@@ -91,18 +81,10 @@
          {:conditions [{n.9/n_regionkey r.10/_id}
           {s.8/s_nationkey n.9/_id}
           {ps.7/ps_suppkey s.8/_id}]}
-         [[:rename
-           r.10
-           [:scan
+         [[:rename {:prefix r.10} [:scan
             {:table #xt/table region, :columns [_id {r_name (== r_name "EUROPE")}]}]]
-          [:rename
-           n.9
-           [:scan {:table #xt/table nation, :columns [_id n_regionkey]}]]
-          [:rename
-           ps.7
-           [:scan
+          [:rename {:prefix n.9} [:scan {:table #xt/table nation, :columns [_id n_regionkey]}]]
+          [:rename {:prefix ps.7} [:scan
             {:table #xt/table partsupp, :columns [ps_partkey ps_supplycost ps_suppkey]}]]
-          [:rename
-           s.8
-           [:scan
+          [:rename {:prefix s.8} [:scan
             {:table #xt/table supplier, :columns [_id s_nationkey]}]]]]]]]]]]]]

@@ -1204,8 +1204,8 @@
 
         (t/testing "inner"
           (let [join (set (tu/query-ra '[:join {:conditions [{foo bar}]}
-                                         [:rename {_id foo} [:scan {:table #xt/table foo, :columns [_id]}]]
-                                         [:rename {_id bar} [:scan {:table #xt/table bar, :columns [_id]}]]]
+                                         [:rename {:columns {_id foo}} [:scan {:table #xt/table foo, :columns [_id]}]]
+                                         [:rename {:columns {_id bar}} [:scan {:table #xt/table bar, :columns [_id]}]]]
                                        {:node node}))]
             (t/is (= f-and-b (count join)))
 
@@ -1215,10 +1215,8 @@
 
         (t/testing "LOJ"
           (let [loj (set (tu/query-ra '[:left-outer-join {:conditions [{foo bar}]}
-                                        [:rename {_id foo}
-                                         [:scan {:table #xt/table foo, :columns [_id]}]]
-                                        [:rename {_id bar}
-                                         [:scan {:table #xt/table bar, :columns [_id]}]]]
+                                        [:rename {:columns {_id foo}} [:scan {:table #xt/table foo, :columns [_id]}]]
+                                        [:rename {:columns {_id bar}} [:scan {:table #xt/table bar, :columns [_id]}]]]
                                       {:node node}))
                 foos (into #{} (map :foo) loj)
                 bars (into #{} (map :bar) loj)]
@@ -1233,8 +1231,8 @@
 
         (t/testing "LOJ flipped"
           (let [loj (set (tu/query-ra '[:left-outer-join {:conditions [{bar foo}]}
-                                        [:rename {_id bar} [:scan {:table #xt/table bar, :columns [_id]}]]
-                                        [:rename {_id foo} [:scan {:table #xt/table foo, :columns [_id]}]]]
+                                        [:rename {:columns {_id bar}} [:scan {:table #xt/table bar, :columns [_id]}]]
+                                        [:rename {:columns {_id foo}} [:scan {:table #xt/table foo, :columns [_id]}]]]
                                       {:node node}))
                 foos (into #{} (map :foo) loj)
                 bars (into #{} (map :bar) loj)]
@@ -1249,8 +1247,8 @@
 
         (t/testing "FOJ"
           (let [foj (set (tu/query-ra '[:full-outer-join {:conditions [{foo bar}]}
-                                        [:rename {_id foo} [:scan {:table #xt/table foo, :columns [_id]}]]
-                                        [:rename {_id bar} [:scan {:table #xt/table bar, :columns [_id]}]]]
+                                        [:rename {:columns {_id foo}} [:scan {:table #xt/table foo, :columns [_id]}]]
+                                        [:rename {:columns {_id bar}} [:scan {:table #xt/table bar, :columns [_id]}]]]
                                       {:node node}))
                 foos (into #{} (map :foo) foj)
                 bars (into #{} (map :bar) foj)]
@@ -1288,8 +1286,6 @@
       (t/is (= [{:foo id1, :bar id1, :a 1, :b 1} {:foo id2, :bar id2, :a 2, :b 2}]
                (tu/query-ra '[:order-by {:order-specs [[a]]}
                               [:join {:conditions [{foo bar}]}
-                               [:rename {_id foo}
-                                [:scan {:table #xt/table foo, :columns [_id a]}]]
-                               [:rename {_id bar}
-                                [:scan {:table #xt/table bar, :columns [_id b]}]]]]
+                               [:rename {:columns {_id foo}} [:scan {:table #xt/table foo, :columns [_id a]}]]
+                               [:rename {:columns {_id bar}} [:scan {:table #xt/table bar, :columns [_id b]}]]]]
                             {:node node}))))))

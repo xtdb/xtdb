@@ -2,5 +2,5 @@
  {:projections [{title si.2/title} {length m.1/length} {films si.2/films}]}
  [:left-outer-join
   {:conditions [{si.2/title m.1/title}]}
-  [:rename si.2 [:scan {:table #xt/table stars_in, :columns [title films]}]]
-  [:rename m.1 [:scan {:table #xt/table movie, :columns [title length]}]]]]
+  [:rename {:prefix si.2} [:scan {:table #xt/table stars_in, :columns [title films]}]]
+  [:rename {:prefix m.1} [:scan {:table #xt/table movie, :columns [title length]}]]]]

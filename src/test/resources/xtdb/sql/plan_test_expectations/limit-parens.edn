@@ -3,9 +3,9 @@
   {:skip nil, :limit 1}
   [:project
    {:projections [{_id bar.1/_id} {foo bar.1/foo}]}
-   [:rename bar.1 [:scan {:table #xt/table bar, :columns [_id foo]}]]]]
+   [:rename {:prefix bar.1} [:scan {:table #xt/table bar, :columns [_id foo]}]]]]
  [:top
   {:skip nil, :limit 1}
   [:project
    {:projections [{_id baz.2/_id} {foo baz.2/foo}]}
-   [:rename baz.2 [:scan {:table #xt/table baz, :columns [_id foo]}]]]]]
+   [:rename {:prefix baz.2} [:scan {:table #xt/table baz, :columns [_id foo]}]]]]]

@@ -28,12 +28,9 @@
   (-> '[:let [PartSupp [:join {:conditions [{s_suppkey ps_suppkey}]}
                         [:join {:conditions [{n_nationkey s_nationkey}]}
                          [:join {:conditions [{n_regionkey r_regionkey}]}
-                          [:rename {_id n_nationkey}
-                           [:scan {:table #xt/table nation, :columns [_id n_name n_regionkey]}]]
-                          [:rename {_id r_regionkey}
-                           [:scan {:table #xt/table region, :columns [_id {r_name (== r_name ?region)}]}]]]
-                         [:rename {_id s_suppkey}
-                          [:scan {:table #xt/table supplier, :columns [_id s_nationkey s_acctbal s_name s_address s_phone s_comment]}]]]
+                          [:rename {:columns {_id n_nationkey}} [:scan {:table #xt/table nation, :columns [_id n_name n_regionkey]}]]
+                          [:rename {:columns {_id r_regionkey}} [:scan {:table #xt/table region, :columns [_id {r_name (== r_name ?region)}]}]]]
+                         [:rename {:columns {_id s_suppkey}} [:scan {:table #xt/table supplier, :columns [_id s_nationkey s_acctbal s_name s_address s_phone s_comment]}]]]
                         [:scan {:table #xt/table partsupp, :columns [ps_suppkey ps_partkey ps_supplycost]}]]]
         [:top {:limit 100}
          [:order-by {:order-specs [[s_acctbal {:direction :desc}] [n_name] [s_name] [p_partkey]]}
@@ -41,8 +38,7 @@
            [:join {:conditions [{ps_partkey ps_partkey} {ps_supplycost min_ps_supplycost}]}
             [:join {:conditions [{ps_partkey p_partkey}]}
              [:relation PartSupp {:col-names [ps_partkey ps_supplycost]}]
-             [:rename {_id p_partkey}
-              [:scan {:table #xt/table part, :columns [_id p_mfgr {p_size (== p_size ?size)} {p_type (like p_type "%BRASS")}]}]]]
+             [:rename {:columns {_id p_partkey}} [:scan {:table #xt/table part, :columns [_id p_mfgr {p_size (== p_size ?size)} {p_type (like p_type "%BRASS")}]}]]]
             [:group-by {:columns [ps_partkey {min_ps_supplycost (min ps_supplycost)}]}
              [:relation PartSupp {:col-names [ps_partkey ps_supplycost]}]]]]]]]
       (with-args {:region "EUROPE"
@@ -60,10 +56,8 @@
                                     {disc_price (* l_extendedprice (- 1 l_discount))}]}
            [:join {:conditions [{o_orderkey l_orderkey}]}
             [:join {:conditions [{c_custkey o_custkey}]}
-             [:rename {_id c_custkey}
-              [:scan {:table #xt/table customer, :columns [_id {c_mktsegment (== c_mktsegment ?segment)}]}]]
-             [:rename {_id o_orderkey}
-              [:scan {:table #xt/table orders, :columns [_id o_custkey o_shippriority
+             [:rename {:columns {_id c_custkey}} [:scan {:table #xt/table customer, :columns [_id {c_mktsegment (== c_mktsegment ?segment)}]}]]
+             [:rename {:columns {_id o_orderkey}} [:scan {:table #xt/table orders, :columns [_id o_custkey o_shippriority
                 {o_orderdate (< o_orderdate ?date)}]}]]]
             [:scan {:table #xt/table lineitem, :columns [l_orderkey l_extendedprice l_discount
               {l_shipdate (> l_shipdate ?date)}]}]]]]]]
@@ -74,8 +68,7 @@
   (-> '[:order-by {:order-specs [[o_orderpriority]]}
         [:group-by {:columns [o_orderpriority {order_count (row-count)}]}
          [:semi-join {:conditions [{o_orderkey l_orderkey}]}
-          [:rename {_id o_orderkey}
-           [:scan {:table #xt/table orders, :columns [o_orderpriority _id
+          [:rename {:columns {_id o_orderkey}} [:scan {:table #xt/table orders, :columns [o_orderpriority _id
              {o_orderdate (and (>= o_orderdate ?start_date)
                                (< o_orderdate ?end_date))}]}]]
           [:select {:predicate (< l_commitdate l_receiptdate)}
@@ -92,19 +85,14 @@
            [:join {:conditions [{s_nationkey c_nationkey}]}
             [:join {:conditions [{n_nationkey s_nationkey}]}
              [:join {:conditions [{r_regionkey n_regionkey}]}
-              [:rename {_id r_regionkey}
-               [:scan {:table #xt/table region, :columns [_id {r_name (== r_name "ASIA")}]}]]
-              [:rename {_id n_nationkey}
-               [:scan {:table #xt/table nation, :columns [_id n_name n_regionkey]}]]]
-             [:rename {_id s_suppkey}
-              [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]]
+              [:rename {:columns {_id r_regionkey}} [:scan {:table #xt/table region, :columns [_id {r_name (== r_name "ASIA")}]}]]
+              [:rename {:columns {_id n_nationkey}} [:scan {:table #xt/table nation, :columns [_id n_name n_regionkey]}]]]
+             [:rename {:columns {_id s_suppkey}} [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]]
             [:join {:conditions [{o_custkey c_custkey}]}
-             [:rename {_id o_orderkey}
-              [:scan {:table #xt/table orders, :columns [_id o_custkey
+             [:rename {:columns {_id o_orderkey}} [:scan {:table #xt/table orders, :columns [_id o_custkey
                 {o_orderdate (and (>= o_orderdate ?start_date)
                                   (< o_orderdate ?end_date))}]}]]
-             [:rename {_id c_custkey}
-              [:scan {:table #xt/table customer, :columns [_id c_nationkey]}]]]]
+             [:rename {:columns {_id c_custkey}} [:scan {:table #xt/table customer, :columns [_id c_nationkey]}]]]]
            [:scan {:table #xt/table lineitem, :columns [l_orderkey l_extendedprice l_discount l_suppkey]}]]]]]
       (with-args {:start-date (LocalDate/parse "1994-01-01")
                   :end-date (LocalDate/parse "1995-01-01")})))
@@ -129,31 +117,23 @@
          [:project {:projections [supp_nation cust_nation
                                    {l_year (extract "YEAR" l_shipdate)}
                                    {volume (* l_extendedprice (- 1 l_discount))}]}
-          [:rename {n1/n_name supp_nation, n2/n_name cust_nation}
-           [:join {:conditions [{c_nationkey n2/n_nationkey}
+          [:rename {:columns {n1/n_name supp_nation, n2/n_name cust_nation}} [:join {:conditions [{c_nationkey n2/n_nationkey}
                    (or (and (== n1/n_name ?nation1)
                             (== n2/n_name ?nation2))
                        (and (== n1/n_name ?nation2)
                             (== n2/n_name ?nation1)))]}
             [:join {:conditions [{o_custkey c_custkey}]}
              [:join {:conditions [{n1/n_nationkey s_nationkey}]}
-              [:rename n1
-               [:rename {_id n_nationkey}
-                [:scan {:table #xt/table nation, :columns [_id {n_name (or (== n_name ?nation1) (== n_name ?nation2))}]}]]]
+              [:rename {:prefix n1} [:rename {:columns {_id n_nationkey}} [:scan {:table #xt/table nation, :columns [_id {n_name (or (== n_name ?nation1) (== n_name ?nation2))}]}]]]
               [:join {:conditions [{o_orderkey l_orderkey}]}
-               [:rename {_id o_orderkey}
-                [:scan {:table #xt/table orders, :columns [_id o_custkey]}]]
+               [:rename {:columns {_id o_orderkey}} [:scan {:table #xt/table orders, :columns [_id o_custkey]}]]
                [:join {:conditions [{s_suppkey l_suppkey}]}
-                [:rename {_id s_suppkey}
-                 [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]
+                [:rename {:columns {_id s_suppkey}} [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]
                 [:scan {:table #xt/table lineitem, :columns [l_orderkey l_extendedprice l_discount l_suppkey
                   {l_shipdate (and (>= l_shipdate ?start_date)
                                    (<= l_shipdate ?end_date))}]}]]]]
-             [:rename {_id c_custkey}
-              [:scan {:table #xt/table customer, :columns [_id c_nationkey]}]]]
-            [:rename n2
-             [:rename {_id n_nationkey}
-              [:scan {:table #xt/table nation, :columns [_id {n_name (or (== n_name ?nation1) (== n_name ?nation2))}]}]]]]]]]]
+             [:rename {:columns {_id c_custkey}} [:scan {:table #xt/table customer, :columns [_id c_nationkey]}]]]
+            [:rename {:prefix n2} [:rename {:columns {_id n_nationkey}} [:scan {:table #xt/table nation, :columns [_id {n_name (or (== n_name ?nation1) (== n_name ?nation2))}]}]]]]]]]]
       (with-args {:nation1 "FRANCE"
                   :nation2 "GERMANY"
                   :start-date (LocalDate/parse "1995-01-01")
@@ -169,33 +149,23 @@
                                                     0.0)}
                                    {volume (* l_extendedprice (- 1 l_discount))}
                                    nation]}
-           [:rename {n2/n_name nation}
-            [:join {:conditions [{s_nationkey n2/n_nationkey}]}
+           [:rename {:columns {n2/n_name nation}} [:join {:conditions [{s_nationkey n2/n_nationkey}]}
              [:join {:conditions [{c_nationkey n1/n_nationkey}]}
               [:join {:conditions [{o_custkey c_custkey}]}
                [:join {:conditions [{l_orderkey o_orderkey}]}
                 [:join {:conditions [{l_suppkey s_suppkey}]}
                  [:join {:conditions [{p_partkey l_partkey}]}
-                  [:rename {_id p_partkey}
-                   [:scan {:table #xt/table part, :columns [_id {p_type (== p_type ?type)}]}]]
+                  [:rename {:columns {_id p_partkey}} [:scan {:table #xt/table part, :columns [_id {p_type (== p_type ?type)}]}]]
                   [:scan {:table #xt/table lineitem, :columns [l_orderkey l_extendedprice l_discount l_suppkey l_partkey]}]]
-                 [:rename {_id s_suppkey}
-                  [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]]
-                [:rename {_id o_orderkey}
-                 [:scan {:table #xt/table orders, :columns [_id o_custkey
+                 [:rename {:columns {_id s_suppkey}} [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]]
+                [:rename {:columns {_id o_orderkey}} [:scan {:table #xt/table orders, :columns [_id o_custkey
                    {o_orderdate (and (>= o_orderdate ?start_date)
                                      (<= o_orderdate ?end_date))}]}]]]
-               [:rename {_id c_custkey}
-                [:scan {:table #xt/table customer, :columns [_id c_nationkey]}]]]
+               [:rename {:columns {_id c_custkey}} [:scan {:table #xt/table customer, :columns [_id c_nationkey]}]]]
               [:join {:conditions [{r_regionkey n1/n_regionkey}]}
-               [:rename {_id r_regionkey}
-                [:scan {:table #xt/table region, :columns [_id {r_name (== r_name ?region)}]}]]
-               [:rename n1
-                [:rename {_id n_nationkey}
-                 [:scan {:table #xt/table nation, :columns [_id n_name n_regionkey]}]]]]]
-             [:rename n2
-              [:rename {_id n_nationkey}
-               [:scan {:table #xt/table nation, :columns [_id n_name]}]]]]]]]]]
+               [:rename {:columns {_id r_regionkey}} [:scan {:table #xt/table region, :columns [_id {r_name (== r_name ?region)}]}]]
+               [:rename {:prefix n1} [:rename {:columns {_id n_nationkey}} [:scan {:table #xt/table nation, :columns [_id n_name n_regionkey]}]]]]]
+             [:rename {:prefix n2} [:rename {:columns {_id n_nationkey}} [:scan {:table #xt/table nation, :columns [_id n_name]}]]]]]]]]]
       (with-args {:nation "BRAZIL"
                   :region "AMERICA"
                   :type "ECONOMY ANODIZED STEEL"
@@ -205,8 +175,7 @@
 (def q9-product-type-profit-measure
   (-> '[:order-by {:order-specs [[nation] [o_year {:direction :desc}]]}
         [:group-by {:columns [nation o_year {sum_profit (sum amount)}]}
-         [:rename {n_name nation}
-          [:project {:projections [n_name
+         [:rename {:columns {n_name nation}} [:project {:projections [n_name
                                     {o_year (extract "YEAR" o_orderdate)}
                                     {amount (- (* l_extendedprice (- 1 l_discount))
                                                (* ps_supplycost l_quantity))}]}
@@ -215,16 +184,12 @@
              [:join {:conditions [{l_suppkey s_suppkey}]}
               [:join {:conditions [{l_partkey ps_partkey} {l_suppkey ps_suppkey}]}
                [:join {:conditions [{p_partkey l_partkey}]}
-                [:rename {_id p_partkey}
-                 [:scan {:table #xt/table part, :columns [_id {p_name (like p_name "%green%")}]}]]
+                [:rename {:columns {_id p_partkey}} [:scan {:table #xt/table part, :columns [_id {p_name (like p_name "%green%")}]}]]
                 [:scan {:table #xt/table lineitem, :columns [l_orderkey l_extendedprice l_discount l_suppkey l_partkey l_quantity]}]]
                [:scan {:table #xt/table partsupp, :columns [ps_partkey ps_suppkey ps_supplycost]}]]
-              [:rename {_id s_suppkey}
-               [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]]
-             [:rename {_id o_orderkey}
-              [:scan {:table #xt/table orders, :columns [_id o_orderdate]}]]]
-            [:rename {_id n_nationkey}
-             [:scan {:table #xt/table nation, :columns [_id n_name]}]]]]]]]
+              [:rename {:columns {_id s_suppkey}} [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]]
+             [:rename {:columns {_id o_orderkey}} [:scan {:table #xt/table orders, :columns [_id o_orderdate]}]]]
+            [:rename {:columns {_id n_nationkey}} [:scan {:table #xt/table nation, :columns [_id n_name]}]]]]]]]
       #_(with-params {:color "green"})))
 
 (def q10-returned-item-reporting
@@ -237,15 +202,12 @@
            [:join {:conditions [{c_nationkey n_nationkey}]}
             [:join {:conditions [{o_orderkey l_orderkey}]}
              [:join {:conditions [{c_custkey o_custkey}]}
-              [:rename {_id c_custkey}
-               [:scan {:table #xt/table customer, :columns [_id c_name c_acctbal c_address c_phone c_comment c_nationkey]}]]
-              [:rename {_id o_orderkey}
-               [:scan {:table #xt/table orders, :columns [_id o_custkey
+              [:rename {:columns {_id c_custkey}} [:scan {:table #xt/table customer, :columns [_id c_name c_acctbal c_address c_phone c_comment c_nationkey]}]]
+              [:rename {:columns {_id o_orderkey}} [:scan {:table #xt/table orders, :columns [_id o_custkey
                  {o_orderdate (and (>= o_orderdate ?start_date)
                                    (< o_orderdate ?end_date))}]}]]]
              [:scan {:table #xt/table lineitem, :columns [l_orderkey {l_returnflag (== l_returnflag "R")} l_extendedprice l_discount]}]]
-            [:rename {_id n_nationkey}
-             [:scan {:table #xt/table nation, :columns [_id n_name]}]]]]]]]
+            [:rename {:columns {_id n_nationkey}} [:scan {:table #xt/table nation, :columns [_id n_name]}]]]]]]]
       (with-args {:start-date (LocalDate/parse "1993-10-01")
                   :end-date (LocalDate/parse "1994-01-01")})))
 
@@ -253,10 +215,8 @@
   (-> '[:let [PartSupp [:project {:projections [ps_partkey {value (* ps_supplycost ps_availqty)}]}
                         [:join {:conditions [{s_suppkey ps_suppkey}]}
                          [:join {:conditions [{n_nationkey s_nationkey}]}
-                          [:rename {_id n_nationkey}
-                           [:scan {:table #xt/table nation, :columns [_id {n_name (== n_name ?nation)}]}]]
-                          [:rename {_id s_suppkey}
-                           [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]]
+                          [:rename {:columns {_id n_nationkey}} [:scan {:table #xt/table nation, :columns [_id {n_name (== n_name ?nation)}]}]]
+                          [:rename {:columns {_id s_suppkey}} [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]]
                          [:scan {:table #xt/table partsupp, :columns [ps_partkey ps_suppkey ps_supplycost ps_availqty]}]]]]
         [:order-by {:order-specs [[value {:direction :desc}]]}
          [:project {:projections [ps_partkey value]}
@@ -284,8 +244,7 @@
                                                1
                                                0)}]}
           [:join {:conditions [{o_orderkey l_orderkey}]}
-           [:rename {_id o_orderkey}
-            [:scan {:table #xt/table orders, :columns [_id o_orderpriority]}]]
+           [:rename {:columns {_id o_orderkey}} [:scan {:table #xt/table orders, :columns [_id o_orderpriority]}]]
            [:select {:predicate (and (< l_commitdate l_receiptdate)
                                      (< l_shipdate l_commitdate))}
             [:scan {:table #xt/table lineitem, :columns [l_orderkey l_commitdate l_shipdate
@@ -303,10 +262,8 @@
         [:group-by {:columns [c_count {custdist (row-count)}]}
          [:group-by {:columns [c_custkey {c_count (count o_comment)}]}
           [:left-outer-join {:conditions [{c_custkey o_custkey}]}
-           [:rename {_id c_custkey}
-            [:scan {:table #xt/table customer, :columns [_id]}]]
-           [:rename {_id o_orderkey}
-            [:scan {:table #xt/table orders, :columns [_id {o_comment (not (like o_comment "%special%requests%"))} o_custkey]}]]]]]]
+           [:rename {:columns {_id c_custkey}} [:scan {:table #xt/table customer, :columns [_id]}]]
+           [:rename {:columns {_id o_orderkey}} [:scan {:table #xt/table orders, :columns [_id {o_comment (not (like o_comment "%special%requests%"))} o_custkey]}]]]]]]
       #_(with-params {:word1 "special"
                       :word2 "requests"})))
 
@@ -319,8 +276,7 @@
                                                       0.0)}
                                   {disc_price (* l_extendedprice (- 1 l_discount))}]}
           [:join {:conditions [{p_partkey l_partkey}]}
-           [:rename {_id p_partkey}
-            [:scan {:table #xt/table part, :columns [_id p_type]}]]
+           [:rename {:columns {_id p_partkey}} [:scan {:table #xt/table part, :columns [_id p_type]}]]
            [:scan {:table #xt/table lineitem, :columns [l_partkey l_extendedprice l_discount
              {l_shipdate (and (>= l_shipdate ?start_date)
                               (< l_shipdate ?end_date))}]}]]]]]
@@ -329,8 +285,7 @@
 
 (def q15-top-supplier
   (-> '[:let [Revenue [:group-by {:columns [supplier_no {total_revenue (sum disc_price)}]}
-                       [:rename {l_suppkey supplier_no}
-                        [:project {:projections [l_suppkey {disc_price (* l_extendedprice (- 1 l_discount))}]}
+                       [:rename {:columns {l_suppkey supplier_no}} [:project {:projections [l_suppkey {disc_price (* l_extendedprice (- 1 l_discount))}]}
                          [:scan {:table #xt/table lineitem, :columns [l_suppkey l_extendedprice l_discount
                            {l_shipdate (and (>= l_shipdate ?start_date)
                                             (< l_shipdate ?end_date))}]}]]]]]
@@ -338,8 +293,7 @@
          [:join {:conditions [{total_revenue max_total_revenue}]}
           [:join {:conditions [{supplier_no s_suppkey}]}
            [:relation Revenue {:col-names [supplier_no total_revenue]}]
-           [:rename {_id s_suppkey}
-            [:scan {:table #xt/table supplier, :columns [_id s_name s_address s_phone]}]]]
+           [:rename {:columns {_id s_suppkey}} [:scan {:table #xt/table supplier, :columns [_id s_name s_address s_phone]}]]]
           [:group-by {:columns [{max_total_revenue (max total_revenue)}]}
            [:relation Revenue {:col-names [supplier_no total_revenue]}]]]]]
       (with-args {:start-date (LocalDate/parse "1996-01-01")
@@ -352,13 +306,11 @@
           [:project {:projections [p_brand p_type p_size ps_suppkey]}
            [:join {:conditions [{p_partkey ps_partkey}]}
             [:semi-join {:conditions [{p_size p_size}]}
-             [:rename {_id p_partkey}
-              [:scan {:table #xt/table part, :columns [_id {p_brand (<> p_brand ?brand)} {p_type (not (like p_type "MEDIUM POLISHED%"))} p_size]}]]
+             [:rename {:columns {_id p_partkey}} [:scan {:table #xt/table part, :columns [_id {p_brand (<> p_brand ?brand)} {p_type (not (like p_type "MEDIUM POLISHED%"))} p_size]}]]
              [:table ?sizes]]
             [:anti-join {:conditions [{ps_suppkey s_suppkey}]}
              [:scan {:table #xt/table partsupp, :columns [ps_partkey ps_suppkey]}]
-             [:rename {_id s_suppkey}
-              [:scan {:table #xt/table supplier, :columns [_id {s_comment (like s_comment "%Customer%Complaints%")}]}]]]]]]]]
+             [:rename {:columns {_id s_suppkey}} [:scan {:table #xt/table supplier, :columns [_id {s_comment (like s_comment "%Customer%Complaints%")}]}]]]]]]]]
       (with-args {:brand "Brand#45"
                   ;; :type "MEDIUM POLISHED%"
 
@@ -375,8 +327,7 @@
   (-> '[:project {:projections [{avg_yearly (/ sum_extendedprice 7)}]}
         [:group-by {:columns [{sum_extendedprice (sum l_extendedprice)}]}
          [:join {:conditions [{p_partkey l_partkey} (< l_quantity small_avg_qty)]}
-          [:rename {_id p_partkey}
-           [:scan {:table #xt/table part, :columns [_id {p_brand (== p_brand ?brand)} {p_container (== p_container ?container)}]}]]
+          [:rename {:columns {_id p_partkey}} [:scan {:table #xt/table part, :columns [_id {p_brand (== p_brand ?brand)} {p_container (== p_container ?container)}]}]]
           [:join {:conditions [{l_partkey l_partkey}]}
            [:project {:projections [l_partkey {small_avg_qty (* 0.2 avg_qty)}]}
             [:group-by {:columns [l_partkey {avg_qty (avg l_quantity)}]}
@@ -392,13 +343,11 @@
           [:join {:conditions [{o_orderkey l_orderkey}]}
            [:join {:conditions [{o_custkey c_custkey}]}
             [:semi-join {:conditions [{o_orderkey l_orderkey}]}
-             [:rename {_id o_orderkey}
-              [:scan {:table #xt/table orders, :columns [_id o_custkey o_orderdate o_totalprice]}]]
+             [:rename {:columns {_id o_orderkey}} [:scan {:table #xt/table orders, :columns [_id o_custkey o_orderdate o_totalprice]}]]
              [:select {:predicate (> sum_qty ?qty)}
               [:group-by {:columns [l_orderkey {sum_qty (sum l_quantity)}]}
                [:scan {:table #xt/table lineitem, :columns [l_orderkey l_quantity]}]]]]
-            [:rename {_id c_custkey}
-             [:scan {:table #xt/table customer, :columns [_id c_name]}]]]
+            [:rename {:columns {_id c_custkey}} [:scan {:table #xt/table customer, :columns [_id c_name]}]]]
            [:scan {:table #xt/table lineitem, :columns [l_orderkey l_quantity]}]]]]]
       (with-args {:qty 300})))
 
@@ -433,8 +382,7 @@
                                        (>= p_size 1)
                                        (<= p_size 15)))}
           [:join {:conditions [{p_partkey l_partkey}]}
-           [:rename {_id p_partkey}
-            [:scan {:table #xt/table part, :columns [_id p_brand p_container p_size]}]]
+           [:rename {:columns {_id p_partkey}} [:scan {:table #xt/table part, :columns [_id p_brand p_container p_size]}]]
            [:scan {:table #xt/table lineitem, :columns [l_partkey l_extendedprice l_discount l_quantity
              {l_shipmode (or (== l_shipmode "AIR") (== l_shipmode "AIR REG"))}
              {l_shipinstruct (== l_shipinstruct "DELIVER IN PERSON")}]}]]]]]
@@ -446,15 +394,12 @@
         [:project {:projections [s_name s_address]}
          [:semi-join {:conditions [{s_suppkey ps_suppkey}]}
           [:join {:conditions [{n_nationkey s_nationkey}]}
-           [:rename {_id n_nationkey}
-            [:scan {:table #xt/table nation, :columns [_id {n_name (== n_name ?nation)}]}]]
-           [:rename {_id s_suppkey}
-            [:scan {:table #xt/table supplier, :columns [_id s_name s_address s_nationkey]}]]]
+           [:rename {:columns {_id n_nationkey}} [:scan {:table #xt/table nation, :columns [_id {n_name (== n_name ?nation)}]}]]
+           [:rename {:columns {_id s_suppkey}} [:scan {:table #xt/table supplier, :columns [_id s_name s_address s_nationkey]}]]]
           [:join {:conditions [{ps_partkey l_partkey} {ps_suppkey l_suppkey} (> ps_availqty sum_qty)]}
            [:semi-join {:conditions [{ps_partkey p_partkey}]}
             [:scan {:table #xt/table partsupp, :columns [ps_suppkey ps_partkey ps_availqty]}]
-            [:rename {_id p_partkey}
-             [:scan {:table #xt/table part, :columns [_id {p_name (like p_name "forest%")}]}]]]
+            [:rename {:columns {_id p_partkey}} [:scan {:table #xt/table part, :columns [_id {p_name (like p_name "forest%")}]}]]]
            [:project {:projections [l_partkey l_suppkey {sum_qty (* 0.5 sum_qty)}]}
             [:group-by {:columns [l_partkey l_suppkey {sum_qty (sum l_quantity)}]}
              [:scan {:table #xt/table lineitem, :columns [l_partkey l_suppkey l_quantity
@@ -469,18 +414,13 @@
   (-> '[:let [L1 [:join {:conditions [{l1/l_orderkey l2/l_orderkey} (<> l1/l_suppkey l2/l_suppkey)]}
                   [:join {:conditions [{l1/l_suppkey s_suppkey}]}
                    [:join {:conditions [{l1/l_orderkey o_orderkey}]}
-                    [:rename l1
-                     [:select {:predicate (> l_receiptdate l_commitdate)}
+                    [:rename {:prefix l1} [:select {:predicate (> l_receiptdate l_commitdate)}
                       [:scan {:for-valid-time [:at :now], :table #xt/table lineitem, :columns [l_orderkey l_suppkey l_receiptdate l_commitdate]}]]]
-                    [:rename {_id o_orderkey}
-                     [:scan {:for-valid-time [:at :now], :table #xt/table orders, :columns [_id {o_orderstatus (== o_orderstatus "F")}]}]]]
+                    [:rename {:columns {_id o_orderkey}} [:scan {:for-valid-time [:at :now], :table #xt/table orders, :columns [_id {o_orderstatus (== o_orderstatus "F")}]}]]]
                    [:semi-join {:conditions [{s_nationkey n_nationkey}]}
-                    [:rename {_id s_suppkey}
-                     [:scan {:for-valid-time [:at :now], :table #xt/table supplier, :columns [_id s_nationkey s_name]}]]
-                    [:rename {_id n_nationkey}
-                     [:scan {:for-valid-time [:at :now], :table #xt/table nation, :columns [_id {n_name (== n_name ?nation)}]}]]]]
-                  [:rename l2
-                   [:scan {:for-valid-time [:at :now], :table #xt/table lineitem, :columns [l_orderkey l_suppkey]}]]]]
+                    [:rename {:columns {_id s_suppkey}} [:scan {:for-valid-time [:at :now], :table #xt/table supplier, :columns [_id s_nationkey s_name]}]]
+                    [:rename {:columns {_id n_nationkey}} [:scan {:for-valid-time [:at :now], :table #xt/table nation, :columns [_id {n_name (== n_name ?nation)}]}]]]]
+                  [:rename {:prefix l2} [:scan {:for-valid-time [:at :now], :table #xt/table lineitem, :columns [l_orderkey l_suppkey]}]]]]
         [:top {:limit 100}
          [:order-by {:order-specs [[numwait {:direction :desc}] [s_name]]}
           [:group-by {:columns [s_name {numwait (row-count)}]}
@@ -491,15 +431,13 @@
               [:join {:conditions [{l1/l_orderkey l3/l_orderkey} (<> l3/l_suppkey l1/l_suppkey)]}
                [:relation L1 {:col-names [l_orderkey l_suppkey l_receiptdate l_commitdate]}]
                [:select {:predicate (> l3/l_receiptdate l3/l_commitdate)}
-                [:rename l3
-                 [:scan {:table #xt/table lineitem, :columns [l_orderkey l_suppkey l_receiptdate l_commitdate]}]]]]]]]]]]]
+                [:rename {:prefix l3} [:scan {:table #xt/table lineitem, :columns [l_orderkey l_suppkey l_receiptdate l_commitdate]}]]]]]]]]]]]
       (with-args {:nation "SAUDI ARABIA"})))
 
 (def q22-global-sales-opportunity
   (-> '[:let [Customer [:semi-join {:conditions [{cntrycode cntrycode}]}
                         [:project {:projections [c_custkey {cntrycode (substring c_phone 1 2)} c_acctbal]}
-                         [:rename {_id c_custkey}
-                          [:scan {:for-valid-time [:at :now], :table #xt/table customer, :columns [_id c_phone c_acctbal]}]]]
+                         [:rename {:columns {_id c_custkey}} [:scan {:for-valid-time [:at :now], :table #xt/table customer, :columns [_id c_phone c_acctbal]}]]]
                         [:table ?cntrycodes]]]
         [:order-by {:order-specs [[cntrycode]]}
          [:group-by {:columns [cntrycode {numcust (row-count)} {totacctbal (sum c_acctbal)}]}

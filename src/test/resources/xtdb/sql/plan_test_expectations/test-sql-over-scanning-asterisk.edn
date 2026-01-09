@@ -5,5 +5,5 @@
   {lastjame bar.2/lastjame}]}
  [:mega-join
   {:conditions []}
-  [[:rename foo.1 [:scan {:table #xt/table foo, :columns [lastname name]}]]
-   [:rename bar.2 [:scan {:table #xt/table bar, :columns [lastjame jame]}]]]]]
+  [[:rename {:prefix foo.1} [:scan {:table #xt/table foo, :columns [lastname name]}]]
+   [:rename {:prefix bar.2} [:scan {:table #xt/table bar, :columns [lastjame jame]}]]]]]

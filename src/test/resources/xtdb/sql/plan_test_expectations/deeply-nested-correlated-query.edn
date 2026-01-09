@@ -1,14 +1,12 @@
-[:rename
- {x1 a, x2 b}
- [:project
+[:rename {:columns {x1 a, x2 b}} [:project
   {:projections [x1 x2]}
   [:apply
    {:mode :semi-join, :columns {x2 ?x13, x4 ?x14}}
    [:mega-join
     {:conditions []}
-    [[:rename {a x1, b x2} [:scan {:table r, :columns [a b]}]]
-     [:rename {c x4} [:scan {:table s, :columns [c]}]]]]
+    [[:rename {:columns {a x1, b x2}} [:scan {:table r, :columns [a b]}]]
+     [:rename {:columns {c x4}} [:scan {:table s, :columns [c]}]]]]
    [:semi-join
     {:conditions [(== x10 ?x14) {x7 x9}]}
-    [:rename {a x6, b x7} [:scan {:table r, :columns [{a (== a ?x13)} b]}]]
-    [:rename {a x9, b x10} [:scan {:table r, :columns [a b]}]]]]]]
+    [:rename {:columns {a x6, b x7}} [:scan {:table r, :columns [{a (== a ?x13)} b]}]]
+    [:rename {:columns {a x9, b x10}} [:scan {:table r, :columns [a b]}]]]]]]

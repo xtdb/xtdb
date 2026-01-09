@@ -11,9 +11,7 @@
       0)}]}
    [:mega-join
     {:conditions [{l.1/l_partkey p.2/_id}]}
-    [[:rename
-      l.1
-      [:scan
+    [[:rename {:prefix l.1} [:scan
        {:table #xt/table lineitem, :columns [{l_shipdate
          (and
           (<
@@ -25,4 +23,4 @@
         l_extendedprice
         l_discount
         l_partkey]}]]
-     [:rename p.2 [:scan {:table #xt/table part, :columns [_id p_type]}]]]]]]]
+     [:rename {:prefix p.2} [:scan {:table #xt/table part, :columns [_id p_type]}]]]]]]]

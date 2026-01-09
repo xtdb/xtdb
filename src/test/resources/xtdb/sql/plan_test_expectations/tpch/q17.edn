@@ -21,16 +21,10 @@
        {:projections [{_row_number_0 (row-number)}]}
        [:mega-join
         {:conditions [{l.1/l_partkey p.2/_id}]}
-        [[:rename
-          l.1
-          [:scan
+        [[:rename {:prefix l.1} [:scan
            {:table #xt/table lineitem, :columns [l_extendedprice l_quantity l_partkey]}]]
-         [:rename
-          p.2
-          [:scan
+         [:rename {:prefix p.2} [:scan
            {:table #xt/table part, :columns [_id
             {p_brand (== p_brand "Brand#23")}
             {p_container (== p_container "MED BOX")}]}]]]]]
-      [:rename
-       l.4
-       [:scan {:table #xt/table lineitem, :columns [l_quantity l_partkey]}]]]]]]]]
+      [:rename {:prefix l.4} [:scan {:table #xt/table lineitem, :columns [l_quantity l_partkey]}]]]]]]]]

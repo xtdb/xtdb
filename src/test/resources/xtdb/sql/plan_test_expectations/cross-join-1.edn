@@ -2,5 +2,5 @@
  {:projections [{a1 a.1/a1} {a2 a.1/a2} {b1 b.2/b1}]}
  [:mega-join
   {:conditions []}
-  [[:rename a.1 [:scan {:table #xt/table a, :columns [a2 a1]}]]
-   [:rename b.2 [:scan {:table #xt/table b, :columns [b1]}]]]]]
+  [[:rename {:prefix a.1} [:scan {:table #xt/table a, :columns [a2 a1]}]]
+   [:rename {:prefix b.2} [:scan {:table #xt/table b, :columns [b1]}]]]]]

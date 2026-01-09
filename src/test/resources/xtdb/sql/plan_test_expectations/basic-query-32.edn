@@ -1,7 +1,5 @@
 [:project
  {:projections [{_column_1 xt.values.1/_column_1} {_column_2 xt.values.1/_column_2}]}
- [:rename
-  xt.values.1
-  [:table
+ [:rename {:prefix xt.values.1} [:table
    [_column_1 _column_2]
    [{:_column_1 1, :_column_2 2} {:_column_1 3, :_column_2 4}]]]]

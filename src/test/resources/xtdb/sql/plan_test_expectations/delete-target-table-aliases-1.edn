@@ -16,8 +16,6 @@
   {:projections [{_iid u.1/_iid}
    {_valid_from u.1/_valid_from}
    {_valid_to u.1/_valid_to}]}
-  [:rename
-   u.1
-   [:scan
+  [:rename {:prefix u.1} [:scan
     {:table #xt/table t1,
      :for-valid-time [:in (current-timestamp) xtdb/end-of-time], :columns [{col1 (== col1 30)} _valid_to _valid_from _iid]}]]]]

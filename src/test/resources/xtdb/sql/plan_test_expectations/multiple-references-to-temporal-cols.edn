@@ -3,9 +3,7 @@
   {_valid_to foo.1/_valid_to}
   {_system_from foo.1/_system_from}
   {_system_to foo.1/_system_to}]}
- [:rename
-  foo.1
-  [:project
+ [:rename {:prefix foo.1} [:project
    {:projections [_valid_from
     _system_from
     _system_to

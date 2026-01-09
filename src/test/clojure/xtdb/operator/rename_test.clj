@@ -11,7 +11,7 @@
     (t/is (= {:types '{b #xt/type :i64, c #xt/type :i64}
               :res [[{:c 12, :b 10}, {:c 0, :b 15}]
                     [{:c 100, :b 83}]]}
-             (tu/query-ra [:rename '{a c}
+             (tu/query-ra [:rename '{:columns {a c}}
                            batches-expr]
                           {:preserve-pages? true
                            :with-types? true})))
@@ -20,7 +20,7 @@
       (t/is (= {:types '{r/b #xt/type :i64, r/c #xt/type :i64}
                 :res [[{:r/c 12, :r/b 10}, {:r/c 0, :r/b 15}]
                       [{:r/c 100, :r/b 83}]]}
-               (tu/query-ra [:rename 'r '{a c}
+               (tu/query-ra [:rename '{:prefix r, :columns {a c}}
                              batches-expr]
                             {:preserve-pages? true
                              :with-types? true
@@ -30,7 +30,7 @@
       (t/is (= {:types '{r/a #xt/type :i64, r/b #xt/type :i64}
                 :res [[{:r/a 12, :r/b 10}, {:r/a 0, :r/b 15}]
                       [{:r/a 100, :r/b 83}]]}
-               (tu/query-ra [:rename 'r
+               (tu/query-ra [:rename '{:prefix r}
                              batches-expr]
                             {:preserve-pages? true
                              :with-types? true

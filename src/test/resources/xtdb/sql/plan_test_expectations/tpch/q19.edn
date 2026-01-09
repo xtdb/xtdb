@@ -54,55 +54,39 @@
           {:mark-spec {_sq_9 [{l.1/l_shipmode xt.values.10/_column_1}]}}
           [:mega-join
            {:conditions [{l.1/l_partkey p.2/_id}]}
-           [[:rename
-             l.1
-             [:scan
+           [[:rename {:prefix l.1} [:scan
               {:table #xt/table lineitem, :columns [l_extendedprice
                l_quantity
                l_shipinstruct
                l_shipmode
                l_discount
                l_partkey]}]]
-            [:rename
-             p.2
-             [:scan
+            [:rename {:prefix p.2} [:scan
               {:table #xt/table part, :columns [_id p_brand p_size p_container]}]]]]
-          [:rename
-           xt.values.10
-           [:table
+          [:rename {:prefix xt.values.10} [:table
             [_column_1]
             [{:_column_1 "AIR"} {:_column_1 "AIR REG"}]]]]
-         [:rename
-          xt.values.8
-          [:table
+         [:rename {:prefix xt.values.8} [:table
            [_column_1]
            [{:_column_1 "MED BAG"}
             {:_column_1 "MED BOX"}
             {:_column_1 "MED PKG"}
             {:_column_1 "MED PACK"}]]]]
-        [:rename
-         xt.values.4
-         [:table
+        [:rename {:prefix xt.values.4} [:table
           [_column_1]
           [{:_column_1 "SM CASE"}
            {:_column_1 "SM BOX"}
            {:_column_1 "SM PACK"}
            {:_column_1 "SM PKG"}]]]]
-       [:rename
-        xt.values.6
-        [:table
+       [:rename {:prefix xt.values.6} [:table
          [_column_1]
          [{:_column_1 "AIR"} {:_column_1 "AIR REG"}]]]]
-      [:rename
-       xt.values.12
-       [:table
+      [:rename {:prefix xt.values.12} [:table
         [_column_1]
         [{:_column_1 "LG CASE"}
          {:_column_1 "LG BOX"}
          {:_column_1 "LG PACK"}
          {:_column_1 "LG PKG"}]]]]
-     [:rename
-      xt.values.14
-      [:table
+     [:rename {:prefix xt.values.14} [:table
        [_column_1]
        [{:_column_1 "AIR"} {:_column_1 "AIR REG"}]]]]]]]]

@@ -1,7 +1,5 @@
 [:project
  {:projections [{z y.2/z}]}
- [:rename
-  y.2
-  [:project
+ [:rename {:prefix y.2} [:project
    {:projections [{z z.1/z}]}
-   [:rename z.1 [:scan {:table #xt/table z, :columns [{z (== z 1)}]}]]]]]
+   [:rename {:prefix z.1} [:scan {:table #xt/table z, :columns [{z (== z 1)}]}]]]]]

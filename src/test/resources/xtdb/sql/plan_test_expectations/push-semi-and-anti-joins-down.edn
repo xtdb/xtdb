@@ -6,11 +6,9 @@
    {:mode :mark-join, :columns {y.2/biz ?_sq_biz_5, x.1/foo ?_sq_foo_4}, :mark-join-projection {_sq_3 true}}
    [:mega-join
     {:conditions []}
-    [[:rename x.1 [:scan {:table #xt/table x, :columns [foo]}]]
-     [:rename y.2 [:scan {:table #xt/table y, :columns [biz]}]]]]
+    [[:rename {:prefix x.1} [:scan {:table #xt/table x, :columns [foo]}]]
+     [:rename {:prefix y.2} [:scan {:table #xt/table y, :columns [biz]}]]]]
    [:project
     {:projections [{bar z.4/bar}]}
-    [:rename
-     z.4
-     [:scan
+    [:rename {:prefix z.4} [:scan
       {:table #xt/table z, :columns [{baz (== baz ?_sq_biz_5)} {bar (== bar ?_sq_foo_4)}]}]]]]]]

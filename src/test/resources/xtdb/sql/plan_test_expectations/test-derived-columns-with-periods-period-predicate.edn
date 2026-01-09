@@ -7,9 +7,7 @@
     (>
      (coalesce (upper f.1/_valid_time) xtdb/end-of-time)
      (lower f.1/_system_time)))}]}
- [:rename
-  f.1
-  [:project
+ [:rename {:prefix f.1} [:project
    {:projections [_valid_from
     _valid_to
     _system_from

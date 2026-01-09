@@ -15,9 +15,7 @@
         (== all_nations.9/nation "BRAZIL")
         all_nations.9/volume
         0)}]}
-     [:rename
-      all_nations.9
-      [:project
+     [:rename {:prefix all_nations.9} [:project
        {:projections [{o_year (extract "YEAR" o.4/o_orderdate)}
         {volume (* l.3/l_extendedprice (- 1 l.3/l_discount))}
         {nation n2.7/n_name}]}
@@ -29,20 +27,12 @@
          {l.3/l_orderkey o.4/_id}
          {p.1/_id l.3/l_partkey}
          {s.2/_id l.3/l_suppkey}]}
-        [[:rename
-          r.8
-          [:scan
+        [[:rename {:prefix r.8} [:scan
            {:table #xt/table region, :columns [_id {r_name (== r_name "AMERICA")}]}]]
-         [:rename n2.7 [:scan {:table #xt/table nation, :columns [_id n_name]}]]
-         [:rename
-          n1.6
-          [:scan {:table #xt/table nation, :columns [_id n_regionkey]}]]
-         [:rename
-          c.5
-          [:scan {:table #xt/table customer, :columns [c_nationkey _id]}]]
-         [:rename
-          o.4
-          [:scan
+         [:rename {:prefix n2.7} [:scan {:table #xt/table nation, :columns [_id n_name]}]]
+         [:rename {:prefix n1.6} [:scan {:table #xt/table nation, :columns [_id n_regionkey]}]]
+         [:rename {:prefix c.5} [:scan {:table #xt/table customer, :columns [c_nationkey _id]}]]
+         [:rename {:prefix o.4} [:scan
            {:table #xt/table orders, :columns [_id
             {o_orderdate
              (between
@@ -50,19 +40,13 @@
               #xt/date "1995-01-01"
               #xt/date "1996-12-31")}
             o_custkey]}]]
-         [:rename
-          l.3
-          [:scan
+         [:rename {:prefix l.3} [:scan
            {:table #xt/table lineitem, :columns [l_orderkey
             l_extendedprice
             l_suppkey
             l_discount
             l_partkey]}]]
-         [:rename
-          p.1
-          [:scan
+         [:rename {:prefix p.1} [:scan
            {:table #xt/table part, :columns [_id {p_type (== p_type "ECONOMY ANODIZED STEEL")}]}]]
-         [:rename
-          s.2
-          [:scan
+         [:rename {:prefix s.2} [:scan
            {:table #xt/table supplier, :columns [_id s_nationkey]}]]]]]]]]]]]

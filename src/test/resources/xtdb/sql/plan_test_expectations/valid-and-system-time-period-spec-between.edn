@@ -1,8 +1,6 @@
 [:project
  {:projections [{_column_1 4}]}
- [:rename
-  t1.1
-  [:scan
+ [:rename {:prefix t1.1} [:scan
    {:table #xt/table t1,
     :columns [],
     :for-valid-time

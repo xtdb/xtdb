@@ -8,9 +8,7 @@
   {c_acctbal xt.values.1/c_acctbal}
   {c_mktsegment xt.values.1/c_mktsegment}
   {c_comment xt.values.1/c_comment}]}
- [:rename
-  xt.values.1
-  [:table
+ [:rename {:prefix xt.values.1} [:table
    [_id
     c_custkey
     c_name

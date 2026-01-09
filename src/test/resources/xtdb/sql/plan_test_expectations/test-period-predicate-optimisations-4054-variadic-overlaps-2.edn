@@ -10,24 +10,18 @@
      (coalesce (upper foo.1/_valid_time) xtdb/end-of-time)
      (coalesce (upper bar.2/_valid_time) xtdb/end-of-time)
      (coalesce (upper baz.3/_valid_time) xtdb/end-of-time)))]}
-  [[:rename
-    baz.3
-    [:project
+  [[:rename {:prefix baz.3} [:project
      {:projections [_valid_from
       _valid_to
       {_valid_time (period _valid_from _valid_to)}]}
      [:scan {:table #xt/table baz, :columns [_valid_from _valid_to]}]]]
-   [:rename
-    foo.1
-    [:project
+   [:rename {:prefix foo.1} [:project
      {:projections [name
       _valid_from
       _valid_to
       {_valid_time (period _valid_from _valid_to)}]}
      [:scan {:table #xt/table foo, :columns [name _valid_from _valid_to]}]]]
-   [:rename
-    bar.2
-    [:project
+   [:rename {:prefix bar.2} [:project
      {:projections [_valid_from
       _valid_to
       {_valid_time (period _valid_from _valid_to)}]}

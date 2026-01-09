@@ -11,9 +11,7 @@
     {:columns [custsale.12/cntrycode
      {_row_count_13 (row-count)}
      {_sum_out_14 (sum custsale.12/c_acctbal)}]}
-    [:rename
-     custsale.12
-     [:project
+    [:rename {:prefix custsale.12} [:project
       {:projections [{cntrycode (substring c.1/c_phone 1 2)}
        {c_acctbal c.1/c_acctbal}]}
       [:select
@@ -30,9 +28,7 @@
             {:projections [{_sq_9 true}]}
             [:anti-join
              {:conditions [{c.1/_id o_custkey}]}
-             [:rename
-              c.1
-              [:scan
+             [:rename {:prefix c.1} [:scan
                {:table #xt/table customer, :columns [c_phone c_acctbal _id]}]]
              [:project
               {:projections [{_id o.10/_id}
@@ -44,9 +40,7 @@
                {o_orderstatus o.10/o_orderstatus}
                {o_shippriority o.10/o_shippriority}
                {o_totalprice o.10/o_totalprice}]}
-              [:rename
-               o.10
-               [:scan
+              [:rename {:prefix o.10} [:scan
                 {:table #xt/table orders, :columns [o_orderpriority
                  o_clerk
                  o_orderstatus
@@ -56,9 +50,7 @@
                  o_comment
                  o_shippriority
                  o_custkey]}]]]]]]
-          [:rename
-           xt.values.3
-           [:table
+          [:rename {:prefix xt.values.3} [:table
             [_column_1]
             [{:_column_1 "13"}
              {:_column_1 "31"}
@@ -77,13 +69,9 @@
             {:conditions [{_needle xt.values.7/_column_1}]}
             [:map
              {:projections [{_needle (substring c.5/c_phone 1 2)}]}
-             [:rename
-              c.5
-              [:scan
+             [:rename {:prefix c.5} [:scan
                {:table #xt/table customer, :columns [c_phone {c_acctbal (> c_acctbal 0.0)}]}]]]
-            [:rename
-             xt.values.7
-             [:table
+            [:rename {:prefix xt.values.7} [:table
               [_column_1]
               [{:_column_1 "13"}
                {:_column_1 "31"}

@@ -4,8 +4,8 @@
   {:conditions []}
   [:mega-join
    {:conditions []}
-   [[:rename foo.1 [:scan {:table #xt/table foo, :columns [lastname name]}]]
-    [:rename bar.2 [:scan {:table #xt/table bar, :columns []}]]]]
+   [[:rename {:prefix foo.1} [:scan {:table #xt/table foo, :columns [lastname name]}]]
+    [:rename {:prefix bar.2} [:scan {:table #xt/table bar, :columns []}]]]]
   [:project
    {:projections [{_sq_3 baz.4/frame}]}
-   [:rename baz.4 [:scan {:table #xt/table baz, :columns [frame]}]]]]]
+   [:rename {:prefix baz.4} [:scan {:table #xt/table baz, :columns [frame]}]]]]]

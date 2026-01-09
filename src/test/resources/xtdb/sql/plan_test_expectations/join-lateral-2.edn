@@ -2,9 +2,7 @@
  {:projections [{y x.1/y} {z y.4/z}]}
  [:left-outer-join
   {:conditions [{x.1/y y.4/z}]}
-  [:rename x.1 [:scan {:table #xt/table x, :columns [y]}]]
-  [:rename
-   y.4
-   [:project
+  [:rename {:prefix x.1} [:scan {:table #xt/table x, :columns [y]}]]
+  [:rename {:prefix y.4} [:project
     {:projections [{z z.2/z}]}
-    [:rename z.2 [:select {:predicate true} [:scan {:table #xt/table z, :columns [z]}]]]]]]]
+    [:rename {:prefix z.2} [:select {:predicate true} [:scan {:table #xt/table z, :columns [z]}]]]]]]]

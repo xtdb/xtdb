@@ -2,13 +2,9 @@
  [:union-all {}
   [:project
    {:projections [{id customers.1/id}]}
-   [:rename customers.1 [:scan {:table #xt/table customers, :columns [id]}]]]
+   [:rename {:prefix customers.1} [:scan {:table #xt/table customers, :columns [id]}]]]
   [:project
    {:projections [{id o.3/id}]}
-   [:rename
-    o.3
-    [:project
+   [:rename {:prefix o.3} [:project
      {:projections [{id orders.2/id} {product orders.2/product}]}
-     [:rename
-      orders.2
-      [:scan {:table #xt/table orders, :columns [product id]}]]]]]]]
+     [:rename {:prefix orders.2} [:scan {:table #xt/table orders, :columns [product id]}]]]]]]]

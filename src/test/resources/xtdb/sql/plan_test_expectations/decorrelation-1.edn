@@ -10,7 +10,5 @@
      {:conditions [{c.1/custkey o.3/custkey}]}
      [:map
       {:projections [{_row_number_0 (row-number)}]}
-      [:rename c.1 [:scan {:table #xt/table customer, :columns [custkey]}]]]
-     [:rename
-      o.3
-      [:scan {:table #xt/table orders, :columns [custkey totalprice]}]]]]]]]
+      [:rename {:prefix c.1} [:scan {:table #xt/table customer, :columns [custkey]}]]]
+     [:rename {:prefix o.3} [:scan {:table #xt/table orders, :columns [custkey totalprice]}]]]]]]]

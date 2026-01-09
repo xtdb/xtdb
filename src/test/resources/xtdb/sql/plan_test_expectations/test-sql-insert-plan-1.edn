@@ -6,8 +6,6 @@
   {:projections [{_id xt.values.1/_id}
    {name xt.values.1/name}
    {_valid_from xt.values.1/_valid_from}]}
-  [:rename
-   xt.values.1
-   [:table
+  [:rename {:prefix xt.values.1} [:table
     [_id name _valid_from]
     [{:_id ?_0, :name ?_1, :_valid_from ?_2}]]]]]

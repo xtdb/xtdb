@@ -1,8 +1,6 @@
 [:project
  {:projections [{name foo.1/name}]}
- [:rename
-  foo.1
-  [:project
+ [:rename {:prefix foo.1} [:project
    {:projections [name
     _valid_from
     _valid_to

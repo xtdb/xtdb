@@ -2,11 +2,9 @@
  {:projections [{_column_1 _sq_2}]}
  [:apply
   {:mode :single-join, :columns {a.1/b ?_sq_b_3}}
-  [:rename a.1 [:scan {:table #xt/table a, :columns [{a (== a 42)} b]}]]
+  [:rename {:prefix a.1} [:scan {:table #xt/table a, :columns [{a (== a 42)} b]}]]
   [:group-by
    {:columns [{_sq_2 (vec_agg b1)}]}
    [:project
     {:projections [{b1 b.3/b1}]}
-    [:rename
-     b.3
-     [:scan {:table #xt/table b, :columns [{b2 (== b2 ?_sq_b_3)} b1]}]]]]]]
+    [:rename {:prefix b.3} [:scan {:table #xt/table b, :columns [{b2 (== b2 ?_sq_b_3)} b1]}]]]]]]

@@ -370,10 +370,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (t/is (= [{:t2d {:foo {:bibble false}, :bar {:baz 1002}},
              :t1d {:foo {:bibble true}, :bar {:baz 1001}}}]
            (tu/query-ra '[:cross-join {}
-                          [:rename {data t2d}
-                           [:scan {:table #xt/table t2, :columns [data]}]]
-                          [:rename {data t1d}
-                           [:scan {:table #xt/table t1, :columns [data]}]]]
+                          [:rename {:columns {data t2d}} [:scan {:table #xt/table t2, :columns [data]}]]
+                          [:rename {:columns {data t1d}} [:scan {:table #xt/table t1, :columns [data]}]]]
                         {:node tu/*node*})
            #_(xt/q tu/*node* "SELECT t2.data t2d, t1.data t1d FROM t2, t1"))))
 
@@ -1053,12 +1051,10 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (t/is (= [{:foo "foo1", :bar "bar1"}]
              (tu/query-ra '[:project {:projections [{bar _id} {foo foo/_id}]}
                             [:semi-join {:conditions [{_id vals/_column_1}]}
-                             [:rename {bar/_id _id}
-                              [:join {:conditions [{foo/_id bar/foo}]}
-                               [:rename foo [:scan {:table #xt/table foo, :columns [_id]}]]
-                               [:rename bar [:scan {:table #xt/table bar, :columns [_id foo]}]]]]
-                             [:rename vals
-                              [:table [_column_1]
+                             [:rename {:columns {bar/_id _id}} [:join {:conditions [{foo/_id bar/foo}]}
+                               [:rename {:prefix foo} [:scan {:table #xt/table foo, :columns [_id]}]]
+                               [:rename {:prefix bar} [:scan {:table #xt/table bar, :columns [_id foo]}]]]]
+                             [:rename {:prefix vals} [:table [_column_1]
                                [{:_column_1 "bar1"}]]]]]
                           {:node node})))
 

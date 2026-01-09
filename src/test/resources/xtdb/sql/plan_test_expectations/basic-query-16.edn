@@ -1,7 +1,7 @@
 [:union-all {}
  [:project
   {:projections [{name si.1/name}]}
-  [:rename si.1 [:scan {:table #xt/table stars_in, :columns [name]}]]]
+  [:rename {:prefix si.1} [:scan {:table #xt/table stars_in, :columns [name]}]]]
  [:project
   {:projections [{name si.2/name}]}
-  [:rename si.2 [:scan {:table #xt/table stars_in, :columns [name]}]]]]
+  [:rename {:prefix si.2} [:scan {:table #xt/table stars_in, :columns [name]}]]]]

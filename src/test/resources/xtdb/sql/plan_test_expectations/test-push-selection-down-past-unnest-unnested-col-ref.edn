@@ -6,4 +6,4 @@
    {:columns {uvs.3/v unnest}}
    [:map
     {:projections [{unnest f.1/vs}]}
-    [:rename f.1 [:scan {:table #xt/table foo, :columns [vs _id]}]]]]]]
+    [:rename {:prefix f.1} [:scan {:table #xt/table foo, :columns [vs _id]}]]]]]]

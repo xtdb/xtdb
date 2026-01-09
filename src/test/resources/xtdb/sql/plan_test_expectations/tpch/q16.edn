@@ -26,28 +26,20 @@
        {:conditions [{ps.1/ps_partkey p.2/_id}]}
        [[:anti-join
          {:conditions [{ps.1/ps_suppkey _id}]}
-         [:rename
-          ps.1
-          [:scan {:table #xt/table partsupp, :columns [ps_partkey ps_suppkey]}]]
+         [:rename {:prefix ps.1} [:scan {:table #xt/table partsupp, :columns [ps_partkey ps_suppkey]}]]
          [:project
           {:projections [{_id s.6/_id}]}
-          [:rename
-           s.6
-           [:scan
+          [:rename {:prefix s.6} [:scan
             {:table #xt/table supplier, :columns [{s_comment (like s_comment "%Customer%Complaints%")}
              _id]}]]]]
         [:semi-join
          {:conditions [{p.2/p_size xt.values.4/_column_1}]}
-         [:rename
-          p.2
-          [:scan
+         [:rename {:prefix p.2} [:scan
            {:table #xt/table part, :columns [_id
             {p_brand (<> p_brand "Brand#45")}
             p_size
             {p_type (not (like p_type "MEDIUM POLISHED%"))}]}]]
-         [:rename
-          xt.values.4
-          [:table
+         [:rename {:prefix xt.values.4} [:table
            [_column_1]
            [{:_column_1 49}
             {:_column_1 14}

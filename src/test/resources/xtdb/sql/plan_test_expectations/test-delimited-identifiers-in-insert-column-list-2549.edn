@@ -1,5 +1,3 @@
 [:project
  {:projections [{_id xt.values.1/_id} {user-id xt.values.1/user-id}]}
- [:rename
-  xt.values.1
-  [:table [_id user-id] [{:_id 1234, :user-id 5678}]]]]
+ [:rename {:prefix xt.values.1} [:table [_id user-id] [{:_id 1234, :user-id 5678}]]]]

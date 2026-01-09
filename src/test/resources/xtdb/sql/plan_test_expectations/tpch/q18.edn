@@ -28,15 +28,11 @@
       {:projections [{_sq_4 true}]}
       [:mega-join
        {:conditions [{o.2/_id l.3/l_orderkey} {c.1/_id o.2/o_custkey}]}
-       [[:rename
-         l.3
-         [:scan {:table #xt/table lineitem, :columns [l_orderkey l_quantity]}]]
-        [:rename c.1 [:scan {:table #xt/table customer, :columns [_id c_name]}]]
+       [[:rename {:prefix l.3} [:scan {:table #xt/table lineitem, :columns [l_orderkey l_quantity]}]]
+        [:rename {:prefix c.1} [:scan {:table #xt/table customer, :columns [_id c_name]}]]
         [:semi-join
          {:conditions [{o.2/_id l_orderkey}]}
-         [:rename
-          o.2
-          [:scan
+         [:rename {:prefix o.2} [:scan
            {:table #xt/table orders, :columns [o_totalprice _id o_orderdate o_custkey]}]]
          [:project
           {:projections [{l_orderkey l.5/l_orderkey}]}
@@ -44,7 +40,5 @@
            {:predicate (> _sum_out_6 300)}
            [:group-by
             {:columns [l.5/l_orderkey {_sum_out_6 (sum l.5/l_quantity)}]}
-            [:rename
-             l.5
-             [:scan
+            [:rename {:prefix l.5} [:scan
               {:table #xt/table lineitem, :columns [l_orderkey l_quantity]}]]]]]]]]]]]]]]

@@ -10,9 +10,7 @@
      {:conditions [{s.1/s_nationkey n.2/_id}]}
      [[:semi-join
        {:conditions [{s.1/_id ps_suppkey}]}
-       [:rename
-        s.1
-        [:scan
+       [:rename {:prefix s.1} [:scan
          {:table #xt/table supplier, :columns [s_name s_address _id s_nationkey]}]]
        [:project
         {:projections [{ps_suppkey ps.4/ps_suppkey}]}
@@ -35,13 +33,9 @@
                {ps.4/ps_suppkey l.8/l_suppkey}]}
               [:map
                {:projections [{_row_number_0 (row-number)}]}
-               [:rename
-                ps.4
-                [:scan
+               [:rename {:prefix ps.4} [:scan
                  {:table #xt/table partsupp, :columns [ps_partkey ps_availqty ps_suppkey]}]]]
-              [:rename
-               l.8
-               [:scan
+              [:rename {:prefix l.8} [:scan
                 {:table #xt/table lineitem, :columns [{l_shipdate
                   (and
                    (<
@@ -55,11 +49,7 @@
                  l_partkey]}]]]]]]
           [:project
            {:projections [{_id p.6/_id}]}
-           [:rename
-            p.6
-            [:scan
+           [:rename {:prefix p.6} [:scan
              {:table #xt/table part, :columns [_id {p_name (like p_name "forest%")}]}]]]]]]]
-      [:rename
-       n.2
-       [:scan
+      [:rename {:prefix n.2} [:scan
         {:table #xt/table nation, :columns [_id {n_name (== n_name "CANADA")}]}]]]]]]]]

@@ -29,14 +29,10 @@
       {:projections [{_sq_3 true}]}
       [:mega-join
        {:conditions [{o.1/_id l.2/l_orderkey}]}
-       [[:rename
-         o.1
-         [:scan {:table #xt/table orders, :columns [o_orderpriority _id]}]]
+       [[:rename {:prefix o.1} [:scan {:table #xt/table orders, :columns [o_orderpriority _id]}]]
         [:semi-join
          {:conditions [{l.2/l_shipmode xt.values.4/_column_1}]}
-         [:rename
-          l.2
-          [:select
+         [:rename {:prefix l.2} [:select
            {:predicate (and
                         (< l_commitdate l_receiptdate)
                         (< l_shipdate l_commitdate))}
@@ -53,8 +49,6 @@
              l_orderkey
              l_shipdate
              l_shipmode]}]]]
-         [:rename
-          xt.values.4
-          [:table
+         [:rename {:prefix xt.values.4} [:table
            [_column_1]
            [{:_column_1 "MAIL"} {:_column_1 "SHIP"}]]]]]]]]]]]]

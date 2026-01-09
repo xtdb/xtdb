@@ -5,9 +5,7 @@
   {bar foo.1/baz}
   {baz foo.1/baz}
   {quux foo.1/quux}]}
- [:rename
-  foo.1
-  [:select
+ [:rename {:prefix foo.1} [:select
    {:predicate (or (not (boolean (=== baz bar))))}
    [:scan
     {:table #xt/table foo, :for-valid-time :all-time, :columns [_valid_to bar baz quux _valid_from _iid]}]]]]

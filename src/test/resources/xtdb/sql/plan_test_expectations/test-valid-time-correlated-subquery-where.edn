@@ -2,18 +2,14 @@
  {:projections [{_column_1 _sq_2}]}
  [:apply
   {:mode :single-join, :columns {bar.1/_valid_time ?_sq__valid_time_3}}
-  [:rename
-   bar.1
-   [:project
+  [:rename {:prefix bar.1} [:project
     {:projections [_valid_from
      _valid_to
      {_valid_time (period _valid_from _valid_to)}]}
     [:scan {:table #xt/table bar, :columns [_valid_from _valid_to]}]]]
   [:project
    {:projections [{_sq_2 foo.3/name}]}
-   [:rename
-    foo.3
-    [:project
+   [:rename {:prefix foo.3} [:project
      {:projections [name
       _valid_from
       _valid_to

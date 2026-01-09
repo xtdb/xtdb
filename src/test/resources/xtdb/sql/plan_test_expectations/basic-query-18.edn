@@ -2,9 +2,7 @@
  [:union-all {}
   [:project
    {:projections [{movie_title si.1/movie_title}]}
-   [:rename si.1 [:scan {:table stars_in, :columns [movie_title]}]]]
-  [:rename
-   {name movie_title}
-   [:project
+   [:rename {:prefix si.1} [:scan {:table stars_in, :columns [movie_title]}]]]
+  [:rename {:columns {name movie_title}} [:project
     {:projections [{name si.2/name}]}
-    [:rename si.2 [:scan {:table stars_in, :columns [name]}]]]]]]
+    [:rename {:prefix si.2} [:scan {:table stars_in, :columns [name]}]]]]]]

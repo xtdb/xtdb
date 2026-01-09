@@ -12,8 +12,6 @@
      [:left-outer-join
       {:conditions [{c.1/_id o.2/o_custkey}
        (not (like o.2/o_comment "%special%requests%"))]}
-      [:rename c.1 [:scan {:table #xt/table customer, :columns [_id]}]]
-      [:rename
-       o.2
-       [:scan
+      [:rename {:prefix c.1} [:scan {:table #xt/table customer, :columns [_id]}]]
+      [:rename {:prefix o.2} [:scan
         {:table #xt/table orders, :columns [_id o_comment o_custkey]}]]]]]]]]

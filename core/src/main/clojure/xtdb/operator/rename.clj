@@ -8,10 +8,12 @@
            (xtdb.arrow RelationReader VectorReader)
            xtdb.ICursor))
 
+(s/def ::prefix ::lp/relation)
+(s/def ::columns (s/map-of ::lp/column ::lp/column :conform-keys true))
+
 (defmethod lp/ra-expr :rename [_]
   (s/cat :op #{:ρ :rho :rename}
-         :prefix (s/? ::lp/relation)
-         :columns (s/? (s/map-of ::lp/column ::lp/column :conform-keys true))
+         :opts (s/keys :opt-un [::prefix ::columns])
          :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -36,8 +38,9 @@
   (close [_]
     (util/try-close in-cursor)))
 
-(defmethod lp/emit-expr :rename [{:keys [columns relation prefix]} args]
-  (let [{->inner-cursor :->cursor, inner-vec-types :vec-types, :as emitted-child-relation} (lp/emit-expr relation args)
+(defmethod lp/emit-expr :rename [{:keys [opts relation]} args]
+  (let [{:keys [prefix columns]} opts
+        {->inner-cursor :->cursor, inner-vec-types :vec-types, :as emitted-child-relation} (lp/emit-expr relation args)
         col-name-mapping (->> (for [old-name (set (keys inner-vec-types))]
                                 [old-name
                                  (cond-> (get columns old-name old-name)

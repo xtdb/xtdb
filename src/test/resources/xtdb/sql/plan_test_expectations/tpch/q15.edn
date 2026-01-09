@@ -6,9 +6,7 @@
     {:columns [l.1/l_suppkey {_sum_out_2 (sum _sum_in_3)}]}
     [:map
      {:projections [{_sum_in_3 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]}
-     [:rename
-      l.1
-      [:scan
+     [:rename {:prefix l.1} [:scan
        {:table #xt/table lineitem, :columns [{l_shipdate
          (and
           (<
@@ -41,21 +39,15 @@
       {:conditions []}
       [:mega-join
        {:conditions [{s.5/_id revenue.6/supplier_no}]}
-       [[:rename
-         s.5
-         [:scan
+       [[:rename {:prefix s.5} [:scan
           {:table #xt/table supplier, :columns [s_name s_address s_phone _id]}]]
-        [:rename
-         revenue.6
-         [:relation
+        [:rename {:prefix revenue.6} [:relation
           revenue.4
           {:col-names [supplier_no total_revenue]}]]]]
       [:project
        {:projections [{_sq_7 _max_out_9}]}
        [:group-by
         {:columns [{_max_out_9 (max revenue.8/total_revenue)}]}
-        [:rename
-         revenue.8
-         [:relation
+        [:rename {:prefix revenue.8} [:relation
           revenue.4
           {:col-names [supplier_no total_revenue]}]]]]]]]]]]

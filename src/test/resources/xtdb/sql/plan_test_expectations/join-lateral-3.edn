@@ -2,9 +2,7 @@
  {:projections [{x x.1/x} {y x.1/y} {z y.4/z}]}
  [:mega-join
   {:conditions [{x.1/x y.4/x} {x.1/y y.4/z}]}
-  [[:rename x.1 [:scan {:table #xt/table x, :columns [x y]}]]
-   [:rename
-    y.4
-    [:project
+  [[:rename {:prefix x.1} [:scan {:table #xt/table x, :columns [x y]}]]
+   [:rename {:prefix y.4} [:project
      {:projections [{x z.2/x} {z z.2/z}]}
-     [:rename z.2 [:scan {:table #xt/table z, :columns [x z]}]]]]]]]
+     [:rename {:prefix z.2} [:scan {:table #xt/table z, :columns [x z]}]]]]]]]

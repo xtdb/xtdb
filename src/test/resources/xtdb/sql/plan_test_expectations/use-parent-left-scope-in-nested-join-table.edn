@@ -4,8 +4,8 @@
   {:mode :cross-join, :columns {r1.1/xs ?_sq_xs_2, r2.2/xs ?_sq_xs_4}}
   [:mega-join
    {:conditions []}
-   [[:rename r1.1 [:scan {:table #xt/table r1, :columns [xs]}]]
-    [:rename r2.2 [:scan {:table #xt/table r2, :columns [xs]}]]]]
+   [[:rename {:prefix r1.1} [:scan {:table #xt/table r1, :columns [xs]}]]
+    [:rename {:prefix r2.2} [:scan {:table #xt/table r2, :columns [xs]}]]]]
   [:mega-join
    {:conditions [{u1.4/i1 u2.6/i2}]}
    [[:map {:projections [{u1.4/i1 (local-row-number)}]} [:table {u1.4/x1 ?_sq_xs_2}]]

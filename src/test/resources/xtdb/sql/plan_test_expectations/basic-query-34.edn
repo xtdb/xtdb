@@ -22,4 +22,4 @@
     (+ t1.1/e 1)
     444
     555)}]}
- [:rename t1.1 [:scan {:table #xt/table t1, :columns [a e c b d]}]]]
+ [:rename {:prefix t1.1} [:scan {:table #xt/table t1, :columns [a e c b d]}]]]

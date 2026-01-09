@@ -4,9 +4,7 @@
   {:columns [{_sum_out_2 (sum _sum_in_3)}]}
   [:map
    {:projections [{_sum_in_3 (* l.1/l_extendedprice l.1/l_discount)}]}
-   [:rename
-    l.1
-    [:scan
+   [:rename {:prefix l.1} [:scan
      {:table #xt/table lineitem, :columns [{l_shipdate
        (and
         (<

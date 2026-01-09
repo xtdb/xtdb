@@ -1,6 +1,4 @@
-[:rename
- {x2 _column_1}
- [:project
+[:rename {:columns {x2 _column_1}} [:project
   {:projections [{x2 4}]}
   [:rename
    {}

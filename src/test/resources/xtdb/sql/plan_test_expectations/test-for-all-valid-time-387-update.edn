@@ -3,9 +3,7 @@
   {_valid_from users.1/_valid_from}
   {_valid_to users.1/_valid_to}
   {first_name "Sue"}]}
- [:rename
-  users.1
-  [:scan
+ [:rename {:prefix users.1} [:scan
    {:table #xt/table users, :for-valid-time :all-time, :columns [_valid_to
     _valid_from
     {first_name (or (not (boolean (=== "Sue" first_name))))}

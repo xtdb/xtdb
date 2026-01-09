@@ -4,7 +4,7 @@
   {:projections [{_sq_2 true}]}
   [:semi-join
    {:conditions [{x.1/y z}]}
-   [:rename x.1 [:scan {:table #xt/table x, :columns [y {z (== z 10.0)}]}]]
+   [:rename {:prefix x.1} [:scan {:table #xt/table x, :columns [y {z (== z 10.0)}]}]]
    [:project
     {:projections [{z y.3/z}]}
-    [:rename y.3 [:scan {:table #xt/table y, :columns [z]}]]]]]]
+    [:rename {:prefix y.3} [:scan {:table #xt/table y, :columns [z]}]]]]]]
