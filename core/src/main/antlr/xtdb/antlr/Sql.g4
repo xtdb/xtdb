@@ -458,9 +458,10 @@ whenOperand : predicatePart2 | expr ;
 
 /// §6.28 <numeric value function>
 
-extractField : primaryDatetimeField | timeZoneField ;
+extractField : primaryDatetimeField | timeZoneField | pgExtractField ;
 primaryDatetimeField : nonSecondPrimaryDatetimeField | 'SECOND' ;
 timeZoneField : 'TIMEZONE_HOUR' | 'TIMEZONE_MINUTE' ;
+pgExtractField : 'DOW' | 'ISODOW' | 'DOY' | 'WEEK' | 'QUARTER' | 'EPOCH' ;
 
 /// §6.30 <string value function>
 

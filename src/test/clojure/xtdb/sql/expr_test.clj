@@ -1084,7 +1084,65 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
 
     (t/is (anomalous? [:unsupported nil
                        #"Extract \"TIMEZONE_HOUR\" not supported for type interval"]
-                      (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x")))))
+                      (xt/q tu/*node* "SELECT EXTRACT(TIMEZONE_HOUR FROM INTERVAL '3 02:47:33' DAY TO SECOND) as x"))))
+
+  (t/testing "pg-style date fields"
+    (t/testing "DOW - day of week (0=Sunday, 1=Monday, ..., 6=Saturday)"
+      (t/is (= [{:x 0}]
+               (xt/q tu/*node* "SELECT EXTRACT(DOW FROM DATE '2025-07-06') as x"))
+            "Sunday = 0")
+      (t/is (= [{:x 6}]
+               (xt/q tu/*node* "SELECT EXTRACT(DOW FROM DATE '2025-07-05') as x"))
+            "Saturday = 6"))
+
+    (t/testing "ISODOW - ISO day of week (1=Monday, ..., 7=Sunday)"
+      (t/is (= [{:x 7}]
+               (xt/q tu/*node* "SELECT EXTRACT(ISODOW FROM DATE '2025-07-06') as x"))
+            "Sunday = 7")
+      (t/is (= [{:x 1}]
+               (xt/q tu/*node* "SELECT EXTRACT(ISODOW FROM DATE '2025-07-07') as x"))
+            "Monday = 1"))
+
+    (t/testing "DOY - day of year"
+      (t/is (= [{:x 1}]
+               (xt/q tu/*node* "SELECT EXTRACT(DOY FROM DATE '2025-01-01') as x"))
+            "first day of year")
+      (t/is (= [{:x 365}]
+               (xt/q tu/*node* "SELECT EXTRACT(DOY FROM DATE '2025-12-31') as x"))
+            "last day of year"))
+
+    (t/testing "WEEK - ISO week number"
+      (t/is (= [{:x 1}]
+               (xt/q tu/*node* "SELECT EXTRACT(WEEK FROM DATE '2025-01-01') as x"))
+            "2025-01-01 is in ISO week 1")
+      (t/is (= [{:x 1}]
+               (xt/q tu/*node* "SELECT EXTRACT(WEEK FROM DATE '2024-12-30') as x"))
+            "2024-12-30 is in ISO week 1 of 2025"))
+
+    (t/testing "QUARTER - quarter of year"
+      (t/is (= [{:x 1}]
+               (xt/q tu/*node* "SELECT EXTRACT(QUARTER FROM DATE '2025-03-31') as x")))
+      (t/is (= [{:x 2}]
+               (xt/q tu/*node* "SELECT EXTRACT(QUARTER FROM DATE '2025-04-01') as x")))
+      (t/is (= [{:x 4}]
+               (xt/q tu/*node* "SELECT EXTRACT(QUARTER FROM DATE '2025-12-31') as x")))))
+
+  (t/testing "pg-style timestamp fields"
+    (t/testing "DOW/ISODOW on timestamp"
+      (t/is (= [{:x 0}]
+               (xt/q tu/*node* "SELECT EXTRACT(DOW FROM TIMESTAMP '2025-07-06T12:00:00') as x"))
+            "DOW: Sunday = 0")
+      (t/is (= [{:x 7}]
+               (xt/q tu/*node* "SELECT EXTRACT(ISODOW FROM TIMESTAMP '2025-07-06T12:00:00') as x"))
+            "ISODOW: Sunday = 7"))
+
+    (t/testing "DOY, WEEK, QUARTER on timestamp"
+      (t/is (= [{:x 185}]
+               (xt/q tu/*node* "SELECT EXTRACT(DOY FROM TIMESTAMP '2025-07-04T12:00:00') as x")))
+      (t/is (= [{:x 27}]
+               (xt/q tu/*node* "SELECT EXTRACT(WEEK FROM TIMESTAMP '2025-07-04T12:00:00') as x")))
+      (t/is (= [{:x 3}]
+               (xt/q tu/*node* "SELECT EXTRACT(QUARTER FROM TIMESTAMP '2025-07-04T12:00:00') as x"))))))
 
 (t/deftest test-age-function
   (t/testing "testing AGE with timestamps"
