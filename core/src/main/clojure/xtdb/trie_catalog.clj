@@ -1,5 +1,6 @@
 (ns xtdb.trie-catalog
   (:require [clojure.tools.logging :as log]
+            [clojure.spec.alpha :as s]
             [integrant.core :as ig]
             [xtdb.table-catalog :as table-cat]
             [xtdb.time :as time]
@@ -17,6 +18,49 @@
            (xtdb.storage BufferPool)
            (xtdb.util TemporalBounds)))
 
+(s/def ::level int?)
+(s/def ::recency (s/nilable #(instance? LocalDate %)))
+(s/def ::part (s/coll-of int? :kind vector?))
+
+(s/def ::shard (s/tuple ::level ::recency ::part))
+
+(s/def ::state #{:live :nascent :garbage})
+(s/def ::block-idx int?)
+(s/def ::trie (s/keys :req-un [::level ::recency ::part ::block-idx ::state]))
+
+(defn descending-by? [key-fn]
+  (fn [coll]
+    (->> coll
+         (map key-fn)
+         (partition 2 1)
+         (every? (fn [[a b]] (>= a b))))))
+
+(s/def ::shard-list
+  (s/and (s/coll-of ::trie)
+         (descending-by? :block-idx)))
+
+(defn all-eq? [key-fn value]
+  (fn [coll]
+    (every? #(= (key-fn %) value) coll)))
+
+(s/def ::live (s/and ::shard-list
+                     (all-eq? :state :live)))
+
+(s/def ::nascent (s/and ::shard-list
+                        (all-eq? :state :nascent)))
+
+(s/def ::garbage (s/and ::shard-list
+                        (all-eq? :state :garbage)))
+
+(s/def ::max-block-idx ::block-idx)
+
+(s/def ::shard-values
+  (s/keys :req-un [::live ::garbage ::max-block-idx]
+          :opt-un [::nascent]))
+
+(s/def ::catalog-tries
+  (s/nilable (s/map-of ::shard ::shard-values)))
+
 ;; table-tries data structure
 ;; values is a map of live, nascent and garbage tries lists
 ;; as well as the max-block-idx
@@ -26,7 +70,7 @@
 ;;   for correctness it's important that these invariants are maintained when a trie switches state
 ;; part :: [long]
 ;; recency :: LocalDate
-'{;; L0 files
+'{ ;; L0 files
   [0 nil []] {:live () :nascent () :garbage ()}
 
   ;; L1 current files (L1C)
@@ -372,16 +416,18 @@
               (fn [_table tries]
                 (log/tracef "Adding tries to table '%s': %s" table (mapv #(.getTrieKey ^TrieDetails %) added-tries))
                 (try
-                  (reduce (fn [table-cat ^TrieDetails added-trie]
-                            (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
-                              (apply-trie-notification table-cat
-                                                       (-> parsed-key
-                                                           (assoc :data-file-size (.getDataFileSize added-trie)
-                                                                  :trie-metadata (.getTrieMetadata added-trie)))
-                                                       {:file-size-target file-size-target,  :as-of as-of})
-                              table-cat))
-                          (or tries {})
-                          added-tries)
+                  (let [{:keys [tries] :as new-trie-cat}  (reduce (fn [table-cat ^TrieDetails added-trie]
+                                                                    (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
+                                                                      (apply-trie-notification table-cat
+                                                                                               (-> parsed-key
+                                                                                                   (assoc :data-file-size (.getDataFileSize added-trie)
+                                                                                                          :trie-metadata (.getTrieMetadata added-trie)))
+                                                                                               {:file-size-target file-size-target,  :as-of as-of})
+                                                                      table-cat))
+                                                                  (or tries {})
+                                                                  added-tries)]
+                    (s/assert ::catalog-tries tries)
+                    new-trie-cat)
                   (catch InterruptedException e (throw e))
                   (catch Throwable e
                     (log/error e "Failed to add tries to table" table)
@@ -396,7 +442,9 @@
   (deleteTries [_ table garbage-trie-keys]
     (.compute !table-cats table
               (fn [_table tries]
-                (remove-garbage tries garbage-trie-keys))))
+                (let [{:keys [tries] :as res} (remove-garbage tries garbage-trie-keys)]
+                  (s/assert ::catalog-tries tries)
+                  res))))
 
   (listAllTrieKeys [this table]
     (mapv :trie-key (all-tries (trie-state this table))))
@@ -412,6 +460,7 @@
                   tries (if (new-partition? (first partitions))
                           tries
                           (merge-with merge tries (partitions->max-block-idx-map partitions)))]]
+      (s/assert ::catalog-tries tries)
       (.put !table-cats table {:tries tries})))
 
   PTrieCatalog
@@ -443,6 +492,7 @@
                     tries (if (new-partition? (first partitions))
                             tries
                             (merge-with merge tries (partitions->max-block-idx-map partitions)))]]
+        (s/assert ::catalog-tries tries)
         (.put !table-cats table {:tries tries}))
 
       !table-cats)
