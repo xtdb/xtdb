@@ -43,7 +43,7 @@
 ;;     * 20%: 0-50ms delay (delayed batch processing)
 ;;
 ;; System updates:
-;;   - Small-batch UPDATEs: batch size <30
+;;   - Small-batch UPDATEs: batch size 30
 ;;   - Simulates constant trickle of system state changes (~every 5min)
 ;;   - Update frequency: configurable rounds (default 10)
 ;;
@@ -53,7 +53,7 @@
 ;;   2. readings-for-system       - Time-series scan with temporal join
 ;;   3. system-count-over-time   - Complex 4-table temporal aggregation
 ;;   4. readings-range-bins       - Hourly aggregation using range_bins()
-;;   5. cumulative-registration   - 5 CTEs + window functions + 6-way join
+;;   5. cumulative-registration   - Multi-CTE query with window functions + complex temporal joins
 ;;                                 Tests registration status (Success/Failed/Pending)
 ;;
 ;; ## Key Production Pathologies Captured
@@ -345,7 +345,7 @@
                ORDER BY t" start end] opts))
 
 (defn query-cumulative-registration
-  "Complex registration tracking query with 4 CTEs, window functions, and multi-table temporal joins"
+  "Complex registration tracking query with multiple CTEs, window functions, and multi-way temporal joins"
   [node start end opts]
   (xt/q node ["WITH gen AS (
                  SELECT d::timestamptz AS t
