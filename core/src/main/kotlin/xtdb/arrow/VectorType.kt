@@ -32,6 +32,7 @@ import java.time.*
 import java.util.*
 
 typealias FieldName = String
+typealias VectorTypes = Map<FieldName, VectorType>
 
 fun schema(vararg fields: Field) = Schema(fields.asIterable())
 
@@ -66,7 +67,15 @@ data class VectorType(
 
         @JvmStatic
         @JvmOverloads
-        fun maybe(type: VectorType, nullable: Boolean = true) = type.copy(nullable = nullable)
+        fun maybe(type: VectorType, nullable: Boolean = true): VectorType =
+            if (nullable && type.arrowType is ArrowType.Union) {
+                // For unions, add a null leg instead of setting nullable flag
+                val nullLeg = NULL.arrowType.toLeg()
+                if (nullLeg in type.children) type
+                else type.copy(children = type.children + (nullLeg to NULL))
+            } else {
+                type.copy(nullable = nullable)
+            }
 
         @JvmStatic
         fun maybe(type: ArrowType, nullable: Boolean = true, vararg children: Pair<FieldName, VectorType>) =

@@ -2178,7 +2178,7 @@
 
               {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types args)
                                                                           :var-types var-types})]
-          (util/with-close-on-catch [out-vec (Vector/open allocator (types/->field return-type col-name))]
+          (util/with-close-on-catch [out-vec (Vector/open allocator (str col-name) return-type)]
             (try
               (@!projection-fn in-rel schema args out-vec)
               (catch ArithmeticException e

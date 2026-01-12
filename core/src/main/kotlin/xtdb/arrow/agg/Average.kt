@@ -28,7 +28,7 @@ class Average(val fromName: FieldName, fromType: VectorType, override val colNam
         }
 
         override fun openFinishedVector(): Vector =
-            al.openVector(field).closeOnCatch { outVec ->
+            al.openVector(colName, type).closeOnCatch { outVec ->
                 sumAgg.openFinishedVector().use { sumVec ->
                     countAgg.openFinishedVector().use { countVec ->
                         sumVec.divideInto(countVec, outVec)

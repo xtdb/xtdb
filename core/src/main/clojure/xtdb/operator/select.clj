@@ -2,8 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [xtdb.coalesce :as coalesce]
             [xtdb.expression :as expr]
-            [xtdb.logical-plan :as lp]
-            [xtdb.types :as types])
+            [xtdb.logical-plan :as lp])
   (:import (xtdb ICursor)
            (xtdb.operator SelectCursor)))
 
@@ -26,7 +25,7 @@
           {:op :select
            :stats inner-stats
            :children [inner-rel]
-           :explain  {:predicate (pr-str predicate)}
+           :explain {:predicate (pr-str predicate)}
            :vec-types inner-vec-types
            :->cursor (fn [{:keys [allocator args schema explain-analyze? tracer query-span]} in-cursor]
                        (cond-> (-> (SelectCursor. allocator in-cursor selector schema args)

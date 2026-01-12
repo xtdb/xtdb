@@ -51,15 +51,15 @@
        pg-class-schema-hack
        params)))
 
-(defn ->theta-comparator [build-rel probe-rel theta-expr params {:keys [build-fields probe-fields param-types]}]
-  (let [var-types (update-vals (merge build-fields probe-fields) types/->type)
+(defn ->theta-comparator [build-rel probe-rel theta-expr params {:keys [build-vec-types probe-vec-types param-types]}]
+  (let [var-types (merge build-vec-types probe-vec-types)
         f (build-comparator (->> (expr/form->expr theta-expr {:var-types var-types, :param-types param-types})
                                  (expr/prepare-expr)
                                  (ewalk/postwalk-expr (fn [{:keys [op] :as expr}]
                                                         (cond-> expr
                                                           (= op :variable)
                                                           (into (let [{:keys [variable]} expr]
-                                                                  (if (contains? probe-fields variable)
+                                                                  (if (contains? probe-vec-types variable)
                                                                     {:rel right-rel, :idx right-idx}
                                                                     {:rel left-rel, :idx left-idx})))))))
                             {:var-types var-types, :param-types param-types})]

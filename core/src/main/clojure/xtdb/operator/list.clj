@@ -3,14 +3,11 @@
             [xtdb.expression :as expr]
             [xtdb.expression.list :as expr-list]
             [xtdb.logical-plan :as lp]
-            [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
-  (:import (org.apache.arrow.vector.types.pojo Field)
-           (org.apache.arrow.memory BufferAllocator)
+            [xtdb.vector.reader :as vr])
+  (:import (org.apache.arrow.memory BufferAllocator)
            (xtdb ICursor)
-           (xtdb.arrow ListExpression RelationReader Vector)))
+           (xtdb.arrow ListExpression RelationReader Vector VectorType)))
 
 (defmethod lp/ra-expr :list [_]
   (s/cat :op #{:list}
@@ -18,16 +15,17 @@
          :list (s/map-of ::lp/column any?, :count 1)))
 
 
-(defn- restrict-cols [fields {:keys [explicit-col-names]}]
-  (cond-> fields
-    explicit-col-names (-> (->> (merge (zipmap explicit-col-names (repeat types/null-field))))
+(defn- restrict-cols [vec-types {:keys [explicit-col-names]}]
+  (cond-> vec-types
+    explicit-col-names (-> (->> (merge (zipmap explicit-col-names (repeat #xt/type :null))))
                            (select-keys explicit-col-names))))
 
 (def ^:dynamic *batch-size* 1024)
 
 (deftype ListCursor [^BufferAllocator allocator
                      ^ListExpression list-expr
-                     ^Field field
+                     ^String col-name
+                     ^VectorType vec-type
                      ^long batch-size
                      ^:unsynchronized-mutable ^long current-pos]
   ICursor
@@ -40,7 +38,7 @@
        (let [start current-pos
              end (min (.getSize list-expr) (+ current-pos batch-size))]
          (set! current-pos end)
-         (util/with-open [out-vec (Vector/open allocator field)]
+         (util/with-open [out-vec (Vector/open allocator col-name vec-type)]
            (.writeTo list-expr out-vec start (- end start))
            (.accept consumer (vr/rel-reader [out-vec]))
            true)))))
@@ -52,15 +50,14 @@
    {:keys [param-types schema] :as opts}]
   (let [[out-col v] (first list)
         input-types {:param-types param-types}
-        expr (expr/form->expr v input-types) 
-        {:keys [field ->list-expr]} (expr-list/compile-list-expr expr input-types)
-        named-field (types/field-with-name field (str out-col))
-        fields {(symbol (.getName named-field)) named-field}
-        vec-types (update-vals (restrict-cols fields list-expr) types/->type)]
+        expr (expr/form->expr v input-types)
+        {:keys [vec-type ->list-expr]} (expr-list/compile-list-expr expr input-types)
+        vec-types (restrict-cols {out-col vec-type} list-expr)]
     {:op :list
      :children []
      :vec-types vec-types
      :->cursor (fn [{:keys [allocator ^RelationReader args explain-analyze? tracer query-span]}]
-                 (cond-> (ListCursor. allocator (->list-expr schema args) named-field
+                 (cond-> (ListCursor. allocator (->list-expr schema args)
+                                      (str out-col) (get vec-types out-col)
                                       *batch-size* 0)
                    (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))

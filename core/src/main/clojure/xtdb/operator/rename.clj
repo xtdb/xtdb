@@ -2,7 +2,6 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [xtdb.logical-plan :as lp]
-            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import (java.util LinkedList Map)
@@ -46,8 +45,7 @@
                               (into {}))
         col-name-reverse-mapping (set/map-invert col-name-mapping)
         out-vec-types (->> inner-vec-types
-                           (into {} (map (fn [[k v]] [(col-name-mapping k) v]))))
-        out-fields (into {} (map (fn [[k v]] [k (types/->field v k)])) out-vec-types)]
+                           (into {} (map (fn [[k v]] [(col-name-mapping k) v])))) ]
     {:op :rename
      :children [emitted-child-relation]
      :explain {:prefix (some-> prefix str), :columns (some-> columns pr-str)}

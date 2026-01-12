@@ -10,7 +10,6 @@ interface AggregateSpec : AutoCloseable {
     interface Factory {
         val colName: String
         val type: VectorType
-        val field: Field get() = type.toField(colName)
         fun build(al: BufferAllocator): AggregateSpec
     }
 

@@ -125,21 +125,19 @@
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
                   (fn [{left-vec-types :vec-types :as left-rel} {right-vec-types :vec-types :as right-rel}]
                     (let [out-vec-types (union-vec-types left-vec-types right-vec-types)
-                          key-col-names (set (keys out-vec-types))
-                          left-fields (into {} (map (fn [[k v]] [k (types/->field v k)])) left-vec-types)
-                          right-fields (into {} (map (fn [[k v]] [k (types/->field v k)])) right-vec-types)]
+                          key-col-names (set (keys out-vec-types))]
                       {:op :intersect
                        :children [left-rel right-rel]
                        :vec-types out-vec-types
                        :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
                                    (let [build-side (join/->build-side allocator
-                                                                       {:fields left-fields
+                                                                       {:vec-types left-vec-types
                                                                         :key-col-names key-col-names})]
 
                                      (cond-> (IntersectionCursor. left-cursor right-cursor
                                                                   build-side (mapv name key-col-names)
-                                                                  (join/->cmp-factory {:fields right-fields
-                                                                                       :key-col-names key-col-names})
+                                                                  (join/->cmp-factory {:build-vec-types left-vec-types
+                                                                                       :probe-vec-types right-vec-types})
                                                                   false false)
                                        (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))))
 
@@ -147,20 +145,18 @@
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
                   (fn [{left-vec-types :vec-types :as left-rel} {right-vec-types :vec-types :as right-rel}]
                     (let [out-vec-types (union-vec-types left-vec-types right-vec-types)
-                          key-col-names (set (keys out-vec-types))
-                          left-fields (into {} (map (fn [[k v]] [k (types/->field v k)])) left-vec-types)
-                          right-fields (into {} (map (fn [[k v]] [k (types/->field v k)])) right-vec-types)]
+                          key-col-names (set (keys out-vec-types))]
                       {:op :difference
                        :children [left-rel right-rel]
                        :vec-types out-vec-types
                        :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
                                    (let [build-side (join/->build-side allocator
-                                                                       {:fields left-fields
+                                                                       {:vec-types left-vec-types
                                                                         :key-col-names key-col-names})]
 
                                      (cond-> (IntersectionCursor. left-cursor right-cursor
                                                                   build-side (mapv name key-col-names)
-                                                                  (join/->cmp-factory {:fields right-fields
-                                                                                       :key-col-names key-col-names})
+                                                                  (join/->cmp-factory {:build-vec-types left-vec-types
+                                                                                       :probe-vec-types right-vec-types})
                                                                   true false)
                                        (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))))

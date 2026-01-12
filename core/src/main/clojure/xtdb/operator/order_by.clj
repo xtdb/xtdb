@@ -3,18 +3,14 @@
             [clojure.spec.alpha :as s]
             [xtdb.expression.comparator :as expr.comp]
             [xtdb.logical-plan :as lp]
-            [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
-  (:import (clojure.lang IPersistentMap)
-           (java.io File OutputStream)
+            [xtdb.util :as util])
+  (:import (java.io File OutputStream)
            (java.nio.channels Channels)
            java.nio.file.Path
-           (java.util HashMap List PriorityQueue)
+           (java.util HashMap List Map PriorityQueue)
            (java.util Comparator)
            java.util.stream.IntStream
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo Field)
            (xtdb.arrow ArrowUnloader$Mode Relation Relation$Loader RelationReader RowCopier Vector)
            xtdb.ICursor))
 
@@ -98,11 +94,7 @@
           nil
           order-specs))
 
-(defn rename-fields [fields]
-  (vec (for [[col-name field] fields]
-         (types/field-with-name field (str col-name)))))
-
-(defn k-way-merge [^BufferAllocator allocator filenames order-specs ^List fields tmp-dir batch-idx file-idx]
+(defn k-way-merge [^BufferAllocator allocator filenames order-specs vec-types tmp-dir batch-idx file-idx]
   (let [k (count filenames)
         out-file (->file tmp-dir batch-idx file-idx)]
 
@@ -116,7 +108,7 @@
 
       (let [copiers (object-array k)
             positions (int-array k)]
-        (with-open [out-rel (Relation. allocator fields)
+        (with-open [out-rel (Relation. allocator ^Map (update-keys vec-types str))
                     out-unl (.startUnload out-rel (Channels/newChannel (io/output-stream out-file)))]
           (dotimes [i k]
             (aset copiers i (.rowCopier ^Relation (nth rels i) out-rel)))
@@ -171,7 +163,7 @@
 
 (def ^:private k-way-constant 4)
 
-(defn- external-sort [allocator in-cursor order-specs fields tmp-dir first-filename]
+(defn- external-sort [allocator in-cursor order-specs vec-types tmp-dir first-filename]
   (let [batches (write-out-rels allocator in-cursor order-specs tmp-dir first-filename)]
     (loop [batches batches
            batch-idx 1]
@@ -181,7 +173,7 @@
          (loop [batches batches new-batches [] file-idx 0]
            (if-let [files (seq (take k-way-constant batches))]
              (let [new-batch (try
-                               (k-way-merge allocator files order-specs fields tmp-dir batch-idx file-idx)
+                               (k-way-merge allocator files order-specs vec-types tmp-dir batch-idx file-idx)
                                (finally
                                  (run! io/delete-file files)))]
 
@@ -193,7 +185,7 @@
 
 (deftype OrderByCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
-                        ^IPersistentMap static-fields
+                        static-vec-types
                         order-specs
                         ^:unsynchronized-mutable ^boolean consumed?
                         ^:unsynchronized-mutable ^Path sort-dir
@@ -220,8 +212,8 @@
           (load-next-batch)
 
           (util/with-open [acc-rel (Relation. allocator
-                                              ^List (vec (for [^Field field static-fields]
-                                                           (Vector/open allocator field)))
+                                              ^List (vec (for [[col-name vec-type] static-vec-types]
+                                                           (Vector/open allocator (str col-name) vec-type)))
                                               0)]
             (while (and (<= (.getRowCount acc-rel) ^int *block-size*)
                         (.tryAdvance in-cursor
@@ -243,7 +235,7 @@
 
                 ;; first batch from external sort
                 (let [sort-dir (util/tmp-dir "external-sort")
-                      ^java.io.File tmp-dir (io/file (.getPath (.toUri sort-dir)))
+                      tmp-dir (io/file (.getPath (.toUri sort-dir)))
                       first-filename (->file tmp-dir 0 0)]
                   (set! (.sort-dir this) sort-dir)
                   (.mkdirs tmp-dir)
@@ -251,7 +243,7 @@
                     (with-open [os (io/output-stream first-filename)]
                       (write-rel allocator out-rel os)))
 
-                  (let [sorted-file (external-sort allocator in-cursor order-specs static-fields tmp-dir first-filename)]
+                  (let [sorted-file (external-sort allocator in-cursor order-specs static-vec-types tmp-dir first-filename)]
                     (set! (.sorted-file this) sorted-file)
                     (let [loader (Relation/loader allocator (util/->file-channel (util/->path sorted-file)))]
                       (set! (.loader this) loader)
@@ -268,11 +260,10 @@
   (let [{:keys [order-specs]} opts]
     (lp/unary-expr (lp/emit-expr relation args)
       (fn [{:keys [vec-types], :as rel}]
-        (let [fields (into {} (map (fn [[k v]] [k (types/->field v k)])) vec-types)]
-          {:op :order-by
-           :children [rel]
-           :explain {:order-specs (pr-str order-specs)}
-           :vec-types vec-types
-           :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
-                       (cond-> (OrderByCursor. allocator in-cursor (rename-fields fields) order-specs false nil nil nil nil)
-                         (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))
+        {:op :order-by
+         :children [rel]
+         :explain {:order-specs (pr-str order-specs)}
+         :vec-types vec-types
+         :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
+                     (cond-> (OrderByCursor. allocator in-cursor vec-types order-specs false nil nil nil nil)
+                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))

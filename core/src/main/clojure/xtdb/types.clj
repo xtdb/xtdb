@@ -125,6 +125,11 @@
     (.getChildren field)
     [field]))
 
+(defn flatten-union-type [^VectorType vec-type]
+  (if (instance? ArrowType$Union (.getArrowType vec-type))
+    (vals (.getChildren vec-type))
+    [vec-type]))
+
 (defn merge-col-types [& col-types]
   (letfn [(merge-col-type* [acc col-type]
             (zmatch col-type
@@ -317,6 +322,13 @@
     ArrowType$FixedSizeList (first (.getChildren field))
     #xt/field [:? :null]))
 
+(defn unnest-type ^VectorType [^VectorType vec-type]
+  (condp instance? (.getArrowType vec-type)
+    ArrowType$List (.getFirstChildOrNull vec-type)
+    SetType (.getFirstChildOrNull vec-type)
+    ArrowType$FixedSizeList (.getFirstChildOrNull vec-type)
+    #xt/type [:? :null]))
+
 ;;; struct
 
 (defmethod col-type->vec-type :struct [nullable? [_ inner-col-types]]
@@ -474,9 +486,5 @@
                (least-upper-bound2 lub col-type))))
           col-types))
 
-(defn with-nullable-fields [fields]
-  (->> fields
-       (into {} (map (juxt key (fn [[k v]]
-                                 (field-with-name (merge-fields v null-field) (str k))))))))
-
-
+(defn with-nullable-types [vec-types]
+  (update-vals vec-types VectorType/maybe))

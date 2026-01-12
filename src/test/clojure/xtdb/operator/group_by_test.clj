@@ -124,10 +124,10 @@
               v0 (tu/open-rel {:v [1 2 3]})
               v1 (tu/open-rel {:v [1 2.0 3]})]
     (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v,
-                                                     :from-field #xt/field {"v" [:union :i64 :f64]}
+                                                     :from-type #xt/type [:union :i64 :f64]
                                                      :to-name 'vsum, :zero-row? true})
           sum-spec (.build sum-factory tu/*allocator*)]
-      (t/is (= #xt/field {"vsum" [:? :f64]} (.getField sum-factory)))
+      (t/is (= #xt/type [:? :f64] (.getType sum-factory)))
       (try
 
         (.aggregate sum-spec v0 gm)
@@ -327,10 +327,10 @@
               k0 (Vector/fromList tu/*allocator* "k" [1 2 3])
               k1 (Vector/fromList tu/*allocator* "k" [4 5 6])]
 
-    (let [agg-factory (group-by/->aggregate-factory {:f :array-agg, :from-name 'k, :from-field #xt/field {"k" :i64}
+    (let [agg-factory (group-by/->aggregate-factory {:f :array-agg, :from-name 'k, :from-type #xt/type :i64
                                                      :to-name 'vs, :zero-row? true})]
       (util/with-open [agg-spec (.build agg-factory tu/*allocator*)]
-        (t/is (= #xt/type [:? :list :i64] (types/->type (.getField agg-factory))))
+        (t/is (= #xt/type [:? :list :i64] (.getType agg-factory)))
 
         (.aggregate agg-spec (vr/rel-reader [k0]) gm0)
         (.aggregate agg-spec (vr/rel-reader [k1]) gm1)

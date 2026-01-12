@@ -1,7 +1,6 @@
 package xtdb.operator.join
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.types.pojo.Field
 import xtdb.ICursor
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
@@ -9,6 +8,7 @@ import xtdb.arrow.Vector.Companion.openVector
 import xtdb.operator.join.ComparatorFactory.Companion.build
 import xtdb.arrow.FieldName
 import xtdb.arrow.VectorType.Companion.I32
+import xtdb.arrow.VectorTypes
 import xtdb.util.closeOnCatch
 import java.util.function.Consumer
 
@@ -94,10 +94,10 @@ class DiskHashJoin(
         fun open(
             al: BufferAllocator,
             buildSide: BuildSide, probeCursor: ICursor,
-            probeFields: List<Field>, probeKeyColNames: List<FieldName>,
+            probeVecTypes: VectorTypes, probeKeyColNames: List<FieldName>,
             joinType: JoinType, comparatorFactory: ComparatorFactory,
         ): DiskHashJoin =
-            Relation(al, probeFields).use { tmpRel ->
+            Relation(al, probeVecTypes).use { tmpRel ->
                 Spill.open(al, tmpRel).use { spill ->
                     probeCursor.forEachRemaining { inRel ->
                         tmpRel.append(inRel)

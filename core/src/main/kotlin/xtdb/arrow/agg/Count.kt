@@ -16,7 +16,7 @@ class Count(
     override val type: VectorType = I64
 
     override fun build(al: BufferAllocator): AggregateSpec {
-        val outVec = al.openVector(field)
+        val outVec = al.openVector(colName, type)
         return object : AggregateSpec {
 
             override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping) {

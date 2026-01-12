@@ -11,9 +11,9 @@
   (-> (fn [expr opts]
         (let [expr (expr/prepare-expr expr)
               {:keys [return-type continue] :as emitted-expr} (expr/codegen-expr expr opts)
-              field (types/unnest-field (types/->field return-type))
+              el-type (->> return-type (keep types/unnest-type) (apply types/merge-types))
               lvr-sym (gensym 'lvr)]
-          {:field field
+          {:vec-type el-type
            :->list-expr (eval `(fn [~(-> expr/schema-sym (expr/with-tag IPersistentMap))
                                     ~(-> expr/args-sym (expr/with-tag RelationReader))]
                                  (let [~@(expr/batch-bindings emitted-expr)]
