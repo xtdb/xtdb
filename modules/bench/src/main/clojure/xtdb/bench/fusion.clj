@@ -1,5 +1,6 @@
 (ns xtdb.bench.fusion
-  (:require [clojure.test :as t]
+  (:require [clojure.string :as str]
+            [clojure.test :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
@@ -150,17 +151,17 @@
      :set-grad-w (random-float rng 100 1000)
 
      ;; Modes (both string and set representations like production)
-     :modes-enabled (clojure.string/join "," modes-enabled)
+     :modes-enabled (str/join "," modes-enabled)
      :modes-enabled-set modes-enabled
-     :modes-supported (clojure.string/join "," modes-supported)
+     :modes-supported (str/join "," modes-supported)
      :modes-supported-set modes-supported
-     :doe-modes-enabled (clojure.string/join "," doe-modes-enabled)
+     :doe-modes-enabled (str/join "," doe-modes-enabled)
      :doe-modes-enabled-set doe-modes-enabled
-     :doe-modes-supported (clojure.string/join "," doe-modes-supported)
+     :doe-modes-supported (str/join "," doe-modes-supported)
      :doe-modes-supported-set doe-modes-supported
-     :vpp-modes-enabled (clojure.string/join "," vpp-modes-enabled)
+     :vpp-modes-enabled (str/join "," vpp-modes-enabled)
      :vpp-modes-enabled-set vpp-modes-enabled
-     :vpp-modes-supported (clojure.string/join "," vpp-modes-supported)
+     :vpp-modes-supported (str/join "," vpp-modes-supported)
      :vpp-modes-supported-set vpp-modes-supported
 
      ;; Credential/controller fields (sparse, like production)
