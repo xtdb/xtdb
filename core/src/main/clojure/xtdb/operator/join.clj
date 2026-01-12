@@ -269,21 +269,21 @@
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
-(defn- equi-spec [idx condition left-fields right-fields param-types]
+(defn- equi-spec [idx condition left-vec-types right-vec-types param-types]
   (let [[left-expr right-expr] (first condition)]
-    (letfn [(equi-projection [side form fields]
+    (letfn [(equi-projection [side form vec-types]
               (if (symbol? form)
                 {:key-col-name form}
 
                 (let [col-name (symbol (format "?join-expr-%s-%d" (name side) idx))
-                      input-types {:var-types (update-vals fields types/->type)
+                      input-types {:var-types vec-types
                                    :param-types param-types}]
                   {:key-col-name col-name
                    :projection (expr/->expression-projection-spec col-name (expr/form->expr form input-types)
                                                                   input-types)})))]
 
-      {:left (equi-projection :left left-expr left-fields)
-       :right (equi-projection :right right-expr right-fields)})))
+      {:left (equi-projection :left left-expr left-vec-types)
+       :right (equi-projection :right right-expr right-vec-types)})))
 
 (defn- projection-specs->fields [projection-specs]
   (->> projection-specs
@@ -330,8 +330,8 @@
    {:keys [param-types]}
    {:keys [build-side merge-fields-fn join-type
            with-nil-row? pushdown-blooms? track-unmatched-build-idxs? mark-col-name]}]
-  (let [{left-fields :fields, left-vec-types :vec-types, ->left-cursor :->cursor} (lp/ensure-vec-types left)
-        {right-fields :fields, right-vec-types :vec-types, ->right-cursor :->cursor} (lp/ensure-vec-types right)
+  (let [{left-vec-types :vec-types, ->left-cursor :->cursor} (lp/ensure-vec-types left)
+        {right-vec-types :vec-types, ->right-cursor :->cursor} (lp/ensure-vec-types right)
         {equis :equi-condition, thetas :pred-expr} (group-by first condition)
 
         theta-expr (when-let [theta-exprs (seq (map second thetas))]
@@ -339,7 +339,7 @@
 
         equi-specs (->> (map last equis)
                         (map-indexed (fn [idx condition]
-                                       (equi-spec idx condition left-fields right-fields param-types)))
+                                       (equi-spec idx condition left-vec-types right-vec-types param-types)))
                         vec)
 
         left-projections (vec (concat
@@ -535,7 +535,7 @@
 
 
 (defn columns [relation]
-  (set (keys (or (:vec-types relation) (:fields relation)))))
+  (set (keys (:vec-types relation))))
 
 (defn expr->columns [expr]
   (-> (if (symbol? expr)
@@ -699,7 +699,7 @@
                                           :condition condition}))
                                   (map-indexed #(assoc %2 :condition-id %1)))
         child-relations (->> relations
-                             (map #(lp/emit-expr % args))
+                             (map #(lp/ensure-vec-types (lp/emit-expr % args)))
                              (map-indexed #(assoc %2 :relation-id %1))
                              (sort-by
                                (juxt (comp nil? :row-count :stats)

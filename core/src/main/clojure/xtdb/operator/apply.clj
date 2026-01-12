@@ -39,18 +39,20 @@
     ;; TODO: decodes/re-encodes row values - can we pass these directly to the sub-query?
 
     (lp/unary-expr (lp/emit-expr independent-relation args)
-      (fn [{independent-fields :fields, :as indep-rel}]
-        (let [{:keys [param-types] :as dependent-args} (-> args
+      (fn [{indep-vec-types :vec-types, :as indep-rel}]
+        (let [independent-fields (into {} (map (fn [[k v]] [k (types/->field v k)])) indep-vec-types)
+              {:keys [param-types] :as dependent-args} (-> args
                                                           (update :param-types
                                                                   (fnil into {})
                                                                   (map (fn [[ik dk]]
-                                                                         (if-let [field (get independent-fields ik)]
-                                                                           [dk (types/->type field)]
+                                                                         (if-let [vec-type (get indep-vec-types ik)]
+                                                                           [dk vec-type]
                                                                            (throw (err/incorrect :xtdb.apply/missing-column
                                                                                                  (str "Column missing from independent relation: " ik)
                                                                                                  {:column ik})))))
                                                                   columns))
-            {dependent-fields :fields, ->dependent-cursor :->cursor, :as dep-rel} (lp/emit-expr dependent-relation dependent-args)
+            {dep-vec-types :vec-types, ->dependent-cursor :->cursor, :as dep-rel} (lp/ensure-vec-types (lp/emit-expr dependent-relation dependent-args))
+            dependent-fields (into {} (map (fn [[k v]] [k (types/->field v k)])) dep-vec-types)
             out-dependent-fields (case mode
                                    :mark-join
                                    (let [[col-name _expr] (first mark-join-projection)]
@@ -81,7 +83,7 @@
                            open-dependent-cursor
                            (if (= mode :mark-join)
                              (let [[_col-name form] (first mark-join-projection)
-                                   input-types {:var-types (update-vals dependent-fields types/->type)
+                                   input-types {:var-types dep-vec-types
                                                 :param-types param-types}
                                    projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
                                (fn [{:keys [allocator args explain-analyze? tracer query-span] :as query-opts}]
