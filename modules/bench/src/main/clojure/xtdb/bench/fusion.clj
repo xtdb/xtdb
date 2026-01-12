@@ -47,20 +47,13 @@
 ;;   - Simulates constant trickle of system state changes (~every 5min)
 ;;   - Update frequency: configurable rounds (default 10)
 ;;
-;; ## Query Suite (9 queries: 4 simple + 5 production)
+;; ## Query Suite (5 queries)
 ;;
-;; Simple queries (sanity checks):
-;;   1. readings-aggregate        - Basic GROUP BY aggregation
-;;   2. system-count-over-time    - generate_series + CONTAINS
-;;   3. system-device-join        - Multi-table temporal join
-;;   4. readings-with-system      - Join readings with system
-;;
-;; Production-inspired queries (from design partner):
-;;   5. system-settings           - Point-in-time system lookup
-;;   6. readings-for-system       - Time-series scan with temporal join
-;;   7. system-count-with-joins   - Complex 4-table temporal aggregation
-;;   8. readings-range-bins       - Hourly aggregation using range_bins()
-;;   9. cumulative-registration   - 5 CTEs + window functions + 6-way join
+;;   1. system-settings           - Point-in-time system lookup
+;;   2. readings-for-system       - Time-series scan with temporal join
+;;   3. system-count-over-time   - Complex 4-table temporal aggregation
+;;   4. readings-range-bins       - Hourly aggregation using range_bins()
+;;   5. cumulative-registration   - 5 CTEs + window functions + 6-way join
 ;;                                 Tests registration status (Success/Failed/Pending)
 ;;
 ;; ## Key Production Pathologies Captured
@@ -79,12 +72,6 @@
 ;;
 ;; Custom scale:
 ;;   ./gradlew fusion -PdeviceCount=1000 -PreadingCount=1000
-;;
-;; Large scale (needs 12GB JVM):
-;;   ./gradlew fusion -PdeviceCount=10000 -PreadingCount=10000 -PtwelveGBJvm
-;;
-;; Expected runtime: ~17-25 minutes for 10k×1k scale
-;; Memory: 6GB default (2GB heap + 3GB direct), 12GB for large scale
 ;;
 ;; ============================================================================
 
@@ -259,24 +246,29 @@
         (let [intervals (->> (tu/->instants :minute 5 #inst "2020-01-01")
                              (partition 2 1)
                              (take readings))
-              batches (partition-all batch-size system-ids)]
+              batches (partition-all batch-size system-ids)
+              base-system-time (Instant/now)]
           (doseq [[idx [start end]] (map-indexed vector intervals)]
             (when (zero? (mod idx 1000))
               (log/infof "Readings batch %d" idx))
-            (doseq [batch batches]
-              (xt/submit-tx node [(->readings-docs random (vec batch) idx start end)]))
-            ;; Bimodal system-time lag: 80% near real-time, 20% delayed
-            ;; Creates temporal scatter without significant overhead (~6s for 1k readings)
-            (let [delay-ms (if (random/chance? random 0.8)
-                             (random/next-int random 2)       ;; 80%: 0-2ms (barely noticeable)
-                             (random/next-int random 50))]    ;; 20%: 0-50ms (cluster gaps)
-              (Thread/sleep delay-ms)))))})
+            ;; Bimodal system-time lag matching production: 80% ~seconds, 20% ~5min
+            ;; Calculate once per interval to maintain monotonic system-time
+            (let [lag-seconds (if (random/chance? random 0.8)
+                                (random/next-int random 6)
+                                (+ 280 (random/next-int random 41)))
+                  system-time (-> base-system-time
+                                  (.plusSeconds (* idx 300))
+                                  (.plusSeconds lag-seconds))]
+              (doseq [batch batches]
+                (xt/submit-tx node
+                              [(->readings-docs random (vec batch) idx start end)]
+                              {:system-time system-time}))))))})
 
-(defn ->update-system-stage [system-ids updates-per-device update-batch-size]
+(defn ->update-system-stage [system-ids updates-per-system update-batch-size]
   {:t :call, :stage :update-system
    :f (fn [{:keys [node random]}]
-        (log/infof "Running %d UPDATE rounds" updates-per-device)
-        (dotimes [round updates-per-device]
+        (log/infof "Running %d UPDATE rounds" updates-per-system)
+        (dotimes [round updates-per-system]
           (doseq [batch (partition-all update-batch-size system-ids)]
             (doseq [sid batch]
               (xt/execute-tx node
@@ -295,11 +287,12 @@
         (b/finish-block! node)
         (b/compact! node))})
 
-(defn query-system-settings [node system-id opts]
+(defn query-system-settings
   "Simple point-in-time system lookup - common query pattern"
+  [node system-id opts]
   (xt/q node ["SELECT *, _valid_from, _system_from FROM system WHERE _id = ?" system-id] opts))
 
-(defn query-readings-for-system [node system-id start end opts]
+(defn query-readings-for-system
   "Time-series scan for specific system - production metabase query
 
   NOTE: Production query is missing temporal join constraint (CONTAINS predicate).
@@ -307,17 +300,19 @@
   product - each reading is joined with ALL versions of the system. If a system has been
   updated N times, each reading appears N times in the result. Benchmarking the actual
   production query to capture realistic performance characteristics."
+  [node system-id start end opts]
   (xt/q node ["SELECT readings._valid_to as reading_time, readings.value::float AS reading_value
                FROM readings FOR ALL VALID_TIME
                JOIN system FOR ALL VALID_TIME ON system._id = readings.system_id
                WHERE system._id = ? AND readings._valid_from >= ? AND readings._valid_from < ?
                ORDER BY reading_time" system-id start end] opts))
 
-(defn query-system-count-over-time [node start end opts]
+(defn query-system-count-over-time
   "Complex temporal aggregation with multi-table joins - production analytics query
 
   Matches production 'System count over a period' query with full table hierarchy:
   system -> device -> device_model -> device_series -> organisation, plus site."
+  [node start end opts]
   (xt/q node ["WITH dates AS (
                  SELECT d::timestamptz AS d
                  FROM generate_series(DATE_BIN(INTERVAL 'PT1H', ?::timestamptz), ?::timestamptz, INTERVAL 'PT1H') AS x(d)
@@ -333,8 +328,9 @@
                GROUP BY dates.d
                ORDER BY dates.d" start end] opts))
 
-(defn query-readings-range-bins [node start end opts]
+(defn query-readings-range-bins
   "Hourly aggregation using range_bins - production power readings query"
+  [node start end opts]
   (xt/q node ["WITH corrected_readings AS (
                  SELECT r.*, r._valid_from, r._valid_to,
                         (bin)._from AS corrected_from,
@@ -348,8 +344,9 @@
                GROUP BY corrected_from
                ORDER BY t" start end] opts))
 
-(defn query-cumulative-registration [node start end opts]
+(defn query-cumulative-registration
   "Complex registration tracking query with 4 CTEs, window functions, and multi-table temporal joins"
+  [node start end opts]
   (xt/q node ["WITH gen AS (
                  SELECT d::timestamptz AS t
                  FROM generate_series(?::timestamptz, ?::timestamptz, INTERVAL 'PT1H') AS x(d)
@@ -402,6 +399,7 @@
                  JOIN system ON system._valid_time CONTAINS gen.t
                  LEFT OUTER JOIN site ON site._id = system.nmi AND site._valid_time CONTAINS gen.t
                  LEFT OUTER JOIN device ON device.system_id = system._id AND device._valid_time CONTAINS gen.t
+                 LEFT OUTER JOIN device_model ON device_model._id = device.device_model_id AND device_model._valid_time CONTAINS gen.t
                  LEFT OUTER JOIN latest_test_suite_run ON latest_test_suite_run.system_id = system._id
                                                        AND latest_test_suite_run.t = gen.t
                  LEFT OUTER JOIN expected_test_cases ON expected_test_cases.test_suite_run_id = latest_test_suite_run._id
@@ -448,13 +446,13 @@
    [nil "--readings READINGS" "Readings per system" :parse-fn parse-long :default 1000]
    [nil "--batch-size BATCH" "Insert batch size" :parse-fn parse-long :default 1000]
    [nil "--update-batch-size BATCH" "Update batch size" :parse-fn parse-long :default 30]
-   [nil "--updates-per-device UPDATES" "UPDATE rounds" :parse-fn parse-long :default 10]
+   [nil "--updates-per-system UPDATES" "UPDATE rounds" :parse-fn parse-long :default 10]
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :fusion [_ {:keys [devices readings batch-size update-batch-size
-                                            updates-per-device seed no-load?]
+                                            updates-per-system seed no-load?]
                                      :or {seed 0 batch-size 1000 update-batch-size 30
-                                          updates-per-device 10}}]
+                                          updates-per-system 10}}]
   (let [setup-rng (java.util.Random. seed)
         system-ids (generate-ids setup-rng devices)
         site-ids (mapv #(str "NMI-" %) (range devices))
@@ -465,18 +463,18 @@
         test-suite-id (random/next-uuid setup-rng)
         test-case-ids (generate-ids setup-rng 5)] ; 5 test cases per suite
     (log/info {:devices devices :readings readings :batch-size batch-size
-               :update-batch-size update-batch-size :updates-per-device updates-per-device})
+               :update-batch-size update-batch-size :updates-per-system updates-per-system})
     {:title "Fusion benchmark"
      :benchmark-type :fusion
      :seed seed
      :parameters {:devices devices :readings readings :batch-size batch-size
-                  :update-batch-size update-batch-size :updates-per-device updates-per-device}
+                  :update-batch-size update-batch-size :updates-per-system updates-per-system}
      :->state #(do {:!state (atom {:system-ids system-ids})})
      :tasks (concat
              (when-not no-load?
                [(->init-tables-stage system-ids site-ids organisation-ids device-series-ids device-model-ids device-ids test-suite-id test-case-ids update-batch-size)
                 (->ingest-readings-stage system-ids readings batch-size)
-                (->update-system-stage system-ids updates-per-device update-batch-size)
+                (->update-system-stage system-ids updates-per-system update-batch-size)
                 (->sync-stage)
                 (->compact-stage)])
 
@@ -504,5 +502,5 @@
 (t/deftest ^:benchmark run-fusion
   (let [path (util/->path "/tmp/fusion-bench")]
     (-> (b/->benchmark :fusion {:devices 100 :readings 100 :batch-size 50
-                                :update-batch-size 10 :updates-per-device 5})
+                                :update-batch-size 10 :updates-per-system 5})
         (b/run-benchmark {:node-dir path}))))
