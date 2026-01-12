@@ -81,7 +81,7 @@ kotlinx-coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core",
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlin-coroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.8.1" }
 mockk = { group = "io.mockk", name = "mockk", version = "1.14.5" }
-kaml = { group = "com.charleskorn.kaml", name = "kaml", version = "0.56.0" }
+kaml = { group = "com.charleskorn.kaml", name = "kaml", version = "0.104.0" }
 kotest = { group = "io.kotest", name = "kotest-assertions-core", version.ref = "kotest" }
 kotest-props = { group = "io.kotest", name = "kotest-property", version.ref = "kotest" }
 
