@@ -6,7 +6,6 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import (java.util LinkedList Map)
-           (org.apache.arrow.vector.types.pojo Field)
            (xtdb.arrow RelationReader VectorReader)
            xtdb.ICursor))
 
@@ -39,30 +38,26 @@
     (util/try-close in-cursor)))
 
 (defmethod lp/emit-expr :rename [{:keys [columns relation prefix]} args]
-  (let [{->inner-cursor :->cursor, inner-fields :fields, :as emitted-child-relation} (lp/emit-expr relation args)
-        col-name-mapping (->> (for [old-name (set (keys inner-fields))]
+  (let [{->inner-cursor :->cursor, inner-vec-types :vec-types, :as emitted-child-relation} (lp/ensure-vec-types (lp/emit-expr relation args))
+        col-name-mapping (->> (for [old-name (set (keys inner-vec-types))]
                                 [old-name
                                  (cond-> (get columns old-name old-name)
                                    prefix (->> name (symbol (name prefix))))])
                               (into {}))
-        col-name-reverse-mapping (set/map-invert col-name-mapping)]
-    (let [out-fields (->> inner-fields
-                          (into {}
-                                (map (juxt (comp col-name-mapping key)
-                                           (comp (fn [^Field field]
-                                                   (-> field
-                                                       (types/field-with-name (str (col-name-mapping (symbol (.getName field)))))))
-                                                 val)))))]
-      {:op :rename
-       :children [emitted-child-relation]
-       :explain {:prefix (some-> prefix str), :columns (some-> columns pr-str)}
-       :fields out-fields
-       :vec-types (update-vals out-fields types/->type)
-       :stats (:stats emitted-child-relation)
+        col-name-reverse-mapping (set/map-invert col-name-mapping)
+        out-vec-types (->> inner-vec-types
+                           (into {} (map (fn [[k v]] [(col-name-mapping k) v]))))
+        out-fields (into {} (map (fn [[k v]] [k (types/->field v k)])) out-vec-types)]
+    {:op :rename
+     :children [emitted-child-relation]
+     :explain {:prefix (some-> prefix str), :columns (some-> columns pr-str)}
+     :vec-types out-vec-types
+     :fields out-fields
+     :stats (:stats emitted-child-relation)
      :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts}]
                  (let [opts (-> opts
                                 (update :pushdown-blooms update-keys #(get col-name-reverse-mapping %))
                                 (update :pushdown-iids update-keys #(get col-name-reverse-mapping %)))]
                    (cond-> (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
                              (RenameCursor. in-cursor col-name-mapping))
-                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))})))
+                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))

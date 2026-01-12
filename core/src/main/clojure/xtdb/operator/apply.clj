@@ -62,17 +62,18 @@
 
                                    (:semi-join :anti-join) {})
             out-fields (merge-with types/merge-fields independent-fields out-dependent-fields)]
-          {:op (case mode
-                 :mark-join :apply-mark-join
-                 :cross-join :apply-cross-join
-                 :left-outer-join :apply-left-join
-                 :semi-join :apply-semi-join
-                 :anti-join :apply-anti-join
-                 :single-join :apply-single-join)
-           :children [indep-rel dep-rel]
-           :explain {:columns (pr-str columns)}
-           :fields out-fields
-           :vec-types (update-vals out-fields types/->type)
+          (let [out-vec-types (update-vals out-fields types/->type)]
+            {:op (case mode
+                   :mark-join :apply-mark-join
+                   :cross-join :apply-cross-join
+                   :left-outer-join :apply-left-join
+                   :semi-join :apply-semi-join
+                   :anti-join :apply-anti-join
+                   :single-join :apply-single-join)
+             :children [indep-rel dep-rel]
+             :explain {:columns (pr-str columns)}
+             :vec-types out-vec-types
+             :fields out-fields
 
            :->cursor (let [out-dep-fields (for [[col-name field] out-dependent-fields]
                                             (types/field-with-name field (str col-name)))
@@ -111,4 +112,4 @@
                                                                                                                            (.select (int-array [idx]))
                                                                                                                            (.withName (str dk)))))
                                                                                                              1))))))))
-                           (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))})))))
+                           (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))))))

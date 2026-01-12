@@ -124,17 +124,18 @@
                                                       (types/field-with-name (str k))))))))
                    (restrict-cols table-expr))]
 
-    {:fields fields
-     :vec-types (update-vals fields types/->type)
-     :row-count row-count
-     :->out-rel (fn [{:keys [^BufferAllocator allocator] :as opts}]
-                  (let [row-count (count rows)]
-                    (when (pos? row-count)
-                      (util/with-close-on-catch [out-rel (Relation. allocator (Schema. (or (vals fields) [])))]
-                        (doseq [{:keys [write-row!]} out-rows]
-                          (write-row! opts out-rel))
+    (let [vec-types (update-vals fields types/->type)]
+      {:vec-types vec-types
+       :fields fields
+       :row-count row-count
+       :->out-rel (fn [{:keys [^BufferAllocator allocator] :as opts}]
+                    (let [row-count (count rows)]
+                      (when (pos? row-count)
+                        (util/with-close-on-catch [out-rel (Relation. allocator (Schema. (or (vals fields) [])))]
+                          (doseq [{:keys [write-row!]} out-rows]
+                            (write-row! opts out-rel))
 
-                        out-rel))))}))
+                          out-rel))))})))
 
 (defn- emit-col-table [col-spec table-expr {:keys [param-types schema] :as opts}]
   (let [[out-col v] (first col-spec)
@@ -143,9 +144,10 @@
         {:keys [field ->list-expr]} (expr-list/compile-list-expr expr input-types)
         named-field (types/field-with-name field (str out-col))]
     (let [out-fields (-> {(symbol (.getName named-field)) named-field}
-                         (restrict-cols table-expr))]
-      {:fields out-fields
-       :vec-types (update-vals out-fields types/->type)
+                         (restrict-cols table-expr))
+          out-vec-types (update-vals out-fields types/->type)]
+      {:vec-types out-vec-types
+       :fields out-fields
        :->out-rel (fn [{:keys [^BufferAllocator allocator, ^RelationReader args]}]
                     (util/with-close-on-catch [out-vec (Vector/open allocator named-field)]
                       (let [^ListExpression list-expr (->list-expr schema args)]
@@ -170,10 +172,11 @@
                                   [child-name ^VectorType child-type] (.getChildren el-leg-type)]
                               (MapEntry/create (symbol child-name) (.toField child-type child-name))))
 
-                   (restrict-cols table-expr))]
+                   (restrict-cols table-expr))
+          vec-types (update-vals fields types/->type)]
 
-    {:fields fields
-     :vec-types (update-vals fields types/->type)
+    {:vec-types vec-types
+     :fields fields
      :->out-rel (fn [{:keys [^BufferAllocator allocator, ^RelationReader args]}]
                   (let [vec-rdr (.vectorForOrNull args (str (symbol param)))
                         list-rdr (cond-> vec-rdr
@@ -196,8 +199,8 @@
 
     {:op       :table
      :children []
-     :fields   fields
      :vec-types vec-types
+     :fields   fields
      :stats    (when row-count {:row-count row-count})
      :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span] :as opts}]
                  (cond-> (TableCursor. allocator (->out-rel opts))

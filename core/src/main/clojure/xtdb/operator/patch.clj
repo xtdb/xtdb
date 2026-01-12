@@ -34,14 +34,16 @@
 
 (defmethod lp/emit-expr :patch-gaps [{:keys [relation], {:keys [valid-from valid-to]} :opts} opts]
   (lp/unary-expr (lp/emit-expr relation opts)
-    (fn [{inner-fields :fields :as inner-rel}]
-      (let [fields (-> inner-fields
-                       (update 'doc types/->nullable-field))]
+    (fn [{inner-vec-types :vec-types :as inner-rel}]
+      (let [out-vec-types (-> inner-vec-types
+                              (update 'doc types/->nullable-type))
+            out-fields (into {} (map (fn [[k v]] [k (types/->field v k)])) out-vec-types)]
         {:op :patch-gaps
          :children [inner-rel]
          :explain {:valid-from (pr-str valid-from)
                    :valid-to (pr-str valid-to)}
-         :fields fields
+         :vec-types out-vec-types
+         :fields out-fields
          :->cursor (fn [{:keys [^BufferAllocator allocator current-time explain-analyze? tracer query-span] :as qopts} inner]
                      (let [valid-from (time/instant->micros (->instant (or valid-from [:literal current-time]) qopts))
                            valid-to (or (some-> valid-to (->instant qopts) time/instant->micros) Long/MAX_VALUE)]
@@ -52,7 +54,7 @@
                                                 :valid-to (time/micros->instant valid-to)}))
                          (cond-> (PatchGapsCursor. inner
                                                    (Relation. allocator
-                                                              (Schema. (for [[nm field] fields]
+                                                              (Schema. (for [[nm field] out-fields]
                                                                          (types/field-with-name field (str nm)))))
                                                    valid-from
                                                    valid-to)

@@ -54,7 +54,7 @@
 (defmethod lp/emit-expr :project [{:keys [relation], {:keys [projections append-columns?]} :opts} {:keys [param-types] :as args}]
   (let [emitted-child-relation (lp/emit-expr relation args)]
     (lp/unary-expr emitted-child-relation
-      (fn [{inner-fields :fields, inner-vec-types :vec-types :as inner-rel}]
+      (fn [{inner-vec-types :vec-types :as inner-rel}]
         (let [projection-specs (concat (when append-columns?
                                          (for [[col-name col-type] inner-vec-types]
                                            (->identity-projection-spec col-name col-type)))
@@ -89,8 +89,8 @@
              :children [inner-rel]
              :explain {:project (pr-str (into [] (map second) projections))
                        :append? (boolean append-columns?)}
-             :fields (into {} (map (fn [[k ^VectorType v]] [k (.toField v (str k))])) out-vec-types)
              :vec-types out-vec-types
+             :fields (into {} (map (fn [[k v]] [k (types/->field v k)])) out-vec-types)
              :stats (:stats emitted-child-relation)
              :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts} in-cursor]
                          (cond-> (->project-cursor opts in-cursor projection-specs)

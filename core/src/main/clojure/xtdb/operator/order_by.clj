@@ -267,12 +267,13 @@
 (defmethod lp/emit-expr :order-by [{:keys [opts relation]} args]
   (let [{:keys [order-specs]} opts]
     (lp/unary-expr (lp/emit-expr relation args)
-      (fn [{:keys [fields vec-types], :as rel}]
-        {:op :order-by
-         :children [rel]
-         :explain {:order-specs (pr-str order-specs)}
-         :fields fields
-         :vec-types vec-types
-         :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
-                     (cond-> (OrderByCursor. allocator in-cursor (rename-fields fields) order-specs false nil nil nil nil)
-                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))
+      (fn [{:keys [vec-types], :as rel}]
+        (let [fields (into {} (map (fn [[k v]] [k (types/->field v k)])) vec-types)]
+          {:op :order-by
+           :children [rel]
+           :explain {:order-specs (pr-str order-specs)}
+           :vec-types vec-types
+           :fields fields
+           :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
+                       (cond-> (OrderByCursor. allocator in-cursor (rename-fields fields) order-specs false nil nil nil nil)
+                         (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))

@@ -151,14 +151,15 @@
 
 (defn emit-cross-join [{:keys [left right]}]
   (lp/binary-expr left right
-    (fn [{left-fields :fields, left-vec-types :vec-types :as left-rel} {right-fields :fields, right-vec-types :vec-types :as right-rel}]
-      {:op :cross-join
-       :children [left-rel right-rel]
-       :fields (merge left-fields right-fields)
-       :vec-types (merge left-vec-types right-vec-types)
-       :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
-                   (cond-> (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil)
-                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))
+    (fn [{left-vec-types :vec-types :as left-rel} {right-vec-types :vec-types :as right-rel}]
+      (let [out-vec-types (merge left-vec-types right-vec-types)]
+        {:op :cross-join
+         :children [left-rel right-rel]
+         :vec-types out-vec-types
+         :fields (into {} (map (fn [[k v]] [k (types/->field v k)])) out-vec-types)
+         :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
+                     (cond-> (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil)
+                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))
 
 (defmethod lp/emit-expr :cross-join [join-expr args]
   (emit-cross-join (emit-join-children join-expr args)))
@@ -289,6 +290,11 @@
        (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
                            #(.getField ^ProjectionSpec %))))))
 
+(defn- projection-specs->vec-types [projection-specs]
+  (->> projection-specs
+       (into {} (map (juxt #(symbol (.getToName ^ProjectionSpec %))
+                           #(.getType ^ProjectionSpec %))))))
+
 (def ^:dynamic *disk-join-threshold-rows*
   (or (some-> (System/getenv "XTDB_JOIN_SPILL_THRESHOLD") parse-long)
       100000))
@@ -385,8 +391,8 @@
      :children [left right]
      :explain {:condition (pr-str (mapv second condition))}
 
+     :vec-types (projection-specs->vec-types output-projections)
      :fields (projection-specs->fields output-projections)
-     :vec-types (update-vals (projection-specs->fields output-projections) types/->type)
 
      :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span args] :as opts}]
                  (util/with-close-on-catch [build-cursor (->build-cursor opts)
@@ -529,7 +535,7 @@
 
 
 (defn columns [relation]
-  (set (keys (:fields relation))))
+  (set (keys (or (:vec-types relation) (:fields relation)))))
 
 (defn expr->columns [expr]
   (-> (if (symbol? expr)

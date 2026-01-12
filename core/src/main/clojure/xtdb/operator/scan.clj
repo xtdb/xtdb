@@ -221,7 +221,7 @@
 
             col-preds (->> (for [[col-name select-form] selects]
                              ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
-                             (let [input-types {:var-types (update-vals fields types/->type)
+                             (let [input-types {:var-types (->> fields (into {} (keep (fn [[k v]] (when v [k (types/->type v)])))))
                                                 :param-types param-types}]
                                (MapEntry/create col-name
                                                 (expr/->expression-selection-spec (expr/form->expr select-form input-types)
@@ -243,7 +243,7 @@
                    :predicates (mapv pr-str (vals selects))}
 
          :fields fields
-         :vec-types (update-vals fields types/->type)
+         :vec-types (->> fields (into {} (keep (fn [[k v]] (when v [k (types/->type v)])))))
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
                      (let [^Snapshot snapshot (get snaps db-name)

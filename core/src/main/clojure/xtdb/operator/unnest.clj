@@ -98,23 +98,25 @@
 (defmethod lp/emit-expr :unnest [{:keys [columns relation], {:keys [ordinality-column]} :opts}, op-args]
   (let [[to-col from-col] (first columns)]
     (lp/unary-expr (lp/emit-expr relation op-args)
-                   (fn [{:keys [fields] :as inner-rel}]
-                     (let [unnest-field (->> (get fields from-col)
+                   (fn [{:keys [vec-types] :as inner-rel}]
+                     (let [fields (into {} (map (fn [[k v]] [k (types/->field v k)])) vec-types)
+                           unnest-field (->> (get fields from-col)
                                              types/flatten-union-field
                                              (keep types/unnest-field)
                                              (apply types/merge-fields))
                            out-fields (-> fields
                                           (assoc to-col (types/field-with-name unnest-field (str to-col)))
                                           (cond-> ordinality-column (assoc ordinality-column (types/->field :i32 ordinality-column))))]
-                       {:op :unnest
-                        :children [inner-rel]
-                        :explain {:from from-col
-                                  :to to-col
-                                  :ordinality ordinality-column}
-                        :fields out-fields
-                        :vec-types (update-vals out-fields types/->type)
-                        :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
+                       (let [out-vec-types (update-vals out-fields types/->type)]
+                        {:op :unnest
+                         :children [inner-rel]
+                         :explain {:from from-col
+                                   :to to-col
+                                   :ordinality ordinality-column}
+                         :vec-types out-vec-types
+                         :fields out-fields
+                         :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                                     (cond-> (UnnestCursor. allocator in-cursor
                                                            (str from-col) (types/field-with-name unnest-field (str to-col))
                                                            (some-> ordinality-column str))
-                                      (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))
+                                      (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))))

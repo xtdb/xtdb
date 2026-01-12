@@ -373,8 +373,9 @@
         {group-cols :group-by, aggs :aggregate} (group-by first columns)
         group-cols (mapv second group-cols)]
     (lp/unary-expr (lp/emit-expr relation args)
-      (fn [{:keys [fields], :as inner-rel}]
-        (let [agg-factories (for [[_ agg] aggs]
+      (fn [{:keys [vec-types], :as inner-rel}]
+        (let [fields (into {} (map (fn [[k v]] [k (types/->field v k)])) vec-types)
+              agg-factories (for [[_ agg] aggs]
                               (let [[to-column agg-form] (first agg)]
                                 (->aggregate-factory (into {:to-name to-column
                                                             :zero-row? (empty? group-cols)}
@@ -393,15 +394,16 @@
                                 (->> agg-factories
                                      (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
                                                          #(.getField ^AggregateSpec$Factory %))))))]
-            {:op :group-by
-             :children [inner-rel]
-             :explain {:group-by (mapv str group-cols)
-                       :aggregates (->> aggs
-                                        (mapv (fn [[_ agg]]
-                                                (let [[to-column agg-form] (first agg)]
-                                                  [(str to-column) (pr-str agg-form)]))))}
-             :fields out-fields
-             :vec-types (update-vals out-fields types/->type)
+            (let [out-vec-types (update-vals out-fields types/->type)]
+              {:op :group-by
+               :children [inner-rel]
+               :explain {:group-by (mapv str group-cols)
+                         :aggregates (->> aggs
+                                          (mapv (fn [[_ agg]]
+                                                  (let [[to-column agg-form] (first agg)]
+                                                    [(str to-column) (pr-str agg-form)]))))}
+               :vec-types out-vec-types
+               :fields out-fields
 
              :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                          (cond-> (util/with-close-on-catch [agg-specs (LinkedList.)]
@@ -412,4 +414,4 @@
                                                    (->group-mapper allocator (select-keys fields group-cols))
                                                    (vec agg-specs)
                                                    false))
-                           (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))))
+                           (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))))

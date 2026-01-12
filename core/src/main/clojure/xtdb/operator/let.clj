@@ -14,10 +14,11 @@
          :relation ::lp/ra-expression))
 
 (defmethod lp/emit-expr :let [{[binding bound-rel] :binding, :keys [relation]} emit-opts]
-  (let [{->bound-cursor :->cursor, :as emitted-bound-rel} (lp/emit-expr bound-rel emit-opts)
-        {->body-cursor :->cursor, :as emitted-body-rel} (lp/emit-expr relation (assoc-in emit-opts [:let-bindings binding] emitted-bound-rel))]
+  (let [{->bound-cursor :->cursor, :as emitted-bound-rel} (lp/ensure-vec-types (lp/emit-expr bound-rel emit-opts))
+        {->body-cursor :->cursor, :as emitted-body-rel} (lp/ensure-vec-types (lp/emit-expr relation (assoc-in emit-opts [:let-bindings binding] emitted-bound-rel)))]
     {:op :let
      :children [emitted-bound-rel emitted-body-rel]
+     :vec-types (:vec-types emitted-body-rel)
      :fields (:fields emitted-body-rel)
      :stats (:stats emitted-body-rel)
      :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span] :as opts}]
@@ -36,17 +37,19 @@
          :opts (s/keys :req-un [::col-names])))
 
 (defmethod lp/emit-expr :relation [{:keys [relation]} emit-opts]
-  (let [{:keys [fields stats]} (or (get-in emit-opts [:let-bindings relation])
-                                   (let [available (set (keys (:let-bindings emit-opts)))]
-                                     (throw (err/fault ::missing-relation
-                                                       (format "Can't find relation '%s', available %s"
-                                                               relation available)
-                                                       {:relation relation
-                                                        :available available}))))]
+  (let [{:keys [vec-types fields stats]} (or (get-in emit-opts [:let-bindings relation])
+                                              (let [available (set (keys (:let-bindings emit-opts)))]
+                                                (throw (err/fault ::missing-relation
+                                                                  (format "Can't find relation '%s', available %s"
+                                                                          relation available)
+                                                                  {:relation relation
+                                                                   :available available}))))]
 
     {:op :relation
      :children []
-     :fields fields, :stats stats
+     :vec-types vec-types
+     :fields fields
+     :stats stats
      :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts}]
                  (let [^ICursor$Factory cursor-factory (or (get-in opts [:let-bindings relation])
                                                            (let [available (set (keys (:let-bindings opts)))]

@@ -1,7 +1,8 @@
 (ns xtdb.operator.top
   (:require [clojure.spec.alpha :as s]
             [xtdb.error :as err]
-            [xtdb.logical-plan :as lp])
+            [xtdb.logical-plan :as lp]
+            [xtdb.types :as types])
   (:import java.util.stream.IntStream
            (xtdb ICursor)
            xtdb.arrow.RelationReader))
@@ -61,14 +62,14 @@
 
 (defmethod lp/emit-expr :top [{:keys [relation], {[skip-tag skip-arg] :skip, [limit-tag limit-arg] :limit} :top} args]
   (lp/unary-expr (lp/emit-expr relation args)
-    (fn [{fields :fields, vec-types :vec-types :as inner-rel}]
+    (fn [{vec-types :vec-types :as inner-rel}]
       {:op :top
        :children [inner-rel]
        :explain (->> {:skip (some-> skip-arg pr-str),
                       :limit (some-> limit-arg pr-str)}
                      (into {} (filter val)))
-       :fields fields
        :vec-types vec-types
+       :fields (into {} (map (fn [[k v]] [k (types/->field v k)])) vec-types)
        :->cursor (fn [{:keys [args explain-analyze? tracer query-span]} in-cursor]
                    (cond-> (TopCursor. in-cursor
                                        (case skip-tag
