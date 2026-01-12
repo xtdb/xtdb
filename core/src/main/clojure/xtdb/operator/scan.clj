@@ -243,6 +243,7 @@
                    :predicates (mapv pr-str (vals selects))}
 
          :fields fields
+         :types (update-vals fields types/->type)
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
                      (let [^Snapshot snapshot (get snaps db-name)

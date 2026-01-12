@@ -9,7 +9,9 @@
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry Var)
            java.time.temporal.Temporal
-           java.util.Date))
+           java.util.Date
+           org.apache.arrow.vector.types.pojo.Field
+           xtdb.arrow.VectorType))
 
 (defn ->col-sym
   ([n]
@@ -122,15 +124,33 @@
   (fn [ra-expr opts]
     (:op ra-expr)))
 
+(defn- ensure-types
+  "Ensures :types is present alongside :fields. During migration, derives :types from :fields if missing."
+  [{:keys [fields types] :as emitted}]
+  (cond-> emitted
+    (and fields (not types))
+    (assoc :types (update-vals fields #(VectorType/fromField ^Field %)))))
+
+(defn- ensure-fields
+  "Ensures :fields is present alongside :types. During migration, derives :fields from :types if missing."
+  [{:keys [fields types] :as emitted}]
+  (cond-> emitted
+    (and types (not fields))
+    (assoc :fields (into {} (map (fn [[k ^VectorType v]] [k (.toField v (str k))])) types))))
+
 (defn unary-expr {:style/indent 1} [{->inner-cursor :->cursor, :as inner-rel} f]
-  (-> (f inner-rel)
+  (-> (f (ensure-types inner-rel))
+      (ensure-types)
+      (ensure-fields)
       (update :->cursor (fn [->cursor]
                           (fn [opts]
                             (util/with-close-on-catch [inner (->inner-cursor opts)]
                               (->cursor opts inner)))))))
 
 (defn binary-expr {:style/indent 2} [{->left-cursor :->cursor, :as left} {->right-cursor :->cursor, :as right} f]
-  (-> (f left right)
+  (-> (f (ensure-types left) (ensure-types right))
+      (ensure-types)
+      (ensure-fields)
       (update :->cursor (fn [->cursor]
                           (fn [opts]
                             (util/with-close-on-catch [left (->left-cursor opts)
