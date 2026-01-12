@@ -41,7 +41,7 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config)
            xtdb.api.module.XtdbModule
-           (xtdb.arrow Relation Relation$ILoader)
+           (xtdb.arrow Relation Relation$ILoader VectorType)
            xtdb.arrow.RelationReader
            xtdb.database.Database$Config
            (xtdb.error Incorrect Interrupted)
@@ -593,9 +593,12 @@
     :json PgType/PG_JSON
     :transit PgType/PG_TRANSIT))
 
+(defn- type->pg-col [col-name ^VectorType vec-type]
+  {:pg-type (PgType/fromVectorType vec-type)
+   :col-name col-name})
+
 (defn- field->pg-col [^Field field]
-  {:pg-type (PgType/fromField field)
-   :col-name (.getName field)})
+  (type->pg-col (.getName field) (types/->type field)))
 
 (defn- cmd-send-row-description [{:keys [conn-state] :as conn} pg-cols]
   (let [fallback (fallback-type (:session @conn-state))
@@ -1085,7 +1088,7 @@
                   (.openQuery prepared-query (assoc query-opts :args args-rel :query-text (:query stmt))))))
 
             (->pg-cols [prepared-pg-cols ^IResultCursor cursor]
-              (let [resolved-pg-cols (mapv field->pg-col (.getResultFields cursor))]
+              (let [resolved-pg-cols (mapv (fn [[col-name vec-type]] (type->pg-col col-name vec-type)) (.getResultTypes cursor))]
                 (when-not (and (= (count prepared-pg-cols) (count resolved-pg-cols))
                                (->> (map vector prepared-pg-cols resolved-pg-cols)
                                     (every? (fn [[{prepared-pg-type :pg-type} {resolved-pg-type :pg-type}]]
@@ -1154,14 +1157,15 @@
                                                :pg-cols (-> (->pg-cols (:pg-cols inner) inner-cursor)
                                                             (with-result-formats result-format))))))
 
-                         :dml (let [arg-fields (.getResultFields args-cursor)]
+                         :dml (let [arg-types (.getResultTypes args-cursor)]
                                 (try
                                   (-> inner
-                                      (assoc :args (vec (for [^Field field arg-fields]
-                                                          (-> (.vectorForOrNull args-rel (.getName field))
+                                      (assoc :args (vec (for [col-name (keys arg-types)]
+                                                          (-> (.vectorForOrNull args-rel col-name)
                                                               (.getObject 0))))
-                                             :param-oids (->> arg-fields
-                                                              (mapv (comp PgType/.getOid :pg-type field->pg-col)))))
+                                             :param-oids (->> arg-types
+                                                              (mapv (fn [[col-name ^VectorType vec-type]]
+                                                                      (PgType/.getOid (PgType/fromVectorType vec-type)))))))
                                   (finally
                                     (util/close args-rel))))))))
 

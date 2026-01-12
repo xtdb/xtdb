@@ -250,9 +250,8 @@
                           (cond->> (not preserve-pages?) (into [] cat)))]
              (if with-types?
                {:res rows,
-                :types (->> (.getResultFields res)
-                            (into {} (map (juxt #(symbol (.getName ^Field %))
-                                                VectorType/fromField))))}
+                :types (->> (.getResultTypes res)
+                            (into {} (map (fn [[k v]] [(symbol k) v]))))}
                rows))))
        (finally
          (when close-q-src?

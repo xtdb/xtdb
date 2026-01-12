@@ -41,7 +41,7 @@
            io.micrometer.core.instrument.Counter
            java.lang.AutoCloseable
            (java.time Duration InstantSource)
-           (java.util HashMap)
+           (java.util HashMap LinkedHashMap)
            [java.util.concurrent.atomic AtomicBoolean]
            (java.util.function Function)
            [java.util.stream Stream StreamSupport]
@@ -57,9 +57,9 @@
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.util.RefCounter))
 
-(defn- wrap-result-fields [^ICursor cursor, result-fields]
+(defn- wrap-result-types [^ICursor cursor, result-types]
   (reify IResultCursor
-    (getResultFields [_] result-fields)
+    (getResultTypes [_] result-types)
     (tryAdvance [_ c] (.tryAdvance cursor c))
 
     (getCursorType [_] (.getCursorType cursor))
@@ -78,7 +78,7 @@
                                          current-time, snapshot-token, default-tz
                                          ^RefCounter ref-ctr]
   (reify IResultCursor
-    (getResultFields [_] (.getResultFields cursor))
+    (getResultTypes [_] (.getResultTypes cursor))
     (tryAdvance [_ c]
       (when (.isClosing ref-ctr)
         (throw (InterruptedException.)))
@@ -103,7 +103,7 @@
 (defn- wrap-closeables ^xtdb.IResultCursor [^IResultCursor cursor, ^RefCounter ref-ctr, closeables]
   (let [!closed? (AtomicBoolean. false)]
     (reify IResultCursor
-      (getResultFields [_] (.getResultFields cursor))
+      (getResultTypes [_] (.getResultTypes cursor))
       (tryAdvance [_ c] (.tryAdvance cursor c))
 
       (getCursorType [_] (.getCursorType cursor))
@@ -123,15 +123,14 @@
           (some-> ref-ctr .release)
           (util/close closeables))))))
 
-(defn- ->result-fields [ordered-outer-projection fields]
-  (if ordered-outer-projection
-    (->> ordered-outer-projection
-         (mapv (fn [field-name]
-                 (-> (get fields field-name)
-                     (types/field-with-name (str field-name))))))
-    (->> fields
-         (mapv (fn [[field-name field]]
-                 (types/field-with-name field (str field-name)))))))
+(defn- ->result-types [ordered-outer-projection vec-types]
+  (let [result (LinkedHashMap.)]
+    (if ordered-outer-projection
+      (doseq [col-name ordered-outer-projection]
+        (.put result (str col-name) (get vec-types col-name)))
+      (doseq [[col-name vec-type] vec-types]
+        (.put result (str col-name) vec-type)))
+    result))
 
 (defn ->arg-types [^RelationReader args]
   (->> args
@@ -214,8 +213,8 @@
                                :param-types param-types
                                :db-cat db-cat
                                :scan-emitter scan-emitter})
-                (update :fields (fn [fs]
-                                  (->result-fields col-names fs))))))))
+                (update :vec-types (fn [vts]
+                                     (->result-types col-names vts))))))))
 
 (defn- ->explain-plan [emitted-expr]
   (letfn [(->explain-plan* [{:keys [op children explain]} depth]
@@ -229,27 +228,22 @@
 
     (->explain-plan* emitted-expr 0)))
 
-(defn- explain-plan-fields [explain-plan]
+(defn- explain-plan-types [explain-plan]
   (let [^VectorType vec-type (->> (map types/value->vec-type explain-plan)
-                                  (apply types/merge-types))]
+                                  (apply types/merge-types))
+        children (.getChildren vec-type)]
+    (LinkedHashMap. ^java.util.Map
+                    (into {} (for [col-name '[depth op explain]]
+                               [(str col-name) (get children (str col-name))])))))
 
-    (map (->> (.getChildren vec-type)
-              (into {} (map (fn [[field-name ^VectorType child-type]]
-                              [(symbol field-name)
-                               (.toField child-type field-name)]))))
-         '[depth op explain])))
-
-(def ^:private explain-analyze-fields
-  ;; for some reason we're not able to use the reader macro here.
-  ;; it's a bug with either Clojure AOT or Gradle Clojurephant, not sure which.
-  [(serde-types/->field {"depth" :utf8})
-   (serde-types/->field {"op" :keyword})
-
-   (serde-types/->field {"total_time" [:duration :micro]})
-   (serde-types/->field {"time_to_first_page" [:duration :micro]})
-
-   (serde-types/->field {"page_count" :i64})
-   (serde-types/->field {"row_count" :i64})])
+(def ^:private explain-analyze-types
+  (LinkedHashMap. ^java.util.Map
+                  {"depth" (types/->type :utf8)
+                   "op" (types/->type :keyword)
+                   "total_time" (types/->type [:duration :micro])
+                   "time_to_first_page" (types/->type [:duration :micro])
+                   "page_count" (types/->type :i64)
+                   "row_count" (types/->type :i64)}))
 
 (defn- explain-analyze-results [^IResultCursor cursor]
   (letfn [(->results [^ICursor cursor, depth]
@@ -339,11 +333,14 @@
                                                   (->> param-fields
                                                        (into {} (map (fn [^Field f]
                                                                        [(symbol (.getName f)) (types/->type f)]))))
-                                                  query-opts)]
-                    (cond
-                      (:explain? planned-query) (explain-plan-fields (->explain-plan emitted-query))
-                      (:explain-analyze? planned-query) explain-analyze-fields
-                      :else (:fields emitted-query))))))
+                                                  query-opts)
+                        vec-types (cond
+                                    (:explain? planned-query) (explain-plan-types (->explain-plan emitted-query))
+                                    (:explain-analyze? planned-query) explain-analyze-types
+                                    :else (:vec-types emitted-query))]
+                    (mapv (fn [[col-name ^VectorType vec-type]]
+                            (.toField vec-type col-name))
+                          vec-types)))))
 
             (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
@@ -364,7 +361,7 @@
                              :else (throw (ex-info "invalid args"
                                                    {:type (class args)})))
 
-                      {:keys [fields ->cursor] :as emitted-query} (emit-query planned-query scan-emitter db-cat snaps (->arg-types args) query-opts)
+                      {:keys [vec-types ->cursor] :as emitted-query} (emit-query planned-query scan-emitter db-cat snaps (->arg-types args) query-opts)
                       current-time (or (some-> (or (:current-time planned-query) current-time)
                                                (expr->value {:args args})
                                                (time/->instant {:default-tz default-tz}))
@@ -397,12 +394,13 @@
                       (if (:explain? planned-query)
                         (let [explain-plan (->explain-plan emitted-query)]
                           (-> (PagesCursor. allocator nil [explain-plan])
-                              (wrap-result-fields (explain-plan-fields explain-plan))
+                              (wrap-result-types (explain-plan-types explain-plan))
                               (wrap-closeables ref-ctr (cond->> [snaps allocator]
                                                          close-args? (cons args)
                                                          closeable-query-span (cons closeable-query-span)))))
 
-                        (let [cursor (-> (->cursor {:allocator allocator,
+                        (let [result-types (->result-types (:ordered-outer-projection planned-query) vec-types)
+                              cursor (-> (->cursor {:allocator allocator,
                                                     :snaps snaps
                                                     :snapshot-token expr/*snapshot-token*
                                                     :current-time current-time
@@ -412,13 +410,13 @@
                                                     :tracer tracer
                                                     :query-span query-span})
 
-                                         (wrap-result-fields fields)
+                                         (wrap-result-types result-types)
                                          (wrap-dynvars current-time expr/*snapshot-token* default-tz ref-ctr))]
                           (if (:explain-analyze? planned-query)
                             (try
                               (.forEachRemaining cursor (fn [_]))
                               (-> (PagesCursor. allocator nil [(explain-analyze-results cursor)])
-                                  (wrap-result-fields explain-analyze-fields)
+                                  (wrap-result-types explain-analyze-types)
                                   (wrap-closeables ref-ctr (cond->> [snaps allocator]
                                                              close-args? (cons args)
                                                              closeable-query-span (cons closeable-query-span))))

@@ -42,6 +42,9 @@ import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.BiFunction
 
+private fun resultTypesToSchema(types: SequencedMap<String, VectorType>) =
+    Schema(types.map { (name, type) -> type.toField(name) })
+
 private typealias TxHandle = ByteString
 private typealias PreparedStatementHandle = ByteString
 private typealias TicketHandle = ByteString
@@ -180,7 +183,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
 
     private fun handleGetStream(cursor: IResultCursor, listener: ServerStreamListener) {
         try {
-            VectorSchemaRoot.create(Schema(cursor.resultFields), allocator).use { vsr ->
+            VectorSchemaRoot.create(resultTypesToSchema(cursor.resultTypes), allocator).use { vsr ->
                 val rootLoader = VectorLoader(vsr)
                 listener.start(vsr)
 
@@ -287,7 +290,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             )
             tickets[ticketHandle] = cursor
             return FlightInfo(
-                Schema(cursor.resultFields),
+                resultTypesToSchema(cursor.resultTypes),
                 descriptor,
                 listOf(FlightEndpoint(ticket)),
                 /* bytes = */ -1, /* records = */ -1
@@ -328,7 +331,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
 
         ps.cursor = cursor
         return FlightInfo(
-            Schema(cursor.resultFields),
+            resultTypesToSchema(cursor.resultTypes),
             descriptor,
             listOf(FlightEndpoint(ticket)),
             -1,

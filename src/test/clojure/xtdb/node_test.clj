@@ -687,7 +687,10 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (let [pq (xtp/prepare-sql tu/*node* "SELECT foo.*, ? FROM foo" {:default-db "xtdb"})
         column-fields [#xt/field {"_id" :i64}
                        #xt/field {"a" :utf8}
-                       #xt/field {"b" :i64}]]
+                       #xt/field {"b" :i64}]
+        column-types {"_id" #xt/type :i64
+                      "a" #xt/type :utf8
+                      "b" #xt/type :i64}]
 
     (t/is (= (conj column-fields #xt/field {"_column_2" :i64})
              (.getColumnFields pq [#xt/field {"?_0" :i64}]))
@@ -695,8 +698,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
     (with-open [cursor (.openQuery pq {:args (tu/open-args [42])})]
 
-      (t/is (= (conj column-fields #xt/field {"_column_2" :i64})
-               (.getResultFields cursor))
+      (t/is (= (assoc column-types "_column_2" #xt/type :i64)
+               (into {} (.getResultTypes cursor)))
             "now param value has been supplied we know its type is non-null")
 
       (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]
@@ -705,8 +708,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (t/testing "preparedQuery rebound with different param types"
       (with-open [cursor (.openQuery pq {:args (tu/open-args ["fish"])})]
 
-        (t/is (= (conj column-fields #xt/field {"_column_2" :utf8})
-                 (.getResultFields cursor))
+        (t/is (= (assoc column-types "_column_2" #xt/type :utf8)
+                 (into {} (.getResultTypes cursor)))
               "now param value has been supplied we know its type is non-null")
 
         (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 "fish"}]]
