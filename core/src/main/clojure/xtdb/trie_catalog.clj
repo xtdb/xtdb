@@ -81,32 +81,41 @@
 
   (stale-block-idx? (get table-tries [level recency part]) block-idx))
 
-(defn- filter-garbage [tries]
-  ((juxt filter remove) #(= (:state %) :garbage) tries))
+(def ^:private empty-trie-state-list (sorted-set-by #(compare (:block-idx %2) (:block-idx %1))))
+
+(defn- empty-shared
+  ([] (empty-shared -1))
+  ([max-block-idx] {:live empty-trie-state-list,
+                    :garbage empty-trie-state-list,
+                    :max-block-idx max-block-idx}))
 
 (defn- supersede-partial-tries [tries
                                 {:keys [^long block-idx] :as _trie}
                                 {:keys [^long file-size-target as-of]}]
   ;; if there is no partition yet we intialize empty but set the max-block-idx the level above
-  (let [{:keys [live garbage] :as tries} (or tries {:live (), :garbage (), :max-block-idx block-idx})
-        [new-garbage live] (->> live
-                                (map (fn [{^long other-block-idx :block-idx, ^long other-size :data-file-size :as other-trie}]
-                                       (cond-> other-trie
-                                         (and (< other-size file-size-target)
-                                              (<= other-block-idx block-idx))
-                                         (-> (assoc :state :garbage
-                                                    :garbage-as-of as-of)
-                                             (dissoc :trie-metadata)))))
-                                filter-garbage)]
+  (let [{:keys [live garbage] :as tries} (or tries (empty-shared block-idx))
+        new-garbage (->> live
+                         (map (fn [{^long other-block-idx :block-idx, ^long other-size :data-file-size :as other-trie}]
+                                (cond-> other-trie
+                                  (and (< other-size file-size-target)
+                                       (<= other-block-idx block-idx))
+                                  (-> (assoc :state :garbage
+                                             :garbage-as-of as-of)
+                                      (dissoc :trie-metadata)))))
+                         (filter (comp #{:garbage} :state)))]
     (-> tries
-        (assoc :live (doall live))
-        (assoc :garbage (doall (concat new-garbage garbage))))))
+        (assoc :live (reduce disj live new-garbage))
+        (assoc :garbage (into garbage new-garbage)))))
+
 
 (defn- conj-trie [tries {block-idx :block-idx :as trie} state]
   (let [trie (assoc trie :state state)
-        tries (or tries {:live (), :garbage ()})]
+        tries (or tries (empty-shared))]
+    (when (and (not (nil? tries))
+               (nil? (:live tries)))
+      (throw (ex-info "tries missing live set" {:tries tries})))
     (-> tries
-        (update state conj trie)
+        (update state (fnil conj empty-trie-state-list) trie)
         (update :max-block-idx (fnil max -1) block-idx))))
 
 (defn- insert-levelled-trie [tries trie opts]
@@ -116,17 +125,17 @@
 
 (defn- supersede-by-block-idx [tries, ^long block-idx {:keys [as-of]}]
   ;; if there is no partition yet we intialize empty but set the max-block-idx from the level above
-  (let [{:keys [live garbage] :as tries} (or tries {:live (), :garbage () :max-block-idx block-idx})
-        [new-garbage live] (->> live
-                                (map (fn [{^long other-block-idx :block-idx, :as trie}]
-                                       (cond-> trie
-                                         (<= other-block-idx block-idx) (-> (assoc :state :garbage
-                                                                                   :garbage-as-of as-of)
-                                                                            (dissoc :trie-metadata)))))
-                                filter-garbage)]
+  (let [{:keys [live garbage] :as tries} (or tries (empty-shared block-idx))
+        new-garbage (->> live
+                         (map (fn [{^long other-block-idx :block-idx, :as trie}]
+                                (cond-> trie
+                                  (<= other-block-idx block-idx) (-> (assoc :state :garbage
+                                                                            :garbage-as-of as-of)
+                                                                     (dissoc :trie-metadata)))))
+                         (filter (comp #{:garbage} :state)))]
     (-> tries
-        (assoc :live (doall live))
-        (assoc :garbage (doall (concat new-garbage garbage))))))
+        (assoc :live (reduce disj live new-garbage))
+        (assoc :garbage (into garbage new-garbage)))))
 
 (defn- sibling-tries [table-tries, {:keys [^long level, recency, part]}]
   (let [pop-part (pop part)]
@@ -142,7 +151,8 @@
   (if-let [trie (first (filter #(= (:block-idx %) block-idx) nascent))]
     (-> tries
         (conj-trie trie :live)
-        (update :nascent (fn [nascents] (doall (remove #(= (:block-idx %) block-idx) nascents)))))
+        ;; this should work as only the :block-idx is considered for comparison
+        (update :nascent (fnil disj empty-trie-state-list) {:block-idx block-idx}))
     tries))
 
 (defn- mark-part-group-live [table-tries {:keys [block-idx level recency part]}]
@@ -164,7 +174,7 @@
         ;; L1H files are nascent until we see the corresponding L1C file
         (-> table-cat
             (update-in [:tries [1 recency part]] conj-trie trie
-                       (let [[{^long l1c-block-idx :block-idx, :as l1c}] (get-in table-cat [:tries [1 nil part] :live])]
+                       (let [{^long l1c-block-idx :block-idx, :as l1c} (first (get-in table-cat [:tries [1 nil part] :live]))]
                          (if (and l1c (>= l1c-block-idx block-idx))
                            :live :nascent)))
             (update-in [:l1h-recencies block-idx] (fnil conj #{}) recency))
@@ -248,14 +258,13 @@
        (filter (garbage-fn as-of))))
 
 (defn remove-garbage [table-cat garbage-trie-keys]
-  (let [garbage-by-path (-> (->> (map trie/parse-trie-key garbage-trie-keys)
-                                 (group-by (juxt :level :recency :part)))
-                            (update-vals #(map :trie-key %)))]
+  (let [garbage-by-path (->> (map trie/parse-trie-key garbage-trie-keys)
+                             (group-by (juxt :level :recency :part)))]
 
     (update table-cat :tries
             (fn [trie-levels]
-              (reduce (fn [trie-levels [path garbage-trie-keys]]
-                        (update-in trie-levels [path :garbage] #(remove (comp (set garbage-trie-keys) :trie-key) %)))
+              (reduce (fn [trie-levels [path garbage-tries]]
+                        (update-in trie-levels [path :garbage] #(reduce disj % garbage-tries)))
                       trie-levels
                       garbage-by-path)))))
 
@@ -318,11 +327,11 @@
   (let [{:keys [live garbage]} (get tries [0 nil []])
         l0-tries (concat live garbage)
         live-tries (->> l0-tries
-                        (sort-by :block-idx #(compare %2 %1))
-                        (map #(assoc % :state :live)))]
+                        (map #(assoc % :state :live))
+                        (into empty-trie-state-list))]
 
     {:tries {[0 nil []] {:max-block-idx (:block-idx (first live-tries))
-                         :live (doall live-tries)}}
+                         :live live-tries}}
      :l1h-recencies {}}))
 
 (defn new-trie-details? [^TrieDetails trie-details]
@@ -350,8 +359,9 @@
 (defn partition->entry [{:keys [level recency part tries max-block-idx] :as _partition}]
   (MapEntry/create [level recency part]
                    (let [{:keys [live nascent garbage]} (group-by :state tries)]
-                     (-> {:garbage garbage :live live :nascent nascent}
-                         (update-vals (fn [trie-list] (sort-by :block-idx #(compare %2 %1) trie-list)))
+                     (-> {:garbage (into empty-trie-state-list garbage)
+                          :live (into empty-trie-state-list live)
+                          :nascent (into empty-trie-state-list nascent)}
                          (assoc :max-block-idx max-block-idx)))))
 
 (defrecord TrieCatalog [^BufferPool buffer-pool, ^BlockCatalog block-cat

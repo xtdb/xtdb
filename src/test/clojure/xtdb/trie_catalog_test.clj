@@ -189,6 +189,15 @@
            (partitions ["l00-rc-b00"] ["l00-rc-b01"] ["l00-rc-b02"]
                        ["l01-r20200101-b01"] ["l01-r20200102-b01"]))))
 
+(t/deftest issues-with-garbage-being-unordered-5140
+  (t/is (= [2 1 0]
+           (->> (-> (apply-msgs ["l00-rc-b00" 10] ["l00-rc-b01" 10] ["l00-rc-b02" 10] ["l00-rc-b03" 10]
+                                ["l01-rc-b00" 10] ["l01-rc-b01" 20] ["l01-rc-b02" 10] ["l01-rc-b03" 20]
+                                ["l02-rc-p0-b01" 10] ["l02-rc-p1-b01" 10] ["l02-rc-p2-b01" 10] ["l02-rc-p3-b01" 10])
+                    :tries
+                    (get-in [[1 nil []] :garbage]))
+                (map :block-idx)))))
+
 (t/deftest test-l0-l1-tries
   (t/is (= #{} (curr-tries)))
 
