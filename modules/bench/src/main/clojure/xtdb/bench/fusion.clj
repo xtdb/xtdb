@@ -302,18 +302,25 @@
                              (partition 2 1)
                              (take readings))
               batches (partition-all batch-size system-ids)
-              base-system-time (Instant/now)]
+              base-system-time (Instant/now)
+              !last-system-time (atom base-system-time)]
           (doseq [[idx [start end]] (map-indexed vector intervals)]
             (when (zero? (mod idx 1000))
               (log/infof "Readings batch %d" idx))
             ;; Bimodal system-time lag matching production: 80% ~seconds, 20% ~5min
-            ;; Calculate once per interval to maintain monotonic system-time
+            ;; Calculate once per interval, enforce monotonicity
             (let [lag-seconds (if (random/chance? random 0.8)
                                 (random/next-int random 6)
                                 (+ 280 (random/next-int random 41)))
-                  system-time (-> base-system-time
-                                  (.plusSeconds (* idx 300))
-                                  (.plusSeconds lag-seconds))]
+                  calculated-time (-> base-system-time
+                                      (.plusSeconds (* idx 300))
+                                      (.plusSeconds lag-seconds))
+                  ;; Ensure monotonicity: if calculated time goes backwards, bump forward
+                  system-time (let [last @!last-system-time]
+                                (if (.isAfter calculated-time last)
+                                  calculated-time
+                                  (.plusMillis last 1)))]
+              (reset! !last-system-time system-time)
               (doseq [batch batches]
                 (xt/submit-tx node
                               [(->readings-docs random (vec batch) idx start end)]
