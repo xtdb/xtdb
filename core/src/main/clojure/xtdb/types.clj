@@ -81,6 +81,11 @@
    "_system_from" (->field :instant "_system_from"), "_system_to" (->field [:? :instant] "_system_to")
    "_valid_from" (->field :instant "_valid_from"), "_valid_to" (->field [:? :instant] "_valid_to")})
 
+(def temporal-vec-types
+  {"_iid" (st/->type :iid)
+   "_system_from" (st/->type :instant), "_system_to" (st/->type [:? :instant])
+   "_valid_from" (st/->type :instant), "_valid_to" (st/->type [:? :instant])})
+
 (defn temporal-col-name? [col-name]
   (contains? temporal-fields (str col-name)))
 

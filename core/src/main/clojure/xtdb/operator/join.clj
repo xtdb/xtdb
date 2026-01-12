@@ -12,7 +12,6 @@
             [xtdb.vector.reader :as vr])
   (:import (java.util ArrayList Iterator List Set SortedSet TreeSet)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo Schema)
            (org.roaringbitmap.buffer MutableRoaringBitmap)
            (xtdb ICursor Bytes)
            (xtdb.arrow BitVector RelationReader VectorType)
@@ -295,18 +294,13 @@
       100000))
 
 (defn ->build-side ^xtdb.operator.join.BuildSide [^BufferAllocator allocator,
-                                                  {:keys [vec-types fields, key-col-names, track-unmatched-build-idxs?, with-nil-row?]}]
-  (let [schema (Schema. (if vec-types
-                          (->> vec-types
-                               (mapv (fn [[col-name ^VectorType vec-type]]
-                                       (.toField (cond-> vec-type
-                                                   with-nil-row? (VectorType/maybe))
-                                                 (str col-name)))))
-                          (->> fields
-                               (mapv (fn [[field-name field]]
-                                       (cond-> (-> field (types/field-with-name (str field-name)))
-                                         with-nil-row? types/->nullable-field))))))]
-    (BuildSide. allocator schema (map str key-col-names)
+                                                  {:keys [vec-types, key-col-names, track-unmatched-build-idxs?, with-nil-row?]}]
+  (let [vec-types (->> vec-types
+                       (into {} (map (fn [[col-name ^VectorType vec-type]]
+                                       [(str col-name)
+                                        (cond-> vec-type
+                                          with-nil-row? (VectorType/maybe))]))))]
+    (BuildSide. allocator vec-types (map str key-col-names)
                 (boolean track-unmatched-build-idxs?)
                 (boolean with-nil-row?)
                 *disk-join-threshold-rows*)))

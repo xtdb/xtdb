@@ -9,7 +9,6 @@
             [xtdb.information-schema :as info-schema]
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
-            [xtdb.metrics :as metrics]
             xtdb.object-store
             [xtdb.table :as table]
             [xtdb.time :as time]
@@ -32,7 +31,7 @@
            (xtdb.indexer Snapshot Snapshot$Source)
            (xtdb.metadata MetadataPredicate PageMetadata PageMetadata$Factory)
            (xtdb.operator.scan MultiIidSelector ScanCursor SingleIidSelector)
-           (xtdb.segment BufferPoolSegment MemorySegment MergePlanner MergeTask)
+           (xtdb.segment BufferPoolSegment MemorySegment MergePlanner)
            (xtdb.storage BufferPool)
            xtdb.table.TableRef
            (xtdb.trie Bucketer TrieCatalog)
@@ -51,7 +50,7 @@
                        :opt-un [::lp/for-valid-time ::lp/for-system-time])))
 
 (definterface IScanEmitter
-  (emitScan [^xtdb.database.Database$Catalog db-cat scan-expr scan-fields param-types]))
+  (emitScan [^xtdb.database.Database$Catalog db-cat scan-expr scan-vec-types param-types]))
 
 (defn ->scan-cols [{:keys [opts]}]
   (let [{:keys [table columns]} opts]
@@ -172,28 +171,28 @@
             {:allocator (ig/ref :xtdb/allocator)
              :info-schema (ig/ref :xtdb/information-schema)})})
 
-(defn scan-fields [^Database$Catalog db-catalog, snaps, scan-cols]
-  (letfn [(->field [[^TableRef table col-name]]
+(defn scan-vec-types [^Database$Catalog db-catalog, snaps, scan-cols]
+  (letfn [(->vec-type [[^TableRef table col-name]]
             (let [col-name (str col-name)]
-              (-> (or (types/temporal-fields col-name)
-                      (-> (info-schema/derived-table table)
-                          (get (symbol col-name)))
-                      (-> (info-schema/template-table table)
-                          (get (symbol col-name)))
-                      (let [db-name (.getDbName table)
-                            ^TableCatalog table-catalog (.getTableCatalog (.databaseOrNull db-catalog db-name))
-                            ^Snapshot snap (get snaps db-name)]
-                        (types/merge-fields (.getField table-catalog table col-name)
-                                            (some-> (.getLiveIndex snap)
-                                                    (.liveTable table)
-                                                    (.columnField col-name)))))
-                  (types/field-with-name col-name))))]
+              (or (types/temporal-vec-types col-name)
+                  (-> (info-schema/derived-table table)
+                      (get (symbol col-name)))
+                  (-> (info-schema/template-table table)
+                      (get (symbol col-name)))
+                  (let [db-name (.getDbName table)
+                        ^TableCatalog table-catalog (.getTableCatalog (.databaseOrNull db-catalog db-name))
+                        ^Snapshot snap (get snaps db-name)]
+                    (types/merge-types (some-> (.getField table-catalog table col-name) types/->type)
+                                       (some-> (.getLiveIndex snap)
+                                               (.liveTable table)
+                                               (.columnField col-name)
+                                               types/->type))))))]
     (->> scan-cols
-         (into {} (map (juxt identity ->field))))))
+         (into {} (map (juxt identity ->vec-type))))))
 
 (defmethod ig/init-key ::scan-emitter [_ {:keys [info-schema]}]
   (reify IScanEmitter
-    (emitScan [_ db-cat {:keys [opts]} scan-fields param-types]
+    (emitScan [_ db-cat {:keys [opts]} scan-vec-types param-types]
       (let [{:keys [^TableRef table columns] :as scan-opts} opts
             db-name (.getDbName table)
             db (.databaseOrNull db-cat db-name)
@@ -206,10 +205,10 @@
                                             (case col-type
                                               :column arg
                                               :select (key (first arg)))))))
-            fields (->> col-names
-                        (into {} (map (juxt identity
-                                            (fn [col-name]
-                                              (get scan-fields [table col-name]))))))
+            vec-types (->> col-names
+                           (into {} (map (juxt identity
+                                               (fn [col-name]
+                                                 (get scan-vec-types [table col-name]))))))
 
             col-names (into #{} (map str) col-names)
 
@@ -221,7 +220,7 @@
 
             col-preds (->> (for [[col-name select-form] selects]
                              ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
-                             (let [input-types {:var-types (->> fields (into {} (keep (fn [[k v]] (when v [k (types/->type v)])))))
+                             (let [input-types {:var-types (->> vec-types (into {} (keep (fn [[k v]] (when v [k v])))))
                                                 :param-types param-types}]
                                (MapEntry/create col-name
                                                 (expr/->expression-selection-spec (expr/form->expr select-form input-types)
@@ -242,7 +241,7 @@
                    :columns (vec col-names)
                    :predicates (mapv pr-str (vals selects))}
 
-         :vec-types (->> fields (into {} (keep (fn [[k v]] (when v [k (types/->type v)])))))
+         :vec-types (->> vec-types (into {} (keep (fn [[k v]] (when v [k v])))))
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
                      (let [^Snapshot snapshot (get snaps db-name)
@@ -261,7 +260,7 @@
                                            (assoc "_iid" (if (= 1 (count iid-set))
                                                            (SingleIidSelector. (first iid-set))
                                                            (MultiIidSelector. iid-set))))
-                               metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) (update-vals fields types/->type) args)
+                               metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) vec-types args)
                                metadata-pred (reify MetadataPredicate
                                                (build [_ page-metadata]
                                                  (-> (.build metadata-pred page-metadata)
@@ -309,6 +308,6 @@
                                                                                                      "db.name" (.getDbName table)}
                                                                                                     (format "query.cursor.scan.%s" (.getTableName table))))))))))}))))
 
-(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-fields, param-types]}]
+(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-vec-types, param-types]}]
   (assert db-cat)
-  (.emitScan scan-emitter db-cat scan-expr scan-fields param-types))
+  (.emitScan scan-emitter db-cat scan-expr scan-vec-types param-types))

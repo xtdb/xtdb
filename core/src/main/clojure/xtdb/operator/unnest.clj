@@ -7,9 +7,9 @@
   (:import (java.util LinkedList)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Union Field)
+           (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Union)
            (xtdb ICursor)
-           (xtdb.arrow IntVector RelationReader RowCopier VectorReader Vector)
+           (xtdb.arrow IntVector RelationReader RowCopier VectorReader Vector VectorType)
            xtdb.vector.extensions.SetType))
 
 (s/def ::ordinality-column ::lp/column)
@@ -25,7 +25,8 @@
 (deftype UnnestCursor [^BufferAllocator allocator
                        ^ICursor in-cursor
                        ^String from-column-name
-                       ^Field to-field
+                       ^String to-col-name
+                       ^VectorType to-vec-type
                        ^String ordinality-column]
   ICursor
   (getCursorType [_] "unnest")
@@ -35,7 +36,7 @@
     (let [advanced? (boolean-array 1)]
       (while (and (.tryAdvance in-cursor
                                (fn [^RelationReader in-rel]
-                                 (with-open [out-vec (Vector/open allocator to-field)]
+                                 (with-open [out-vec (Vector/open allocator to-col-name to-vec-type)]
                                    (let [out-cols (LinkedList.)
 
                                          vec-rdr (.vectorForOrNull in-rel from-column-name)
@@ -112,6 +113,6 @@
                         :vec-types out-vec-types
                         :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                                     (cond-> (UnnestCursor. allocator in-cursor
-                                                           (str from-col) (.toField unnest-type (str to-col))
+                                                           (str from-col) (str to-col) unnest-type
                                                            (some-> ordinality-column str))
                                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))

@@ -194,7 +194,7 @@
 (defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache, explain-analyze?]},
                    scan-emitter, ^Database$Catalog db-cat, snaps
                    param-types, {:keys [default-tz]}]
-  (.get emit-cache {:scan-fields (scan/scan-fields db-cat snaps scan-cols)
+  (.get emit-cache {:scan-vec-types (scan/scan-vec-types db-cat snaps scan-cols)
 
                     ;; this one is just to reset the cache for up-to-date stats
                     ;; probably over-zealous
@@ -205,10 +205,10 @@
                     :param-types param-types
                     :explain-analyze? explain-analyze?}
 
-        (fn [{:keys [scan-fields param-types default-tz]}]
+        (fn [{:keys [scan-vec-types param-types default-tz]}]
           (binding [expr/*default-tz* default-tz]
             (-> (lp/emit-expr conformed-plan
-                              {:scan-fields scan-fields
+                              {:scan-vec-types scan-vec-types
                                :default-tz default-tz
                                :param-types param-types
                                :db-cat db-cat

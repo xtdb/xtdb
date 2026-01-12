@@ -15,8 +15,8 @@
            (io.micrometer.core.instrument.distribution ValueAtPercentile)
            [java.lang AutoCloseable]
            [java.time Duration]
+           [java.util Map]
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo Schema)
            (xtdb ICursor)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader VectorType VectorReader VectorWriter)
@@ -30,10 +30,8 @@
 (defn name->oid [s]
   (Math/abs ^Integer (hash s)))
 
-  (defn- map->fields [m]
-    (into {} (map (fn [[col-name type-spec]]
-                    [col-name (types/->field type-spec col-name)]))
-          m))
+(defn- map->vec-types [m]
+  (update-vals m types/->type))
 
 (defn schema-info->col-rows [schema-info]
   (for [[^TableRef table cols] schema-info
@@ -43,26 +41,26 @@
                                  "_valid_to" [:? :instant]
                                  "_system_from" :instant
                                  "_system_to" [:? :instant]}
-                               map->fields))
+                               map->vec-types))
                          cols)
               {xt-cols true, user-cols false} (group-by (comp #(str/starts-with? % "_") key) cols)
               cols (concat (sort-by key xt-cols)
                            (sort-by key user-cols))]
         [idx col] (map-indexed #(vector %1 %2) cols)
         :let [name (key col)
-              col-field (val col)]]
+              vec-type (val col)]]
 
     {:idx (inc idx) ;; no guarantee of stability of idx for a given col
      :table table
      :name name
-     :field col-field}))
+     :vec-type vec-type}))
 
 (do
   (def info-tables
     (-> '{information_schema/tables {table_catalog :utf8, table_schema :utf8, table_name :utf8, table_type :utf8}
           information_schema/columns {table_catalog :utf8, table_schema :utf8, table_name :utf8, column_name :utf8, data_type :utf8}
           information_schema/schemata {catalog_name :utf8, schema_name :utf8, schema_owner :utf8}}
-        (update-vals map->fields)))
+        (update-vals map->vec-types)))
 
   (def ^:private pg-catalog-tables
     (-> '{pg_catalog/pg_tables {schemaname :utf8, tablename :utf8, tableowner :utf8, tablespace :null}
@@ -95,11 +93,11 @@
           pg_catalog/pg_range {rngtypid :i32, rngsubtype :i32, rngmultitypid :i32
                                rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}
           pg_catalog/pg_am {oid :i32, amname :utf8, amhandler :utf8, amtype :utf8}}
-        (update-vals map->fields)))
+        (update-vals map->vec-types)))
 
   (def ^:private pg-catalog-template-tables
     (-> '{pg_catalog/pg_user {username :utf8 usesuper :bool passwd [:? :utf8]}}
-        (update-vals map->fields)))
+        (update-vals map->vec-types)))
 
   (def ^:private xt-derived-tables
     (-> '{xt/trie_stats {schema_name :utf8, table_name :utf8, trie_key :utf8, level :i32, recency [:? :date :day],
@@ -120,7 +118,7 @@
 
           xt/metrics_gauges {name :utf8, tags :struct, value :f64}
           xt/metrics_counters {name :utf8, tags :struct, count :f64}}
-        (update-vals map->fields)))
+        (update-vals map->vec-types)))
 
   (def derived-tables
     (merge info-tables pg-catalog-tables xt-derived-tables))
@@ -264,16 +262,16 @@
      :rngsubdiff rngsubdiff}))
 
 (defn columns [col-rows]
-  (for [{:keys [^TableRef table, field], col-name :name} col-rows]
+  (for [{:keys [^TableRef table, ^VectorType vec-type], col-name :name} col-rows]
     {:table-catalog (.getDbName table)
      :table-name (.getTableName table)
      :table-schema (.getSchemaName table)
      :column-name (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (str col-name))
-     :data-type (pr-str (st/render-type (VectorType/fromField field)))}))
+     :data-type (pr-str (st/render-type vec-type))}))
 
 (defn pg-attribute [col-rows]
-  (for [{:keys [idx table name field]} col-rows
-        :let [^PgType pg-type (PgType/fromField field)
+  (for [{:keys [idx table name ^VectorType vec-type]} col-rows
+        :let [^PgType pg-type (PgType/fromVectorType vec-type)
               ^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) PgType/PG_JSON pg-type)]]
     {:attrelid (name->oid (table/ref->schema+table table))
      :attname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (str name))
@@ -477,15 +475,18 @@
                  table col-names col-preds
                  schema params]
         ;; TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
-        ;; should be types/merge-fields as per scan-fields
+        ;; should be types/merge-types as per scan-vec-types
         (let [^Database db db
               db-name (.getName db)
               table-catalog (.getTableCatalog db)
               trie-catalog (.getTrieCatalog db)
+              ;; convert Fields from catalog to VectorTypes
+              fields->vec-types (fn [m] (update-vals m (fn [cols] (update-vals cols types/->type))))
               schema-info (-> (merge-with merge
-                                          (.getFields table-catalog)
+                                          (fields->vec-types (.getFields table-catalog))
                                           (some-> (.getLiveIndex ^Snapshot snap)
-                                                  (.getAllColumnFields)))
+                                                  (.getAllColumnFields)
+                                                  fields->vec-types))
                               (merge meta-table-schemas)
                               (update-keys (fn [k]
                                              (cond
@@ -493,7 +494,7 @@
                                                (symbol? k) (table/->ref db-name k)))))]
 
           (util/with-close-on-catch [out-rel (Relation. ^BufferAllocator allocator
-                                                        (Schema. (vec (vals derived-table-schema))))]
+                                                        ^Map (update-keys derived-table-schema str))]
 
             (.writeRows out-rel (->> (case (table/ref->schema+table table)
                                        information_schema/tables (tables schema-info)

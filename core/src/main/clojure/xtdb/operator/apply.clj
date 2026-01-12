@@ -71,9 +71,7 @@
            :explain {:columns (pr-str columns)}
            :vec-types out-vec-types
 
-           :->cursor (let [out-dep-vec-types (-> out-dep-vec-types
-                                                 (update-keys str)
-                                                 (update-vals types/->type))
+           :->cursor (let [out-dep-vec-types (update-keys out-dep-vec-types str)
                            mode-strat (->mode-strategy mode mark-join-projection out-dep-vec-types)
                            open-dependent-cursor
                            (if (= mode :mark-join)
