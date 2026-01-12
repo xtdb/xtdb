@@ -1332,18 +1332,30 @@
   (let [transaction (get-in @conn-state [:transaction])]
     (when (:failed transaction)
       (throw (pgio/err-protocol-violation "current transaction is aborted, commands ignored until ROLLBACK is received")))
-    
+
     (when-not (or transaction (= statement-type :show-variable))
-      (cmd-begin conn {:implicit? true :access-mode :read-only} {}))) 
-  
+      (cmd-begin conn {:implicit? true :access-mode :read-only} {})))
+
   (try
-    (let [n-rows-out (volatile! 0)
+    (let [!n-rows-out (volatile! 0)
           {session-params :parameters, :as session} (:session @conn-state)
-          fallback (fallback-type session)]
+          fallback (fallback-type session)
+          serialize-row (fn [^RelationReader rel idx]
+                          (mapv (fn [{:keys [^String col-name pg-type result-format]}]
+                                  (let [^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) fallback pg-type)
+                                        rdr (.vectorForOrNull rel col-name)]
+                                    (when-not (.isNull rdr idx)
+                                      (if (= :binary result-format)
+                                        (.writeBinary pg-type session-params rdr idx)
+                                        (.writeText pg-type session-params rdr idx)))))
+                                pg-cols))
+          send-row! (fn [row]
+                      (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
+                      (vswap! !n-rows-out inc))]
       (run-cancellable-query!
        conn
        (fn []
-         (while (and (or (nil? limit) (< @n-rows-out limit))
+         (while (and (or (nil? limit) (< @!n-rows-out limit))
                      (.tryAdvance cursor
                                   (fn [^RelationReader rel]
                                     (log/trace "advancing cursor with rel count" (.getRowCount rel))
@@ -1352,21 +1364,11 @@
 
                                       @!closing? (log/trace "query result stream stopping (conn closing)")
 
-                                      :else (dotimes [idx (cond-> (.getRowCount rel)
-                                                            limit (min (- limit @n-rows-out)))]
-                                              (let [row (mapv
-                                                         (fn [{:keys [^String col-name pg-type result-format]}]
-                                                           (let [^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) fallback pg-type)
-                                                                 rdr (.vectorForOrNull rel col-name)]
-                                                             (when-not (.isNull rdr idx)
-                                                               (if (= :binary result-format)
-                                                                 (.writeBinary pg-type session-params rdr idx)
-                                                                 (.writeText pg-type session-params rdr idx)))))
-                                                         pg-cols)]
-                                                (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
-                                                (vswap! n-rows-out inc))))))))))
+                                      :else (dotimes [idx (cond-> (.getRowCount rel) 
+                                                            limit (min (- limit @!n-rows-out)))]
+                                              (send-row! (serialize-row rel idx))))))))))
 
-      (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @n-rows-out)}))
+      (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @!n-rows-out)}))
 
     (catch Interrupted e (throw e))
     (catch InterruptedException e (throw e))
