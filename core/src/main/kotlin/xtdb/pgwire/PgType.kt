@@ -796,33 +796,12 @@ sealed class PgType(
     companion object {
         @JvmField val PG_DEFAULT = Default
         @JvmField val PG_NULL = Null
-        @JvmField val PG_INT8 = Int8
-        @JvmField val PG_INT4 = Int4
-        @JvmField val PG_INT2 = Int2
-        @JvmField val PG_FLOAT4 = Float4
-        @JvmField val PG_FLOAT8 = Float8
-        @JvmField val PG_BOOL = Bool
         @JvmField val PG_TEXT = Text
         @JvmField val PG_VARCHAR = VarChar
-        @JvmField val PG_NUMERIC = Numeric
         @JvmField val PG_TIMESTAMP = Timestamp
         @JvmField val PG_TIMESTAMPTZ = TimestampTz
         @JvmField val PG_DATE = Date
-        @JvmField val PG_TIME = Time
-        @JvmField val PG_INTERVAL = PgInterval
-        @JvmField val PG_DURATION = PgDuration
-        @JvmField val PG_TSTZ_RANGE = TsTzRange
-        @JvmField val PG_BYTES = Bytes
-        @JvmField val PG_INT4S = Int4s
-        @JvmField val PG_INT8S = Int8s
-        @JvmField val PG_TEXTS = Texts
-        @JvmField val PG_UUID = Uuid
-        @JvmField val PG_KEYWORD = Keyword
-        @JvmField val PG_OID = PgOid
-        @JvmField val PG_REG_CLASS = RegClass
-        @JvmField val PG_REG_PROC = RegProc
         @JvmField val PG_JSON = Json
-        @JvmField val PG_JSONB = Jsonb
         @JvmField val PG_TRANSIT = Transit
 
         // All concrete PgTypes (excluding Default and Null which are special)
@@ -914,6 +893,7 @@ sealed class PgType(
         private val INT_ARRAYS = setOf(Int4s, Int8s)
 
         private fun unifyPgTypes(pgTypes: Set<PgType>): PgType = when {
+            pgTypes.isEmpty() -> Null
             pgTypes.size == 1 -> pgTypes.first()
             pgTypes.all { it in INTS } -> Int8
             pgTypes.all { it in FLOATS } -> Float8
@@ -924,7 +904,7 @@ sealed class PgType(
         @JvmStatic
         fun fromField(field: Field): PgType {
             val xtType = field.asType
-            val pgTypes = xtType.unionLegs.mapTo(mutableSetOf()) { fromXtType(it) }
+            val pgTypes = xtType.mapTo(mutableSetOf()) { fromXtType(it) }.minus(Null)
             return unifyPgTypes(pgTypes)
         }
     }

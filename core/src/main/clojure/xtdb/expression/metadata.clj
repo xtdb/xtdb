@@ -58,7 +58,7 @@
        :args (let [^VectorType value-type (case (:op value-expr)
                                             :literal (types/value->vec-type (:literal value-expr))
                                             :param (:param-type value-expr))]
-               (for [^VectorType leg-type (some-> value-type .getUnionLegs)]
+               (for [^VectorType leg-type value-type]
                  (if (= MetadataFlavour$Bytes (MetadataFlavour/getMetadataFlavour (.getArrowType leg-type)))
                    {:op :test-bloom,
                     :col col,
@@ -73,7 +73,7 @@
        :args (let [^VectorType value-type (case (:op value-expr)
                                             :literal (types/value->vec-type (:literal value-expr))
                                             :param (:param-type value-expr))]
-               (for [^VectorType leg-type (some-> value-type .getUnionLegs)]
+               (for [^VectorType leg-type value-type]
                  (if (= MetadataFlavour$Presence (MetadataFlavour/getMetadataFlavour (.getArrowType leg-type)))
                    {:op :test-presence,
                     :col col,

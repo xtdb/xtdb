@@ -92,6 +92,6 @@ private fun leastUpperBound2(left: ArrowType, right: ArrowType): ArrowType? = wh
 @JvmName("of")
 fun leastUpperBound(types: Collection<VectorType>): ArrowType? =
     types
-        .flatMap { it.unionLegs }
+        .flatten()
         .map { it.arrowType }
         .reduceOrNull { l, r -> leastUpperBound2(l, r) ?: return null }

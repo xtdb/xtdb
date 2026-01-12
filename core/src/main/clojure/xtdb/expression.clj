@@ -460,12 +460,8 @@
   (->> expr
        (macro/macroexpand-all)))
 
-(defn- flatten-type [^VectorType return-type]
-  (->> (.getUnionLegs return-type)
-       (mapcat VectorType/.getSplitNull)))
-
 (defn- wrap-boxed-poly-return [{:keys [return-type continue] :as emitted-expr} _]
-  (let [union-legs (flatten-type return-type)]
+  (let [union-legs (seq return-type)]
     (if (> (count union-legs) 1)
       (let [box-sym (gensym 'box)
             legs (->> union-legs

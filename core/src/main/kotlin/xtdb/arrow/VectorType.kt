@@ -42,7 +42,7 @@ data class VectorType(
     @get:JvmName("isNullable")
     val nullable: Boolean = false,
     val children: Map<FieldName, VectorType> = emptyMap()
-) {
+): Iterable<VectorType> {
 
     val fieldType get() = FieldType(nullable, arrowType, null)
 
@@ -50,17 +50,17 @@ data class VectorType(
 
     val asLegField get() = toField(arrowType.toLeg())
 
-    // NOTE: the col-types version of this expands nulls out into the list; this keeps them within the individual types
-    // not sure which I want yet.
-    val unionLegs get() = if (arrowType is ArrowType.Union) children.values.toList() else listOf(this)
+    private val unionLegs get() = if (arrowType is ArrowType.Union) children.values.toList() else listOf(this)
 
     val firstChildOrNull get() = children.entries.firstOrNull()?.value
 
-    val splitNull get() = when {
+    private val splitNull get() = when {
         arrowType is ArrowType.Null -> listOf(this)
         nullable -> listOf(NULL, copy(nullable = false))
         else -> listOf(this)
     }
+
+    override fun iterator(): Iterator<VectorType> = unionLegs.flatMap { it.splitNull }.iterator()
 
     companion object {
 
