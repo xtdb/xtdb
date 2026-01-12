@@ -156,7 +156,6 @@
         {:op :cross-join
          :children [left-rel right-rel]
          :vec-types out-vec-types
-         :fields (into {} (map (fn [[k v]] [k (types/->field v k)])) out-vec-types)
          :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
                      (cond-> (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil)
                        (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))
@@ -330,8 +329,8 @@
    {:keys [param-types]}
    {:keys [build-side merge-fields-fn join-type
            with-nil-row? pushdown-blooms? track-unmatched-build-idxs? mark-col-name]}]
-  (let [{left-vec-types :vec-types, ->left-cursor :->cursor} (lp/ensure-vec-types left)
-        {right-vec-types :vec-types, ->right-cursor :->cursor} (lp/ensure-vec-types right)
+  (let [{left-vec-types :vec-types, ->left-cursor :->cursor} left
+        {right-vec-types :vec-types, ->right-cursor :->cursor} right
         {equis :equi-condition, thetas :pred-expr} (group-by first condition)
 
         theta-expr (when-let [theta-exprs (seq (map second thetas))]
@@ -392,7 +391,6 @@
      :explain {:condition (pr-str (mapv second condition))}
 
      :vec-types (projection-specs->vec-types output-projections)
-     :fields (projection-specs->fields output-projections)
 
      :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span args] :as opts}]
                  (util/with-close-on-catch [build-cursor (->build-cursor opts)
@@ -699,7 +697,7 @@
                                           :condition condition}))
                                   (map-indexed #(assoc %2 :condition-id %1)))
         child-relations (->> relations
-                             (map #(lp/ensure-vec-types (lp/emit-expr % args)))
+                             (map #(lp/emit-expr % args))
                              (map-indexed #(assoc %2 :relation-id %1))
                              (sort-by
                                (juxt (comp nil? :row-count :stats)

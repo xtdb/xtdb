@@ -90,7 +90,6 @@
              :explain {:project (pr-str (into [] (map second) projections))
                        :append? (boolean append-columns?)}
              :vec-types out-vec-types
-             :fields (into {} (map (fn [[k v]] [k (types/->field v k)])) out-vec-types)
              :stats (:stats emitted-child-relation)
              :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts} in-cursor]
                          (cond-> (->project-cursor opts in-cursor projection-specs)

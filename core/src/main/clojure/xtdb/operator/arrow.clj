@@ -48,7 +48,6 @@
     {:op :arrow
      :children []
      :vec-types (update-vals fields #(VectorType/fromField ^Field %))
-     :fields fields
      :->cursor (fn [{:keys [^BufferAllocator allocator explain-analyze? tracer query-span]}]
                  (util/with-close-on-catch [loader (path->loader allocator path)
                                             rel (Relation. allocator (.getSchema loader))]

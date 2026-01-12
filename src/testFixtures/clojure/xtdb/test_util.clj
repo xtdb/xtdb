@@ -188,7 +188,6 @@
     {:op :pages
      :children []
      :vec-types out-vec-types
-     :fields fields
      :stats stats
      :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]}]
                  (cond-> (->cursor allocator schema pages)

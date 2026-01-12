@@ -164,7 +164,6 @@
                                                      (let [[to-column {:keys [window-agg]}] (first p)]
                                                        [to-column (pr-str window-agg)]))))}
              :vec-types out-vec-types
-             :fields out-fields
 
              :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                          (cond-> (util/with-close-on-catch [window-fn-specs (LinkedList.)]

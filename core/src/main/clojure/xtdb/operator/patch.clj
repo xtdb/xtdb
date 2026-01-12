@@ -43,7 +43,6 @@
          :explain {:valid-from (pr-str valid-from)
                    :valid-to (pr-str valid-to)}
          :vec-types out-vec-types
-         :fields out-fields
          :->cursor (fn [{:keys [^BufferAllocator allocator current-time explain-analyze? tracer query-span] :as qopts} inner]
                      (let [valid-from (time/instant->micros (->instant (or valid-from [:literal current-time]) qopts))
                            valid-to (or (some-> valid-to (->instant qopts) time/instant->micros) Long/MAX_VALUE)]

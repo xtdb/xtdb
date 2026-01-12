@@ -72,7 +72,6 @@
                       {:op :union-all
                        :children [left-rel right-rel]
                        :vec-types out-vec-types
-                       :fields (into {} (map (fn [[k v]] [k (types/->field v k)])) out-vec-types)
                        :->cursor (fn [{:keys [explain-analyze? tracer query-span]} left-cursor right-cursor]
                                    (cond-> (UnionAllCursor. left-cursor right-cursor)
                                      (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))
@@ -132,7 +131,6 @@
                       {:op :intersect
                        :children [left-rel right-rel]
                        :vec-types out-vec-types
-                       :fields (into {} (map (fn [[k v]] [k (types/->field v k)])) out-vec-types)
                        :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
                                    (let [build-side (join/->build-side allocator
                                                                        {:fields left-fields
@@ -155,7 +153,6 @@
                       {:op :difference
                        :children [left-rel right-rel]
                        :vec-types out-vec-types
-                       :fields (into {} (map (fn [[k v]] [k (types/->field v k)])) out-vec-types)
                        :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
                                    (let [build-side (join/->build-side allocator
                                                                        {:fields left-fields

@@ -114,7 +114,6 @@
                                    :to to-col
                                    :ordinality ordinality-column}
                          :vec-types out-vec-types
-                         :fields out-fields
                          :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                                     (cond-> (UnnestCursor. allocator in-cursor
                                                            (str from-col) (types/field-with-name unnest-field (str to-col))

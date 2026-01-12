@@ -15,12 +15,11 @@
          :relation ::lp/ra-expression))
 
 (defmethod lp/emit-expr :let [{[binding bound-rel] :binding, :keys [relation]} emit-opts]
-  (let [{->bound-cursor :->cursor, :as emitted-bound-rel} (lp/ensure-vec-types (lp/emit-expr bound-rel emit-opts))
-        {->body-cursor :->cursor, body-vec-types :vec-types, :as emitted-body-rel} (lp/ensure-vec-types (lp/emit-expr relation (assoc-in emit-opts [:let-bindings binding] emitted-bound-rel)))]
+  (let [{->bound-cursor :->cursor, :as emitted-bound-rel} (lp/emit-expr bound-rel emit-opts)
+        {->body-cursor :->cursor, body-vec-types :vec-types, :as emitted-body-rel} (lp/emit-expr relation (assoc-in emit-opts [:let-bindings binding] emitted-bound-rel))]
     {:op :let
      :children [emitted-bound-rel emitted-body-rel]
      :vec-types body-vec-types
-     :fields (into {} (map (fn [[k v]] [k (types/->field v k)])) body-vec-types)
      :stats (:stats emitted-body-rel)
      :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span] :as opts}]
                  (cond-> (util/with-close-on-catch [bound-cursor (->bound-cursor opts)
@@ -49,7 +48,6 @@
     {:op :relation
      :children []
      :vec-types vec-types
-     :fields (into {} (map (fn [[k v]] [k (types/->field v k)])) vec-types)
      :stats stats
      :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts}]
                  (let [^ICursor$Factory cursor-factory (or (get-in opts [:let-bindings relation])

@@ -38,7 +38,7 @@
     (util/try-close in-cursor)))
 
 (defmethod lp/emit-expr :rename [{:keys [columns relation prefix]} args]
-  (let [{->inner-cursor :->cursor, inner-vec-types :vec-types, :as emitted-child-relation} (lp/ensure-vec-types (lp/emit-expr relation args))
+  (let [{->inner-cursor :->cursor, inner-vec-types :vec-types, :as emitted-child-relation} (lp/emit-expr relation args)
         col-name-mapping (->> (for [old-name (set (keys inner-vec-types))]
                                 [old-name
                                  (cond-> (get columns old-name old-name)
@@ -52,7 +52,6 @@
      :children [emitted-child-relation]
      :explain {:prefix (some-> prefix str), :columns (some-> columns pr-str)}
      :vec-types out-vec-types
-     :fields out-fields
      :stats (:stats emitted-child-relation)
      :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts}]
                  (let [opts (-> opts

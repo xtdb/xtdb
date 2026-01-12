@@ -403,7 +403,6 @@
                                                   (let [[to-column agg-form] (first agg)]
                                                     [(str to-column) (pr-str agg-form)]))))}
                :vec-types out-vec-types
-               :fields out-fields
 
              :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                          (cond-> (util/with-close-on-catch [agg-specs (LinkedList.)]

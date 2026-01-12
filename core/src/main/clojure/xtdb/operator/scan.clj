@@ -242,7 +242,6 @@
                    :columns (vec col-names)
                    :predicates (mapv pr-str (vals selects))}
 
-         :fields fields
          :vec-types (->> fields (into {} (keep (fn [[k v]] (when v [k (types/->type v)])))))
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]

@@ -28,7 +28,6 @@
            :children [inner-rel]
            :explain  {:predicate (pr-str predicate)}
            :vec-types inner-vec-types
-           :fields (into {} (map (fn [[k v]] [k (types/->field v k)])) inner-vec-types)
            :->cursor (fn [{:keys [allocator args schema explain-analyze? tracer query-span]} in-cursor]
                        (cond-> (-> (SelectCursor. allocator in-cursor selector schema args)
                                    (coalesce/->coalescing-cursor allocator))

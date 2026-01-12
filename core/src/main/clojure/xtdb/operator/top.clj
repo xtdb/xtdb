@@ -69,7 +69,6 @@
                       :limit (some-> limit-arg pr-str)}
                      (into {} (filter val)))
        :vec-types vec-types
-       :fields (into {} (map (fn [[k v]] [k (types/->field v k)])) vec-types)
        :->cursor (fn [{:keys [args explain-analyze? tracer query-span]} in-cursor]
                    (cond-> (TopCursor. in-cursor
                                        (case skip-tag

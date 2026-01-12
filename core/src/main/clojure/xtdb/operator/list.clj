@@ -55,10 +55,11 @@
         expr (expr/form->expr v input-types) 
         {:keys [field ->list-expr]} (expr-list/compile-list-expr expr input-types)
         named-field (types/field-with-name field (str out-col))
-        fields {(symbol (.getName named-field)) named-field}]
+        fields {(symbol (.getName named-field)) named-field}
+        vec-types (update-vals (restrict-cols fields list-expr) types/->type)]
     {:op :list
      :children []
-     :fields (restrict-cols fields list-expr)
+     :vec-types vec-types
      :->cursor (fn [{:keys [allocator ^RelationReader args explain-analyze? tracer query-span]}]
                  (cond-> (ListCursor. allocator (->list-expr schema args) named-field
                                       *batch-size* 0)

@@ -273,7 +273,6 @@
            :children [rel]
            :explain {:order-specs (pr-str order-specs)}
            :vec-types vec-types
-           :fields fields
            :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                        (cond-> (OrderByCursor. allocator in-cursor (rename-fields fields) order-specs false nil nil nil nil)
                          (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))
