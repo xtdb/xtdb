@@ -90,7 +90,6 @@
   ;; if there is no partition yet we intialize empty but set the max-block-idx the level above
   (let [{:keys [live garbage] :as tries} (or tries {:live (), :garbage (), :max-block-idx block-idx})
         [new-garbage live] (->> live
-                                ;; TODO this simple map op does not work, see #4947
                                 (map (fn [{^long other-block-idx :block-idx, ^long other-size :data-file-size :as other-trie}]
                                        (cond-> other-trie
                                          (and (< other-size file-size-target)
