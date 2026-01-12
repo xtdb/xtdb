@@ -124,7 +124,7 @@
   (fn [ra-expr opts]
     (:op ra-expr)))
 
-(defn- ensure-vec-types
+(defn ensure-vec-types
   "Ensures :vec-types is present alongside :fields. During migration, derives :vec-types from :fields if missing."
   [{:keys [fields vec-types] :as emitted}]
   (cond-> emitted

@@ -324,8 +324,8 @@
    {:keys [param-types]}
    {:keys [build-side merge-fields-fn join-type
            with-nil-row? pushdown-blooms? track-unmatched-build-idxs? mark-col-name]}]
-  (let [{left-fields :fields, ->left-cursor :->cursor} left
-        {right-fields :fields, ->right-cursor :->cursor} right
+  (let [{left-fields :fields, left-vec-types :vec-types, ->left-cursor :->cursor} (lp/ensure-vec-types left)
+        {right-fields :fields, right-vec-types :vec-types, ->right-cursor :->cursor} (lp/ensure-vec-types right)
         {equis :equi-condition, thetas :pred-expr} (group-by first condition)
 
         theta-expr (when-let [theta-exprs (seq (map second thetas))]
@@ -337,13 +337,13 @@
                         vec)
 
         left-projections (vec (concat
-                               (for [[_col-name ^Field field] left-fields]
-                                 (project/->identity-projection-spec field))
+                               (for [[col-name col-type] left-vec-types]
+                                 (project/->identity-projection-spec col-name col-type))
                                (keep (comp :projection :left) equi-specs)))
 
         right-projections (vec (concat
-                                (for [[_col-name ^Field field] right-fields]
-                                  (project/->identity-projection-spec field))
+                                (for [[col-name col-type] right-vec-types]
+                                  (project/->identity-projection-spec col-name col-type))
                                 (keep (comp :projection :right) equi-specs)))
 
         left-fields-proj (projection-specs->fields left-projections)
@@ -368,7 +368,9 @@
                                                                 (filter :projection)
                                                                 (map :key-col-name))
                                                       equi-specs))
-                                (mapv #(project/->identity-projection-spec (get merged-fields %))))]
+                                (mapv (fn [col-name]
+                                        (let [^Field field (get merged-fields col-name)]
+                                          (project/->identity-projection-spec col-name (types/->type field))))))]
 
     {:op (case join-type
            ::inner-join :inner-join

@@ -2167,7 +2167,8 @@
                             :return-type)]
 
     (reify ProjectionSpec
-      (getField [_] (types/->field widest-out-type col-name))
+      (getToName [_] (str col-name))
+      (getType [_] widest-out-type)
 
       (project [_ allocator in-rel schema args]
         (let [var-types (->> in-rel

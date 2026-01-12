@@ -1,20 +1,19 @@
 package xtdb.arrow.agg
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.types.pojo.Field
 import xtdb.arrow.FieldName
 import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector
 import xtdb.arrow.Vector.Companion.openVector
+import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.I64
-import xtdb.arrow.VectorType.Companion.ofType
 
 class Count(
     private val fromColName: FieldName,
-    outColName: FieldName,
+    override val colName: FieldName,
     private val hasZeroRow: Boolean
 ) : AggregateSpec.Factory {
-    override val field: Field = outColName ofType I64
+    override val type: VectorType = I64
 
     override fun build(al: BufferAllocator): AggregateSpec {
         val outVec = al.openVector(field)
