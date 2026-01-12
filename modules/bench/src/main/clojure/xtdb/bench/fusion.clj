@@ -110,16 +110,66 @@
    :state (random/uniform-nth rng ["NSW" "VIC" "QLD" "SA" "WA"])})
 
 (defn generate-system-record [rng system-id nmi base-time]
-  {:xt/id system-id
-   :nmi nmi
-   :type (random/next-int rng 10)
-   :created-at base-time
-   :registration-date base-time
-   :rtg-max-w (random-float rng 1000 10000)
-   :rtg-max-wh (random-float rng 5000 50000)
-   :set-max-w (random-float rng 500 5000)
-   :modes-enabled "default,eco"
-   :updated-time (double (System/currentTimeMillis))})
+  (let [modes-enabled ["default" "eco"]
+        modes-supported ["default" "eco" "grid-charge" "grid-discharge"]
+        doe-modes-enabled ["doe-mode-1"]
+        doe-modes-supported ["doe-mode-1" "doe-mode-2" "doe-mode-3"]
+        vpp-modes-enabled ["vpp-frequency" "vpp-voltage"]
+        vpp-modes-supported ["vpp-frequency" "vpp-voltage" "vpp-reserve"]]
+    {:xt/id system-id
+     :nmi nmi
+     :type (random/next-int rng 10)
+     :created-at base-time
+     :registration-date base-time
+
+     ;; Rating limits (rtg_*)
+     :rtg-max-w (random-float rng 1000 10000)
+     :rtg-max-wh (random-float rng 5000 50000)
+     :rtg-max-va (random-float rng 1000 11000)
+     :rtg-max-var (random-float rng 500 5000)
+     :rtg-max-var-neg (random-float rng 500 5000)
+     :rtg-max-a (random-float rng 10 50)
+     :rtg-max-v (random-float rng 400 500)
+     :rtg-min-v (random-float rng 180 220)
+     :rtg-v-nom (random-float rng 230 240)
+     :rtg-max-charge-rate-w (random-float rng 2000 5000)
+     :rtg-max-charge-rate-va (random-float rng 2000 5500)
+     :rtg-max-discharge-rate-w (random-float rng 2000 5000)
+     :rtg-max-discharge-rate-va (random-float rng 2000 5500)
+     :rtg-min-pf-over-excited (random-float rng 0.8 0.95)
+     :rtg-min-pf-under-excited (random-float rng 0.8 0.95)
+
+     ;; Setpoint limits (set_*)
+     :set-max-w (random-float rng 500 5000)
+     :set-max-wh (random-float rng 2500 25000)
+     :set-max-va (random-float rng 500 5500)
+     :set-max-var (random-float rng 250 2500)
+     :set-max-var-neg (random-float rng 250 2500)
+     :set-max-charge-rate-w (random-float rng 1000 4000)
+     :set-max-discharge-rate-w (random-float rng 1000 4000)
+     :set-grad-w (random-float rng 100 1000)
+
+     ;; Modes (both string and set representations like production)
+     :modes-enabled (clojure.string/join "," modes-enabled)
+     :modes-enabled-set modes-enabled
+     :modes-supported (clojure.string/join "," modes-supported)
+     :modes-supported-set modes-supported
+     :doe-modes-enabled (clojure.string/join "," doe-modes-enabled)
+     :doe-modes-enabled-set doe-modes-enabled
+     :doe-modes-supported (clojure.string/join "," doe-modes-supported)
+     :doe-modes-supported-set doe-modes-supported
+     :vpp-modes-enabled (clojure.string/join "," vpp-modes-enabled)
+     :vpp-modes-enabled-set vpp-modes-enabled
+     :vpp-modes-supported (clojure.string/join "," vpp-modes-supported)
+     :vpp-modes-supported-set vpp-modes-supported
+
+     ;; Credential/controller fields (sparse, like production)
+     :certificate-credential-id (when (random/chance? rng 0.3)
+                                   (str "cert-" (random/next-uuid rng)))
+     :controller-listing-id (when (random/chance? rng 0.4)
+                              (str "ctrl-" (random/next-uuid rng)))
+
+     :updated-time (double (System/currentTimeMillis))}))
 
 (defn generate-device [rng device-id system-id device-model-id base-time]
   {:xt/id device-id
