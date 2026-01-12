@@ -125,6 +125,7 @@
                    (restrict-cols table-expr))]
 
     {:fields fields
+     :vec-types (update-vals fields types/->type)
      :row-count row-count
      :->out-rel (fn [{:keys [^BufferAllocator allocator] :as opts}]
                   (let [row-count (count rows)]
@@ -141,14 +142,16 @@
         input-types opts
         {:keys [field ->list-expr]} (expr-list/compile-list-expr expr input-types)
         named-field (types/field-with-name field (str out-col))]
-    {:fields (-> {(symbol (.getName named-field)) named-field}
-                 (restrict-cols table-expr))
-     :->out-rel (fn [{:keys [^BufferAllocator allocator, ^RelationReader args]}]
-                  (util/with-close-on-catch [out-vec (Vector/open allocator named-field)]
-                    (let [^ListExpression list-expr (->list-expr schema args)]
-                      (when list-expr
-                        (.writeTo list-expr out-vec 0 (.getSize list-expr)))
-                      (Relation. allocator ^List (vector out-vec) (.getValueCount out-vec)))))}))
+    (let [out-fields (-> {(symbol (.getName named-field)) named-field}
+                         (restrict-cols table-expr))]
+      {:fields out-fields
+       :vec-types (update-vals out-fields types/->type)
+       :->out-rel (fn [{:keys [^BufferAllocator allocator, ^RelationReader args]}]
+                    (util/with-close-on-catch [out-vec (Vector/open allocator named-field)]
+                      (let [^ListExpression list-expr (->list-expr schema args)]
+                        (when list-expr
+                          (.writeTo list-expr out-vec 0 (.getSize list-expr)))
+                        (Relation. allocator ^List (vector out-vec) (.getValueCount out-vec)))))})))
 
 (defn- emit-arg-table [param table-expr {:keys [param-types]}]
   (let [fields (-> (into {} (for [^VectorType leg-type (or (get param-types param)
@@ -170,6 +173,7 @@
                    (restrict-cols table-expr))]
 
     {:fields fields
+     :vec-types (update-vals fields types/->type)
      :->out-rel (fn [{:keys [^BufferAllocator allocator, ^RelationReader args]}]
                   (let [vec-rdr (.vectorForOrNull args (str (symbol param)))
                         list-rdr (cond-> vec-rdr
@@ -185,14 +189,15 @@
                                (.getValueCount el-rdr))))}))
 
 (defmethod lp/emit-expr :table [{:keys [table] :as table-expr} opts]
-  (let [{:keys [fields ->out-rel row-count]} (zmatch table
-                                                     [:rows rows] (emit-rows-table rows table-expr opts)
-                                                     [:column col] (emit-col-table col table-expr opts)
-                                                     [:param param] (emit-arg-table param table-expr opts))]
+  (let [{:keys [fields vec-types ->out-rel row-count]} (zmatch table
+                                                               [:rows rows] (emit-rows-table rows table-expr opts)
+                                                               [:column col] (emit-col-table col table-expr opts)
+                                                               [:param param] (emit-arg-table param table-expr opts))]
 
     {:op       :table
      :children []
      :fields   fields
+     :vec-types vec-types
      :stats    (when row-count {:row-count row-count})
      :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span] :as opts}]
                  (cond-> (TableCursor. allocator (->out-rel opts))

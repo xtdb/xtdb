@@ -38,6 +38,9 @@
   ;; they statically can't intersect - but maybe that's one step too far for now.
   (merge-with types/merge-fields left-fields right-fields))
 
+(defn- union-vec-types [left-vec-types right-vec-types]
+  (merge-with types/merge-types left-vec-types right-vec-types))
+
 (deftype UnionAllCursor [^ICursor left-cursor
                          ^ICursor right-cursor]
   ICursor
@@ -67,10 +70,11 @@
 
 (defmethod lp/emit-expr :union-all [{:keys [_opts left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
-                  (fn [{left-fields :fields :as left-rel} {right-fields :fields :as right-rel}]
+                  (fn [{left-fields :fields, left-vec-types :vec-types :as left-rel} {right-fields :fields, right-vec-types :vec-types :as right-rel}]
                     {:op :union-all
                      :children [left-rel right-rel]
                      :fields (union-fields left-fields right-fields)
+                     :vec-types (union-vec-types left-vec-types right-vec-types)
                      :->cursor (fn [{:keys [explain-analyze? tracer query-span]} left-cursor right-cursor]
                                  (cond-> (UnionAllCursor. left-cursor right-cursor)
                                    (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))
@@ -122,12 +126,14 @@
 
 (defmethod lp/emit-expr :intersect [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
-                  (fn [{left-fields :fields :as left-rel} {right-fields :fields :as right-rel}]
+                  (fn [{left-fields :fields, left-vec-types :vec-types :as left-rel} {right-fields :fields, right-vec-types :vec-types :as right-rel}]
                     (let [fields (union-fields left-fields right-fields)
+                          vec-types (union-vec-types left-vec-types right-vec-types)
                           key-col-names (set (keys fields))]
                       {:op :intersect
                        :children [left-rel right-rel]
                        :fields fields
+                       :vec-types vec-types
                        :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
                                    (let [build-side (join/->build-side allocator
                                                                        {:fields left-fields
@@ -142,12 +148,14 @@
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
-                  (fn [{left-fields :fields :as left-rel} {right-fields :fields :as right-rel}]
+                  (fn [{left-fields :fields, left-vec-types :vec-types :as left-rel} {right-fields :fields, right-vec-types :vec-types :as right-rel}]
                     (let [fields (union-fields left-fields right-fields)
+                          vec-types (union-vec-types left-vec-types right-vec-types)
                           key-col-names (set (keys fields))]
                       {:op :difference
                        :children [left-rel right-rel]
                        :fields fields
+                       :vec-types vec-types
                        :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
                                    (let [build-side (join/->build-side allocator
                                                                        {:fields left-fields

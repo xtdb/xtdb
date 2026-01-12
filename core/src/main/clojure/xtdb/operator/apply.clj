@@ -60,7 +60,8 @@
 
                                    (:left-outer-join :single-join) (types/with-nullable-fields dependent-fields)
 
-                                   (:semi-join :anti-join) {})]
+                                   (:semi-join :anti-join) {})
+            out-fields (merge-with types/merge-fields independent-fields out-dependent-fields)]
           {:op (case mode
                  :mark-join :apply-mark-join
                  :cross-join :apply-cross-join
@@ -68,45 +69,46 @@
                  :semi-join :apply-semi-join
                  :anti-join :apply-anti-join
                  :single-join :apply-single-join)
-         :children [indep-rel dep-rel]
-         :explain {:columns (pr-str columns)}
-         :fields (merge-with types/merge-fields independent-fields out-dependent-fields)
+           :children [indep-rel dep-rel]
+           :explain {:columns (pr-str columns)}
+           :fields out-fields
+           :vec-types (update-vals out-fields types/->type)
 
-         :->cursor (let [out-dep-fields (for [[col-name field] out-dependent-fields]
-                                          (types/field-with-name field (str col-name)))
-                         mode-strat (->mode-strategy mode mark-join-projection out-dep-fields)
-                         open-dependent-cursor
-                         (if (= mode :mark-join)
-                           (let [[_col-name form] (first mark-join-projection)
-                                 input-types {:var-types (update-vals dependent-fields types/->type)
-                                              :param-types param-types}
-                                 projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
-                             (fn [{:keys [allocator args explain-analyze? tracer query-span] :as query-opts}]
-                               (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
-                                 (cond-> (reify ICursor
-                                           (getCursorType [_] "apply-mark-join")
-                                           (getChildCursors [_] [dep-cursor])
+           :->cursor (let [out-dep-fields (for [[col-name field] out-dependent-fields]
+                                            (types/field-with-name field (str col-name)))
+                           mode-strat (->mode-strategy mode mark-join-projection out-dep-fields)
+                           open-dependent-cursor
+                           (if (= mode :mark-join)
+                             (let [[_col-name form] (first mark-join-projection)
+                                   input-types {:var-types (update-vals dependent-fields types/->type)
+                                                :param-types param-types}
+                                   projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
+                               (fn [{:keys [allocator args explain-analyze? tracer query-span] :as query-opts}]
+                                 (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
+                                   (cond-> (reify ICursor
+                                             (getCursorType [_] "apply-mark-join")
+                                             (getChildCursors [_] [dep-cursor])
 
-                                           (tryAdvance [_ c]
-                                             (.tryAdvance dep-cursor (fn [in-rel]
-                                                                       (with-open [match-vec (.project projection-spec allocator in-rel {} args)]
-                                                                         (.accept c (vr/rel-reader [match-vec]))))))
+                                             (tryAdvance [_ c]
+                                               (.tryAdvance dep-cursor (fn [in-rel]
+                                                                         (with-open [match-vec (.project projection-spec allocator in-rel {} args)]
+                                                                           (.accept c (vr/rel-reader [match-vec]))))))
 
-                                           (close [_] (.close dep-cursor)))
-                                   (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))))
-                           ->dependent-cursor)]
+                                             (close [_] (.close dep-cursor)))
+                                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))))
+                             ->dependent-cursor)]
 
-                     (fn [{:keys [allocator explain-analyze? tracer query-span] :as query-opts} independent-cursor]
-                       (cond-> (ApplyCursor. allocator mode-strat independent-cursor out-dep-fields
-                                             (reify DependentCursorFactory
-                                               (open [_this in-rel idx]
-                                                 (open-dependent-cursor (-> query-opts
-                                                                            (update :args
-                                                                                    (fn [^RelationReader args]
-                                                                                      (RelationReader/from (concat args
-                                                                                                                   (for [[ik dk] columns]
-                                                                                                                     (-> (.vectorForOrNull in-rel (str ik))
-                                                                                                                         (.select (int-array [idx]))
-                                                                                                                         (.withName (str dk)))))
-                                                                                                           1))))))))
-                         (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))})))))
+                       (fn [{:keys [allocator explain-analyze? tracer query-span] :as query-opts} independent-cursor]
+                         (cond-> (ApplyCursor. allocator mode-strat independent-cursor out-dep-fields
+                                               (reify DependentCursorFactory
+                                                 (open [_this in-rel idx]
+                                                   (open-dependent-cursor (-> query-opts
+                                                                              (update :args
+                                                                                      (fn [^RelationReader args]
+                                                                                        (RelationReader/from (concat args
+                                                                                                                     (for [[ik dk] columns]
+                                                                                                                       (-> (.vectorForOrNull in-rel (str ik))
+                                                                                                                           (.select (int-array [idx]))
+                                                                                                                           (.withName (str dk)))))
+                                                                                                             1))))))))
+                           (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))})))))

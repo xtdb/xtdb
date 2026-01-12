@@ -61,13 +61,14 @@
 
 (defmethod lp/emit-expr :top [{:keys [relation], {[skip-tag skip-arg] :skip, [limit-tag limit-arg] :limit} :top} args]
   (lp/unary-expr (lp/emit-expr relation args)
-    (fn [{fields :fields :as inner-rel}]
+    (fn [{fields :fields, vec-types :vec-types :as inner-rel}]
       {:op :top
        :children [inner-rel]
        :explain (->> {:skip (some-> skip-arg pr-str),
                       :limit (some-> limit-arg pr-str)}
                      (into {} (filter val)))
        :fields fields
+       :vec-types vec-types
        :->cursor (fn [{:keys [args explain-analyze? tracer query-span]} in-cursor]
                    (cond-> (TopCursor. in-cursor
                                        (case skip-tag

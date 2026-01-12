@@ -75,10 +75,11 @@
 
 (defmethod lp/emit-expr :distinct [{:keys [_opts relation]} args]
   (lp/unary-expr (lp/emit-expr relation args)
-                 (fn [{inner-fields :fields :as inner-rel}]
+                 (fn [{inner-fields :fields, inner-vec-types :vec-types :as inner-rel}]
                    {:op :distinct
                     :children [inner-rel]
                     :fields inner-fields
+                    :vec-types inner-vec-types
                     :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                                 (cond-> (DistinctCursor. allocator in-cursor
                                                          (->relation-map allocator

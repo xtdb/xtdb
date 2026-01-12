@@ -46,21 +46,23 @@
                                    prefix (->> name (symbol (name prefix))))])
                               (into {}))
         col-name-reverse-mapping (set/map-invert col-name-mapping)]
-    {:op :rename
-     :children [emitted-child-relation]
-     :explain {:prefix (some-> prefix str), :columns (some-> columns pr-str)}
-     :fields (->> inner-fields
-                  (into {}
-                        (map (juxt (comp col-name-mapping key)
-                                   (comp (fn [^Field field]
-                                           (-> field
-                                               (types/field-with-name (str (col-name-mapping (symbol (.getName field)))))))
-                                         val)))))
-     :stats (:stats emitted-child-relation)
+    (let [out-fields (->> inner-fields
+                          (into {}
+                                (map (juxt (comp col-name-mapping key)
+                                           (comp (fn [^Field field]
+                                                   (-> field
+                                                       (types/field-with-name (str (col-name-mapping (symbol (.getName field)))))))
+                                                 val)))))]
+      {:op :rename
+       :children [emitted-child-relation]
+       :explain {:prefix (some-> prefix str), :columns (some-> columns pr-str)}
+       :fields out-fields
+       :vec-types (update-vals out-fields types/->type)
+       :stats (:stats emitted-child-relation)
      :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts}]
                  (let [opts (-> opts
                                 (update :pushdown-blooms update-keys #(get col-name-reverse-mapping %))
                                 (update :pushdown-iids update-keys #(get col-name-reverse-mapping %)))]
                    (cond-> (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
                              (RenameCursor. in-cursor col-name-mapping))
-                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))
+                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))})))

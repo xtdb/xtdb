@@ -124,23 +124,23 @@
   (fn [ra-expr opts]
     (:op ra-expr)))
 
-(defn- ensure-types
-  "Ensures :types is present alongside :fields. During migration, derives :types from :fields if missing."
-  [{:keys [fields types] :as emitted}]
+(defn- ensure-vec-types
+  "Ensures :vec-types is present alongside :fields. During migration, derives :vec-types from :fields if missing."
+  [{:keys [fields vec-types] :as emitted}]
   (cond-> emitted
-    (and fields (not types))
-    (assoc :types (update-vals fields #(VectorType/fromField ^Field %)))))
+    (and fields (not vec-types))
+    (assoc :vec-types (update-vals fields #(VectorType/fromField ^Field %)))))
 
 (defn- ensure-fields
-  "Ensures :fields is present alongside :types. During migration, derives :fields from :types if missing."
-  [{:keys [fields types] :as emitted}]
+  "Ensures :fields is present alongside :vec-types. During migration, derives :fields from :vec-types if missing."
+  [{:keys [fields vec-types] :as emitted}]
   (cond-> emitted
-    (and types (not fields))
-    (assoc :fields (into {} (map (fn [[k ^VectorType v]] [k (.toField v (str k))])) types))))
+    (and vec-types (not fields))
+    (assoc :fields (into {} (map (fn [[k ^VectorType v]] [k (.toField v (str k))])) vec-types))))
 
 (defn unary-expr {:style/indent 1} [{->inner-cursor :->cursor, :as inner-rel} f]
-  (-> (f (ensure-types inner-rel))
-      (ensure-types)
+  (-> (f (ensure-vec-types inner-rel))
+      (ensure-vec-types)
       (ensure-fields)
       (update :->cursor (fn [->cursor]
                           (fn [opts]
@@ -148,8 +148,8 @@
                               (->cursor opts inner)))))))
 
 (defn binary-expr {:style/indent 2} [{->left-cursor :->cursor, :as left} {->right-cursor :->cursor, :as right} f]
-  (-> (f (ensure-types left) (ensure-types right))
-      (ensure-types)
+  (-> (f (ensure-vec-types left) (ensure-vec-types right))
+      (ensure-vec-types)
       (ensure-fields)
       (update :->cursor (fn [->cursor]
                           (fn [opts]

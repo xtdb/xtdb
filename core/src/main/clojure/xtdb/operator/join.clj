@@ -151,10 +151,11 @@
 
 (defn emit-cross-join [{:keys [left right]}]
   (lp/binary-expr left right
-    (fn [{left-fields :fields :as left-rel} {right-fields :fields :as right-rel}]
+    (fn [{left-fields :fields, left-vec-types :vec-types :as left-rel} {right-fields :fields, right-vec-types :vec-types :as right-rel}]
       {:op :cross-join
        :children [left-rel right-rel]
        :fields (merge left-fields right-fields)
+       :vec-types (merge left-vec-types right-vec-types)
        :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
                    (cond-> (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil)
                      (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))
@@ -383,6 +384,7 @@
      :explain {:condition (pr-str (mapv second condition))}
 
      :fields (projection-specs->fields output-projections)
+     :vec-types (update-vals (projection-specs->fields output-projections) types/->type)
 
      :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span args] :as opts}]
                  (util/with-close-on-catch [build-cursor (->build-cursor opts)

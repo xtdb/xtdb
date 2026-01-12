@@ -83,17 +83,19 @@
                                                                       :param-types param-types}
                                                          expr (expr/form->expr form input-types)]
                                                      (expr/->expression-projection-spec col-name expr input-types)))))]
-          {:op :project
-           :children [inner-rel]
-           :explain {:project (pr-str (into [] (map second) projections))
-                     :append? (boolean append-columns?)}
-           :fields (->> projection-specs
-                        (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
-                                            #(.getField ^ProjectionSpec %)))))
-           :stats (:stats emitted-child-relation)
-           :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts} in-cursor]
-                       (cond-> (->project-cursor opts in-cursor projection-specs)
-                         (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))
+          (let [out-fields (->> projection-specs
+                                 (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
+                                                     #(.getField ^ProjectionSpec %)))))]
+            {:op :project
+             :children [inner-rel]
+             :explain {:project (pr-str (into [] (map second) projections))
+                       :append? (boolean append-columns?)}
+             :fields out-fields
+             :vec-types (update-vals out-fields types/->type)
+             :stats (:stats emitted-child-relation)
+             :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts} in-cursor]
+                         (cond-> (->project-cursor opts in-cursor projection-specs)
+                           (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))))
 
 (defmethod lp/emit-expr :map [{:keys [opts] :as op} args]
   (lp/emit-expr (assoc op :op :project :opts (assoc opts :append-columns? true)) args))

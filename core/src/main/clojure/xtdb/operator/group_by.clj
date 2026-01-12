@@ -387,26 +387,28 @@
                                                                {:f f
                                                                 :from-name from-column
                                                                 :from-field from-field}))))))]
-          {:op :group-by
-           :children [inner-rel]
-           :explain {:group-by (mapv str group-cols)
-                     :aggregates (->> aggs
-                                      (mapv (fn [[_ agg]]
-                                              (let [[to-column agg-form] (first agg)]
-                                                [(str to-column) (pr-str agg-form)]))))}
-           :fields (into (->> group-cols
-                              (into {} (map (juxt identity fields))))
-                         (->> agg-factories
-                              (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
-                                                  #(.getField ^AggregateSpec$Factory %))))))
+          (let [out-fields (into (->> group-cols
+                                     (into {} (map (juxt identity fields))))
+                                (->> agg-factories
+                                     (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
+                                                         #(.getField ^AggregateSpec$Factory %))))))]
+            {:op :group-by
+             :children [inner-rel]
+             :explain {:group-by (mapv str group-cols)
+                       :aggregates (->> aggs
+                                        (mapv (fn [[_ agg]]
+                                                (let [[to-column agg-form] (first agg)]
+                                                  [(str to-column) (pr-str agg-form)]))))}
+             :fields out-fields
+             :vec-types (update-vals out-fields types/->type)
 
-           :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
-                       (cond-> (util/with-close-on-catch [agg-specs (LinkedList.)]
-                                 (doseq [^AggregateSpec$Factory factory agg-factories]
-                                   (.add agg-specs (.build factory allocator)))
+             :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
+                         (cond-> (util/with-close-on-catch [agg-specs (LinkedList.)]
+                                   (doseq [^AggregateSpec$Factory factory agg-factories]
+                                     (.add agg-specs (.build factory allocator)))
 
-                                 (GroupByCursor. allocator in-cursor
-                                                 (->group-mapper allocator (select-keys fields group-cols))
-                                                 (vec agg-specs)
-                                                 false))
-                         (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))
+                                   (GroupByCursor. allocator in-cursor
+                                                   (->group-mapper allocator (select-keys fields group-cols))
+                                                   (vec agg-specs)
+                                                   false))
+                           (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))))
