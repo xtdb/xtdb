@@ -16,7 +16,7 @@
    (RelationReader/from cols row-count)))
 
 (defn- ->absent-col [col-name allocator row-count]
-  (doto (Vector/open allocator (st/->field {col-name [:? :null]}))
+  (doto (Vector/open allocator (str col-name) (st/->type [:? :null]))
     (.ensureCapacity row-count)))
 
 (defn- available-col-names [^xtdb.arrow.RelationReader rel]

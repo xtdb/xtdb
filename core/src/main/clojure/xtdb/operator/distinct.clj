@@ -2,12 +2,11 @@
   (:require [clojure.spec.alpha :as s]
             [xtdb.expression.map :as emap]
             [xtdb.logical-plan :as lp]
-            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
-  (:import java.util.stream.IntStream
-           org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.types.pojo.Schema
+  (:import (java.util Map)
+           (java.util.stream IntStream)
+           (org.apache.arrow.memory BufferAllocator)
            (xtdb ICursor)
            (xtdb.arrow RelationReader)
            (xtdb.operator.distinct DistinctRelationMap DistinctRelationMap$ComparatorFactory)))
@@ -50,19 +49,18 @@
 (defn ->relation-map ^DistinctRelationMap
   [^BufferAllocator allocator,
    {:keys [key-col-names store-full-build-rel?
-           build-fields
+           build-vec-types
            nil-keys-equal?
            param-types args]
     :as opts}]
   (let [param-types (update-keys param-types str)
         build-key-col-names (get opts :build-key-col-names key-col-names)
 
-        schema (Schema. (-> build-fields
-                            (cond-> (not store-full-build-rel?) (select-keys build-key-col-names))
-                            (->> (mapv (fn [[field-name field]]
-                                         (-> field (types/field-with-name (str field-name))))))))]
+        vec-types (-> build-vec-types
+                      (cond-> (not store-full-build-rel?) (select-keys build-key-col-names))
+                      (update-keys str))]
 
-    (DistinctRelationMap. allocator schema
+    (DistinctRelationMap. allocator ^Map vec-types
                           (map str build-key-col-names)
                           (boolean store-full-build-rel?)
                           (reify DistinctRelationMap$ComparatorFactory
@@ -75,14 +73,14 @@
 
 (defmethod lp/emit-expr :distinct [{:keys [_opts relation]} args]
   (lp/unary-expr (lp/emit-expr relation args)
-                 (fn [{inner-fields :fields :as inner-rel}]
+                 (fn [{inner-vec-types :vec-types :as inner-rel}]
                    {:op :distinct
                     :children [inner-rel]
-                    :fields inner-fields
+                    :vec-types inner-vec-types
                     :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                                 (cond-> (DistinctCursor. allocator in-cursor
                                                          (->relation-map allocator
-                                                                         {:build-fields inner-fields
-                                                                          :key-col-names (set (keys inner-fields))
+                                                                         {:build-vec-types inner-vec-types
+                                                                          :key-col-names (set (keys inner-vec-types))
                                                                           :nil-keys-equal? true}))
                                   (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))

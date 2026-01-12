@@ -902,10 +902,12 @@ sealed class PgType(
         }
 
         @JvmStatic
-        fun fromField(field: Field): PgType {
-            val xtType = field.asType
-            val pgTypes = xtType.mapTo(mutableSetOf()) { fromXtType(it) }.minus(Null)
+        fun fromVectorType(type: VectorType): PgType {
+            val pgTypes = type.mapTo(mutableSetOf()) { fromXtType(it) }.minus(Null)
             return unifyPgTypes(pgTypes)
         }
+
+        @JvmStatic
+        fun fromField(field: Field): PgType = fromVectorType(field.asType)
     }
 }

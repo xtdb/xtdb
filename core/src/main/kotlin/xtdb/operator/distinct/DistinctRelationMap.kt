@@ -1,11 +1,11 @@
 package xtdb.operator.distinct
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.IntVector
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
+import xtdb.arrow.VectorTypes
 import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.expression.map.RelationMapBuilder
 import xtdb.trie.MutableMemoryHashTrie
@@ -13,7 +13,7 @@ import java.util.function.IntBinaryOperator
 
 class DistinctRelationMap(
     val allocator: BufferAllocator,
-    val schema: Schema,
+    val vecTypes: VectorTypes,
     val keyColumnNames: List<String>,
     private val storeFullBuildRel: Boolean,
     private val comparatorFactory: ComparatorFactory,
@@ -24,7 +24,7 @@ class DistinctRelationMap(
         fun buildEqui(l: VectorReader, r: VectorReader): IntBinaryOperator
     }
 
-    private val accRel = Relation(allocator, schema)
+    private val accRel = Relation(allocator, vecTypes)
     private val keyCols = keyColumnNames.map { accRel[it] }
 
     private val hashColumn = IntVector.open(allocator, "xt/join-hash", false)

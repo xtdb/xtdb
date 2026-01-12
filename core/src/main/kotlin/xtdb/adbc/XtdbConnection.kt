@@ -36,9 +36,10 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         override fun executeQuery(): QueryResult {
             val sql = this.sql ?: error("SQL query not set")
             val cursor = node.openSqlQuery(sql)
+            val schema = Schema(cursor.resultTypes.map { (name, type) -> type.toField(name) })
 
             return QueryResult(-1, object : ArrowReader(node.allocator) {
-                override fun readSchema() = Schema(cursor.resultFields)
+                override fun readSchema() = schema
 
                 override fun loadNextBatch(): Boolean =
                     cursor.tryAdvance { inRel ->

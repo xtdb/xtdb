@@ -13,9 +13,8 @@
            (java.util ArrayList LinkedList List Spliterator)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo Field)
            (xtdb ICursor)
-           (xtdb.arrow RelationReader Vector VectorReader VectorWriter)
+           (xtdb.arrow RelationReader Vector VectorReader VectorType VectorWriter)
            (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Average Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount StdDevPop StdDevSamp Sum VariancePop VarianceSamp)
            (xtdb.expression.map RelationMapBuilder)
            xtdb.operator.distinct.DistinctRelationMap
@@ -41,17 +40,17 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn ->group-mapper [^BufferAllocator allocator, group-fields]
-  (if-let [group-col-names (not-empty (set (keys group-fields)))]
+(defn ->group-mapper [^BufferAllocator allocator, group-vec-types]
+  (if-let [group-col-names (not-empty (set (keys group-vec-types)))]
     (GroupMapper$Mapper. allocator
-                         (distinct/->relation-map allocator {:build-fields group-fields
+                         (distinct/->relation-map allocator {:build-vec-types group-vec-types
                                                              :build-key-col-names (vec group-col-names)
                                                              :nil-keys-equal? true}))
     (GroupMapper$Null. allocator)))
 
 (defmulti ^AggregateSpec$Factory ->aggregate-factory
   #_{:clj-kondo/ignore [:unused-binding]}
-  (fn [{:keys [f from-name from-field to-name zero-row?]}]
+  (fn [{:keys [f from-name from-type to-name zero-row?]}]
     (expr/normalise-fn-name f)))
 
 (defmethod ->aggregate-factory :row_count [{:keys [to-name zero-row?]}]
@@ -98,18 +97,18 @@
 
 (defn- reducing-agg-factory [{:keys [to-name to-type zero-row?] :as agg-opts}]
   (let [to-type (types/->nullable-type to-type)
-        to-field (types/->field to-type to-name)
         agg-opts (assoc agg-opts :to-type to-type)]
     (reify AggregateSpec$Factory
-      (getField [_] to-field)
+      (getColName [_] (str to-name))
+      (getType [_] to-type)
 
-      (build [_ al]
-        (let [out-vec (Vector/open al to-field)]
+      (build [this al]
+        (let [out-vec (Vector/open al (.getColName this) (.getType this))]
           (reify
             AggregateSpec
             (aggregate [_ in-rel group-mapping]
               (let [input-opts {:var-types (->> in-rel
-                                                (into {acc-sym (types/->type to-field)}
+                                                (into {acc-sym to-type}
                                                       (map (juxt #(symbol (.getName ^VectorReader %))
                                                                  #(.getType ^VectorReader %)))))}
                     {:keys [eval-agg]} (emit-agg agg-opts input-opts)]
@@ -124,11 +123,11 @@
             Closeable
             (close [_] (.close out-vec))))))))
 
-(defmethod ->aggregate-factory :sum [{:keys [from-name from-field to-name zero-row?]}]
-  (Sum. (str from-name) (str to-name) (Sum/outType (types/->type (or from-field :null))) zero-row?))
+(defmethod ->aggregate-factory :sum [{:keys [from-name from-type to-name zero-row?]}]
+  (Sum. (str from-name) (str to-name) (Sum/outType from-type) zero-row?))
 
-(defmethod ->aggregate-factory :avg [{:keys [from-name from-field to-name zero-row?]}]
-  (Average. (str from-name) (types/->type (or from-field :null)) (str to-name) zero-row?))
+(defmethod ->aggregate-factory :avg [{:keys [from-name from-type to-name zero-row?]}]
+  (Average. (str from-name) from-type (str to-name) zero-row?))
 
 (defmethod ->aggregate-factory :var_pop [{:keys [from-name to-name zero-row?]}]
   (VariancePop. (str from-name) (str to-name) zero-row?))
@@ -155,13 +154,13 @@
 
 (defn- min-max-factory
   "compare-kw: update the accumulated value if `(compare-kw el acc)`"
-  [compare-kw {:keys [from-name from-field] :as agg-opts}]
+  [compare-kw {:keys [from-name from-type] :as agg-opts}]
 
-  (let [to-arrow-type (LeastUpperBound/of [(types/->type from-field)])
+  (let [to-arrow-type (LeastUpperBound/of [from-type])
         to-type (or (some-> to-arrow-type types/->type)
                     (throw (err/incorrect :xtdb.group-by/incomparable-min-max-types
                                           "Incomparable types in min/max aggregate"
-                                          {:from-field from-field})))]
+                                          {:from-type from-type})))]
     (assert-supported-min-max-type to-type)
 
     (reducing-agg-factory (into agg-opts
@@ -182,9 +181,10 @@
 (defmethod ->aggregate-factory :max_all [agg-opts] (min-max-factory :> agg-opts))
 (defmethod ->aggregate-factory :max_distinct [agg-opts] (min-max-factory :> agg-opts))
 
-(defn- wrap-distinct [^AggregateSpec$Factory agg-factory, from-name, ^Field from-field]
+(defn- wrap-distinct [^AggregateSpec$Factory agg-factory, from-name, ^VectorType from-type]
   (reify AggregateSpec$Factory
-    (getField [_] (.getField agg-factory))
+    (getColName [_] (.getColName agg-factory))
+    (getType [_] (.getType agg-factory))
 
     (build [_ al]
       (let [agg-spec (.build agg-factory al)
@@ -198,7 +198,7 @@
               (dotimes [idx (.getValueCount in-vec)]
                 (let [group-idx (.getInt group-mapping idx)]
                   (while (<= (.size rel-maps) group-idx)
-                    (.add rel-maps (distinct/->relation-map al {:build-fields {from-name from-field}
+                    (.add rel-maps (distinct/->relation-map al {:build-vec-types {from-name from-type}
                                                                 :build-key-col-names [from-name]})))
                   (let [^DistinctRelationMap rel-map (nth rel-maps group-idx)]
                     (while (<= (.size builders) group-idx)
@@ -223,29 +223,29 @@
             (util/close agg-spec)
             (util/close rel-maps)))))))
 
-(defmethod ->aggregate-factory :count_distinct [{:keys [from-name from-field] :as agg-opts}]
+(defmethod ->aggregate-factory :count_distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :count))
-      (wrap-distinct from-name from-field)))
+      (wrap-distinct from-name from-type)))
 
 (defmethod ->aggregate-factory :count_all [agg-opts]
   (->aggregate-factory (assoc agg-opts :f :count)))
 
-(defmethod ->aggregate-factory :sum_distinct [{:keys [from-name from-field] :as agg-opts}]
+(defmethod ->aggregate-factory :sum_distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :sum))
-      (wrap-distinct from-name from-field)))
+      (wrap-distinct from-name from-type)))
 
 (defmethod ->aggregate-factory :sum_all [agg-opts]
   (->aggregate-factory (assoc agg-opts :f :sum)))
 
-(defmethod ->aggregate-factory :avg_distinct [{:keys [from-name from-field] :as agg-opts}]
+(defmethod ->aggregate-factory :avg_distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :avg))
-      (wrap-distinct from-name from-field)))
+      (wrap-distinct from-name from-type)))
 
 (defmethod ->aggregate-factory :avg_all [agg-opts]
   (->aggregate-factory (assoc agg-opts :f :avg)))
 
 (deftype ArrayAggAggregateSpec [^BufferAllocator allocator
-                                from-name ^Field to-field
+                                from-name to-name ^VectorType to-type
                                 ^VectorWriter acc-col
                                 ^:unsynchronized-mutable ^long base-idx
                                 ^List group-idxmaps
@@ -266,7 +266,7 @@
       (set! (.base-idx this) (+ base-idx row-count))))
 
   (openFinishedVector [_]
-    (util/with-close-on-catch [out-vec (Vector/open allocator to-field)]
+    (util/with-close-on-catch [out-vec (Vector/open allocator to-name to-type)]
       (let [el-writer (.getListElements out-vec)
             row-copier (.rowCopier acc-col el-writer)]
         (doseq [^IntStream$Builder isb group-idxmaps]
@@ -288,33 +288,31 @@
   (close [_]
     (util/close acc-col)))
 
-(defmethod ->aggregate-factory :array_agg [{:keys [from-name from-field to-name zero-row?]}]
-  (let [from-type (types/->type from-field)
-        to-field (-> (cond-> (types/->type [:list from-type]) 
-                       zero-row? types/->nullable-type)
-                     (types/->field to-name))]
+(defmethod ->aggregate-factory :array_agg [{:keys [from-name from-type to-name zero-row?]}]
+  (let [to-type (cond-> (types/->type [:list from-type])
+                  zero-row? types/->nullable-type)]
     (reify AggregateSpec$Factory
-      (getField [_] to-field)
+      (getColName [_] (str to-name))
+      (getType [_] to-type)
 
-      (build [_ al]
-        (util/with-close-on-catch [acc-col (Vector/open al (types/->field from-type "$data$"))]
-          (ArrayAggAggregateSpec. al from-name to-field acc-col
+      (build [this al]
+        (util/with-close-on-catch [acc-col (Vector/open al "$data$" from-type)]
+          (ArrayAggAggregateSpec. al from-name (.getColName this) (.getType this) acc-col
                                   0 (ArrayList.) (if zero-row? :null :empty-rel)))))))
 
-(defmethod ->aggregate-factory :array_agg_distinct [{:keys [from-name from-field] :as agg-opts}]
+(defmethod ->aggregate-factory :array_agg_distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :array_agg))
-      (wrap-distinct from-name from-field)))
+      (wrap-distinct from-name from-type)))
 
-(defmethod ->aggregate-factory :vec_agg [{:keys [from-name from-field to-name zero-row?]}]
-  (let [from-type (types/->type from-field)
-        to-field (-> (types/->type [:list from-type])
-                     (types/->field to-name))]
+(defmethod ->aggregate-factory :vec_agg [{:keys [from-name from-type to-name zero-row?]}]
+  (let [to-type (types/->type [:list from-type])]
     (reify AggregateSpec$Factory
-      (getField [_] to-field)
+      (getColName [_] (str to-name))
+      (getType [_] to-type)
 
-      (build [_ al]
-        (util/with-close-on-catch [acc-col (Vector/open al (types/->field from-type "$data$"))]
-          (ArrayAggAggregateSpec. al from-name to-field acc-col
+      (build [this al]
+        (util/with-close-on-catch [acc-col (Vector/open al "$data$" from-type)]
+          (ArrayAggAggregateSpec. al from-name (.getColName this) (.getType this) acc-col
                                   0 (ArrayList.) (if zero-row? :empty-vec :empty-rel)))))))
 
 (defn- bool-agg-factory [step-f-kw {:keys [from-name] :as agg-opts}]
@@ -372,7 +370,7 @@
         {group-cols :group-by, aggs :aggregate} (group-by first columns)
         group-cols (mapv second group-cols)]
     (lp/unary-expr (lp/emit-expr relation args)
-      (fn [{:keys [fields], :as inner-rel}]
+      (fn [{:keys [vec-types], :as inner-rel}]
         (let [agg-factories (for [[_ agg] aggs]
                               (let [[to-column agg-form] (first agg)]
                                 (->aggregate-factory (into {:to-name to-column
@@ -383,10 +381,15 @@
 
                                                              [:unary agg-opts]
                                                              (let [{:keys [f from-column]} agg-opts
-                                                                   from-field (get fields from-column types/null-field)]
+                                                                   from-type (get vec-types from-column VectorType/NULL)]
                                                                {:f f
                                                                 :from-name from-column
-                                                                :from-field from-field}))))))]
+                                                                :from-type from-type}))))))
+              out-vec-types (into (->> group-cols
+                                         (into {} (map (juxt identity vec-types))))
+                                    (->> agg-factories
+                                         (into {} (map (juxt #(symbol (.getColName ^AggregateSpec$Factory %))
+                                                             #(.getType ^AggregateSpec$Factory %))))))]
           {:op :group-by
            :children [inner-rel]
            :explain {:group-by (mapv str group-cols)
@@ -394,11 +397,7 @@
                                       (mapv (fn [[_ agg]]
                                               (let [[to-column agg-form] (first agg)]
                                                 [(str to-column) (pr-str agg-form)]))))}
-           :fields (into (->> group-cols
-                              (into {} (map (juxt identity fields))))
-                         (->> agg-factories
-                              (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
-                                                  #(.getField ^AggregateSpec$Factory %))))))
+           :vec-types out-vec-types
 
            :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                        (cond-> (util/with-close-on-catch [agg-specs (LinkedList.)]
@@ -406,7 +405,7 @@
                                    (.add agg-specs (.build factory allocator)))
 
                                  (GroupByCursor. allocator in-cursor
-                                                 (->group-mapper allocator (select-keys fields group-cols))
+                                                 (->group-mapper allocator (select-keys vec-types group-cols))
                                                  (vec agg-specs)
                                                  false))
                          (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))

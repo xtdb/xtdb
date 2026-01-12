@@ -1,10 +1,11 @@
 package xtdb.operator.apply
 
 import com.carrotsearch.hppc.IntArrayList
-import org.apache.arrow.vector.types.pojo.Field
 import xtdb.ICursor
+import xtdb.arrow.FieldName
 import xtdb.arrow.NullVector
 import xtdb.arrow.RelationWriter
+import xtdb.arrow.VectorType
 import xtdb.error.Incorrect
 import xtdb.trie.ColumnName
 import xtdb.arrow.VectorType.Companion.BOOL
@@ -37,12 +38,12 @@ sealed interface ApplyMode {
         }
     }
 
-    class CrossJoin(private val dependentFields: List<Field>) : ApplyMode {
+    class CrossJoin(private val dependentVecTypes: Map<FieldName, VectorType>) : ApplyMode {
         override fun accept(
             dependentCursor: ICursor, dependentOutWriter: RelationWriter,
             idxs: IntArrayList, inIdx: Int
         ) {
-            dependentFields.forEach { dependentOutWriter.vectorFor(it.name, it.type, it.isNullable) }
+            dependentVecTypes.forEach { (name, type) -> dependentOutWriter.vectorFor(name, type.arrowType, type.nullable) }
 
             dependentCursor.forEachRemaining { depRel ->
                 dependentOutWriter.append(depRel)
@@ -51,12 +52,12 @@ sealed interface ApplyMode {
         }
     }
 
-    class LeftJoin(private val dependentFields: List<Field>) : ApplyMode {
+    class LeftJoin(private val dependentVecTypes: Map<FieldName, VectorType>) : ApplyMode {
         override fun accept(
             dependentCursor: ICursor, dependentOutWriter: RelationWriter,
             idxs: IntArrayList, inIdx: Int
         ) {
-            dependentFields.forEach { dependentOutWriter.vectorFor(it.name, it.type, it.isNullable) }
+            dependentVecTypes.forEach { (name, type) -> dependentOutWriter.vectorFor(name, type.arrowType, type.nullable) }
 
             var match = false
             dependentCursor.forEachRemaining { depRel ->
@@ -69,9 +70,9 @@ sealed interface ApplyMode {
 
             if (!match) {
                 idxs.add(inIdx)
-                for (field in dependentFields) {
-                    dependentOutWriter.vectorFor(field.name, field.type, field.isNullable)
-                        .append(NullVector(field.name).also { it.valueCount = 1 })
+                for ((name, _) in dependentVecTypes) {
+                    dependentOutWriter.vectorFor(name, VectorType.NULL.arrowType, true)
+                        .append(NullVector(name).also { it.valueCount = 1 })
                 }
             }
         }
@@ -110,7 +111,7 @@ sealed interface ApplyMode {
         }
     }
 
-    class SingleJoin(private val dependentFields: List<Field>) : ApplyMode {
+    class SingleJoin(private val dependentVecTypes: Map<FieldName, VectorType>) : ApplyMode {
 
         private val cardinalityViolation: Nothing
             get() =
@@ -120,7 +121,7 @@ sealed interface ApplyMode {
             dependentCursor: ICursor, dependentOutWriter: RelationWriter,
             idxs: IntArrayList, inIdx: Int
         ) {
-            dependentFields.forEach { dependentOutWriter.vectorFor(it.name, it.type, it.isNullable) }
+            dependentVecTypes.forEach { (name, type) -> dependentOutWriter.vectorFor(name, type.arrowType, type.nullable) }
 
             var match = false
 
@@ -139,9 +140,9 @@ sealed interface ApplyMode {
 
             if (!match) {
                 idxs.add(inIdx)
-                for (field in dependentFields) {
-                    dependentOutWriter.vectorFor(field.name, field.type, field.isNullable)
-                        .append(NullVector(field.name).also { it.valueCount = 1 })
+                for ((name, _) in dependentVecTypes) {
+                    dependentOutWriter.vectorFor(name, VectorType.NULL.arrowType, true)
+                        .append(NullVector(name).also { it.valueCount = 1 })
                 }
             }
         }

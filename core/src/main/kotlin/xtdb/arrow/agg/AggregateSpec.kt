@@ -4,11 +4,12 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector
-import xtdb.arrow.VectorReader
+import xtdb.arrow.VectorType
 
 interface AggregateSpec : AutoCloseable {
     interface Factory {
-        val field: Field
+        val colName: String
+        val type: VectorType
         fun build(al: BufferAllocator): AggregateSpec
     }
 

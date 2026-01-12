@@ -2,8 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [xtdb.coalesce :as coalesce]
             [xtdb.expression :as expr]
-            [xtdb.logical-plan :as lp]
-            [xtdb.types :as types])
+            [xtdb.logical-plan :as lp])
   (:import (xtdb ICursor)
            (xtdb.operator SelectCursor)))
 
@@ -19,15 +18,15 @@
 (defmethod lp/emit-expr :select [{:keys [opts relation]} {:keys [param-types] :as args}]
   (let [{:keys [predicate]} opts]
     (lp/unary-expr (lp/emit-expr relation args)
-      (fn [{inner-fields :fields, inner-stats :stats :as inner-rel}]
-        (let [input-types {:var-types (update-vals inner-fields types/->type)
+      (fn [{inner-vec-types :vec-types, inner-stats :stats :as inner-rel}]
+        (let [input-types {:var-types inner-vec-types
                            :param-types param-types}
               selector (expr/->expression-selection-spec (expr/form->expr predicate input-types) input-types)]
           {:op :select
            :stats inner-stats
            :children [inner-rel]
-           :explain  {:predicate (pr-str predicate)}
-           :fields inner-fields
+           :explain {:predicate (pr-str predicate)}
+           :vec-types inner-vec-types
            :->cursor (fn [{:keys [allocator args schema explain-analyze? tracer query-span]} in-cursor]
                        (cond-> (-> (SelectCursor. allocator in-cursor selector schema args)
                                    (coalesce/->coalescing-cursor allocator))

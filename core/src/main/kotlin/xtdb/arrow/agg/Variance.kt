@@ -3,24 +3,22 @@ package xtdb.arrow.agg
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.FloatingPointPrecision
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
 import xtdb.arrow.*
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.F64
 import xtdb.arrow.VectorType.Companion.maybe
-import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.closeOnCatch
 import kotlin.math.max
 
 sealed class Variance(
     val fromName: FieldName,
-    toName: FieldName,
+    override val colName: FieldName,
     val hasZeroRow: Boolean,
     private val isSample: Boolean
 ) : AggregateSpec.Factory {
 
     private val f64Type = ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)
-    override val field: Field = toName.ofType(maybe(f64Type))
+    override val type: VectorType = maybe(f64Type)
 
     override fun build(al: BufferAllocator) = object : AggregateSpec {
         private val sumxAgg = Sum(fromName, "sumx", F64, hasZeroRow).build(al)
@@ -40,7 +38,7 @@ sealed class Variance(
         }
 
         override fun openFinishedVector(): Vector {
-            val outVec = al.openVector(field) as DoubleVector
+            val outVec = al.openVector(colName, type) as DoubleVector
 
             sumxAgg.openFinishedVector().use { sumxVec ->
                 sumx2Agg.openFinishedVector().use { sumx2Vec ->

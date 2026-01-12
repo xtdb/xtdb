@@ -5,8 +5,8 @@
             [xtdb.logical-plan :as lp]
             [xtdb.time :as time]
             [xtdb.types :as types])
-  (:import org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.types.pojo.Schema
+  (:import java.util.Map
+           org.apache.arrow.memory.BufferAllocator
            (xtdb ICursor)
            [xtdb.arrow Relation RelationReader]
            xtdb.operator.PatchGapsCursor))
@@ -34,14 +34,14 @@
 
 (defmethod lp/emit-expr :patch-gaps [{:keys [relation], {:keys [valid-from valid-to]} :opts} opts]
   (lp/unary-expr (lp/emit-expr relation opts)
-    (fn [{inner-fields :fields :as inner-rel}]
-      (let [fields (-> inner-fields
-                       (update 'doc types/->nullable-field))]
+    (fn [{inner-vec-types :vec-types, :as inner-rel}]
+      (let [out-vec-types (-> inner-vec-types
+                              (update 'doc types/->nullable-type))]
         {:op :patch-gaps
          :children [inner-rel]
          :explain {:valid-from (pr-str valid-from)
                    :valid-to (pr-str valid-to)}
-         :fields fields
+         :vec-types out-vec-types
          :->cursor (fn [{:keys [^BufferAllocator allocator current-time explain-analyze? tracer query-span] :as qopts} inner]
                      (let [valid-from (time/instant->micros (->instant (or valid-from [:literal current-time]) qopts))
                            valid-to (or (some-> valid-to (->instant qopts) time/instant->micros) Long/MAX_VALUE)]
@@ -51,9 +51,7 @@
                                                {:valid-from (time/micros->instant valid-from)
                                                 :valid-to (time/micros->instant valid-to)}))
                          (cond-> (PatchGapsCursor. inner
-                                                   (Relation. allocator
-                                                              (Schema. (for [[nm field] fields]
-                                                                         (types/field-with-name field (str nm)))))
+                                                   (Relation. allocator ^Map (update-keys out-vec-types str))
                                                    valid-from
                                                    valid-to)
                            (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))))}))))

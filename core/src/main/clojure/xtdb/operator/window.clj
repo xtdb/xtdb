@@ -12,9 +12,8 @@
   (:import (clojure.lang IPersistentMap)
            (com.carrotsearch.hppc LongLongHashMap LongLongMap)
            (java.io Closeable)
-           (java.util LinkedList List Spliterator)
+           (java.util LinkedList List Map Spliterator)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo Field)
            (xtdb ICursor)
            (xtdb.arrow IntVector LongVector RelationReader Relation)
            (xtdb.arrow.agg GroupMapper)))
@@ -64,7 +63,7 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWindowFnSpecFactory
   (^clojure.lang.Symbol getToColumnName [])
-  (^org.apache.arrow.vector.types.pojo.Field getToColumnField [])
+  (^xtdb.arrow.VectorType getToColumnType [])
   (^xtdb.operator.window.IWindowFnSpec build [^org.apache.arrow.memory.BufferAllocator allocator]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
@@ -75,7 +74,7 @@
 (defmethod ->window-fn-factory :row_number [{:keys [to-name]}]
   (reify IWindowFnSpecFactory
     (getToColumnName [_] to-name)
-    (getToColumnField [_] (types/->field :i64))
+    (getToColumnType [_] #xt/type :i64)
 
     (build [_ al]
       (let [out-vec (LongVector. al (str to-name) false)
@@ -94,7 +93,7 @@
 
 (deftype WindowFnCursor [^BufferAllocator allocator
                          ^ICursor in-cursor
-                         ^IPersistentMap static-fields
+                         static-vec-types
                          ^GroupMapper group-mapper
                          order-specs
                          ^List window-specs
@@ -110,7 +109,7 @@
 
        (let [window-groups (gensym "window-groups")]
          ;; TODO we likely want to do some retaining here instead of copying
-         (util/with-open [out-rel (Relation. allocator ^List static-fields)
+         (util/with-open [out-rel (Relation. allocator ^Map (update-keys static-vec-types str))
                           group-mapping (IntVector/open allocator (str window-groups) false)]
 
            (.forEachRemaining in-cursor (fn [^RelationReader in-rel]
@@ -137,39 +136,39 @@
   (let [{:keys [projections windows]} specs
         [_window-name {:keys [partition-cols order-specs]}] (first windows)]
     (lp/unary-expr (lp/emit-expr relation args)
-      (fn [{:keys [fields] :as inner-rel}]
+      (fn [{:keys [vec-types] :as inner-rel}]
         (let [window-fn-factories (vec (for [p projections]
                                          ;; ignoring window-name for now
                                          (let [[to-column {:keys [_window-name window-agg]}] (first p)]
                                            (->window-fn-factory (into {:to-name to-column
                                                                        :zero-row? (empty? partition-cols)}
                                                                       (zmatch window-agg
-                                                                        [:nullary agg-opts]
-                                                                        (select-keys agg-opts [:f])
+                                                                              [:nullary agg-opts]
+                                                                              (select-keys agg-opts [:f])
 
-                                                                        [:unary _agg-opts]
-                                                                        (throw (UnsupportedOperationException.))))))))
-              out-fields (-> (into fields
-                                   (->> window-fn-factories
-                                        (into {} (map (juxt #(.getToColumnName ^IWindowFnSpecFactory %)
-                                                            #(.getToColumnField ^IWindowFnSpecFactory %)))))))]
+                                                                              [:unary _agg-opts]
+                                                                              (throw (UnsupportedOperationException.))))))))
+              out-vec-types (into vec-types
+                                  (->> window-fn-factories
+                                       (into {} (map (juxt #(.getToColumnName ^IWindowFnSpecFactory %)
+                                                           #(.getToColumnType ^IWindowFnSpecFactory %))))))]
           {:op :window
            :children [inner-rel]
            :explain {:partition-by (vec partition-cols)
                      :order-by (pr-str order-specs)
                      :window-functions (->> projections
-                                           (mapv (fn [p]
-                                                   (let [[to-column {:keys [window-agg]}] (first p)]
-                                                     [to-column (pr-str window-agg)]))))}
-           :fields out-fields
+                                            (mapv (fn [p]
+                                                    (let [[to-column {:keys [window-agg]}] (first p)]
+                                                      [to-column (pr-str window-agg)]))))}
+           :vec-types out-vec-types
 
            :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                        (cond-> (util/with-close-on-catch [window-fn-specs (LinkedList.)]
                                  (doseq [^IWindowFnSpecFactory factory window-fn-factories]
                                    (.add window-fn-specs (.build factory allocator)))
 
-                                 (WindowFnCursor. allocator in-cursor (order-by/rename-fields fields)
-                                                  (group-by/->group-mapper allocator (select-keys fields partition-cols))
+                                 (WindowFnCursor. allocator in-cursor vec-types
+                                                  (group-by/->group-mapper allocator (select-keys vec-types partition-cols))
                                                   order-specs
                                                   (vec window-fn-specs)
                                                   false))

@@ -182,11 +182,12 @@
                             (into {} (map (fn [[col-name vec-type]]
                                             [col-name (types/vec-type->field vec-type col-name)]))))
                    (rows->fields (into [] cat pages)))
+        out-vec-types (or vec-types (update-vals fields types/->type))
         ^Schema schema (Schema. (for [[col-name field] fields]
                                   (types/field-with-name field (str col-name))))]
     {:op :pages
      :children []
-     :fields fields
+     :vec-types out-vec-types
      :stats stats
      :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]}]
                  (cond-> (->cursor allocator schema pages)
@@ -197,13 +198,13 @@
   (s/cat :op #{:prn}
          :relation ::lp/ra-expression))
 
-(defmethod lp/emit-expr :prn [{:keys [relation]} _args]
-  (lp/unary-expr (lp/emit-expr relation _args)
-    (fn [{inner-fields :fields, :as inner-rel}]
+(defmethod lp/emit-expr :prn [{:keys [relation]} args]
+  (lp/unary-expr (lp/emit-expr relation args)
+    (fn [{inner-types :vec-types, :as inner-rel}]
       {:op :prn
        :stats (:stats inner-rel)
        :children [inner-rel]
-       :fields inner-fields
+       :vec-types inner-types
        :->cursor (fn [{:keys [explain-analyze? tracer query-span]}, ^ICursor in-cursor]
                    (cond-> (reify ICursor
                              (getCursorType [_] "prn")
@@ -250,9 +251,8 @@
                           (cond->> (not preserve-pages?) (into [] cat)))]
              (if with-types?
                {:res rows,
-                :types (->> (.getResultFields res)
-                            (into {} (map (juxt #(symbol (.getName ^Field %))
-                                                VectorType/fromField))))}
+                :types (->> (.getResultTypes res)
+                            (into {} (map (fn [[k v]] [(symbol k) v]))))}
                rows))))
        (finally
          (when close-q-src?

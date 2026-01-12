@@ -13,8 +13,6 @@ import xtdb.test.AllocatorResolver
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.VectorType.Companion.maybe
-import xtdb.arrow.VectorType.Companion.ofType
-import xtdb.arrow.schema
 
 @ExtendWith(AllocatorResolver::class)
 class BuildSideTest {
@@ -29,10 +27,10 @@ class BuildSideTest {
 
     @Test
     fun testBuildSideWithDiskSpill(al: BufferAllocator) {
-        val schema = schema(
-            "id" ofType maybe(I32),
-            "name" ofType maybe(VectorType.UTF8),
-            "value" ofType maybe(I32)
+        val vecTypes = mapOf(
+            "id" to maybe(I32),
+            "name" to maybe(VectorType.UTF8),
+            "value" to maybe(I32)
         )
 
         val john = mapOf("id" to 1, "name" to "John", "value" to 100)
@@ -47,7 +45,7 @@ class BuildSideTest {
         Relation.openFromRows(al, rows).use { rel ->
             // without nil row
             BuildSide(
-                al, schema, listOf("id"),
+                al, vecTypes, listOf("id"),
                 trackUnmatchedIdxs = false,
                 withNilRow = false,
                 inMemoryThreshold = 5
@@ -90,7 +88,7 @@ class BuildSideTest {
 
             // with nil row
             BuildSide(
-                al, schema, listOf("id"),
+                al, vecTypes, listOf("id"),
                 trackUnmatchedIdxs = false,
                 withNilRow = true,
                 inMemoryThreshold = 5
@@ -130,10 +128,10 @@ class BuildSideTest {
 
     @Test
     fun testBuildSideWithoutDiskSpill(al: BufferAllocator) {
-        val schema = schema(
-            "id" ofType maybe(I32),
-            "name" ofType maybe(VectorType.UTF8),
-            "value" ofType maybe(I32)
+        val vecTypes = mapOf(
+            "id" to maybe(I32),
+            "name" to maybe(VectorType.UTF8),
+            "value" to maybe(I32)
         )
 
         val rows = listOf(
@@ -142,11 +140,11 @@ class BuildSideTest {
             mapOf("id" to 3, "name" to "Bob", "value" to 300)
         )
 
-        Relation(al, schema).use { rel ->
+        Relation(al, vecTypes).use { rel ->
             rel.writeRows(*rows.toTypedArray())
 
             BuildSide(
-                al, schema, listOf("id"),
+                al, vecTypes, listOf("id"),
                 trackUnmatchedIdxs = false,
                 withNilRow = false,
                 inMemoryThreshold = 5

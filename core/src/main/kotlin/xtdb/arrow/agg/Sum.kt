@@ -2,19 +2,15 @@ package xtdb.arrow.agg
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
 import xtdb.arrow.*
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.maybe
-import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.error.Incorrect
 import xtdb.types.leastUpperBound
 
 class Sum(
-    val fromName: FieldName, toName: FieldName, toType: VectorType, val hasZeroRow: Boolean
+    val fromName: FieldName, override val colName: FieldName, override val type: VectorType, val hasZeroRow: Boolean
 ) : AggregateSpec.Factory {
-
-    override val field: Field = toName ofType toType
 
     companion object {
         @JvmStatic
@@ -24,7 +20,7 @@ class Sum(
     }
 
     override fun build(al: BufferAllocator) = object : AggregateSpec {
-        private val outVec = al.openVector(field)
+        private val outVec = al.openVector(colName, type)
 
         override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping) {
             val inVec = inRel.vectorForOrNull(fromName) ?: return

@@ -7,7 +7,7 @@
            (java.nio.file CopyOption Files Path)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            org.apache.arrow.vector.types.pojo.Field
-           (xtdb.arrow Relation Relation$ILoader)
+           (xtdb.arrow Relation Relation$ILoader VectorType)
            xtdb.ICursor))
 
 (defmethod lp/ra-expr :arrow [_]
@@ -41,17 +41,18 @@
 
 ;; HACK: not ideal that we have to open the file in the emitter just to get the fields?
 (defn- path->cursor [^Path path on-close-fn]
-  {:op :arrow
-   :children []
-   :fields (with-open [al (RootAllocator.)
-                       loader (path->loader al path)]
-             (->> (.getFields (.getSchema loader))
-                  (into {} (map (juxt #(symbol (.getName ^Field %)) identity)))))
-   :->cursor (fn [{:keys [^BufferAllocator allocator explain-analyze? tracer query-span]}]
-               (util/with-close-on-catch [loader (path->loader allocator path)
-                                          rel (Relation. allocator (.getSchema loader))]
-                 (cond-> (ArrowCursor. rel loader on-close-fn)
-                   (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))})
+  (let [fields (with-open [al (RootAllocator.)
+                           loader (path->loader al path)]
+                 (->> (.getFields (.getSchema loader))
+                      (into {} (map (juxt #(symbol (.getName ^Field %)) identity)))))]
+    {:op :arrow
+     :children []
+     :vec-types (update-vals fields #(VectorType/fromField ^Field %))
+     :->cursor (fn [{:keys [^BufferAllocator allocator explain-analyze? tracer query-span]}]
+                 (util/with-close-on-catch [loader (path->loader allocator path)
+                                            rel (Relation. allocator (.getSchema loader))]
+                   (cond-> (ArrowCursor. rel loader on-close-fn)
+                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))
 
 (defmethod lp/emit-expr :arrow [{:keys [^URL url]} _args]
   ;; TODO: should we make it possible to disable local files?

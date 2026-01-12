@@ -31,13 +31,13 @@ import java.util.*
 import java.util.function.Consumer
 
 class Relation(
-    private val al: BufferAllocator, val vecs: SequencedMap<String, Vector>, override var rowCount: Int
+    private val al: BufferAllocator, val vecs: SequencedMap<FieldName, Vector>, override var rowCount: Int
 ) : RelationWriter {
 
     override val schema get() = Schema(vecs.sequencedValues().map { it.field })
     override val vectors get() = vecs.values
 
-    constructor(al: BufferAllocator) : this(al, linkedMapOf<String, Vector>(), 0)
+    constructor(al: BufferAllocator) : this(al, linkedMapOf<FieldName, Vector>(), 0)
 
     constructor(al: BufferAllocator, vectors: List<Vector>, rowCount: Int)
             : this(al, vectors.associateByTo(linkedMapOf()) { it.name }, rowCount)
@@ -45,12 +45,14 @@ class Relation(
     constructor(al: BufferAllocator, schema: Schema) : this(al, schema.fields)
     constructor(al: BufferAllocator, fields: List<Field>) : this(al, fields.safeMap { al.openVector(it) }, 0)
     constructor(al: BufferAllocator, vararg fields: Field) : this(al, fields.toList())
+    constructor(al: BufferAllocator, vecTypes: VectorTypes)
+            : this(al, vecTypes.entries.safeMap { (name, type) -> al.openVector(name, type) }, 0)
 
-    override fun vectorForOrNull(name: String) = vecs[name]
-    override fun vectorFor(name: String) = vectorForOrNull(name) ?: error("missing vector: $name")
-    override operator fun get(name: String) = vectorFor(name)
+    override fun vectorForOrNull(name: FieldName) = vecs[name]
+    override fun vectorFor(name: FieldName) = vectorForOrNull(name) ?: error("missing vector: $name")
+    override operator fun get(name: FieldName) = vectorFor(name)
 
-    override fun vectorFor(name: String, arrowType: ArrowType, nullable: Boolean): Vector =
+    override fun vectorFor(name: FieldName, arrowType: ArrowType, nullable: Boolean): Vector =
         vecs.compute(name) { _, v ->
             v?.maybePromote(al, arrowType, nullable)
                 ?: al.openVector(name, arrowType, nullable)

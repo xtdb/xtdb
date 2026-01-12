@@ -3,14 +3,13 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.reader :as vr])
   (:import (java.util LinkedList)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Union Field FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Union)
            (xtdb ICursor)
-           (xtdb.arrow IntVector RelationReader RowCopier VectorReader VectorWriter Vector)
+           (xtdb.arrow IntVector RelationReader RowCopier VectorReader Vector VectorType)
            xtdb.vector.extensions.SetType))
 
 (s/def ::ordinality-column ::lp/column)
@@ -26,7 +25,8 @@
 (deftype UnnestCursor [^BufferAllocator allocator
                        ^ICursor in-cursor
                        ^String from-column-name
-                       ^Field to-field
+                       ^String to-col-name
+                       ^VectorType to-vec-type
                        ^String ordinality-column]
   ICursor
   (getCursorType [_] "unnest")
@@ -36,7 +36,7 @@
     (let [advanced? (boolean-array 1)]
       (while (and (.tryAdvance in-cursor
                                (fn [^RelationReader in-rel]
-                                 (with-open [out-vec (Vector/open allocator to-field)]
+                                 (with-open [out-vec (Vector/open allocator to-col-name to-vec-type)]
                                    (let [out-cols (LinkedList.)
 
                                          vec-rdr (.vectorForOrNull in-rel from-column-name)
@@ -98,21 +98,21 @@
 (defmethod lp/emit-expr :unnest [{:keys [columns relation], {:keys [ordinality-column]} :opts}, op-args]
   (let [[to-col from-col] (first columns)]
     (lp/unary-expr (lp/emit-expr relation op-args)
-                   (fn [{:keys [fields] :as inner-rel}]
-                     (let [unnest-field (->> (get fields from-col)
-                                             types/flatten-union-field
-                                             (keep types/unnest-field)
-                                             (apply types/merge-fields))]
+                   (fn [{:keys [vec-types] :as inner-rel}]
+                     (let [unnest-type (->> (get vec-types from-col)
+                                            (keep types/unnest-type)
+                                            (apply types/merge-types))
+                           out-vec-types (-> vec-types
+                                             (assoc to-col unnest-type)
+                                             (cond-> ordinality-column (assoc ordinality-column #xt/type :i32)))]
                        {:op :unnest
                         :children [inner-rel]
                         :explain {:from from-col
                                   :to to-col
                                   :ordinality ordinality-column}
-                        :fields (-> fields
-                                    (assoc to-col (types/field-with-name unnest-field (str to-col)))
-                                    (cond-> ordinality-column (assoc ordinality-column (types/->field :i32 ordinality-column))))
+                        :vec-types out-vec-types
                         :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                                     (cond-> (UnnestCursor. allocator in-cursor
-                                                           (str from-col) (types/field-with-name unnest-field (str to-col))
+                                                           (str from-col) (str to-col) unnest-type
                                                            (some-> ordinality-column str))
                                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))

@@ -1,7 +1,6 @@
 package xtdb.operator.join
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.types.pojo.Schema
 import org.roaringbitmap.RoaringBitmap
 import xtdb.arrow.NullVector
 import xtdb.arrow.Relation
@@ -11,17 +10,18 @@ import xtdb.arrow.VectorReader
 import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.arrow.FieldName
 import xtdb.arrow.VectorType.Companion.I32
+import xtdb.arrow.VectorTypes
 import java.util.function.IntUnaryOperator
 
 class BuildSide(
     private val al: BufferAllocator,
-    val schema: Schema,
+    val vecTypes: VectorTypes,
     val keyColNames: List<String>,
     trackUnmatchedIdxs: Boolean,
     val withNilRow: Boolean,
     val inMemoryThreshold: Long = 100_000,
 ) : AutoCloseable {
-    val dataRel = Relation(al, schema)
+    val dataRel = Relation(al, vecTypes)
     private val hashCol = al.openVector("hashes", I32)
 
     var buildMap: BuildSideMap? = null; private set

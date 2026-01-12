@@ -2,11 +2,9 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [xtdb.logical-plan :as lp]
-            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import (java.util LinkedList Map)
-           (org.apache.arrow.vector.types.pojo Field)
            (xtdb.arrow RelationReader VectorReader)
            xtdb.ICursor))
 
@@ -39,23 +37,19 @@
     (util/try-close in-cursor)))
 
 (defmethod lp/emit-expr :rename [{:keys [columns relation prefix]} args]
-  (let [{->inner-cursor :->cursor, inner-fields :fields, :as emitted-child-relation} (lp/emit-expr relation args)
-        col-name-mapping (->> (for [old-name (set (keys inner-fields))]
+  (let [{->inner-cursor :->cursor, inner-vec-types :vec-types, :as emitted-child-relation} (lp/emit-expr relation args)
+        col-name-mapping (->> (for [old-name (set (keys inner-vec-types))]
                                 [old-name
                                  (cond-> (get columns old-name old-name)
                                    prefix (->> name (symbol (name prefix))))])
                               (into {}))
-        col-name-reverse-mapping (set/map-invert col-name-mapping)]
+        col-name-reverse-mapping (set/map-invert col-name-mapping)
+        out-vec-types (->> inner-vec-types
+                           (into {} (map (fn [[k v]] [(col-name-mapping k) v])))) ]
     {:op :rename
      :children [emitted-child-relation]
      :explain {:prefix (some-> prefix str), :columns (some-> columns pr-str)}
-     :fields (->> inner-fields
-                  (into {}
-                        (map (juxt (comp col-name-mapping key)
-                                   (comp (fn [^Field field]
-                                           (-> field
-                                               (types/field-with-name (str (col-name-mapping (symbol (.getName field)))))))
-                                         val)))))
+     :vec-types out-vec-types
      :stats (:stats emitted-child-relation)
      :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts}]
                  (let [opts (-> opts

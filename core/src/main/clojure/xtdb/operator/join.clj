@@ -12,10 +12,9 @@
             [xtdb.vector.reader :as vr])
   (:import (java.util ArrayList Iterator List Set SortedSet TreeSet)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo Field Schema)
            (org.roaringbitmap.buffer MutableRoaringBitmap)
            (xtdb ICursor Bytes)
-           (xtdb.arrow BitVector RelationReader)
+           (xtdb.arrow BitVector RelationReader VectorType)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
            (xtdb.operator.join BuildSide ComparatorFactory DiskHashJoin JoinType MemoryHashJoin ProbeSide)))
@@ -151,13 +150,14 @@
 
 (defn emit-cross-join [{:keys [left right]}]
   (lp/binary-expr left right
-    (fn [{left-fields :fields :as left-rel} {right-fields :fields :as right-rel}]
-      {:op :cross-join
-       :children [left-rel right-rel]
-       :fields (merge left-fields right-fields)
-       :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
-                   (cond-> (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil)
-                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))
+    (fn [{left-vec-types :vec-types :as left-rel} {right-vec-types :vec-types :as right-rel}]
+      (let [out-vec-types (merge left-vec-types right-vec-types)]
+        {:op :cross-join
+         :children [left-rel right-rel]
+         :vec-types out-vec-types
+         :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} left-cursor right-cursor]
+                     (cond-> (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil)
+                       (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))
 
 (defmethod lp/emit-expr :cross-join [join-expr args]
   (emit-cross-join (emit-join-children join-expr args)))
@@ -185,7 +185,7 @@
 
 (deftype JoinCursor [^BufferAllocator allocator,
                      ^BuildSide build-side, ^ICursor build-cursor,
-                     probe-fields probe-key-cols ->probe-cursor
+                     probe-vec-types probe-key-cols ->probe-cursor
                      ^:unsynchronized-mutable ^ICursor hash-join-cursor
                      pushdown-blooms, ^Set pushdown-iids
                      ^ComparatorFactory cmp-factory, ^JoinType join-type]
@@ -205,14 +205,15 @@
                                                                 (when (and (not shuffle?) pushdown-iids)
                                                                   (zipmap (map symbol probe-key-cols) pushdown-iids)))]
           (set! (.hash-join-cursor this)
-                (if shuffle?
-                  (DiskHashJoin/open allocator build-side probe-cursor
-                                     (vals probe-fields) (map str probe-key-cols)
-                                     join-type cmp-factory)
+                (let [probe-vec-types (update-keys probe-vec-types str)]
+                  (if shuffle?
+                    (DiskHashJoin/open allocator build-side probe-cursor
+                                       probe-vec-types (map str probe-key-cols)
+                                       join-type cmp-factory)
 
-                  (MemoryHashJoin. build-side probe-cursor
-                                   (vals probe-fields) (map str probe-key-cols)
-                                   join-type cmp-factory))))))
+                    (MemoryHashJoin. build-side probe-cursor
+                                     (some-> probe-vec-types keys vec) (map str probe-key-cols)
+                                     join-type cmp-factory)))))))
 
     (.tryAdvance hash-join-cursor c))
 
@@ -267,43 +268,44 @@
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
-(defn- equi-spec [idx condition left-fields right-fields param-types]
+(defn- equi-spec [idx condition left-vec-types right-vec-types param-types]
   (let [[left-expr right-expr] (first condition)]
-    (letfn [(equi-projection [side form fields]
+    (letfn [(equi-projection [side form vec-types]
               (if (symbol? form)
                 {:key-col-name form}
 
                 (let [col-name (symbol (format "?join-expr-%s-%d" (name side) idx))
-                      input-types {:var-types (update-vals fields types/->type)
+                      input-types {:var-types vec-types
                                    :param-types param-types}]
                   {:key-col-name col-name
                    :projection (expr/->expression-projection-spec col-name (expr/form->expr form input-types)
                                                                   input-types)})))]
 
-      {:left (equi-projection :left left-expr left-fields)
-       :right (equi-projection :right right-expr right-fields)})))
+      {:left (equi-projection :left left-expr left-vec-types)
+       :right (equi-projection :right right-expr right-vec-types)})))
 
-(defn- projection-specs->fields [projection-specs]
+(defn- projection-specs->vec-types [projection-specs]
   (->> projection-specs
-       (into {} (map (comp (juxt #(symbol (.getName ^Field %)) identity)
-                           #(.getField ^ProjectionSpec %))))))
+       (into {} (map (juxt #(symbol (.getToName ^ProjectionSpec %))
+                           #(.getType ^ProjectionSpec %))))))
 
 (def ^:dynamic *disk-join-threshold-rows*
   (or (some-> (System/getenv "XTDB_JOIN_SPILL_THRESHOLD") parse-long)
       100000))
 
 (defn ->build-side ^xtdb.operator.join.BuildSide [^BufferAllocator allocator,
-                                                  {:keys [fields, key-col-names, track-unmatched-build-idxs?, with-nil-row?]}]
-  (let [schema (Schema. (->> fields
-                             (mapv (fn [[field-name field]]
-                                     (cond-> (-> field (types/field-with-name (str field-name)))
-                                       with-nil-row? types/->nullable-field)))))]
-    (BuildSide. allocator schema (map str key-col-names)
+                                                  {:keys [vec-types, key-col-names, track-unmatched-build-idxs?, with-nil-row?]}]
+  (let [vec-types (->> vec-types
+                       (into {} (map (fn [[col-name ^VectorType vec-type]]
+                                       [(str col-name)
+                                        (cond-> vec-type
+                                          with-nil-row? (VectorType/maybe))]))))]
+    (BuildSide. allocator vec-types (map str key-col-names)
                 (boolean track-unmatched-build-idxs?)
                 (boolean with-nil-row?)
                 *disk-join-threshold-rows*)))
 
-(defn ->cmp-factory [{:keys [build-fields probe-fields theta-expr param-types args with-nil-row?]}]
+(defn ->cmp-factory [{:keys [build-vec-types probe-vec-types theta-expr param-types args with-nil-row?]}]
   (reify ComparatorFactory
     (buildEqui [_ build-col probe-col]
       (emap/->equi-comparator build-col probe-col args
@@ -313,18 +315,17 @@
     (buildTheta [_ build-rel probe-rel]
       (when theta-expr
         (emap/->theta-comparator build-rel probe-rel theta-expr args
-                                 {:nil-keys-equal? with-nil-row?
-                                  :build-fields build-fields
-                                  :probe-fields probe-fields
+                                 {:build-vec-types build-vec-types
+                                  :probe-vec-types probe-vec-types
                                   :param-types param-types})))))
 
 (defn- emit-join-expr {:style/indent 2}
   [{:keys [condition left right]}
    {:keys [param-types]}
-   {:keys [build-side merge-fields-fn join-type
+   {:keys [build-side merge-vec-types-fn join-type
            with-nil-row? pushdown-blooms? track-unmatched-build-idxs? mark-col-name]}]
-  (let [{left-fields :fields, ->left-cursor :->cursor} left
-        {right-fields :fields, ->right-cursor :->cursor} right
+  (let [{left-vec-types :vec-types, ->left-cursor :->cursor} left
+        {right-vec-types :vec-types, ->right-cursor :->cursor} right
         {equis :equi-condition, thetas :pred-expr} (group-by first condition)
 
         theta-expr (when-let [theta-exprs (seq (map second thetas))]
@@ -332,42 +333,44 @@
 
         equi-specs (->> (map last equis)
                         (map-indexed (fn [idx condition]
-                                       (equi-spec idx condition left-fields right-fields param-types)))
+                                       (equi-spec idx condition left-vec-types right-vec-types param-types)))
                         vec)
 
         left-projections (vec (concat
-                               (for [[_col-name ^Field field] left-fields]
-                                 (project/->identity-projection-spec field))
+                               (for [[col-name col-type] left-vec-types]
+                                 (project/->identity-projection-spec col-name col-type))
                                (keep (comp :projection :left) equi-specs)))
 
         right-projections (vec (concat
-                                (for [[_col-name ^Field field] right-fields]
-                                  (project/->identity-projection-spec field))
+                                (for [[col-name col-type] right-vec-types]
+                                  (project/->identity-projection-spec col-name col-type))
                                 (keep (comp :projection :right) equi-specs)))
 
-        left-fields-proj (projection-specs->fields left-projections)
-        right-fields-proj (projection-specs->fields right-projections)
+        left-vec-types-proj (projection-specs->vec-types left-projections)
+        right-vec-types-proj (projection-specs->vec-types right-projections)
         left-key-col-names (mapv (comp :key-col-name :left) equi-specs)
         right-key-col-names (mapv (comp :key-col-name :right) equi-specs)
 
         ->left-project-cursor (fn [opts] (project/->project-cursor opts (->left-cursor opts) left-projections))
         ->right-project-cursor (fn [opts] (project/->project-cursor opts (->right-cursor opts) right-projections))
 
-        [build-fields build-key-col-names ->build-cursor
-         probe-fields probe-key-col-names ->probe-cursor]
+        [build-vec-types build-key-col-names ->build-cursor
+         probe-vec-types probe-key-col-names ->probe-cursor]
         (case build-side
-          :left [left-fields-proj left-key-col-names ->left-project-cursor
-                 right-fields-proj right-key-col-names ->right-project-cursor]
-          :right [right-fields-proj right-key-col-names ->right-project-cursor
-                  left-fields-proj left-key-col-names ->left-project-cursor])
+          :left [left-vec-types-proj left-key-col-names ->left-project-cursor
+                 right-vec-types-proj right-key-col-names ->right-project-cursor]
+          :right [right-vec-types-proj right-key-col-names ->right-project-cursor
+                  left-vec-types-proj left-key-col-names ->left-project-cursor])
 
-        merged-fields (merge-fields-fn left-fields-proj right-fields-proj)
-        output-projections (->> (set/difference (set (keys merged-fields))
+        merged-vec-types (merge-vec-types-fn left-vec-types-proj right-vec-types-proj)
+        output-projections (->> (set/difference (set (keys merged-vec-types))
                                                 (into #{} (comp (mapcat (juxt :left :right))
                                                                 (filter :projection)
                                                                 (map :key-col-name))
                                                       equi-specs))
-                                (mapv #(project/->identity-projection-spec (get merged-fields %))))]
+                                (mapv (fn [col-name]
+                                        (let [col-type (get merged-vec-types col-name)]
+                                          (project/->identity-projection-spec col-name col-type)))))]
 
     {:op (case join-type
            ::inner-join :inner-join
@@ -382,11 +385,11 @@
      :children [left right]
      :explain {:condition (pr-str (mapv second condition))}
 
-     :fields (projection-specs->fields output-projections)
+     :vec-types (projection-specs->vec-types output-projections)
 
      :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span args] :as opts}]
                  (util/with-close-on-catch [build-cursor (->build-cursor opts)
-                                            build-side (->build-side allocator {:fields build-fields
+                                            build-side (->build-side allocator {:vec-types build-vec-types
                                                                                 :key-col-names build-key-col-names
                                                                                 :with-nil-row? with-nil-row?
                                                                                 :track-unmatched-build-idxs? track-unmatched-build-idxs?})]
@@ -398,14 +401,13 @@
                                              (vec (repeatedly (count build-key-col-names) #(MutableRoaringBitmap.))))
                            pushdown-iids (->> build-key-col-names
                                               (mapv (fn [col-name]
-                                                      (let [^Field field (get build-fields col-name)
-                                                            build-col-type (.getType field)]
+                                                      (let [^VectorType build-col-type (get build-vec-types col-name)]
                                                         (when (or (and (= build-col-type #xt.arrow/type :varbinary)
                                                                        (str/ends-with? col-name "/_iid"))
                                                                   (= build-col-type #xt.arrow/type :uuid))
                                                           (TreeSet. Bytes/COMPARATOR))))))
-                           cmp-factory (->cmp-factory {:build-fields build-fields
-                                                       :probe-fields probe-fields
+                           cmp-factory (->cmp-factory {:build-vec-types build-vec-types
+                                                       :probe-vec-types probe-vec-types
                                                        :with-nil-row? with-nil-row?
                                                        :key-col-names probe-key-col-names
                                                        :theta-expr theta-expr
@@ -417,7 +419,7 @@
                                                                             ->probe-cursor-with-pushdowns (map str probe-key-col-names) cmp-factory nil
                                                                             mark-col-name pushdown-blooms)
                                                            (JoinCursor. allocator build-side build-cursor
-                                                                        probe-fields probe-key-col-names
+                                                                        probe-vec-types probe-key-col-names
                                                                         ->probe-cursor-with-pushdowns nil
                                                                         pushdown-blooms pushdown-iids cmp-factory
                                                                         (case join-type
@@ -442,7 +444,7 @@
 (defn emit-inner-join-expr [join-expr args]
   (emit-join-expr join-expr args
                   {:build-side :left
-                   :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields right-fields))
+                   :merge-vec-types-fn (fn [left-vec-types right-vec-types] (merge-with types/merge-types left-vec-types right-vec-types))
                    :join-type ::inner-join
                    :pushdown-blooms? true}))
 
@@ -461,11 +463,11 @@
                     args
                     (if (= build-side :right)
                       {:build-side build-side
-                       :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
+                       :merge-vec-types-fn (fn [left-vec-types right-vec-types] (merge-with types/merge-types left-vec-types (types/with-nullable-types right-vec-types)))
                        :join-type ::left-outer-join
                        :with-nil-row? true}
                       {:build-side build-side
-                       :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
+                       :merge-vec-types-fn (fn [left-vec-types right-vec-types] (merge-with types/merge-types left-vec-types (types/with-nullable-types right-vec-types)))
                        :join-type ::left-outer-join-flipped
                        :track-unmatched-build-idxs? true
                        :pushdown-blooms? true}))))
@@ -476,7 +478,7 @@
                         (assoc :condition conditions))
                     args
                     {:build-side :left
-                     :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields (types/with-nullable-fields left-fields) (types/with-nullable-fields right-fields)))
+                     :merge-vec-types-fn (fn [left-vec-types right-vec-types] (merge-with types/merge-types (types/with-nullable-types left-vec-types) (types/with-nullable-types right-vec-types)))
                      :join-type ::full-outer-join
                      :with-nil-row? true
                      :track-unmatched-build-idxs? true})))
@@ -487,7 +489,7 @@
                         (assoc :condition conditions))
                     args
                     {:build-side :right
-                     :merge-fields-fn (fn [left-fields _] left-fields)
+                     :merge-vec-types-fn (fn [left-vec-types _] left-vec-types)
                      :join-type ::semi-join
                      :pushdown-blooms? true})))
 
@@ -497,7 +499,7 @@
                         (assoc :condition conditions))
                     args
                     {:build-side :right
-                     :merge-fields-fn (fn [left-fields _] left-fields)
+                     :merge-vec-types-fn (fn [left-vec-types _] left-vec-types)
                      :join-type ::anti-semi-join})))
 
 (defmethod lp/emit-expr :mark-join [{:keys [opts] :as join-expr} args]
@@ -507,7 +509,7 @@
                         (assoc :condition mark-condition))
                     args
                     {:build-side :right
-                     :merge-fields-fn (fn [left-fields _] (assoc left-fields mark-col-name (types/->field [:? :bool] mark-col-name)))
+                     :merge-vec-types-fn (fn [left-vec-types _] (assoc left-vec-types mark-col-name #xt/type [:? :bool]))
                      :mark-col-name mark-col-name
                      :join-type ::mark-join
                      :track-unmatched-build-idxs? true
@@ -519,13 +521,13 @@
                         (assoc :condition conditions))
                     args
                     {:build-side :right
-                     :merge-fields-fn (fn [left-fields right-fields] (merge-with types/merge-fields left-fields (types/with-nullable-fields right-fields)))
+                     :merge-vec-types-fn (fn [left-vec-types right-vec-types] (merge-with types/merge-types left-vec-types (types/with-nullable-types right-vec-types)))
                      :join-type ::single-join
                      :with-nil-row? true})))
 
 
 (defn columns [relation]
-  (set (keys (:fields relation))))
+  (set (keys (:vec-types relation))))
 
 (defn expr->columns [expr]
   (-> (if (symbol? expr)
