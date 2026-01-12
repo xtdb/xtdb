@@ -109,24 +109,24 @@
    :postcode (str (random-int rng 1000 9999))
    :state (random/uniform-nth rng ["NSW" "VIC" "QLD" "SA" "WA"])})
 
-(defn generate-system-record [rng system-id nmi]
+(defn generate-system-record [rng system-id nmi base-time]
   {:xt/id system-id
    :nmi nmi
    :type (random/next-int rng 10)
-   :created-at (Instant/parse "2020-01-01T00:00:00Z")
-   :registration-date (Instant/parse "2020-01-01T00:00:00Z")
+   :created-at base-time
+   :registration-date base-time
    :rtg-max-w (random-float rng 1000 10000)
    :rtg-max-wh (random-float rng 5000 50000)
    :set-max-w (random-float rng 500 5000)
    :modes-enabled "default,eco"
    :updated-time (double (System/currentTimeMillis))})
 
-(defn generate-device [rng device-id system-id device-model-id]
+(defn generate-device [rng device-id system-id device-model-id base-time]
   {:xt/id device-id
    :system-id system-id
    :device-model-id device-model-id
    :serial-number (str "SN-" (random/next-uuid rng))
-   :installed-at (Instant/parse "2020-01-01T00:00:00Z")})
+   :installed-at base-time})
 
 ;; Registration test tables - for cumulative registration query
 
@@ -141,26 +141,28 @@
    :name (str "Test Case " case-num)
    :description (str "Registration check " case-num)})
 
-(defn generate-test-suite-run [rng run-id system-id suite-id]
-  (let [passed? (random/chance? rng 0.8)]
+(defn generate-test-suite-run [rng run-id system-id suite-id base-time]
+  (let [passed? (random/chance? rng 0.8)
+        test-start (.plusSeconds base-time 43200)] ; 12 hours after system creation
     {:xt/id run-id
      :system-id system-id
      :test-suite-id suite-id
      :status (if passed? "DONE" "FAILED")
      :passed? passed?
-     :started-at (Instant/parse "2020-01-01T12:00:00Z")
-     :completed-at (Instant/parse "2020-01-01T12:05:00Z")}))
+     :started-at test-start
+     :completed-at (.plusSeconds test-start 300)}))
 
-(defn generate-test-case-run [rng run-id suite-run-id case-id suite-passed?]
-  (let [case-passed? (or suite-passed? (random/chance? rng 0.7))]
+(defn generate-test-case-run [rng run-id suite-run-id case-id suite-passed? base-time]
+  (let [case-passed? (or suite-passed? (random/chance? rng 0.7))
+        test-start (.plusSeconds base-time 43200)] ; Same as suite run start
     {:xt/id run-id
      :test-suite-run-id suite-run-id
      :test-case-id case-id
      :status (if case-passed? "OK" "FAILED")
-     :executed-at (Instant/parse "2020-01-01T12:00:00Z")}))
+     :executed-at test-start}))
 
 (defn ->init-tables-stage
-  [system-ids site-ids organisation-ids device-series-ids device-model-ids device-ids test-suite-id test-case-ids batch-size]
+  [system-ids site-ids organisation-ids device-series-ids device-model-ids device-ids test-suite-id test-case-ids batch-size base-time]
   {:t :call, :stage :init-tables
    :f (fn [{:keys [node random]}]
         (log/infof "Inserting %d organisation records" (count organisation-ids))
@@ -196,7 +198,7 @@
                                             (partition-all batch-size system-ids)
                                             (partition-all batch-size site-ids))]
           (xt/submit-tx node [(into [:put-docs :system]
-                                    (map (fn [sid nmi] (generate-system-record random sid nmi))
+                                    (map (fn [sid nmi] (generate-system-record random sid nmi base-time))
                                          sys-batch site-batch))]))
 
         (log/infof "Inserting %d device records" (count device-ids))
@@ -204,7 +206,8 @@
           (xt/submit-tx node [(into [:put-docs :device]
                                     (map #(generate-device random %
                                                            (random/uniform-nth random system-ids)
-                                                           (random/uniform-nth random device-model-ids))
+                                                           (random/uniform-nth random device-model-ids)
+                                                           base-time)
                                          batch))]))
 
         ;; Insert test suite and test cases for registration tracking
@@ -218,7 +221,7 @@
         (log/infof "Inserting test suite runs for %d systems" (count system-ids))
         (doseq [system-id system-ids]
           (let [suite-run-id (random/next-uuid random)
-                suite-run (generate-test-suite-run random suite-run-id system-id test-suite-id)
+                suite-run (generate-test-suite-run random suite-run-id system-id test-suite-id base-time)
                 suite-passed? (:passed? suite-run)]
             (xt/submit-tx node [(into [:put-docs :test_suite_run]
                                       [(dissoc suite-run :passed?)])])
@@ -228,7 +231,8 @@
                                                                      (random/next-uuid random)
                                                                      suite-run-id
                                                                      case-id
-                                                                     suite-passed?))
+                                                                     suite-passed?
+                                                                     base-time))
                                            test-case-ids))]))))})
 
 (defn ->readings-docs [rng system-ids reading-idx start end]
@@ -239,11 +243,11 @@
            :value (random-float rng -100 100)
            :duration 300})))
 
-(defn ->ingest-readings-stage [system-ids readings batch-size]
+(defn ->ingest-readings-stage [system-ids readings batch-size base-time]
   {:t :call, :stage :ingest-readings
    :f (fn [{:keys [node random]}]
         (log/infof "Inserting %d readings for %d systems" readings (count system-ids))
-        (let [intervals (->> (tu/->instants :minute 5 #inst "2020-01-01")
+        (let [intervals (->> (tu/->instants :minute 5 base-time)
                              (partition 2 1)
                              (take readings))
               batches (partition-all batch-size system-ids)
@@ -454,6 +458,7 @@
                                      :or {seed 0 batch-size 1000 update-batch-size 30
                                           updates-per-system 10}}]
   (let [setup-rng (java.util.Random. seed)
+        base-time (.minus (Instant/now) (Duration/ofDays 3))
         system-ids (generate-ids setup-rng devices)
         site-ids (mapv #(str "NMI-" %) (range devices))
         organisation-ids (generate-ids setup-rng 5)
@@ -472,8 +477,8 @@
      :->state #(do {:!state (atom {:system-ids system-ids})})
      :tasks (concat
              (when-not no-load?
-               [(->init-tables-stage system-ids site-ids organisation-ids device-series-ids device-model-ids device-ids test-suite-id test-case-ids update-batch-size)
-                (->ingest-readings-stage system-ids readings batch-size)
+               [(->init-tables-stage system-ids site-ids organisation-ids device-series-ids device-model-ids device-ids test-suite-id test-case-ids update-batch-size base-time)
+                (->ingest-readings-stage system-ids readings batch-size base-time)
                 (->update-system-stage system-ids updates-per-system update-batch-size)
                 (->sync-stage)
                 (->compact-stage)])
