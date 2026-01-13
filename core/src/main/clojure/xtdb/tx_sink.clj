@@ -1,5 +1,6 @@
 (ns xtdb.tx-sink
   (:require [integrant.core :as ig]
+            [xtdb.error :as err]
             [xtdb.log :as log]
             [xtdb.node :as xtn]
             xtdb.node.impl
@@ -81,6 +82,35 @@
                      (update-vals #(mapv :event %)))]))
        (sort-by first)))
 
+(defn events->tx-output
+  [system-time table->events db-name block-idx encode-fn]
+  (let [; NOTE: We get the tx-key from the xt.txs table
+        txs-events (or (get table->events #xt/table "xt/txs")
+                       (throw (err/fault :xtdb.tx-sink/missing-txs-table
+                                         "Expected xt.txs table in transaction events"
+                                         {:system-time system-time
+                                          :tables (keys table->events)})))
+        _ (when (not= 1 (count txs-events))
+            (throw (err/fault :xtdb.tx-sink/unexpected-txs-count
+                              (format "Expected exactly 1 xt.txs event per transaction, got %d" (count txs-events))
+                              {:system-time system-time
+                               :count (count txs-events)})))
+        tx-key (serde/->TxKey (-> txs-events first :doc :xt/id)
+                              (time/->instant system-time))]
+    {:tx-key tx-key
+     :message (-> {:transaction {:id tx-key}
+                   :system-time (time/->instant system-time)
+                   :source {:db db-name
+                            :block-idx block-idx}
+                   :tables (->> table->events
+                                (map (fn [[^TableRef table events]]
+                                       {:db (.getDbName table)
+                                        :schema (.getSchemaName table)
+                                        :table (.getTableName table)
+                                        :ops events}))
+                                (into []))}
+                  encode-fn
+                  Log$Message$Tx.)}))
 (defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format enable db-name initial-scan]}]
   (.txSink config
            (cond-> (TxSinkConfig.)

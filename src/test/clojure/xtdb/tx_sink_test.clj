@@ -283,3 +283,28 @@
       (let [[_ tables-at-t3] (nth grouped 2)]
         (t/is (= #{:table-a} (set (keys tables-at-t3))))
         (t/is (= [{:system-from t3 :id 3}] (get tables-at-t3 :table-a)))))))
+
+(t/deftest test-events->tx-output-requires-txs-table
+  (let [t1 #inst "2020-01-01T00:00:00Z"
+        table->events {#xt/table "xtdb/foo" [{:doc {:xt/id 1}}]}]
+    (t/is (anomalous? [:fault :xtdb.tx-sink/missing-txs-table
+                       "Expected xt.txs table"]
+                      (tx-sink/events->tx-output t1 table->events "xtdb" 0 identity)))))
+
+(t/deftest test-events->tx-output-requires-exactly-one-txs-event
+  (let [t1 #inst "2020-01-01T00:00:00Z"
+        table->events {#xt/table "xt/txs" [{:doc {:xt/id 1}} {:doc {:xt/id 2}}]}]
+    (t/is (anomalous? [:fault :xtdb.tx-sink/unexpected-txs-count
+                       "Expected exactly 1 xt.txs event"]
+                      (tx-sink/events->tx-output t1 table->events "xtdb" 0 identity)))))
+
+(t/deftest test-events->tx-output-produces-valid-tx-key
+  (let [t1 #inst "2020-01-01T00:00:00Z"
+        table->events {#xt/table "xt/txs" [{:doc {:xt/id 42}
+                                            :op :put
+                                            :iid (util/->iid 42)
+                                            :valid-from t1
+                                            :valid-to nil}]}
+        encode-fn (tx-sink/->encode-fn :transit+json)
+        {:keys [tx-key]} (tx-sink/events->tx-output t1 table->events "xtdb" 0 encode-fn)]
+    (t/is (= 42 (:tx-id tx-key)) "tx-key should have correct tx-id")))
