@@ -1,23 +1,23 @@
 [:let
- [revenue.4
-  [:project
-   {:projections [{supplier_no l.1/l_suppkey} {total_revenue _sum_out_2}]}
-   [:group-by
-    {:columns [l.1/l_suppkey {_sum_out_2 (sum _sum_in_3)}]}
-    [:map
-     {:projections [{_sum_in_3 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]}
-     [:rename {:prefix l.1} [:scan
-       {:table #xt/table lineitem, :columns [{l_shipdate
-         (and
-          (<
-           l_shipdate
-           (+
-            #xt/date "1996-01-01"
-            (single-field-interval "3" "MONTH" 2 6)))
-          (>= l_shipdate #xt/date "1996-01-01"))}
-        l_extendedprice
-        l_suppkey
-        l_discount]}]]]]]]
+ {:binding-sym revenue.4}
+ [:project
+  {:projections [{supplier_no l.1/l_suppkey} {total_revenue _sum_out_2}]}
+  [:group-by
+   {:columns [l.1/l_suppkey {_sum_out_2 (sum _sum_in_3)}]}
+   [:map
+    {:projections [{_sum_in_3 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]}
+    [:rename {:prefix l.1} [:scan
+      {:table #xt/table lineitem, :columns [{l_shipdate
+        (and
+         (<
+          l_shipdate
+          (+
+           #xt/date "1996-01-01"
+           (single-field-interval "3" "MONTH" 2 6)))
+         (>= l_shipdate #xt/date "1996-01-01"))}
+       l_extendedprice
+       l_suppkey
+       l_discount]}]]]]]
  [:project
   {:projections [{s_suppkey s_suppkey}
    {s_name s.5/s_name}
@@ -41,13 +41,9 @@
        {:conditions [{s.5/_id revenue.6/supplier_no}]}
        [[:rename {:prefix s.5} [:scan
           {:table #xt/table supplier, :columns [s_name s_address s_phone _id]}]]
-        [:rename {:prefix revenue.6} [:relation
-          revenue.4
-          {:col-names [supplier_no total_revenue]}]]]]
+        [:rename {:prefix revenue.6} [:relation {:cte-id revenue.4 :col-names [supplier_no total_revenue]}]]]]
       [:project
        {:projections [{_sq_7 _max_out_9}]}
        [:group-by
         {:columns [{_max_out_9 (max revenue.8/total_revenue)}]}
-        [:rename {:prefix revenue.8} [:relation
-          revenue.4
-          {:col-names [supplier_no total_revenue]}]]]]]]]]]]
+        [:rename {:prefix revenue.8} [:relation {:cte-id revenue.4 :col-names [supplier_no total_revenue]}]]]]]]]]]]

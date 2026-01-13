@@ -98,8 +98,8 @@
   (case op
     :relation #{}
 
-    :let (let [{[_ bind-rel] :binding, :keys [relation]} expr]
-           #{bind-rel relation})
+    :let (let [{:keys [bound-relation relation]} expr]
+           #{bound-relation relation})
 
     (let [spec (s/describe (ra-expr [op]))]
       (case (first spec)
@@ -188,13 +188,11 @@
         rows (mapv symbol (keys (first (filter map? rows))))
         :else []))
             
-    [:list explicit-column-names _]
-    (vec explicit-column-names)
-    
-    [:list list]
-    (mapv symbol (if (map? list)
-                   (keys list)
-                   (keys (first list))))
+    [:list opts]
+    (let [{:keys [col-names columns]} opts]
+      (if col-names
+        (vec col-names)
+        (mapv symbol (keys columns))))
 
     [:scan opts]
     (let [{:keys [columns]} opts]
@@ -281,10 +279,10 @@
       (cond-> (conj (relation-columns relation) (key (first columns)))
         ordinality-column (conj ordinality-column)))
 
-    [:let _ relation]
+    [:let _opts _bound-relation relation]
     (relation-columns relation)
 
-    [:relation _ opts] (:col-names opts)
+    [:relation opts] (:col-names opts)
 
     [:apply opts independent-relation dependent-relation]
     (let [{:keys [mode mark-join-projection]} opts]
@@ -297,7 +295,7 @@
               (:mark-join :semi-join :anti-join) []))
           (vec)))
 
-    [:arrow _path]
+    [:arrow _opts]
     []
 
     [:window specs relation]

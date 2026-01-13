@@ -9,16 +9,18 @@
            (xtdb ICursor)
            (xtdb.arrow ListExpression RelationReader Vector VectorType)))
 
+(s/def ::columns (s/map-of ::lp/column any?, :count 1))
+(s/def ::col-names (s/coll-of ::lp/column :kind vector?))
+
 (defmethod lp/ra-expr :list [_]
   (s/cat :op #{:list}
-         :explicit-col-names (s/? (s/coll-of ::lp/column :kind vector?))
-         :list (s/map-of ::lp/column any?, :count 1)))
+         :opts (s/keys :req-un [::columns] :opt-un [::col-names])))
 
 
-(defn- restrict-cols [vec-types {:keys [explicit-col-names]}]
+(defn- restrict-cols [vec-types {:keys [col-names]}]
   (cond-> vec-types
-    explicit-col-names (-> (->> (merge (zipmap explicit-col-names (repeat #xt/type :null))))
-                           (select-keys explicit-col-names))))
+    col-names (-> (->> (merge (zipmap col-names (repeat #xt/type :null))))
+                  (select-keys col-names))))
 
 (def ^:dynamic *batch-size* 1024)
 
@@ -46,13 +48,13 @@
   (close [_] nil))
 
 (defmethod lp/emit-expr :list
-  [{:keys [list] :as list-expr}
+  [{{:keys [columns] :as list-opts} :opts}
    {:keys [param-types schema] :as opts}]
-  (let [[out-col v] (first list)
+  (let [[out-col v] (first columns)
         input-types {:param-types param-types}
         expr (expr/form->expr v input-types)
         {:keys [vec-type ->list-expr]} (expr-list/compile-list-expr expr input-types)
-        vec-types (restrict-cols {out-col vec-type} list-expr)]
+        vec-types (restrict-cols {out-col vec-type} list-opts)]
     {:op :list
      :children []
      :vec-types vec-types

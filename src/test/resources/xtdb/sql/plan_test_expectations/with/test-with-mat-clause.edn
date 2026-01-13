@@ -1,11 +1,11 @@
 [:let
- [foo.2
-  [:project
-   {:projections [{_id bar.1/_id}]}
-   [:rename {:prefix bar.1} [:scan {:table #xt/table bar, :columns [{_id (== _id 5)}]}]]]]
+ {:binding-sym foo.2}
+ [:project
+  {:projections [{_id bar.1/_id}]}
+  [:rename {:prefix bar.1} [:scan {:table #xt/table bar, :columns [{_id (== _id 5)}]}]]]
  [:project
   {:projections [{foo_id foo.3/_id} {baz_id baz.4/_id}]}
   [:mega-join
    {:conditions []}
-   [[:rename {:prefix foo.3} [:relation foo.2 {:col-names [_id]}]]
-    [:rename {:prefix baz.4} [:relation foo.2 {:col-names [_id]}]]]]]]
+   [[:rename {:prefix foo.3} [:relation {:cte-id foo.2 :col-names [_id]}]]
+    [:rename {:prefix baz.4} [:relation {:cte-id foo.2 :col-names [_id]}]]]]]]

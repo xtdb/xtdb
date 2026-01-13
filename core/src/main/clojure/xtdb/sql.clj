@@ -497,9 +497,9 @@
 
   PlanRelation
   (plan-rel [_]
-    (as-> [:list {(-> (->col-sym (str unique-table-alias) (str unnest-col))
-                      (with-meta (meta unnest-col)))
-                  unnest-expr}]
+    (as-> [:list {:columns {(-> (->col-sym (str unique-table-alias) (str unnest-col))
+                            (with-meta (meta unnest-col)))
+                        unnest-expr}}]
         plan
 
       (if ordinality-col
@@ -601,7 +601,7 @@
               (add-err! env (->PeriodSpecificationDisallowedOnCte query-name)))
 
             (->DerivedTable (if materialized?
-                              [:relation cte-id {:col-names cte-cols}]
+                              [:relation {:cte-id cte-id :col-names cte-cols}]
                               plan)
                             table-alias unique-table-alias
                             (->insertion-ordered-set (or cols cte-cols))))
@@ -2353,8 +2353,7 @@
                        (.accept (->WithVisitor env scope)))]
       (reduce (fn [{:keys [plan col-syms] :as acc} {:keys [materialized? cte-id], cte-plan :plan}]
                 (if materialized?
-                  (->QueryExpr [:let [cte-id cte-plan]
-                                plan]
+                  (->QueryExpr [:let {:binding-sym cte-id} cte-plan plan]
                                col-syms)
                   acc))
               (.accept (.queryExpressionNoWith ctx)

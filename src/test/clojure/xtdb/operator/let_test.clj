@@ -6,28 +6,33 @@
 
 (t/deftest test-let
   (t/is (= [{:a 4}]
-           (tu/query-ra '[:let [Foo [::tu/pages
-                                     [[{:a 12}, {:a 0}]
-                                      [{:a 12}, {:a 100}]]]]
+           (tu/query-ra '[:let {:binding-sym Foo}
+                          [::tu/pages
+                           [[{:a 12}, {:a 0}]
+                            [{:a 12}, {:a 100}]]]
                           [:table {:rows [{:a 4}]}]]))
         "unused let")
 
   (t/is (= [[{:a 12}, {:a 0}]
             [{:a 12}, {:a 100}]]
-           (tu/query-ra '[:let [Foo [::tu/pages
-                                     [[{:a 12}, {:a 0}]
-                                      [{:a 12}, {:a 100}]]]]
-                          [:relation Foo {:col-names [a]}]]
+           (tu/query-ra '[:let {:binding-sym Foo}
+                          [::tu/pages
+                           [[{:a 12}, {:a 0}]
+                            [{:a 12}, {:a 100}]]]
+                          [:relation {:cte-id Foo :col-names [a]}]]
                         {:preserve-pages? true}))
         "normal usage")
 
   (t/is (= [{:a 1 :b 1}]
-           (tu/query-ra '[:let [X [:table {:param ?x}]]
-                          [:let [Y [:join {:conditions [{a b}]}
-                                    [:relation X {:col-names [a]}]
-                                    [:table {:param ?y}]]]
-                           [:let [X [:relation Y {:col-names [a b]}]]
-                            [:relation X {:col-names [a b]}]]]]
+           (tu/query-ra '[:let {:binding-sym X}
+                          [:table {:param ?x}]
+                          [:let {:binding-sym Y}
+                           [:join {:conditions [{a b}]}
+                            [:relation {:cte-id X :col-names [a]}]
+                            [:table {:param ?y}]]
+                           [:let {:binding-sym X}
+                            [:relation {:cte-id Y :col-names [a b]}]
+                            [:relation {:cte-id X :col-names [a b]}]]]]
 
                         {:args {:x [{:a 1}]
                                 :y [{:b 1}]}}))
@@ -37,23 +42,25 @@
             [{:a 12}, {:a 100}]
             [{:a 12}, {:a 0}]
             [{:a 12}, {:a 100}]]
-           (tu/query-ra '[:let [Foo [::tu/pages
-                                     [[{:a 12}, {:a 0}]
-                                      [{:a 12}, {:a 100}]]]]
+           (tu/query-ra '[:let {:binding-sym Foo}
+                          [::tu/pages
+                           [[{:a 12}, {:a 0}]
+                            [{:a 12}, {:a 100}]]]
                           [:union-all {}
-                           [:relation Foo {:col-names [a]}]
-                           [:relation Foo {:col-names [a]}]]]
+                           [:relation {:cte-id Foo :col-names [a]}]
+                           [:relation {:cte-id Foo :col-names [a]}]]]
                         {:preserve-pages? true}))
         "can use it multiple times")
 
   (t/is (= [{:a 0} {:a 0}
             {:a 12} {:a 12} {:a 12} {:a 12}
             {:a 100} {:a 100}]
-           (tu/query-ra '[:let [Foo [::tu/pages
-                                     [[{:a 12}, {:a 0}]
-                                      [{:a 12}, {:a 100}]]]]
+           (tu/query-ra '[:let {:binding-sym Foo}
+                          [::tu/pages
+                           [[{:a 12}, {:a 0}]
+                            [{:a 12}, {:a 100}]]]
                           [:order-by {:order-specs [[a]]}
                            [:union-all {}
-                            [:relation Foo {:col-names [a]}]
-                            [:relation Foo {:col-names [a]}]]]]))
+                            [:relation {:cte-id Foo :col-names [a]}]
+                            [:relation {:cte-id Foo :col-names [a]}]]]]))
         "can pass it to other operators"))

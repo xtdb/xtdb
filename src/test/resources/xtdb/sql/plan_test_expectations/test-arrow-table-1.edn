@@ -1,3 +1,3 @@
 [:project
  {:projections [{a foo.1/a}]}
- [:rename {:prefix foo.1} [:project {:projections [a]} [:arrow "test.arrow"]]]]
+ [:rename {:prefix foo.1} [:project {:projections [a]} [:arrow {:url "test.arrow"}]]]]
