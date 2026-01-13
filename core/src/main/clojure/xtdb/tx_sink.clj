@@ -71,7 +71,7 @@
 
 (defn gt [a b] (pos? (compare a b)))
 
-(defrecord TxSink [^Log output-log encode-as-bytes ^BlockCatalog block-cat db-name last-tx-key]
+(defrecord TxSink [^Log output-log encode-fn ^BlockCatalog block-cat db-name last-tx-key]
   Indexer$TxSink
   (onCommit [_ tx-key live-idx-tx]
     (when (or (nil? last-tx-key) (gt tx-key last-tx-key))
@@ -90,21 +90,22 @@
                                 :tables (->> live-tables
                                              (map #(read-table-rows % live-idx-tx))
                                              (into []))}
-                               encode-as-bytes
+                               encode-fn
                                Log$Message$Tx.)))))))
 
 (defmethod ig/init-key ::for-db [_ {:keys [^TxSinkConfig tx-sink-conf ^Log output-log block-cat db-name]}]
   (when (and tx-sink-conf
              (.getEnable tx-sink-conf)
              (= db-name (.getDbName tx-sink-conf)))
-    (let [last-message (try
+    (let [encode-fn (->encode-fn (keyword (.getFormat tx-sink-conf)))
+          last-message (try
                          (let [decode-record (->decode-fn (keyword (.getFormat tx-sink-conf)))]
                            (->> (.readLastMessage output-log)
                                 Log$Message/.encode
                                 decode-record))
                          (catch Exception _ nil))]
       (map->TxSink {:output-log output-log
-                    :encode-as-bytes (->encode-fn (keyword (.getFormat tx-sink-conf)))
+                    :encode-fn encode-fn
                     :block-cat block-cat
                     :db-name db-name
                     :last-tx-key (some-> last-message :transaction :id)}))))
