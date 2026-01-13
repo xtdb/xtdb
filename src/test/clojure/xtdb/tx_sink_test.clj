@@ -3,14 +3,16 @@
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.db-catalog :as db]
-            [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
-            [xtdb.tx-sink :as tx-sink]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.log :as xt-log]
+            [xtdb.trie-catalog :as trie-cat]
+            [xtdb.tx-sink :as tx-sink])
   (:import [xtdb.api.log Log$Message]
            [xtdb.database Database$Catalog]
+           [xtdb.table TableRef]
            [xtdb.test.log RecordingLog]))
 
 (t/use-fixtures :each tu/with-mock-clock)
@@ -217,3 +219,35 @@
           (t/is (every? :valid-from rows))
           (t/is (every? :system-from rows))
           (t/is (every? #(contains? % :valid-to) rows)))))))
+
+(t/deftest test-read-l0-events
+  (tu/with-tmp-dirs #{node-dir}
+    (with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 0})]
+      (xt/execute-tx node [[:put-docs :foo {:xt/id 1 :value "first"}]])
+      (tu/finish-block! node)
+      (xt/execute-tx node [[:put-docs :foo {:xt/id 2 :value "second"}]])
+      (xt/execute-tx node [[:put-docs :foo {:xt/id 3 :value "third"}]])
+      (tu/finish-block! node)
+
+      (let [allocator (.getAllocator node)
+            xtdb-db (db/primary-db node)
+            bp (.getBufferPool xtdb-db)
+            cat (.getTrieCatalog xtdb-db)
+            blocks (trie-cat/l0-blocks cat)
+            table-events (fn [table-filter events]
+                           (->> events
+                                (filter (fn [{:keys [^TableRef table]}]
+                                          (= table-filter (.getTableName table))))
+                                (map :event)))
+            event-values #(get-in % [:doc "value"])]
+        (t/is (= [0 1] (map :block-idx blocks)))
+        (let [{:keys [tables]} (first blocks)
+              events (tx-sink/read-l0-events allocator bp tables)
+              foo-events (table-events "foo" events)]
+          (t/is (= 1 (count foo-events)))
+          (t/is (= #{"first"} (->> foo-events (map event-values) set))))
+        (let [{:keys [tables]} (second blocks)
+              events (tx-sink/read-l0-events allocator bp tables)
+              foo-events (table-events "foo" events)]
+          (t/is (= 2 (count foo-events)))
+          (t/is (= #{"second" "third"} (->> foo-events (map event-values) set))))))))

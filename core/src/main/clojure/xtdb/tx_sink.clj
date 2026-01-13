@@ -3,15 +3,18 @@
             [xtdb.log :as log]
             [xtdb.node :as xtn]
             xtdb.node.impl
-            xtdb.serde
-            [xtdb.util :as util]
-            [xtdb.time :as time])
-  (:import (xtdb.api TxSinkConfig Xtdb Xtdb$Config)
+            [xtdb.serde :as serde]
+            [xtdb.time :as time]
+            [xtdb.util :as util])
+  (:import (org.apache.arrow.memory BufferAllocator)
+           (xtdb.api TxSinkConfig Xtdb Xtdb$Config)
            (xtdb.api.log Log Log$Message Log$Message$Tx)
-           (xtdb.arrow RelationReader)
+           (xtdb.arrow Relation RelationReader)
            (xtdb.catalog BlockCatalog)
            (xtdb.indexer Indexer$TxSink LiveIndex$Tx)
-           (xtdb.table TableRef)))
+           (xtdb.storage BufferPool)
+           (xtdb.table TableRef)
+           (xtdb.trie Trie)))
 
 (defn read-relation-rows
   ([rel] (read-relation-rows rel 0))
@@ -53,6 +56,25 @@
   (case fmt
     :transit+json #(xtdb.serde/read-transit % :json)
     :transit+msgpack #(xtdb.serde/read-transit % :msgpack)))
+
+(defn- read-l0-data-file
+  [^BufferAllocator allocator ^BufferPool buffer-pool data-path]
+  (let [footer (.getFooter buffer-pool data-path)
+        schema (.getSchema footer)
+        batch-count (count (.getRecordBatches footer))]
+    (->> (range batch-count)
+         (mapcat (fn [batch-idx]
+                   (with-open [rb (.getRecordBatchSync buffer-pool data-path batch-idx)
+                               rel (Relation/fromRecordBatch allocator schema rb)]
+                     (read-relation-rows rel))))
+         reverse
+         (into []))))
+
+(defn read-l0-events
+  [^BufferAllocator allocator ^BufferPool buffer-pool table-entries]
+  (for [{:keys [^TableRef table trie-key]} table-entries
+        event (read-l0-data-file allocator buffer-pool (Trie/dataFilePath table trie-key))]
+    {:table table :event event}))
 
 (defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format enable db-name]}]
   (.txSink config
