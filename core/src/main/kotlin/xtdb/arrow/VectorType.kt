@@ -167,15 +167,6 @@ data class VectorType(
         @JvmField
         val INTERVAL_MDM = VectorType(IntervalMDMType)
 
-        @JvmField
-        val LIST_TYPE: ArrowType = MinorType.LIST.type
-
-        @JvmField
-        val STRUCT_TYPE: ArrowType = MinorType.STRUCT.type
-
-        @JvmField
-        val UNION_TYPE: ArrowType = MinorType.DENSEUNION.type
-
         fun unionOf(vararg legs: Pair<FieldName, VectorType>) = unionOf(legs.toMap())
         fun unionOf(legs: Map<FieldName, VectorType>) = VectorType(ArrowType.Union(UnionMode.Dense, null), children = legs)
 

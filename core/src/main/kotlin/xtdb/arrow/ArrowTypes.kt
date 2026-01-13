@@ -11,11 +11,27 @@ import org.apache.arrow.vector.types.IntervalUnit
 import org.apache.arrow.vector.types.IntervalUnit.*
 import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.TimeUnit.*
+import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.arrow.VectorType.Companion.asVectorType
 import xtdb.vector.extensions.*
+
+@JvmField
+val NULL_TYPE: ArrowType = ArrowType.Null.INSTANCE
+
+@JvmField
+val UTF8_TYPE: ArrowType = MinorType.VARCHAR.type
+
+@JvmField
+val LIST_TYPE: ArrowType = MinorType.LIST.type
+
+@JvmField
+val STRUCT_TYPE: ArrowType = MinorType.STRUCT.type
+
+@JvmField
+val UNION_TYPE: ArrowType = MinorType.DENSEUNION.type
 
 private fun DateUnit.toLegPart() = when (this) {
     DAY -> "day"

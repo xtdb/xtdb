@@ -14,7 +14,7 @@ class RelationAsStructReader(
     private val rel: RelationReader
 ) : VectorReader {
     override val nullable = false
-    override val arrowType: ArrowType = VectorType.STRUCT_TYPE
+    override val arrowType: ArrowType = STRUCT_TYPE
     override val field get() = structOf(rel.vectors.associate { it.name to it.field.asType }).toField(name)
     override val childFields get() = rel.vectors.map { it.field }
 

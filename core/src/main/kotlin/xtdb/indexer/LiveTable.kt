@@ -11,8 +11,8 @@ import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.*
+import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.VectorType
-import xtdb.arrow.VectorType.Companion.STRUCT_TYPE
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.HLL
 import xtdb.util.RowCounter

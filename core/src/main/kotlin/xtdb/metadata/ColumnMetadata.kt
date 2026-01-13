@@ -1,13 +1,13 @@
 package xtdb.metadata
 
 import com.carrotsearch.hppc.IntArrayList
+import xtdb.arrow.LIST_TYPE
+import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.VectorType.Companion.F64
 import xtdb.arrow.VectorType.Companion.I32
-import xtdb.arrow.VectorType.Companion.LIST_TYPE
-import xtdb.arrow.VectorType.Companion.STRUCT_TYPE
 import xtdb.arrow.VectorType.Companion.VAR_BINARY
 import xtdb.arrow.VectorWriter
 import xtdb.arrow.metadata.MetadataFlavour

@@ -4,10 +4,10 @@ package xtdb.tx
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.*
+import xtdb.arrow.LIST_TYPE
+import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.VectorType.Companion.IID
 import xtdb.arrow.VectorType.Companion.INSTANT
-import xtdb.arrow.VectorType.Companion.LIST_TYPE
-import xtdb.arrow.VectorType.Companion.STRUCT_TYPE
 import xtdb.arrow.VectorType.Companion.UTF8
 import xtdb.arrow.VectorType.Companion.VAR_BINARY
 import xtdb.arrow.VectorType.Companion.just

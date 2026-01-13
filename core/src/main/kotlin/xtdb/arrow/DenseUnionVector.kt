@@ -41,7 +41,7 @@ class DenseUnionVector private constructor(
             error("can't set DUV nullable")
         }
 
-    override val arrowType = VectorType.UNION_TYPE
+    override val arrowType = UNION_TYPE
 
     private val legVectors = legVectors.toMutableList()
 

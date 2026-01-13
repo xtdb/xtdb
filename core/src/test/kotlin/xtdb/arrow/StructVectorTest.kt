@@ -276,7 +276,7 @@ class StructVectorTest {
 
             assertEquals(
                 Field("struct", FieldType(false, STRUCT, null), listOf(
-                    Field("a", FieldType(false, VectorType.UNION_TYPE, null), listOf(
+                    Field("a", FieldType(false, UNION_TYPE, null), listOf(
                         Field("i32", FieldType(false, VectorType.I32.arrowType, null), emptyList()),
                         Field("utf8", FieldType(false, UTF8_TYPE, null), emptyList())
                     ))

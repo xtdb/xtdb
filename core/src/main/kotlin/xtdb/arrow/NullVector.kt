@@ -11,8 +11,6 @@ import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import org.apache.arrow.vector.NullVector as ArrowNullVector
 
-internal val NULL_TYPE = ArrowType.Null.INSTANCE
-
 class NullVector(
     // nullable = false used for vectors that only contain 'undefined' values
     override var name: String, override var nullable: Boolean = true, override var valueCount: Int = 0

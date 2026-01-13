@@ -7,8 +7,6 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import java.nio.ByteBuffer
 
-internal val UTF8_TYPE = MinorType.VARCHAR.type
-
 class Utf8Vector private constructor(
     override val al: BufferAllocator,
     override var name: String, override var valueCount: Int,

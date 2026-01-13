@@ -10,7 +10,7 @@ import xtdb.util.closeOnCatch
 
 class SingletonListReader(override val name: String, private val elReader: VectorReader) : VectorReader {
     override val nullable = false
-    override val arrowType: ArrowType = VectorType.LIST_TYPE
+    override val arrowType: ArrowType = LIST_TYPE
     override val childFields: List<Field> get() = listOf(elReader.field)
 
     override val valueCount = 1
