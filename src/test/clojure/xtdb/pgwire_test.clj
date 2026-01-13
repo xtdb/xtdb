@@ -3074,7 +3074,7 @@ ORDER BY 1,2;")
     (with-open [conn (pgjdbc-conn)]
       (let [total-rows 10000]
         (doseq [batch (partition-all 1000 (range total-rows))]
-          (xt/submit-tx conn (mapv (fn [n] [:put-docs :foo {:xt/id n}]) batch)))))
+          (xt/execute-tx conn (mapv (fn [n] [:put-docs :foo {:xt/id n}]) batch)))))
 
     (with-open [conn (pgjdbc-conn)]
       ;; pgjdbc requires autocommit=false for cursor mode
@@ -3087,6 +3087,36 @@ ORDER BY 1,2;")
                          (recur (conj rows (.getLong rs 1)))
                          rows))]
             (t/is (= 10000 (count rows)))))))))
+
+(t/deftest test-cursor-fetch-sizes
+  (with-open [conn (pgjdbc-conn)]
+    (xt/execute-tx conn (mapv (fn [n] [:put-docs :cursor-test {:xt/id n}]) (range 200))))
+
+  (letfn [(count-rows [fetch-size]
+            (with-open [conn (pgjdbc-conn)]
+              (.setAutoCommit conn false)
+              (let [stmt (doto (.prepareStatement conn "SELECT * FROM cursor_test")
+                           (.setFetchSize fetch-size))]
+                (with-open [rs (.executeQuery stmt)]
+                  (loop [n 0]
+                    (if (.next rs)
+                      (recur (inc n))
+                      n))))))]
+    
+    (t/testing "fetch size = 1"
+      (t/is (= 200 (count-rows 1))))
+    
+    (t/testing "fetch size = row count (one full batch)"
+      (t/is (= 200 (count-rows 200)))) 
+
+    (t/testing "fetch size is exact divisor (two full batches)"
+      (t/is (= 200 (count-rows 100))))
+
+    (t/testing "fetch size is not exact divisor"
+      (t/is (= 200 (count-rows 75))))
+
+    (t/testing "fetch size larger than row count"
+      (t/is (= 200 (count-rows 500))))))
 
 (comment
   (user/set-log-level! 'xtdb.pgwire :trace))
