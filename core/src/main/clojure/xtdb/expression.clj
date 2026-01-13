@@ -461,7 +461,7 @@
        (macro/macroexpand-all)))
 
 (defn- wrap-boxed-poly-return [{:keys [return-type continue] :as emitted-expr} _]
-  (let [union-legs (seq return-type)]
+  (let [union-legs (.getLegs return-type)]
     (if (> (count union-legs) 1)
       (let [box-sym (gensym 'box)
             legs (->> union-legs

@@ -11,7 +11,7 @@
   (-> (fn [expr opts]
         (let [expr (expr/prepare-expr expr)
               {:keys [return-type continue] :as emitted-expr} (expr/codegen-expr expr opts)
-              el-type (->> return-type (keep types/unnest-type) (apply types/merge-types))
+              el-type (->> (.getLegs return-type) (keep types/unnest-type) (apply types/merge-types))
               lvr-sym (gensym 'lvr)]
           {:vec-type el-type
            :->list-expr (eval `(fn [~(-> expr/schema-sym (expr/with-tag IPersistentMap))

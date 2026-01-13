@@ -280,7 +280,7 @@
   (field->col-type (VectorType/field vec-type)))
 
 (defn nullable-vec-type? [^VectorType vec-type]
-  (boolean (some VectorType/.isNullable vec-type)))
+  (boolean (some VectorType/.isNullable (.getLegs vec-type))))
 
 (defn null-vec-type? [^VectorType vec-type]
   (instance? ArrowType$Null (.getArrowType vec-type)))

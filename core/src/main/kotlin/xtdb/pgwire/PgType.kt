@@ -903,7 +903,7 @@ sealed class PgType(
 
         @JvmStatic
         fun fromVectorType(type: VectorType): PgType {
-            val pgTypes = type.mapTo(mutableSetOf()) { fromXtType(it) }.minus(Null)
+            val pgTypes = type.legs.mapTo(mutableSetOf()) { fromXtType(it) }.minus(Null)
             return unifyPgTypes(pgTypes)
         }
 

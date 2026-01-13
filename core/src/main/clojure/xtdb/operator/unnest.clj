@@ -101,6 +101,7 @@
     (lp/unary-expr (lp/emit-expr relation op-args)
                    (fn [{:keys [vec-types] :as inner-rel}]
                      (let [unnest-type (->> (get vec-types from-col)
+                                            (.getLegs)
                                             (keep types/unnest-type)
                                             (apply types/merge-types))
                            out-vec-types (-> vec-types

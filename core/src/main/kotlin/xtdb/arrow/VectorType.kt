@@ -43,7 +43,7 @@ data class VectorType(
     @get:JvmName("isNullable")
     val nullable: Boolean = false,
     val children: Map<FieldName, VectorType> = emptyMap()
-): Iterable<VectorType> {
+) {
 
     val fieldType get() = FieldType(nullable, arrowType, null)
 
@@ -61,7 +61,7 @@ data class VectorType(
         else -> listOf(this)
     }
 
-    override fun iterator(): Iterator<VectorType> = unionLegs.flatMap { it.splitNull }.iterator()
+    val legs: Iterable<VectorType> = unionLegs.flatMap { it.splitNull }
 
     companion object {
 
