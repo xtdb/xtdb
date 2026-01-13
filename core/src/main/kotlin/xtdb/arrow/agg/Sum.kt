@@ -1,7 +1,6 @@
 package xtdb.arrow.agg
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.arrow.*
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.maybe

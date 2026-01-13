@@ -8,8 +8,8 @@ import xtdb.util.Hasher
 import xtdb.vector.extensions.XtExtensionVector
 import java.nio.ByteBuffer
 
-abstract class ExtensionVector : Vector() {
-    protected abstract val inner: Vector
+abstract class ExtensionVector : MonoVector() {
+    protected abstract val inner: MonoVector
 
     override var name
         get() = inner.name

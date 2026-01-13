@@ -15,7 +15,7 @@ class BitVector private constructor(
     private val al: BufferAllocator,
     override var name: String, override var valueCount: Int,
     private var validityBuffer: BitBuffer?, private val dataBuffer: BitBuffer
-) : Vector(), MetadataFlavour.Presence {
+) : MonoVector(), MetadataFlavour.Presence {
 
     constructor(
         al: BufferAllocator, name: String, nullable: Boolean

@@ -2,6 +2,8 @@ package xtdb.arrow.agg
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.FieldName
+import xtdb.arrow.LongVector
+import xtdb.arrow.MonoVector
 import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector
 import xtdb.arrow.Vector.Companion.openVector
@@ -12,7 +14,8 @@ class RowCount(override val colName: FieldName, val hasZeroRow: Boolean) : Aggre
     override val type: VectorType = I64
 
     override fun build(al: BufferAllocator): AggregateSpec {
-        val outVec = al.openVector(colName, type)
+        val outVec = LongVector(al, colName, false)
+
         return object : AggregateSpec {
 
             override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping) {

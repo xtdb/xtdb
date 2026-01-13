@@ -28,7 +28,7 @@ sealed class Variance(
         override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping) {
             val inVec = inRel.vectorForOrNull(fromName) ?: return
 
-            al.openVector("x2", maybe(F64))
+            DoubleVector(al, "x2", nullable = true)
                 .closeOnCatch { inVec.squareInto(it) }
                 .use { x2Vec ->
                     sumxAgg.aggregate(inRel, groupMapping)

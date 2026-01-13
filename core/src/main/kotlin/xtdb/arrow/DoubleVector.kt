@@ -47,7 +47,7 @@ class DoubleVector private constructor(
         return outVec
     }
 
-    override fun squareInto(outVec: Vector): Vector {
+    override fun squareInto(outVec: Vector): MonoVector {
         check(outVec is DoubleVector) { "Cannot square DoubleVector into ${outVec.arrowType}" }
         repeat(valueCount) { idx ->
             if (isNull(idx)) {

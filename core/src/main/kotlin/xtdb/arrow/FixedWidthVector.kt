@@ -20,7 +20,7 @@ internal fun TimeUnit.toLong(seconds: Long, nanos: Int): Long = when (this) {
     TimeUnit.NANOSECOND -> seconds * 1_000_000_000 + nanos
 }
 
-sealed class FixedWidthVector : Vector() {
+sealed class FixedWidthVector : MonoVector() {
 
     protected abstract val al: BufferAllocator
     protected abstract val byteWidth: Int

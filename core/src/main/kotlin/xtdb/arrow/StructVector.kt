@@ -25,7 +25,7 @@ class StructVector private constructor(
     private var validityBuffer: BitBuffer?,
     private val childWriters: SequencedMap<String, Vector> = LinkedHashMap(),
     override var valueCount: Int = 0,
-) : Vector(), MetadataFlavour.Struct {
+) : MonoVector(), MetadataFlavour.Struct {
 
     override var nullable: Boolean
         get() = validityBuffer != null

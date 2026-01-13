@@ -11,7 +11,7 @@ import xtdb.arrow.VectorIndirection.Companion.Slice
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
-abstract class VariableWidthVector : Vector() {
+abstract class VariableWidthVector : MonoVector() {
 
     override val vectors: Iterable<Vector> = emptyList()
 

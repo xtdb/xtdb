@@ -18,7 +18,7 @@ class FixedSizeListVector private constructor(
     private var validityBuffer: BitBuffer?,
     private var elVector: Vector,
     override var valueCount: Int = 0
-) : Vector(), MetadataFlavour.List {
+) : MonoVector(), MetadataFlavour.List {
 
     override var nullable: Boolean
         get() = validityBuffer != null

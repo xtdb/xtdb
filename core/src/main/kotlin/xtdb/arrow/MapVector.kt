@@ -8,7 +8,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.util.Hasher
 
-class MapVector(private val listVector: ListVector, private val keysSorted: Boolean) : Vector() {
+class MapVector(private val listVector: ListVector, private val keysSorted: Boolean) : MonoVector() {
 
     override var name
         get() = listVector.name

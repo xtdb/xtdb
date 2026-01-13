@@ -4,7 +4,6 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.DateUnit
@@ -18,10 +17,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType.*
 import org.apache.arrow.vector.types.pojo.DictionaryEncoding
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
-import xtdb.api.query.IKeyFn
 import xtdb.trie.ColumnName
-import xtdb.arrow.VectorType.Companion.ofType
-import xtdb.util.Hasher
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
 import xtdb.util.safeMap
@@ -50,33 +46,12 @@ sealed class Vector : VectorReader, VectorWriter {
 
     abstract override var valueCount: Int; internal set
 
-    internal abstract fun getObject0(idx: Int, keyFn: IKeyFn<*>): Any
-    override fun getObject(idx: Int, keyFn: IKeyFn<*>) = if (isNull(idx)) null else getObject0(idx, keyFn)
-
-    open fun ensureCapacity(valueCount: Int): Unit = unsupported("ensureCapacity")
-
-    open fun setNull(idx: Int): Unit = unsupported("setNull")
-    open fun setBoolean(idx: Int, v: Boolean): Unit = unsupported("setBoolean")
-    open fun setInt(idx: Int, v: Int): Unit = unsupported("setInt")
-    open fun setLong(idx: Int, v: Long): Unit = unsupported("setLong")
-    open fun setFloat(idx: Int, v: Float): Unit = unsupported("setFloat")
-    open fun setDouble(idx: Int, v: Double): Unit = unsupported("setDouble")
-
     override fun writeNull() {
         if (!nullable) nullable = true
         writeUndefined()
     }
 
-    protected abstract fun writeObject0(value: Any)
-
-    override fun writeObject(obj: Any?) =
-        when (obj) {
-            null -> writeNull()
-            is ValueReader -> writeValue(obj)
-            else -> writeObject0(obj)
-        }
-
-    private fun writeValues(al: BufferAllocator, values: Iterable<*>): Vector {
+    fun writeValues(al: BufferAllocator, values: Iterable<*>): Vector {
         var vec = this
         for (value in values) {
             try {
@@ -89,9 +64,18 @@ sealed class Vector : VectorReader, VectorWriter {
         return vec
     }
 
-    abstract fun hashCode0(idx: Int, hasher: Hasher): Int
-    final override fun hashCode(idx: Int, hasher: Hasher) =
-        if (isNull(idx)) ArrowBufPointer.NULL_HASH_CODE else hashCode0(idx, hasher)
+    override fun rowCopier(dest: VectorWriter): RowCopier {
+        if (dest is DenseUnionVector.LegVector) return dest.rowCopierFrom(this)
+        if (dest is DenseUnionVector) return dest.rowCopier0(this)
+
+        check(dest is Vector) { "can only copy to another Vector, got ${dest::class}" }
+
+        if (arrowType != dest.arrowType) throw InvalidCopySourceException(this, dest)
+
+        return dest.rowCopier0(this)
+    }
+
+    internal abstract fun rowCopier0(src: VectorReader): RowCopier
 
     /**
      * Divides this vector by [divisorVec] and writes the result into [outVec].
@@ -131,21 +115,6 @@ sealed class Vector : VectorReader, VectorWriter {
             }
         }
 
-    override fun rowCopier(dest: VectorWriter): RowCopier {
-        if (dest is DenseUnionVector.LegVector) return dest.rowCopierFrom(this)
-        if (dest is DenseUnionVector) return dest.rowCopier0(this)
-
-        check(dest is Vector) { "can only copy to another Vector, got ${dest::class}" }
-        
-        if (arrowType != dest.arrowType) throw InvalidCopySourceException(this, dest)
-
-        return dest.rowCopier0(this)
-    }
-
-    internal abstract fun rowCopier0(src: VectorReader): RowCopier
-
-    override val asList get() = (0 until valueCount).map { getObject(it) }
-
     override fun toString() = VectorReader.toString(this)
 
     companion object {
@@ -177,7 +146,7 @@ sealed class Vector : VectorReader, VectorWriter {
                 override fun visit(type: Null) = NullVector(name)
 
                 override fun visit(type: Struct) =
-                    StructVector(al, name, nullable, children.associateTo(linkedMapOf()) { it.name to it })
+                    StructVector(al, name, nullable, children.associateByTo(linkedMapOf()) { it.name })
 
                 override fun visit(type: ArrowType.List) =
                     ListVector(al, name, nullable, children.firstOrNull() ?: NullVector($$"$data$", false))

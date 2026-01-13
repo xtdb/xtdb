@@ -14,7 +14,7 @@ import org.apache.arrow.vector.NullVector as ArrowNullVector
 class NullVector(
     // nullable = false used for vectors that only contain 'undefined' values
     override var name: String, override var nullable: Boolean = true, override var valueCount: Int = 0
-) : Vector() {
+) : MonoVector() {
     override val vectors = emptyList<Vector>()
 
     override val arrowType: ArrowType = NULL_TYPE
@@ -48,8 +48,12 @@ class NullVector(
 
     override fun hashCode0(idx: Int, hasher: Hasher) = error("hashCode0 called on NullVector")
 
-    override fun sumInto(outVec: Vector) = VectorSummer { _, groupIdx ->
-        outVec.ensureCapacity(groupIdx + 1)
+    override fun sumInto(outVec: Vector): VectorSummer {
+        check(outVec is MonoVector)
+
+        return VectorSummer { _, groupIdx ->
+            outVec.ensureCapacity(groupIdx + 1)
+        }
     }
 
     override fun maybePromote(al: BufferAllocator, targetType: ArrowType, targetNullable: Boolean): Vector =

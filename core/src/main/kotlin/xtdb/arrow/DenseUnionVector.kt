@@ -234,10 +234,8 @@ class DenseUnionVector private constructor(
         return if (legName == leg.arrowType.toLeg()) value else TaggedValue(legName.kw, value)
     }
 
-    override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = throw UnsupportedOperationException()
-
-    override fun writeObject0(value: Any) =
-        legWriter(value.toArrowType(), false).writeObject(value)
+    override fun writeObject(obj: Any?) =
+        legWriter(obj.toArrowType(), false).writeObject(obj)
 
     // DUV overrides the nullable one because DUVs themselves can't be null.
     override fun writeValue(v: ValueReader) {
@@ -312,7 +310,7 @@ class DenseUnionVector private constructor(
     override val metadataFlavours: Collection<MetadataFlavour>
         get() = legVectors.flatMap { it.metadataFlavours }
 
-    override fun hashCode0(idx: Int, hasher: Hasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)
+    override fun hashCode(idx: Int, hasher: Hasher) = leg(idx)!!.hashCode(getOffset(idx), hasher)
 
     override fun rowCopier0(src: VectorReader): RowCopier =
         when {

@@ -20,7 +20,7 @@ class ListVector private constructor(
     private var validityBuffer: BitBuffer?,
     private val offsetBuffer: ExtensibleBuffer,
     override var valueCount: Int = 0
-) : Vector(), MetadataFlavour.List {
+) : MonoVector(), MetadataFlavour.List {
 
     override var nullable: Boolean
         get() = validityBuffer != null
