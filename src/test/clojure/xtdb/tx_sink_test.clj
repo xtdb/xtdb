@@ -251,3 +251,35 @@
               foo-events (table-events "foo" events)]
           (t/is (= 2 (count foo-events)))
           (t/is (= #{"second" "third"} (->> foo-events (map event-values) set))))))))
+
+(t/deftest test-group-events-by-system-time
+  (let [t1 #inst "2020-01-01T00:00:00Z"
+        t2 #inst "2020-01-01T00:01:00Z"
+        t3 #inst "2020-01-01T00:02:00Z"
+        events [{:table :table-a :event {:system-from t1 :id 1}}
+                {:table :table-a :event {:system-from t2 :id 2}}
+                {:table :table-a :event {:system-from t3 :id 3}}
+                {:table :table-b :event {:system-from t1 :id 10}}
+                {:table :table-b :event {:system-from t2 :id 20}}
+                {:table :table-b :event {:system-from t2 :id 30}}]
+        grouped (tx-sink/group-events-by-system-time events)]
+
+    (t/testing "returns a seq with system-from as keys"
+      (t/is (= [t1 t2 t3] (map first grouped))))
+
+    (t/testing "events at t1 grouped by table"
+      (let [[_ tables-at-t1] (nth grouped 0)]
+        (t/is (= #{:table-a :table-b} (set (keys tables-at-t1))))
+        (t/is (= [{:system-from t1 :id 1}] (get tables-at-t1 :table-a)))
+        (t/is (= [{:system-from t1 :id 10}] (get tables-at-t1 :table-b)))))
+
+    (t/testing "events at t2 grouped by table"
+      (let [[_ tables-at-t2] (nth grouped 1)]
+        (t/is (= #{:table-a :table-b} (set (keys tables-at-t2))))
+        (t/is (= [{:system-from t2 :id 2}] (get tables-at-t2 :table-a)))
+        (t/is (= [{:system-from t2 :id 20} {:system-from t2 :id 30}] (get tables-at-t2 :table-b)))))
+
+    (t/testing "events at t3 only table-a"
+      (let [[_ tables-at-t3] (nth grouped 2)]
+        (t/is (= #{:table-a} (set (keys tables-at-t3))))
+        (t/is (= [{:system-from t3 :id 3}] (get tables-at-t3 :table-a)))))))

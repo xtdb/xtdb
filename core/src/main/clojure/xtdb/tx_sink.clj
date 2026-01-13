@@ -76,6 +76,14 @@
         event (read-l0-data-file allocator buffer-pool (Trie/dataFilePath table trie-key))]
     {:table table :event event}))
 
+(defn group-events-by-system-time
+  [events]
+  (->> (group-by #(get-in % [:event :system-from]) events)
+       (map (fn [[k entries]]
+              [k (-> (group-by :table entries)
+                     (update-vals #(mapv :event %)))]))
+       (sort-by first)))
+
 (defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format enable db-name]}]
   (.txSink config
            (cond-> (TxSinkConfig.)
