@@ -37,3 +37,7 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn set-log-level! [ns level]
   (logging/set-log-level! ns level))
+
+(comment
+  (set-log-level! 'xtdb.pgwire :debug)
+  (set-log-level! 'xtdb.pgwire :info))
