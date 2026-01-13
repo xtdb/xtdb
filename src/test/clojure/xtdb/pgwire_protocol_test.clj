@@ -344,3 +344,50 @@
                                        :detail nil}}]
                 [:msg-ready {:status :idle}]]
                (test "SELECT 1 one; BEGIN"))))))
+
+(deftest test-cursor-protocol-messages-5131
+  (let [{:keys [!in-msgs] :as frontend} (->recording-frontend)
+        portal-name "cursor-test"
+        stmt-name "cursor-stmt"]
+    (with-open [conn (->conn frontend {"user" "xtdb" "database" "xtdb"})]
+      (reset! !in-msgs [])
+      (pgwire/handle-msg conn {:msg-name :msg-simple-query
+                               :query "INSERT INTO foo RECORDS {_id: 1}, {_id: 2}, {_id: 3}"})
+
+      (t/testing "Execute with limit returns portal-suspended"
+        (reset! !in-msgs [])
+        (pgwire/handle-msg conn {:msg-name :msg-simple-query
+                                 :query "BEGIN"})
+        (pgwire/handle-msg conn {:msg-name :msg-parse :stmt-name stmt-name
+                                 :query "SELECT _id FROM foo ORDER BY _id" :param-oids []})
+        (pgwire/handle-msg conn {:msg-name :msg-bind
+                                 :portal-name portal-name :stmt-name stmt-name
+                                 :arg-format [] :args [] :result-format nil})
+        (pgwire/handle-msg conn {:msg-name :msg-describe :describe-type :portal :describe-name portal-name})
+        (pgwire/handle-msg conn {:msg-name :msg-execute :portal-name portal-name :limit 2})
+        (pgwire/handle-msg conn {:msg-name :msg-sync})
+
+        (t/is (= [[:msg-command-complete {:command "BEGIN"}]
+                  [:msg-ready {:status :transaction}]
+                  [:msg-parse-complete]
+                  [:msg-bind-complete]
+                  [:msg-row-description {:columns [{:column-name "_id"
+                                                    :table-oid 0 :column-attribute-number 0
+                                                    :column-oid 20 :typlen 8
+                                                    :type-modifier -1 :result-format :text}]}]
+                  [:msg-data-row {:vals ["1"]}]
+                  [:msg-data-row {:vals ["2"]}]
+                  [:msg-portal-suspended]
+                  [:msg-ready {:status :transaction}]]
+                 @!in-msgs)))
+
+      (t/testing "Subsequent Execute returns remaining rows and command-complete"
+        (reset! !in-msgs [])
+        (pgwire/handle-msg conn {:msg-name :msg-execute :portal-name portal-name :limit 2})
+        (pgwire/handle-msg conn {:msg-name :msg-sync})
+        (pgwire/handle-msg conn {:msg-name :msg-terminate})
+
+        (t/is (= [[:msg-data-row {:vals ["3"]}]
+                  [:msg-command-complete {:command "SELECT 3"}]
+                  [:msg-ready {:status :transaction}]]
+                 @!in-msgs))))))
