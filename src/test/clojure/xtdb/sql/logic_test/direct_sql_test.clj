@@ -11,7 +11,6 @@
 (slt/def-slt-test direct-sql--periods-and-derived-cols {:direct-sql true})
 (slt/def-slt-test direct-sql--object-array {:direct-sql true})
 (slt/def-slt-test direct-sql--limit {:direct-sql true})
-(slt/def-slt-test direct-sql--arrow-table {:direct-sql true})
 (slt/def-slt-test direct-sql--sl-a5 {:direct-sql true})
 (slt/def-slt-test direct-sql--sl-demo {:direct-sql true})
 (slt/def-slt-test direct-sql--no-projected-cols {:direct-sql true})

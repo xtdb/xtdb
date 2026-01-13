@@ -84,7 +84,6 @@ AND : 'AND' ;
 ANY : 'ANY' ;
 ARRAY : 'ARRAY' ;
 ARRAY_AGG : 'ARRAY_AGG' ;
-ARROW_TABLE : 'ARROW_TABLE' ;
 AS : 'AS' ;
 ASC : 'ASC' ;
 ASSERT : 'ASSERT' ;

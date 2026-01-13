@@ -531,7 +531,6 @@ tableReference
     | 'LATERAL' subquery tableAlias tableProjection? # LateralDerivedTable
     | 'UNNEST' '(' expr ')' withOrdinality? tableAlias tableProjection? # CollectionDerivedTable
     | generateSeries withOrdinality? tableAlias tableProjection? # GenerateSeriesTable
-    | 'ARROW_TABLE' '(' characterString ')' tableAlias tableProjection # ArrowTable
     | '(' tableReference ')' # WrappedTableReference
     ;
 

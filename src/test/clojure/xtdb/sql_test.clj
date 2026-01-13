@@ -801,15 +801,6 @@
          (sql/plan "SELECT a FROM foo ORDER BY a NULLS LAST"
                    {:table-info {#xt/table foo #{"a"}}}))))
 
-(t/deftest test-arrow-table
-  (t/is (=plan-file
-         "test-arrow-table-1"
-         (sql/plan "SELECT foo.a FROM ARROW_TABLE('test.arrow') AS foo (a)")))
-
-  (t/is (=plan-file
-         "test-arrow-table-2"
-         (sql/plan "SELECT * FROM ARROW_TABLE('test.arrow') AS foo (a, b)"))))
-
 (t/deftest test-projects-that-matter-are-maintained
   (t/is (=plan-file
          "projects-that-matter-are-maintained"

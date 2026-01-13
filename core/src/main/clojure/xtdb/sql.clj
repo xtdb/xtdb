@@ -509,26 +509,6 @@
          plan]
         plan))))
 
-(defrecord ArrowTable [env url table-alias unique-table-alias ^SequencedSet !table-cols]
-  Scope
-  (available-cols [_]
-    !table-cols)
-
-  (-find-cols [this [col-name table-name] excl-cols]
-    (when (or (nil? table-name) (= table-name table-alias))
-      (for [col (if col-name
-                  (when (.contains !table-cols col-name)
-                    [col-name])
-                  (available-cols this))
-            :when (not (contains? excl-cols col))]
-        (->col-sym (str unique-table-alias) (str col)))))
-
-  PlanRelation
-  (plan-rel [_]
-    [:rename {:prefix unique-table-alias}
-     [:project {:projections (vec !table-cols)}
-      [:arrow url]]]))
-
 (defn- ->table-projection [^ParserRuleContext ctx]
   (some-> ctx
           (.accept
@@ -742,15 +722,7 @@
                            (-> (->col-sym (str "_ordinal." (swap! !id-count inc)))
                                (vary-meta assoc :unnamed-unnest-col? true))))))))
 
-  (visitWrappedTableReference [this ctx] (-> (.tableReference ctx) (.accept this)))
-
-  (visitArrowTable [{{:keys [!id-count]} :env} ctx]
-    (let [table-alias (identifier-sym (.tableAlias ctx))
-          cols (->table-projection (.tableProjection ctx))
-          url (some-> (.characterString ctx) (.accept (->ExprPlanVisitor env scope)))]
-      (->ArrowTable env url table-alias
-                    (symbol (str table-alias "." (swap! !id-count inc)))
-                    (->insertion-ordered-set cols)))))
+  (visitWrappedTableReference [this ctx] (-> (.tableReference ctx) (.accept this))))
 
 (defrecord QuerySpecificationScope [outer-scope from-rel]
   Scope

@@ -13,7 +13,6 @@
             [xtdb.logical-plan :as lp]
             [xtdb.metrics :as metrics]
             xtdb.operator.apply
-            xtdb.operator.arrow
             xtdb.operator.distinct
             xtdb.operator.group-by
             xtdb.operator.join
@@ -30,7 +29,6 @@
             xtdb.operator.top
             xtdb.operator.unnest
             xtdb.operator.window
-            [xtdb.serde.types :as serde-types]
             [xtdb.sql :as sql]
             [xtdb.time :as time]
             [xtdb.types :as types]
