@@ -14,7 +14,7 @@
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb ICursor)
-           (xtdb.arrow RelationReader Vector VectorReader VectorType VectorWriter)
+           (xtdb.arrow MonoVector RelationReader Vector VectorReader VectorType VectorWriter)
            (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Average Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount StdDevPop StdDevSamp Sum VariancePop VarianceSamp)
            (xtdb.expression.map RelationMapBuilder)
            xtdb.operator.distinct.DistinctRelationMap
@@ -81,7 +81,7 @@
 
               {:keys [continue] :as emitted-expr} (expr/codegen-expr agg-expr input-opts)]
 
-          {:eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag Vector))
+          {:eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag MonoVector))
                                ~(-> expr/rel-sym (expr/with-tag RelationReader))
                                ~(-> group-mapping-sym (expr/with-tag VectorReader))]
                             (let [~@(expr/batch-bindings emitted-expr)]
