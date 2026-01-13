@@ -53,7 +53,7 @@
                                     :system-from #xt/instant "2020-01-01T00:00Z"
                                     :valid-from  #xt/instant "2020-01-01T00:00Z"
                                     :valid-to nil
-                                    :doc {"_id" :doc1, "value" "test"}}]}
+                                    :doc {:xt/id :doc1, :value "test"}}]}
                             {:db "xtdb"
                              :schema "xt"
                              :table "txs"
@@ -62,9 +62,9 @@
                                     :system-from #xt/instant "2020-01-01T00:00Z"
                                     :valid-from  #xt/instant "2020-01-01T00:00Z"
                                     :valid-to nil
-                                    :doc {"_id" 0
-                                          "system_time" #xt/zdt "2020-01-01T00:00[UTC]"
-                                          "committed" true}}]}]})
+                                    :doc {:xt/id 0
+                                          :system-time #xt/zdt "2020-01-01T00:00[UTC]"
+                                          :committed true}}]}]})
                  (util/->clj msg))))
 
       (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1, a: 1, b: {c: [1, 2, 3], d: 'test'}}, {_id: 2, a: 2}, {_id: 3, a: 3}"])
@@ -207,7 +207,7 @@
           (let [puts (filter #(= :put (:op %)) rows)]
             (t/is (= 2 (count puts)))
             (t/is (every? :doc puts))
-            (t/is (= #{"first" "second"} (->> puts (map #(get-in % [:doc "value"])) set)))))
+            (t/is (= #{"first" "second"} (->> puts (map #(get-in % [:doc :value])) set)))))
 
         (t/testing "delete operations"
           (let [deletes (filter #(= :delete (:op %)) rows)]
@@ -239,7 +239,7 @@
                                 (filter (fn [{:keys [^TableRef table]}]
                                           (= table-filter (.getTableName table))))
                                 (map :event)))
-            event-values #(get-in % [:doc "value"])]
+            event-values #(get-in % [:doc :value])]
         (t/is (= [0 1] (map :block-idx blocks)))
         (let [{:keys [tables]} (first blocks)
               events (tx-sink/read-l0-events allocator bp tables)

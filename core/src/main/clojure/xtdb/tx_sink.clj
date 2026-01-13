@@ -7,6 +7,7 @@
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import (org.apache.arrow.memory BufferAllocator)
+           (xtdb TaggedValue)
            (xtdb.api TxSinkConfig Xtdb Xtdb$Config)
            (xtdb.api.log Log Log$Message Log$Message$Tx)
            (xtdb.arrow Relation RelationReader)
@@ -19,24 +20,20 @@
 (defn read-relation-rows
   ([rel] (read-relation-rows rel 0))
   ([^RelationReader rel start]
-   (let [row-count (.getRowCount rel)
-         iid-vec (.vectorFor rel "_iid")
-         system-from-vec (.vectorFor rel "_system_from")
-         valid-from-vec (.vectorFor rel "_valid_from")
-         valid-to-vec (.vectorFor rel "_valid_to")
-         op-vec (.vectorFor rel "op")
-         put-vec (.vectorFor op-vec "put")]
-     (into []
-           (for [i (range start row-count)]
-             (let [leg (.getLeg op-vec i)]
-               (cond-> {:iid (.getObject iid-vec i)
-                        :valid-from (time/->instant (.getObject valid-from-vec i))
-                        :system-from (time/->instant (.getObject system-from-vec i))
-                        :valid-to (let [vt (.getLong valid-to-vec i)]
-                                    (when-not (= Long/MAX_VALUE vt)
-                                      (time/->instant (.getObject valid-to-vec i))))}
-                 leg (assoc :op (keyword leg))
-                 (and (= leg "put") put-vec) (assoc :doc (.getObject put-vec i)))))))))
+   (->> (.getAsMaps rel)
+        (drop start)
+        (map (fn [{:xt/keys [iid valid-from system-from valid-to]
+                   :keys [^TaggedValue op]}]
+               (let [op-tag (.getTag op)]
+                 (cond-> {:iid iid
+                          :valid-from (time/->instant valid-from)
+                          :system-from (time/->instant system-from)
+                          :valid-to (let [vt (time/->instant valid-to)]
+                                      (when-not (= vt time/end-of-time)
+                                        vt))
+                          :op op-tag}
+                   (= op-tag :put) (assoc :doc (.getValue op))))))
+        (into []))))
 
 (defn read-table-rows [^TableRef table ^LiveIndex$Tx live-idx-tx]
   (let [live-table (.liveTable live-idx-tx table)
