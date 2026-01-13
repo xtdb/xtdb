@@ -1331,7 +1331,8 @@
       Future$State/FAILED (throw (.exceptionNow task)))))
 
 (defn cmd-exec-query [{:keys [conn-state !closing? query-error-counter] :as conn}
-                      {:keys [limit statement-type query ^IResultCursor cursor pg-cols] :as _portal}]
+                      {:keys [limit statement-type query ^IResultCursor cursor pg-cols portal-name pending-rows total-rows-sent]
+                       :as _portal}]
   ;; Create an implicit transaction if one hasn't already been started
   (let [transaction (get-in @conn-state [:transaction])]
     (when (:failed transaction)
@@ -1342,6 +1343,7 @@
 
   (try
     (let [!n-rows-out (volatile! 0)
+          !pending (volatile! [])
           {session-params :parameters, :as session} (:session @conn-state)
           fallback (fallback-type session)
           serialize-row (fn [^RelationReader rel idx]
@@ -1359,7 +1361,15 @@
       (run-cancellable-query!
        conn
        (fn []
-         (while (and (or (nil? limit) (< @!n-rows-out limit))
+         ;; Send any pending rows from previous Execute
+         (when (not-empty pending-rows)
+           (let [[to-send to-keep] (split-at (or limit (count pending-rows)) pending-rows)] 
+             (run! send-row! to-send)
+             (vreset! !pending (vec to-keep))))
+
+         ;; If no pending rows left to process, continue with cursor
+         (while (and (empty? @!pending)
+                     (or (nil? limit) (< @!n-rows-out limit))
                      (.tryAdvance cursor
                                   (fn [^RelationReader rel]
                                     (log/trace "advancing cursor with rel count" (.getRowCount rel))
@@ -1368,11 +1378,25 @@
 
                                       @!closing? (log/trace "query result stream stopping (conn closing)")
 
-                                      :else (dotimes [idx (cond-> (.getRowCount rel) 
-                                                            limit (min (- limit @!n-rows-out)))]
-                                              (send-row! (serialize-row rel idx))))))))))
+                                      :else (let [row-count (.getRowCount rel)
+                                                  num-to-send (cond-> row-count
+                                                                limit (min (- limit @!n-rows-out)))]
+                                              ;; Send rows up to limit 
+                                              (dotimes [idx num-to-send] 
+                                                (send-row! (serialize-row rel idx)))
+                                              ;; Buffer any remaining rows for next Execute 
+                                              (dotimes [idx (- row-count num-to-send)] 
+                                                (vswap! !pending conj (serialize-row rel (+ num-to-send idx))))))))))))
 
-      (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @!n-rows-out)}))
+      ;; Save any pending rows and cumulative count back to portal
+      (let [cumulative-rows (+ (or total-rows-sent 0) @!n-rows-out)]
+        (when portal-name
+          (swap! conn-state update-in [:portals portal-name]
+                 assoc :pending-rows @!pending :total-rows-sent cumulative-rows))
+
+        (if (= @!n-rows-out limit)
+          (pgio/cmd-write-msg conn pgio/msg-portal-suspended)
+          (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " cumulative-rows)}))))
 
     (catch Interrupted e (throw e))
     (catch InterruptedException e (throw e))
@@ -1492,7 +1516,8 @@
   (let [portal (or (get-in @conn-state [:portals portal-name])
                    (throw (pgio/err-protocol-violation "no such portal")))]
     (execute-portal conn (cond-> portal
-                           (not (zero? limit)) (assoc :limit limit)))))
+                           (not (zero? limit)) (assoc :limit limit)
+                           :always (assoc :portal-name portal-name)))))
 
 (defmethod handle-msg* :msg-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
   (swap! conn-state assoc :protocol :simple)
