@@ -388,7 +388,7 @@
                           (project1 '(- a -9223372036854775807) {:a 9223372036854775807}))))
 
 (defn- project-mono-value [f-sym val vec-type]
-  (with-open [rel (vr/rel-reader [(tu/open-vec (types/->field vec-type "s") [val])])]
+  (with-open [rel (vr/rel-reader [(tu/open-vec "s" vec-type [val])])]
     (-> (run-projection rel (list f-sym 's))
         :res
         first)))
@@ -1889,8 +1889,8 @@
                                           (+ (. x b) (nth (. x c) 1))]})))))
 
 (t/deftest absent-handling-2944
-  (with-open [rel (vr/rel-reader [(tu/open-vec #xt/field {"x" [:struct {"maybe-float" [:? :f64], 
-                                                                        "maybe-str" [:? :utf8]}]}
+  (with-open [rel (vr/rel-reader [(tu/open-vec "x" #xt/type [:struct {"maybe-float" [:? :f64],
+                                                                        "maybe-str" [:? :utf8]}]
                                                [{}])])]
 
     (t/is (= {:res [nil], :res-type #xt/type [:? :f64]}

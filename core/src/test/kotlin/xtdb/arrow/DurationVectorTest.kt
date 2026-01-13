@@ -29,9 +29,9 @@ class DurationVectorTest {
 
     @Test
     fun `divideInto divides durations by integers`() {
-        Vector.fromList(allocator, "dividend" ofType DURATION_MICRO,
+        Vector.fromList(allocator, "dividend", DURATION_MICRO,
             listOf(Duration.ofSeconds(100), Duration.ofSeconds(50), Duration.ofSeconds(75))).use { dividendVec ->
-            Vector.fromList(allocator, "divisor" ofType I32, listOf(4, 2, 3)).use { divisorVec ->
+            Vector.fromList(allocator, "divisor", I32, listOf(4, 2, 3)).use { divisorVec ->
                 allocator.openVector("result", DURATION_MICRO).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
@@ -46,9 +46,9 @@ class DurationVectorTest {
 
     @Test
     fun `divideInto handles null dividend`() {
-        Vector.fromList(allocator, "dividend" ofType maybe(DURATION_MICRO),
+        Vector.fromList(allocator, "dividend", maybe(DURATION_MICRO),
             listOf(null, Duration.ofSeconds(50))).use { dividendVec ->
-            Vector.fromList(allocator, "divisor" ofType I32, listOf(4, 2)).use { divisorVec ->
+            Vector.fromList(allocator, "divisor", I32, listOf(4, 2)).use { divisorVec ->
                 allocator.openVector("result", maybe(DURATION_MICRO)).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
@@ -62,9 +62,9 @@ class DurationVectorTest {
 
     @Test
     fun `divideInto handles null divisor`() {
-        Vector.fromList(allocator, "dividend" ofType DURATION_MICRO,
+        Vector.fromList(allocator, "dividend", DURATION_MICRO,
             listOf(Duration.ofSeconds(100), Duration.ofSeconds(50))).use { dividendVec ->
-            Vector.fromList(allocator, "divisor" ofType maybe(I32), listOf(4, null)).use { divisorVec ->
+            Vector.fromList(allocator, "divisor", maybe(I32), listOf(4, null)).use { divisorVec ->
                 allocator.openVector("result", maybe(DURATION_MICRO)).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 
@@ -78,9 +78,9 @@ class DurationVectorTest {
 
     @Test
     fun `divideInto handles division by zero`() {
-        Vector.fromList(allocator, "dividend" ofType DURATION_MICRO,
+        Vector.fromList(allocator, "dividend", DURATION_MICRO,
             listOf(Duration.ofSeconds(100), Duration.ofSeconds(50), Duration.ofSeconds(75))).use { dividendVec ->
-            Vector.fromList(allocator, "divisor" ofType I32, listOf(0, 2, 0)).use { divisorVec ->
+            Vector.fromList(allocator, "divisor", I32, listOf(0, 2, 0)).use { divisorVec ->
                 allocator.openVector("result", maybe(DURATION_MICRO)).use { resultVec ->
                     dividendVec.divideInto(divisorVec, resultVec)
 

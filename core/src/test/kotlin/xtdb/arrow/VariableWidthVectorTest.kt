@@ -58,7 +58,7 @@ class VariableWidthVectorTest {
             val rand = Random(seed)
             val idxs = (0..<strs.size).shuffled(rand).toIntArray()
 
-            Vector.fromList(al, "foo" ofType VectorType.UTF8, strs).use { src ->
+            Vector.fromList(al, "foo", VectorType.UTF8, strs).use { src ->
                 al.openVector(src.field).use { dest ->
                     val copier = src.rowCopier(dest)
                     copier.copyRows(idxs)
@@ -77,7 +77,7 @@ class VariableWidthVectorTest {
             val len = Arb.nonNegativeInt(strs.size - 1 - offset).bind()
             Triple(strs, offset, len)
         }) { (strs, offset, len) ->
-            Vector.fromList(al, "foo" ofType VectorType.UTF8, strs).use { src ->
+            Vector.fromList(al, "foo", VectorType.UTF8, strs).use { src ->
                 al.openVector(src.field).use { dest ->
                     val copier = src.rowCopier(dest)
                     copier.copyRange(offset, len)

@@ -39,19 +39,19 @@
 
 (t/deftest empty-list-with-nested-lists-slicing-3377
   (t/testing "empty list of lists"
-    (with-open [vec (tu/open-vec #xt/field {"0" [:list {"1" [:list {"2" :i64}]}]}
+    (with-open [vec (tu/open-vec "0" #xt/type [:list {"1" [:list {"2" :i64}]}]
                                  [[]])
                 copied-vec (.openSlice vec tu/*allocator*)]
       (t/is (= (.getAsList vec) (.getAsList copied-vec)))))
 
   (t/testing "empty set of lists"
-    (with-open [vec (tu/open-vec #xt/field {"0" [:set {"1" [:list {"2" :i64}]}]}
+    (with-open [vec (tu/open-vec "0" #xt/type [:set {"1" [:list {"2" :i64}]}]
                                  [#{}])
                 copied-vec (.openSlice vec tu/*allocator*)]
       (= (.getAsList vec) (.getAsList copied-vec))))
 
   (t/testing "empty list of sets"
-    (with-open [vec (tu/open-vec #xt/field {"0" [:list {"1" [:set {"2" :i64}]}]}
+    (with-open [vec (tu/open-vec "0" #xt/type [:list {"1" [:set {"2" :i64}]}]
                                  [[] #{}])
                 copied-vec (.openSlice vec tu/*allocator*)]
       (= (.getAsList vec) (.getAsList copied-vec)))))

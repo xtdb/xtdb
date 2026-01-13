@@ -23,6 +23,7 @@ import xtdb.trie.ColumnName
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.Hasher
 import xtdb.util.closeAllOnCatch
+import xtdb.util.closeOnCatch
 import xtdb.util.safeMap
 import xtdb.vector.extensions.*
 import java.time.ZoneId
@@ -74,6 +75,19 @@ sealed class Vector : VectorReader, VectorWriter {
             is ValueReader -> writeValue(obj)
             else -> writeObject0(obj)
         }
+
+    private fun writeValues(al: BufferAllocator, values: Iterable<*>): Vector {
+        var vec = this
+        for (value in values) {
+            try {
+                vec.writeObject(value)
+            } catch (_: InvalidWriteObjectException) {
+                vec = vec.maybePromote(al, value.toArrowType(), value == null)
+                vec.writeObject(value)
+            }
+        }
+        return vec
+    }
 
     abstract fun hashCode0(idx: Int, hasher: Hasher): Int
     final override fun hashCode(idx: Int, hasher: Hasher) =
@@ -271,30 +285,11 @@ sealed class Vector : VectorReader, VectorWriter {
         }
 
         @JvmStatic
-        fun fromList(al: BufferAllocator, field: Field, values: List<*>): Vector {
-            var vec = al.openVector(field)
-            try {
-                for (value in values) {
-                    try {
-                        vec.writeObject(value)
-                    } catch (_: InvalidWriteObjectException) {
-                        vec = vec.maybePromote(al, value.toArrowType(), value == null)
-                        vec.writeObject(value)
-                    }
-                }
-                return vec
-            } catch (t: Throwable) {
-                vec.close()
-                throw t
-            }
-        }
-
-        @JvmStatic
         fun fromList(al: BufferAllocator, colName: FieldName, type: VectorType, values: List<*>) =
-            fromList(al, colName ofType type, values)
+            al.openVector(colName, type).closeOnCatch { it.writeValues(al, values) }
 
         @JvmStatic
         fun fromList(al: BufferAllocator, name: ColumnName, values: List<*>) =
-            fromList(al, name ofType VectorType.NULL, values)
+            fromList(al, name, VectorType.NULL, values)
     }
 }

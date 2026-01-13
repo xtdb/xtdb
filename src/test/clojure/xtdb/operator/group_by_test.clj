@@ -120,7 +120,7 @@
           "aggregate without group")))
 
 (t/deftest test-promoting-sum
-  (with-open [gm (tu/open-vec #xt/field {"gm" :i32} (map int [0 0 0]))
+  (with-open [gm (tu/open-vec "gm" #xt/type :i32 (map int [0 0 0]))
               v0 (tu/open-rel {:v [1 2 3]})
               v1 (tu/open-rel {:v [1 2.0 3]})]
     (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v,
@@ -322,8 +322,8 @@
                                                    {:a 12}]}]]))))
 
 (t/deftest test-array-agg
-  (with-open [gm0 (tu/open-vec #xt/field {"gm0" :i32} (map int [0 1 0]))
-              gm1 (tu/open-vec #xt/field {"gm1" :i32} (map int [1 2 0]))
+  (with-open [gm0 (tu/open-vec "gm0" #xt/type :i32 (map int [0 1 0]))
+              gm1 (tu/open-vec "gm1" #xt/type :i32 (map int [1 2 0]))
               k0 (Vector/fromList tu/*allocator* "k" [1 2 3])
               k1 (Vector/fromList tu/*allocator* "k" [4 5 6])]
 

@@ -78,7 +78,7 @@ class FixedWidthVectorTest {
             val rand = Random(seed)
             val idxs = (0..<ints.size).shuffled(rand).toIntArray()
 
-            Vector.fromList(al, "foo" ofType I32, ints).use { src ->
+            Vector.fromList(al, "foo", I32, ints).use { src ->
                 al.openVector(src.field).use { dest ->
                     val copier = src.rowCopier(dest)
                     copier.copyRows(idxs)
@@ -97,7 +97,7 @@ class FixedWidthVectorTest {
             val len = Arb.nonNegativeInt(ints.size - 1 - offset).bind()
             Triple(ints, offset, len)
         }) { (ints, offset, len) ->
-            Vector.fromList(al, "foo" ofType I32, ints).use { src ->
+            Vector.fromList(al, "foo", I32, ints).use { src ->
                 al.openVector(src.field).use { dest ->
                     val copier = src.rowCopier(dest)
                     copier.copyRange(offset, len)
