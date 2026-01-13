@@ -14,9 +14,12 @@ internal data class InvalidWriteObjectException(
         PersistentArrayMap.create(mapOf("target".kw to vec::class.simpleName, "obj".kw to obj))
 }
 
+private val VectorReader.typeAsString get() =
+    "${if (nullable) "?" else ""}$arrowType"
+
 internal data class InvalidCopySourceException(
     val src: VectorReader, val dest: VectorWriter
-) : IllegalStateException("illegal copy src vector: ${src.type} -> ${dest.type}")
+) : IllegalStateException("illegal copy src vector: ${src.typeAsString} -> ${dest.typeAsString}")
 
 interface VectorWriter : VectorReader, AutoCloseable {
 

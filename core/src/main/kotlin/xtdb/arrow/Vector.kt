@@ -42,7 +42,6 @@ sealed class Vector : VectorReader, VectorWriter {
     abstract val vectors: Iterable<Vector>
 
     override val childFields get() = vectors.map { it.field }
-    final override val field: Field get() = Field(name, FieldType(nullable, arrowType, null), vectors.map { it.field })
 
     abstract override var valueCount: Int; internal set
 

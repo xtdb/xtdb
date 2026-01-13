@@ -105,7 +105,7 @@
 (defn- assert-timestamp-col-type [^VectorReader rdr]
   (when-not (or (nil? rdr) (= types/temporal-arrow-type (.getArrowType rdr)))
     (throw (err/fault :xtdb/invalid-timestamp-col-type "Invalid timestamp col type"
-                      {:col-name (.getName rdr), :col-type (.getType rdr)}))))
+                      {:field (.getField rdr)}))))
 
 (defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
                                                    ^Database db, ^Instant system-time

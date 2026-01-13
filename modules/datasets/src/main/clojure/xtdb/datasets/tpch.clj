@@ -86,27 +86,27 @@
 
 (defn- cell-writer [^TpchColumn col]
   (condp = (.getBase (.getType col))
-    TpchColumnType$Base/IDENTIFIER [#xt/type :uuid
+    TpchColumnType$Base/IDENTIFIER [#xt.arrow/type :uuid
                                     (let [get-iid (iid-getter col)]
                                       (fn [^VectorWriter out-col, ^TpchEntity e]
                                         (.writeObject out-col (get-iid e))))]
-    TpchColumnType$Base/INTEGER [#xt/type :i64
+    TpchColumnType$Base/INTEGER [#xt.arrow/type :i64
                                  (fn [^VectorWriter out-col, ^TpchEntity e]
                                    (.writeLong out-col (.getInteger col e)))]
-    TpchColumnType$Base/VARCHAR [#xt/type :utf8
+    TpchColumnType$Base/VARCHAR [#xt.arrow/type :utf8
                                  (fn [^VectorWriter out-col, ^TpchEntity e]
                                    (.writeObject out-col (.getString col e)))]
-    TpchColumnType$Base/DOUBLE [#xt/type :f64
+    TpchColumnType$Base/DOUBLE [#xt.arrow/type :f64
                                 (fn [^VectorWriter out-col, ^TpchEntity e]
                                   (.writeDouble out-col (.getDouble col e)))]
-    TpchColumnType$Base/DATE [#xt/type [:date :day]
+    TpchColumnType$Base/DATE [#xt.arrow/type [:date :day]
                               (fn [^VectorWriter out-col, ^TpchEntity e]
                                 (.writeInt out-col (.getDate col e)))]))
 
 (defn- write-col! [^Relation rel, ^TpchColumn col, entities]
   (let [col-name (.getColumnName col)
-        [^VectorType vec-type, write-cell!] (cell-writer col)
-        out-col (.vectorFor rel col-name (.getArrowType vec-type) (.isNullable vec-type))]
+        [arrow-type, write-cell!] (cell-writer col)
+        out-col (.vectorFor rel col-name arrow-type false)]
     (doseq [^TpchEntity e entities]
       (write-cell! out-col e))))
 

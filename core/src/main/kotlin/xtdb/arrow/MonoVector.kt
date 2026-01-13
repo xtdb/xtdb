@@ -37,8 +37,6 @@ sealed class MonoVector : Vector(), VectorReader, VectorWriter {
     abstract override var nullable: Boolean
     abstract override val arrowType: ArrowType
 
-    override val childFields get() = vectors.map { it.field }
-
     abstract override var valueCount: Int; internal set
 
     internal abstract fun getObject0(idx: Int, keyFn: IKeyFn<*>): Any

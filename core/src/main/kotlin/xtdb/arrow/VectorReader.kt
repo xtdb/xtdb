@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorIndirection.Companion.selection
@@ -21,11 +22,12 @@ interface VectorReader : ILookup, AutoCloseable {
     val name: String
     val valueCount: Int
 
-    val nullable: Boolean
     val arrowType: ArrowType
+    val nullable: Boolean
     val childFields: List<Field>
+    val field get() = Field(name, FieldType(nullable, arrowType, null), childFields)
+
     val type get() = VectorType(arrowType, nullable, childFields.associate { it.name to it.asType })
-    val field get() = name ofType type
 
     private class RenamedVector(private val inner: VectorReader, override val name: String) : VectorReader by inner {
         override fun withName(newName: String) = RenamedVector(inner, newName)
@@ -98,7 +100,7 @@ interface VectorReader : ILookup, AutoCloseable {
     fun openSlice(al: BufferAllocator): VectorReader
 
     fun openDirectSlice(al: BufferAllocator): Vector =
-        al.openVector(name, type).closeOnCatch { outVec -> outVec.also { it.append(this) } }
+        al.openVector(field).closeOnCatch { outVec -> outVec.also { it.append(this) } }
 
     fun select(idxs: IntArray): VectorReader = IndirectVector(this, selection(idxs))
     fun select(startIdx: Int, len: Int): VectorReader = IndirectVector(this, slice(startIdx, len))
