@@ -1327,7 +1327,7 @@
       Future$State/FAILED (throw (.exceptionNow task)))))
 
 (defn cmd-exec-query [{:keys [conn-state !closing? query-error-counter] :as conn}
-                      {:keys [limit statement-type query ^IResultCursor cursor pg-cols portal-name pending-rows]
+                      {:keys [limit statement-type query ^IResultCursor cursor pg-cols portal-name pending-rows total-rows-sent]
                        :as _portal}]
   ;; Create an implicit transaction if one hasn't already been started
   (let [transaction (get-in @conn-state [:transaction])]
@@ -1384,13 +1384,15 @@
                                               (dotimes [idx (- row-count num-to-send)] 
                                                 (vswap! !pending conj (serialize-row rel (+ num-to-send idx))))))))))))
 
-      ;; Save any pending rows back to portal
-      (when portal-name
-        (swap! conn-state assoc-in [:portals portal-name :pending-rows] @!pending))
+      ;; Save any pending rows and cumulative count back to portal
+      (let [cumulative-rows (+ (or total-rows-sent 0) @!n-rows-out)]
+        (when portal-name
+          (swap! conn-state update-in [:portals portal-name]
+                 assoc :pending-rows @!pending :total-rows-sent cumulative-rows))
 
-      (if (= @!n-rows-out limit)
-        (pgio/cmd-write-msg conn pgio/msg-portal-suspended)
-        (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " @!n-rows-out)})))
+        (if (= @!n-rows-out limit)
+          (pgio/cmd-write-msg conn pgio/msg-portal-suspended)
+          (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " cumulative-rows)}))))
 
     (catch Interrupted e (throw e))
     (catch InterruptedException e (throw e))
