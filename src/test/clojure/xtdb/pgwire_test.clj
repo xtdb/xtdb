@@ -3072,20 +3072,21 @@ ORDER BY 1,2;")
 (t/deftest test-cursor-fetch-no-row-loss-5131
   (t/testing "Fetching with cursor (setFetchSize) should return all rows"
     (with-open [conn (pgjdbc-conn)]
-      ;; pgjdbc requires autocommit=false for cursor mode
-      (.setAutoCommit conn false)
       (let [total-rows 10000]
         (doseq [batch (partition-all 1000 (range total-rows))]
-          (xt/submit-tx conn (mapv (fn [n] [:put-docs :foo {:xt/id n}]) batch)))
+          (xt/submit-tx conn (mapv (fn [n] [:put-docs :foo {:xt/id n}]) batch)))))
 
-        (let [stmt (doto (.prepareStatement conn "SELECT * FROM foo")
-                     (.setFetchSize 500))]
-          (with-open [rs (.executeQuery stmt)]
-            (let [rows (loop [rows []]
-                         (if (.next rs)
-                           (recur (conj rows (.getLong rs 1)))
-                           rows))]
-              (t/is (= total-rows (count rows))))))))))
+    (with-open [conn (pgjdbc-conn)]
+      ;; pgjdbc requires autocommit=false for cursor mode
+      (.setAutoCommit conn false)
+      (let [stmt (doto (.prepareStatement conn "SELECT * FROM foo")
+                   (.setFetchSize 500))]
+        (with-open [rs (.executeQuery stmt)]
+          (let [rows (loop [rows []]
+                       (if (.next rs)
+                         (recur (conj rows (.getLong rs 1)))
+                         rows))]
+            (t/is (= 10000 (count rows)))))))))
 
 (comment
   (user/set-log-level! 'xtdb.pgwire :trace))
