@@ -294,6 +294,28 @@
            :value (random-float rng -100 100)
            :duration 300})))
 
+(defn generate-reading-system-times
+  "Generate system-times for readings with bimodal lag distribution.
+  Returns vector of [idx system-time] pairs."
+  [random interval-count base-system-time]
+  (loop [idx 0
+         last-time base-system-time
+         result []]
+    (if (>= idx interval-count)
+      result
+      (let [lag-seconds (if (random/chance? random 0.8)
+                          (random/next-int random 6)
+                          (+ 280 (random/next-int random 41)))
+            calculated-time (-> base-system-time
+                                (.plusSeconds (* idx 300))
+                                (.plusSeconds lag-seconds))
+            system-time (if (.isAfter calculated-time last-time)
+                          calculated-time
+                          (.plusMillis last-time 1))]
+        (recur (inc idx)
+               system-time
+               (conj result [idx system-time]))))))
+
 (defn ->ingest-readings-stage [system-ids readings batch-size base-time]
   {:t :call, :stage :ingest-readings
    :f (fn [{:keys [node random]}]
@@ -303,28 +325,14 @@
                              (take readings))
               batches (partition-all batch-size system-ids)
               base-system-time (Instant/now)
-              !last-system-time (atom base-system-time)]
-          (doseq [[idx [start end]] (map-indexed vector intervals)]
+              system-times (generate-reading-system-times random readings base-system-time)]
+          (doseq [[[idx system-time] [start end]] (map vector system-times intervals)]
             (when (zero? (mod idx 1000))
               (log/infof "Readings batch %d" idx))
-            ;; Bimodal system-time lag matching production: 80% ~seconds, 20% ~5min
-            ;; Calculate once per interval, enforce monotonicity
-            (let [lag-seconds (if (random/chance? random 0.8)
-                                (random/next-int random 6)
-                                (+ 280 (random/next-int random 41)))
-                  calculated-time (-> base-system-time
-                                      (.plusSeconds (* idx 300))
-                                      (.plusSeconds lag-seconds))
-                  ;; Ensure monotonicity: if calculated time goes backwards, bump forward
-                  system-time (let [last @!last-system-time]
-                                (if (.isAfter calculated-time last)
-                                  calculated-time
-                                  (.plusMillis last 1)))]
-              (reset! !last-system-time system-time)
-              (doseq [batch batches]
-                (xt/submit-tx node
-                              [(->readings-docs random (vec batch) idx start end)]
-                              {:system-time system-time}))))))})
+            (doseq [batch batches]
+              (xt/submit-tx node
+                            [(->readings-docs random (vec batch) idx start end)]
+                            {:system-time system-time})))))})
 
 (defn ->update-system-stage [system-ids updates-per-system update-batch-size]
   {:t :call, :stage :update-system
@@ -561,6 +569,54 @@
               (->query-stage :system-count-over-time)
               (->query-stage :readings-range-bins)
               (->query-stage :cumulative-registration)])}))
+
+;; ============================================================================
+;; Tests
+;; ============================================================================
+
+(t/deftest test-reading-system-times-distribution
+  (let [rng (java.util.Random. 42)
+        interval-count 200
+        base-time (Instant/now)
+        times (generate-reading-system-times rng interval-count base-time)
+
+        ;; Calculate lags in seconds
+        lags (for [[[idx1 t1] [idx2 t2]] (partition 2 1 times)
+                   :let [expected-interval-gap (* (- idx2 idx1) 300)
+                         actual-gap (Duration/between t1 t2)
+                         lag (- (.getSeconds actual-gap) expected-interval-gap)]]
+               lag)
+
+        short-lags (filter #(<= % 5) lags)
+        long-lags (filter #(>= % 280) lags)
+        short-ratio (/ (count short-lags) (double (count lags)))
+        long-ratio (/ (count long-lags) (double (count lags)))]
+
+    ;; All times should be monotonically increasing
+    (t/is (every? (fn [[[_ t1] [_ t2]]] (or (.isBefore t1 t2) (.equals t1 t2)))
+                  (partition 2 1 times))
+          "System times must be monotonically increasing")
+
+    ;; Should have both short and long lags
+    (t/is (pos? (count short-lags))
+          "Should have some short lags (0-5s)")
+    (t/is (pos? (count long-lags))
+          "Should have some long lags (280-320s)")
+
+    ;; Check distribution is roughly 80/20 (allow 10% margin)
+    (t/is (> short-ratio 0.70)
+          (format "Short lags should be ~80%% (got %.1f%%)" (* 100 short-ratio)))
+    (t/is (< short-ratio 0.90)
+          (format "Short lags should be ~80%% (got %.1f%%)" (* 100 short-ratio)))
+
+    (t/is (> long-ratio 0.10)
+          (format "Long lags should be ~20%% (got %.1f%%)" (* 100 long-ratio)))
+    (t/is (< long-ratio 0.30)
+          (format "Long lags should be ~20%% (got %.1f%%)" (* 100 long-ratio)))
+
+    ;; Log summary for human verification
+    (log/infof "System-time lag distribution: %.1f%% short (0-5s), %.1f%% long (280-320s)"
+               (* 100 short-ratio) (* 100 long-ratio))))
 
 (t/deftest ^:benchmark run-fusion
   (let [path (util/->path "/tmp/fusion-bench")]
