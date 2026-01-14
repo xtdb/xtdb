@@ -385,11 +385,11 @@
 (defn live-columns [^Snapshot snap]
   (let [li-snap (.getLiveIndex snap)]
     (for [^TableRef table (.getLiveTables li-snap)
-          [col-name col-field] (.getColumnFields (.liveTable li-snap table))]
+          [col-name col-type] (.getTypes (.liveTable li-snap table))]
       {:schema-name (.getSchemaName table)
        :table-name (.getTableName table)
        :col-name col-name
-       :col-type (pr-str (st/render-type (st/->type col-field)))})))
+       :col-type (pr-str (st/render-type col-type))})))
 
 (defn metrics-timers [^MeterRegistry reg]
   (->> (.getMeters reg)
@@ -480,13 +480,10 @@
               db-name (.getName db)
               table-catalog (.getTableCatalog db)
               trie-catalog (.getTrieCatalog db)
-              ;; convert Fields from catalog to VectorTypes
-              fields->vec-types (fn [m] (update-vals m (fn [cols] (update-vals cols types/->type))))
               schema-info (-> (merge-with merge
-                                          (fields->vec-types (.getFields table-catalog))
+                                          (.getTypes table-catalog)
                                           (some-> (.getLiveIndex ^Snapshot snap)
-                                                  (.getAllColumnFields)
-                                                  fields->vec-types))
+                                                  (.getAllColumnTypes)))
                               (merge meta-table-schemas)
                               (update-keys (fn [k]
                                              (cond

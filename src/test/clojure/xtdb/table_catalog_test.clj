@@ -7,7 +7,6 @@
             [xtdb.table-catalog :as table-cat]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
-            [xtdb.trie :as trie]
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import (com.google.protobuf ByteString)
@@ -209,7 +208,7 @@
                                             :tries [(last trie-details)]}]})]
     (doseq [trie-details-transform [->old-trie-details identity]]
       (doseq [table-block-transform [->old-table-block identity]]
-        (t/is (= {:fields {},
+        (t/is (= {:vec-types {},
                   :partitions
                   [{:level 0, :part [], :tries ["l00-rc-b00" "l00-rc-b01"]}
                    {:level 1, :part [], :tries ["l01-rc-b00"]}

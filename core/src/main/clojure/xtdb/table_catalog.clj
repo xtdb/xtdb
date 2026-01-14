@@ -34,9 +34,12 @@
       (.resolve block-table-metadata-path)
       (.resolve (format "b%s.binpb" (util/->lex-hex-string block-idx)))))
 
-(defn write-table-block-data ^java.nio.ByteBuffer [^Schema table-schema ^long row-count
+(defn write-table-block-data ^java.nio.ByteBuffer [vec-types ^long row-count
                                                    partitions hlls]
-  (let [res (ByteBuffer/wrap (-> (doto (TableBlock/newBuilder)
+  (let [table-schema (Schema. (->> vec-types
+                                   (mapv (fn [[col-name vec-type]]
+                                           (types/->field vec-type col-name)))))
+        res (ByteBuffer/wrap (-> (doto (TableBlock/newBuilder)
                                    (.setArrowSchema (ByteString/copyFrom (.serializeAsMessage table-schema)))
                                    (.setRowCount row-count)
                                    (.putAllColumnNameToHll ^Map (update-vals hlls #(ByteString/copyFrom ^ByteBuffer %)))
@@ -100,27 +103,26 @@
                (update-vals #(-> (.toByteArray ^ByteString %) HyperLogLog/toHLL)))
      :partitions (into [] (map <-partition) (.getPartitionsList table-block))}))
 
-(defn- merge-fields [old-fields new-fields]
+(defn- merge-vec-types [old-vec-types new-vec-types]
   (cond
-    (nil? old-fields) (into {} new-fields)
-    (nil? new-fields) (into {} old-fields)
+    (nil? old-vec-types) (into {} new-vec-types)
+    (nil? new-vec-types) (into {} old-vec-types)
 
-    :else (->> (for [col-name (set/union (set (keys old-fields))
-                                         (set (keys new-fields)))]
-                 [col-name (-> (types/merge-fields (or (get old-fields col-name)
-                                                       (types/->field #xt/type [:? :null] col-name))
-                                                   (or (get new-fields col-name)
-                                                       (types/->field #xt/type [:? :null] col-name)))
-                               (types/field-with-name col-name))])
+    :else (->> (for [col-name (set/union (set (keys old-vec-types))
+                                         (set (keys new-vec-types)))]
+                 [col-name (types/merge-types (or (get old-vec-types col-name)
+                                                  #xt/type [:? :null])
+                                              (or (get new-vec-types col-name)
+                                                  #xt/type [:? :null]))])
                (into {}))))
 
 (defn- merge-hlls [old-hlls new-hlls]
   (merge-with #(HyperLogLog/combine %1 %2) old-hlls new-hlls))
 
-(defn- merge-tables [old-table {:keys [row-count fields hlls] :as delta-table}]
+(defn- merge-tables [old-table {:keys [row-count vec-types hlls] :as delta-table}]
   (cond-> old-table
     delta-table (-> (update :row-count (fnil + 0) row-count)
-                    (update :fields merge-fields fields)
+                    (update :vec-types merge-vec-types vec-types)
                     (update :hlls merge-hlls hlls))))
 
 (defn- new-tables-metadata [old-tables-metadata new-deltas-metadata]
@@ -137,8 +139,12 @@
     (let [tables (.getAllTables block-cat)]
       (->> (for [^TableRef table tables
                  :let [table-block-path (->table-block-metadata-obj-key (Trie/getTablePath table) block-idx)
-                       table-block (TableBlock/parseFrom (.getByteArray buffer-pool table-block-path))]]
-             (MapEntry/create table (<-table-block table-block)))
+                       {:keys [fields] :as tb} (-> (.getByteArray buffer-pool table-block-path)
+                                                   (TableBlock/parseFrom)
+                                                   (<-table-block))]]
+             (MapEntry/create table (-> tb
+                                        (assoc :vec-types (update-vals fields types/->type))
+                                        (dissoc :fields))))
            (into {})))))
 
 (deftype TableCatalog [^BufferPool buffer-pool, ^BlockCatalog block-cat
@@ -147,14 +153,12 @@
   (finish-block! [this block-idx delta-table->metadata table->partitions]
     (let [new-table->metadata (new-tables-metadata table->metadata delta-table->metadata)
           tables (ArrayList.)]
-      (doseq [[^TableRef table {:keys [row-count fields hlls]}] new-table->metadata]
+      (doseq [[^TableRef table {:keys [row-count vec-types hlls]}] new-table->metadata]
         (let [table-partitions (get table->partitions table)
-              fields (for [[col-name field] fields]
-                       (types/field-with-name field col-name))
               table-block-path (->table-block-metadata-obj-key (Trie/getTablePath table) block-idx)]
           (.add tables table)
           (.putObject buffer-pool table-block-path
-                      (write-table-block-data (Schema. fields) row-count
+                      (write-table-block-data vec-types row-count
                                               (map (comp ->partition
                                                          #(update % :tries (partial map (fn [trie] (trie/->trie-details table trie)))))
                                                    table-partitions)
@@ -165,12 +169,15 @@
   xtdb.catalog.TableCatalog
   (rowCount [_ table] (get-in table->metadata [table :row-count]))
 
-  (getField [_ table col-name]
-    (some-> (get-in table->metadata [table :fields])
-            (get col-name (types/->field #xt/type [:? :null] col-name))))
+  (getType [_ table col-name]
+    (some-> (get-in table->metadata [table :vec-types])
+            (get col-name)))
 
-  (getFields [_ table] (get-in table->metadata [table :fields]))
-  (getFields [_] (update-vals table->metadata :fields))
+  (getTypes [_ table]
+    (get-in table->metadata [table :vec-types]))
+
+  (getTypes [_]
+    (update-vals table->metadata :vec-types))
 
   (refresh [this]
     (set! (.table->metadata this)

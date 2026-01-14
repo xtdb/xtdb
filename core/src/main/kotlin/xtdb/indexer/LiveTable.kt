@@ -1,29 +1,24 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.TransactionKey
 import xtdb.arrow.*
-import xtdb.arrow.VectorWriter
+import xtdb.arrow.VectorType.Companion.NULL
 import xtdb.log.proto.TrieMetadata
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.*
-import xtdb.arrow.STRUCT_TYPE
-import xtdb.arrow.VectorType
-import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.HLL
 import xtdb.util.RowCounter
 import xtdb.util.closeOnCatch
 import java.nio.ByteBuffer
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.runBlocking
 
 class LiveTable
 @JvmOverloads
@@ -61,11 +56,13 @@ constructor(
     private val hllCalculator = HllCalculator()
 
     class Snapshot(
-        val columnFields: Map<ColumnName, Field>,
+        val columnTypes: Map<ColumnName, VectorType>,
         val liveRelation: RelationReader,
         val liveTrie: MemoryHashTrie
     ) : AutoCloseable {
-        fun columnField(col: ColumnName): Field = columnFields[col] ?: col ofType VectorType.NULL
+        fun columnType(col: ColumnName): VectorType = columnTypes[col] ?: NULL
+
+        val types: Map<ColumnName, VectorType> get() = columnTypes
 
         override fun close() {
             liveRelation.close()
@@ -149,32 +146,29 @@ constructor(
 
     fun startTx(txKey: TransactionKey, newLiveTable: Boolean) = Tx(txKey, newLiveTable)
 
-    private val RelationWriter.fields: Map<String, Field>
+    private val RelationWriter.types: Map<String, VectorType>
         get() {
             val putVec = vectorFor("op").vectorForOrNull("put") ?: return emptyMap()
-            return putVec.field
-                .also { assert(it.type is ArrowType.Struct) }
-                .children
-                .associateBy { it.name }
+            return putVec.type.children
         }
 
     private fun openSnapshot(trie: MemoryHashTrie): Snapshot {
         liveRelation.openDirectSlice(al).closeOnCatch { wmLiveRel ->
             val wmLiveTrie = trie.withIidReader(wmLiveRel["_iid"])
 
-            return Snapshot(liveRelation.fields, wmLiveRel, wmLiveTrie)
+            return Snapshot(liveRelation.types, wmLiveRel, wmLiveTrie)
         }
     }
 
     fun openSnapshot() = openSnapshot(liveTrie)
 
     data class FinishedBlock(
-        val fields: Map<ColumnName, Field>,
+        val types: Map<FieldName, VectorType>,
         val trieKey: TrieKey,
         val dataFileSize: FileSize,
         val rowCount: Int,
         val trieMetadata: TrieMetadata,
-        val hllDeltas: Map<ColumnName, HLL>
+        val hllDeltas: Map<FieldName, HLL>
     )
 
     fun finishBlock(blockIdx: BlockIndex): FinishedBlock? {
@@ -185,7 +179,7 @@ constructor(
         return liveRelation.openDirectSlice(al).use { dataRel ->
             val dataFileSize = trieWriter.writeLiveTrie(table, trieKey, liveTrie, dataRel)
             FinishedBlock(
-                liveRelation.fields, trieKey, dataFileSize, rowCount,
+                liveRelation.types, trieKey, dataFileSize, rowCount,
                 trieMetadataCalculator.build(), hllCalculator.build()
             )
         }

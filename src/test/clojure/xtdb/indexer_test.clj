@@ -229,18 +229,18 @@
 
         (let [db (db/primary-db node)
               tc (.getTableCatalog db)]
-          (t/is (= #xt/field {"_id" [:union :utf8 :keyword :i64]}
-                   (.getField tc #xt/table xt_docs "_id")))
+          (t/is (= #xt/type [:union :utf8 :keyword :i64]
+                   (.getType tc #xt/table xt_docs "_id")))
 
-          (t/is (= #xt/field {"list" [:? :list [:union :f64 :utf8 :instant :bool]]}
-                   (.getField tc #xt/table xt_docs "list")))
+          (t/is (= #xt/type [:? :list [:union :f64 :utf8 :instant :bool]]
+                   (.getType tc #xt/table xt_docs "list")))
 
-          (t/is (= #xt/field {"struct" [:? :struct {"a" [:union :i64 :bool],
-                                                      "b" [:union
-                                                           :utf8
-                                                           ;; TODO these shouldn't be optional strings, really. #4988
-                                                           [:struct {"c" [:? :utf8], "d" [:? :utf8]}]]}]}
-                   (.getField tc #xt/table xt_docs "struct"))))))))
+          (t/is (= #xt/type [:? :struct {"a" [:union :i64 :bool],
+                                         "b" [:union
+                                              :utf8
+                                              ;; TODO these shouldn't be optional strings, really. #4988
+                                              [:struct {"c" [:? :utf8], "d" [:? :utf8]}]]}]
+                   (.getType tc #xt/table xt_docs "struct"))))))))
 
 (t/deftest drops-nils-on-round-trip
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id "nil-bar", :foo "foo", :bar nil}]
@@ -395,10 +395,10 @@
           (t/is (= 5500 (count second-half-tx-ops)))
 
           (let [{first-half-tx-id :tx-id} (reduce
-                                           (fn [_ tx-ops]
-                                             (xt/submit-tx node1 tx-ops))
-                                           nil
-                                           (partition-all 100 first-half-tx-ops))
+                                            (fn [_ tx-ops]
+                                              (xt/submit-tx node1 tx-ops))
+                                            nil
+                                            (partition-all 100 first-half-tx-ops))
                 first-half-await-token (xtp/await-token node1)]
             (.close node1)
 
@@ -417,7 +417,7 @@
                   (t/is (< (:tx-id latest-completed-tx) first-half-tx-id))
 
                   (Thread/sleep 250)    ; wait for the block to finish writing to disk
-                                        ; we don't have an accessible hook for this, beyond awaiting the tx
+                  ; we don't have an accessible hook for this, beyond awaiting the tx
                   (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
                     (t/is (= 5 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.binpb" %) objs))))
                     (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/l00.+\.arrow" %) objs))))
@@ -427,13 +427,13 @@
                     (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/l00.+?\.arrow" %) objs))))))
 
                 (t/is (= #xt/type :utf8
-                         (types/->type (.getField tc #xt/table device_readings "_id"))))
+                         (.getType tc #xt/table device_readings "_id")))
 
                 (let [{second-half-tx-id :tx-id} (reduce
-                                                  (fn [_ tx-ops]
-                                                    (xt/submit-tx node2 tx-ops))
-                                                  nil
-                                                  (partition-all 100 second-half-tx-ops))
+                                                   (fn [_ tx-ops]
+                                                     (xt/submit-tx node2 tx-ops))
+                                                   nil
+                                                   (partition-all 100 second-half-tx-ops))
                       second-half-await-token (xtp/await-token node2)]
 
                   (t/is (<= first-half-tx-id
@@ -443,31 +443,29 @@
                   (.close node2)
 
                   (with-open [node3 (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
-                    (let [db (db/primary-db node3)
-                          bp (.getBufferPool db)]
-                      (xt-log/await-node node3 first-half-await-token (Duration/ofSeconds 10))
-                      (t/is (<= first-half-tx-id
-                                (-> (xtp/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))
-                                second-half-tx-id))
+                    (xt-log/await-node node3 first-half-await-token (Duration/ofSeconds 10))
+                    (t/is (<= first-half-tx-id
+                              (-> (xtp/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))
+                              second-half-tx-id))
 
-                      (t/is (= #xt/type :utf8
-                               (types/->type (.getField tc #xt/table device_info "_id"))))
+                    (t/is (= #xt/type :utf8
+                             (.getType tc #xt/table device_info "_id")))
 
-                      (xt-log/await-node node3 second-half-await-token (Duration/ofSeconds 15))
-                      (t/is (= second-half-tx-id (-> (xtp/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))))
+                    (xt-log/await-node node3 second-half-await-token (Duration/ofSeconds 15))
+                    (t/is (= second-half-tx-id (-> (xtp/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))))
 
-                      (Thread/sleep 250); wait for the block to finish writing to disk
-                                        ; we don't have an accessible hook for this, beyond awaiting the tx
-                      (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
-                        (t/is (= 11 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.binpb" %) objs))))
-                        (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/l00-.+.arrow" %) objs))))
-                        (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/data/l00-.+.arrow" %) objs))))
-                        (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/meta/l00-.+.arrow" %) objs))))
-                        (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/l00-.+.arrow" %) objs))))
-                        (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/l00-.+.arrow" %) objs)))))
+                    (Thread/sleep 250); wait for the block to finish writing to disk
+                    ; we don't have an accessible hook for this, beyond awaiting the tx
+                    (let [objs (mapv (comp str :key os/<-StoredObject) (.listAllObjects bp))]
+                      (t/is (= 11 (count (filter #(re-matches #"blocks/b\p{XDigit}+\.binpb" %) objs))))
+                      (t/is (= 4 (count (filter #(re-matches #"tables/public\$device_info/(.+?)/l00-.+.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/data/l00-.+.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/public\$device_readings/meta/l00-.+.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/l00-.+.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/l00-.+.arrow" %) objs)))))
 
-                      (t/is (= #xt/type :utf8
-                               (types/->type (.getField tc #xt/table device_info "_id")))))))))))))))
+                    (t/is (= #xt/type :utf8
+                             (.getType tc #xt/table device_info "_id")))))))))))))
 
 (t/deftest merges-column-fields-on-restart
   (let [node-dir (util/->path "target/merges-column-fields")
@@ -482,7 +480,7 @@
         (tu/flush-block! node1)
 
         (t/is (= #xt/type :utf8
-                 (types/->type (.getField tc1 #xt/table xt_docs "v"))))
+                 (.getType tc1 #xt/table xt_docs "v")))
 
         (xt/execute-tx node1 [[:put-docs :xt_docs {:xt/id 1, :v :bar}]
                               [:put-docs :xt_docs {:xt/id 2, :v #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
@@ -491,17 +489,17 @@
         (tu/flush-block! node1)
 
         (t/is (= #xt/type [:union :utf8 :keyword :uuid :transit]
-                 (types/->type (.getField tc1 #xt/table xt_docs "v")))))
+                 (.getType tc1 #xt/table xt_docs "v")))))
 
-      (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
-        (let [tc2 (.getTableCatalog (db/primary-db node2))]
-          (xt-log/sync-node node2 (Duration/ofMillis 200))
+    (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
+      (let [tc2 (.getTableCatalog (db/primary-db node2))]
+        (xt-log/sync-node node2 (Duration/ofMillis 200))
 
-          ;; this one comes out with union with type-ids null vs union with type-ids [].
-          ;; very annoying.
-          ;; so we render the type to compare.
-          (t/is (= [:union :utf8 :keyword :uuid :transit]
-                   (st/render-type (types/->type (.getField tc2 #xt/table xt_docs "v"))))))))))
+        ;; this one comes out with union with type-ids null vs union with type-ids [].
+        ;; very annoying.
+        ;; so we render the type to compare.
+        (t/is (= [:union :utf8 :keyword :uuid :transit]
+                 (st/render-type (.getType tc2 #xt/table xt_docs "v"))))))))
 
 (t/deftest test-await-fails-fast
   (let [e (UnsupportedOperationException. "oh no!")]
@@ -554,7 +552,6 @@
 
             (cpb/check-pbuf (.toPath (io/file expected-dir "pbuf"))
                             (.resolve node-dir "objects"))))))))
-
 
 (t/deftest ingestion-stopped-query-as-tx-op-3265
   (t/is (anomalous? [:incorrect :xtdb/queries-in-read-write-tx

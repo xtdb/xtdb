@@ -21,6 +21,7 @@ import xtdb.arrow.ArrowUnloader.Mode
 import xtdb.arrow.ArrowUnloader.Mode.FILE
 import xtdb.arrow.ArrowUnloader.Mode.STREAM
 import xtdb.arrow.Vector.Companion.openVector
+import xtdb.trie.ColumnName
 import xtdb.util.*
 import java.io.ByteArrayOutputStream
 import java.nio.channels.*

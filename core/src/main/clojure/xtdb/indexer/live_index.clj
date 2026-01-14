@@ -32,7 +32,7 @@
       (.put snaps table (.openSnapshot live-table)))
 
     (reify LiveIndex$Snapshot
-      (getAllColumnFields [_] (update-vals snaps #(.getColumnFields ^LiveTable$Snapshot %)))
+      (getAllColumnTypes [_] (update-vals snaps #(.getTypes ^LiveTable$Snapshot %)))
 
       (liveTable [_ table] (.get snaps table))
 
@@ -43,9 +43,9 @@
 
 (defn ->schema [^LiveIndex$Snapshot live-index-snap, ^TableCatalog table-catalog]
   (merge-with set/union
-              (update-vals (.getFields table-catalog)
+              (update-vals (.getTypes table-catalog)
                            (comp set keys))
-              (update-vals (some-> live-index-snap (.getAllColumnFields))
+              (update-vals (some-> live-index-snap (.getAllColumnTypes))
                            (comp set keys))))
 
 (deftype LiveIndex [^BufferAllocator allocator, db-name, ^BufferPool buffer-pool, ^Log log
@@ -113,7 +113,7 @@
               (.computeIfAbsent snaps table (fn [_] (.openSnapshot live-table))))
 
             (reify LiveIndex$Snapshot
-              (getAllColumnFields [_] (update-vals snaps #(.getColumnFields ^LiveTable$Snapshot %)))
+              (getAllColumnTypes [_] (update-vals snaps #(.getTypes ^LiveTable$Snapshot %)))
               (liveTable [_ table] (.get snaps table))
               (getLiveTables [_] (keys snaps))
 
@@ -136,7 +136,7 @@
   (finishBlock [_ block-idx]
     (let [table-metadata (-> (LiveTable/finishBlock tables block-idx)
                              (update-vals (fn [^LiveTable$FinishedBlock fb]
-                                            {:fields (.getFields fb)
+                                            {:vec-types (.getTypes fb)
                                              :trie-key (.getTrieKey fb)
                                              :row-count (.getRowCount fb)
                                              :data-file-size (.getDataFileSize fb)

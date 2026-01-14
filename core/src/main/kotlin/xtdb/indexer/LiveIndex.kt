@@ -2,6 +2,7 @@ package xtdb.indexer
 
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.TransactionKey
+import xtdb.arrow.VectorType
 import xtdb.table.TableRef
 import xtdb.trie.BlockIndex
 
@@ -9,6 +10,7 @@ interface LiveIndex : Snapshot.Source, AutoCloseable {
 
     interface Snapshot : AutoCloseable {
         val allColumnFields: Map<TableRef, Map<String, Field>>
+        val allColumnTypes: Map<TableRef, Map<String, VectorType>>
         fun liveTable(table: TableRef): LiveTable.Snapshot
         val liveTables: Iterable<TableRef>
     }

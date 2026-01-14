@@ -182,11 +182,10 @@
                   (let [db-name (.getDbName table)
                         ^TableCatalog table-catalog (.getTableCatalog (.databaseOrNull db-catalog db-name))
                         ^Snapshot snap (get snaps db-name)]
-                    (types/merge-types (some-> (.getField table-catalog table col-name) types/->type)
+                    (types/merge-types (some-> (.getType table-catalog table col-name))
                                        (some-> (.getLiveIndex snap)
                                                (.liveTable table)
-                                               (.columnField col-name)
-                                               types/->type))))))]
+                                               (.columnType col-name)))))))]
     (->> scan-cols
          (into {} (map (juxt identity ->vec-type))))))
 
