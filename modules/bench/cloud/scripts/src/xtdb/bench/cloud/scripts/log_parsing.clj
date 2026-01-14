@@ -131,6 +131,27 @@
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
+(defmethod parse-log "ingest-tx-overhead" [_benchmark-type log-file-path]
+  (let [content (slurp log-file-path)
+        lines (str/split-lines content)
+        stage-lines (filter #(str/starts-with? % "{\"stage\":") lines)
+        stages (mapv (fn [line]
+                       (try
+                         (json/parse-string line true)
+                         (catch Exception e
+                           (throw (ex-info (str "Failed to parse JSON line: " line)
+                                           {:line line :error (.getMessage e)})))))
+                     stage-lines)
+        batch-stages (filterv (fn [stage]
+                                (let [stage-name (name (:stage stage))]
+                                  (str/starts-with? stage-name "ingest-batch-")))
+                              stages)
+        {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
+    {:all-stages stages
+     :batch-stages batch-stages
+     :benchmark-total-time-ms benchmark-total-time-ms
+     :benchmark-summary benchmark-summary}))
+
 (defn load-summary
   "Load and parse a benchmark log file, returning summary with benchmark type."
   [benchmark-type log-file-path]

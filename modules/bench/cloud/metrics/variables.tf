@@ -200,3 +200,22 @@ variable "tsbs_iot_anomaly_devices" {
   type        = number
   default     = 2000
 }
+
+# Ingest TX Overhead anomaly detection configuration
+variable "ingest_tx_overhead_anomaly_logic_app_name" {
+  description = "Logic App name for scheduled Ingest TX Overhead anomaly detection"
+  type        = string
+  default     = "xtdb-bench-ingest-tx-overhead-anomaly-schedule"
+}
+
+variable "ingest_tx_overhead_anomaly_alert_enabled" {
+  description = "Whether the Ingest TX Overhead anomaly detection Logic App is enabled"
+  type        = bool
+  default     = true
+}
+
+variable "ingest_tx_overhead_anomaly_doc_count" {
+  description = "Ingest TX Overhead doc count to scope anomaly detection to"
+  type        = number
+  default     = 100000
+}

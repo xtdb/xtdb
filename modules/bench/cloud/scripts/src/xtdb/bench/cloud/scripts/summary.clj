@@ -115,6 +115,15 @@
    :time-taken-ms time-taken-ms
    :duration (util/format-duration :millis time-taken-ms)})
 
+(defn ingest-tx-overhead-stage->row
+  [idx {:keys [stage time-taken-ms]}]
+  (when-let [[_ batch-size] (re-find #"^ingest-batch-(\d+)$" (name stage))]
+    {:stage-order idx
+     :batch-size (Long/parseLong batch-size)
+     :stage (str "Batch " batch-size)
+     :time-taken-ms time-taken-ms
+     :duration (util/format-duration :millis time-taken-ms)}))
+
 (defn clickbench-summary->stage-rows
   [summary]
   (let [rows (->> (:ingest-stages summary)
@@ -130,6 +139,26 @@
                                     (-> row
                                         (assoc :percent-of-total (format "%.2f%%" pct))
                                         (dissoc :stage-order))))
+                                rows)]
+    {:rows rows-with-percent
+     :total-ms total-ms}))
+
+(defn ingest-tx-overhead-summary->stage-rows
+  [summary]
+  (let [rows (->> (:batch-stages summary)
+                  (map-indexed ingest-tx-overhead-stage->row)
+                  (remove nil?)
+                  (sort-by :batch-size >)
+                  vec)
+        total-ms (reduce + (map :time-taken-ms rows))
+        rows-with-percent (mapv (fn [row]
+                                  (let [ms (:time-taken-ms row)
+                                        pct (if (pos? total-ms)
+                                              (* 100.0 (/ ms total-ms))
+                                              0.0)]
+                                    (-> row
+                                        (assoc :percent-of-total (format "%.2f%%" pct))
+                                        (dissoc :stage-order :batch-size))))
                                 rows)]
     {:rows rows-with-percent
      :total-ms total-ms}))
@@ -175,6 +204,12 @@
          "\n\n"
          (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
 
+(defmethod summary->table "ingest-tx-overhead" [summary]
+  (let [{:keys [rows total-ms]} (ingest-tx-overhead-summary->stage-rows summary)]
+    (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
+         "\n\n"
+         (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
+
 ;; summary->slack multimethod
 
 (defmulti summary->slack :benchmark-type)
@@ -213,6 +248,14 @@
 
 (defmethod summary->slack "clickbench" [summary]
   (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
+    (str
+     (util/totals->string total-ms (:benchmark-total-time-ms summary))
+     "\n\n"
+     (util/wrap-slack-code
+      (rows->string [:stage :duration] rows)))))
+
+(defmethod summary->slack "ingest-tx-overhead" [summary]
+  (let [{:keys [rows total-ms]} (ingest-tx-overhead-summary->stage-rows summary)]
     (str
      (util/totals->string total-ms (:benchmark-total-time-ms summary))
      "\n\n"
@@ -269,6 +312,16 @@
 (defmethod summary->github-markdown "clickbench" [summary]
   (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)
         columns [{:key :stage :header "Stage"}
+                 {:key :time-taken-ms :header "Time (ms)"}
+                 {:key :duration :header "Duration"}
+                 {:key :percent-of-total :header "% of total"}]]
+    (str (util/github-table columns rows)
+         "\n\n"
+         (util/totals->string total-ms (:benchmark-total-time-ms summary)))))
+
+(defmethod summary->github-markdown "ingest-tx-overhead" [summary]
+  (let [{:keys [rows total-ms]} (ingest-tx-overhead-summary->stage-rows summary)
+        columns [{:key :stage :header "Batch Size"}
                  {:key :time-taken-ms :header "Time (ms)"}
                  {:key :duration :header "Duration"}
                  {:key :percent-of-total :header "% of total"}]]

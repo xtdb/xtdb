@@ -1,0 +1,42 @@
+name: Nightly Benchmark Ingest TX Overhead
+run-name: "Ingest TX Overhead (Docs: ${{ inputs.doc_count || '100000' }}, Batch Sizes: ${{ inputs.batch_sizes || '1000,100,10,1' }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      doc_count:
+        description: 'Document Count'
+        required: false
+        default: '100000'
+        type: string
+      batch_sizes:
+        description: 'Batch Sizes (comma-separated)'
+        required: false
+        default: '1000,100,10,1'
+        type: string
+  schedule:
+    - cron: '0 8 * * *'  # Run daily at 08:00 UTC
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+  packages: write
+
+concurrency:
+  group: nightly-benchmark-ingest-tx-overhead
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    if: ${{ github.event_name != 'schedule' || github.repository == 'xtdb/xtdb' }}
+    uses: ./.github/workflows/run-nightly-benchmark.yml
+    with:
+      bench_type: ingest-tx-overhead
+      job_display_name: Ingest TX Overhead
+      branch: ${{ github.ref_name }}
+      timeout_minutes: 90
+      benchmark_timeout: PT2H
+      ingest_tx_overhead_doc_count: ${{ inputs.doc_count || '100000' }}
+      ingest_tx_overhead_batch_sizes: ${{ inputs.batch_sizes || '1000,100,10,1' }}
+    secrets: inherit

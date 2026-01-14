@@ -34,6 +34,10 @@ clickbench:
   # Name of k8s secret containing AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
   awsSecretName: "xtdb-aws-datasets-secret"
 
+ingestTxOverhead:
+  docCount: 100000
+  batchSizes: "1000,100,10,1"
+
 tsbs-iot:
   devices: 2000
   timestampStart: "2020-01-01T00:00:00Z"

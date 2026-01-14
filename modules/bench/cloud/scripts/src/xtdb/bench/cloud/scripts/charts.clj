@@ -81,7 +81,10 @@
                  :default-scale-factor nil} ;; clickbench uses size, not scale-factor
    "tsbs-iot"   {:benchmark-name "TSBS IoT"
                  :title "TSBS IoT Benchmark Performance"
-                 :default-scale-factor nil}}) ;; tsbs-iot uses devices, not scale-factor
+                 :default-scale-factor nil} ;; tsbs-iot uses devices, not scale-factor
+   "ingest-tx-overhead" {:benchmark-name "Ingest batch vs individual"
+                         :title "Ingest TX Overhead Benchmark Performance"
+                         :default-scale-factor nil}}) ;; ingest-tx-overhead uses doc-count, not scale-factor
 
 (defn plot-benchmark-timeseries
   "Plot a benchmark timeseries chart from Azure Log Analytics.

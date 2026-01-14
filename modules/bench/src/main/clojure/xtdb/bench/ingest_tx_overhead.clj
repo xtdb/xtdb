@@ -84,6 +84,7 @@
 
   {:title "Ingest batch vs individual"
    :seed seed
+   :parameters {:doc-count doc-count :batch-sizes (sort > batch-sizes)}
    :tasks (->> [{:t :call
                  :batch-size 1000
                  :stage :ingest-batch-1000

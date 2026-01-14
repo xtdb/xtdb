@@ -127,6 +127,19 @@ locals {
       metric_name     = "duration_minutes"
       dashboard_idx   = 4
     }
+    ingest-tx-overhead = {
+      name            = "Ingest batch vs individual"
+      display_name    = "Ingest TX Overhead"
+      logic_app_name  = var.ingest_tx_overhead_anomaly_logic_app_name
+      enabled         = var.ingest_tx_overhead_anomaly_alert_enabled
+      param_name      = "doc-count"
+      param_path      = "parameters['doc-count']"
+      param_value     = var.ingest_tx_overhead_anomaly_doc_count
+      param_is_string = false
+      metric_path     = "'time-taken-ms'"
+      metric_name     = "duration_minutes"
+      dashboard_idx   = 5
+    }
   }
 
   # Dashboard part positions (6 cols wide, 4 rows tall each)
@@ -136,6 +149,7 @@ locals {
     2 = { x = 0, y = 4 }
     3 = { x = 6, y = 4 }
     4 = { x = 0, y = 8 }
+    5 = { x = 6, y = 8 }
   }
 
   # Filter expressions per benchmark (string params quoted, numeric params use todouble)
