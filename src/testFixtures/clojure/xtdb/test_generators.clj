@@ -274,8 +274,6 @@
   [records]
   (vec-type->value-generator (MergeTypes/mergeTypes (mapv VectorType/fromValue records))))
 
-(MergeTypes/mergeTypes (mapv VectorType/fromValue [{:a 1}]))
-
 (defn info-schema->generator
   "Given an XTDB info schema for a specific table, produce a generator that will generate records"
   [info-schema]
@@ -283,8 +281,8 @@
                     (filter (fn [{:keys [column-name]}]
                               (not (#{"_system_from" "_system_to" "_valid_from" "_valid_to"} column-name))))
                     (mapv (fn [{:keys [column-name data-type]}]
-                            (types/->field (read-string data-type) column-name))))]
-    (vec-type->value-generator (apply types/->field "docs" #xt.arrow/type :struct false fields))))
+                            (types/->field column-name (read-string data-type)))))]
+    (vec-type->value-generator (apply types/->field* "docs" #xt.arrow/type :struct false fields))))
 
 (defn generate-unique-id-records
   ([num-records] (generate-unique-id-records num-records num-records))

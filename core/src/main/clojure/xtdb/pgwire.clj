@@ -978,13 +978,14 @@
                         (->> (.getColumnFields pq (->> param-types
                                                        (into [] (comp (map types/->nullable-type)
                                                                       (map-indexed (fn [idx vt]
-                                                                                     (types/->field vt (str "?_" idx))))))))
+                                                                                     (types/->field (str "?_" idx) vt)))))))
                              (mapv field->pg-col)))]
           (assoc stmt
                  :prepared-query pq
                  :param-oids param-oids
                  :prepared-pg-cols pg-cols
                  :pg-cols pg-cols)))
+
       (catch IllegalArgumentException e
         (log/debug e "Error preparing statement")
         (throw e))

@@ -170,11 +170,11 @@
 
 (defn rows->fields [rows]
   (->> (for [col-name (into #{} (mapcat keys) rows)]
-         [(symbol col-name) (-> rows
-                                (->> (into #{} (map (fn [row]
-                                                      (types/value->vec-type (get row col-name)))))
-                                     (apply types/merge-types))
-                                (types/->field (str (symbol col-name))))])
+         [(symbol col-name) (types/->field (str (symbol col-name))
+                                           (->> rows
+                                                (into #{} (map (fn [row]
+                                                                 (types/value->vec-type (get row col-name)))))
+                                                (apply types/merge-types)))])
        (into {})))
 
 (defmethod lp/emit-expr ::pages [{:keys [vec-types pages stats]} _args]

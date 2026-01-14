@@ -62,19 +62,17 @@
   (VectorType/maybe (->type type-spec)))
 
 (defn ->field
-  (^org.apache.arrow.vector.types.pojo.Field [type-spec]
-   (VectorType/field (->type type-spec)))
+  (^org.apache.arrow.vector.types.pojo.Field [type-spec] (st/->field type-spec))
 
-  (^org.apache.arrow.vector.types.pojo.Field [type-spec, field-name]
-   (VectorType/field (str field-name) (->type type-spec))))
+  (^org.apache.arrow.vector.types.pojo.Field [field-name type-spec] (st/->field* field-name type-spec)))
 
 (defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, name]
   (Field. name (.getFieldType field) (.getChildren field)))
 
 (def temporal-fields
-  {"_iid" (->field :iid "_iid"),
-   "_system_from" (->field :instant "_system_from"), "_system_to" (->field [:? :instant] "_system_to")
-   "_valid_from" (->field :instant "_valid_from"), "_valid_to" (->field [:? :instant] "_valid_to")})
+  {"_iid" (->field "_iid" :iid),
+   "_system_from" (->field "_system_from" :instant), "_system_to" (->field "_system_to" [:? :instant])
+   "_valid_from" (->field "_valid_from" :instant), "_valid_to" (->field "_valid_to" [:? :instant])})
 
 (def temporal-vec-types
   {"_iid" (st/->type :iid)
@@ -173,7 +171,7 @@
   (VectorType/fromValue v))
 
 (defn vec-type->field
-  (^org.apache.arrow.vector.types.pojo.Field [^VectorType vec-type field-name] (->field vec-type (str field-name)))
+  (^org.apache.arrow.vector.types.pojo.Field [^VectorType vec-type field-name] (->field (str field-name) vec-type))
   (^org.apache.arrow.vector.types.pojo.Field [^VectorType vec-type] (->field vec-type)))
 
 ;;; time units

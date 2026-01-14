@@ -334,12 +334,10 @@
      :setting setting}))
 
 (def ^:private pg-user-field
-  (-> #xt/type [:struct
-                {"_id" :utf8}
-                {"username" :utf8}
-                {"usesuper" :bool}
-                {"passwd" [:? :utf8]}]
-      (types/->field "put")))
+  (types/->field "put" [:struct {"_id" :utf8
+                                 "username" :utf8
+                                 "usesuper" :bool
+                                 "passwd" [:? :utf8]}]))
 
 (def ^:private initial-user-data
   [{:_id "xtdb", :username "xtdb", :usesuper true, :passwd (authn.crypt/encrypt-pw "xtdb")}])

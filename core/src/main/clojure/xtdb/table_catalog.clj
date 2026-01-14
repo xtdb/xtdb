@@ -38,7 +38,7 @@
                                                    partitions hlls]
   (let [table-schema (Schema. (->> vec-types
                                    (mapv (fn [[col-name vec-type]]
-                                           (types/->field vec-type col-name)))))
+                                           (types/->field col-name vec-type)))))
         res (ByteBuffer/wrap (-> (doto (TableBlock/newBuilder)
                                    (.setArrowSchema (ByteString/copyFrom (.serializeAsMessage table-schema)))
                                    (.setRowCount row-count)
