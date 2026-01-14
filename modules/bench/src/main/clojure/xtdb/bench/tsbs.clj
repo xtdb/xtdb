@@ -27,7 +27,33 @@
 
    ["-h" "--help"]])
 
+(defn- estimate-row-count
+  "Estimate total rows based on devices and time range.
+   Each device generates 1 reading + 1 diagnostic every 5 minutes (PT5M).
+   Uses TSBS defaults (1 day) if timestamps not provided."
+  [devices timestamp-start timestamp-end]
+  (when devices
+    (let [;; Use TSBS defaults: 2016-01-01 to 2016-01-02 (1 day)
+          start (time/->instant (or timestamp-start #inst "2016-01-01T00:00:00Z"))
+          end (time/->instant (or timestamp-end #inst "2016-01-02T00:00:00Z"))
+          duration-millis (.toMillis (Duration/between start end))
+          interval-millis (.toMillis #xt/duration "PT5M")
+          readings-per-device (quot duration-millis interval-millis)
+          total-readings (* devices readings-per-device)
+          total-diagnostics total-readings
+          total-rows (+ total-readings total-diagnostics)]
+      {:devices devices
+       :days (/ duration-millis (* 1000 60 60 24.0))
+       :readings-per-device readings-per-device
+       :total-readings total-readings
+       :total-diagnostics total-diagnostics
+       :total-rows total-rows})))
+
 (defmethod b/->benchmark :tsbs-iot [_ {:keys [seed txs-file devices timestamp-start timestamp-end], :or {seed 0}, :as opts}]
+  (when-let [est (and (not txs-file) (estimate-row-count devices timestamp-start timestamp-end))]
+    (log/info (format "TSBS-IoT scale: %d devices × %.1f days = %,d total rows (%,d readings + %,d diagnostics)"
+                      (:devices est) (:days est) (:total-rows est) (:total-readings est) (:total-diagnostics est))))
+
   {:title "TSBS IoT"
    :benchmark-type :tsbs-iot
    :seed seed
@@ -59,7 +85,8 @@
                          :f (fn [{:keys [node]}]
                               (tsbs/make-gen)
 
-                              (tsbs/with-generated-data (into {:use-case :iot,
+                              (tsbs/with-generated-data (into {:seed seed
+                                                               :use-case :iot,
                                                                :log-interval #xt/duration "PT5M"}
                                                               (if devices
                                                                 ;; We pass devices as scale here to not confuse with scale-factor elsewhere
@@ -83,8 +110,11 @@
            {:t :call
             :stage :queries
             :f (fn [{:keys [node]}]
-                 (log/info "readings:" (:row-count (first (xt/q node "SELECT COUNT(*) row_count FROM readings FOR ALL VALID_TIME"))))
-                 (log/info "diagnostics:" (:row-count (first (xt/q node "SELECT COUNT(*) row_count FROM diagnostics FOR ALL VALID_TIME")))))}]})
+                 (let [readings-count (:row-count (first (xt/q node "SELECT COUNT(*) row_count FROM readings FOR ALL VALID_TIME")))
+                       diagnostics-count (:row-count (first (xt/q node "SELECT COUNT(*) row_count FROM diagnostics FOR ALL VALID_TIME")))
+                       total-count (+ readings-count diagnostics-count)]
+                   (log/info (format "TSBS-IoT final counts: %,d readings + %,d diagnostics = %,d total rows"
+                                     readings-count diagnostics-count total-count))))}]})
 
 ;; not intended to be run as a test - more for ease of REPL dev
 (t/deftest ^:benchmark run-iot

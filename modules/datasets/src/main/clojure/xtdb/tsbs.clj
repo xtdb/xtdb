@@ -112,17 +112,17 @@
                             :or {seed 123, log-interval #xt/duration "PT1M", scale 1}
                             :as opts}
                            f]
-  (let [proc (-> (Runtime/getRuntime)
-                 (.exec (->> (cond-> ["./bin/tsbs_generate_data"
-                                      "--use-case" (name use-case)
-                                      "--format" "cratedb"
-                                      "--log-interval" (str (.toSeconds log-interval) "s")
-                                      "--seed" (str seed)
-                                      "--scale" (str scale)]
-                               timestamp-start (conj "--timestamp-start" (str (time/->instant timestamp-start)))
-                               timestamp-end (conj "--timestamp-end" (str (time/->instant timestamp-end))))
-
-                             ^"[Ljava.lang.String;" (into-array String))
+  (let [cmd-args (cond-> ["./bin/tsbs_generate_data"
+                          "--use-case" (name use-case)
+                          "--format" "cratedb"
+                          "--log-interval" (str (.toSeconds log-interval) "s")
+                          "--seed" (str seed)
+                          "--scale" (str scale)]
+                   timestamp-start (conj "--timestamp-start" (str (time/->instant timestamp-start)))
+                   timestamp-end (conj "--timestamp-end" (str (time/->instant timestamp-end))))
+        _ (log/info "TSBS generator command:" (str/join " " cmd-args))
+        proc (-> (Runtime/getRuntime)
+                 (.exec ^"[Ljava.lang.String;" (into-array String cmd-args)
                         nil
                         tsbs-dir))]
 

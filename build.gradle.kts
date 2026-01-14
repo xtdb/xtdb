@@ -687,7 +687,12 @@ createBench("products", mapOf("limit" to "--limit"))
 // can't seem to have an arg with the same name as a task
 createBench("readings", mapOf("readingCount" to "--readings", "deviceCount" to "--devices"))
 
-createBench("tsbs-iot", mapOf("file" to "--file", "deviceCount" to "--devices"))
+createBench("tsbs-iot", mapOf(
+    "file" to "--file",
+    "deviceCount" to "--devices",
+    "timestampStart" to "--timestamp-start",
+    "timestampEnd" to "--timestamp-end"
+))
 
 createBench("patch", mapOf("docCount" to "--doc-count", "patchCount" to "--patch-count"))
 
