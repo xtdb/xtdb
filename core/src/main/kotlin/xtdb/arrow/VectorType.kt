@@ -70,7 +70,7 @@ data class VectorType(
         fun maybe(type: VectorType, nullable: Boolean = true): VectorType =
             if (nullable && type.arrowType is ArrowType.Union) {
                 // For unions, add a null leg instead of setting nullable flag
-                val nullLeg = NULL.arrowType.toLeg()
+                val nullLeg = NULL_TYPE.toLeg()
                 if (nullLeg in type.children) type
                 else type.copy(children = type.children + (nullLeg to NULL))
             } else {

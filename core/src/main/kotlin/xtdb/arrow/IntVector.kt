@@ -14,7 +14,7 @@ class IntVector private constructor(
     override var validityBuffer: BitBuffer?, override val dataBuffer: ExtensibleBuffer
 ) : IntegerVector(), MetadataFlavour.Number {
 
-    override val arrowType: ArrowType = I32.arrowType
+    override val arrowType: ArrowType = I32_TYPE
     override val byteWidth = Int.SIZE_BYTES
 
     companion object {

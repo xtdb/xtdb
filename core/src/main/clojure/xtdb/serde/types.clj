@@ -125,20 +125,20 @@
   (case (if (keyword? col-type)
           col-type
           (first col-type))
-    :null ArrowType$Null/INSTANCE
-    :bool ArrowType$Bool/INSTANCE
+    :null ArrowTypes/NULL_TYPE
+    :bool ArrowTypes/BOOL_TYPE
 
-    :i8 (.getType Types$MinorType/TINYINT)
-    :i16 (.getType Types$MinorType/SMALLINT)
-    :i32 (.getType Types$MinorType/INT)
-    :i64 (.getType Types$MinorType/BIGINT)
-    :f32 (.getType Types$MinorType/FLOAT4)
-    :f64 (.getType Types$MinorType/FLOAT8)
+    :i8 ArrowTypes/I8_TYPE
+    :i16 ArrowTypes/I16_TYPE
+    :i32 ArrowTypes/I32_TYPE
+    :i64 ArrowTypes/I64_TYPE
+    :f32 ArrowTypes/F32_TYPE
+    :f64 ArrowTypes/F64_TYPE
 
-    :utf8 (.getType Types$MinorType/VARCHAR)
-    :varbinary (.getType Types$MinorType/VARBINARY)
+    :utf8 ArrowTypes/UTF8_TYPE
+    :varbinary ArrowTypes/VAR_BINARY_TYPE
 
-    :instant (.getArrowType VectorType/INSTANT)
+    :instant ArrowTypes/INSTANT_TYPE
     :tstz-range TsTzRangeType/INSTANCE
     :keyword KeywordType/INSTANCE
     :oid OidType/INSTANCE
@@ -148,10 +148,10 @@
     :uri UriType/INSTANCE
     :transit TransitType/INSTANCE
 
-    :struct ArrowType$Struct/INSTANCE
-    :list ArrowType$List/INSTANCE
+    :struct ArrowTypes/STRUCT_TYPE
+    :list ArrowTypes/LIST_TYPE
     :set SetType/INSTANCE
-    :union (.getType Types$MinorType/DENSEUNION)
+    :union ArrowTypes/UNION_TYPE
     :sparse-union (.getType Types$MinorType/UNION)
 
     :map (let [[_ {:keys [sorted?]}] col-type]
@@ -187,7 +187,7 @@
     :fixed-size-binary (let [[_ byte-width] col-type]
                          (ArrowType$FixedSizeBinary. byte-width))
 
-    :iid (.getArrowType VectorType/IID)))
+    :iid ArrowTypes/IID_TYPE))
 
 (declare render-field render-type)
 

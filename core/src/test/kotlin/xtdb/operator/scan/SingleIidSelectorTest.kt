@@ -6,6 +6,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.arrow.IID_TYPE
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorWriter
@@ -42,7 +43,7 @@ class SingleIidSelectorTest {
 
         fun testUuids(vararg uuids: Uuid) =
             Relation(al).use { rel ->
-                val iids = rel.vectorFor("_iid", IID.arrowType, false)
+                val iids = rel.vectorFor("_iid", IID_TYPE, false)
 
                 for (uuid in uuids) {
                     iids.writeUuid(uuid)

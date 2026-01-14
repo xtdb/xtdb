@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
+import xtdb.arrow.I64_TYPE
+import xtdb.arrow.UTF8_TYPE
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.test.AllocatorResolver
 import xtdb.arrow.VectorType.Companion.I32
@@ -26,7 +28,7 @@ class PromotionTest {
     @Test
     fun `no-op if the type matches`(al: BufferAllocator) {
         al.openVector("i64", I64)
-            .use { v -> assertEquals(v, v.maybePromote(al, I64.arrowType, false)) }
+            .use { v -> assertEquals(v, v.maybePromote(al, I64_TYPE, false)) }
 
         al.openVector("struct", structOf("a" to I64, "b" to UTF8))
             .use { v -> assertEquals(v, v.maybePromote(al, STRUCT, false)) }
@@ -37,14 +39,14 @@ class PromotionTest {
         val field = "v" ofType I64
         al.openVector(field).use { v ->
             assertEquals(field, v.field)
-            v.maybePromote(al, I64.arrowType, true)
+            v.maybePromote(al, I64_TYPE, true)
             assertEquals("v" ofType maybe(I64), v.field)
         }
 
         val field2 = "v" ofType maybe(I64)
         al.openVector(field2).use { v ->
             assertEquals(field2, v.field)
-            v.maybePromote(al, I64.arrowType, true)
+            v.maybePromote(al, I64_TYPE, true)
             assertEquals(field2, v.field)
         }
     }
@@ -53,7 +55,7 @@ class PromotionTest {
     fun `promotes to union`(al: BufferAllocator) {
         al.openVector("v", I32).closeOnCatch { v ->
             v.writeAll(listOf(1, 2, 3))
-            v.maybePromote(al, UTF8.arrowType, false)
+            v.maybePromote(al, UTF8_TYPE, false)
         }.use { promoted ->
             promoted.writeAll(listOf("4", 5, "6"))
             assertEquals(
@@ -66,7 +68,7 @@ class PromotionTest {
         al.openVector("v", listTypeOf(I32))
             .closeOnCatch { v ->
                 v.writeAll(listOf(listOf(1, 2), listOf(3)))
-                v.maybePromote(al, UTF8.arrowType, false)
+                v.maybePromote(al, UTF8_TYPE, false)
             }
             .use { promoted ->
                 promoted.writeAll(listOf("hello", listOf(4, 5), "world"))

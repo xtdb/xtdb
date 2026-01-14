@@ -4,7 +4,7 @@ package xtdb.types
 
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.Null
-import xtdb.arrow.VectorType.Companion.F64
+import xtdb.arrow.F64_TYPE
 import xtdb.arrow.VectorType
 import org.apache.arrow.vector.types.pojo.ArrowType.Decimal as DecimalType
 import org.apache.arrow.vector.types.pojo.ArrowType.Duration as DurationType
@@ -75,8 +75,8 @@ private fun leastUpperBound2(left: ArrowType, right: ArrowType): ArrowType? = wh
     left is FloatType && right is IntType -> left
     left is FloatType && right is FloatType -> leastUpperBound2(left, right)
 
-    left is DecimalType && right is IntType -> F64.arrowType
-    left is IntType && right is DecimalType -> F64.arrowType
+    left is DecimalType && right is IntType -> F64_TYPE
+    left is IntType && right is DecimalType -> F64_TYPE
     left is DecimalType && right is FloatType -> right
     left is FloatType && right is DecimalType -> left
     left is DecimalType && right is DecimalType -> leastUpperBound2(left, right)

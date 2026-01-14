@@ -22,7 +22,31 @@ import xtdb.vector.extensions.*
 val NULL_TYPE: ArrowType = ArrowType.Null.INSTANCE
 
 @JvmField
+val BOOL_TYPE: ArrowType = ArrowType.Bool.INSTANCE
+
+@JvmField
+val I8_TYPE: ArrowType = MinorType.TINYINT.type
+
+@JvmField
+val I16_TYPE: ArrowType = MinorType.SMALLINT.type
+
+@JvmField
+val I32_TYPE: ArrowType = MinorType.INT.type
+
+@JvmField
+val I64_TYPE: ArrowType = MinorType.BIGINT.type
+
+@JvmField
+val F32_TYPE: ArrowType = ArrowType.FloatingPoint(SINGLE)
+
+@JvmField
+val F64_TYPE: ArrowType = ArrowType.FloatingPoint(DOUBLE)
+
+@JvmField
 val UTF8_TYPE: ArrowType = MinorType.VARCHAR.type
+
+@JvmField
+val VAR_BINARY_TYPE: ArrowType = MinorType.VARBINARY.type
 
 @JvmField
 val LIST_TYPE: ArrowType = MinorType.LIST.type
@@ -32,6 +56,12 @@ val STRUCT_TYPE: ArrowType = MinorType.STRUCT.type
 
 @JvmField
 val UNION_TYPE: ArrowType = MinorType.DENSEUNION.type
+
+@JvmField
+val IID_TYPE: ArrowType = ArrowType.FixedSizeBinary(16)
+
+@JvmField
+val INSTANT_TYPE: ArrowType = ArrowType.Timestamp(MICROSECOND, "UTC")
 
 private fun DateUnit.toLegPart() = when (this) {
     DAY -> "day"

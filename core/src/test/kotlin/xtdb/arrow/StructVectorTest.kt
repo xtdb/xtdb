@@ -9,7 +9,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.arrow.I32_TYPE
 import xtdb.arrow.Relation.Companion.loader
+import xtdb.arrow.UTF8_TYPE
 import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.VectorType.Companion.UTF8
 import xtdb.arrow.VectorType.Companion.asStructOf
@@ -88,12 +90,12 @@ class StructVectorTest {
     @Test
     fun createsMissingVectors() {
         StructVector(allocator, "struct", false).use { structVec ->
-            val i32Writer = structVec.vectorFor("i32", I32.arrowType, false)
+            val i32Writer = structVec.vectorFor("i32", I32_TYPE, false)
 
             i32Writer.writeInt(4)
             structVec.endStruct()
 
-            val utf8Writer = structVec.vectorFor("utf8", UTF8.arrowType, false)
+            val utf8Writer = structVec.vectorFor("utf8", UTF8_TYPE, false)
 
             i32Writer.writeInt(8)
             utf8Writer.writeObject("Hello")
@@ -277,7 +279,7 @@ class StructVectorTest {
             assertEquals(
                 Field("struct", FieldType(false, STRUCT, null), listOf(
                     Field("a", FieldType(false, UNION_TYPE, null), listOf(
-                        Field("i32", FieldType(false, VectorType.I32.arrowType, null), emptyList()),
+                        Field("i32", FieldType(false, I32_TYPE, null), emptyList()),
                         Field("utf8", FieldType(false, UTF8_TYPE, null), emptyList())
                     ))
                 )),

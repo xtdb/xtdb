@@ -130,11 +130,6 @@
     (.getChildren field)
     [field]))
 
-(defn flatten-union-type [^VectorType vec-type]
-  (if (instance? ArrowType$Union (.getArrowType vec-type))
-    (vals (.getChildren vec-type))
-    [vec-type]))
-
 (defn merge-col-types [& col-types]
   (letfn [(merge-col-type* [acc col-type]
             (zmatch col-type

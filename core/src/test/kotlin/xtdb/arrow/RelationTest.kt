@@ -7,7 +7,9 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
+import xtdb.arrow.I32_TYPE
 import xtdb.arrow.Relation.Companion.loader
+import xtdb.arrow.UTF8_TYPE
 import xtdb.kw
 import xtdb.arrow.VectorType.Companion.asListOf
 import xtdb.arrow.VectorType.Companion.maybe
@@ -217,13 +219,13 @@ class RelationTest {
     @Test
     fun testPromotion() {
         Relation(allocator).use { rel ->
-            val intVec = rel.vectorFor("foo", VectorType.I32.arrowType, false)
+            val intVec = rel.vectorFor("foo", I32_TYPE, false)
             intVec.writeInt(32)
             rel.endRow()
 
             assertEquals(listOf(mapOf("foo".kw to 32)), rel.asMaps)
 
-            val strVec = rel.vectorFor("bar", VectorType.UTF8.arrowType, false)
+            val strVec = rel.vectorFor("bar", UTF8_TYPE, false)
             strVec.writeObject("hello")
             rel.endRow()
 

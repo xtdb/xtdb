@@ -2,7 +2,9 @@ package xtdb.operator.apply
 
 import com.carrotsearch.hppc.IntArrayList
 import xtdb.ICursor
+import xtdb.arrow.BOOL_TYPE
 import xtdb.arrow.FieldName
+import xtdb.arrow.NULL_TYPE
 import xtdb.arrow.NullVector
 import xtdb.arrow.RelationWriter
 import xtdb.arrow.VectorType
@@ -21,7 +23,7 @@ sealed interface ApplyMode {
             idxs: IntArrayList, inIdx: Int
         ) {
             idxs.add(inIdx)
-            val outWriter = dependentOutWriter.vectorFor(columnName, BOOL.arrowType, true)
+            val outWriter = dependentOutWriter.vectorFor(columnName, BOOL_TYPE, true)
             var match = -1
             while (match != 1) {
                 dependentCursor.tryAdvance { depRel ->
@@ -71,7 +73,7 @@ sealed interface ApplyMode {
             if (!match) {
                 idxs.add(inIdx)
                 for ((name, _) in dependentVecTypes) {
-                    dependentOutWriter.vectorFor(name, VectorType.NULL.arrowType, true)
+                    dependentOutWriter.vectorFor(name, NULL_TYPE, true)
                         .append(NullVector(name).also { it.valueCount = 1 })
                 }
             }
@@ -141,7 +143,7 @@ sealed interface ApplyMode {
             if (!match) {
                 idxs.add(inIdx)
                 for ((name, _) in dependentVecTypes) {
-                    dependentOutWriter.vectorFor(name, VectorType.NULL.arrowType, true)
+                    dependentOutWriter.vectorFor(name, NULL_TYPE, true)
                         .append(NullVector(name).also { it.valueCount = 1 })
                 }
             }
