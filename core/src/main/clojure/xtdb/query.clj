@@ -39,7 +39,7 @@
            io.micrometer.core.instrument.Counter
            java.lang.AutoCloseable
            (java.time Duration InstantSource)
-           (java.util HashMap LinkedHashMap)
+           (java.util HashMap LinkedHashMap Map)
            [java.util.concurrent.atomic AtomicBoolean]
            (java.util.function Function)
            [java.util.stream Stream StreamSupport]
@@ -235,13 +235,12 @@
                                [(str col-name) (get children (str col-name))])))))
 
 (def ^:private explain-analyze-types
-  (LinkedHashMap. ^java.util.Map
-                  {"depth" (types/->type :utf8)
-                   "op" (types/->type :keyword)
-                   "total_time" (types/->type [:duration :micro])
-                   "time_to_first_page" (types/->type [:duration :micro])
-                   "page_count" (types/->type :i64)
-                   "row_count" (types/->type :i64)}))
+  (LinkedHashMap. ^Map (identity {"depth" (types/->type :utf8)
+                                  "op" (types/->type :keyword)
+                                  "total_time" (types/->type [:duration :micro])
+                                  "time_to_first_page" (types/->type [:duration :micro])
+                                  "page_count" (types/->type :i64)
+                                  "row_count" (types/->type :i64)})))
 
 (defn- explain-analyze-results [^IResultCursor cursor]
   (letfn [(->results [^ICursor cursor, depth]

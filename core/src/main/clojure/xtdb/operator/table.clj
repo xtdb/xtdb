@@ -58,11 +58,14 @@
         out-rows (->> rows
                       (mapv (fn [[row-tag row-arg]]
                               (case row-tag
-                                :param (let [^VectorType struct-type (-> (for [^VectorType leg-type (.getLegs (or (get param-types row-arg)
-                                                                                                                  (throw (UnsupportedOperationException. "missing param"))))
+                                :param (let [^VectorType param-type (or (get param-types row-arg)
+                                                                        (throw (UnsupportedOperationException. "missing param")))
+
+                                             ^VectorType struct-type (-> (for [^VectorType leg-type (.getLegs param-type)
                                                                                :when (= #xt.arrow/type :struct (.getArrowType leg-type))]
                                                                            leg-type)
                                                                          (->> (apply types/merge-types)))
+
                                              children (.getChildren struct-type)
                                              ks (into #{} (map symbol) (keys children))]
 
@@ -153,14 +156,16 @@
                       (Relation. allocator ^List (vector out-vec) (.getValueCount out-vec)))))}))
 
 (defn- emit-arg-table [param table-opts {:keys [param-types]}]
-  (let [vec-types (-> (into {} (for [^VectorType leg-type (.getLegs (or (get param-types param)
-                                                                        (throw (err/incorrect :unknown-table "Table refers to unknown param"
-                                                                                              {:param param, :params (set (keys param-types))}))))
+  (let [^VectorType param-type (or (get param-types param)
+                                   (throw (err/incorrect :unknown-table "Table refers to unknown param"
+                                                         {:param param, :params (set (keys param-types))})))
+
+        vec-types (-> (into {} (for [^VectorType leg-type (.getLegs param-type)
                                      :when (not= #xt.arrow/type :null (.getArrowType leg-type))
                                      :when (or (= #xt.arrow/type :list (.getArrowType leg-type))
                                                (throw (err/incorrect :illegal-param-type "Table param must be of type struct list"
                                                                      {:param param})))
-                                     :let [el-type (first (vals (.getChildren leg-type)))]
+                                     :let [^VectorType el-type (first (vals (.getChildren leg-type)))]
                                      ^VectorType el-leg-type (.getLegs el-type)
                                      :when (or (= #xt.arrow/type :struct (.getArrowType el-leg-type))
                                                (= #xt.arrow/type :null (.getArrowType el-leg-type))
