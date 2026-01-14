@@ -11,7 +11,7 @@
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.tx-sink :as tx-sink])
   (:import [xtdb.api.log Log$Message]
-           [xtdb.database Database$Catalog]
+           [xtdb.database Database Database$Catalog]
            [xtdb.table TableRef]
            [xtdb.test.log RecordingLog]))
 
@@ -21,14 +21,17 @@
   ([msg] (decode-record msg :json))
   ([msg fmt] (-> msg Log$Message/.encode (xtdb.serde/read-transit fmt))))
 
+(defn database-or-null ^Database [node db-name]
+  (let [^Database$Catalog db-cat (util/component node :xtdb/db-catalog)]
+    (-> db-cat
+        (.databaseOrNull db-name))))
+
 (defn get-output-log
   ([node] (get-output-log node "xtdb"))
   ([node db-name]
-   (let [^Database$Catalog db-cat (util/component node :xtdb/db-catalog)]
-     (-> db-cat
-         (.databaseOrNull db-name)
-         (.getTxSink)
-         :output-log))))
+   (-> (database-or-null node db-name)
+       (.getTxSink)
+       :output-log)))
 
 (t/deftest test-tx-sink-output
   (with-open [node (xtn/start-node (merge tu/*node-opts*
