@@ -208,7 +208,7 @@
                                             :tries [(last trie-details)]}]})]
     (doseq [trie-details-transform [->old-trie-details identity]]
       (doseq [table-block-transform [->old-table-block identity]]
-        (t/is (= {:vec-types {},
+        (t/is (= {:fields {},
                   :partitions
                   [{:level 0, :part [], :tries ["l00-rc-b00" "l00-rc-b01"]}
                    {:level 1, :part [], :tries ["l01-rc-b00"]}

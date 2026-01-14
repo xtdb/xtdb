@@ -181,11 +181,6 @@ data class MergeTypes(
         fun mergeTypes(types: Collection<VectorType?>): VectorType = cache[types.mapNotNullTo(mutableSetOf()) { it }]
 
         fun mergeTypes(vararg types: VectorType?): VectorType = mergeTypes(types.toList())
-
-        @JvmStatic
-        fun mergeFields(fields: Collection<Field?>): VectorType = mergeTypes(fields.map { it?.asType })
-
-        fun mergeFields(vararg fields: Field?): VectorType = mergeFields(fields.toList())
     }
 }
 

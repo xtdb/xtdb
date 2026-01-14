@@ -71,11 +71,6 @@
 (defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, name]
   (Field. name (.getFieldType field) (.getChildren field)))
 
-(defn ->nullable-field ^org.apache.arrow.vector.types.pojo.Field [^Field field]
-  (if (.isNullable field)
-    field
-    (Field. (.getName field) (FieldType. true (.getType field) nil nil) (.getChildren field))))
-
 (def temporal-fields
   {"_iid" (->field :iid "_iid"),
    "_system_from" (->field :instant "_system_from"), "_system_to" (->field [:? :instant] "_system_to")
@@ -171,16 +166,8 @@
     (-> (transduce (comp (remove nil?) (distinct)) (completing merge-col-type*) {} col-types)
         (map->col-type))))
 
-(def ^Field null-field (st/->field {"null" :null}))
-
 (defn merge-types ^xtdb.arrow.VectorType [& types]
   (MergeTypes/mergeTypes (vec types)))
-
-(defn merge-fields [& fields]
-  (let [merged-type (MergeTypes/mergeFields (vec fields))]
-    (VectorType/field (or (some (fn [^Field f] (some-> f .getName)) fields)
-                          (ArrowTypes/toLeg (.getArrowType merged-type)))
-                      merged-type)))
 
 (defn value->vec-type ^xtdb.arrow.VectorType [v]
   (VectorType/fromValue v))
@@ -314,13 +301,6 @@
 
 (defmethod arrow-type->col-type ArrowType$Map [^ArrowType$Map arrow-field & [data-field]]
   [:map {:sorted? (.getKeysSorted arrow-field)} (field->col-type data-field)])
-
-(defn unnest-field [^Field field]
-  (condp = (class (.getType field))
-    ArrowType$List (first (.getChildren field))
-    SetType (first (.getChildren field))
-    ArrowType$FixedSizeList (first (.getChildren field))
-    #xt/field [:? :null]))
 
 (defn unnest-type ^VectorType [^VectorType vec-type]
   (condp instance? (.getArrowType vec-type)

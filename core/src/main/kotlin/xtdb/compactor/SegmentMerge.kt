@@ -6,8 +6,11 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.arrow.MergeTypes.Companion.mergeTypes
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
+import xtdb.arrow.VectorType.Companion.asType
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.bitemporal.PolygonCalculator
 import xtdb.compactor.OutWriter.OutWriters
 import xtdb.compactor.OutWriter.RecencyRowCopier
@@ -19,18 +22,13 @@ import xtdb.segment.MergeTask
 import xtdb.segment.Segment
 import xtdb.segment.Segment.PageMeta.Companion.pageMeta
 import xtdb.table.TableRef
-import xtdb.trie.ArrowHashTrie
-import xtdb.trie.EventRowPointer
-import xtdb.trie.Trie
+import xtdb.time.LocalDateTimeUtil.asMicros
+import xtdb.trie.*
+import xtdb.trie.RecencyMicros
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.dataRelSchema
 import xtdb.trie.Trie.metaFilePath
-import xtdb.trie.RecencyMicros
-import xtdb.trie.TrieKey
-import xtdb.arrow.MergeTypes.Companion.mergeFields
-import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.util.*
-import xtdb.time.LocalDateTimeUtil.asMicros
 import java.nio.file.Path
 import java.time.LocalDate
 import java.util.*
@@ -204,12 +202,13 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
         recencyPartitioning: RecencyPartitioning,
         recencyPartition: RecencyPartition? = WEEK
     ): Results {
-        val mergedPutField = mergeFields(
+        val mergedPutField = mergeTypes(
             segments.mapNotNull { seg ->
                 seg.schema
                     .findField("op")
                     .children
                     .find { it.name == "put" && it.children.isNotEmpty() }
+                    ?.asType
             })
 
         val schema = dataRelSchema("put" ofType mergedPutField)
