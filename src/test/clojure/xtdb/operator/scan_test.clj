@@ -352,7 +352,7 @@
 
     (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo"}]])
 
-    (t/is (= '{_id #xt/type [:union :keyword :utf8]}
+    (t/is (= '{_id #xt/type #{:keyword :utf8}}
              (->col-type '_id)))))
 
 (t/deftest test-content-pred

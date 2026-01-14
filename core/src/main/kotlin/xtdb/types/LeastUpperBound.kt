@@ -3,16 +3,17 @@
 package xtdb.types
 
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.ArrowType.Null
 import xtdb.arrow.F64_TYPE
 import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.Mono
+import xtdb.arrow.VectorType.Scalar
+import kotlin.math.max
 import org.apache.arrow.vector.types.pojo.ArrowType.Decimal as DecimalType
 import org.apache.arrow.vector.types.pojo.ArrowType.Duration as DurationType
 import org.apache.arrow.vector.types.pojo.ArrowType.FloatingPoint as FloatType
 import org.apache.arrow.vector.types.pojo.ArrowType.Int as IntType
-import org.apache.arrow.vector.types.pojo.ArrowType.Timestamp as TimestampType
 import org.apache.arrow.vector.types.pojo.ArrowType.Time as TimeType
-import kotlin.math.max
+import org.apache.arrow.vector.types.pojo.ArrowType.Timestamp as TimestampType
 
 private fun leastUpperBound2(left: IntType, right: IntType): ArrowType? =
     if (left.isSigned && right.isSigned) maxOf(left, right, compareBy { it.bitWidth }) else null
@@ -65,33 +66,37 @@ private fun leastUpperBound2(left: DecimalType, right: DecimalType): ArrowType {
     return DecimalType(resultPrecision, resultScale, resultBitWidth)
 }
 
-private fun leastUpperBound2(left: ArrowType, right: ArrowType): ArrowType? = when {
-    left is Null -> right
-    right is Null -> left
+private fun leastUpperBound2(left: Mono, right: Mono): Mono? =
+    when {
+        left == VectorType.Null -> right
+        right == VectorType.Null -> left
 
-    left is IntType && right is IntType -> leastUpperBound2(left, right)
+        left !is Scalar || right !is Scalar -> null
 
-    left is IntType && right is FloatType -> right
-    left is FloatType && right is IntType -> left
-    left is FloatType && right is FloatType -> leastUpperBound2(left, right)
+        else -> {
+            val leftType = left.arrowType
+            val rightType = right.arrowType
 
-    left is DecimalType && right is IntType -> F64_TYPE
-    left is IntType && right is DecimalType -> F64_TYPE
-    left is DecimalType && right is FloatType -> right
-    left is FloatType && right is DecimalType -> left
-    left is DecimalType && right is DecimalType -> leastUpperBound2(left, right)
-
-    left is DurationType && right is DurationType -> leastUpperBound2(left, right)
-
-    left is TimestampType && right is TimestampType -> leastUpperBound2(left, right)
-    left is TimeType && right is TimeType -> leastUpperBound2(left, right)
-
-    else -> null
-}
+            when (leftType) {
+                is IntType if rightType is IntType -> leastUpperBound2(leftType, rightType)
+                is IntType if rightType is FloatType -> rightType
+                is FloatType if rightType is IntType -> leftType
+                is FloatType if rightType is FloatType -> leastUpperBound2(leftType, rightType)
+                is DecimalType if rightType is IntType -> F64_TYPE
+                is IntType if rightType is DecimalType -> F64_TYPE
+                is DecimalType if rightType is FloatType -> rightType
+                is FloatType if rightType is DecimalType -> leftType
+                is DecimalType if rightType is DecimalType -> leastUpperBound2(leftType, rightType)
+                is DurationType if rightType is DurationType -> leastUpperBound2(leftType, rightType)
+                is TimestampType if rightType is TimestampType -> leastUpperBound2(leftType, rightType)
+                is TimeType if rightType is TimeType -> leastUpperBound2(leftType, rightType)
+                else -> null
+            }?.let { Scalar(it) }
+        }
+    }
 
 @JvmName("of")
-fun leastUpperBound(types: Collection<VectorType>): ArrowType? =
+fun leastUpperBound(types: Collection<VectorType>): Mono? =
     types
         .flatMap { it.legs }
-        .map { it.arrowType }
         .reduceOrNull { l, r -> leastUpperBound2(l, r) ?: return null }

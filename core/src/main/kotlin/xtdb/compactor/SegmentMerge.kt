@@ -9,6 +9,7 @@ import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.MergeFields.Companion.mergeFields
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
+import xtdb.arrow.VectorType.Companion.asType
 import xtdb.bitemporal.PolygonCalculator
 import xtdb.compactor.OutWriter.OutWriters
 import xtdb.compactor.OutWriter.RecencyRowCopier

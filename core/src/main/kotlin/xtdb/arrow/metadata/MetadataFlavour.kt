@@ -1,7 +1,9 @@
 package xtdb.arrow.metadata
 
 import org.apache.arrow.vector.types.pojo.ArrowType
+import xtdb.arrow.UNION_TYPE
 import xtdb.arrow.VectorReader
+import xtdb.arrow.VectorType
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
@@ -40,11 +42,11 @@ sealed interface MetadataFlavour {
     }
 
     companion object {
-        @JvmStatic
-        val ArrowType.metadataFlavour
+        private fun ArrowType.unsupported(): Nothing =
+            throw UnsupportedOperationException(this::class.java.simpleName)
+
+        private val ArrowType.metadataFlavour
             get() = accept(object : ArrowType.ArrowTypeVisitor<Class<out MetadataFlavour>?> {
-                private fun ArrowType.unsupported(): Nothing =
-                    throw UnsupportedOperationException(this::class.java.simpleName)
 
                 override fun visit(type: ArrowType.Null) = Presence::class.java
 
@@ -56,7 +58,7 @@ sealed interface MetadataFlavour {
                 override fun visit(type: ArrowType.ListView) = type.unsupported()
                 override fun visit(type: ArrowType.LargeListView) = type.unsupported()
 
-                override fun visit(type: ArrowType.Union) = type.unsupported()
+                override fun visit(type: ArrowType.Union) = error("Union should have already been handled")
                 override fun visit(type: ArrowType.Map) = type.unsupported()
 
                 override fun visit(type: ArrowType.Int) = Number::class.java
@@ -81,6 +83,14 @@ sealed interface MetadataFlavour {
 
                 override fun visit(type: ArrowType.RunEndEncoded) = type.unsupported()
             })
+
+        @JvmStatic
+        val VectorType.metadataFlavour: Class<out MetadataFlavour>?
+            get() = when(this) {
+                is VectorType.Mono -> arrowType.metadataFlavour
+                is VectorType.Maybe -> mono.metadataFlavour
+                is VectorType.Poly -> UNION_TYPE.unsupported()
+            }
 
         @JvmStatic
         val Class<out MetadataFlavour>.metaColName

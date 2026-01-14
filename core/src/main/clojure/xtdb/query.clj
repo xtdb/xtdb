@@ -229,10 +229,10 @@
 (defn- explain-plan-types [explain-plan]
   (let [^VectorType vec-type (->> (map types/value->vec-type explain-plan)
                                   (apply types/merge-types))
-        children (.getChildren vec-type)]
-    (LinkedHashMap. ^java.util.Map
-                    (into {} (for [col-name '[depth op explain]]
-                               [(str col-name) (get children (str col-name))])))))
+        ;; asMono because it's a struct
+        children (.getChildren (.asMono vec-type))]
+    (LinkedHashMap. ^Map (into {} (for [col-name '[depth op explain]]
+                                    [(str col-name) (get children (str col-name))])))))
 
 (def ^:private explain-analyze-types
   (LinkedHashMap. ^Map (identity {"depth" (types/->type :utf8)

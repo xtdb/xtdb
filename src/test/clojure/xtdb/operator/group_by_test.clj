@@ -3,7 +3,6 @@
             [xtdb.api :as xt]
             [xtdb.operator.group-by :as group-by]
             [xtdb.test-util :as tu]
-            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import [xtdb.arrow Vector]))
@@ -124,7 +123,7 @@
               v0 (tu/open-rel {:v [1 2 3]})
               v1 (tu/open-rel {:v [1 2.0 3]})]
     (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v,
-                                                     :from-type #xt/type [:union :i64 :f64]
+                                                     :from-type #xt/type #{:i64 :f64}
                                                      :to-name 'vsum, :zero-row? true})
           sum-spec (.build sum-factory tu/*allocator*)]
       (t/is (= #xt/type [:? :f64] (.getType sum-factory)))
@@ -473,7 +472,7 @@
 
 (t/deftest test-group-by-groups-nils
   (t/is (= {:res #{{:b 1, :n 85}}
-            :types '{a #xt/type [:? :null], b #xt/type :i64, n #xt/type [:? :i64]}}
+            :types '{a #xt/type :null, b #xt/type :i64, n #xt/type [:? :i64]}}
            (-> (tu/query-ra '[:group-by {:columns [a b {n (sum c)}]}
                               [:table {:rows [{:a nil, :b 1, :c 42}
                                               {:a nil, :b 1, :c 43}]}]]

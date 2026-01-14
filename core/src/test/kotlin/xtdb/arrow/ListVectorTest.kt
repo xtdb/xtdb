@@ -2,15 +2,13 @@ package xtdb.arrow
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.types.pojo.Field
-import org.apache.arrow.vector.types.pojo.FieldType
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.arrow.VectorType.Companion.listTypeOf
 import xtdb.arrow.VectorType.Companion.ofType
-import xtdb.arrow.VectorType.Companion.unionOf
+import xtdb.arrow.VectorType.Companion.fromLegs
 
 class ListVectorTest {
 
@@ -34,7 +32,7 @@ class ListVectorTest {
             assertEquals(listOf(listOf(1, 2, 3), listOf(4, 5, "6")), listVec.asList)
 
             assertEquals(
-                "list" ofType listTypeOf(unionOf("i32" to VectorType.I32, "utf8" to VectorType.UTF8)),
+                "list" ofType listTypeOf(fromLegs(VectorType.I32, VectorType.UTF8)),
                 listVec.field
             )
         }

@@ -10,9 +10,8 @@ import org.junit.jupiter.api.Test
 import xtdb.arrow.*
 import xtdb.arrow.VectorType.Companion.F64
 import xtdb.arrow.VectorType.Companion.I32
-import xtdb.arrow.VectorType.Companion.just
 import xtdb.arrow.VectorType.Companion.maybe
-import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.arrow.VectorType.Companion.scalar
 import java.math.BigDecimal
 import kotlin.use
 
@@ -171,7 +170,7 @@ class AggregateTest {
 
     @Test
     fun `Sum aggregates decimal values`() {
-        val decimalType = just(ArrowType.Decimal(10, 2, 128))
+        val decimalType = scalar(ArrowType.Decimal(10, 2, 128))
         Vector.fromList(allocator, "values", decimalType,
             listOf(BigDecimal("10.50"), BigDecimal("20.25"), BigDecimal("30.75"), BigDecimal("40.00"))).use { valuesVec ->
             Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->
@@ -191,7 +190,7 @@ class AggregateTest {
 
     @Test
     fun `Average calculates mean of decimal values`() {
-        val decimalType = just(ArrowType.Decimal(10, 2, 128))
+        val decimalType = scalar(ArrowType.Decimal(10, 2, 128))
         Vector.fromList(allocator, "values", decimalType,
             listOf(BigDecimal("10.00"), BigDecimal("20.00"), BigDecimal("30.00"), BigDecimal("40.00"))).use { valuesVec ->
             Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->

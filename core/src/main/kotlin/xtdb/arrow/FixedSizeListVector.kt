@@ -7,6 +7,7 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorType.Listy
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import xtdb.util.closeOnCatch
@@ -32,6 +33,7 @@ class FixedSizeListVector private constructor(
     ) : this(al, name, listSize, if (nullable) BitBuffer(al) else null, elVector, valueCount)
 
     override val arrowType = ArrowType.FixedSizeList(listSize)
+    override val monoType get() = Listy(arrowType, elVector.type)
 
     override val vectors get() = listOf(elVector)
 

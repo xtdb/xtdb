@@ -24,12 +24,12 @@
                     [xtdb public/baseball col1 :i64]
                     [xtdb public/baseball col2 :i64]
                     [xtdb public/beanie _id :keyword]
-                    [xtdb public/beanie col1 [:union :utf8 :i64]]
+                    [xtdb public/beanie col1 #{:utf8 :i64}]
                     [xtdb xt/txs _id :i64]
                     [xtdb xt/txs committed :bool]
                     [xtdb xt/txs error [:? :transit]]
                     [xtdb xt/txs system_time :instant]
-                    [xtdb xt/txs user_metadata [:? :struct]]}
+                    [xtdb xt/txs user_metadata [:? :struct {}]]}
                  (for [table '[public/baseball public/beanie xt/txs]
                        [col data-type] '[[_system_from :instant]
                                          [_system_to [:? :instant]]
@@ -455,7 +455,7 @@
             ["xt" "txs" "committed" :bool]
             ["xt" "txs" "error" [:? :transit]]
             ["xt" "txs" "system_time" :instant]
-            ["xt" "txs" "user_metadata" [:? :struct]]]
+            ["xt" "txs" "user_metadata" [:? :struct {}]]]
            (->> (xt/q tu/*node* "SELECT * FROM xt.live_columns ORDER BY schema_name, table_name, col_name")
                 (mapv (juxt :schema-name :table-name :col-name (comp read-string :col-type)))))))
 

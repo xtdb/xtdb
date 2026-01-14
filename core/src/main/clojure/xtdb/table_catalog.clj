@@ -111,9 +111,9 @@
     :else (->> (for [col-name (set/union (set (keys old-vec-types))
                                          (set (keys new-vec-types)))]
                  [col-name (types/merge-types (or (get old-vec-types col-name)
-                                                  #xt/type [:? :null])
+                                                  #xt/type :null)
                                               (or (get new-vec-types col-name)
-                                                  #xt/type [:? :null]))])
+                                                  #xt/type :null))])
                (into {}))))
 
 (defn- merge-hlls [old-hlls new-hlls]

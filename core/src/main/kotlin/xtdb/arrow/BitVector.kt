@@ -6,6 +6,7 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import org.apache.arrow.vector.BitVector as ArrowBitVector
@@ -29,6 +30,7 @@ class BitVector private constructor(
         }
 
     override val arrowType: ArrowType = BIT_TYPE
+    override val monoType = BOOL
     override val vectors: Iterable<Vector> = emptyList()
 
     override fun ensureCapacity(valueCount: Int) {

@@ -7,6 +7,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.TaggedValue
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorType.Companion.fromLegs
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Unsupported
@@ -42,6 +43,7 @@ class DenseUnionVector private constructor(
         }
 
     override val arrowType = UNION_TYPE
+    override val type get() = fromLegs(vectors.map { it.type })
 
     private val legVectors = legVectors.toMutableList()
 
@@ -58,6 +60,7 @@ class DenseUnionVector private constructor(
         override val arrowType: ArrowType get() = inner.arrowType
         override val field get() = inner.field
         override val childFields get() = inner.childFields
+        override val type: VectorType get() = inner.type
 
         fun getTypeId(idx: Int) = typeBuffer.getByte(idx)
         fun getOffset(idx: Int) = offsetBuffer.getInt(idx)

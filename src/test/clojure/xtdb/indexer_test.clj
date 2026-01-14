@@ -229,17 +229,16 @@
 
         (let [db (db/primary-db node)
               tc (.getTableCatalog db)]
-          (t/is (= #xt/type [:union :utf8 :keyword :i64]
+          (t/is (= #xt/type #{:utf8 :keyword :i64}
                    (.getType tc #xt/table xt_docs "_id")))
 
-          (t/is (= #xt/type [:? :list [:union :f64 :utf8 :instant :bool]]
+          (t/is (= #xt/type [:? :list #{:f64 :utf8 :instant :bool}]
                    (.getType tc #xt/table xt_docs "list")))
 
-          (t/is (= #xt/type [:? :struct {"a" [:union :i64 :bool],
-                                         "b" [:union
-                                              :utf8
-                                              ;; TODO these shouldn't be optional strings, really. #4988
-                                              [:struct {"c" [:? :utf8], "d" [:? :utf8]}]]}]
+          (t/is (= #xt/type [:? :struct {"a" #{:i64 :bool},
+                                         "b" #{:utf8
+                                               ;; TODO these shouldn't be optional strings, really. #4988
+                                               [:struct {"c" [:? :utf8], "d" [:? :utf8]}]}}]
                    (.getType tc #xt/table xt_docs "struct"))))))))
 
 (t/deftest drops-nils-on-round-trip
@@ -488,7 +487,7 @@
 
         (tu/flush-block! node1)
 
-        (t/is (= #xt/type [:union :utf8 :keyword :uuid :transit]
+        (t/is (= #xt/type #{:utf8 :keyword :uuid :transit}
                  (.getType tc1 #xt/table xt_docs "v")))))
 
     (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
@@ -498,7 +497,7 @@
         ;; this one comes out with union with type-ids null vs union with type-ids [].
         ;; very annoying.
         ;; so we render the type to compare.
-        (t/is (= [:union :utf8 :keyword :uuid :transit]
+        (t/is (= #{:utf8 :keyword :uuid :transit}
                  (st/render-type (.getType tc2 #xt/table xt_docs "v"))))))))
 
 (t/deftest test-await-fails-fast

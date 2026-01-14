@@ -46,6 +46,7 @@ class StructVector private constructor(
     )
 
     override val arrowType: ArrowType = STRUCT
+    override val monoType get() = VectorType.Struct(childWriters.mapValues { it.value.type })
 
     override val vectors: Iterable<Vector> get() = childWriters.sequencedValues()
 

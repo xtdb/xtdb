@@ -8,8 +8,7 @@
             xtdb.serde.types
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import (java.nio.file FileVisitOption Files Path)
-           (xtdb.arrow Relation)))
+  (:import (java.nio.file FileVisitOption Files Path)))
 
 (def ^:dynamic *regen?*
   #_{:clj-kondo/ignore [:single-logical-operand]}

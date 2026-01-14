@@ -5,6 +5,7 @@ import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorType.Companion.listTypeOf
 import xtdb.util.Hasher
 import xtdb.util.closeOnCatch
 
@@ -12,6 +13,7 @@ class SingletonListReader(override val name: String, private val elReader: Vecto
     override val nullable = false
     override val arrowType: ArrowType = LIST_TYPE
     override val childFields: List<Field> get() = listOf(elReader.field)
+    override val type get() = listTypeOf(elReader.type)
 
     override val valueCount = 1
 

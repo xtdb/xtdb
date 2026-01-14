@@ -1078,8 +1078,8 @@
   (t/testing "polymorphic types on both sides - all matching"
     (t/is (= {:res [[{:a 1 :b 1} {:a "2" :b "2"}]],
               :types
-              '{a #xt/type [:union :utf8 :i64 [:? :null]]
-                b #xt/type [:union :utf8 :i64 [:? :null]]}}
+              '{a #xt/type #{:utf8 :i64 :null}
+                b #xt/type #{:utf8 :i64 :null}}}
              (tu/query-ra [:full-outer-join '{:conditions [{a b}]}
                            [::tu/pages
                             [[{:a 1}, {:a "2"}]]]
@@ -1090,8 +1090,8 @@
   (t/testing "polymorphic types on both sides - some unmatching"
     (t/is (= {:res [[{:b 1, :a 1} {:b "3"}] [{:a "2"}]],
               :types
-              '{a #xt/type [:union :utf8 :i64 [:? :null]]
-                b #xt/type [:union :utf8 :i64 [:? :null]]}}
+              '{a #xt/type #{:utf8 :i64 :null}
+                b #xt/type #{:utf8 :i64 :null}}}
              (tu/query-ra [:full-outer-join '{:conditions [{a b}]}
                            [::tu/pages
                             [[{:a 1}, {:a "2"}]]]
@@ -1102,8 +1102,8 @@
   (t/testing "polymorphic types on both sides - all unmatching"
     (t/is (= {:res [[{:b 3} {:b "4"}] [{:a 1} {:a "2"}]],
               :types
-              '{a #xt/type [:union :utf8 :i64 [:? :null]]
-                b #xt/type [:union :utf8 :i64 [:? :null]]}}
+              '{a #xt/type #{:utf8 :i64 :null}
+                b #xt/type #{:utf8 :i64 :null}}}
              (tu/query-ra [:full-outer-join '{:conditions [{a b}]}
                            [::tu/pages
                             [[{:a 1}, {:a "2"}]]]

@@ -8,12 +8,14 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import xtdb.arrow.VectorIndirection.Companion.Selection
 import xtdb.arrow.VectorIndirection.Companion.Slice
+import xtdb.arrow.VectorType.Scalar
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
 
 abstract class VariableWidthVector : MonoVector() {
 
     override val vectors: Iterable<Vector> = emptyList()
+    override val monoType get() = Scalar(arrowType)
 
     internal abstract val al: BufferAllocator
     internal abstract var validityBuffer: BitBuffer?

@@ -6,6 +6,7 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorType.*
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
@@ -18,6 +19,7 @@ class NullVector(
     override val vectors = emptyList<Vector>()
 
     override val arrowType: ArrowType = NULL_TYPE
+    override val monoType = Null
 
     override fun isNull(idx: Int) = true
 

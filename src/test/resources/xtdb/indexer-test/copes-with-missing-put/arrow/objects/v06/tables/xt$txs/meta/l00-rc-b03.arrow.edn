@@ -8,18 +8,17 @@
                  {"data-page-idx" :i32,
                   "columns"
                   [:list
-                   {"col"
-                    [:struct
-                     {"col-name" :utf8,
-                      "transit" [:? :bool],
-                      "count" :i64,
-                      "bool" [:? :bool],
-                      "bytes" [:? :struct {"bloom" [:? :varbinary]}],
-                      "numbers" [:? :struct {"min" :f64, "max" :f64}],
-                      "date-times"
-                      [:? :struct {"min" :f64, "max" :f64}],
-                      "struct" [:? :list :i32],
-                      "root-col?" :bool}]}]}]}]}),
+                   [:struct
+                    {"col-name" :utf8,
+                     "transit" [:? :bool],
+                     "count" :i64,
+                     "bool" [:? :bool],
+                     "bytes" [:? :struct {"bloom" [:? :varbinary]}],
+                     "numbers" [:? :struct {"min" :f64, "max" :f64}],
+                     "date-times"
+                     [:? :struct {"min" :f64, "max" :f64}],
+                     "struct" [:? :list :i32],
+                     "root-col?" :bool}]]}]}]}),
  :batches
  ([{:nodes
     #xt/tagged [:leaf

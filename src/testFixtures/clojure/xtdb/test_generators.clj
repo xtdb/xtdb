@@ -10,8 +10,7 @@
            [java.time.temporal Temporal]
            [java.util List Map Set]
            [org.apache.arrow.memory BufferAllocator]
-           [org.apache.arrow.vector.types.pojo Field]
-           [xtdb.arrow ArrowTypes MergeTypes Vector VectorType]))
+           [xtdb.arrow ArrowTypes MergeTypes Vector VectorType VectorType$Listy VectorType$Maybe VectorType$Null VectorType$Poly VectorType$Scalar VectorType$Struct]))
 
 ;; Simple types
 ;; TODO: Ensure all arrow types are covered here
@@ -234,40 +233,62 @@
   (= (map normalize-for-comparison list1)
      (map normalize-for-comparison list2)))
 
-(defn vec-type->value-generator
-  "Generate a value generator for a given Arrow Field"
-  [^VectorType vec-type]
-  (let [arrow-type (.getArrowType vec-type)
-        nullable? (.isNullable vec-type)]
+(defprotocol ValueGenerator
+  (vec-type->value-generator [vec-type]))
+
+(extend-protocol ValueGenerator
+  VectorType$Null
+  (vec-type->value-generator [_]
+    (gen/return nil))
+
+  VectorType$Scalar
+  (vec-type->value-generator [vec-type]
+    (condp = (.getArrowType vec-type)
+      #xt.arrow/type :i8 i8-gen
+      #xt.arrow/type :i16 i16-gen
+      #xt.arrow/type :i32 i32-gen
+      #xt.arrow/type :i64 i64-gen
+      #xt.arrow/type :f64 f64-gen
+      #xt.arrow/type [:decimal 32 1 128] decimal-gen
+      #xt.arrow/type :utf8 utf8-gen
+      #xt.arrow/type :varbinary varbinary-gen
+      #xt.arrow/type :keyword keyword-gen
+      #xt.arrow/type :uuid uuid-gen
+      #xt.arrow/type :uri uri-gen
+      #xt.arrow/type :bool bool-gen
+      #xt.arrow/type :instant instant-gen
+      #xt.arrow/type [:date :day] local-date-gen
+      #xt.arrow/type [:time-local :nano] local-time-gen
+      ;; fallback for unknown scalar types
+      simple-gen))
+
+  VectorType$Listy
+  (vec-type->value-generator [vec-type]
+    (let [el-gen (vec-type->value-generator (.getElType vec-type))]
+      (condp = (.getArrowType vec-type)
+        #xt.arrow/type :list (gen/vector el-gen 0 10)
+        #xt.arrow/type :set (gen/set el-gen {:min-elements 0 :max-elements 10})
+        ;; fallback for unknown listy types
+        (gen/vector el-gen 0 10))))
+
+  VectorType$Struct
+  (vec-type->value-generator [vec-type]
+    (gen/let [entries (apply gen/tuple (map (fn [[child-name child-type]]
+                                              (gen/let [v (vec-type->value-generator child-type)]
+                                                (when v [(keyword child-name) v])))
+                                            (.getChildren vec-type)))]
+      (->> (filter some? entries)
+           (into {}))))
+
+  VectorType$Maybe
+  (vec-type->value-generator [vec-type]
     (gen/frequency
-     (cond-> [[15 (condp = arrow-type
-                    #xt.arrow/type :i8 i8-gen
-                    #xt.arrow/type :i16 i16-gen
-                    #xt.arrow/type :i32 i32-gen
-                    #xt.arrow/type :i64 i64-gen
-                    #xt.arrow/type :f64 f64-gen
-                    #xt.arrow/type [:decimal 32 1 128] decimal-gen
-                    #xt.arrow/type :utf8 utf8-gen
-                    #xt.arrow/type :varbinary varbinary-gen
-                    #xt.arrow/type :keyword keyword-gen
-                    #xt.arrow/type :uuid uuid-gen
-                    #xt.arrow/type :uri uri-gen
-                    #xt.arrow/type :bool bool-gen
-                    #xt.arrow/type :instant instant-gen
-                    #xt.arrow/type [:date :day] local-date-gen
-                    #xt.arrow/type [:time-local :nano] local-time-gen
-                    #xt.arrow/type :list (gen/vector (vec-type->value-generator (.firstChildOrNull vec-type)) 0 10)
-                    #xt.arrow/type :set (gen/set (vec-type->value-generator (.firstChildOrNull vec-type)) {:min-elements 0 :max-elements 10})
-                    #xt.arrow/type :union (gen/one-of (map vec-type->value-generator (vals (.getChildren vec-type))))
-                    #xt.arrow/type :struct (gen/let [entries (apply gen/tuple (map (fn [[child-name child-type]]
-                                                                                     (gen/let [v (vec-type->value-generator child-type)]
-                                                                                       (when v [(keyword child-name) v])))
-                                                                                   (.getChildren vec-type)))]
-                                             (->> (filter some? entries)
-                                                  (into {})))
-                    ;; fallback for unknown types
-                    simple-gen)]]
-       nullable? (conj [1 (gen/return nil)])))))
+     [[15 (vec-type->value-generator (.getMono vec-type))]
+      [1 (gen/return nil)]]))
+
+  VectorType$Poly
+  (vec-type->value-generator [vec-type]
+    (gen/one-of (map vec-type->value-generator (.getLegs vec-type)))))
 
 (defn records->generator
   "Given a list of records, produce a generator that will generate similar records"

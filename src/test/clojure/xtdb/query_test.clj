@@ -378,7 +378,7 @@
         (t/is (= #{{:xt/id "xtdb-db"} {:xt/id :new-db}} (set res)))
 
         ;; these two are equivalent - for some reason CI gives different ordering
-        (t/is (or (= '{_id #xt/type [:union :utf8 :keyword]}
+        (t/is (or (= '{_id #xt/type #{:utf8 :keyword}}
                      types)
-                  (= '{_id #xt/type [:union :keyword :utf8]}
+                  (= '{_id #xt/type #{:keyword :utf8}}
                      types)))))))

@@ -3,26 +3,24 @@ package xtdb.trie
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
+import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.Companion.BOOL
+import xtdb.arrow.VectorType.Companion.I32
+import xtdb.arrow.VectorType.Companion.I64
+import xtdb.arrow.VectorType.Companion.UTF8
+import xtdb.arrow.VectorType.Companion.asListOf
+import xtdb.arrow.VectorType.Companion.asStructOf
+import xtdb.arrow.VectorType.Companion.asUnionFieldOf
+import xtdb.arrow.VectorType.Companion.listTypeOf
+import xtdb.arrow.VectorType.Companion.maybe
+import xtdb.arrow.VectorType.Companion.structOf
+import xtdb.arrow.schema
 import xtdb.indexer.TrieMetadataCalculator
 import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.ColumnMetadata
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.trie.Trie.metaFilePath
-import xtdb.arrow.VectorType
-import xtdb.arrow.VectorType.Companion.BOOL
-import xtdb.arrow.VectorType.Companion.I32
-import xtdb.arrow.VectorType.Companion.I64
-import xtdb.arrow.VectorType.Companion.NULL
-import xtdb.arrow.VectorType.Companion.UTF8
-import xtdb.arrow.VectorType.Companion.asListOf
-import xtdb.arrow.VectorType.Companion.asStructOf
-import xtdb.arrow.VectorType.Companion.asUnionOf
-import xtdb.arrow.VectorType.Companion.listTypeOf
-import xtdb.arrow.VectorType.Companion.unionOf
-import xtdb.arrow.VectorType.Companion.maybe
-import xtdb.arrow.VectorType.Companion.ofType
-import xtdb.arrow.schema
 
 class MetadataFileWriter(
     al: BufferAllocator, private val bp: BufferPool,
@@ -31,23 +29,17 @@ class MetadataFileWriter(
     calculateBlooms: Boolean, writeTrieMetadata: Boolean
 ) : AutoCloseable {
     companion object {
-        private val metadataField = listTypeOf(
-            VectorType.structOf(
-                "col-name" to UTF8,
-                "root-col?" to BOOL,
-                "count" to I64
-            ),
-            elName = "col"
-        )
 
         @JvmField
         val metaRelSchema = schema(
-            "nodes" ofType unionOf(
-                "nil" to NULL,
+            "nodes".asUnionFieldOf(
+                "nil" to VectorType.Null,
                 "branch-iid" asListOf maybe(I32),
                 "leaf".asStructOf(
                     "data-page-idx" to I32,
-                    "columns" to metadataField
+                    "columns" to listTypeOf(
+                        structOf("col-name" to UTF8, "root-col?" to BOOL, "count" to I64),
+                    )
                 )
             )
         )

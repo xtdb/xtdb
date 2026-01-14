@@ -13,7 +13,7 @@
                   {:a 100, :b "bar", :c 3.14, :d (time/->zdt #inst "2020"), :e 10, :f (Duration/ofMinutes 1)}]
             :types {'a #xt/type :i64, 'b #xt/type :utf8, 'c #xt/type :f64,
                     'd #xt/type [:? :instant]
-                    'e #xt/type [:union :bool :i64]
+                    'e #xt/type #{:bool :i64}
                     'f #xt/type [:duration :micro]}}
            (-> (tu/query-ra '[:table {:output-cols [a b c d e f], :param ?table}]
                             {:args {:table [{:a 12, :b "foo" :c 1.2 :d nil :e true :f (Duration/ofHours 1)}
@@ -24,7 +24,7 @@
                   {:a 100, :b "bar", :c 3.14, :d (time/->zdt #inst "2020"), :e 10}]
             :types '{a #xt/type :i64, b #xt/type :utf8, c #xt/type :f64,
                      d #xt/type [:? :instant]
-                     e #xt/type [:union :i64 :bool]}}
+                     e #xt/type #{:i64 :bool}}}
            (-> (tu/query-ra '[:table {:rows [{:a 12, :b "foo", :c 1.2, :d nil, :e true}
                                              {:a 100, :b "bar", :c 3.14, :d #inst "2020", :e 10}]}]
                             {:with-types? true})))
@@ -82,7 +82,7 @@
 
   (t/is (= [{:foo :bar, :baz {:nested-foo :bar}}]
            (tu/query-ra '[:table {:rows [{:foo :bar, :baz {:nested_foo ?nested_param}}]}]
-                         {:args {:nested_param :bar}}))
+                        {:args {:nested_param :bar}}))
         "nested param with need for normalisation"))
 
 (t/deftest test-table-handles-symbols
@@ -146,7 +146,7 @@
         "differing columns")
 
   (t/is (= {:res [{:a 12.4, :b 10} {:b 15} {:a 100, :b 83} {:a 83.0, :b 100}],
-            :types '{a #xt/type [:union [:? :f64] :i64], b #xt/type :i64}}
+            :types '{a #xt/type #{:f64 :null :i64}, b #xt/type :i64}}
 
            (tu/query-ra '[:table {:param ?table}]
                         {:args {:table [{:a 12.4, :b 10}, {:a nil, :b 15}, {:a 100, :b 83}, {:a 83.0, :b 100}]}
@@ -160,18 +160,18 @@
                         {:with-types? true})))
 
   (t/is (= '{:res [{:x5 1} {:x5 2.0} {:x5 3}],
-             :types {x5 #xt/type [:union :i64 :f64]}}
+             :types {x5 #xt/type #{:i64 :f64}}}
            (tu/query-ra '[:table {:column {x5 [1 2.0 3]}}]
                         {:with-types? true})))
 
   (t/is (= {:res [{:unnest-param 12.4} {} {:unnest-param 100} {:unnest-param 83.0}],
-            :types '{unnest-param #xt/type [:union [:? :f64] :i64]}}
+            :types '{unnest-param #xt/type #{:f64 :i64 :null}}}
 
            (tu/query-ra '[:table {:column {unnest-param ?coll}}]
                         {:args {:coll [12.4, nil, 100, 83.0]}
                          :with-types? true})))
 
-  (t/is (= {:res [], :types '{b #xt/type [:? :null]}}
+  (t/is (= {:res [], :types '{b #xt/type :null}}
            (tu/query-ra '[:table {:column {b nil}}]
                         {:with-types? true}))
         "nil value - #4075"))

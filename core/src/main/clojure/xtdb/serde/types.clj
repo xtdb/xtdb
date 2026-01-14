@@ -3,7 +3,7 @@
   (:import (java.io Writer)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
-           (xtdb.arrow ArrowTypes VectorType)
+           (xtdb.arrow ArrowTypes VectorType VectorType$Listy VectorType$Maybe VectorType$Null VectorType$Poly VectorType$Scalar VectorType$Struct)
            (xtdb.vector.extensions IntervalMDMType KeywordType OidType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (defprotocol FromArrowType
@@ -215,41 +215,48 @@
 (defmethod print-method FieldType [field-type w]
   (print-dup field-type w))
 
-(declare render-type)
+(defprotocol RenderType
+  (render-type [vec-type]))
 
-(defn- render-children
-  "Renders children map to shorthand format.
-   Returns: (optionally) a map of non-matching entries, then bare types for matching ones."
-  [children ctx]
-  (let [{matching true, non-matching false}
-        (group-by (fn [[field-name ^VectorType child-type]]
-                    (case ctx
-                      (:union :sparse-union) (= field-name (ArrowTypes/toLeg (.getArrowType child-type)))
-                      (:list :set) (= "$data$" field-name)
-                      false))
-                  children)]
-    (concat
-     (when (seq non-matching)
-       [(into {} (map (fn [[k v]] [k (render-type v)]) non-matching))])
-     (map (fn [[_ v]] (render-type v)) matching))))
+(extend-protocol RenderType
+  VectorType$Null 
+  (render-type [_] :null)
 
-(defn render-type
-  ([^VectorType type]
-   (render-type (.getArrowType type) (.isNullable type) (.getChildren type)))
+  VectorType$Scalar
+  (render-type [scalar]
+    (<-arrow-type (.getArrowType scalar)))
 
-  ([arrow-type nullable? children]
-   (let [arrow-type-spec (<-arrow-type arrow-type)]
-     (if (and (not nullable?) (empty? children))
-       arrow-type-spec
+  VectorType$Listy
+  (render-type [list-type]
+    (if (= list-type VectorType/TSTZ_RANGE)
+      :tstz-range
 
-       (as-> [] type-spec
-         (cond-> type-spec nullable? (conj :?))
-         (if (keyword? arrow-type-spec)
-           (conj type-spec arrow-type-spec)
-           (into type-spec arrow-type-spec))
-         (into type-spec (render-children children arrow-type-spec)))))))
+      (let [arrow-type (.getArrowType list-type)
+            el-type (render-type (.getElType list-type))
+            arrow-type-spec (<-arrow-type arrow-type)]
+        (as-> [] type-spec
+          (if (keyword? arrow-type-spec)
+            (conj type-spec arrow-type-spec)
+            (into type-spec arrow-type-spec))
 
-(defn- render-field-type 
+          (conj type-spec el-type)))))
+
+  VectorType$Struct
+  (render-type [struct-type]
+    [:struct (-> (.getChildren struct-type) (update-vals render-type))])
+
+  VectorType$Maybe
+  (render-type [maybe-type]
+    (let [base-type (render-type (.getMono maybe-type))]
+      (if (keyword? base-type)
+        [:? base-type]
+        (into [:?] base-type))))
+  
+  VectorType$Poly
+  (render-type [vec-type]
+    (into #{} (map render-type) (.getLegs vec-type))))
+
+(defn render-field-type 
   ([^Field field]
    (render-field-type (<-arrow-type (.getType field)) (.isNullable field) (.getChildren field)))
 
@@ -354,29 +361,6 @@
                                  [nil field-spec])]
             (->field* nm type-spec))))
 
-(declare ^xtdb.arrow.VectorType ->type)
-
-(defn- ->child-entries
-  "Converts child specs to map entries {name -> VectorType}.
-   Accepts: bare types (use leg name), singleton maps, or multi-entry maps."
-  [child-specs ctx]
-  (reduce (fn [acc child-spec]
-            (cond
-              (instance? Field child-spec)
-              (let [^Field f child-spec]
-                (assoc acc (.getName f) (VectorType/fromField f)))
-
-              (map? child-spec)
-              (reduce-kv (fn [m k v] (assoc m k (->type v))) acc child-spec)
-
-              :else
-              (case ctx
-                (:set :list) (assoc acc "$data$" (->type child-spec))
-                (let [vec-type (->type child-spec)]
-                  (assoc acc (ArrowTypes/toLeg (.getArrowType vec-type)) vec-type)))))
-          {}
-          child-specs))
-
 (defmethod print-dup Schema [^Schema s, ^Writer w]
   (.write w "#xt/schema ")
   (print-dup (map render-field (.getFields s)) w))
@@ -408,10 +392,14 @@
   (cond
     (instance? VectorType type-spec) type-spec
     (instance? Field type-spec) (VectorType/fromField type-spec)
-    (instance? ArrowType type-spec) (VectorType. type-spec false {})
+    (instance? ArrowType type-spec) (VectorType/scalar type-spec)
+
     (keyword? type-spec) (case type-spec
                            :tstz-range VectorType/TSTZ_RANGE
-                           (VectorType. (->arrow-type type-spec) false {}))
+                           :null VectorType$Null/INSTANCE
+                           (VectorType/scalar (->arrow-type type-spec)))
+
+    (set? type-spec) (VectorType/fromLegs (into #{} (map ->type) type-spec))
 
     :else (let [[first-elem & more-opts] type-spec
                 [nullable? more-opts] (if (= :? first-elem)
@@ -419,12 +407,19 @@
                                         [false (cons first-elem more-opts)])
                 [arrow-type-head & more-opts] more-opts]
             (case arrow-type-head
-              (:union :set :list :struct :sparse-union :tstz-range)
-              (VectorType. (->arrow-type arrow-type-head)
-                           nullable?
-                           (->child-entries more-opts arrow-type-head))
+              :null VectorType$Null/INSTANCE
+              :struct (-> (VectorType/structOf (->> (first more-opts)
+                                                    (into {} (map (fn [[k v]]
+                                                                    [(str k) (->type v)])))))
+                          (VectorType/maybe nullable?))
 
-              (VectorType. (->arrow-type (cons arrow-type-head more-opts))
-                           nullable?
-                           {})))))
+              :tstz-range (-> VectorType/TSTZ_RANGE
+                              (VectorType/maybe nullable?))
+
+              (:set :list :fixed-size-list)
+              (-> (VectorType/listy (->arrow-type arrow-type-head) (->type (first more-opts)))
+                  (VectorType/maybe nullable?))
+
+              (-> (VectorType/scalar (->arrow-type (cons arrow-type-head more-opts)))
+                  (VectorType/maybe nullable?))))))
 

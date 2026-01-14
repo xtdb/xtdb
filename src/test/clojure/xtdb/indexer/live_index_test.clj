@@ -126,7 +126,7 @@
           (t/is (= [(os/->StoredObject "tables/public$foo/data/l00-rc-b00.arrow" 2494)]
                    (.listAllObjects bp (util/->path "tables/public$foo/data"))))
 
-          (t/is (= [(os/->StoredObject "tables/public$foo/meta/l00-rc-b00.arrow" 3878)]
+          (t/is (= [(os/->StoredObject "tables/public$foo/meta/l00-rc-b00.arrow" 3886)]
                    (.listAllObjects bp (util/->path "tables/public$foo/meta")))))
 
         (let [expected-dir (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index"))]

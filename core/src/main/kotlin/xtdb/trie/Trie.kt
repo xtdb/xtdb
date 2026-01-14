@@ -3,17 +3,18 @@ package xtdb.trie
 import com.carrotsearch.hppc.ByteArrayList
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
-import xtdb.table.TableRef
+import xtdb.arrow.UNION_TYPE
 import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.*
 import xtdb.arrow.VectorType.Companion.IID
-import xtdb.arrow.VectorType.Companion.NULL
 import xtdb.arrow.VectorType.Companion.INSTANT
-import xtdb.arrow.VectorType.Companion.asType
+import xtdb.arrow.VectorType.Companion.asUnionFieldOf
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.schema
-import xtdb.arrow.withName
+import xtdb.table.TableRef
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
@@ -115,12 +116,13 @@ object Trie {
             "_system_from" ofType INSTANT,
             "_valid_from" ofType INSTANT,
             "_valid_to" ofType INSTANT,
-            "op" ofType VectorType.unionOf(
-                *(listOfNotNull(
-                    putDocField?.let { "put" to it.asType },
-                    "delete" to NULL,
-                    "erase" to NULL
-                ).toTypedArray())
+            Field(
+                "op", FieldType.notNullable(UNION_TYPE),
+                listOfNotNull(
+                    putDocField,
+                    "delete" ofType Null,
+                    "erase" ofType Null
+                )
             )
         )
 

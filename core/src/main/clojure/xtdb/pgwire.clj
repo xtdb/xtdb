@@ -928,13 +928,10 @@
 
 (defn- show-var-param-types [variable]
   (case variable
-    "latest_completed_txs" [#xt/type [:list [:struct {"db_name" :utf8}
-                                                     {"part" :i32}
-                                                     {"tx_id" :i64}
-                                                     {"system_time" :instant}]]]
-    ("latest_submitted_msg_ids" "latest_processed_msg_ids") [#xt/type [:list [:struct {"db_name" :utf8}
-                                                                                      {"part" :i32}
-                                                                                      {"msg_id" :i64}]]]
+    "latest_completed_txs" [#xt/type [:list [:struct {"db_name" :utf8, "part" :i32, "tx_id" :i64, "system_time" :instant}]]]
+    ("latest_submitted_msg_ids" "latest_processed_msg_ids") [#xt/type [:list [:struct {"db_name" :utf8
+                                                                                       "part" :i32
+                                                                                       "msg_id" :i64}]]]
     "latest_submitted_tx" [#xt/type :i64, #xt/type :instant, #xt/type :bool, #xt/type :transit, #xt/type :utf8]
     "await_token" [#xt/type :utf8]
     "standard_conforming_strings" [#xt/type :bool]

@@ -1040,7 +1040,7 @@
                             (= (to ~x-sym) (to ~y-sym))))))})
 
 (defmethod expr/codegen-call [:* :tstz-range :tstz-range] [_]
-  {:return-type #xt/type [:union :null :tstz-range], :return-col-type [:union #{:null :tstz-range}]
+  {:return-type #xt/type [:? :tstz-range], :return-col-type [:union #{:null :tstz-range}]
    :continue-call (fn [f [x y]]
                     (let [x-sym (gensym 'x)
                           y-sym (gensym 'y)

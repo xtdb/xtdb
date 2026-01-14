@@ -7,14 +7,12 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
-import xtdb.arrow.I32_TYPE
 import xtdb.arrow.Relation.Companion.loader
-import xtdb.arrow.UTF8_TYPE
 import xtdb.kw
-import xtdb.arrow.VectorType.Companion.asListOf
+import xtdb.arrow.VectorType.Companion.asUnionFieldOf
+import xtdb.arrow.VectorType.Companion.listTypeOf
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.ofType
-import xtdb.arrow.VectorType.Companion.unionOf
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 
@@ -255,9 +253,9 @@ class RelationTest {
             assertEquals(
                 schema(
                     "foo" ofType maybe(VectorType.I32),
-                    "bar" ofType unionOf(
+                    "bar".asUnionFieldOf(
                         "utf8" to maybe(VectorType.UTF8),
-                        "list" asListOf VectorType.UTF8
+                        "list" to listTypeOf(VectorType.UTF8)
                     )
                 ),
                 rel.schema

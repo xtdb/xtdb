@@ -1381,12 +1381,12 @@
 
     ;; least + greatest
 
-    (t/is (= {:res 2.0, :res-type #xt/type [:union [:decimal 32 1 128] :f64]}
+    (t/is (= {:res 2.0, :res-type #xt/type #{[:decimal 32 1 128] :f64}}
              (run-test 'least (bigdec 3.0) (double 2.0))))
-    (t/is (= {:res 3.0, :res-type #xt/type [:union [:decimal 32 1 128] :f64]}
+    (t/is (= {:res 3.0, :res-type #xt/type #{[:decimal 32 1 128] :f64}}
              (run-test 'greatest (double 3.0) (bigdec 2.0))))
 
-    (t/is (= {:res-type #xt/type [:union [:decimal 32 1 128] [:decimal 32 2 128]],
+    (t/is (= {:res-type #xt/type #{[:decimal 32 1 128] [:decimal 32 2 128]},
               :res 1.0M}
              (run-test 'least (bigdec 1.0M) (bigdec 2.02))))
 
@@ -1431,7 +1431,7 @@
               (run-projection rel (list f 'x 'y))))]
 
     (t/is (= {:res [2.001M 2.0101M],
-              :res-type #xt/type [:union [:decimal 32 4 128] [:decimal 32 3 128]]}
+              :res-type #xt/type #{[:decimal 32 4 128] [:decimal 32 3 128]}}
              (run-test '+
                        [(bigdec 1.0) (bigdec 1.01)]
                        [(bigdec 1.001) (bigdec 1.0001)])))
@@ -1447,7 +1447,7 @@
                        [(bigdec 1.0) (bigdec 1.01)]
                        (repeat 2 (double 1.0)))))
 
-    (t/is (= {:res-type #xt/type [:union [:decimal 32 1 128] [:decimal 32 2 128]],
+    (t/is (= {:res-type #xt/type #{[:decimal 32 1 128] [:decimal 32 2 128]},
               :res [0.0M 0.01M]}
              (run-test '-
                        [(bigdec 1.0) (bigdec 1.01)]
@@ -1484,18 +1484,18 @@
 
 (t/deftest test-polymorphic-columns
   (t/is (= {:res [1.2 1 3.4]
-            :res-type #xt/type [:union :f64 :i64]}
+            :res-type #xt/type #{:f64 :i64}}
            (with-open [rel (tu/open-rel {:x [1.2 1 3.4]})]
              (run-projection rel 'x))))
 
   (t/is (= {:res [4.4 9.75]
-            :res-type #xt/type [:union :f64 :f32]}
+            :res-type #xt/type #{:f64 :f32}}
            (with-open [rel (tu/open-rel {:x [1 1.5]
                                          :y [3.4 (float 8.25)]})]
              (run-projection rel '(+ x y)))))
 
   (t/is (= {:res [(float 4.4) nil nil nil]
-            :res-type #xt/type [:union :f64 :f32 [:? :null]]}
+            :res-type #xt/type #{:f64 :f32 :null}}
            (with-open [rel (tu/open-rel {:x [1 12 nil nil]
                                          :y [(float 3.4) nil 4.8 nil]})]
              (run-projection rel '(+ x y))))))
@@ -1649,7 +1649,7 @@
     (t/is (= {:res [3.4 8.25], :res-type #xt/type :f64}
              (run-projection rel '(. {:x x, :y y} y))))
 
-    (t/is (= {:res [nil nil], :res-type #xt/type [:? :null]}
+    (t/is (= {:res [nil nil], :res-type #xt/type :null}
              (run-projection rel '(. {:x x, :y y} z))))))
 
 (t/deftest test-namespaced-struct-literals
@@ -1817,8 +1817,8 @@
                     {:b 12}
                     {:a 15, :b 25.0}
                     10.0]
-              :res-type #xt/type [:union :f64 [:struct {"a" [:? :i64], 
-                                                        "b" [:union [:? :i64] :f64]}]]}
+              :res-type #xt/type #{:f64 [:struct {"a" [:? :i64],
+                                                        "b" #{:i64 :null :f64}}]}}
              (run-projection rel 'x)))
 
     (t/is (= {:res [42 12 nil nil 15 nil]
@@ -1831,8 +1831,8 @@
                     {:xb 12}
                     {:xa 15, :xb 25.0}
                     {}],
-              :res-type #xt/type [:struct {"xa" [:? :i64], 
-                                           "xb" [:union :f64 :i64 [:? :null]]}]}
+              :res-type #xt/type [:struct {"xa" [:? :i64],
+                                           "xb" #{:f64 :i64 :null}}]}
              (run-projection rel '{:xa (. x a),
                                    :xb (. x b)})))))
 
@@ -1882,8 +1882,8 @@
                     {:sums [nil 11.5]}
                     {:a 15, :sums [40 nil]}
                     {:sums [nil nil]}],
-              :res-type #xt/type [:struct {"a" [:union :f64 :i64 [:? :null]],
-                                           "sums" [:list [:union :f64 :i64 [:? :null]]]}]}
+              :res-type #xt/type [:struct {"a" #{:f64 :i64 :null},
+                                           "sums" [:list #{:f64 :i64 :null}]}]}
              (run-projection rel '{:a (. x a),
                                    :sums [(+ (. x a) (. x b))
                                           (+ (. x b) (nth (. x c) 1))]})))))
@@ -2057,7 +2057,7 @@
                                                    {:with-types? true})]
               {:res (:res (first res))
                :type (get types 'res)}))]
-    (let [exp {:res nil, :type #xt/type [:? :null]}]
+    (let [exp {:res nil, :type #xt/type :null}]
       (t/is (= exp (test-null-cast :i32)))
       (t/is (= exp (test-null-cast :i64)))
       (t/is (= exp (test-null-cast :utf8)))

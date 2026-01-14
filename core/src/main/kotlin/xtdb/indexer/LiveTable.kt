@@ -7,7 +7,7 @@ import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
 import xtdb.arrow.*
-import xtdb.arrow.VectorType.Companion.NULL
+import xtdb.arrow.VectorType.*
 import xtdb.log.proto.TrieMetadata
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
@@ -60,7 +60,7 @@ constructor(
         val liveRelation: RelationReader,
         val liveTrie: MemoryHashTrie
     ) : AutoCloseable {
-        fun columnType(col: ColumnName): VectorType = columnTypes[col] ?: NULL
+        fun columnType(col: ColumnName): VectorType = columnTypes[col] ?: Null
 
         val types: Map<ColumnName, VectorType> get() = columnTypes
 
@@ -149,7 +149,11 @@ constructor(
     private val RelationWriter.types: Map<String, VectorType>
         get() {
             val putVec = vectorFor("op").vectorForOrNull("put") ?: return emptyMap()
-            return putVec.type.children
+            val type = putVec.type
+            check(type is Mono && type.arrowType == STRUCT_TYPE) {
+                "Expected 'put' vector to be STRUCT type, got: $type"
+            }
+            return type.children
         }
 
     private fun openSnapshot(trie: MemoryHashTrie): Snapshot {

@@ -4,11 +4,13 @@ package xtdb.arrow
 
 import clojure.lang.Keyword
 import org.apache.arrow.vector.PeriodDuration
+import org.apache.arrow.vector.types.DateUnit
 import org.apache.arrow.vector.types.FloatingPointPrecision.DOUBLE
 import org.apache.arrow.vector.types.FloatingPointPrecision.SINGLE
+import org.apache.arrow.vector.types.IntervalUnit
+import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.TimeUnit.MICROSECOND
 import org.apache.arrow.vector.types.Types.MinorType
-import org.apache.arrow.vector.types.UnionMode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
@@ -19,7 +21,6 @@ import xtdb.time.Interval
 import xtdb.time.MICRO_HZ
 import xtdb.time.NANO_HZ
 import xtdb.types.ClojureForm
-import xtdb.types.Oid
 import xtdb.types.RegClass
 import xtdb.types.RegProc
 import xtdb.types.ZonedDateTimeRange
@@ -38,158 +39,231 @@ fun schema(vararg fields: Field) = Schema(fields.asIterable())
 
 internal const val LIST_ELS_NAME = $$"$data$"
 
-data class VectorType(
-    val arrowType: ArrowType,
-    @get:JvmName("isNullable")
-    val nullable: Boolean = false,
-    val children: Map<FieldName, VectorType> = emptyMap()
-) {
+sealed class VectorType {
+    abstract val arrowType: ArrowType
+    abstract val nullable: Boolean
 
-    val fieldType get() = FieldType(nullable, arrowType, null)
+    abstract fun toField(name: FieldName): Field
 
-    fun toField(name: FieldName): Field = Field(name, fieldType, children.map { (n, t) -> t.toField(n) })
+    abstract val asLegField: Field
 
-    val asLegField get() = toField(arrowType.toLeg())
+    abstract val legs: Iterable<Mono>
 
-    private val unionLegs get() = if (arrowType is ArrowType.Union) children.values.toList() else listOf(this)
+    @get:JvmName("asMono")
+    val asMono get() = this as Mono
 
-    val firstChildOrNull get() = children.entries.firstOrNull()?.value
+    sealed class Mono() : VectorType() {
+        abstract val children: Map<FieldName, VectorType>
 
-    private val splitNull get() = when {
-        arrowType is ArrowType.Null -> listOf(this)
-        nullable -> listOf(NULL, copy(nullable = false))
-        else -> listOf(this)
+        override val nullable: Boolean get() = arrowType == NULL_TYPE
+
+        val fieldType get() = FieldType(nullable, arrowType, null)
+        val firstChildOrNull get() = children.entries.firstOrNull()?.value
+
+        override val legs: Iterable<Mono> get() = setOf(this)
+        override fun toField(name: FieldName) = toField(name, nullable)
+
+        fun toField(name: FieldName, nullable: Boolean): Field =
+            Field(name, FieldType(nullable, arrowType, null), children.map { (n, t) -> t.toField(n) })
+
+        override val asLegField get() = toField(arrowType.toLeg())
     }
 
-    val legs: Iterable<VectorType> = unionLegs.flatMap { it.splitNull }
+    data object Null : Mono() {
+        override val arrowType get() = NULL_TYPE
+        override val children: Map<FieldName, VectorType> get() = emptyMap()
+        override val nullable get() = true
+
+        override val asLegField get() = toField(arrowType.toLeg())
+
+        override val legs: Iterable<Mono> get() = listOf(this)
+    }
+
+    data class Scalar(override val arrowType: ArrowType) : Mono() {
+        init {
+            assert(arrowType != NULL_TYPE) { "Use Null type for NULL_TYPE" }
+            assert(arrowType !is ArrowType.Union) { "Use Poly type for UNION_TYPE" }
+        }
+
+        override val children get() = emptyMap<FieldName, VectorType>()
+    }
+
+    data class Listy(override val arrowType: ArrowType, val elType: VectorType) : Mono() {
+        override val children get() = mapOf(LIST_ELS_NAME to elType)
+    }
+
+    data class Struct(override val children: Map<FieldName, VectorType>) : Mono() {
+        override val arrowType get() = STRUCT_TYPE
+    }
+
+    data class Maybe(val mono: Mono) : VectorType() {
+        override val arrowType get() = mono.arrowType
+        override val nullable = true
+        val fieldType: FieldType get() = FieldType.nullable(arrowType)
+
+        override val asLegField get() = toField(Null.arrowType.toLeg())
+
+        override val legs: Iterable<Mono> get() = listOf(mono, Null)
+
+        override fun toField(name: FieldName) =
+            Field(name, fieldType, mono.children.map { (n, t) -> t.toField(n) })
+    }
+
+    data class Poly(
+        private val children: Set<Mono>
+    ) : VectorType() {
+        companion object {
+            private val fieldType = FieldType.notNullable(UNION_TYPE)
+        }
+
+        override val nullable by lazy { children.any { it == Null } }
+
+        private val singleMono: Mono? by lazy {
+            (children - Null).singleOrNull()
+        }
+
+        override val arrowType get() = singleMono?.arrowType ?: UNION_TYPE
+
+        override fun toField(name: FieldName): Field =
+            singleMono?.toField(name, nullable)
+                ?: Field(name, fieldType, children.map { it.asLegField })
+
+        override val asLegField get() = toField(arrowType.toLeg())
+
+        override val legs get() = children
+    }
 
     companion object {
 
         @JvmStatic
         @JvmOverloads
-        fun maybe(type: VectorType, nullable: Boolean = true): VectorType =
-            if (nullable && type.arrowType is ArrowType.Union) {
-                // For unions, add a null leg instead of setting nullable flag
-                val nullLeg = NULL_TYPE.toLeg()
-                if (nullLeg in type.children) type
-                else type.copy(children = type.children + (nullLeg to NULL))
-            } else {
-                type.copy(nullable = nullable)
+        fun maybe(type: VectorType, nullable: Boolean = true): VectorType {
+            if (!nullable) return type
+
+            return when (type) {
+                Null -> type
+                is Mono -> Maybe(type)
+                is Maybe -> type
+                is Poly -> Poly(type.legs + Null)
             }
+        }
+
+        @JvmField
+        val BOOL = Scalar(MinorType.BIT.type)
+
+        @JvmField
+        val I8 = Scalar(MinorType.TINYINT.type)
+
+        @JvmField
+        val I16 = Scalar(MinorType.SMALLINT.type)
+
+        @JvmField
+        val I32 = Scalar(MinorType.INT.type)
+
+        @JvmField
+        val I64 = Scalar(MinorType.BIGINT.type)
+
+        @JvmField
+        val F32 = Scalar(ArrowType.FloatingPoint(SINGLE))
+
+        @JvmField
+        val F64 = Scalar(ArrowType.FloatingPoint(DOUBLE))
+
+        @JvmField
+        val UTF8 = Scalar(MinorType.VARCHAR.type)
+
+        @JvmField
+        val INSTANT = Scalar(ArrowType.Timestamp(MICROSECOND, "UTC"))
+
+        @JvmField
+        val IID = Scalar(ArrowType.FixedSizeBinary(16))
+
+        @JvmField
+        val VAR_BINARY = Scalar(MinorType.VARBINARY.type)
+
+        @JvmField
+        val UUID = Scalar(UuidType)
+
+        @JvmField
+        val URI = Scalar(UriType)
+
+        @JvmField
+        val KEYWORD = Scalar(KeywordType)
+
+        @JvmField
+        val TRANSIT = Scalar(TransitType)
+
+        @JvmField
+        val OID = Scalar(OidType)
+
+        @JvmField
+        val REG_CLASS = Scalar(RegClassType)
+
+        @JvmField
+        val REG_PROC = Scalar(RegProcType)
+
+        @JvmField
+        val TSTZ_RANGE = Listy(TsTzRangeType, INSTANT)
+
+        @JvmField
+        val TIMESTAMP_MICRO = Scalar(ArrowType.Timestamp(MICROSECOND, null))
+
+        @JvmField
+        val DATE_DAY = Scalar(ArrowType.Date(DateUnit.DAY))
+
+        @JvmField
+        val TIME_MICRO = Scalar(ArrowType.Time(MICROSECOND, 64))
+
+        @JvmField
+        val TIME_NANO = Scalar(ArrowType.Time(TimeUnit.NANOSECOND, 64))
+
+        @JvmField
+        val DURATION_MICRO = Scalar(ArrowType.Duration(MICROSECOND))
+
+        @JvmField
+        val INTERVAL_YEAR = Scalar(ArrowType.Interval(IntervalUnit.YEAR_MONTH))
+
+        @JvmField
+        val INTERVAL_MDN = Scalar(ArrowType.Interval(IntervalUnit.MONTH_DAY_NANO))
+
+        @JvmField
+        val INTERVAL_MDM = Scalar(IntervalMDMType)
 
         @JvmStatic
-        fun maybe(type: ArrowType, nullable: Boolean = true, vararg children: Pair<FieldName, VectorType>) =
-            VectorType(type, nullable, children.toMap())
+        fun scalar(arrowType: ArrowType) = Scalar(arrowType)
 
-        fun just(type: ArrowType, vararg children: Pair<FieldName, VectorType>) = VectorType(type, false, children.toMap())
+        fun fromLegs(vararg legs: Mono) = fromLegs(legs.toSet())
+        fun fromLegs(legs: Iterable<VectorType>) = fromLegs(legs.flatMapTo(mutableSetOf()) { it.legs })
 
-        @JvmField
-        val NULL = VectorType(MinorType.NULL.type, true)
+        @JvmStatic
+        fun fromLegs(legs: Set<Mono>): VectorType {
+            val nullable = Null in legs
+            val withoutNull = legs - Null
 
-        @JvmField
-        val BOOL = VectorType(MinorType.BIT.type)
+            return when (withoutNull.size) {
+                0 -> Null
+                1 -> maybe(withoutNull.single(), nullable)
+                else -> Poly(legs)
+            }
+        }
 
-        @JvmField
-        val I8 = VectorType(MinorType.TINYINT.type)
+        fun FieldName.asUnionFieldOf(legs: Iterable<Pair<FieldName, VectorType>>) =
+            Field(this, FieldType.notNullable(UNION_TYPE), legs.map { (n, t) -> t.toField(n) })
 
-        @JvmField
-        val I16 = VectorType(MinorType.SMALLINT.type)
-
-        @JvmField
-        val I32 = VectorType(MinorType.INT.type)
-
-        @JvmField
-        val I64 = VectorType(MinorType.BIGINT.type)
-
-        @JvmField
-        val F32 = VectorType(ArrowType.FloatingPoint(SINGLE))
-
-        @JvmField
-        val F64 = VectorType(ArrowType.FloatingPoint(DOUBLE))
-
-        @JvmField
-        val UTF8 = VectorType(MinorType.VARCHAR.type)
-
-        @JvmField
-        val INSTANT = VectorType(ArrowType.Timestamp(MICROSECOND, "UTC"))
-
-        @JvmField
-        val IID = VectorType(ArrowType.FixedSizeBinary(16))
-
-        @JvmField
-        val VAR_BINARY = VectorType(MinorType.VARBINARY.type)
-
-        @JvmField
-        val UUID = VectorType(UuidType)
-
-        @JvmField
-        val URI = VectorType(UriType)
-
-        @JvmField
-        val KEYWORD = VectorType(KeywordType)
-
-        @JvmField
-        val TRANSIT = VectorType(TransitType)
-
-        @JvmField
-        val OID = VectorType(OidType)
-
-        @JvmField
-        val REG_CLASS = VectorType(RegClassType)
-
-        @JvmField
-        val REG_PROC = VectorType(RegProcType)
-
-        @JvmField
-        val TSTZ_RANGE = VectorType(TsTzRangeType, false, mapOf(LIST_ELS_NAME to INSTANT))
-
-        @JvmField
-        val TIMESTAMP_MICRO = VectorType(ArrowType.Timestamp(MICROSECOND, null))
-
-        @JvmField
-        val DATE_DAY = VectorType(ArrowType.Date(org.apache.arrow.vector.types.DateUnit.DAY))
-
-        @JvmField
-        val TIME_MICRO = VectorType(ArrowType.Time(MICROSECOND, 64))
-
-        @JvmField
-        val TIME_NANO = VectorType(ArrowType.Time(org.apache.arrow.vector.types.TimeUnit.NANOSECOND, 64))
-
-        @JvmField
-        val DURATION_MICRO = VectorType(ArrowType.Duration(MICROSECOND))
-
-        @JvmField
-        val INTERVAL_YEAR = VectorType(ArrowType.Interval(org.apache.arrow.vector.types.IntervalUnit.YEAR_MONTH))
-
-        @JvmField
-        val INTERVAL_MDN = VectorType(ArrowType.Interval(org.apache.arrow.vector.types.IntervalUnit.MONTH_DAY_NANO))
-
-        @JvmField
-        val INTERVAL_MDM = VectorType(IntervalMDMType)
-
-        fun unionOf(vararg legs: Pair<FieldName, VectorType>) = unionOf(legs.toMap())
-        fun unionOf(legs: Map<FieldName, VectorType>) = VectorType(ArrowType.Union(UnionMode.Dense, null), children = legs)
+        fun FieldName.asUnionFieldOf(vararg legs: Pair<FieldName, VectorType>) = asUnionFieldOf(legs.asIterable())
 
         fun structOf(vararg fields: Pair<FieldName, VectorType>) = structOf(fields.toMap())
-        fun structOf(fields: Map<FieldName, VectorType>) = VectorType(STRUCT_TYPE, children = fields)
 
-        fun listTypeOf(el: VectorType, elName: FieldName = LIST_ELS_NAME) =
-            just(LIST_TYPE, elName to el)
+        @JvmStatic
+        fun structOf(fields: Map<FieldName, VectorType>) = Struct(fields)
 
+        @JvmStatic
+        fun listy(arrowType: ArrowType, el: VectorType) = Listy(arrowType, el)
+
+        fun listTypeOf(el: VectorType) = Listy(LIST_TYPE, el)
         infix fun FieldName.asListOf(el: VectorType) = this to listTypeOf(el)
 
-        fun fixedSizeList(size: Int, el: VectorType, elName: FieldName = LIST_ELS_NAME) =
-            just(ArrowType.FixedSizeList(size), elName to el)
-
-        fun setTypeOf(el: VectorType, nullable: Boolean = false, elName: FieldName = LIST_ELS_NAME) =
-            maybe(SetType, nullable, elName to el)
-
-        fun mapTypeOf(
-            keyType: VectorType, valueType: VectorType,
-            sorted: Boolean = true, entriesName: FieldName = $$"$entries$",
-            keyName: FieldName = "key", valueName: FieldName = "value",
-        ) =
-            just(ArrowType.Map(sorted), entriesName to structOf(keyName to keyType, valueName to valueType))
+        fun setTypeOf(el: VectorType) = Listy(SetType, el)
 
         @JvmStatic
         fun field(name: FieldName, type: VectorType) = type.toField(name)
@@ -200,17 +274,24 @@ data class VectorType(
         infix fun FieldName.ofType(type: VectorType) = type.toField(this)
 
         fun FieldName.asStructOf(vararg fields: Pair<FieldName, VectorType>) = this to structOf(*fields)
-        fun FieldName.asUnionOf(vararg legs: Pair<FieldName, VectorType>) = this to unionOf(*legs)
+        fun FieldName.asUnionOf(vararg legs: Mono) = this to fromLegs(*legs)
 
         @JvmStatic
         @get:JvmName("fromField")
-        val Field.asType: VectorType get() = VectorType(type, isNullable, children.associate { it.name to it.asType })
+        val Field.asType: VectorType
+            get() = when (type) {
+                NULL_TYPE -> Null
+                LIST_TYPE, SetType, TsTzRangeType, is ArrowType.FixedSizeList -> Listy(type, children.single().asType)
+                STRUCT_TYPE -> Struct(children.associate { it.name to it.asType })
+                is ArrowType.Union -> fromLegs(children.map { it.asType })
+                else -> Scalar(type)
+            }.let { maybe(it, isNullable) }
 
         @JvmStatic
         @get:JvmName("fromValue")
-        val Any?.asVectorType: VectorType
+        val Any?.asVectorType: Mono
             get() = when (this) {
-                null -> NULL
+                null -> Null
                 is ValueReader -> readObject().asVectorType
                 is ListValueReader -> listTypeOf(mergeTypes((0 until size()).map { nth(it).readObject().asVectorType }))
                 is Boolean -> BOOL
@@ -228,11 +309,11 @@ data class VectorType(
                         in 33..64 -> 64
                         else -> throw Unsupported("Unsupported precision: ${precision()}")
                     }
-                    VectorType(ArrowType.Decimal(precision, scale(), precision * 4))
+                    Scalar(ArrowType.Decimal(precision, scale(), precision * 4))
                 }
 
-                is ZonedDateTime -> VectorType(ArrowType.Timestamp(MICROSECOND, zone.toString()))
-                is OffsetDateTime -> VectorType(ArrowType.Timestamp(MICROSECOND, offset.toString()))
+                is ZonedDateTime -> Scalar(ArrowType.Timestamp(MICROSECOND, zone.toString()))
+                is OffsetDateTime -> Scalar(ArrowType.Timestamp(MICROSECOND, offset.toString()))
                 is Instant -> INSTANT
                 is Date -> INSTANT
                 is LocalDateTime -> TIMESTAMP_MICRO

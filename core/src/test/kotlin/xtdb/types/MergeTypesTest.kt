@@ -3,10 +3,10 @@ package xtdb.types
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.arrow.MergeTypes.Companion.mergeTypes
+import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.VectorType.Companion.F64
 import xtdb.arrow.VectorType.Companion.I64
-import xtdb.arrow.VectorType.Companion.NULL
 import xtdb.arrow.VectorType.Companion.UTF8
 import xtdb.arrow.VectorType.Companion.asStructOf
 import xtdb.arrow.VectorType.Companion.asUnionOf
@@ -14,24 +14,25 @@ import xtdb.arrow.VectorType.Companion.listTypeOf
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.setTypeOf
 import xtdb.arrow.VectorType.Companion.structOf
-import xtdb.arrow.VectorType.Companion.unionOf
+import xtdb.arrow.VectorType.Companion.fromLegs
+import xtdb.arrow.VectorType.Null
 
 class MergeTypesTest {
 
     @Test
     fun `test basic mergeTypes`() {
-        assertEquals(NULL, mergeTypes())
+        assertEquals(Null, mergeTypes())
 
         assertEquals(UTF8, mergeTypes(UTF8, UTF8), "Same types merge ofType themselves")
 
         assertEquals(
-            unionOf("utf8" to UTF8, "i64" to I64),
+            fromLegs(UTF8, I64),
             mergeTypes(UTF8, I64),
             "Different types create unions"
         )
 
         assertEquals(
-            unionOf("utf8" to UTF8, "i64" to I64, "f64" to F64),
+            fromLegs(UTF8, I64, F64),
             mergeTypes(UTF8, I64, F64),
             "Multiple different types create unions"
         )
@@ -41,12 +42,12 @@ class MergeTypesTest {
     fun `test merges list types`() {
         val utf8List = listTypeOf(UTF8)
         val i64List = listTypeOf(I64)
-        val nullList = listTypeOf(NULL)
+        val nullList = listTypeOf(Null)
 
         assertEquals(utf8List, mergeTypes(utf8List, utf8List), "Same list types merge")
 
         assertEquals(
-            listTypeOf(unionOf("utf8" to UTF8, "i64" to I64)),
+            listTypeOf(fromLegs(UTF8, I64)),
             mergeTypes(utf8List, i64List),
             "Different list element types create union"
         )
@@ -73,7 +74,7 @@ class MergeTypesTest {
         assertEquals(
             structOf(
                 "a" to UTF8,
-                "b".asUnionOf("utf8" to UTF8, "i64" to I64)
+                "b".asUnionOf(UTF8, I64)
             ),
             mergeTypes(struct1, struct3),
             "Structs with different field types create union in differing fields"
@@ -98,13 +99,10 @@ class MergeTypesTest {
 
     @Test
     fun `test union with struct and float`() {
-        val unionWithStruct = unionOf("f64" to F64, "struct".asStructOf("a" to I64))
+        val unionWithStruct = fromLegs(F64, structOf("a" to I64))
         val justStruct = structOf("a" to UTF8)
 
-        val expected = unionOf(
-            "f64" to F64,
-            "struct".asStructOf("a".asUnionOf("i64" to I64, "utf8" to UTF8))
-        )
+        val expected = fromLegs(F64, structOf("a".asUnionOf(I64, UTF8)))
         assertEquals(
             expected,
             mergeTypes(unionWithStruct, justStruct),
@@ -115,30 +113,30 @@ class MergeTypesTest {
     @Test
     fun `test null behaviour`() {
         assertEquals(
-            NULL, mergeTypes(NULL),
+            Null, mergeTypes(Null),
             "Single null remains null"
         )
 
         assertEquals(
-            NULL, mergeTypes(NULL, NULL),
+            Null, mergeTypes(Null, Null),
             "Multiple nulls remain null"
         )
 
         assertEquals(
-            maybe(I64), mergeTypes(NULL, I64),
+            maybe(I64), mergeTypes(Null, I64),
             "Null with one other type creates nullable type"
         )
 
         assertEquals(
-            unionOf("i64" to I64, "utf8" to UTF8, "null" to NULL),
-            mergeTypes(NULL, I64, UTF8),
+            fromLegs(I64, UTF8, Null),
+            mergeTypes(Null, I64, UTF8),
             "Null with multiple other types creates union"
         )
 
         assertEquals(
-            unionOf("i64" to maybe(I64), "utf8" to UTF8),
+            fromLegs(I64, UTF8, Null),
             mergeTypes(maybe(I64), UTF8),
-            "Nullable legs are preserved"
+            "Nullable legs are split"
         )
     }
 
@@ -152,7 +150,7 @@ class MergeTypesTest {
             "Same set types merge"
         )
 
-        val expectedMergedSet = setTypeOf(unionOf("i64" to I64, "utf8" to UTF8))
+        val expectedMergedSet = setTypeOf(fromLegs(I64, UTF8))
         assertEquals(
             expectedMergedSet, mergeTypes(setInt64, setUtf8),
             "Different set element types create union"
@@ -171,11 +169,8 @@ class MergeTypesTest {
         )
 
         val expected = structOf(
-            "a".asUnionOf("i64" to I64, "bool" to BOOL),
-            "b".asUnionOf(
-                "utf8" to UTF8,
-                "struct".asStructOf("c" to UTF8, "d" to UTF8),
-            )
+            "a".asUnionOf(I64, BOOL),
+            "b".asUnionOf(UTF8, structOf("c" to UTF8, "d" to UTF8))
         )
         assertEquals(
             expected, mergeTypes(struct0, struct1),
@@ -186,8 +181,8 @@ class MergeTypesTest {
     @Test
     fun `test multiple nulls with different types`() {
         assertEquals(
-            unionOf("f64" to F64, "i64" to I64, "null" to NULL),
-            mergeTypes(F64, NULL, I64),
+            fromLegs(F64, I64, Null),
+            mergeTypes(F64, Null, I64),
             "Multiple types with null creates union including null"
         )
     }
@@ -204,15 +199,11 @@ class MergeTypesTest {
 
         assertEquals(
             structOf(
-                "foo".asUnionOf(
-                    "utf8" to UTF8,
-                    "struct".asStructOf("bibble" to BOOL),
-                ),
+                "foo".asUnionOf(UTF8, structOf("bibble" to BOOL)),
                 "bar" to maybe(I64)
             ),
             mergeTypes(nestedStruct, mixedStruct),
             "Nested struct merging with other fields preserves structure"
         )
     }
-
 }

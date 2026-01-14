@@ -8,13 +8,19 @@ import xtdb.arrow.VectorType.Companion.F64
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.util.closeOnCatch
 
-class Average(val fromName: FieldName, fromType: VectorType, override val colName: FieldName, val hasZeroRow: Boolean) : AggregateSpec.Factory {
+class Average(val fromName: FieldName, fromType: VectorType, override val colName: FieldName, val hasZeroRow: Boolean) :
+    AggregateSpec.Factory {
 
-    private val sumOutType = Sum.outType(fromType).let { when(it.arrowType) {
-        is ArrowType.Int, is ArrowType.FloatingPoint, is ArrowType.Decimal, is ArrowType.Null -> F64
-        is ArrowType.Duration -> it
-        else -> throw IllegalArgumentException("Cannot compute AVERAGE over type $fromType")
-    } }
+    private val sumOutType =
+        Sum.outType(fromType)
+            .let {
+                when (it.arrowType) {
+                    is ArrowType.Int, is ArrowType.FloatingPoint, is ArrowType.Decimal, is ArrowType.Null -> F64
+                    is ArrowType.Duration -> it
+                    else -> throw IllegalArgumentException("Cannot compute AVERAGE over type $fromType")
+                }
+            }
+            .let { maybe(it) }
 
     override val type: VectorType = maybe(sumOutType)
 

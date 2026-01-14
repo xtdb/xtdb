@@ -4,11 +4,9 @@ import org.apache.arrow.vector.types.FloatingPointPrecision.DOUBLE
 import org.apache.arrow.vector.types.FloatingPointPrecision.SINGLE
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
-import org.apache.arrow.vector.types.pojo.Field
 import org.apache.commons.codec.binary.Hex
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
-import xtdb.arrow.VectorType.Companion.asType
 import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.VectorType.Companion.F32
 import xtdb.arrow.VectorType.Companion.F64
@@ -95,7 +93,7 @@ sealed class PgType(
     // Null type - delegates to Text for OID/serialization, but distinct for comparison purposes
     data object Null : PgType(
         typname = "null",
-        xtType = VectorType.NULL,
+        xtType = VectorType.Null,
         oid = 25, // same as Text
         typcategory = STRING,
         typsend = "textsend",
@@ -875,7 +873,7 @@ sealed class PgType(
         })
 
         private fun listPgType(xtType: VectorType): PgType {
-            val elType = xtType.firstChildOrNull?.arrowType ?: return Default
+            val elType = xtType.asMono.firstChildOrNull?.arrowType ?: return Default
 
             return when (elType) {
                 is ArrowType.Int -> when (elType.bitWidth) {
@@ -906,8 +904,5 @@ sealed class PgType(
             val pgTypes = type.legs.mapTo(mutableSetOf()) { fromXtType(it) }.minus(Null)
             return unifyPgTypes(pgTypes)
         }
-
-        @JvmStatic
-        fun fromField(field: Field): PgType = fromVectorType(field.asType)
     }
 }

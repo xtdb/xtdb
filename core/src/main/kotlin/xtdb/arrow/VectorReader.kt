@@ -10,8 +10,6 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorIndirection.Companion.selection
 import xtdb.arrow.VectorIndirection.Companion.slice
-import xtdb.arrow.VectorType.Companion.asType
-import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
@@ -25,9 +23,10 @@ interface VectorReader : ILookup, AutoCloseable {
     val arrowType: ArrowType
     val nullable: Boolean
     val childFields: List<Field>
-    val field get() = Field(name, FieldType(nullable, arrowType, null), childFields)
+    val fieldType: FieldType get() = FieldType(nullable, arrowType, null)
+    val field get() = Field(name, fieldType, childFields)
 
-    val type get() = VectorType(arrowType, nullable, childFields.associate { it.name to it.asType })
+    val type: VectorType
 
     private class RenamedVector(private val inner: VectorReader, override val name: String) : VectorReader by inner {
         override fun withName(newName: String) = RenamedVector(inner, newName)

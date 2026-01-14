@@ -10,14 +10,13 @@ import xtdb.arrow.LIST_TYPE
 import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.UTF8_TYPE
 import xtdb.arrow.VAR_BINARY_TYPE
+import xtdb.arrow.VectorType.*
 import xtdb.arrow.VectorType.Companion.INSTANT
 import xtdb.arrow.VectorType.Companion.UTF8
-import xtdb.arrow.VectorType.Companion.just
 import xtdb.arrow.VectorType.Companion.listTypeOf
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.ofType
-import xtdb.arrow.VectorType.Companion.structOf
-import xtdb.arrow.VectorType.Companion.unionOf
+import xtdb.arrow.VectorType.Companion.fromLegs
 import xtdb.error.Incorrect
 import xtdb.table.SchemaName
 import xtdb.table.TableName
@@ -26,11 +25,11 @@ import java.time.Instant
 import java.time.ZoneId
 
 private val txSchema = schema(
-    "tx-ops" ofType listTypeOf(unionOf()),
+    "tx-ops" ofType listTypeOf(fromLegs()),
     "system-time" ofType maybe(INSTANT),
     "default-tz" ofType UTF8,
     "user" ofType maybe(UTF8),
-    "user-metadata" ofType maybe(STRUCT_TYPE)
+    "user-metadata" ofType Maybe(Struct(emptyMap()))
 )
 
 private val FORBIDDEN_SCHEMAS = setOf("xt", "information_schema", "pg_catalog")
@@ -197,7 +196,7 @@ data class TxOpts(
 fun List<TxOp>.toBytes(al: BufferAllocator, opts: TxOpts): ByteArray =
     Relation(al, txSchema).use { rel ->
         val txOpsVec = rel["tx-ops"]
-        val txOpVec = txOpsVec.listElements
+        val txOpVec = txOpsVec.getListElements(UNION_TYPE, false)
 
         val sqlWriter by lazy { SqlWriter(al, txOpVec) }
         val putDocsWriter by lazy { PutDocsWriter(txOpVec) }

@@ -25,13 +25,13 @@
              (run-test '(generate_series 1 11 1) {}))
           "happy case with generate_series")
 
-    (t/is (= {:vec-type #xt/type [:? :null]
+    (t/is (= {:vec-type #xt/type :null
               :size nil
               :value nil}
              (run-test '(get_field 1) {}))
           "expr that returns nil")
 
-    (t/is (= {:vec-type #xt/type [:? :null]
+    (t/is (= {:vec-type #xt/type :null
               :size nil
               :value nil}
              (run-test '(+ 1 1) {}))

@@ -66,7 +66,7 @@
                                                                            leg-type)
                                                                          (->> (apply types/merge-types)))
 
-                                             children (.getChildren struct-type)
+                                             children (.getChildren (.asMono struct-type))
                                              ks (into #{} (map symbol) (keys children))]
 
                                          (doseq [[child-name ^VectorType child-type] children
@@ -165,13 +165,13 @@
                                      :when (or (= #xt.arrow/type :list (.getArrowType leg-type))
                                                (throw (err/incorrect :illegal-param-type "Table param must be of type struct list"
                                                                      {:param param})))
-                                     :let [^VectorType el-type (first (vals (.getChildren leg-type)))]
+                                     :let [el-type (.getFirstChildOrNull (.asMono leg-type))]
                                      ^VectorType el-leg-type (.getLegs el-type)
                                      :when (or (= #xt.arrow/type :struct (.getArrowType el-leg-type))
                                                (= #xt.arrow/type :null (.getArrowType el-leg-type))
                                                (throw (err/incorrect :illegal-param-type "Table param must be of type struct list"
                                                                      {:param param})))
-                                     [child-name ^VectorType child-type] (.getChildren el-leg-type)]
+                                     [child-name ^VectorType child-type] (.getChildren (.asMono el-leg-type))]
                                  (MapEntry/create (symbol child-name) child-type)))
                       (restrict-cols table-opts))]
 

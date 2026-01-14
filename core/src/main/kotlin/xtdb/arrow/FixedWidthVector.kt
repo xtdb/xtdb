@@ -9,6 +9,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.TimeUnit
 import xtdb.arrow.VectorIndirection.Companion.Selection
 import xtdb.arrow.VectorIndirection.Companion.Slice
+import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import java.nio.ByteBuffer
@@ -25,6 +26,7 @@ sealed class FixedWidthVector : MonoVector() {
     protected abstract val al: BufferAllocator
     protected abstract val byteWidth: Int
     override val vectors: Iterable<Vector> = emptyList()
+    override val monoType get() = Scalar(arrowType)
 
     internal abstract var validityBuffer: BitBuffer?
     internal abstract val dataBuffer: ExtensibleBuffer

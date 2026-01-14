@@ -1,9 +1,12 @@
 package xtdb.arrow.agg
 
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.arrow.*
+import xtdb.arrow.FieldName
+import xtdb.arrow.RelationReader
+import xtdb.arrow.Vector
 import xtdb.arrow.Vector.Companion.openVector
-import xtdb.arrow.VectorType.Companion.maybe
+import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.Scalar
 import xtdb.error.Incorrect
 import xtdb.types.leastUpperBound
 
@@ -14,8 +17,7 @@ class Sum(
     companion object {
         @JvmStatic
         fun outType(fromType: VectorType) =
-            maybe(leastUpperBound(listOf(fromType))
-                ?: throw Incorrect("Cannot compute SUM over type $fromType"))
+            leastUpperBound(listOf(fromType)) ?: throw Incorrect("Cannot compute SUM over type $fromType")
     }
 
     override fun build(al: BufferAllocator) = object : AggregateSpec {

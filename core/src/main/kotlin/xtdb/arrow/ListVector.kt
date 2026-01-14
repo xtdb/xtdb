@@ -7,6 +7,7 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorType.Listy
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import org.apache.arrow.vector.complex.ListVector as ArrowListVector
@@ -38,6 +39,7 @@ class ListVector private constructor(
     )
 
     override val arrowType: ArrowType = LIST
+    override val monoType: Listy get() = Listy(LIST, elVector.type)
 
     override val vectors get() = listOf(elVector)
 

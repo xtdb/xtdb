@@ -4,7 +4,6 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.util.ByteFunctionHelpers
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
-import xtdb.arrow.VectorType.Companion.asType
 import xtdb.arrow.VectorType.Companion.structOf
 import xtdb.util.Hasher
 import xtdb.util.closeOnCatch
@@ -15,8 +14,9 @@ class RelationAsStructReader(
 ) : VectorReader {
     override val nullable = false
     override val arrowType: ArrowType = STRUCT_TYPE
-    override val field get() = structOf(rel.vectors.associate { it.name to it.field.asType }).toField(name)
     override val childFields get() = rel.vectors.map { it.field }
+
+    override val type get() = structOf(rel.vectors.associate { it.name to it.type })
 
     override val valueCount get() = rel.rowCount
 

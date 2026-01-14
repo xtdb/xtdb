@@ -4,6 +4,7 @@ import clojure.lang.IFn
 import com.cognitect.transit.Reader
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Anomaly
 import xtdb.types.ClojureForm
@@ -16,6 +17,7 @@ private val TRANSIT_MSGPACK_READER: IFn = requiringResolve("xtdb.serde/transit-m
 class TransitVector(override val inner: VarBinaryVector) : ExtensionVector(), MetadataFlavour.Presence {
 
     override val arrowType = TransitType
+    override val monoType = Scalar(arrowType)
 
     private fun transitReader(v: ByteArray): Reader = TRANSIT_MSGPACK_READER.invoke(ByteArrayInputStream(v)) as Reader
 

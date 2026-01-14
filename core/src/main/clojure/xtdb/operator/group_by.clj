@@ -124,7 +124,7 @@
             (close [_] (.close out-vec))))))))
 
 (defmethod ->aggregate-factory :sum [{:keys [from-name from-type to-name zero-row?]}]
-  (Sum. (str from-name) (str to-name) (Sum/outType from-type) zero-row?))
+  (Sum. (str from-name) (str to-name) (VectorType/maybe (Sum/outType from-type)) zero-row?))
 
 (defmethod ->aggregate-factory :avg [{:keys [from-name from-type to-name zero-row?]}]
   (Average. (str from-name) from-type (str to-name) zero-row?))
@@ -381,7 +381,7 @@
 
                                                              [:unary agg-opts]
                                                              (let [{:keys [f from-column]} agg-opts
-                                                                   from-type (get vec-types from-column VectorType/NULL)]
+                                                                   from-type (get vec-types from-column #xt/type :null)]
                                                                {:f f
                                                                 :from-name from-column
                                                                 :from-type from-type}))))))

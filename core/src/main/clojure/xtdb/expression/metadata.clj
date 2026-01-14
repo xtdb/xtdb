@@ -59,7 +59,7 @@
                                             :literal (types/value->vec-type (:literal value-expr))
                                             :param (:param-type value-expr))]
                (for [^VectorType leg-type (.getLegs value-type)]
-                 (if (= MetadataFlavour$Bytes (MetadataFlavour/getMetadataFlavour (.getArrowType leg-type)))
+                 (if (= MetadataFlavour$Bytes (MetadataFlavour/getMetadataFlavour leg-type))
                    {:op :test-bloom,
                     :col col,
                     :value-expr value-expr
@@ -74,7 +74,7 @@
                                             :literal (types/value->vec-type (:literal value-expr))
                                             :param (:param-type value-expr))]
                (for [^VectorType leg-type (.getLegs value-type)]
-                 (if (= MetadataFlavour$Presence (MetadataFlavour/getMetadataFlavour (.getArrowType leg-type)))
+                 (if (= MetadataFlavour$Presence (MetadataFlavour/getMetadataFlavour leg-type))
                    {:op :test-presence,
                     :col col,
                     :value-type leg-type}
@@ -220,7 +220,7 @@
   {:return-type #xt/type :f64, :return-col-type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
 
 (defmethod expr/codegen-call [:_meta_double :any] [_]
-  {:return-type #xt/type [:? :null], :return-col-type :null, :->call-code (fn [& _args] nil)})
+  {:return-type #xt/type :null, :return-col-type :null, :->call-code (fn [& _args] nil)})
 
 (defmethod expr/codegen-expr :test-minmax [{:keys [f min-or-max col val-sym dbl-sym]} opts]
   (case (get-in opts [:local-types dbl-sym])
@@ -229,7 +229,7 @@
     :f64 (let [col-name (str col)
                col-sym (gensym 'meta_col)
                val-type (get-in opts [:local-types val-sym])
-               flavour-col (MetadataFlavour/getMetaColName (MetadataFlavour/getMetadataFlavour (st/->arrow-type val-type)))]
+               flavour-col (MetadataFlavour/getMetaColName (MetadataFlavour/getMetadataFlavour (st/->type (st/->arrow-type val-type))))]
            {:return-type #xt/type :bool
             :batch-bindings [[(-> col-sym (expr/with-tag VectorReader))
                               `(some-> (.vectorForOrNull ~col-rdr-sym ~flavour-col)

@@ -17,6 +17,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType.*
 import org.apache.arrow.vector.types.pojo.DictionaryEncoding
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.trie.ColumnName
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
@@ -91,28 +92,7 @@ sealed class Vector : VectorReader, VectorWriter {
     internal abstract fun loadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>)
     internal abstract fun loadFromArrow(vec: ValueVector)
 
-    internal open fun maybePromote(al: BufferAllocator, targetType: ArrowType, targetNullable: Boolean): Vector =
-        // if it's a NullVector coming in, don't promote - we can just set ourselves to nullable. #4675
-        when {
-            targetType != arrowType && targetType != NULL_TYPE ->
-                DenseUnionVector(al, name, listOf(this), valueCount)
-                    .apply {
-                        repeat(this.valueCount) { idx ->
-                            typeBuffer.writeByte(0)
-                            offsetBuffer.writeInt(idx)
-                        }
-
-                        maybePromote(al, targetType, targetNullable)
-                    }
-                    .also {
-                        this@Vector.name = arrowType.toLeg()
-                    }
-
-            else -> {
-                nullable = nullable || targetNullable
-                this
-            }
-        }
+    internal abstract fun maybePromote(al: BufferAllocator, targetType: ArrowType, targetNullable: Boolean): Vector
 
     override fun toString() = VectorReader.toString(this)
 
@@ -126,10 +106,7 @@ sealed class Vector : VectorReader, VectorWriter {
 
         @JvmStatic
         @JvmName("open")
-        fun BufferAllocator.openVector(name: FieldName, type: VectorType): Vector =
-            type.children.entries.safeMap { (n, t) -> openVector(n, t) }.closeAllOnCatch { children ->
-                openVector(name, type.arrowType, type.nullable, children)
-            }
+        fun BufferAllocator.openVector(name: FieldName, type: VectorType) = openVector(name ofType type)
 
         @JvmStatic
         @JvmName("open")
@@ -258,6 +235,6 @@ sealed class Vector : VectorReader, VectorWriter {
 
         @JvmStatic
         fun fromList(al: BufferAllocator, name: ColumnName, values: List<*>) =
-            fromList(al, name, VectorType.NULL, values)
+            fromList(al, name, VectorType.Null, values)
     }
 }

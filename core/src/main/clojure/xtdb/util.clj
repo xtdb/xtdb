@@ -7,7 +7,8 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [clojure.walk :as walk]
-            [integrant.core :as ig])
+            [integrant.core :as ig]
+            [xtdb.serde.types :as st])
   (:import [clojure.lang Keyword MapEntry Symbol]
            io.netty.util.internal.PlatformDependent
            (java.io File IOException Writer)
@@ -52,10 +53,9 @@
 
                     (instance? Schema v)
                     (->> (.getFields ^Schema v)
-                         (into {} (map (juxt Field/.getName VectorType/fromField))))
+                         (into {} (map (juxt Field/.getName st/render-field-type))))
 
-                    (instance? Field v)
-                    {(Field/.getName v) (VectorType/fromField v)}
+                    (instance? Field v) (st/render-field v)
 
                     :else v))
                 v))

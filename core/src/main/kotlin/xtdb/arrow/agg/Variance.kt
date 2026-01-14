@@ -7,6 +7,7 @@ import xtdb.arrow.*
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType.Companion.F64
 import xtdb.arrow.VectorType.Companion.maybe
+import xtdb.arrow.VectorType.Maybe
 import xtdb.util.closeOnCatch
 import kotlin.math.max
 
@@ -17,8 +18,7 @@ sealed class Variance(
     private val isSample: Boolean
 ) : AggregateSpec.Factory {
 
-    private val f64Type = ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)
-    override val type: VectorType = maybe(f64Type)
+    override val type: VectorType = Maybe(F64)
 
     override fun build(al: BufferAllocator) = object : AggregateSpec {
         private val sumxAgg = Sum(fromName, "sumx", F64, hasZeroRow).build(al)

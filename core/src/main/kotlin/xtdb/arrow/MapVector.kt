@@ -6,6 +6,7 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorType.Listy
 import xtdb.util.Hasher
 
 class MapVector(private val listVector: ListVector, private val keysSorted: Boolean) : MonoVector() {
@@ -17,6 +18,7 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
         }
 
     override val arrowType = ArrowType.Map(keysSorted)
+    override val monoType get() = Listy( ArrowType.Map(keysSorted), listVector.monoType.elType )
 
     override var nullable: Boolean
         get() = listVector.nullable

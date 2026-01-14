@@ -17,6 +17,7 @@ class TsTzRangeVector(override val inner: FixedSizeListVector) : ExtensionVector
     }
 
     override val arrowType = TsTzRangeType
+    override val monoType = VectorType.TSTZ_RANGE
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) =
         inner.listElements.let { elVec ->

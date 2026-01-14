@@ -193,6 +193,7 @@ class IntervalMonthDayMicroVector(
 ) : ExtensionVector(), MetadataFlavour.Presence {
 
     override val arrowType = IntervalMDMType
+    override val monoType = VectorType.INTERVAL_MDM
 
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = inner.getObject0(idx, keyFn)
     override fun writeObject0(value: Any) = inner.writeObject(value)

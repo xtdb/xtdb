@@ -370,7 +370,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                         ByteString.copyFrom(
                             Schema(
                                 (0 until pq.paramCount).map { idx ->
-                                    "$$idx" ofType VectorType.unionOf()
+                                    "$$idx" ofType VectorType.fromLegs()
                                 }
                             ).serializeAsMessage()
                         )

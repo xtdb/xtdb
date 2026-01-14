@@ -5,22 +5,17 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
-import xtdb.arrow.I64_TYPE
-import xtdb.arrow.UTF8_TYPE
 import xtdb.arrow.Vector.Companion.openVector
-import xtdb.test.AllocatorResolver
 import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.VectorType.Companion.I64
-import xtdb.arrow.VectorType.Companion.NULL
 import xtdb.arrow.VectorType.Companion.UTF8
-import xtdb.arrow.VectorType.Companion.asListOf
-import xtdb.arrow.VectorType.Companion.asUnionOf
-import xtdb.arrow.VectorType.Companion.structOf
-import xtdb.arrow.VectorType.Companion.unionOf
-import xtdb.arrow.VectorType.Companion.just
 import xtdb.arrow.VectorType.Companion.listTypeOf
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.arrow.VectorType.Companion.structOf
+import xtdb.arrow.VectorType.Companion.fromLegs
+import xtdb.arrow.VectorType.Null
+import xtdb.test.AllocatorResolver
 import xtdb.util.closeOnCatch
 
 @ExtendWith(AllocatorResolver::class)
@@ -59,7 +54,7 @@ class PromotionTest {
         }.use { promoted ->
             promoted.writeAll(listOf("4", 5, "6"))
             assertEquals(
-                "v" ofType unionOf("i32" to I32, "utf8" to UTF8),
+                "v" ofType fromLegs(I32, UTF8),
                 promoted.field
             )
             assertEquals(listOf(1, 2, 3, "4", 5, "6"), promoted.asList)
@@ -75,7 +70,7 @@ class PromotionTest {
 
                 assertEquals(listOf(listOf(1, 2), listOf(3), "hello", listOf(4, 5), "world"), promoted.asList)
                 assertEquals(
-                    "v" ofType unionOf("list" asListOf I32, "utf8" to UTF8),
+                    "v" ofType fromLegs(listTypeOf(I32), UTF8),
                     promoted.field
                 )
             }
@@ -133,7 +128,7 @@ class PromotionTest {
     @Test
     fun `rowCopier in a list-vec promotes the el-vector`(al: BufferAllocator) {
         Vector.fromList(al, "src", listOf(listOf(1))).use { srcVec ->
-            al.openVector("dest", listTypeOf(NULL)).use { destVec ->
+            al.openVector("dest", listTypeOf(Null)).use { destVec ->
                 srcVec.rowCopier(destVec).copyRow(0)
 
                 assertEquals(listOf(listOf(1)), destVec.asList)

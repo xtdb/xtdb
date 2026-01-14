@@ -460,7 +460,7 @@
   (->> expr
        (macro/macroexpand-all)))
 
-(defn- wrap-boxed-poly-return [{:keys [return-type continue] :as emitted-expr} _]
+(defn- wrap-boxed-poly-return [{:keys [^VectorType return-type continue] :as emitted-expr} _]
   (let [union-legs (.getLegs return-type)]
     (if (> (count union-legs) 1)
       (let [box-sym (gensym 'box)
@@ -678,7 +678,7 @@
                                                                      :args emitted-args
                                                                      :arg-col-types arg-col-types
                                                                      :arg-types (mapv #(types/col-type->vec-type false %) arg-col-types)))
-                                                {:return-type #xt/type [:? :null], :return-col-type :null, :->call-code (constantly nil)})))
+                                                {:return-type #xt/type :null, :return-col-type :null, :->call-code (constantly nil)})))
                            (into {}))
 
         return-type (->> (vals emitted-calls)
@@ -1286,7 +1286,7 @@
                   `(str->buf (.toLowerCase (resolve-string ~code))))})
 
 (defmethod codegen-call [:namespace :keyword] [_]
-  {:return-type #xt/type [:union :null :utf8]
+  {:return-type #xt/type [:? :utf8]
    :return-col-type [:union #{:null :utf8}]
    :continue-call (fn [f [kw]]
                     (let [res (symbol 'ns)]
@@ -1396,7 +1396,7 @@
   (Thread/sleep (long (* duration (quot (types/ts-units-per-second unit) 1000)))))
 
 (defmethod codegen-call [:sleep :duration] [{[[_duration unit] _] :arg-col-types}]
-  {:return-type #xt/type [:? :null], :return-col-type :null
+  {:return-type #xt/type :null, :return-col-type :null
    :->call-code (fn [[lit]]
                   `(sleep ~lit ~unit))})
 
@@ -1670,10 +1670,10 @@
                                      :val-box (gensym (str (util/symbol->normal-form-symbol k) "-box"))
                                      :emitted-expr (codegen-expr expr opts)}))))
 
-        return-type (types/->type (into [:struct]
-                                        (map (fn [{:keys [k], {:keys [return-type]} :emitted-expr}]
-                                               {(str k) return-type}))
-                                        emitted-vals))
+        return-type (types/->type [:struct (into {}
+                                                 (map (fn [{:keys [k], {:keys [return-type]} :emitted-expr}]
+                                                        {(str k) return-type}))
+                                                 emitted-vals)])
         return-col-type (types/vec-type->col-type return-type)
         map-sym (gensym 'map)]
 
@@ -1703,10 +1703,10 @@
                       (continue-read f val-type (-> `(.get ~struct-code ~(str field))
                                                     (with-tag ValueReader))))}
 
-    {:return-type #xt/type [:? :null], :return-col-type :null, :->call-code (constantly nil)}))
+    {:return-type #xt/type :null, :return-col-type :null, :->call-code (constantly nil)}))
 
 (defmethod codegen-call [:get_field :any] [_]
-  {:return-type #xt/type [:? :null], :return-col-type :null, :->call-code (constantly nil)})
+  {:return-type #xt/type :null, :return-col-type :null, :->call-code (constantly nil)})
 
 (doseq [[op return-code] [[:== 1] [:<> -1]]]
   (defmethod codegen-call [op :struct :struct] [{[[_ l-field-types] [_ r-field-types]] :arg-col-types}]
@@ -1720,14 +1720,14 @@
                                                              r-val-type (-> (get r-field-types field) types/flatten-union-types)]
                                                          (MapEntry/create [l-val-type r-val-type]
                                                                           (if (or (= :null l-val-type) (= :null r-val-type))
-                                                                            {:return-col-type :null, :return-type #xt/type [:? :null], :->call-code (constantly nil)}
+                                                                            {:return-col-type :null, :return-type #xt/type :null, :->call-code (constantly nil)}
                                                                             (codegen-call {:f :==, :arg-col-types [l-val-type r-val-type]}))))
                                                        (into {}))))
                                (into {}))
               l-sym (gensym 'l-struct)
               r-sym (gensym 'r-struct)]
 
-          {:return-type #xt/type [:union :bool :null], :return-col-type [:union #{:bool :null}]
+          {:return-type #xt/type [:? :bool], :return-col-type [:union #{:bool :null}]
            :continue-call (fn [f [l-code r-code]]
                             (let [res-sym (gensym 'res)]
                               `(let [~l-sym ~l-code
@@ -1913,7 +1913,7 @@
                              ~(f :null nil)))))}))
 
 (defmethod codegen-call [:nth :any :int] [_]
-  {:return-type #xt/type [:? :null], :return-col-type :null, :->call-code (constantly nil)})
+  {:return-type #xt/type :null, :return-col-type :null, :->call-code (constantly nil)})
 
 (defmethod codegen-call [:cardinality :list] [_]
   {:return-type #xt/type :i32, :return-col-type :i32
@@ -1984,11 +1984,11 @@
                                  r-el-type (types/flatten-union-types r-el-type)]
                              (MapEntry/create [l-el-type r-el-type]
                                               (if (or (= :null l-el-type) (= :null r-el-type))
-                                                {:return-col-type :null, :return-type #xt/type [:? :null], :->call-code (constantly nil)}
+                                                {:return-col-type :null, :return-type #xt/type :null, :->call-code (constantly nil)}
                                                 (codegen-call {:f :==, :arg-col-types [l-el-type r-el-type]}))))
                            (into {}))]
 
-      {:return-type #xt/type [:union :bool :null], :return-col-type [:union #{:bool :null}]
+      {:return-type #xt/type [:? :bool], :return-col-type [:union #{:bool :null}]
        :children (vals inner-calls)
        :continue-call (fn continue-list= [f [l-code r-code]]
                         (let [l-sym (gensym 'l), r-sym (gensym 'r)]
@@ -2094,7 +2094,7 @@
 
 (defn write-value-out-code [^VectorType return-type]
   (if (instance? ArrowType$Union (.getArrowType return-type))
-    (let [writer-syms (->> (vals (.getChildren return-type))
+    (let [writer-syms (->> (.getLegs return-type)
                            (into {} (map (juxt types/vec-type->col-type (fn [_] (gensym 'out-writer))))))]
       {:writer-bindings (into []
                               (mapcat (fn [[value-type writer-sym]]

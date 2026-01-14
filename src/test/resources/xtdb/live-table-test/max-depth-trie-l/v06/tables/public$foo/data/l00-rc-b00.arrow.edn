@@ -5,9 +5,9 @@
              {"_valid_to" :instant}
              {"op"
               [:union
-               {"delete" [:? :null]}
-               {"erase" [:? :null]}
-               {"put" :struct}]}),
+               {"delete" [:? :null],
+                "erase" [:? :null],
+                "put" :struct}]}),
  :batches
  ([{:xt/system-from #xt/zdt "2000-01-01T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "1970-01-01T00:00Z[UTC]",

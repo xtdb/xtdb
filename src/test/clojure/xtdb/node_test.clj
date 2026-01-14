@@ -1103,7 +1103,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (t/is (= res (xt/q tu/*node* "SELECT * FROM table ORDER BY _id")))
 
     (tu/finish-block! tu/*node*)
-    (c/compact-all! tu/*node* nil)
+    (c/compact-all! tu/*node* #xt/duration "PT1S")
 
     (t/is (= res (xt/q tu/*node* "SELECT * FROM table ORDER BY _id")))))
 

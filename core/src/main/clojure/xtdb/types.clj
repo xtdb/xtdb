@@ -6,7 +6,7 @@
             [xtdb.serde.types :as st]
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
-           (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType)
+           (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb.arrow ArrowTypes MergeTypes VectorType)
            (xtdb.vector.extensions IntervalMDMType KeywordType OidType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
@@ -214,7 +214,10 @@
 (alter-meta! #'col-type->vec-type assoc :tag Field)
 
 (defmethod col-type->vec-type ::default [nullable? col-type]
-  (VectorType. (st/->arrow-type col-type) (or nullable? (= col-type :null)) {}))
+  (-> (VectorType/scalar (st/->arrow-type col-type))
+      (VectorType/maybe nullable?)))
+
+(defmethod col-type->vec-type :null [_ _] #xt/type :null)
 
 (defmethod col-type->field-name :decimal [[type-head precision scale bit-width]]
   (str (name type-head) "-" precision "-" scale "-" bit-width))
@@ -260,7 +263,7 @@
   (field->col-type (VectorType/field vec-type)))
 
 (defn nullable-vec-type? [^VectorType vec-type]
-  (boolean (some VectorType/.isNullable (.getLegs vec-type))))
+  (boolean (some VectorType/.getNullable (.getLegs vec-type))))
 
 (defn null-vec-type? [^VectorType vec-type]
   (instance? ArrowType$Null (.getArrowType vec-type)))
@@ -273,46 +276,47 @@
 ;;; list
 
 (defmethod col-type->vec-type :list [nullable? [_ inner-col-type]]
-  (VectorType. ArrowType$List/INSTANCE nullable?
-               {"$data$" (col-type->vec-type false inner-col-type)}))
+  (-> (VectorType/listy ArrowType$List/INSTANCE (col-type->vec-type false inner-col-type))
+      (VectorType/maybe nullable?)))
 
 (defmethod arrow-type->col-type ArrowType$List [_ & [data-field]]
   [:list (or (some-> data-field field->col-type) :null)])
 
 (defmethod col-type->vec-type :fixed-size-list [nullable? [_ list-size inner-col-type]]
-  (VectorType. (ArrowType$FixedSizeList. list-size) nullable?
-               {"$data$" (col-type->vec-type false inner-col-type)}))
+  (-> (VectorType/listy (ArrowType$FixedSizeList. list-size) (col-type->vec-type false inner-col-type))
+      (VectorType/maybe nullable?)))
 
 (defmethod arrow-type->col-type ArrowType$FixedSizeList [^ArrowType$FixedSizeList list-type & [data-field]]
   [:fixed-size-list (.getListSize list-type) (or (some-> data-field field->col-type) :null)])
 
 (defmethod col-type->vec-type :set [nullable? [_ inner-col-type]]
-  (VectorType. SetType/INSTANCE nullable?
-               {"$data$" (col-type->vec-type false inner-col-type)}))
+  (-> (VectorType/listy SetType/INSTANCE (col-type->vec-type false inner-col-type))
+      (VectorType/maybe nullable?)))
 
 (defmethod arrow-type->col-type SetType [_ & [data-field]]
   [:set (or (some-> data-field field->col-type) :null)])
 
 (defmethod col-type->vec-type :map [nullable? [_ {:keys [sorted?]} inner-col-type]]
-  (VectorType. (ArrowType$Map. (boolean sorted?)) nullable?
-               {"$entries$" (col-type->vec-type false inner-col-type)}))
+  (-> (VectorType/listy (ArrowType$Map. (boolean sorted?))
+                        (col-type->vec-type false inner-col-type))
+      (VectorType/maybe nullable?)))
 
 (defmethod arrow-type->col-type ArrowType$Map [^ArrowType$Map arrow-field & [data-field]]
   [:map {:sorted? (.getKeysSorted arrow-field)} (field->col-type data-field)])
 
 (defn unnest-type ^VectorType [^VectorType vec-type]
   (condp instance? (.getArrowType vec-type)
-    ArrowType$List (.getFirstChildOrNull vec-type)
-    SetType (.getFirstChildOrNull vec-type)
-    ArrowType$FixedSizeList (.getFirstChildOrNull vec-type)
-    #xt/type [:? :null]))
+    ArrowType$List (.getFirstChildOrNull (.asMono vec-type))
+    SetType (.getFirstChildOrNull (.asMono vec-type))
+    ArrowType$FixedSizeList (.getFirstChildOrNull (.asMono vec-type))
+    #xt/type :null))
 
 ;;; struct
 
 (defmethod col-type->vec-type :struct [nullable? [_ inner-col-types]]
-  (VectorType. ArrowType$Struct/INSTANCE nullable?
-               (into {} (for [[col-name col-type] inner-col-types]
-                          [(str col-name) (col-type->vec-type false col-type)]))))
+  (-> (VectorType/structOf (into {} (for [[col-name col-type] inner-col-types]
+                                      [(str col-name) (col-type->vec-type false col-type)])))
+      (VectorType/maybe nullable?)))
 
 (defmethod arrow-type->col-type ArrowType$Struct [_ & child-fields]
   [:struct (->> (for [^Field child-field child-fields]
@@ -330,15 +334,12 @@
       0 (col-type->vec-type true :null)
       1 (col-type->vec-type nullable? (first without-null))
 
-      (VectorType. (.getType Types$MinorType/DENSEUNION) false
-                   (into {} (for [ct col-types]
-                              [(col-type->leg ct) (col-type->vec-type false ct)]))))))
+      (VectorType/fromLegs (into #{} (map #(col-type->vec-type false %)) col-types)))))
 
 (defmethod arrow-type->col-type ArrowType$Union [_ & child-fields]
   (->> child-fields
        (into #{} (map field->col-type))
        (apply merge-col-types)))
-
 
 ;;; number
 
