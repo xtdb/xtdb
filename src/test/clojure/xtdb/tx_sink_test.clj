@@ -11,7 +11,6 @@
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.tx-sink :as tx-sink])
   (:import [xtdb.api.log Log$Message]
-           [xtdb.database Database Database$Catalog]
            [xtdb.table TableRef]
            [xtdb.test.log RecordingLog]))
 
@@ -21,24 +20,12 @@
   ([msg] (decode-record msg :json))
   ([msg fmt] (-> msg Log$Message/.encode (xtdb.serde/read-transit fmt))))
 
-(defn database-or-null ^Database [node db-name]
-  (let [^Database$Catalog db-cat (util/component node :xtdb/db-catalog)]
-    (-> db-cat
-        (.databaseOrNull db-name))))
-
-(defn get-output-log
-  ([node] (get-output-log node "xtdb"))
-  ([node db-name]
-   (-> (database-or-null node db-name)
-       (.getTxSink)
-       :output-log)))
-
 (t/deftest test-tx-sink-output
   (with-open [node (xtn/start-node (merge tu/*node-opts*
                                           {:tx-sink {:enable true
                                                      :output-log [::tu/recording {}]
                                                      :format :transit+json}}))]
-    (let [^RecordingLog output-log (get-output-log node)]
+    (let [^RecordingLog output-log (tu/get-output-log node)]
       (t/is (= [] (.getMessages output-log)))
 
       (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1, :value "test"}]])
@@ -93,7 +80,7 @@
                                             {:tx-sink {:enable true
                                                        :output-log [::tu/recording {}]
                                                        :format :transit+json}}))]
-      (let [^RecordingLog output-log (get-output-log node)]
+      (let [^RecordingLog output-log (tu/get-output-log node)]
         (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1, :value "test"}]])
         (let [msg (-> (.getMessages output-log) first (decode-record :json))]
           (t/is (= #{:transaction :system-time :source :tables} (set (keys msg))))
@@ -103,7 +90,7 @@
                                             {:tx-sink {:enable true
                                                        :output-log [::tu/recording {}]
                                                        :format :transit+msgpack}}))]
-      (let [^RecordingLog output-log (get-output-log node)]
+      (let [^RecordingLog output-log (tu/get-output-log node)]
         (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1, :value "test"}]])
         (let [msg (-> (.getMessages output-log) first (decode-record :msgpack))]
           (t/is (= #{:transaction :system-time :source :tables} (set (keys msg))))
@@ -114,7 +101,7 @@
                                           {:tx-sink {:enable true
                                                      :output-log [::tu/recording {}]
                                                      :format :transit+json}}))]
-    (let [^RecordingLog output-log (get-output-log node)]
+    (let [^RecordingLog output-log (tu/get-output-log node)]
       ;; TODO: Remove once #5012 is solved
       (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
       (.clear (.getMessages output-log))
@@ -142,7 +129,7 @@
                                           {:tx-sink {:enable true
                                                      :output-log [::tu/recording {}]
                                                      :format :transit+json}}))]
-    (let [^RecordingLog output-log (get-output-log node)]
+    (let [^RecordingLog output-log (tu/get-output-log node)]
       (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1}]])
       (t/is (= 0 (-> (.getMessages output-log) first decode-record :source :block-idx)))
 
@@ -153,7 +140,7 @@
 
 (t/deftest test-tx-sink-disabled
   (with-open [node (xtn/start-node tu/*node-opts*)]
-    (t/is (nil? (get-output-log node)))))
+    (t/is (nil? (tu/get-output-log node)))))
 
 (t/deftest test-tx-sink-multi-db
   (with-open [node (xtn/start-node {:tx-sink {:enable true
@@ -161,12 +148,12 @@
                                               :output-log [::tu/recording {}]
                                               :format :transit+json}})]
     (t/testing "not enabled for primary db"
-      (t/is (nil? (get-output-log node))))
+      (t/is (nil? (tu/get-output-log node))))
     (t/testing "enabled for secondary db"
       (jdbc/execute! node [(format "ATTACH DATABASE secondary WITH $$log: !InMemory$$")])
       (let [secondary (.build (-> (.createConnectionBuilder node)
                                   (.database "secondary")))
-            ^RecordingLog output-log (get-output-log node "secondary")]
+            ^RecordingLog output-log (tu/get-output-log node "secondary")]
         (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
         (jdbc/execute! secondary ["INSERT INTO docs RECORDS {_id: 1}"])
         (t/is (= 1 (count (.getMessages output-log))))))))
@@ -179,7 +166,7 @@
                                                                  :output-log [::tu/recording {}]
                                                                  :format :transit+json}})]
                        (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1}]])
-                       (let [^RecordingLog output-log (get-output-log node)]
+                       (let [^RecordingLog output-log (tu/get-output-log node)]
                          (.getMessages output-log)))]
         (t/is (= 1 (count messages)))
         (with-open [node (xtn/start-node {:log [:local {:path (.resolve local-path "log")}]
@@ -187,7 +174,7 @@
                                                     :output-log [::tu/recording {:messages messages}]
                                                     :format :transit+json}})]
           (xt-log/sync-node node #xt/duration "PT1S")
-          (let [^RecordingLog output-log (get-output-log node)]
+          (let [^RecordingLog output-log (tu/get-output-log node)]
             (t/is (= 1 (count (.getMessages output-log))))
             (t/is (= messages (.getMessages output-log)))))))))
 

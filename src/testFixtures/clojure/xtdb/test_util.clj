@@ -35,6 +35,7 @@
            (xtdb.test.log RecordingLog$Factory)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector VectorType)
+           [xtdb.database Database Database$Catalog]
            xtdb.database.Database$Catalog
            (xtdb.indexer LiveTable)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
@@ -409,3 +410,15 @@
     (when (zero? (mod i 100))
       (println (format "Run %d/%d" i n)))
     (t/test-vars [test-var])))
+
+(defn database-or-null ^Database [node db-name]
+  (let [^Database$Catalog db-cat (util/component node :xtdb/db-catalog)]
+    (-> db-cat
+        (.databaseOrNull db-name))))
+
+(defn get-output-log
+  ([node] (get-output-log node "xtdb"))
+  ([node db-name]
+   (-> (database-or-null node db-name)
+       (.getTxSink)
+       :output-log)))
