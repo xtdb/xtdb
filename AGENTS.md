@@ -12,3 +12,4 @@ For example, even when we're working on a feature branch, we will often separate
 * Modules are named `xtdb-<directory>` - e.g. `:xtdb-core`, `:modules:xtdb-kafka` - so that the Maven artifacts have the `xtdb-` prefix.
 * If you need to create git worktrees, create them in the `.tasks` directory in the repo root.
 * When tests fail, read the test report at `build/reports/tests/test/index.html` instead of re-running tests with different flags to get error details.
+* For file operations (reading, searching, editing, writing), use the built-in tools (`Read`, `Edit`, `Write`, `Glob`, `Grep`) rather than clojure-mcp tools. Only use clojure-mcp for REPL evaluation (`mcp__clojure-mcp__clojure_eval`) and finding REPL ports (`mcp__clojure-mcp__list_nrepl_ports`).
