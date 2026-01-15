@@ -1227,6 +1227,11 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
     (t/is (= [{:v 1}] (xt/q node "SELECT 1 AS v")))))
 
+(t/deftest test-merge-fields-npe-4721
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:h {:b #{}} :xt/id 1}]])
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:h {}, :xt/id 1} {:xt/id 1}]])
+  (t/is (= [{:xt/id 1}] (xt/q tu/*node* "SELECT * FROM docs"))))
+
 (t/deftest test-info-schema-with-empty-set-children-4774
   (xt/execute-tx tu/*node* [[:put-docs :docs {:h {:b #{}} :xt/id 1}]])
   (xt/execute-tx tu/*node* [[:put-docs :docs {:h {}, :xt/id 1} {:xt/id 1}]])

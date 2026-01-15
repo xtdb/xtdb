@@ -69,6 +69,11 @@
 (defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, name]
   (Field. name (.getFieldType field) (.getChildren field)))
 
+(defn ->nullable-field ^org.apache.arrow.vector.types.pojo.Field [^Field field]
+  (if (.isNullable field)
+    field
+    (Field. (.getName field) (FieldType. true (.getType field) nil nil) (.getChildren field))))
+
 (def temporal-fields
   {"_iid" (->field "_iid" :iid),
    "_system_from" (->field "_system_from" :instant), "_system_to" (->field "_system_to" [:? :instant])
@@ -164,6 +169,8 @@
     (-> (transduce (comp (remove nil?) (distinct)) (completing merge-col-type*) {} col-types)
         (map->col-type))))
 
+(def ^Field null-field (st/->field {"null" :null}))
+
 (defn merge-types ^xtdb.arrow.VectorType [& types]
   (MergeTypes/mergeTypes (vec types)))
 
@@ -214,13 +221,6 @@
 
 (defmethod col-type->vec-type :tstz-range [nullable? _col-type]
   (VectorType/maybe VectorType/TSTZ_RANGE (boolean nullable?)))
-
-(defn col-type->field
-  (^org.apache.arrow.vector.types.pojo.Field [col-type]
-   (col-type->field (col-type->field-name col-type) col-type))
-
-  (^org.apache.arrow.vector.types.pojo.Field [col-name col-type]
-   (VectorType/field (str col-name) (col-type->vec-type false col-type))))
 
 (defn col-type->leg [col-type]
   (let [head (col-type-head col-type)]
