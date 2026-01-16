@@ -205,6 +205,7 @@ export default defineConfig({
                                 { label: 'Reference', link: '/ops/config/monitoring' },
                             ]
                         },
+                        { label: 'Kafka Sink Connector', link: '/ops/kafka-connector' },
                         { label: 'Troubleshooting', link: '/ops/troubleshooting' },
                     ]
                 },

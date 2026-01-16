@@ -18,6 +18,10 @@ To work on this project you should have `git lfs` installed and initialised.
 objects from `git lfs`. Inside the `docs/shared` directory:
 ** `git lfs pull`
 
+You should also have the D2 CLI installed:
+** For Arch: `sudo pacman -Sy d2`
+** For Mac OS: `brew install d2`
+
 From this point you should be able to run the commands in the next section.
 
 == Commands
