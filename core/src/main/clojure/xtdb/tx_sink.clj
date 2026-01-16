@@ -116,10 +116,10 @@
 (def ^:dynamic *after-block-hook* nil)
 
 (defn backfill-from-l0!
-  [^BufferAllocator al ^BufferPool bp ^Log output-log db-name encode-fn ^TrieCatalog trie-cat refresh!]
-  (loop [remaining-blocks (trie-cat/l0-blocks trie-cat)
-         last-key nil
-         last-block-idx -1]
+  [^BufferAllocator al ^BufferPool bp ^Log output-log db-name encode-fn ^TrieCatalog trie-cat last-message refresh!]
+  (loop [remaining-blocks nil
+         last-key (some-> last-message :transaction :id)
+         last-block-idx (some-> last-message :source :block-idx)]
     (if-let [{:keys [block-idx tables]} (first remaining-blocks)]
       (let [grouped-txs (->> tables (read-l0-events al bp) group-events-by-system-time)
             new-last-key
@@ -135,7 +135,7 @@
       (do
         (refresh!)
         (let [new-blocks (->> (trie-cat/l0-blocks trie-cat)
-                              (drop-while #(>= last-block-idx (:block-idx %))))]
+                              (drop-while #(>= (or last-block-idx -1) (:block-idx %))))]
           (if (seq new-blocks)
             (recur new-blocks last-key last-block-idx)
             last-key))))))
@@ -204,9 +204,10 @@
                      (.refresh block-cat)
                      (.refresh table-cat)
                      (.refresh trie-cat))
-          last-tx-key (if (and (.getInitialScan tx-sink-conf) (nil? last-message))
-                        (backfill-from-l0! allocator buffer-pool output-log db-name encode-fn trie-cat refresh!)
-                        (some-> last-message :transaction :id))]
+          last-tx-key (when (or last-message (.getInitialScan tx-sink-conf))
+                        (backfill-from-l0! allocator buffer-pool output-log
+                                           db-name encode-fn trie-cat
+                                           last-message refresh!))]
       (map->TxSink {:output-log output-log
                     :encode-fn encode-fn
                     :block-cat block-cat

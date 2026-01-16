@@ -427,8 +427,7 @@
               msgs (->> (.getMessages output-log) (map decode-record))]
           (t/is (= (util/->clj msgs) (util/->clj original-messages))))))))
 
-(t/deftest test-initial-scan-skips-unflushed-transactions
-  ; NOTE: This behavior will change with #5055
+(t/deftest test-initial-scan-catches-up-to-latest-block
   (util/with-tmp-dirs #{node-dir}
     (let [original-messages
           (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
@@ -462,8 +461,7 @@
                                                   :format :transit+json}})]
         (xt-log/sync-node node #xt/duration "PT5S")
         (let [^RecordingLog output-log (tu/get-output-log node)]
-          (t/is (= original-messages (.getMessages output-log))
-                "No new messages should be output"))))))
+          (t/is (= 3 (count (.getMessages output-log)))))))))
 
 (t/deftest test-initial-scan-reads-garbage-l0s
   (util/with-tmp-dirs #{node-dir}
