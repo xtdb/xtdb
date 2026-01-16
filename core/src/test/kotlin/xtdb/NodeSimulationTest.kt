@@ -168,45 +168,6 @@ class NodeSimulationTest : SimulationTestBase() {
         }
     }
 
-    /**
-     * Asserts consistency between trie catalogs and storage during concurrent operations.
-     *
-     * Checks:
-     * 1. All live/nascent tries in each catalog exist in storage
-     * 2. No live/nascent tries appear in the deleted files list
-     */
-    private fun assertCatalogStorageConsistency(tableRef: TableRef) {
-        trieCatalogs.forEachIndexed { idx, trieCatalog ->
-            val liveAndNascent = trieCatalog.listLiveAndNascentTrieKeys(tableRef).toSet()
-            val triesInStorage = sharedBufferPool
-                .listAllObjects("tables/public\$${tableRef.tableName}/data/".asPath)
-                .map { it.key.fileName.toString().removeSuffix(".arrow") }
-                .toSet()
-
-            val deletedTrieKeys = synchronized(gcDriver.deletedTrieKeys) {
-                gcDriver.deletedTrieKeys[tableRef]?.toSet() ?: emptySet()
-            }
-
-            // Check 1: All live/nascent tries should exist in storage
-            LOGGER.debug("Validating all live/nascent tries are present in storage for catalog $idx")
-            val missingFromStorage = liveAndNascent - triesInStorage
-            if (missingFromStorage.isNotEmpty()) {
-                throw AssertionError(
-                    "Catalog $idx: Live/nascent tries missing from storage: $missingFromStorage"
-                )
-            }
-
-            // Check 2: No live/nascent tries should have been deleted
-            LOGGER.debug("Validating no live/nascent tries have been deleted for catalog $idx")
-            val deletedLiveOrNascent = liveAndNascent.intersect(deletedTrieKeys)
-            if (deletedLiveOrNascent.isNotEmpty()) {
-                throw AssertionError(
-                    "Catalog $idx: Live/nascent tries were deleted: $deletedLiveOrNascent"
-                )
-            }
-        }
-    }
-
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun `l1 compaction followed by garbage collection`(iteration: Int) {
