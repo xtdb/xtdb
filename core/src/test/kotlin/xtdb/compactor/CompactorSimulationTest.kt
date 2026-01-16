@@ -52,6 +52,7 @@ import xtdb.util.debug
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
@@ -95,7 +96,10 @@ class CompactorMockDriver(
     private val temporalSplitting = config.temporalSplitting
     private val baseTime = config.baseTime
     private val blocksPerWeek = config.blocksPerWeek
-    val trieKeyToFileSize = mutableMapOf<TrieKey, Long>()
+    // Key is "tableName:trieKey" to avoid collisions between tables with the same trie key
+    val trieKeyToFileSize = ConcurrentHashMap<String, Long>()
+
+    fun fileSizeKey(tableName: String, trieKey: String) = "$tableName:$trieKey"
     val sharedFlow = MutableSharedFlow<AppendMessage>(extraBufferCapacity = Int.MAX_VALUE)
     var nextSystemId = 0
 
@@ -140,18 +144,19 @@ class CompactorMockDriver(
         }
 
         override suspend fun executeJob(job: Job): TriesAdded {
-            LOGGER.debug("[executeJob started] systemId=$systemId table=${job.table.tableName} job.trieKeys=${job.trieKeys} job.outputTrieKey=${job.outputTrieKey}")
+            val tableName = job.table.tableName
+            LOGGER.debug("[executeJob started] systemId=$systemId table=$tableName job.trieKeys=${job.trieKeys} job.outputTrieKey=${job.outputTrieKey}")
             yield() // Force suspension after executeJob has started
             val trieKey = job.outputTrieKey
             val trieDetailsBuilder = TrieDetails.newBuilder()
-                .setTableName(job.table.tableName)
+                .setTableName(tableName)
             val result = if (trieKey.level == 1L) {
                 val addedTries = mutableListOf<TrieDetails>()
-                val size = job.trieKeys.sumOf { trieKeyToFileSize[it]!! }
+                val size = job.trieKeys.sumOf { trieKeyToFileSize[fileSizeKey(tableName, it)]!! }
                 val rand = trieKeyRand(trieKey)
                 when(temporalSplitting) {
                     CURRENT -> {
-                        trieKeyToFileSize[trieKey.toString()] = size
+                        trieKeyToFileSize[fileSizeKey(tableName, trieKey.toString())] = size
                         addedTries.add(
                             trieDetailsBuilder
                                 .setTrieKey(trieKey.toString())
@@ -161,7 +166,7 @@ class CompactorMockDriver(
                     }
                     HISTORICAL -> {
                         val historicalTrieKey = Trie.Key(trieKey.level, deterministicRecency(rand, trieKey), trieKey.part, trieKey.blockIndex)
-                        trieKeyToFileSize[historicalTrieKey.toString()] = size
+                        trieKeyToFileSize[fileSizeKey(tableName, historicalTrieKey.toString())] = size
                         addedTries.add(
                             trieDetailsBuilder
                                 .setTrieKey(historicalTrieKey.toString())
@@ -172,8 +177,8 @@ class CompactorMockDriver(
                     BOTH -> {
                         val historicalTrieKey = Trie.Key(trieKey.level, deterministicRecency(rand, trieKey), trieKey.part, trieKey.blockIndex)
                         val (currentSize, historicalSize) = deterministicSizeSplit(rand, size)
-                        trieKeyToFileSize[trieKey.toString()] = currentSize
-                        trieKeyToFileSize[historicalTrieKey.toString()] = historicalSize
+                        trieKeyToFileSize[fileSizeKey(tableName, trieKey.toString())] = currentSize
+                        trieKeyToFileSize[fileSizeKey(tableName, historicalTrieKey.toString())] = historicalSize
                         addedTries.addAll(listOf(
                             trieDetailsBuilder
                                 .setTrieKey(trieKey.toString())
@@ -324,7 +329,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
     private fun addL0s(tableRef: TableRef, l0s: List<TrieDetails>) {
         l0s.forEach {
-            mockDriver.trieKeyToFileSize[it.trieKey.toString()] = it.dataFileSize
+            mockDriver.trieKeyToFileSize[mockDriver.fileSizeKey(tableRef.tableName, it.trieKey.toString())] = it.dataFileSize
         }
         dbs.forEach { db ->
             addTriesToBufferPool(db.bufferPool, tableRef, l0s)

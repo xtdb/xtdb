@@ -160,7 +160,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
     private fun addTries(tableRef: TableRef, tries: List<TrieDetails>, timestamp: Instant) {
         tries.forEach {
-            compactorDriver.trieKeyToFileSize[it.trieKey.toString()] = it.dataFileSize
+            compactorDriver.trieKeyToFileSize[compactorDriver.fileSizeKey(tableRef.tableName, it.trieKey.toString())] = it.dataFileSize
         }
         dbs.forEach { db ->
             db.trieCatalog.addTries(tableRef, tries, timestamp)
