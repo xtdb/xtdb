@@ -118,7 +118,8 @@
 (defn backfill-from-l0!
   [^BufferAllocator al ^BufferPool bp ^Log output-log db-name encode-fn ^TrieCatalog trie-cat refresh!]
   (loop [remaining-blocks (trie-cat/l0-blocks trie-cat)
-         last-key nil]
+         last-key nil
+         last-block-idx -1]
     (if-let [{:keys [block-idx tables]} (first remaining-blocks)]
       (let [grouped-txs (->> tables (read-l0-events al bp) group-events-by-system-time)
             new-last-key
@@ -130,8 +131,14 @@
                   (recur (rest remaining-txs) tx-key))
                 tx-key))]
         (when *after-block-hook* (*after-block-hook* block-idx))
-        (recur (rest remaining-blocks) new-last-key))
-      last-key)))
+        (recur (rest remaining-blocks) new-last-key block-idx))
+      (do
+        (refresh!)
+        (let [new-blocks (->> (trie-cat/l0-blocks trie-cat)
+                              (drop-while #(>= last-block-idx (:block-idx %))))]
+          (if (seq new-blocks)
+            (recur new-blocks last-key last-block-idx)
+            last-key))))))
 
 (defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format enable db-name initial-scan]}]
   (.txSink config

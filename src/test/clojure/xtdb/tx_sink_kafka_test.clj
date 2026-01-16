@@ -10,12 +10,21 @@
             [xtdb.util :as util]
             [xtdb.api :as xt])
   (:import [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
+           [org.apache.kafka.clients.admin AdminClient RecordsToDelete OffsetSpec ListOffsetsResult$ListOffsetsResultInfo]
+           [org.apache.kafka.common TopicPartition]
            org.testcontainers.kafka.ConfluentKafkaContainer
            org.testcontainers.utility.DockerImageName
            [xtdb.test.log RecordingLog]
            [xtdb.api.storage ObjectStore$StoredObject]))
 
 (def ^:private ^:dynamic *bootstrap-servers* nil)
+
+(defn truncate-topic [log-topic]
+  (with-open [^AdminClient admin (AdminClient/create (java.util.Map/of "bootstrap.servers" *bootstrap-servers*))]
+    (let [tp (TopicPartition. log-topic 0)
+          end-offsets @(.all (.listOffsets admin {tp (OffsetSpec/latest)}))
+          end-offset (.offset ^ListOffsetsResult$ListOffsetsResultInfo (get end-offsets tp))]
+      @(.all (.deleteRecords admin {tp (RecordsToDelete/beforeOffset end-offset)})))))
 
 (defonce ^ConfluentKafkaContainer kafka-container
   (ConfluentKafkaContainer. (DockerImageName/parse "confluentinc/cp-kafka:7.8.0")))
@@ -82,9 +91,9 @@
       (with-open [node (xtn/start-node node-opts)]
         (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
         (let [msgs (consume-messages *bootstrap-servers* output-topic)]
-          (t/is (= 1 (count msgs)))
+          (t/is (= 1 (count msgs)))))
           ;; NOTE: No flush here, so offset isn't be committed yet
-          ,))
+
       ;; Restart node
       (with-open [node (xtn/start-node node-opts)]
         ;; Flush block to ensure node has processed all messages
@@ -184,6 +193,65 @@
 
             (t/is (= 1 (count (get-blocks)))
                   "After GC, only block 1 should exist")))
+
+        (deliver resume-backfill true)
+        ; TxSink will now resume and move onto indexing
+
+        (t/is (= (deref result 5000 :timeout) 3))
+        (t/is (not= (deref done 5000 :timeout) :timeout))))))
+
+(t/deftest ^:integration test-log-truncated-during-backfill
+  (util/with-tmp-dirs #{node-dir}
+    (let [log-topic (str "xtdb.kafka-test." (random-uuid))]
+      ;; Create block 0
+      (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                        :log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
+                                        :log [:kafka {:cluster :my-kafka :topic log-topic}]
+                                        :compactor {:threads 0}})]
+        (xt/submit-tx node [[:put-docs :docs {:xt/id 0}]])
+        (tu/flush-block! node))
+
+      (let [first-block-done (promise)
+            resume-backfill (promise)
+            result (promise)
+            done (promise)]
+        ;; Start backfill in background thread then block
+        ;; This is to simulate the tx-sink taking so long that other nodes have moved on
+        (future
+          (try
+            (binding [tx-sink/*after-block-hook*
+                      (fn [block-idx]
+                        (when (= block-idx 0)
+                          (deliver first-block-done true)
+                          @resume-backfill))]
+              (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                                :log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
+                                                :log [:kafka {:cluster :my-kafka :topic log-topic}]
+                                                :compactor {:threads 0}
+                                                :tx-sink {:enable true
+                                                          :initial-scan true
+                                                          :output-log [::tu/recording {}]
+                                                          :format :transit+json}})]
+                ; Works where sync & await-node don't for some reason
+                (xt/submit-tx node [[:put-docs :docs {:xt/id 2}]])
+                (deliver result (count (.getMessages ^RecordingLog (tu/get-output-log node))))))
+            (catch Exception e
+              (deliver result e)))
+          (deliver done true))
+
+        (deref first-block-done 5000 :timeout)
+
+        (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                          :log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
+                                          :log [:kafka {:cluster :my-kafka :topic log-topic}]
+                                          :compactor {:threads 0}
+                                          :garbage-collector {:enabled true
+                                                              :blocks-to-keep 1
+                                                              :garbage-lifetime #xt/duration "PT1S"}})]
+          (xt/submit-tx node [[:put-docs :docs {:xt/id 1}]])
+          (tu/flush-block! node))
+
+        (truncate-topic log-topic)
 
         (deliver resume-backfill true)
         ; TxSink will now resume and move onto indexing
