@@ -15,4 +15,6 @@
 
                 "src/testFixtures/clojure"
                 "src/test/clojure" "src/dev/clojure"]
- :paths-ignore-regex ["dev/*"]}
+ :paths-ignore-regex ["dev/*"]
+ :project-specs [{:project-path "build.gradle.kts"
+                  :classpath-cmd ["./gradlew" "-q" "printClasspath"]}]}

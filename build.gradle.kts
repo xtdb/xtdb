@@ -763,3 +763,10 @@ tasks.register<JavaExec>("readTableBlockFile") {
     if (project.hasProperty("file"))
         args(project.property("file") as? String ?: error("file property must be a string"))
 }
+
+tasks.register("printClasspath") {
+    description = "Prints the dev classpath for clojure-lsp integration"
+    doLast {
+        println(sourceSets.dev.get().runtimeClasspath.asPath)
+    }
+}
