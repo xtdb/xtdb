@@ -33,6 +33,7 @@ tasks.shadowJar {
     archiveBaseName.set("xtdb")
     archiveVersion.set("")
     archiveClassifier.set("azure")
+    setProperty("zip64", true)
     mergeServiceFiles()
     transform(DataReaderTransformer())
 }
