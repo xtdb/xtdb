@@ -422,3 +422,8 @@
    (-> (database-or-null node db-name)
        (.getTxSink)
        :output-log)))
+
+(defn get-trie-cat
+  ([node] (get-trie-cat node "xtdb"))
+  ([node db-name]
+   (.getTrieCatalog (database-or-null node db-name))))

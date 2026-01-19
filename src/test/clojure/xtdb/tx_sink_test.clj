@@ -2,7 +2,9 @@
   (:require [clojure.test :as t]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
+            xtdb.error
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
@@ -298,3 +300,259 @@
         encode-fn (tx-sink/->encode-fn :transit+json)
         {:keys [tx-key]} (tx-sink/events->tx-output t1 table->events "xtdb" 0 encode-fn)]
     (t/is (= 42 (:tx-id tx-key)) "tx-key should have correct tx-id")))
+
+(t/deftest test-initial-scan-disabled
+  (util/with-tmp-dirs #{node-dir}
+    ; Create L0 block
+    (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                      :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
+                                      :compactor {:threads 0}
+                                      :tx-sink {:enable true
+                                                :output-log [::tu/recording {}]
+                                                :format :transit+json}})]
+      (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
+      (tu/flush-block! node))
+
+    ; initial-scan disabled
+    (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                      :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
+                                      :compactor {:threads 0}
+                                      :tx-sink {:enable true
+                                                :initial-scan false
+                                                :output-log [::tu/recording {}]
+                                                :format :transit+json}})]
+      (xt-log/sync-node node #xt/duration "PT5S")
+
+      (let [^RecordingLog output-log (tu/get-output-log node)
+            msgs (->> (.getMessages output-log) (map decode-record))]
+        (t/is (= 0 (count msgs)))))
+
+    ; initial-scan enabled
+    (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                      :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
+                                      :compactor {:threads 0}
+                                      :tx-sink {:enable true
+                                                :initial-scan true
+                                                :output-log [::tu/recording {}]
+                                                :format :transit+json}})]
+      (xt-log/sync-node node #xt/duration "PT5S")
+
+      (let [^RecordingLog output-log (tu/get-output-log node)
+            msgs (->> (.getMessages output-log) (map decode-record))]
+        (t/is (= 1 (count msgs)))))))
+
+(t/deftest test-initial-scan-output-matches
+  (util/with-tmp-dirs #{node-dir}
+    (let [original-messages
+          (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                            :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
+                                            :compactor {:threads 0}
+                                            :tx-sink {:enable true
+                                                      :output-log [::tu/recording {}]
+                                                      :format :transit+json}})]
+            ; Block with single transaction
+            (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
+            (tu/flush-block! node)
+            (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
+            ; Block with multi-statement transaction
+            (jdbc/with-transaction [tx node]
+              (jdbc/execute! tx ["INSERT INTO docs RECORDS {_id: 1, a: 1, b: {c: [1, 2, 3], d: 'test'}}, {_id: 2, a: 2}, {_id: 3, a: 3}"])
+              (jdbc/execute! tx ["UPDATE docs SET a = 4 WHERE _id = 1"])
+              (jdbc/execute! tx ["DELETE FROM docs WHERE _id = 1"])
+              (jdbc/execute! tx ["ERASE FROM docs WHERE _id = 1"])
+              (jdbc/execute! tx ["INSERT INTO other RECORDS {_id: 1}"]))
+            (tu/flush-block! node)
+            ; Block with multiple transactions
+            (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 10}"])
+            (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 20}"])
+            (tu/flush-block! node)
+            (let [^RecordingLog output-log (tu/get-output-log node)]
+              (->> (.getMessages output-log) (map decode-record))))]
+
+      (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                        :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
+                                        :compactor {:threads 0}
+                                        :tx-sink {:enable true
+                                                  :initial-scan true
+                                                  :output-log [::tu/recording {}]
+                                                  :format :transit+json}})]
+        (xt-log/sync-node node #xt/duration "PT5S")
+
+        (let [^RecordingLog output-log (tu/get-output-log node)
+              msgs (->> (.getMessages output-log) (map decode-record))]
+          (t/is (= 5 (count msgs)))
+
+          (doseq [[idx msg original] (map vector
+                                          (range)
+                                          (util/->clj msgs)
+                                          (util/->clj original-messages))]
+            (t/testing (str "transaction " idx)
+              (t/is (= (:transaction msg) (:transaction original)))
+              (t/is (= (:system-time msg) (:system-time original)))
+              (t/is (= (:source msg) (:source original)))
+              ; NOTE: We don't guarantee the order of tables *or* ops within tables, except between iids
+              (t/is (= (->> (:tables msg) (map #(update % :ops set)) set)
+                       (->> (:tables original) (map #(update % :ops set)) set)))))
+
+          (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 3, value: 'third'}"])
+          (t/is (= 6 (count (.getMessages output-log)))
+                "New transaction should also be output"))))))
+
+(t/deftest test-initial-scan-outputs-historical-transactions
+  (util/with-tmp-dirs #{node-dir}
+    (let [; Create some l0 files
+          original-messages
+          (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                            :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
+                                            :compactor {:threads 0}
+                                            :tx-sink {:enable true
+                                                      :output-log [::tu/recording {}]
+                                                      :format :transit+json}})]
+            (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1, value: 'first'}"])
+            (tu/flush-block! node)
+            (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 2, value: 'second'}"])
+            (tu/flush-block! node)
+            (->> (.getMessages ^RecordingLog (tu/get-output-log node)) (map decode-record)))]
+      ; Check backfill behaves the same
+      (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                        :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
+                                        :compactor {:threads 0}
+                                        :tx-sink {:enable true
+                                                  :initial-scan true
+                                                  :output-log [::tu/recording {}]
+                                                  :format :transit+json}})]
+        (xt-log/sync-node node #xt/duration "PT5S")
+
+        (let [^RecordingLog output-log (tu/get-output-log node)
+              msgs (->> (.getMessages output-log) (map decode-record))]
+          (t/is (= (util/->clj msgs) (util/->clj original-messages))))))))
+
+(t/deftest test-initial-scan-skips-unflushed-transactions
+  ; NOTE: This behavior will change with #5055
+  (util/with-tmp-dirs #{node-dir}
+    (let [original-messages
+          (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                            :log [:local {:path (.resolve node-dir "log")}]
+                                            :compactor {:threads 0}
+                                            :tx-sink {:enable true
+                                                      :initial-scan true
+                                                      :output-log [::tu/recording {}]
+                                                      :format :transit+json}})]
+            (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
+            (tu/flush-block! node)
+            (.getMessages ^RecordingLog (tu/get-output-log node)))]
+      (t/is (= 1 (count original-messages))
+            "Should have 1 original message")
+
+      ; While the tx-sink is down, more blocks are added
+      (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                        :log [:local {:path (.resolve node-dir "log")}]
+                                        :compactor {:threads 0}})]
+        (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 2}"])
+        (tu/flush-block! node)
+        (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 3}"])
+        (tu/flush-block! node))
+
+      (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                        :log [:local {:path (.resolve node-dir "log")}]
+                                        :compactor {:threads 0}
+                                        :tx-sink {:enable true
+                                                  :initial-scan true
+                                                  :output-log [::tu/recording {:messages original-messages}]
+                                                  :format :transit+json}})]
+        (xt-log/sync-node node #xt/duration "PT5S")
+        (let [^RecordingLog output-log (tu/get-output-log node)]
+          (t/is (= original-messages (.getMessages output-log))
+                "No new messages should be output"))))))
+
+(t/deftest test-initial-scan-reads-garbage-l0s
+  (util/with-tmp-dirs #{node-dir}
+    ; Create data and compact to L1 (marking L0s as garbage)
+    (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                      :log [:local {:path (.resolve node-dir "log")}]
+                                      :compactor {:threads 1}})]
+      (doseq [_ (range 4)]
+        (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
+        (tu/flush-block! node))
+      (c/compact-all! node #xt/duration "PT5S")
+
+      (let [^xtdb.trie.TrieCatalog trie-cat (tu/get-trie-cat node)
+            {:keys [tries]} (trie-cat/trie-state trie-cat #xt/table "docs")
+            {:keys [live garbage]} (get tries [0 nil []])]
+        (t/is (empty? live))
+        (t/is (not (empty? garbage)))))
+
+    (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                      :log [:local {:path (.resolve node-dir "log")}]
+                                      :compactor {:threads 0}
+                                      :tx-sink {:enable true
+                                                :initial-scan true
+                                                :output-log [::tu/recording {}]
+                                                :format :transit+json}})]
+      (xt-log/sync-node node #xt/duration "PT5S")
+
+      (let [^RecordingLog output-log (tu/get-output-log node)
+            msgs (->> (.getMessages output-log) (map decode-record))]
+        (t/is (= 4 (count msgs))
+              "Should read from L0 even if marked as garbage")))))
+
+(t/deftest test-initial-scan-with-no-block-files
+  (with-open [node (xtn/start-node {:compactor {:threads 0}
+                                    :tx-sink {:enable true
+                                              :initial-scan true
+                                              :output-log [::tu/recording {}]
+                                              :format :transit+json}})]
+    (let [^RecordingLog output-log (tu/get-output-log node)
+          msgs (->> (.getMessages output-log) (map decode-record))]
+      (t/is (empty? msgs) "Should have no messages when no blocks exist"))))
+
+(comment
+  (util/with-tmp-dirs #{test-dir}
+    (let [test-dir (java.nio.file.Files/createTempDirectory
+                    "l0-order-test"
+                    (into-array java.nio.file.attribute.FileAttribute []))]
+      (with-open [node (xtn/start-node
+                        {:storage [:local {:path (.resolve test-dir "storage")}]
+                         :log [:local {:path (.resolve test-dir "log")}]
+                         :compactor {:threads 0}})]
+        (jdbc/with-transaction [tx node]
+          (jdbc/execute! tx ["INSERT INTO docs RECORDS {_id: 1, a: 1, b: {c: [1, 2, 3], d: 'test'}}, {_id: 2, a: 2}, {_id: 3, a: 3}"])
+          (jdbc/execute! tx ["UPDATE docs SET a = 4 WHERE _id = 1"])
+          (jdbc/execute! tx ["DELETE FROM docs WHERE _id = 1"])
+          (jdbc/execute! tx ["ERASE FROM docs WHERE _id = 1"])
+          (jdbc/execute! tx ["INSERT INTO other RECORDS {_id: 1}"]))
+
+        ;; Flush to L0
+        (tu/finish-block! node)
+
+        ;; Read L0 directly
+        (let [xtdb-db (db/primary-db node)
+              bp (.getBufferPool xtdb-db)
+              trie-cat (.getTrieCatalog xtdb-db)
+              allocator (.getAllocator node)
+              [{:keys [tables]}] (trie-cat/l0-blocks trie-cat)
+              events (tx-sink/read-l0-events allocator bp tables)
+              fmt-instant #(some-> % str (subs 11 23))]
+
+          (println "\n=== Events as stored in L0 ===")
+          (println "(sorted by table, iid, valid-from)\n")
+          (doseq [{:keys [^TableRef table event]} events]
+            (let [{:keys [op doc system-from iid]} event
+                  iid-hex (->> iid (take 4) (map #(format "%02x" (bit-and % 0xff))) (apply str))]
+              (printf "%-6s %-7s iid=%s sf=%s doc-id=%s doc=%s\n"
+                      (.getTableName table)
+                      (name op)
+                      iid-hex
+                      (fmt-instant system-from)
+                      (pr-str (:xt/id doc))
+                      (pr-str doc))))
+
+          (println "\n=== After group-events-by-system-time ===\n")
+          (let [grouped (tx-sink/group-events-by-system-time events)]
+            (doseq [[system-time table->events] grouped]
+              (println "TX at" (fmt-instant system-time))
+              (doseq [[^TableRef table-ref ops] table->events]
+                (printf "  %s: %s\n"
+                        (.getTableName table-ref)
+                        (mapv #(vector (:op %) (:xt/id (:doc %))) ops)))
+              (println))))))))

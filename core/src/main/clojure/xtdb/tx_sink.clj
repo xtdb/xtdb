@@ -6,17 +6,18 @@
             xtdb.node.impl
             [xtdb.serde :as serde]
             [xtdb.time :as time]
+            [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import (org.apache.arrow.memory BufferAllocator)
            (xtdb TaggedValue)
            (xtdb.api TxSinkConfig Xtdb Xtdb$Config)
            (xtdb.api.log Log Log$Message Log$Message$Tx)
            (xtdb.arrow Relation RelationReader)
-           (xtdb.catalog BlockCatalog)
+           (xtdb.catalog BlockCatalog TableCatalog)
            (xtdb.indexer Indexer$TxSink LiveIndex$Tx)
            (xtdb.storage BufferPool)
            (xtdb.table TableRef)
-           (xtdb.trie Trie)))
+           (xtdb.trie Trie TrieCatalog)))
 
 (defn read-relation-rows
   ([rel] (read-relation-rows rel 0))
@@ -111,6 +112,27 @@
                                 (into []))}
                   encode-fn
                   Log$Message$Tx.)}))
+
+(def ^:dynamic *after-block-hook* nil)
+
+(defn backfill-from-l0!
+  [^BufferAllocator al ^BufferPool bp ^Log output-log db-name encode-fn ^TrieCatalog trie-cat refresh!]
+  (loop [remaining-blocks (trie-cat/l0-blocks trie-cat)
+         last-key nil]
+    (if-let [{:keys [block-idx tables]} (first remaining-blocks)]
+      (let [grouped-txs (->> tables (read-l0-events al bp) group-events-by-system-time)
+            new-last-key
+            (loop [remaining-txs grouped-txs
+                   tx-key nil]
+              (if-let [[system-time events] (first remaining-txs)]
+                (let [{:keys [tx-key message]} (events->tx-output system-time events db-name block-idx encode-fn)]
+                  @(.appendMessage output-log message)
+                  (recur (rest remaining-txs) tx-key))
+                tx-key))]
+        (when *after-block-hook* (*after-block-hook* block-idx))
+        (recur (rest remaining-blocks) new-last-key))
+      last-key)))
+
 (defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format enable db-name initial-scan]}]
   (.txSink config
            (cond-> (TxSinkConfig.)
@@ -124,6 +146,10 @@
   {k {:tx-sink-conf tx-sink-conf
       :output-log (ig/ref ::output-log)
       :block-cat (ig/ref :xtdb/block-catalog)
+      :allocator (ig/ref :xtdb.db-catalog/allocator)
+      :buffer-pool (ig/ref :xtdb/buffer-pool)
+      :table-cat (ig/ref :xtdb/table-catalog)
+      :trie-cat (ig/ref :xtdb/trie-catalog)
       :db-name db-name}
    ::output-log {:tx-sink-conf tx-sink-conf
                  :base base
@@ -153,7 +179,10 @@
                                encode-fn
                                Log$Message$Tx.)))))))
 
-(defmethod ig/init-key ::for-db [_ {:keys [^TxSinkConfig tx-sink-conf ^Log output-log block-cat db-name]}]
+(defmethod ig/init-key ::for-db [_ {:keys [^TxSinkConfig tx-sink-conf ^Log output-log
+                                           ^BlockCatalog block-cat allocator buffer-pool
+                                           ^TableCatalog table-cat
+                                           ^TrieCatalog trie-cat db-name]}]
   (when (and tx-sink-conf
              (.getEnable tx-sink-conf)
              (= db-name (.getDbName tx-sink-conf)))
@@ -163,12 +192,19 @@
                            (->> (.readLastMessage output-log)
                                 Log$Message/.encode
                                 decode-record))
-                         (catch Exception _ nil))]
+                         (catch Exception _ nil))
+          refresh! (fn []
+                     (.refresh block-cat)
+                     (.refresh table-cat)
+                     (.refresh trie-cat))
+          last-tx-key (if (and (.getInitialScan tx-sink-conf) (nil? last-message))
+                        (backfill-from-l0! allocator buffer-pool output-log db-name encode-fn trie-cat refresh!)
+                        (some-> last-message :transaction :id))]
       (map->TxSink {:output-log output-log
                     :encode-fn encode-fn
                     :block-cat block-cat
                     :db-name db-name
-                    :last-tx-key (some-> last-message :transaction :id)}))))
+                    :last-tx-key last-tx-key}))))
 
 (defmethod ig/init-key ::output-log [_ {:keys [^TxSinkConfig tx-sink-conf db-name]
                                         {:keys [log-clusters]} :base}]
