@@ -18,9 +18,17 @@
   (def tmp-file (bu/tmp-file-path "ts-devices-test" "device_info"))
   (bu/download-s3-dataset-file "ts-devices/small/devices_small_device_info.csv.gz" tmp-file))
 
-(defmethod b/->benchmark :ts-devices [_ {:keys [size seed] :or {seed 0}}]
+(defmethod b/cli-flags :ts-devices [_]
+  [["-s" "--size SIZE" "Dataset size (small, med, big)"
+    :parse-fn keyword
+    :default :small]
+
+   ["-h" "--help"]])
+
+(defmethod b/->benchmark :ts-devices [_ {:keys [size seed] :or {size :small seed 0}}]
   (log/info {:size size :seed seed})
   {:title "TS Devices Ingest"
+   :parameters {:size size}
    :seed seed,
    :->state #(do {:!state (atom {})})
    :tasks [{:t :do

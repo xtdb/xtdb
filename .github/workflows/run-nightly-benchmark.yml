@@ -101,6 +101,11 @@ on:
         required: false
         default: ''
         type: string
+      ts_devices_size:
+        description: 'Dataset size for ts-devices benchmark (small, med, big)'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   id-token: write
@@ -269,6 +274,7 @@ jobs:
           PATCH_DOC_COUNT: ${{ inputs.patch_doc_count }}
           PATCH_PATCH_COUNT: ${{ inputs.patch_patch_count }}
           PRODUCTS_LIMIT: ${{ inputs.products_limit }}
+          TS_DEVICES_SIZE: ${{ inputs.ts_devices_size }}
         run: |
           helm dependency update ./modules/bench/cloud/helm
           HELM_ARGS=(
@@ -334,6 +340,9 @@ jobs:
           fi
           if [ -n "$PRODUCTS_LIMIT" ]; then
             HELM_ARGS+=(--set "products.limit=${PRODUCTS_LIMIT}")
+          fi
+          if [ -n "$TS_DEVICES_SIZE" ]; then
+            HELM_ARGS+=(--set "ts-devices.size=${TS_DEVICES_SIZE}")
           fi
 
           helm upgrade --install "xtdb-benchmark" ./modules/bench/cloud/helm "${HELM_ARGS[@]}"
@@ -403,6 +412,7 @@ jobs:
           PATCH_DOC_COUNT: ${{ inputs.patch_doc_count }}
           PATCH_PATCH_COUNT: ${{ inputs.patch_patch_count }}
           PRODUCTS_LIMIT: ${{ inputs.products_limit }}
+          TS_DEVICES_SIZE: ${{ inputs.ts_devices_size }}
           GIT_SHA: ${{ github.sha }}
           GIT_BRANCH: ${{ inputs.branch }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
@@ -431,6 +441,7 @@ jobs:
           [ -n "$PATCH_DOC_COUNT" ] && CONFIG_PARTS+=("Docs: ${PATCH_DOC_COUNT}")
           [ -n "$PATCH_PATCH_COUNT" ] && CONFIG_PARTS+=("Patches: ${PATCH_PATCH_COUNT}")
           [ -n "$PRODUCTS_LIMIT" ] && CONFIG_PARTS+=("Limit: ${PRODUCTS_LIMIT}")
+          [ -n "$TS_DEVICES_SIZE" ] && CONFIG_PARTS+=("Size: ${TS_DEVICES_SIZE}")
           # Join with " | "
           CONFIG_INFO=$(printf " | %s" "${CONFIG_PARTS[@]}")
           CONFIG_INFO="${CONFIG_INFO:3}" # Strip leading " | "

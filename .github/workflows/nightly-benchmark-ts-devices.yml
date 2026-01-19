@@ -1,0 +1,40 @@
+name: Nightly Benchmark TS Devices
+run-name: "TS Devices (Size: ${{ inputs.size || 'small' }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      size:
+        description: 'Dataset size (small, med, big)'
+        required: false
+        default: 'small'
+        type: choice
+        options:
+          - small
+          - med
+          - big
+  schedule:
+    - cron: '0 11 * * *'  # Run daily at 11:00 UTC (1hr after products)
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+  packages: write
+
+concurrency:
+  group: nightly-benchmark-ts-devices
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    if: ${{ github.event_name != 'schedule' || github.repository == 'xtdb/xtdb' }}
+    uses: ./.github/workflows/run-nightly-benchmark.yml
+    with:
+      bench_type: ts-devices
+      job_display_name: TS Devices
+      branch: ${{ github.ref_name }}
+      timeout_minutes: 120
+      benchmark_timeout: PT3H
+      ts_devices_size: ${{ inputs.size || 'small' }}
+    secrets: inherit

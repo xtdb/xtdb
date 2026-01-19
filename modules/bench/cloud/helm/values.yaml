@@ -45,6 +45,9 @@ patch:
 products:
   limit: ""
 
+ts-devices:
+  size: small
+
 tsbs-iot:
   devices: 2000
   timestampStart: "2020-01-01T00:00:00Z"

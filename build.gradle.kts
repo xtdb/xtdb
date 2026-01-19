@@ -704,6 +704,8 @@ createBench("ingestTxOverhead", mapOf("docCount" to "--doc-count", "batchSizes" 
 
 createBench("clickbench", mapOf("limit" to "--limit", "size" to "--size"))
 
+createBench("ts-devices", mapOf("size" to "--size"))
+
 tasks.dokkaHtmlMultiModule {
     moduleName.set("")
     moduleVersion.set("2.x-SNAPSHOT")

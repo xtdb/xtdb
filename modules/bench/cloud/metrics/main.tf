@@ -166,6 +166,19 @@ locals {
       metric_name     = "duration_minutes"
       dashboard_idx   = 7
     }
+    ts-devices = {
+      name            = "TS Devices Ingest"
+      display_name    = "TS Devices"
+      logic_app_name  = var.ts_devices_anomaly_logic_app_name
+      enabled         = var.ts_devices_anomaly_alert_enabled
+      param_name      = "size"
+      param_path      = "parameters['size']"
+      param_value     = var.ts_devices_anomaly_size
+      param_is_string = true
+      metric_path     = "'time-taken-ms'"
+      metric_name     = "duration_minutes"
+      dashboard_idx   = 8
+    }
   }
 
   # Dashboard part positions (6 cols wide, 4 rows tall each)
@@ -178,6 +191,7 @@ locals {
     5 = { x = 6, y = 8 }
     6 = { x = 0, y = 12 }
     7 = { x = 6, y = 12 }
+    8 = { x = 0, y = 16 }
   }
 
   # Filter expressions per benchmark (string params quoted, numeric params use todouble)

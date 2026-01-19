@@ -56,7 +56,8 @@
                   (throw (ex-info "No patch stages found in log file"
                                   {:benchmark-type "patch"
                                    :log-file log-file-path})))
-        "products" nil)
+        "products" nil
+        "ts-devices" nil)
       (summary/render-summary parsed-summary {:format format}))))
 
 (defn plot-benchmark-timeseries
@@ -159,7 +160,7 @@
   (println)
   (println "  plot-benchmark-timeseries [--scale-factor SF] <benchmark-type>")
   (println "      Plot a benchmark timeseries chart from Azure Log Analytics.")
-  (println "      Supported: tpch, yakbench, auctionmark, readings, clickbench, tsbs-iot, ingest-tx-overhead, patch, products")
+  (println "      Supported: tpch, yakbench, auctionmark, readings, clickbench, tsbs-iot, ingest-tx-overhead, patch, products, ts-devices")
   (println)
   (println "Kubernetes Commands (output JSON):")
   (println "  inspect-deployment [--namespace NS]")

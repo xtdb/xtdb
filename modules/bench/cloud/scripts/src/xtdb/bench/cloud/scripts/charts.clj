@@ -90,7 +90,10 @@
                :default-scale-factor nil} ;; patch uses doc-count, not scale-factor
    "products" {:benchmark-name "Products"
                :title "Products Benchmark Performance"
-               :default-scale-factor nil}}) ;; products uses limit, not scale-factor
+               :default-scale-factor nil} ;; products uses limit, not scale-factor
+   "ts-devices" {:benchmark-name "TS Devices Ingest"
+                 :title "TS Devices Benchmark Performance"
+                 :default-scale-factor nil}}) ;; ts-devices uses size, not scale-factor
 
 (defn plot-benchmark-timeseries
   "Plot a benchmark timeseries chart from Azure Log Analytics.

@@ -192,6 +192,23 @@
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
+(defmethod parse-log "ts-devices" [_benchmark-type log-file-path]
+  (let [content (slurp log-file-path)
+        lines (str/split-lines content)
+        stage-lines (filter #(str/starts-with? % "{\"stage\":") lines)
+        stages (mapv (fn [line]
+                       (try
+                         (json/parse-string line true)
+                         (catch Exception e
+                           (throw (ex-info (str "Failed to parse JSON line: " line)
+                                           {:line line :error (.getMessage e)})))))
+                     stage-lines)
+        {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
+    {:all-stages stages
+     :ingest-stages (filterv #(contains? #{"download-files" "submit-docs" "sync" "finish-block" "compact" "ingest"} (name (:stage %))) stages)
+     :benchmark-total-time-ms benchmark-total-time-ms
+     :benchmark-summary benchmark-summary}))
+
 (defn load-summary
   "Load and parse a benchmark log file, returning summary with benchmark type."
   [benchmark-type log-file-path]

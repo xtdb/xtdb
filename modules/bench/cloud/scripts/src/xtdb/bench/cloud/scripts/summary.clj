@@ -254,6 +254,12 @@
          "\n\n"
          (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
 
+(defmethod summary->table "ts-devices" [summary]
+  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
+    (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
+         "\n\n"
+         (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
+
 ;; summary->slack multimethod
 
 (defmulti summary->slack :benchmark-type)
@@ -315,6 +321,14 @@
       (rows->string [:stage :duration] rows)))))
 
 (defmethod summary->slack "products" [summary]
+  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
+    (str
+     (util/totals->string total-ms (:benchmark-total-time-ms summary))
+     "\n\n"
+     (util/wrap-slack-code
+      (rows->string [:stage :duration] rows)))))
+
+(defmethod summary->slack "ts-devices" [summary]
   (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
     (str
      (util/totals->string total-ms (:benchmark-total-time-ms summary))
@@ -400,6 +414,16 @@
          (util/totals->string total-ms (:benchmark-total-time-ms summary)))))
 
 (defmethod summary->github-markdown "products" [summary]
+  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)
+        columns [{:key :stage :header "Stage"}
+                 {:key :time-taken-ms :header "Time (ms)"}
+                 {:key :duration :header "Duration"}
+                 {:key :percent-of-total :header "% of total"}]]
+    (str (util/github-table columns rows)
+         "\n\n"
+         (util/totals->string total-ms (:benchmark-total-time-ms summary)))))
+
+(defmethod summary->github-markdown "ts-devices" [summary]
   (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)
         columns [{:key :stage :header "Stage"}
                  {:key :time-taken-ms :header "Time (ms)"}

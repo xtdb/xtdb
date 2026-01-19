@@ -251,3 +251,22 @@ variable "products_anomaly_alert_enabled" {
   type        = bool
   default     = true
 }
+
+# TS Devices anomaly detection configuration
+variable "ts_devices_anomaly_logic_app_name" {
+  description = "Logic App name for scheduled TS Devices anomaly detection"
+  type        = string
+  default     = "xtdb-bench-ts-devices-anomaly-schedule"
+}
+
+variable "ts_devices_anomaly_alert_enabled" {
+  description = "Whether the TS Devices anomaly detection Logic App is enabled"
+  type        = bool
+  default     = true
+}
+
+variable "ts_devices_anomaly_size" {
+  description = "TS Devices size to scope anomaly detection to (small, med, big)"
+  type        = string
+  default     = "small"
+}
