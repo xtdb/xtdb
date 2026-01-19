@@ -106,15 +106,91 @@
                      :stage :compact
                      :f (fn [{:keys [node]}] (b/compact! node))}]}
 
-           ;; TODO more queries
+           ;; Query phase - exercise different query patterns
            {:t :call
-            :stage :queries
+            :stage :query-counts
             :f (fn [{:keys [node]}]
                  (let [readings-count (:row-count (first (xt/q node "SELECT COUNT(*) row_count FROM readings FOR ALL VALID_TIME")))
                        diagnostics-count (:row-count (first (xt/q node "SELECT COUNT(*) row_count FROM diagnostics FOR ALL VALID_TIME")))
                        total-count (+ readings-count diagnostics-count)]
-                   (log/info (format "TSBS-IoT final counts: %,d readings + %,d diagnostics = %,d total rows"
-                                     readings-count diagnostics-count total-count))))}]})
+                   (log/info (format "TSBS-IoT counts: %,d readings + %,d diagnostics = %,d total"
+                                     readings-count diagnostics-count total-count))
+                   {:readings-count readings-count
+                    :diagnostics-count diagnostics-count
+                    :total-count total-count}))}
+
+           ;; Last location per truck (point query - latest valid-time per entity)
+           {:t :call
+            :stage :query-last-loc
+            :f (fn [{:keys [node]}]
+                 (let [results (xt/q node
+                                     "SELECT t.name, t.driver, r.longitude, r.latitude
+                                      FROM trucks t
+                                      JOIN readings r ON r._id = t._id
+                                      WHERE t.fleet = 'South'
+                                      ORDER BY t.name")]
+                   (log/info (format "Last location query: %d trucks" (count results)))
+                   {:truck-count (count results)}))}
+
+           ;; Trucks with low fuel (threshold query on latest diagnostic)
+           {:t :call
+            :stage :query-low-fuel
+            :f (fn [{:keys [node]}]
+                 (let [results (xt/q node
+                                     "SELECT t.name, t.driver, d.fuel_state
+                                      FROM trucks t
+                                      JOIN diagnostics d ON d._id = t._id
+                                      WHERE t.fleet = 'South'
+                                        AND d.fuel_state < 0.1
+                                      ORDER BY d.fuel_state")]
+                   (log/info (format "Low fuel query: %d trucks with <10%% fuel" (count results)))
+                   {:low-fuel-count (count results)}))}
+
+           ;; Trucks with high load (threshold query - load vs capacity)
+           {:t :call
+            :stage :query-high-load
+            :f (fn [{:keys [node]}]
+                 (let [results (xt/q node
+                                     "SELECT t.name, t.driver, d.current_load, t.load_capacity,
+                                             (d.current_load / t.load_capacity) AS load_pct
+                                      FROM trucks t
+                                      JOIN diagnostics d ON d._id = t._id
+                                      WHERE t.fleet = 'South'
+                                        AND d.current_load / t.load_capacity > 0.9
+                                      ORDER BY load_pct DESC")]
+                   (log/info (format "High load query: %d trucks with >90%% load" (count results)))
+                   {:high-load-count (count results)}))}
+
+           ;; Stationary trucks (time-windowed aggregation)
+           ;; Find trucks with avg velocity < 1 in a 10-minute window
+           {:t :call
+            :stage :query-stationary
+            :f (fn [{:keys [node]}]
+                 (let [;; Query over all valid time, group by truck and 10-min buckets
+                       results (xt/q node
+                                     "SELECT t.name, t.driver, AVG(r.velocity) AS avg_velocity
+                                      FROM trucks t
+                                      JOIN readings FOR ALL VALID_TIME AS r ON r._id = t._id
+                                      WHERE t.fleet = 'South'
+                                      GROUP BY t.name, t.driver
+                                      HAVING AVG(r.velocity) < 1
+                                      ORDER BY avg_velocity")]
+                   (log/info (format "Stationary trucks query: %d trucks with avg velocity < 1" (count results)))
+                   {:stationary-count (count results)}))}
+
+           ;; Average load per fleet per model (analytics query)
+           {:t :call
+            :stage :query-avg-load
+            :f (fn [{:keys [node]}]
+                 (let [results (xt/q node
+                                     "SELECT t.fleet, t.model, t.load_capacity,
+                                             AVG(d.current_load / t.load_capacity) AS avg_load_pct
+                                      FROM trucks t
+                                      JOIN diagnostics FOR ALL VALID_TIME AS d ON d._id = t._id
+                                      GROUP BY t.fleet, t.model, t.load_capacity
+                                      ORDER BY t.fleet, t.model")]
+                   (log/info (format "Avg load query: %d fleet/model combinations" (count results)))
+                   {:fleet-model-count (count results)}))}]})
 
 ;; not intended to be run as a test - more for ease of REPL dev
 (t/deftest ^:benchmark run-iot
