@@ -1,6 +1,6 @@
 name: Nightly Benchmark Cleanup
 run-name: >-
-  Benchmark Cleanup: ${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType == 'clickbench' && 'ClickBench' || inputs.benchType == 'tsbs-iot' && 'TSBS IoT' || inputs.benchType == 'patch' && 'Patch' || inputs.benchType == 'products' && 'Products' || inputs.benchType == 'ts-devices' && 'TS Devices' || inputs.benchType }}
+  Benchmark Cleanup: ${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType == 'clickbench' && 'ClickBench' || inputs.benchType == 'tsbs-iot' && 'TSBS IoT' || inputs.benchType == 'ingest-tx-overhead' && 'Ingest TX Overhead' || inputs.benchType == 'patch' && 'Patch' || inputs.benchType == 'products' && 'Products' || inputs.benchType == 'ts-devices' && 'TS Devices' || inputs.benchType }}
 
 on:
   workflow_dispatch:
@@ -16,6 +16,7 @@ on:
           - yakbench
           - clickbench
           - tsbs-iot
+          - ingest-tx-overhead
           - patch
           - products
           - ts-devices
