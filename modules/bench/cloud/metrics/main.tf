@@ -153,6 +153,19 @@ locals {
       metric_name     = "duration_minutes"
       dashboard_idx   = 6
     }
+    products = {
+      name            = "Products"
+      display_name    = "Products"
+      logic_app_name  = var.products_anomaly_logic_app_name
+      enabled         = var.products_anomaly_alert_enabled
+      param_name      = "benchmark"
+      param_path      = "benchmark"
+      param_value     = "Products"
+      param_is_string = true
+      metric_path     = "'time-taken-ms'"
+      metric_name     = "duration_minutes"
+      dashboard_idx   = 7
+    }
   }
 
   # Dashboard part positions (6 cols wide, 4 rows tall each)
@@ -164,6 +177,7 @@ locals {
     4 = { x = 0, y = 8 }
     5 = { x = 6, y = 8 }
     6 = { x = 0, y = 12 }
+    7 = { x = 6, y = 12 }
   }
 
   # Filter expressions per benchmark (string params quoted, numeric params use todouble)

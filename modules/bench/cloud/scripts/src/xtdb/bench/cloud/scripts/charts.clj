@@ -87,7 +87,10 @@
                          :default-scale-factor nil} ;; ingest-tx-overhead uses doc-count, not scale-factor
    "patch"    {:benchmark-name "PATCH Performance Benchmark"
                :title "Patch Benchmark Performance"
-               :default-scale-factor nil}}) ;; patch uses doc-count, not scale-factor
+               :default-scale-factor nil} ;; patch uses doc-count, not scale-factor
+   "products" {:benchmark-name "Products"
+               :title "Products Benchmark Performance"
+               :default-scale-factor nil}}) ;; products uses limit, not scale-factor
 
 (defn plot-benchmark-timeseries
   "Plot a benchmark timeseries chart from Azure Log Analytics.

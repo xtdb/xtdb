@@ -42,6 +42,9 @@ patch:
   docCount: 500000
   patchCount: 10
 
+products:
+  limit: ""
+
 tsbs-iot:
   devices: 2000
   timestampStart: "2020-01-01T00:00:00Z"

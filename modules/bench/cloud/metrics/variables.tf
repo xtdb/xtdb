@@ -238,3 +238,16 @@ variable "patch_anomaly_doc_count" {
   type        = number
   default     = 500000
 }
+
+# Products anomaly detection configuration
+variable "products_anomaly_logic_app_name" {
+  description = "Logic App name for scheduled Products anomaly detection"
+  type        = string
+  default     = "xtdb-bench-products-anomaly-schedule"
+}
+
+variable "products_anomaly_alert_enabled" {
+  description = "Whether the Products anomaly detection Logic App is enabled"
+  type        = bool
+  default     = true
+}

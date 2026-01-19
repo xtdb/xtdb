@@ -96,6 +96,11 @@ on:
         required: false
         default: ''
         type: string
+      products_limit:
+        description: 'Limit for products benchmark (empty = all)'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   id-token: write
@@ -263,6 +268,7 @@ jobs:
           INGEST_TX_OVERHEAD_BATCH_SIZES: ${{ inputs.ingest_tx_overhead_batch_sizes }}
           PATCH_DOC_COUNT: ${{ inputs.patch_doc_count }}
           PATCH_PATCH_COUNT: ${{ inputs.patch_patch_count }}
+          PRODUCTS_LIMIT: ${{ inputs.products_limit }}
         run: |
           helm dependency update ./modules/bench/cloud/helm
           HELM_ARGS=(
@@ -325,6 +331,9 @@ jobs:
           fi
           if [ -n "$PATCH_PATCH_COUNT" ]; then
             HELM_ARGS+=(--set "patch.patchCount=${PATCH_PATCH_COUNT}")
+          fi
+          if [ -n "$PRODUCTS_LIMIT" ]; then
+            HELM_ARGS+=(--set "products.limit=${PRODUCTS_LIMIT}")
           fi
 
           helm upgrade --install "xtdb-benchmark" ./modules/bench/cloud/helm "${HELM_ARGS[@]}"
@@ -393,6 +402,7 @@ jobs:
           INGEST_TX_OVERHEAD_BATCH_SIZES: ${{ inputs.ingest_tx_overhead_batch_sizes }}
           PATCH_DOC_COUNT: ${{ inputs.patch_doc_count }}
           PATCH_PATCH_COUNT: ${{ inputs.patch_patch_count }}
+          PRODUCTS_LIMIT: ${{ inputs.products_limit }}
           GIT_SHA: ${{ github.sha }}
           GIT_BRANCH: ${{ inputs.branch }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
@@ -420,6 +430,7 @@ jobs:
           [ -n "$INGEST_TX_OVERHEAD_BATCH_SIZES" ] && CONFIG_PARTS+=("Batch Sizes: ${INGEST_TX_OVERHEAD_BATCH_SIZES}")
           [ -n "$PATCH_DOC_COUNT" ] && CONFIG_PARTS+=("Docs: ${PATCH_DOC_COUNT}")
           [ -n "$PATCH_PATCH_COUNT" ] && CONFIG_PARTS+=("Patches: ${PATCH_PATCH_COUNT}")
+          [ -n "$PRODUCTS_LIMIT" ] && CONFIG_PARTS+=("Limit: ${PRODUCTS_LIMIT}")
           # Join with " | "
           CONFIG_INFO=$(printf " | %s" "${CONFIG_PARTS[@]}")
           CONFIG_INFO="${CONFIG_INFO:3}" # Strip leading " | "

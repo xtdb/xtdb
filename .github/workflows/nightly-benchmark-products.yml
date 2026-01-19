@@ -1,0 +1,36 @@
+name: Nightly Benchmark Products
+run-name: "Products${{ inputs.limit && format(' (Limit: {0})', inputs.limit) || '' }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Limit number of products to ingest (empty = all)'
+        required: false
+        default: ''
+        type: string
+  schedule:
+    - cron: '0 10 * * *'  # Run daily at 10:00 UTC (1hr after patch)
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+  packages: write
+
+concurrency:
+  group: nightly-benchmark-products
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    if: ${{ github.event_name != 'schedule' || github.repository == 'xtdb/xtdb' }}
+    uses: ./.github/workflows/run-nightly-benchmark.yml
+    with:
+      bench_type: products
+      job_display_name: Products
+      branch: ${{ github.ref_name }}
+      timeout_minutes: 90
+      benchmark_timeout: PT2H
+      products_limit: ${{ inputs.limit || '' }}
+    secrets: inherit
