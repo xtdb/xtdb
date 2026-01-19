@@ -141,9 +141,10 @@
                      (doseq [[_ {:keys [sys]}] !dbs]
                        (ig/halt! sys))))]
 
-      (let [xtdb-db-config (-> (Database$Config.)
-                               (.log (.getLog conf))
-                               (.storage (.getStorage conf)))]
+      (let [xtdb-db-config (cond-> (-> (Database$Config.)
+                                       (.log (.getLog conf))
+                                       (.storage (.getStorage conf)))
+                             (.getReadOnlyDatabases conf) (.mode Database$Mode/READ_ONLY))]
         (util/with-close-on-catch [xtdb-db (open-db "xtdb" (assoc base :db-catalog db-cat) xtdb-db-config)]
           (.put !dbs "xtdb" xtdb-db)
 
@@ -151,8 +152,10 @@
             (doseq [[db-name ^Database$Config db-config] (-> (.getSecondaryDatabases (.getBlockCatalog xtdb-db))
                                                              (update-vals Database$Config/fromProto))
                     :when (not= db-name "xtdb")]
-              (util/with-close-on-catch [db (open-db db-name base db-config)]
-                (.put !dbs db-name db))))))
+              (let [db-config (cond-> db-config
+                                (.getReadOnlyDatabases conf) (.mode Database$Mode/READ_ONLY))]
+                (util/with-close-on-catch [db (open-db db-name base db-config)]
+                  (.put !dbs db-name db)))))))
 
       db-cat)))
 

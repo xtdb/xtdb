@@ -79,6 +79,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var garbageCollector: GarbageCollectorConfig = GarbageCollectorConfig(),
         var tracer: TracerConfig = TracerConfig(),
         var txSink: TxSinkConfig? = null,
+        var readOnlyDatabases: Boolean = false,
         var nodeId: String = System.getenv("XTDB_NODE_ID") ?: randomUUID().toString().takeWhile { it != '-' }
     ) {
         var allocator: BufferAllocator? = null
@@ -122,6 +123,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             garbageCollector(GarbageCollectorConfig().also(configure))
 
         fun txSink(txSink: TxSinkConfig) = apply { this.txSink = txSink }
+
+        fun readOnlyDatabases(readOnlyDatabases: Boolean = true) = apply { this.readOnlyDatabases = readOnlyDatabases }
 
         fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
 
