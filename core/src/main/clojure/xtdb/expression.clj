@@ -2,14 +2,12 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.expression.macro :as macro]
-            [xtdb.rewrite :refer [zmatch]]
             [xtdb.serde.types :as st]
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (clojure.lang IPersistentMap Keyword MapEntry)
            (java.lang NumberFormatException)
-           (xtdb.expression PgFormat)
            (java.math RoundingMode)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
@@ -18,9 +16,10 @@
            (java.util.regex Pattern)
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union)
+           (org.apache.arrow.vector.types.pojo ArrowType$Date)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorReader VectorType)
+           (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Poly VectorType$Struct)
+           (xtdb.expression PgFormat)
            (xtdb.operator ProjectionSpec SelectionSpec)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
@@ -302,15 +301,15 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti read-value-code
-  (fn [col-type & args]
-    (types/col-type-head col-type))
+  (fn [^VectorType$Mono vec-type & args]
+    (types/col-type-head (st/<-arrow-type (.getArrowType vec-type))))
   :default ::default,
   :hierarchy #'types/col-type-hierarchy)
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti set-value-code
-  (fn [col-type & args]
-    (types/col-type-head col-type))
+  (fn [^VectorType$Mono vec-type & args]
+    (types/col-type-head (st/<-arrow-type (.getArrowType vec-type))))
   :default ::default
   :hierarchy #'types/col-type-hierarchy)
 
@@ -324,15 +323,15 @@
 (defmethod set-value-code :timestamp-local [_ w idx val] `(.setLong ~w ~idx ~val))
 (defmethod set-value-code :timestamp-tz [_ w idx val] `(.setLong ~w ~idx ~val))
 
-(defmethod set-value-code :date [[_ date-unit] w idx val]
-  (case date-unit
+(defmethod set-value-code :date [^VectorType$Mono vec-type w idx val]
+  (case (st/date-type->unit vec-type)
     :day `(.setInt ~w ~idx ~val)
     :milli `(.setLong ~w ~idx ~val)))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti write-value-code
-  (fn [col-type & args]
-    (types/col-type-head col-type))
+  (fn [^VectorType$Mono vec-type & args]
+    (types/col-type-head (st/<-arrow-type (.getArrowType vec-type))))
   :default ::default,
   :hierarchy #'types/col-type-hierarchy)
 
@@ -356,15 +355,15 @@
   (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" rw-fn)) ~@args))
   (defmethod write-value-code k [_ & args] `(~(symbol (str ".write" rw-fn)) ~@args)))
 
-(defmethod read-value-code :date [[_ date-unit] & args]
-  (case date-unit
-    :day `(.readInt ~@args)
-    :milli `(.readLong ~@args)))
+(defmethod read-value-code :date [vec-type & args]
+  (case (st/date-type->unit vec-type)
+    #xt.arrow/date-unit :day `(.readInt ~@args)
+    #xt.arrow/date-unit :milli `(.readLong ~@args)))
 
-(defmethod write-value-code :date [[_ date-unit] & args]
-  (case date-unit
-    :day `(.writeInt ~@args)
-    :milli `(.writeLong ~@args)))
+(defmethod write-value-code :date [^VectorType$Mono vec-type & args]
+  (case (st/date-type->unit vec-type)
+    #xt.arrow/date-unit :day `(.writeInt ~@args)
+    #xt.arrow/date-unit :milli `(.writeLong ~@args)))
 
 (defmethod write-value-code :oid [_ & args] `(.writeInt ~@args))
 
@@ -376,35 +375,30 @@
   (defmethod write-value-code k [_ & args] `(.writeObject ~@args)))
 
 (defn- continue-read-union [f inner-types reader-sym args]
-  (let [without-null (disj inner-types :null)]
+  (let [without-null (disj inner-types #xt/type :null)]
     (if (empty? without-null)
-      (f :null nil)
+      (f #xt/type :null nil)
 
       (let [nn-code (if (= 1 (count without-null))
                       (let [nn-type (first (seq without-null))]
                         (f nn-type (read-value-code nn-type reader-sym)))
 
                       `(case (.getLeg ~reader-sym ~@args)
-                         ;; https://ask.clojure.org/index.php/13407/method-large-compiling-expression-unfortunate-clause-hashes
-                         :wont-ever-be-this (throw (IllegalStateException.))
-
                          ~@(->> inner-types
-                                (mapcat (fn [col-type]
-                                          ;; HACK
-                                          [(types/col-type->leg col-type)
-                                           (f col-type (read-value-code col-type reader-sym))])))))]
-        (if (contains? inner-types :null)
+                                (mapcat (fn [^VectorType$Mono vec-type]
+                                          [(types/arrow-type->leg (.getArrowType vec-type))
+                                           (f vec-type (read-value-code vec-type reader-sym))])))))]
+        (if (contains? inner-types #xt/type :null)
           `(if (.isNull ~reader-sym ~@args)
-             ~(f :null nil)
+             ~(f #xt/type :null nil)
              ~nn-code)
 
           nn-code)))))
 
-(defn- continue-read [f col-type reader-sym & args]
-  (zmatch col-type
-    [:union inner-types] (continue-read-union f inner-types reader-sym args)
-
-    (f col-type (apply read-value-code col-type reader-sym args))))
+(defn- continue-read [f ^VectorType vec-type reader-sym & args]
+  (if (instance? VectorType$Mono vec-type)
+    (f vec-type (apply read-value-code vec-type reader-sym args))
+    (continue-read-union f (set (.getLegs vec-type)) reader-sym args)))
 
 (def ^:dynamic ^String *snapshot-token* nil)
 (def ^:dynamic ^String *await-token* nil)
@@ -465,21 +459,20 @@
     (if (> (count union-legs) 1)
       (let [box-sym (gensym 'box)
             legs (->> union-legs
-                      (into {} (map (fn [^VectorType vt]
-                                      (let [col-type (types/vec-type->col-type vt)]
-                                        (MapEntry/create col-type (types/col-type->leg col-type)))))))]
+                      (into {} (map (fn [^VectorType$Mono vec-type]
+                                      (MapEntry/create vec-type
+                                                       (types/arrow-type->leg (.getArrowType vec-type)))))))]
         (-> emitted-expr
             (update :batch-bindings (fnil conj []) [box-sym `(ValueBox.)])
             (assoc :continue (fn [f]
                                `(do
                                   ~(continue (fn [return-col-type code]
-                                               (write-value-code return-col-type box-sym (get legs return-col-type) code)))
+                                               (let [return-type (types/col-type->vec-type false return-col-type)]
+                                                 (write-value-code return-type box-sym (get legs return-type) code))))
 
                                   (case (.getLeg ~box-sym)
-                                    ;; https://ask.clojure.org/index.php/13407/method-large-compiling-expression-unfortunate-clause-hashes
-                                    :wont-ever-be-this (throw (IllegalStateException.))
                                     ~@(->> (for [[ret-type leg] legs]
-                                             [leg (f ret-type (read-value-code ret-type box-sym))])
+                                             [leg (f (types/vec-type->col-type ret-type) (read-value-code ret-type box-sym))])
                                            (apply concat))))))))
 
       emitted-expr)))
@@ -490,7 +483,6 @@
                                     :or {extract-vecs-from-rel? true}}]
   (let [return-type (or (get var-types variable)
                         (throw (AssertionError. (str "unknown variable: " variable))))
-        return-col-type (types/vec-type->col-type return-type)
         var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))]
 
     ;; NOTE: when used from metadata exprs, incoming vectors might not exist
@@ -501,7 +493,9 @@
      :continue (fn [f]
                  `(do
                     (.setPos ~var-rdr-sym ~idx)
-                    ~(continue-read f return-col-type var-rdr-sym)))}))
+                    ~(continue-read (fn [vec-type code]
+                                      (f (types/vec-type->col-type vec-type) code))
+                                    return-type var-rdr-sym)))}))
 
 (defmethod codegen-expr :param [{:keys [param]} {:keys [param-types]}]
   (codegen-expr {:op :variable, :variable param, :rel args-sym, :idx 0}
@@ -557,17 +551,15 @@
         children (cons emitted-expr (vals emitted-thens))]
 
     (-> (if-not (contains? expr-rets :null)
-          (let [return-col-type (types/vec-type->col-type then-ret-type)]
-            {:return-type then-ret-type
-             :children children
-             :continue (fn [f]
-                         (continue-expr (fn [local-type code]
-                                          `(let [~local ~code]
-                                             ~((:continue (get emitted-thens local-type)) f)))))})
+          {:return-type then-ret-type
+           :children children
+           :continue (fn [f]
+                       (continue-expr (fn [local-type code]
+                                        `(let [~local ~code]
+                                           ~((:continue (get emitted-thens local-type)) f)))))}
 
           (let [{e-ret-type :return-type, e-cont :continue, :as emitted-else} (codegen-expr else opts)
-                return-type (types/merge-types e-ret-type then-ret-type)
-                return-col-type (types/vec-type->col-type return-type)]
+                return-type (types/merge-types e-ret-type then-ret-type)]
             {:return-type return-type
              :children (cons emitted-else children)
              :continue (fn [f]
@@ -1691,17 +1683,22 @@
      :continue (fn [f]
                  `(do
                     ~@(for [{:keys [val-box], {:keys [continue]} :emitted-expr} emitted-vals]
-                        (continue (fn [val-type code]
-                                    (write-value-code val-type val-box (types/col-type->leg val-type) code))))
+                        (continue (fn [val-col-type code]
+                                    (let [val-type (types/col-type->vec-type false val-col-type)]
+                                      (write-value-code val-type val-box (types/arrow-type->leg (.getArrowType val-type)) code)))))
 
                     ~(f return-col-type map-sym)))}))
 
 (defmethod codegen-call [:get_field :struct] [{[[_ field-types]] :arg-col-types, :keys [field]}]
-  (if-let [val-type (get field-types field)]
-    {:return-type (types/col-type->vec-type false val-type), :return-col-type val-type
-     :continue-call (fn [f [struct-code]]
-                      (continue-read f val-type (-> `(.get ~struct-code ~(str field))
-                                                    (with-tag ValueReader))))}
+  (if-let [val-col-type (get field-types field)]
+    (let [val-type (types/col-type->vec-type false val-col-type)]
+      {:return-type val-type, :return-col-type val-col-type
+       :continue-call (fn [f [struct-code]]
+                        (continue-read (fn [vec-type code]
+                                         (f (types/vec-type->col-type vec-type) code))
+
+                                       val-type (-> `(.get ~struct-code ~(str field))
+                                                    (with-tag ValueReader))))})
 
     {:return-type #xt/type :null, :return-col-type :null, :->call-code (constantly nil)}))
 
@@ -1709,19 +1706,24 @@
   {:return-type #xt/type :null, :return-col-type :null, :->call-code (constantly nil)})
 
 (doseq [[op return-code] [[:== 1] [:<> -1]]]
-  (defmethod codegen-call [op :struct :struct] [{[[_ l-field-types] [_ r-field-types]] :arg-col-types}]
-    (let [fields (set (keys l-field-types))]
+  (defmethod codegen-call [op :struct :struct] [{[^VectorType$Struct l-type, ^VectorType$Struct r-type] :arg-types}]
+    (let [l-field-types (.getChildren l-type)
+          r-field-types (.getChildren r-type)
+          fields (set (keys l-field-types))]
       (if-not (= fields (set (keys r-field-types)))
         {:return-type #xt/type :bool, :return-col-type :bool, :->call-code (constantly (if (= :== op) false true))}
 
         (let [inner-calls (->> (for [field fields]
                                  (MapEntry/create field
-                                                  (->> (for [l-val-type (-> (get l-field-types field) types/flatten-union-types)
-                                                             r-val-type (-> (get r-field-types field) types/flatten-union-types)]
+                                                  (->> (for [l-val-type (VectorType/.getLegs (get l-field-types field))
+                                                             r-val-type (VectorType/.getLegs (get r-field-types field))]
                                                          (MapEntry/create [l-val-type r-val-type]
-                                                                          (if (or (= :null l-val-type) (= :null r-val-type))
+                                                                          (if (or (= #xt/type :null l-val-type) (= #xt/type :null r-val-type))
                                                                             {:return-col-type :null, :return-type #xt/type :null, :->call-code (constantly nil)}
-                                                                            (codegen-call {:f :==, :arg-col-types [l-val-type r-val-type]}))))
+                                                                            (codegen-call {:f :==, 
+                                                                                           :arg-col-types [(types/vec-type->col-type l-val-type)
+                                                                                                           (types/vec-type->col-type r-val-type)]
+                                                                                           :arg-types [l-val-type r-val-type]}))))
                                                        (into {}))))
                                (into {}))
               l-sym (gensym 'l-struct)
@@ -1756,16 +1758,21 @@
                                    ~(f :null nil)
                                    ~(f :bool `(== ~return-code ~res-sym))))))})))))
 
-(defmethod codegen-call [:=== :struct :struct] [{[[_ l-field-types] [_ r-field-types]] :arg-col-types}]
-  (let [fields (set (keys l-field-types))]
+(defmethod codegen-call [:=== :struct :struct] [{[^VectorType$Struct l-type, ^VectorType$Struct r-type] :arg-types}]
+  (let [l-field-types (.getChildren l-type)
+        r-field-types (.getChildren r-type)
+        fields (set (keys l-field-types))]
     (if-not (= fields (set (keys r-field-types)))
       {:return-type #xt/type :bool, :return-col-type :bool, :->call-code (constantly false)}
       (let [inner-calls (->> (for [field fields]
                                (MapEntry/create field
-                                                (->> (for [l-val-type (-> (get l-field-types field) types/flatten-union-types)
-                                                           r-val-type (-> (get r-field-types field) types/flatten-union-types)]
+                                                (->> (for [l-val-type (VectorType/.getLegs (get l-field-types field))
+                                                           r-val-type (VectorType/.getLegs (get r-field-types field))]
                                                        (MapEntry/create [l-val-type r-val-type]
-                                                                        (codegen-call {:f :===, :arg-col-types [l-val-type r-val-type]})))
+                                                                        (codegen-call {:f :===, 
+                                                                                       :arg-types [l-val-type r-val-type]
+                                                                                       :arg-col-types [(types/vec-type->col-type l-val-type)
+                                                                                                       (types/vec-type->col-type r-val-type)]})))
                                                      (into {}))))
                              (into {}))
             l-sym (gensym 'l-struct)
@@ -1882,9 +1889,10 @@
                           ~@(->> emitted-els
                                  (sequence (comp (map-indexed (fn [idx {:keys [el-box], {:keys [continue]} :emitted-el}]
                                                                 [idx (continue (fn [return-col-type code]
-                                                                                 (let [leg (types/col-type->leg return-col-type)]
+                                                                                 (let [return-type (types/col-type->vec-type false return-col-type)
+                                                                                       leg (types/arrow-type->leg (.getArrowType return-type))]
                                                                                    `(do
-                                                                                      ~(write-value-code return-col-type el-box leg code)
+                                                                                      ~(write-value-code return-type el-box leg code)
                                                                                       ~el-box))))]))
                                                  cat))))))))}))
 
@@ -1900,7 +1908,8 @@
                                             (f return-col-type code))))))))
 
 (defmethod codegen-call [:nth :list :int] [{[[_ list-el-type] _n-type] :arg-col-types}]
-  (let [return-col-type (types/merge-col-types list-el-type :null)]
+  (let [return-col-type (types/merge-col-types list-el-type :null)
+        list-el-vec-type (types/col-type->vec-type false list-el-type)]
     {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
      :continue-call (fn [f [list-code n-code]]
                       (let [list-sym (gensym 'list)
@@ -1909,7 +1918,8 @@
                                ~n-sym ~n-code]
                            (if (and (>= ~n-sym 0) (< ~n-sym (.size ~list-sym)))
                              (do
-                               ~(continue-read f list-el-type `(.nth ~list-sym ~n-sym)))
+                               ~(continue-read (fn [vec-type code] (f (types/vec-type->col-type vec-type) code))
+                                               list-el-vec-type `(.nth ~list-sym ~n-sym)))
                              ~(f :null nil)))))}))
 
 (defmethod codegen-call [:nth :any :int] [_]
@@ -1976,16 +1986,21 @@
                                                  (with-tag ListValueReader)))))))}))
 
 (doseq [[op return-code] [[:== 1] [:<> -1]]]
-  (defmethod codegen-call [op :list :list] [{[[_ l-el-type] [_ r-el-type]] :arg-col-types}]
-    (let [n-sym (gensym 'n)
+  (defmethod codegen-call [op :list :list] [{[^VectorType$Listy l-type ^VectorType$Listy r-type] :arg-types}]
+    (let [l-el-type (.getElType l-type)
+          r-el-type (.getElType r-type)
+          n-sym (gensym 'n)
           len-sym (gensym 'len)
           res-sym (gensym 'res)
-          inner-calls (->> (for [l-el-type (types/flatten-union-types l-el-type)
-                                 r-el-type (types/flatten-union-types r-el-type)]
+          inner-calls (->> (for [l-el-type (.getLegs l-el-type)
+                                 r-el-type (.getLegs r-el-type)]
                              (MapEntry/create [l-el-type r-el-type]
-                                              (if (or (= :null l-el-type) (= :null r-el-type))
+                                              (if (or (= #xt/type :null l-el-type) (= #xt/type :null r-el-type))
                                                 {:return-col-type :null, :return-type #xt/type :null, :->call-code (constantly nil)}
-                                                (codegen-call {:f :==, :arg-col-types [l-el-type r-el-type]}))))
+                                                (codegen-call {:f :==,
+                                                               :arg-col-types [(types/vec-type->col-type l-el-type)
+                                                                               (types/vec-type->col-type r-el-type)]
+                                                               :arg-types [l-el-type r-el-type]}))))
                            (into {}))]
 
       {:return-type #xt/type [:? :bool], :return-col-type [:union #{:bool :null}]
@@ -2021,14 +2036,19 @@
                                ~(f :null nil)
                                ~(f :bool `(== ~return-code ~res-sym))))))})))
 
-(defmethod codegen-call [:=== :list :list] [{[[_ l-el-type] [_ r-el-type]] :arg-col-types}]
-  (let [n-sym (gensym 'n)
+(defmethod codegen-call [:=== :list :list] [{[^VectorType$Listy l-type ^VectorType$Listy r-type] :arg-types}]
+  (let [l-el-type (.getElType l-type)
+        r-el-type (.getElType r-type)
+        n-sym (gensym 'n)
         len-sym (gensym 'len)
         res-sym (gensym 'res)
-        inner-calls (->> (for [l-el-type (types/flatten-union-types l-el-type)
-                               r-el-type (types/flatten-union-types r-el-type)]
+        inner-calls (->> (for [l-el-type (.getLegs l-el-type)
+                               r-el-type (.getLegs r-el-type)]
                            (MapEntry/create [l-el-type r-el-type]
-                                            (codegen-call {:f :===, :arg-col-types [l-el-type r-el-type]})))
+                                            (codegen-call {:f :===, 
+                                                           :arg-types [l-el-type r-el-type]
+                                                           :arg-col-types [(types/vec-type->col-type l-el-type)
+                                                                           (types/vec-type->col-type r-el-type)]})))
                          (into {}))]
 
     {:return-type #xt/type :bool, :return-col-type :bool
@@ -2093,20 +2113,21 @@
          (sequence (comp (distinct) cat)))))
 
 (defn write-value-out-code [^VectorType return-type]
-  (if (instance? ArrowType$Union (.getArrowType return-type))
+  (if (instance? VectorType$Poly return-type)
     (let [writer-syms (->> (.getLegs return-type)
-                           (into {} (map (juxt types/vec-type->col-type (fn [_] (gensym 'out-writer))))))]
+                           (into {} (map (juxt identity (fn [_] (gensym 'out-writer))))))]
       {:writer-bindings (into []
-                              (mapcat (fn [[value-type writer-sym]]
+                              (mapcat (fn [[^VectorType$Mono vec-type writer-sym]]
                                         [writer-sym `(.vectorFor ~out-vec-sym
-                                                                 ~(types/arrow-type->leg (st/->arrow-type value-type)))]))
+                                                                 ~(types/arrow-type->leg (.getArrowType vec-type)))]))
                               writer-syms)
 
        :write-value-out! (fn [value-type code]
-                           (write-value-code value-type (get writer-syms value-type) code))})
+                           (let [vec-type (types/col-type->vec-type false value-type)]
+                             (write-value-code vec-type (get writer-syms vec-type) code)))})
 
     {:write-value-out! (fn [value-type code]
-                         (write-value-code value-type out-vec-sym code))}))
+                         (write-value-code (types/col-type->vec-type false value-type) out-vec-sym code))}))
 
 (defn wrap-zone-id-cache-buster [f]
   (fn [expr opts]

@@ -106,6 +106,7 @@
 
       (derive :date-time :any)
 
+      (derive :instant :timestamp-tz)
       (derive :timestamp-tz :date-time) (derive :timestamp-local :date-time) (derive :date :date-time)
       (derive :time-local :any) (derive :interval :any) (derive :duration :any)
       (derive :fixed-size-binary :varbinary) (derive :varbinary :any) (derive :utf8 :any)
@@ -211,7 +212,7 @@
     (col-type-head col-type))
   :default ::default, :hierarchy #'col-type-hierarchy)
 
-(alter-meta! #'col-type->vec-type assoc :tag Field)
+(alter-meta! #'col-type->vec-type assoc :tag VectorType)
 
 (defmethod col-type->vec-type ::default [nullable? col-type]
   (-> (VectorType/scalar (st/->arrow-type col-type))

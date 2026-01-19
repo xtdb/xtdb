@@ -3,7 +3,7 @@
   (:import (java.io Writer)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
-           (xtdb.arrow ArrowTypes VectorType VectorType$Listy VectorType$Maybe VectorType$Null VectorType$Poly VectorType$Scalar VectorType$Struct)
+           (xtdb.arrow ArrowTypes VectorType VectorType$Listy VectorType$Maybe VectorType$Null VectorType$Poly VectorType$Scalar VectorType$Struct VectorType$Mono)
            (xtdb.vector.extensions IntervalMDMType KeywordType OidType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (defprotocol FromArrowType
@@ -34,7 +34,10 @@
     :day DateUnit/DAY
     :milli DateUnit/MILLISECOND))
 
-(defn- time-unit->kw [unit]
+(defn date-type->unit ^org.apache.arrow.vector.types.DateUnit [^VectorType$Mono mono-type]
+  (ArrowType$Date/.getUnit (.getArrowType mono-type)))
+
+(defn time-unit->kw [unit]
   (case-enum unit
     TimeUnit/SECOND :second
     TimeUnit/MILLISECOND :milli
@@ -48,7 +51,7 @@
     :micro TimeUnit/MICROSECOND
     :nano TimeUnit/NANOSECOND))
 
-(defn- interval-unit->kw [unit]
+(defn interval-unit->kw [unit]
   (case-enum unit
     IntervalUnit/DAY_TIME :day-time
     IntervalUnit/MONTH_DAY_NANO :month-day-nano

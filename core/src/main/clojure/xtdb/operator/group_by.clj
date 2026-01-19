@@ -90,7 +90,7 @@
                                   (.ensureCapacity ~acc-sym (inc ~group-idx-sym))
 
                                   ~(continue (fn [acc-type acc-code]
-                                               (expr/set-value-code acc-type acc-sym group-idx-sym acc-code)))))))
+                                               (expr/set-value-code (types/col-type->vec-type false acc-type) acc-sym group-idx-sym acc-code)))))))
                          #_(doto clojure.pprint/pprint) ;; <<no-commit>>
                          eval)}))
       (util/lru-memoize))) ;; <<no-commit>>
