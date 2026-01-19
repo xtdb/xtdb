@@ -29,6 +29,17 @@
            (take n)
            (mapv #(nth available %))))))
 
+(defn- random-window
+  "Pick a random time window of given duration within the data range"
+  [^Random rng ^Instant min-time ^Instant max-time ^Duration window-duration]
+  (let [range-millis (- (.toEpochMilli max-time) (.toEpochMilli min-time))
+        window-millis (.toMillis window-duration)
+        max-start (max 0 (- range-millis window-millis))
+        start-offset (if (pos? max-start) (.nextLong rng max-start) 0)
+        window-start (Instant/ofEpochMilli (+ (.toEpochMilli min-time) start-offset))
+        window-end (.plus window-start window-duration)]
+    [window-start window-end]))
+
 (defmethod b/cli-flags :tsbs-iot [_]
   [[nil "--devices DEVICES"
     :id :devices
@@ -142,50 +153,26 @@
                        ;; Pick random fleet for this benchmark run
                        fleet (random-fleet rng)
                        ;; Pick some random trucks for specific queries
-                       sample-trucks (random-trucks rng truck-names 5)]
+                       sample-trucks (random-trucks rng truck-names 5)
+                       min-time (:min_time time-bounds)
+                       max-time (:max_time time-bounds)]
                    (log/info (format "Query setup: %d trucks, fleet=%s, time=%s to %s"
-                                     (count truck-names) fleet
-                                     (:min_time time-bounds) (:max_time time-bounds)))
+                                     (count truck-names) fleet min-time max-time))
                    (swap! !state assoc
                           :truck-names truck-names
                           :fleet fleet
                           :sample-trucks sample-trucks
-                          :min-time (:min_time time-bounds)
-                          :max-time (:max_time time-bounds))
+                          :min-time min-time
+                          :max-time max-time)
                    {:truck-count (count truck-names)
                     :fleet fleet
                     :sample-trucks sample-trucks}))}
 
-           ;; Query phase - exercise different query patterns
-           {:t :call
-            :stage :query-counts
-            :f (fn [{:keys [node]}]
-                 (let [readings-count (:row-count (first (xt/q node "SELECT COUNT(*) row_count FROM readings FOR ALL VALID_TIME")))
-                       diagnostics-count (:row-count (first (xt/q node "SELECT COUNT(*) row_count FROM diagnostics FOR ALL VALID_TIME")))
-                       total-count (+ readings-count diagnostics-count)]
-                   (log/info (format "TSBS-IoT counts: %,d readings + %,d diagnostics = %,d total"
-                                     readings-count diagnostics-count total-count))
-                   {:readings-count readings-count
-                    :diagnostics-count diagnostics-count
-                    :total-count total-count}))}
+           ;; ============ TSBS IoT Queries (all 13) ============
 
-           ;; Last location per truck in a fleet (point query - latest valid-time per entity)
+           ;; 1. LastLocByTruck - last location for specific trucks
            {:t :call
-            :stage :query-last-loc
-            :f (fn [{:keys [node !state]}]
-                 (let [{:keys [fleet]} @!state
-                       results (xt/q node
-                                     ["SELECT t.name, t.driver, r.longitude, r.latitude
-                                       FROM trucks t
-                                       JOIN readings r ON r._id = t._id
-                                       WHERE t.fleet = ?
-                                       ORDER BY t.name" fleet])]
-                   (log/info (format "Last location query (fleet=%s): %d trucks" fleet (count results)))
-                   {:fleet fleet :truck-count (count results)}))}
-
-           ;; Last location for specific trucks (parameterized truck selection)
-           {:t :call
-            :stage :query-last-loc-trucks
+            :stage :last-loc-by-truck
             :f (fn [{:keys [node !state]}]
                  (let [{:keys [sample-trucks]} @!state
                        results (xt/q node
@@ -195,28 +182,43 @@
                                              WHERE t.name IN (SELECT * FROM UNNEST(?))
                                              ORDER BY t.name"]
                                            [sample-trucks]))]
-                   (log/info (format "Last location for %d specific trucks: %d results"
+                   (log/info (format "last-loc-by-truck: %d trucks queried, %d results"
                                      (count sample-trucks) (count results)))
-                   {:queried-trucks sample-trucks :result-count (count results)}))}
+                   {:queried-trucks (count sample-trucks) :result-count (count results)}))}
 
-           ;; Trucks with low fuel (threshold query on latest diagnostic)
+           ;; 2. LastLocPerTruck - last location for all trucks in a fleet
            {:t :call
-            :stage :query-low-fuel
+            :stage :last-loc-per-truck
+            :f (fn [{:keys [node !state]}]
+                 (let [{:keys [fleet]} @!state
+                       results (xt/q node
+                                     ["SELECT t.name, t.driver, r.longitude, r.latitude
+                                       FROM trucks t
+                                       JOIN readings r ON r._id = t._id
+                                       WHERE t.name IS NOT NULL AND t.fleet = ?
+                                       ORDER BY t.name" fleet])]
+                   (log/info (format "last-loc-per-truck (fleet=%s): %d trucks" fleet (count results)))
+                   {:fleet fleet :truck-count (count results)}))}
+
+           ;; 3. TrucksWithLowFuel - trucks with fuel < 10%
+           {:t :call
+            :stage :low-fuel
             :f (fn [{:keys [node !state]}]
                  (let [{:keys [fleet]} @!state
                        results (xt/q node
                                      ["SELECT t.name, t.driver, d.fuel_state
                                        FROM trucks t
                                        JOIN diagnostics d ON d._id = t._id
-                                       WHERE t.fleet = ?
+                                       WHERE t.name IS NOT NULL
+                                         AND t.fleet = ?
                                          AND d.fuel_state < 0.1
                                        ORDER BY d.fuel_state" fleet])]
-                   (log/info (format "Low fuel query (fleet=%s): %d trucks with <10%% fuel" fleet (count results)))
-                   {:fleet fleet :low-fuel-count (count results)}))}
+                   (log/info (format "low-fuel (fleet=%s): %d trucks" fleet (count results)))
+                   {:fleet fleet :count (count results)}))}
 
-           ;; Trucks with high load (threshold query - load vs capacity)
+           ;; 4. TrucksWithHighLoad - trucks with load > 90% capacity
            {:t :call
-            :stage :query-high-load
+            :stage :high-load
             :f (fn [{:keys [node !state]}]
                  (let [{:keys [fleet]} @!state
                        results (xt/q node
@@ -224,49 +226,222 @@
                                               (d.current_load / t.load_capacity) AS load_pct
                                        FROM trucks t
                                        JOIN diagnostics d ON d._id = t._id
-                                       WHERE t.fleet = ?
+                                       WHERE t.name IS NOT NULL
+                                         AND t.fleet = ?
                                          AND d.current_load / t.load_capacity > 0.9
                                        ORDER BY load_pct DESC" fleet])]
-                   (log/info (format "High load query (fleet=%s): %d trucks with >90%% load" fleet (count results)))
-                   {:fleet fleet :high-load-count (count results)}))}
+                   (log/info (format "high-load (fleet=%s): %d trucks" fleet (count results)))
+                   {:fleet fleet :count (count results)}))}
 
-           ;; Stationary trucks in time window (time-windowed aggregation)
+           ;; 5. StationaryTrucks - trucks with avg velocity < 1 in 10-min window
            {:t :call
-            :stage :query-stationary
+            :stage :stationary-trucks
             :f (fn [{:keys [node !state]}]
-                 (let [{:keys [fleet min-time max-time]} @!state
-                       ;; Use a 10-minute window from the middle of the time range
-                       mid-time (Instant/ofEpochMilli (/ (+ (.toEpochMilli ^Instant min-time)
-                                                           (.toEpochMilli ^Instant max-time)) 2))
-                       window-start (.minus mid-time (Duration/ofMinutes 5))
-                       window-end (.plus mid-time (Duration/ofMinutes 5))
+                 (let [{:keys [fleet min-time max-time rng]} @!state
+                       [window-start window-end] (random-window rng min-time max-time (Duration/ofMinutes 10))
                        results (xt/q node
                                      ["SELECT t.name, t.driver, AVG(r.velocity) AS avg_velocity
                                        FROM trucks t
                                        JOIN readings FOR VALID_TIME BETWEEN ? AND ? AS r ON r._id = t._id
-                                       WHERE t.fleet = ?
+                                       WHERE t.name IS NOT NULL AND t.fleet = ?
                                        GROUP BY t.name, t.driver
                                        HAVING AVG(r.velocity) < 1
                                        ORDER BY avg_velocity"
                                       window-start window-end fleet])]
-                   (log/info (format "Stationary trucks (fleet=%s, window=%s to %s): %d trucks"
+                   (log/info (format "stationary-trucks (fleet=%s, %s to %s): %d trucks"
                                      fleet window-start window-end (count results)))
-                   {:fleet fleet :window-start window-start :window-end window-end
-                    :stationary-count (count results)}))}
+                   {:fleet fleet :window [window-start window-end] :count (count results)}))}
 
-           ;; Average load per fleet per model (analytics query - full scan)
+           ;; 6. TrucksWithLongDrivingSessions - drove > 220 mins in 4 hours (stopped < 20 mins)
            {:t :call
-            :stage :query-avg-load
+            :stage :long-driving-sessions
+            :f (fn [{:keys [node !state]}]
+                 (let [{:keys [fleet min-time max-time rng]} @!state
+                       [window-start window-end] (random-window rng min-time max-time (Duration/ofHours 4))
+                       ;; Count 10-min periods with avg velocity > 1, need > 22 (220 mins of driving)
+                       results (xt/q node
+                                     ["WITH driving_periods AS (
+                                         SELECT t.name, t.driver,
+                                                DATE_TRUNC(HOUR, r._valid_from) AS hour_bucket,
+                                                AVG(r.velocity) AS avg_vel
+                                         FROM trucks t
+                                         JOIN readings FOR VALID_TIME BETWEEN ? AND ? AS r ON r._id = t._id
+                                         WHERE t.name IS NOT NULL AND t.fleet = ?
+                                         GROUP BY t.name, t.driver, DATE_TRUNC(HOUR, r._valid_from)
+                                         HAVING AVG(r.velocity) > 1
+                                       )
+                                       SELECT name, driver, COUNT(*) AS driving_hours
+                                       FROM driving_periods
+                                       GROUP BY name, driver
+                                       HAVING COUNT(*) >= 3
+                                       ORDER BY driving_hours DESC"
+                                      window-start window-end fleet])]
+                   (log/info (format "long-driving-sessions (fleet=%s): %d trucks" fleet (count results)))
+                   {:fleet fleet :count (count results)}))}
+
+           ;; 7. TrucksWithLongDailySessions - drove > 10 hours in 24 hours
+           {:t :call
+            :stage :long-daily-sessions
+            :f (fn [{:keys [node !state]}]
+                 (let [{:keys [fleet min-time max-time rng]} @!state
+                       [window-start window-end] (random-window rng min-time max-time (Duration/ofHours 24))
+                       results (xt/q node
+                                     ["WITH driving_periods AS (
+                                         SELECT t.name, t.driver,
+                                                DATE_TRUNC(HOUR, r._valid_from) AS hour_bucket,
+                                                AVG(r.velocity) AS avg_vel
+                                         FROM trucks t
+                                         JOIN readings FOR VALID_TIME BETWEEN ? AND ? AS r ON r._id = t._id
+                                         WHERE t.name IS NOT NULL AND t.fleet = ?
+                                         GROUP BY t.name, t.driver, DATE_TRUNC(HOUR, r._valid_from)
+                                         HAVING AVG(r.velocity) > 1
+                                       )
+                                       SELECT name, driver, COUNT(*) AS driving_hours
+                                       FROM driving_periods
+                                       GROUP BY name, driver
+                                       HAVING COUNT(*) >= 10
+                                       ORDER BY driving_hours DESC"
+                                      window-start window-end fleet])]
+                   (log/info (format "long-daily-sessions (fleet=%s): %d trucks" fleet (count results)))
+                   {:fleet fleet :count (count results)}))}
+
+           ;; 8. AvgVsProjectedFuelConsumption - actual vs nominal fuel per fleet
+           {:t :call
+            :stage :avg-vs-projected-fuel
+            :f (fn [{:keys [node]}]
+                 (let [results (xt/q node
+                                     "SELECT t.fleet,
+                                             AVG(r.fuel_consumption) AS avg_fuel_consumption,
+                                             AVG(t.nominal_fuel_consumption) AS projected_fuel_consumption
+                                      FROM trucks t
+                                      JOIN readings FOR ALL VALID_TIME AS r ON r._id = t._id
+                                      WHERE t.fleet IS NOT NULL
+                                        AND t.nominal_fuel_consumption IS NOT NULL
+                                        AND r.velocity > 1
+                                      GROUP BY t.fleet
+                                      ORDER BY t.fleet")]
+                   (log/info (format "avg-vs-projected-fuel: %d fleets" (count results)))
+                   {:fleet-count (count results) :results results}))}
+
+           ;; 9. AvgDailyDrivingDuration - average hours driven per day per driver
+           {:t :call
+            :stage :avg-daily-driving-duration
+            :f (fn [{:keys [node]}]
+                 (let [results (xt/q node
+                                     "WITH driving_hours AS (
+                                        SELECT t.name, t.driver, t.fleet,
+                                               DATE_TRUNC(DAY, r._valid_from) AS day,
+                                               DATE_TRUNC(HOUR, r._valid_from) AS hour_bucket
+                                        FROM trucks t
+                                        JOIN readings FOR ALL VALID_TIME AS r ON r._id = t._id
+                                        WHERE t.name IS NOT NULL
+                                        GROUP BY t.name, t.driver, t.fleet,
+                                                 DATE_TRUNC(DAY, r._valid_from),
+                                                 DATE_TRUNC(HOUR, r._valid_from)
+                                        HAVING AVG(r.velocity) > 1
+                                      ),
+                                      daily_hours AS (
+                                        SELECT name, driver, fleet, day, COUNT(*) AS hours_driven
+                                        FROM driving_hours
+                                        GROUP BY name, driver, fleet, day
+                                      )
+                                      SELECT fleet, name, driver, AVG(hours_driven) AS avg_daily_hours
+                                      FROM daily_hours
+                                      GROUP BY fleet, name, driver
+                                      ORDER BY fleet, name")]
+                   (log/info (format "avg-daily-driving-duration: %d drivers" (count results)))
+                   {:driver-count (count results)}))}
+
+           ;; 10. AvgDailyDrivingSession - avg session length per driver per day (state transitions)
+           {:t :call
+            :stage :avg-daily-driving-session
+            :f (fn [{:keys [node]}]
+                 ;; Simplified: count driving periods (velocity > 5) per day
+                 (let [results (xt/q node
+                                     "WITH driver_states AS (
+                                        SELECT t.name,
+                                               DATE_TRUNC(DAY, r._valid_from) AS day,
+                                               DATE_TRUNC(HOUR, r._valid_from) AS hour_bucket,
+                                               AVG(r.velocity) > 5 AS driving
+                                        FROM trucks t
+                                        JOIN readings FOR ALL VALID_TIME AS r ON r._id = t._id
+                                        WHERE t.name IS NOT NULL
+                                        GROUP BY t.name, DATE_TRUNC(DAY, r._valid_from), DATE_TRUNC(HOUR, r._valid_from)
+                                      )
+                                      SELECT name, day, COUNT(*) FILTER (WHERE driving) AS driving_hours
+                                      FROM driver_states
+                                      GROUP BY name, day
+                                      HAVING COUNT(*) FILTER (WHERE driving) > 0
+                                      ORDER BY name, day")]
+                   (log/info (format "avg-daily-driving-session: %d driver-days" (count results)))
+                   {:driver-day-count (count results)}))}
+
+           ;; 11. AvgLoad - average load per truck model per fleet
+           {:t :call
+            :stage :avg-load
             :f (fn [{:keys [node]}]
                  (let [results (xt/q node
                                      "SELECT t.fleet, t.model, t.load_capacity,
                                              AVG(d.current_load / t.load_capacity) AS avg_load_pct
                                       FROM trucks t
                                       JOIN diagnostics FOR ALL VALID_TIME AS d ON d._id = t._id
+                                      WHERE t.name IS NOT NULL
                                       GROUP BY t.fleet, t.model, t.load_capacity
                                       ORDER BY t.fleet, t.model")]
-                   (log/info (format "Avg load query: %d fleet/model combinations" (count results)))
-                   {:fleet-model-count (count results)}))}]})
+                   (log/info (format "avg-load: %d fleet/model combinations" (count results)))
+                   {:combination-count (count results)}))}
+
+           ;; 12. DailyTruckActivity - hours active per day per fleet/model
+           {:t :call
+            :stage :daily-activity
+            :f (fn [{:keys [node]}]
+                 (let [results (xt/q node
+                                     "WITH active_hours AS (
+                                        SELECT t.fleet, t.model,
+                                               DATE_TRUNC(DAY, d._valid_from) AS day,
+                                               DATE_TRUNC(HOUR, d._valid_from) AS hour_bucket,
+                                               AVG(d.status) AS avg_status
+                                        FROM trucks t
+                                        JOIN diagnostics FOR ALL VALID_TIME AS d ON d._id = t._id
+                                        WHERE t.name IS NOT NULL
+                                        GROUP BY t.fleet, t.model,
+                                                 DATE_TRUNC(DAY, d._valid_from),
+                                                 DATE_TRUNC(HOUR, d._valid_from)
+                                        HAVING AVG(d.status) < 1
+                                      )
+                                      SELECT fleet, model, day, COUNT(*) AS active_hours
+                                      FROM active_hours
+                                      GROUP BY fleet, model, day
+                                      ORDER BY day, fleet, model")]
+                   (log/info (format "daily-activity: %d fleet/model/day combinations" (count results)))
+                   {:combination-count (count results)}))}
+
+           ;; 13. TruckBreakdownFrequency - breakdown events per model
+           {:t :call
+            :stage :breakdown-frequency
+            :f (fn [{:keys [node]}]
+                 ;; Count transitions from status > 0.5 to status < 0.5 per model
+                 (let [results (xt/q node
+                                     "WITH hourly_status AS (
+                                        SELECT t.model, t._id AS truck_id,
+                                               DATE_TRUNC(HOUR, d._valid_from) AS hour_bucket,
+                                               AVG(d.status) >= 0.5 AS operational
+                                        FROM trucks t
+                                        JOIN diagnostics FOR ALL VALID_TIME AS d ON d._id = t._id
+                                        WHERE t.name IS NOT NULL
+                                        GROUP BY t.model, t._id, DATE_TRUNC(HOUR, d._valid_from)
+                                      ),
+                                      breakdown_events AS (
+                                        SELECT model, COUNT(*) FILTER (WHERE NOT operational) AS breakdown_hours
+                                        FROM hourly_status
+                                        GROUP BY model
+                                      )
+                                      SELECT model, breakdown_hours
+                                      FROM breakdown_events
+                                      WHERE breakdown_hours > 0
+                                      ORDER BY breakdown_hours DESC")]
+                   (log/info (format "breakdown-frequency: %d models with breakdowns" (count results)))
+                   {:model-count (count results) :results results}))}]})
 
 ;; not intended to be run as a test - more for ease of REPL dev
 (t/deftest ^:benchmark run-iot
