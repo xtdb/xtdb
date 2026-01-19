@@ -6,7 +6,28 @@
             [xtdb.time :as time]
             [xtdb.tsbs :as tsbs]
             [xtdb.util :as util])
-  (:import (java.time Duration LocalTime)))
+  (:import (java.time Duration Instant LocalTime)
+           (java.util Random)))
+
+;; TSBS fleet choices (from pkg/data/usecases/iot/truck.go)
+(def fleet-choices ["East" "West" "North" "South"])
+
+(defn- random-fleet
+  "Pick a random fleet using the benchmark seed"
+  [^Random rng]
+  (nth fleet-choices (.nextInt rng (count fleet-choices))))
+
+(defn- random-trucks
+  "Pick n random truck names from the available trucks"
+  [^Random rng truck-names n]
+  (let [available (vec truck-names)
+        cnt (count available)]
+    (if (<= cnt n)
+      available
+      (->> (repeatedly n #(.nextInt rng cnt))
+           distinct
+           (take n)
+           (mapv #(nth available %))))))
 
 (defmethod b/cli-flags :tsbs-iot [_]
   [[nil "--devices DEVICES"
@@ -62,6 +83,7 @@
                 :devices devices
                 :timestamp-start timestamp-start
                 :timestamp-end timestamp-end}
+   :->state (fn [_] {:!state (atom {:rng (Random. seed)})})
    :tasks [{:t :do
             :stage :ingest
             :tasks [(letfn [(submit-txs [node txs]
@@ -106,6 +128,34 @@
                      :stage :compact
                      :f (fn [{:keys [node]}] (b/compact! node))}]}
 
+           ;; Query setup - discover data characteristics for parameterized queries
+           {:t :call
+            :stage :query-setup
+            :f (fn [{:keys [node !state]}]
+                 (let [rng (:rng @!state)
+                       ;; Get all truck names for random selection
+                       truck-names (mapv :name (xt/q node "SELECT name FROM trucks ORDER BY name"))
+                       ;; Get time range from readings
+                       time-bounds (first (xt/q node
+                                                "SELECT MIN(_valid_from) AS min_time, MAX(_valid_from) AS max_time
+                                                 FROM readings FOR ALL VALID_TIME"))
+                       ;; Pick random fleet for this benchmark run
+                       fleet (random-fleet rng)
+                       ;; Pick some random trucks for specific queries
+                       sample-trucks (random-trucks rng truck-names 5)]
+                   (log/info (format "Query setup: %d trucks, fleet=%s, time=%s to %s"
+                                     (count truck-names) fleet
+                                     (:min_time time-bounds) (:max_time time-bounds)))
+                   (swap! !state assoc
+                          :truck-names truck-names
+                          :fleet fleet
+                          :sample-trucks sample-trucks
+                          :min-time (:min_time time-bounds)
+                          :max-time (:max_time time-bounds))
+                   {:truck-count (count truck-names)
+                    :fleet fleet
+                    :sample-trucks sample-trucks}))}
+
            ;; Query phase - exercise different query patterns
            {:t :call
             :stage :query-counts
@@ -119,66 +169,92 @@
                     :diagnostics-count diagnostics-count
                     :total-count total-count}))}
 
-           ;; Last location per truck (point query - latest valid-time per entity)
+           ;; Last location per truck in a fleet (point query - latest valid-time per entity)
            {:t :call
             :stage :query-last-loc
-            :f (fn [{:keys [node]}]
-                 (let [results (xt/q node
-                                     "SELECT t.name, t.driver, r.longitude, r.latitude
-                                      FROM trucks t
-                                      JOIN readings r ON r._id = t._id
-                                      WHERE t.fleet = 'South'
-                                      ORDER BY t.name")]
-                   (log/info (format "Last location query: %d trucks" (count results)))
-                   {:truck-count (count results)}))}
+            :f (fn [{:keys [node !state]}]
+                 (let [{:keys [fleet]} @!state
+                       results (xt/q node
+                                     ["SELECT t.name, t.driver, r.longitude, r.latitude
+                                       FROM trucks t
+                                       JOIN readings r ON r._id = t._id
+                                       WHERE t.fleet = ?
+                                       ORDER BY t.name" fleet])]
+                   (log/info (format "Last location query (fleet=%s): %d trucks" fleet (count results)))
+                   {:fleet fleet :truck-count (count results)}))}
+
+           ;; Last location for specific trucks (parameterized truck selection)
+           {:t :call
+            :stage :query-last-loc-trucks
+            :f (fn [{:keys [node !state]}]
+                 (let [{:keys [sample-trucks]} @!state
+                       results (xt/q node
+                                     (into ["SELECT t.name, t.driver, r.longitude, r.latitude
+                                             FROM trucks t
+                                             JOIN readings r ON r._id = t._id
+                                             WHERE t.name IN (SELECT * FROM UNNEST(?))
+                                             ORDER BY t.name"]
+                                           [sample-trucks]))]
+                   (log/info (format "Last location for %d specific trucks: %d results"
+                                     (count sample-trucks) (count results)))
+                   {:queried-trucks sample-trucks :result-count (count results)}))}
 
            ;; Trucks with low fuel (threshold query on latest diagnostic)
            {:t :call
             :stage :query-low-fuel
-            :f (fn [{:keys [node]}]
-                 (let [results (xt/q node
-                                     "SELECT t.name, t.driver, d.fuel_state
-                                      FROM trucks t
-                                      JOIN diagnostics d ON d._id = t._id
-                                      WHERE t.fleet = 'South'
-                                        AND d.fuel_state < 0.1
-                                      ORDER BY d.fuel_state")]
-                   (log/info (format "Low fuel query: %d trucks with <10%% fuel" (count results)))
-                   {:low-fuel-count (count results)}))}
+            :f (fn [{:keys [node !state]}]
+                 (let [{:keys [fleet]} @!state
+                       results (xt/q node
+                                     ["SELECT t.name, t.driver, d.fuel_state
+                                       FROM trucks t
+                                       JOIN diagnostics d ON d._id = t._id
+                                       WHERE t.fleet = ?
+                                         AND d.fuel_state < 0.1
+                                       ORDER BY d.fuel_state" fleet])]
+                   (log/info (format "Low fuel query (fleet=%s): %d trucks with <10%% fuel" fleet (count results)))
+                   {:fleet fleet :low-fuel-count (count results)}))}
 
            ;; Trucks with high load (threshold query - load vs capacity)
            {:t :call
             :stage :query-high-load
-            :f (fn [{:keys [node]}]
-                 (let [results (xt/q node
-                                     "SELECT t.name, t.driver, d.current_load, t.load_capacity,
-                                             (d.current_load / t.load_capacity) AS load_pct
-                                      FROM trucks t
-                                      JOIN diagnostics d ON d._id = t._id
-                                      WHERE t.fleet = 'South'
-                                        AND d.current_load / t.load_capacity > 0.9
-                                      ORDER BY load_pct DESC")]
-                   (log/info (format "High load query: %d trucks with >90%% load" (count results)))
-                   {:high-load-count (count results)}))}
+            :f (fn [{:keys [node !state]}]
+                 (let [{:keys [fleet]} @!state
+                       results (xt/q node
+                                     ["SELECT t.name, t.driver, d.current_load, t.load_capacity,
+                                              (d.current_load / t.load_capacity) AS load_pct
+                                       FROM trucks t
+                                       JOIN diagnostics d ON d._id = t._id
+                                       WHERE t.fleet = ?
+                                         AND d.current_load / t.load_capacity > 0.9
+                                       ORDER BY load_pct DESC" fleet])]
+                   (log/info (format "High load query (fleet=%s): %d trucks with >90%% load" fleet (count results)))
+                   {:fleet fleet :high-load-count (count results)}))}
 
-           ;; Stationary trucks (time-windowed aggregation)
-           ;; Find trucks with avg velocity < 1 in a 10-minute window
+           ;; Stationary trucks in time window (time-windowed aggregation)
            {:t :call
             :stage :query-stationary
-            :f (fn [{:keys [node]}]
-                 (let [;; Query over all valid time, group by truck and 10-min buckets
+            :f (fn [{:keys [node !state]}]
+                 (let [{:keys [fleet min-time max-time]} @!state
+                       ;; Use a 10-minute window from the middle of the time range
+                       mid-time (Instant/ofEpochMilli (/ (+ (.toEpochMilli ^Instant min-time)
+                                                           (.toEpochMilli ^Instant max-time)) 2))
+                       window-start (.minus mid-time (Duration/ofMinutes 5))
+                       window-end (.plus mid-time (Duration/ofMinutes 5))
                        results (xt/q node
-                                     "SELECT t.name, t.driver, AVG(r.velocity) AS avg_velocity
-                                      FROM trucks t
-                                      JOIN readings FOR ALL VALID_TIME AS r ON r._id = t._id
-                                      WHERE t.fleet = 'South'
-                                      GROUP BY t.name, t.driver
-                                      HAVING AVG(r.velocity) < 1
-                                      ORDER BY avg_velocity")]
-                   (log/info (format "Stationary trucks query: %d trucks with avg velocity < 1" (count results)))
-                   {:stationary-count (count results)}))}
+                                     ["SELECT t.name, t.driver, AVG(r.velocity) AS avg_velocity
+                                       FROM trucks t
+                                       JOIN readings FOR VALID_TIME BETWEEN ? AND ? AS r ON r._id = t._id
+                                       WHERE t.fleet = ?
+                                       GROUP BY t.name, t.driver
+                                       HAVING AVG(r.velocity) < 1
+                                       ORDER BY avg_velocity"
+                                      window-start window-end fleet])]
+                   (log/info (format "Stationary trucks (fleet=%s, window=%s to %s): %d trucks"
+                                     fleet window-start window-end (count results)))
+                   {:fleet fleet :window-start window-start :window-end window-end
+                    :stationary-count (count results)}))}
 
-           ;; Average load per fleet per model (analytics query)
+           ;; Average load per fleet per model (analytics query - full scan)
            {:t :call
             :stage :query-avg-load
             :f (fn [{:keys [node]}]
