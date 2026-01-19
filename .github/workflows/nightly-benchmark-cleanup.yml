@@ -1,6 +1,6 @@
 name: Nightly Benchmark Cleanup
 run-name: >-
-  Benchmark Cleanup: ${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType == 'clickbench' && 'ClickBench' || inputs.benchType == 'tsbs-iot' && 'TSBS IoT' || inputs.benchType }}
+  Benchmark Cleanup: ${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType == 'clickbench' && 'ClickBench' || inputs.benchType == 'tsbs-iot' && 'TSBS IoT' || inputs.benchType == 'patch' && 'Patch' || inputs.benchType }}
 
 on:
   workflow_dispatch:
@@ -16,6 +16,7 @@ on:
           - yakbench
           - clickbench
           - tsbs-iot
+          - patch
       status:
         description: 'Status of the benchmark'
         required: true
@@ -520,6 +521,7 @@ jobs:
             auctionmark) bench_friendly="AuctionMark" ;;
             readings) bench_friendly="Readings" ;;
             yakbench) bench_friendly="Yakbench" ;;
+            patch) bench_friendly="Patch" ;;
             *) bench_friendly="$bench" ;;
           esac
 
@@ -587,6 +589,7 @@ jobs:
           [ "$type" = "auctionmark" ] && type="AuctionMark"
           [ "$type" = "readings" ] && type="Readings"
           [ "$type" = "yakbench" ] && type="Yakbench"
+          [ "$type" = "patch" ] && type="Patch"
 
           status="${{ steps.derive.outputs.bench_status || inputs.status }}"
           if [ "$status" = "success" ]; then
@@ -700,6 +703,7 @@ jobs:
             auctionmark) FRIENDLY_NAME="AuctionMark" ;;
             readings) FRIENDLY_NAME="Readings" ;;
             yakbench) FRIENDLY_NAME="Yakbench" ;;
+            patch) FRIENDLY_NAME="Patch" ;;
             *) FRIENDLY_NAME="$BENCH_TYPE" ;;
           esac
 

@@ -71,6 +71,7 @@
 
   {:title "PATCH Performance Benchmark"
    :benchmark-type :patch
+   :parameters {:doc-count doc-count :patch-count patch-count}
    :seed seed
    :tasks [{:t :do
             :stage :ingest
@@ -79,14 +80,15 @@
                                :stage :submit-docs
                                :f (fn [{:keys [node] :as worker}]
                                     (log/info "Inserting" doc-count "documents...")
-                                    (doseq [batch-start (range 0 doc-count 1000)]
-                                      (when (zero? (mod batch-start 10000))
-                                        (log/info (format "Batch - %s / %s" (/ batch-start 1000) (/ doc-count 1000))))
-                                      (xt/submit-tx node (mapv (fn [i]
-                                                                 [:put-docs :foo {:xt/id (+ i batch-start)
-                                                                                  :a (str "a" (+ i batch-start))
-                                                                                  :data (b/random-str worker 100 500)}])
-                                                               (range 0 1000))))
+                                    (let [batch-size 500]
+                                      (doseq [batch-start (range 0 doc-count batch-size)]
+                                        (when (zero? (mod batch-start 10000))
+                                          (log/info (format "Batch - %s / %s" (/ batch-start batch-size) (/ doc-count batch-size))))
+                                        (xt/submit-tx node (mapv (fn [i]
+                                                                   [:put-docs :foo {:xt/id (+ i batch-start)
+                                                                                    :a (str "a" (+ i batch-start))
+                                                                                    :data (b/random-str worker 100 500)}])
+                                                                 (range 0 batch-size)))))
                                     (log/info "Inserted" doc-count "documents"))}])
 
                            [{:t :do

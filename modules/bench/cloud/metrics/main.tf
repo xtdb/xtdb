@@ -140,6 +140,19 @@ locals {
       metric_name     = "duration_minutes"
       dashboard_idx   = 5
     }
+    patch = {
+      name            = "PATCH Performance Benchmark"
+      display_name    = "Patch"
+      logic_app_name  = var.patch_anomaly_logic_app_name
+      enabled         = var.patch_anomaly_alert_enabled
+      param_name      = "doc-count"
+      param_path      = "parameters['doc-count']"
+      param_value     = var.patch_anomaly_doc_count
+      param_is_string = false
+      metric_path     = "'time-taken-ms'"
+      metric_name     = "duration_minutes"
+      dashboard_idx   = 6
+    }
   }
 
   # Dashboard part positions (6 cols wide, 4 rows tall each)
@@ -150,6 +163,7 @@ locals {
     3 = { x = 6, y = 4 }
     4 = { x = 0, y = 8 }
     5 = { x = 6, y = 8 }
+    6 = { x = 0, y = 12 }
   }
 
   # Filter expressions per benchmark (string params quoted, numeric params use todouble)

@@ -219,3 +219,22 @@ variable "ingest_tx_overhead_anomaly_doc_count" {
   type        = number
   default     = 100000
 }
+
+# Patch anomaly detection configuration
+variable "patch_anomaly_logic_app_name" {
+  description = "Logic App name for scheduled Patch anomaly detection"
+  type        = string
+  default     = "xtdb-bench-patch-anomaly-schedule"
+}
+
+variable "patch_anomaly_alert_enabled" {
+  description = "Whether the Patch anomaly detection Logic App is enabled"
+  type        = bool
+  default     = true
+}
+
+variable "patch_anomaly_doc_count" {
+  description = "Patch doc count to scope anomaly detection to"
+  type        = number
+  default     = 500000
+}

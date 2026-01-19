@@ -163,6 +163,38 @@
     {:rows rows-with-percent
      :total-ms total-ms}))
 
+(defn patch-stage->row
+  [idx {:keys [stage time-taken-ms]}]
+  (let [stage-name (name stage)
+        friendly-name (cond
+                        (= stage-name "patch-existing-docs") "Patch Existing"
+                        (= stage-name "patch-multiple-docs") "Patch Multiple"
+                        (= stage-name "patch-non-existing-docs") "Patch Non-Existing"
+                        :else (util/title-case stage-name))]
+    {:stage-order idx
+     :stage friendly-name
+     :time-taken-ms time-taken-ms
+     :duration (util/format-duration :millis time-taken-ms)}))
+
+(defn patch-summary->stage-rows
+  [summary]
+  (let [rows (->> (:patch-stages summary)
+                  (map-indexed patch-stage->row)
+                  (sort-by :stage-order)
+                  vec)
+        total-ms (reduce + (map :time-taken-ms rows))
+        rows-with-percent (mapv (fn [row]
+                                  (let [ms (:time-taken-ms row)
+                                        pct (if (pos? total-ms)
+                                              (* 100.0 (/ ms total-ms))
+                                              0.0)]
+                                    (-> row
+                                        (assoc :percent-of-total (format "%.2f%%" pct))
+                                        (dissoc :stage-order))))
+                                rows)]
+    {:rows rows-with-percent
+     :total-ms total-ms}))
+
 (defn rows->string [columns rows]
   (-> (with-out-str
         (pprint/print-table columns rows))
@@ -206,6 +238,12 @@
 
 (defmethod summary->table "ingest-tx-overhead" [summary]
   (let [{:keys [rows total-ms]} (ingest-tx-overhead-summary->stage-rows summary)]
+    (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
+         "\n\n"
+         (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
+
+(defmethod summary->table "patch" [summary]
+  (let [{:keys [rows total-ms]} (patch-summary->stage-rows summary)]
     (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
          "\n\n"
          (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
@@ -256,6 +294,14 @@
 
 (defmethod summary->slack "ingest-tx-overhead" [summary]
   (let [{:keys [rows total-ms]} (ingest-tx-overhead-summary->stage-rows summary)]
+    (str
+     (util/totals->string total-ms (:benchmark-total-time-ms summary))
+     "\n\n"
+     (util/wrap-slack-code
+      (rows->string [:stage :duration] rows)))))
+
+(defmethod summary->slack "patch" [summary]
+  (let [{:keys [rows total-ms]} (patch-summary->stage-rows summary)]
     (str
      (util/totals->string total-ms (:benchmark-total-time-ms summary))
      "\n\n"
@@ -322,6 +368,16 @@
 (defmethod summary->github-markdown "ingest-tx-overhead" [summary]
   (let [{:keys [rows total-ms]} (ingest-tx-overhead-summary->stage-rows summary)
         columns [{:key :stage :header "Batch Size"}
+                 {:key :time-taken-ms :header "Time (ms)"}
+                 {:key :duration :header "Duration"}
+                 {:key :percent-of-total :header "% of total"}]]
+    (str (util/github-table columns rows)
+         "\n\n"
+         (util/totals->string total-ms (:benchmark-total-time-ms summary)))))
+
+(defmethod summary->github-markdown "patch" [summary]
+  (let [{:keys [rows total-ms]} (patch-summary->stage-rows summary)
+        columns [{:key :stage :header "Stage"}
                  {:key :time-taken-ms :header "Time (ms)"}
                  {:key :duration :header "Duration"}
                  {:key :percent-of-total :header "% of total"}]]

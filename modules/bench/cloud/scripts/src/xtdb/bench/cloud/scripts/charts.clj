@@ -84,7 +84,10 @@
                  :default-scale-factor nil} ;; tsbs-iot uses devices, not scale-factor
    "ingest-tx-overhead" {:benchmark-name "Ingest batch vs individual"
                          :title "Ingest TX Overhead Benchmark Performance"
-                         :default-scale-factor nil}}) ;; ingest-tx-overhead uses doc-count, not scale-factor
+                         :default-scale-factor nil} ;; ingest-tx-overhead uses doc-count, not scale-factor
+   "patch"    {:benchmark-name "PATCH Performance Benchmark"
+               :title "Patch Benchmark Performance"
+               :default-scale-factor nil}}) ;; patch uses doc-count, not scale-factor
 
 (defn plot-benchmark-timeseries
   "Plot a benchmark timeseries chart from Azure Log Analytics.

@@ -1,0 +1,42 @@
+name: Nightly Benchmark Patch
+run-name: "Patch (Docs: ${{ inputs.doc_count || '500000' }}, Patches: ${{ inputs.patch_count || '10' }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      doc_count:
+        description: 'Number of initial documents to load'
+        required: false
+        default: '500000'
+        type: string
+      patch_count:
+        description: 'Number of patches to perform in each stage'
+        required: false
+        default: '10'
+        type: string
+  schedule:
+    - cron: '0 9 * * *'  # Run daily at 09:00 UTC (1hr after last benchmark)
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+  packages: write
+
+concurrency:
+  group: nightly-benchmark-patch
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    if: ${{ github.event_name != 'schedule' || github.repository == 'xtdb/xtdb' }}
+    uses: ./.github/workflows/run-nightly-benchmark.yml
+    with:
+      bench_type: patch
+      job_display_name: Patch
+      branch: ${{ github.ref_name }}
+      timeout_minutes: 90
+      benchmark_timeout: PT2H
+      patch_doc_count: ${{ inputs.doc_count || '500000' }}
+      patch_patch_count: ${{ inputs.patch_count || '10' }}
+    secrets: inherit
