@@ -64,56 +64,87 @@
     (.delete (java.io.File. temp-spec-file))))
 
 (def ^:private benchmark-configs
+  "Configuration for each benchmark type.
+   :filter-param - parameter name in log.parameters to filter by
+   :filter-value - default value to filter by
+   :filter-is-string - true if filter-value is a string (for KQL quoting)"
   {"tpch"       {:benchmark-name "TPC-H (OLAP)"
                  :title "TPC-H Benchmark Performance"
-                 :default-scale-factor 1.0}
+                 :filter-param "scale-factor"
+                 :filter-value 1.0
+                 :filter-is-string false}
    "yakbench"   {:benchmark-name "Yakbench"
                  :title "Yakbench Benchmark Performance"
-                 :default-scale-factor 1.0}
+                 :filter-param "scale-factor"
+                 :filter-value 1.0
+                 :filter-is-string false}
    "auctionmark" {:benchmark-name "Auction Mark OLTP"
                   :title "AuctionMark Benchmark Performance"
-                  :default-scale-factor 0.1}
+                  :filter-param "duration"
+                  :filter-value "PT30M"
+                  :filter-is-string true}
    "readings"   {:benchmark-name "Readings benchmarks"
                  :title "Readings Benchmark Performance"
-                 :default-scale-factor nil} ;; readings doesn't use scale-factor
+                 :filter-param "devices"
+                 :filter-value 10000
+                 :filter-is-string false}
    "clickbench" {:benchmark-name "Clickbench Hits"
                  :title "Clickbench Benchmark Performance"
-                 :default-scale-factor nil} ;; clickbench uses size, not scale-factor
+                 :filter-param nil
+                 :filter-value nil
+                 :filter-is-string false}
    "tsbs-iot"   {:benchmark-name "TSBS IoT"
                  :title "TSBS IoT Benchmark Performance"
-                 :default-scale-factor nil} ;; tsbs-iot uses devices, not scale-factor
+                 :filter-param "devices"
+                 :filter-value 2000
+                 :filter-is-string false}
    "ingest-tx-overhead" {:benchmark-name "Ingest batch vs individual"
                          :title "Ingest TX Overhead Benchmark Performance"
-                         :default-scale-factor nil} ;; ingest-tx-overhead uses doc-count, not scale-factor
+                         :filter-param "doc-count"
+                         :filter-value 100000
+                         :filter-is-string false}
    "patch"    {:benchmark-name "PATCH Performance Benchmark"
                :title "Patch Benchmark Performance"
-               :default-scale-factor nil} ;; patch uses doc-count, not scale-factor
+               :filter-param "doc-count"
+               :filter-value 500000
+               :filter-is-string false}
    "products" {:benchmark-name "Products"
                :title "Products Benchmark Performance"
-               :default-scale-factor nil} ;; products uses limit, not scale-factor
+               :filter-param nil
+               :filter-value nil
+               :filter-is-string false}
    "ts-devices" {:benchmark-name "TS Devices Ingest"
                  :title "TS Devices Benchmark Performance"
-                 :default-scale-factor nil}}) ;; ts-devices uses size, not scale-factor
+                 :filter-param "size"
+                 :filter-value "small"
+                 :filter-is-string true}})
 
 (defn plot-benchmark-timeseries
   "Plot a benchmark timeseries chart from Azure Log Analytics.
 
   benchmark-type: benchmark type (e.g., \"tpch\", \"yakbench\", \"auctionmark\", \"readings\")
-  opts: {:scale-factor 1.0}  ; scale factor to filter by (uses default if not provided)
+  opts: {:filter-value <val>   ; override the default filter value for this benchmark
+         :repo \"owner/repo\"   ; override github repo (default: xtdb/xtdb)
+         :branch \"branch\"}    ; override git branch (default: main)
 
   Fetches benchmark data and plots it to an SVG file.
   Uses default parameters suitable for the specified benchmark type."
   ([benchmark-type] (plot-benchmark-timeseries benchmark-type {}))
-  ([benchmark-type {:keys [scale-factor]}]
+  ([benchmark-type opts]
    (let [config (get benchmark-configs benchmark-type)
          _ (when-not config
              (throw (ex-info (format "Unsupported benchmark type for timeseries plotting: %s" benchmark-type)
                              {:benchmark-type benchmark-type
                               :supported (keys benchmark-configs)})))
-         {:keys [benchmark-name title default-scale-factor]} config
-         sf (or scale-factor default-scale-factor)
+         {:keys [benchmark-name title filter-param filter-value filter-is-string]} config
+         ;; Allow override of filter-value via opts
+         actual-filter-value (get opts :filter-value filter-value)
          fetch-opts (cond-> {:benchmark benchmark-name}
-                      sf (assoc :scale-factor sf))
+                      filter-param (assoc :filter-param filter-param
+                                          :filter-value actual-filter-value
+                                          :filter-is-string filter-is-string)
+                      (:repo opts) (assoc :repo (:repo opts))
+                      (:branch opts) (assoc :branch (:branch opts)))
          data-ms (azure/fetch-azure-benchmark-timeseries fetch-opts)
          ;; Convert milliseconds to minutes
          data (mapv (fn [{:keys [timestamp value]}]
@@ -124,8 +155,8 @@
                          :value (/ num-value 60000.0)}))
                     data-ms)
          output-path (str benchmark-type "-benchmark-timeseries.svg")
-         chart-title (if sf
-                       (str title " (SF " sf ")")
+         chart-title (if (and filter-param actual-filter-value)
+                       (str title " (" filter-param "=" actual-filter-value ")")
                        title)]
      (plot-timeseries-vega data {:output-path output-path
                                  :title chart-title

@@ -158,8 +158,9 @@
   (println "  summarize-log [--format table|slack|github] <benchmark-type> <log-file>")
   (println "      Print a benchmark summary. Default format is 'table'.")
   (println)
-  (println "  plot-benchmark-timeseries [--scale-factor SF] <benchmark-type>")
+  (println "  plot-benchmark-timeseries [options] <benchmark-type>")
   (println "      Plot a benchmark timeseries chart from Azure Log Analytics.")
+  (println "      Options: --scale-factor SF, --repo owner/repo, --branch branch")
   (println "      Supported: tpch, yakbench, auctionmark, readings, clickbench, tsbs-iot, ingest-tx-overhead, patch, products, ts-devices")
   (println)
   (println "Kubernetes Commands (output JSON):")
@@ -199,14 +200,17 @@
           "plot-benchmark-timeseries"
           (let [{:keys [args opts]} (cli/parse-args rest-args {:coerce {:scale-factor :double}})
                 [benchmark-type & extra] args
-                scale-factor (:scale-factor opts)]
+                {:keys [scale-factor repo branch]} opts]
             (when (seq extra)
               (throw (ex-info "Too many positional arguments supplied."
                               {:arguments rest-args})))
             (when-not benchmark-type
               (throw (ex-info "Benchmark type is required."
                               {:arguments rest-args})))
-            (plot-benchmark-timeseries benchmark-type {:scale-factor scale-factor}))
+            (plot-benchmark-timeseries benchmark-type (cond-> {}
+                                                        scale-factor (assoc :filter-value scale-factor)
+                                                        repo (assoc :repo repo)
+                                                        branch (assoc :branch branch))))
 
           ;; K8s commands
           "inspect-deployment" (inspect-deployment rest-args)

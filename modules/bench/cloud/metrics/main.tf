@@ -114,6 +114,19 @@ locals {
       metric_name     = "throughput"
       dashboard_idx   = 3
     }
+    clickbench = {
+      name            = "Clickbench Hits"
+      display_name    = "Clickbench"
+      logic_app_name  = var.clickbench_anomaly_logic_app_name
+      enabled         = var.clickbench_anomaly_alert_enabled
+      param_name      = "benchmark"
+      param_path      = "benchmark"
+      param_value     = "Clickbench Hits"
+      param_is_string = true
+      metric_path     = "'time-taken-ms'"
+      metric_name     = "duration_minutes"
+      dashboard_idx   = 4
+    }
     tsbs-iot = {
       name            = "TSBS IoT"
       display_name    = "TSBS IoT"
@@ -125,7 +138,7 @@ locals {
       param_is_string = false
       metric_path     = "'time-taken-ms'"
       metric_name     = "duration_minutes"
-      dashboard_idx   = 4
+      dashboard_idx   = 5
     }
     ingest-tx-overhead = {
       name            = "Ingest batch vs individual"
@@ -138,7 +151,7 @@ locals {
       param_is_string = false
       metric_path     = "'time-taken-ms'"
       metric_name     = "duration_minutes"
-      dashboard_idx   = 5
+      dashboard_idx   = 6
     }
     patch = {
       name            = "PATCH Performance Benchmark"
@@ -151,7 +164,7 @@ locals {
       param_is_string = false
       metric_path     = "'time-taken-ms'"
       metric_name     = "duration_minutes"
-      dashboard_idx   = 6
+      dashboard_idx   = 7
     }
     products = {
       name            = "Products"
@@ -164,7 +177,7 @@ locals {
       param_is_string = true
       metric_path     = "'time-taken-ms'"
       metric_name     = "duration_minutes"
-      dashboard_idx   = 7
+      dashboard_idx   = 8
     }
     ts-devices = {
       name            = "TS Devices Ingest"
@@ -177,28 +190,30 @@ locals {
       param_is_string = true
       metric_path     = "'time-taken-ms'"
       metric_name     = "duration_minutes"
-      dashboard_idx   = 8
+      dashboard_idx   = 9
     }
   }
 
-  # Dashboard part positions (6 cols wide, 4 rows tall each)
+  # Dashboard part positions (6 cols wide, 4 rows tall each, 4 columns)
   dashboard_positions = {
     0 = { x = 0, y = 0 }
     1 = { x = 6, y = 0 }
-    2 = { x = 0, y = 4 }
-    3 = { x = 6, y = 4 }
-    4 = { x = 0, y = 8 }
-    5 = { x = 6, y = 8 }
-    6 = { x = 0, y = 12 }
-    7 = { x = 6, y = 12 }
-    8 = { x = 0, y = 16 }
+    2 = { x = 12, y = 0 }
+    3 = { x = 18, y = 0 }
+    4 = { x = 0, y = 4 }
+    5 = { x = 6, y = 4 }
+    6 = { x = 12, y = 4 }
+    7 = { x = 18, y = 4 }
+    8 = { x = 0, y = 8 }
+    9 = { x = 6, y = 8 }
   }
 
   # Filter expressions per benchmark (string params quoted, numeric params use todouble)
+  # Also filters by github-repo and git-branch
   param_filter_expr = {
     for key, bench in local.benchmarks : key => bench.param_is_string
-    ? "filter_param = tostring(log.${bench.param_path})\n                      | where benchmark == \"${bench.name}\" and filter_param == \"${bench.param_value}\""
-    : "filter_param = todouble(log.${bench.param_path})\n                      | where benchmark == \"${bench.name}\" and filter_param == ${bench.param_value}"
+    ? "filter_param = tostring(log.${bench.param_path}),\n                               github_repo = tostring(log['github-repo']),\n                               git_branch = tostring(log['git-branch'])\n                      | where benchmark == \"${bench.name}\" and filter_param == \"${bench.param_value}\" and github_repo == \"${var.anomaly_repo}\" and git_branch == \"${var.anomaly_branch}\""
+    : "filter_param = todouble(log.${bench.param_path}),\n                               github_repo = tostring(log['github-repo']),\n                               git_branch = tostring(log['git-branch'])\n                      | where benchmark == \"${bench.name}\" and filter_param == ${bench.param_value} and github_repo == \"${var.anomaly_repo}\" and git_branch == \"${var.anomaly_branch}\""
   }
 
   # TPC-H individual query breakdown KQL (cold and hot)
@@ -211,8 +226,10 @@ locals {
       | extend log = parse_json(LogEntry)
       | extend stage = tostring(log.stage),
                duration_ms = todouble(log['time-taken-ms']),
-               bench_id = tostring(log['bench-id'])
-      | where stage startswith "${query_type}-queries-q"
+               bench_id = tostring(log['bench-id']),
+               github_repo = tostring(log['github-repo']),
+               git_branch = tostring(log['git-branch'])
+      | where stage startswith "${query_type}-queries-q" and github_repo == "${var.anomaly_repo}" and git_branch == "${var.anomaly_branch}"
       | extend query_name = extract("${query_type}-queries-(q[0-9]+-[a-z-]+)", 1, stage)
       | where isnotempty(query_name)
       | summarize duration_ms = max(duration_ms) by bench_id, query_name, TimeGenerated;
@@ -236,7 +253,10 @@ locals {
       | where LogEntry startswith "{" and LogEntry contains "profiles"
       | extend log = parse_json(LogEntry)
       | where isnotnull(log.profiles)
-      | extend bench_id = tostring(log['bench-id'])
+      | extend bench_id = tostring(log['bench-id']),
+               github_repo = tostring(log['github-repo']),
+               git_branch = tostring(log['git-branch'])
+      | where github_repo == "${var.anomaly_repo}" and git_branch == "${var.anomaly_branch}"
       | mv-expand profile = log.profiles['${profile_type}']
       | extend query_id = tostring(profile.id),
                mean_ms = todouble(profile['mean']) / 1000000.0
@@ -254,6 +274,7 @@ locals {
 
   # Dashboard KQL queries per benchmark
   # auctionmark uses string comparison (ISO duration), others use numeric comparison
+  # Also filters by github-repo and git-branch
   dashboard_queries = {
     for key, bench in local.benchmarks : key => bench.param_is_string ? trimspace(<<-KQL
       ContainerLog
@@ -262,8 +283,10 @@ locals {
       | where isnotnull(log.benchmark) and log.stage != "init"
       | extend benchmark = tostring(log.benchmark),
                filter_param = tostring(log.${bench.param_path}),
+               github_repo = tostring(log['github-repo']),
+               git_branch = tostring(log['git-branch']),
                ${bench.metric_name} = todouble(log[${bench.metric_path}])
-      | where benchmark == "${bench.name}" and filter_param == "${bench.param_value}"
+      | where benchmark == "${bench.name}" and filter_param == "${bench.param_value}" and github_repo == "${var.anomaly_repo}" and git_branch == "${var.anomaly_branch}"
       | top ${var.anomaly_baseline_n} by TimeGenerated desc
       | order by TimeGenerated asc
       | project TimeGenerated, ${bench.metric_name}
@@ -275,8 +298,10 @@ locals {
       | where isnotnull(log.benchmark) and log.stage != "init"
       | extend benchmark = tostring(log.benchmark),
                filter_param = todouble(log.${bench.param_path}),
+               github_repo = tostring(log['github-repo']),
+               git_branch = tostring(log['git-branch']),
                duration_ms = todouble(log[${bench.metric_path}])
-      | where benchmark == "${bench.name}" and filter_param == ${bench.param_value}
+      | where benchmark == "${bench.name}" and filter_param == ${bench.param_value} and github_repo == "${var.anomaly_repo}" and git_branch == "${var.anomaly_branch}"
       | top ${var.anomaly_baseline_n} by TimeGenerated desc
       | extend duration_minutes = todouble(duration_ms) / 60000
       | order by TimeGenerated asc

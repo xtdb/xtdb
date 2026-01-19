@@ -66,9 +66,15 @@ variable "tpch_anomaly_scale_factor" {
 }
 
 variable "anomaly_repo" {
-  description = "Repository (owner/name) for run links in anomaly alerts"
+  description = "Repository (owner/name) for filtering benchmark logs and run links in alerts"
   type        = string
   default     = "xtdb/xtdb"
+}
+
+variable "anomaly_branch" {
+  description = "Git branch for filtering benchmark logs (e.g., main)"
+  type        = string
+  default     = "main"
 }
 
 variable "anomaly_schedule_frequency" {
@@ -180,6 +186,19 @@ variable "auctionmark_anomaly_duration" {
   description = "AuctionMark duration (ISO 8601, e.g. PT30M) to scope anomaly detection to"
   type        = string
   default     = "PT30M"
+}
+
+# Clickbench anomaly detection configuration
+variable "clickbench_anomaly_logic_app_name" {
+  description = "Logic App name for scheduled Clickbench anomaly detection"
+  type        = string
+  default     = "xtdb-bench-clickbench-anomaly-schedule"
+}
+
+variable "clickbench_anomaly_alert_enabled" {
+  description = "Whether the Clickbench anomaly detection Logic App is enabled"
+  type        = bool
+  default     = true
 }
 
 # TSBS IoT anomaly detection configuration
