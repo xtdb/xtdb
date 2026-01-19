@@ -229,5 +229,6 @@
                  (-> (.getCompactor) (.threads 0))
                  (.setServer nil)
                  (.setFlightSql nil)
-                 (some-> (.getTxSink) (.enable true)))]
+                 (some-> (.getTxSink) (.enable true))
+                 (.readOnlyDatabases true))]
     (.open config)))
