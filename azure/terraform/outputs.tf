@@ -10,6 +10,14 @@ output "storage_account_name" {
   value = module.xtdb_storage.name
 }
 
+output "storage_account_id" {
+  value = module.xtdb_storage.resource_id
+}
+
+output "user_assigned_managed_identity_principal_id" {
+  value = azurerm_user_assigned_identity.xtdb_infra.principal_id
+}
+
 output "oidc_issuer_url" {
   value = module.aks.oidc_issuer_url
 }

@@ -57,7 +57,7 @@ data:
       echo "Uploading $file to $PREFIX/$file..."
       az storage blob upload \
         --account-name "$AZURE_STORAGE_ACCOUNT" \
-        --container-name "$AZURE_STORAGE_CONTAINER" \
+        --container-name "${AZURE_DUMPS_CONTAINER:-$AZURE_STORAGE_CONTAINER}" \
         --name "$PREFIX/$file" \
         --file "$DUMP_DIR/$file" \
         --auth-mode login \

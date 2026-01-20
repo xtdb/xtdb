@@ -22,7 +22,8 @@ terraform {
 
 provider "azurerm" {
   features {}
-  subscription_id = "91804669-c60b-4727-afa2-d7021fe5055b" # Long Run Reliability
+  subscription_id      = "91804669-c60b-4727-afa2-d7021fe5055b" # Long Run Reliability
+  storage_use_azuread  = true  # Key auth is disabled on the storage account
 }
 
 module "xtdb_azure_bench" {
@@ -65,6 +66,19 @@ resource "azurerm_federated_identity_credential" "xtdb_identity_federation" {
   issuer              = module.xtdb_azure_bench.oidc_issuer_url
   subject             = "system:serviceaccount:cloud-benchmark:xtdb-service-account"
   audience            = ["api://AzureADTokenExchange"]
+}
+
+# Separate container for heap dumps - not cleared by clear-bench.sh
+resource "azurerm_storage_container" "dumps" {
+  name                  = "xtdb-benchmark-dumps"
+  storage_account_name  = "xtdbazurebenchmark"
+  container_access_type = "private"
+}
+
+resource "azurerm_role_assignment" "dumps_contributor" {
+  scope                = "/subscriptions/91804669-c60b-4727-afa2-d7021fe5055b/resourceGroups/cloud-benchmark-resources/providers/Microsoft.Storage/storageAccounts/xtdbazurebenchmark/blobServices/default/containers/xtdb-benchmark-dumps"
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = module.xtdb_azure_bench.user_assigned_managed_identity_principal_id
 }
 
 output "user_assigned_identity_client_id" {

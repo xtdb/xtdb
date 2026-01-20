@@ -3,6 +3,7 @@ providerConfig:
   env:
     AZURE_STORAGE_ACCOUNT: "xtdbazurebenchmark"
     AZURE_STORAGE_CONTAINER: "xtdbazurebenchmarkcontainer"
+    AZURE_DUMPS_CONTAINER: "xtdb-benchmark-dumps"
     AZURE_USER_MANAGED_IDENTITY_CLIENT_ID: "<user_assigned_managed_identity_client_id>"
   podLabels:
     azure.workload.identity/use: "true"

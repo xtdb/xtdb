@@ -132,6 +132,8 @@ spec:
               value: {{ .Values.providerConfig.env.AZURE_STORAGE_ACCOUNT | default "" | quote }}
             - name: AZURE_STORAGE_CONTAINER
               value: {{ .Values.providerConfig.env.AZURE_STORAGE_CONTAINER | default "" | quote }}
+            - name: AZURE_DUMPS_CONTAINER
+              value: {{ .Values.providerConfig.env.AZURE_DUMPS_CONTAINER | default "" | quote }}
             - name: XTDB_NODE_ID
               valueFrom:
                 fieldRef:
