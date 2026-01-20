@@ -194,18 +194,19 @@ locals {
     }
   }
 
-  # Dashboard part positions (6 cols wide, 4 rows tall each, 4 columns)
+  # Dashboard part positions (5 cols wide, 4 rows tall each, 4 columns)
+  # Total width: 5*4 = 20 cols, leaving 4 cols margin on right
   dashboard_positions = {
     0 = { x = 0, y = 0 }
-    1 = { x = 6, y = 0 }
-    2 = { x = 12, y = 0 }
-    3 = { x = 18, y = 0 }
+    1 = { x = 5, y = 0 }
+    2 = { x = 10, y = 0 }
+    3 = { x = 15, y = 0 }
     4 = { x = 0, y = 4 }
-    5 = { x = 6, y = 4 }
-    6 = { x = 12, y = 4 }
-    7 = { x = 18, y = 4 }
+    5 = { x = 5, y = 4 }
+    6 = { x = 10, y = 4 }
+    7 = { x = 15, y = 4 }
     8 = { x = 0, y = 8 }
-    9 = { x = 6, y = 8 }
+    9 = { x = 5, y = 8 }
   }
 
   # Filter expressions per benchmark (string params quoted, numeric params use todouble)
@@ -226,10 +227,9 @@ locals {
       | extend log = parse_json(LogEntry)
       | extend stage = tostring(log.stage),
                duration_ms = todouble(log['time-taken-ms']),
-               bench_id = tostring(log['bench-id']),
-               github_repo = tostring(log['github-repo']),
-               git_branch = tostring(log['git-branch'])
-      | where stage startswith "${query_type}-queries-q" and github_repo == "${var.anomaly_repo}" and git_branch == "${var.anomaly_branch}"
+               bench_id = tostring(log['bench-id'])
+      // TODO: add repo/branch filtering once metadata is added to query-level logs
+      | where stage startswith "${query_type}-queries-q"
       | extend query_name = extract("${query_type}-queries-(q[0-9]+-[a-z-]+)", 1, stage)
       | where isnotempty(query_name)
       | summarize duration_ms = max(duration_ms) by bench_id, query_name, TimeGenerated;
@@ -253,10 +253,8 @@ locals {
       | where LogEntry startswith "{" and LogEntry contains "profiles"
       | extend log = parse_json(LogEntry)
       | where isnotnull(log.profiles)
-      | extend bench_id = tostring(log['bench-id']),
-               github_repo = tostring(log['github-repo']),
-               git_branch = tostring(log['git-branch'])
-      | where github_repo == "${var.anomaly_repo}" and git_branch == "${var.anomaly_branch}"
+      | extend bench_id = tostring(log['bench-id'])
+      // TODO: add repo/branch filtering once metadata is added to profile logs
       | mv-expand profile = log.profiles['${profile_type}']
       | extend query_id = tostring(profile.id),
                mean_ms = todouble(profile['mean']) / 1000000.0
@@ -557,7 +555,7 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
               position = {
                 x       = local.dashboard_positions[bench.dashboard_idx].x
                 y       = local.dashboard_positions[bench.dashboard_idx].y
-                colSpan = 6
+                colSpan = 5
                 rowSpan = 4
               }
               metadata = {
@@ -610,9 +608,9 @@ resource "azurerm_portal_dashboard" "bench_dashboard" {
           {
             for idx, query_type in local.tpch_query_types : "tpch-${query_type}-queries" => {
               position = {
-                x       = idx * 6
+                x       = idx * 5
                 y       = 12
-                colSpan = 6
+                colSpan = 5
                 rowSpan = 4
               }
               metadata = {
