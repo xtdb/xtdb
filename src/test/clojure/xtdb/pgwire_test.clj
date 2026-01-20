@@ -24,7 +24,7 @@
            (java.net Socket)
            (java.nio ByteBuffer)
            (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
-           (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
+           (java.time Clock Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
            (java.util Arrays Calendar List TimeZone)
            (java.util.concurrent CountDownLatch TimeUnit)
            (org.postgresql.util PGobject PSQLException)
@@ -1579,7 +1579,9 @@
   (doseq [{:keys [^Class type val pg-type]} [{:type LocalDate :val #xt/date "2018-07-25" :pg-type "date"}
                                              {:type LocalDate :val #xt/date "1239-01-24" :pg-type "date"}
                                              {:type LocalDateTime :val #xt/date-time "2024-07-03T19:01:34.123456" :pg-type "timestamp"}
-                                             {:type LocalDateTime :val #xt/date-time "1742-07-03T04:22:59" :pg-type "timestamp"}]
+                                             {:type LocalDateTime :val #xt/date-time "1742-07-03T04:22:59" :pg-type "timestamp"}
+                                             {:type LocalTime :val #xt/time "03:04:11" :pg-type "time"}
+                                             {:type LocalTime :val #xt/time "14:30:59.123456" :pg-type "time"}]
           binary? [true false]]
 
     (t/testing (format "binary?: %s, type: %s, pg-type: %s, val: %s" binary? type pg-type val)
