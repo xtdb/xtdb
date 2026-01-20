@@ -14,6 +14,21 @@ All of the below commands should be run in the *root* of the XT2 repo.
 
 You will need at least JDK 21 installed.
 
+=== Optional: AI Coding Assistant Tools
+
+For AI-assisted development with REPL integration, install https://github.com/bhauman/clojure-mcp-light[clojure-mcp-light] tools via https://github.com/babashka/bbin[bbin]:
+
+```bash
+# Install clj-nrepl-eval for REPL evaluation from command line
+bbin install https://github.com/bhauman/clojure-mcp-light.git --tag v0.2.1 \
+  --as clj-nrepl-eval --main-opts '["-m" "clojure-mcp-light.nrepl-eval"]'
+
+# Optional: Install paren-repair hook for Claude Code
+bbin install https://github.com/bhauman/clojure-mcp-light.git --tag v0.2.1
+```
+
+See link:../skills/clojure-eval/SKILL.md[skills/clojure-eval/SKILL.md] for usage details.
+
 == Getting started
 
 XT2 uses https://gradle.org/[Gradle] - a JVM build tool that supports multi-module, polyglot projects.
