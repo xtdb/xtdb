@@ -9,6 +9,7 @@
            (org.apache.arrow.vector.types FloatingPointPrecision)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb.arrow ArrowTypes MergeTypes VectorType)
+           xtdb.types.LeastUpperBound
            (xtdb.vector.extensions IntervalMDMType KeywordType OidType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -49,23 +50,13 @@
 (defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, name]
   (Field. name (.getFieldType field) (.getChildren field)))
 
-(defn ->nullable-field ^org.apache.arrow.vector.types.pojo.Field [^Field field]
-  (if (.isNullable field)
-    field
-    (Field. (.getName field) (FieldType. true (.getType field) nil nil) (.getChildren field))))
-
-(def temporal-fields
-  {"_iid" (->field "_iid" :iid),
-   "_system_from" (->field "_system_from" :instant), "_system_to" (->field "_system_to" [:? :instant])
-   "_valid_from" (->field "_valid_from" :instant), "_valid_to" (->field "_valid_to" [:? :instant])})
-
 (def temporal-vec-types
   {"_iid" (st/->type :iid)
    "_system_from" (st/->type :instant), "_system_to" (st/->type [:? :instant])
    "_valid_from" (st/->type :instant), "_valid_to" (st/->type [:? :instant])})
 
 (defn temporal-col-name? [col-name]
-  (contains? temporal-fields (str col-name)))
+  (contains? temporal-vec-types (str col-name)))
 
 ;;;; col-types
 
@@ -149,8 +140,6 @@
 
     (-> (transduce (comp (remove nil?) (distinct)) (completing merge-col-type*) {} col-types)
         (map->col-type))))
-
-(def ^Field null-field (st/->field {"null" :null}))
 
 (defn merge-types ^xtdb.arrow.VectorType [& types]
   (MergeTypes/mergeTypes (vec types)))
@@ -381,12 +370,6 @@
 (defmethod arrow-type->col-type TransitType [_] :transit)
 (defmethod arrow-type->col-type IntervalMDMType [_] [:interval :month-day-micro])
 
-;;; LUB
-
-(defmulti least-upper-bound2
-  (fn [x-type y-type] [(col-type-head x-type) (col-type-head y-type)])
-  :hierarchy #'col-type-hierarchy)
-
 ;; HACK
 ;; the decimal widening to other types currently only works without
 ;; casting elsewhere because we are using Clojure's polymorphic functions
@@ -399,38 +382,8 @@
       (derive :int :f64) (derive :int :f32)
       (derive :int :decimal) (derive :uint :decimal)))
 
-(defmethod least-upper-bound2 [:num :num] [x-type y-type]
-  (let [x-head-type (col-type-head x-type)
-        y-head-type (col-type-head y-type)]
-    (cond
-      (isa? widening-hierarchy x-head-type y-head-type) y-type
-      (isa? widening-hierarchy y-head-type x-head-type) x-type
-      :else :any)))
-
-(defmethod least-upper-bound2 [:duration :duration] [[_ x-unit] [_ y-unit]]
-  [:duration (smallest-ts-unit x-unit y-unit)])
-
-(defmethod least-upper-bound2 [:date :date] [_ _] [:date :day])
-
-(defmethod least-upper-bound2 [:timestamp-local :timestamp-local] [[_ x-unit] [_ y-unit]]
-  [:timestamp-local (smallest-ts-unit x-unit y-unit)])
-
-(defmethod least-upper-bound2 [:time-local :time-local] [[_ x-unit] [_ y-unit]]
-  [:time-local (smallest-ts-unit x-unit y-unit)])
-
-(defmethod least-upper-bound2 [:timestamp-tz :timestamp-tz] [[_ x-unit x-tz] [_ y-unit y-tz]]
-  [:timestamp-tz (smallest-ts-unit x-unit y-unit) (if (= x-tz y-tz) x-tz "Z")])
-
-(defmethod least-upper-bound2 :default [_ _] :any)
-
-(defn least-upper-bound [col-types]
-  (reduce (fn
-            ([] :null)
-            ([lub col-type]
-             (if (= lub col-type)
-               lub
-               (least-upper-bound2 lub col-type))))
-          col-types))
+(defn least-upper-bound [vec-types]
+  (LeastUpperBound/of vec-types))
 
 (defn with-nullable-types [vec-types]
   (update-vals vec-types VectorType/maybe))

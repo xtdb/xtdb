@@ -82,8 +82,8 @@ private fun leastUpperBound2(left: Mono, right: Mono): Mono? =
                 is IntType if rightType is FloatType -> rightType
                 is FloatType if rightType is IntType -> leftType
                 is FloatType if rightType is FloatType -> leastUpperBound2(leftType, rightType)
-                is DecimalType if rightType is IntType -> F64_TYPE
-                is IntType if rightType is DecimalType -> F64_TYPE
+                is DecimalType if rightType is IntType -> leftType
+                is IntType if rightType is DecimalType -> rightType
                 is DecimalType if rightType is FloatType -> rightType
                 is FloatType if rightType is DecimalType -> leftType
                 is DecimalType if rightType is DecimalType -> leastUpperBound2(leftType, rightType)

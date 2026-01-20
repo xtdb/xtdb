@@ -443,7 +443,6 @@
 
 (defmethod codegen-expr :literal [{:keys [literal]} _]
   (let [return-type (types/value->vec-type literal)
-        return-col-type (types/vec-type->col-type return-type)
         literal-type (class literal)]
     {:return-type return-type
      :continue (fn [f]
@@ -577,7 +576,7 @@
     and one of the following
     * for monomorphic return types: `:->call-code` :: emitted-args -> code
     * for polymorphic return types: `:continue-call` :: f, emitted-args -> code
-        where f :: return-col-type, code -> code"
+        where f :: return-type, code -> code"
 
   (fn [{:keys [f arg-col-types]}]
     (vec (cons (normalise-fn-name f)
@@ -807,33 +806,35 @@
   (let [arg-cast (if (isa? types/widening-hierarchy int-type :i32) 'int 'long)]
     (map #(list arg-cast %) emitted-args)))
 
-(defmethod codegen-call [:+ :int :int] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:+ :int :int] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)
+        return-col-type (types/vec-type->col-type return-type)]
+    {:return-type return-type, :return-col-type return-col-type
      :->call-code (fn [emitted-args]
                     (list (type->cast return-col-type)
                           `(Math/addExact ~@(with-math-integer-cast return-col-type emitted-args))))}))
 
-(defmethod codegen-call [:+ :num :num] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:+ :num :num] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type, :return-col-type (types/vec-type->col-type return-type)
      :->call-code #(do `(+ ~@%))}))
 
-(defmethod codegen-call [:+ :duration :duration] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:+ :duration :duration] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type, :return-col-type (types/vec-type->col-type return-type)
      :->call-code #(do `(+ ~@%))}))
 
-(defmethod codegen-call [:- :int :int] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:- :int :int] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)
+        return-col-type (types/vec-type->col-type return-type)]
+    {:return-type return-type, :return-col-type return-col-type
      :->call-code (fn [emitted-args]
                     (list (type->cast return-col-type)
                           `(Math/subtractExact ~@(with-math-integer-cast return-col-type emitted-args))))}))
 
-(defmethod codegen-call [:- :num :num] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:- :num :num] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type, :return-col-type (types/vec-type->col-type return-type)
      :->call-code #(do `(- ~@%))}))
 
 (defmethod codegen-call [:- :num] [{[x-type] :arg-col-types}]
@@ -846,16 +847,17 @@
   {:return-type (types/col-type->vec-type false x-type), :return-col-type x-type
    :->call-code #(do `(- ~@%))})
 
-(defmethod codegen-call [:* :int :int] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:* :int :int] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)
+        return-col-type (types/vec-type->col-type return-type)]
+    {:return-type return-type, :return-col-type return-col-type
      :->call-code (fn [emitted-args]
                     (list (type->cast return-col-type)
                           `(Math/multiplyExact ~@(with-math-integer-cast return-col-type emitted-args))))}))
 
-(defmethod codegen-call [:* :num :num] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:* :num :num] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type, :return-col-type (types/vec-type->col-type return-type)
      :->call-code #(do `(* ~@%))}))
 
 ;; decimal
@@ -894,23 +896,26 @@
   {:return-type (types/col-type->vec-type false x-type), :return-col-type x-type
    :->call-code #(do `(bit-not ~@%))})
 
-(defmethod codegen-call [:bit_and :int :int] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:bit_and :int :int] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)
+        return-col-type (types/vec-type->col-type return-type)]
+    {:return-type return-type, :return-col-type return-col-type
      :->call-code (fn [emitted-args]
                     (list (type->cast return-col-type)
                           `(bit-and ~@(with-math-integer-cast return-col-type emitted-args))))}))
 
-(defmethod codegen-call [:bit_or :int :int] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:bit_or :int :int] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)
+        return-col-type (types/vec-type->col-type return-type)]
+    {:return-type return-type, :return-col-type return-col-type
      :->call-code (fn [emitted-args]
                     (list (type->cast return-col-type)
                           `(bit-or ~@(with-math-integer-cast return-col-type emitted-args))))}))
 
-(defmethod codegen-call [:bit_xor :int :int] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:bit_xor :int :int] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)
+        return-col-type (types/vec-type->col-type return-type)]
+    {:return-type return-type, :return-col-type return-col-type
      :->call-code (fn [emitted-args]
                     (list (type->cast return-col-type)
                           `(bit-xor ~@(with-math-integer-cast return-col-type emitted-args))))}))
@@ -926,22 +931,22 @@
    :->call-code (fn [emitted-args]
                   `(bit-shift-right ~@(with-math-integer-cast left-arg-type emitted-args)))})
 
-(defmethod codegen-call [:mod :num :num] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:mod :num :num] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type, :return-col-type (types/vec-type->col-type return-type)
      :->call-code #(do `(mod ~@%))}))
 
 (defn throw-div-0 []
   (throw (err/incorrect ::division-by-zero "data exception - division by zero")))
 
-(defmethod codegen-call [:/ :int :int] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:/ :int :int] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type, :return-col-type (types/vec-type->col-type return-type)
      :->call-code #(do `(quot ~@%))}))
 
-(defmethod codegen-call [:/ :num :num] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:/ :num :num] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type, :return-col-type (types/vec-type->col-type return-type)
      :->call-code (fn [[l r]]
                     `(let [l# ~l, r# ~r]
                        (if (zero? r#)
@@ -957,14 +962,14 @@
                        (long (/ dur# num#)))))})
 
 ;; TODO extend min/max to variable width
-(defmethod codegen-call [:greatest :num :num] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:greatest :num :num] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type, :return-col-type (types/vec-type->col-type return-type)
      :->call-code #(do `(Math/max ~@%))}))
 
-(defmethod codegen-call [:least :num :num] [{:keys [arg-col-types]}]
-  (let [return-col-type (types/least-upper-bound arg-col-types)]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+(defmethod codegen-call [:least :num :num] [{:keys [arg-types]}]
+  (let [return-type (types/least-upper-bound arg-types)]
+    {:return-type return-type, :return-col-type (types/vec-type->col-type return-type)
      :->call-code #(do `(Math/min ~@%))}))
 
 (defmethod codegen-call [:power :num :num] [_]
