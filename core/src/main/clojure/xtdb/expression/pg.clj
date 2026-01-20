@@ -28,7 +28,6 @@
 
 (defmethod expr/codegen-cast [:utf8 :regclass] [{:keys [target-type]}]
   {:return-type #xt/type :regclass
-   :return-col-type target-type
    :->call-code (fn [[utf8-code]]
                   `(find-table ~expr/schema-sym (expr/buf->str ~utf8-code)))})
 
@@ -45,7 +44,6 @@
 
 (defmethod expr/codegen-cast [:regclass :utf8] [{:keys [target-type]}]
   {:return-type #xt/type :utf8
-   :return-col-type target-type
    :->call-code (fn [[regclass-code]]
                   `(let [oid# ~regclass-code]
                      (expr/resolve-utf8-buf (or (some-> (oid->table ~expr/schema-sym oid#) table/ref->schema+table string-name)
@@ -53,12 +51,10 @@
 
 (defmethod expr/codegen-cast [:regclass :int] [{:keys [target-type]}]
   {:return-type #xt/type :i32
-   :return-col-type target-type
    :->call-code first})
 
 (defmethod expr/codegen-cast [:int :regclass] [{:keys [target-type]}]
   {:return-type #xt/type :regclass
-   :return-col-type target-type
    :->call-code first})
 
 (defn find-proc [proc-name]
@@ -67,13 +63,11 @@
 
 (defmethod expr/codegen-cast [:utf8 :regproc] [{:keys [target-type]}]
   {:return-type #xt/type :regproc
-   :return-col-type target-type
    :->call-code (fn [[utf8-code]]
                   `(find-proc (expr/buf->str ~utf8-code)))})
 
 (defmethod expr/codegen-cast [:regproc :utf8] [{:keys [target-type]}]
   {:return-type #xt/type :utf8
-   :return-col-type target-type
    :->call-code (fn [[regproc-code]]
                   `(let [oid# ~regproc-code]
                      (expr/resolve-utf8-buf (or (string-name (info/oid->proc oid#))
@@ -81,34 +75,28 @@
 
 (defmethod expr/codegen-cast [:regproc :int] [{:keys [target-type]}]
   {:return-type #xt/type :i32
-   :return-col-type target-type
    :->call-code first})
 
 (defmethod expr/codegen-cast [:int :regproc] [{:keys [target-type]}]
   {:return-type #xt/type :regproc
-   :return-col-type target-type
    :->call-code first})
 
 ;;; oid casts
 
 (defmethod expr/codegen-cast [:int :oid] [{:keys [target-type]}]
   {:return-type #xt/type :oid
-   :return-col-type target-type
    :->call-code first})
 
 (defmethod expr/codegen-cast [:oid :int] [{:keys [target-type]}]
   {:return-type #xt/type :i32
-   :return-col-type target-type
    :->call-code first})
 
 (defmethod expr/codegen-cast [:regclass :oid] [{:keys [target-type]}]
   {:return-type #xt/type :oid
-   :return-col-type target-type
    :->call-code first})
 
 (defmethod expr/codegen-cast [:regproc :oid] [{:keys [target-type]}]
   {:return-type #xt/type :oid
-   :return-col-type target-type
    :->call-code first})
 
 ;;; col_description
@@ -120,6 +108,5 @@
 
 (defmethod expr/codegen-call [:col_description :oid :int] [_]
   {:return-type #xt/type :null
-   :return-col-type :null
    :->call-code (fn [[_regoid-code _int-code]]
                   nil)})

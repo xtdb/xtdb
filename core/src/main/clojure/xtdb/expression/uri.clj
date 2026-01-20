@@ -11,17 +11,14 @@
 
 (defmethod expr/codegen-cast [:utf8 :uri] [_]
   {:return-type #xt/type :uri
-   :return-col-type :uri
    :->call-code #(do `(URI/create (expr/resolve-string ~(first %))))})
 
 (defmethod expr/codegen-cast [:uri :utf8] [_]
   {:return-type #xt/type :utf8
-   :return-col-type :utf8
    :->call-code #(do `(expr/resolve-utf8-buf (str ~(first %))))})
 
 (defn- codegen-extract [f-sym]
   {:return-type #xt/type [:? :utf8]
-   :return-col-type [:union #{:null :utf8}]
    :continue-call (fn [f [uri]]
                     (let [uri-part (gensym 'uri-part)]
                       `(if-let [~uri-part (~f-sym ~uri)]
@@ -50,7 +47,6 @@
 
 (defmethod expr/codegen-call [:uri_port :uri] [_]
   {:return-type #xt/type [:? :i32]
-   :return-col-type [:union #{:null :i32}]
    :continue-call (fn [f [uri]]
                     (let [uri-part (gensym 'uri-part)]
                       `(let [~uri-part (.getPort ~uri)]
