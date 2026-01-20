@@ -397,7 +397,18 @@ sealed class PgType(
         typsend = "time_send",
         typreceive = "time_recv",
     ) {
+        override fun readBinary(data: ByteArray): LocalTime {
+            val micros = ByteBuffer.wrap(data).long
+            return LocalTime.ofNanoOfDay(micros * 1000)
+        }
+
         override fun readText(data: ByteArray): LocalTime = LocalTime.parse(readUtf8(data))
+
+        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
+            val time = rdr.getObject(idx) as LocalTime
+            val micros = time.toNanoOfDay() / 1000
+            return ByteBuffer.allocate(8).putLong(micros).array()
+        }
 
         override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray {
             val time = rdr.getObject(idx) as LocalTime
