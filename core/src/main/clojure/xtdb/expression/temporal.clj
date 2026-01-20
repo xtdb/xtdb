@@ -1051,8 +1051,8 @@
                              ~max-from (Math/max (from ~x-sym) (from ~y-sym))
                              ~min-to (Math/min (to ~x-sym) (to ~y-sym))]
                          (if (< ~max-from ~min-to)
-                           ~(f :tstz-range `(->period ~max-from ~min-to))
-                           ~(f :null nil)))))})
+                           ~(f #xt/type :tstz-range `(->period ~max-from ~min-to))
+                           ~(f #xt/type :null nil)))))})
 
 ;;;; Intervals
 
@@ -1641,8 +1641,8 @@
    :continue-call (fn [f _]
                     (let [tok (gensym 'tok)]
                       `(if-let [~tok expr/*snapshot-token*]
-                         ~(f :utf8 `(expr/str->buf ~tok))
-                         ~(f :null nil))))})
+                         ~(f #xt/type :utf8 `(expr/str->buf ~tok))
+                         ~(f #xt/type :null nil))))})
 
 (defn- truncate-for-precision [code precision]
   (let [^long modulus (precision-modulus precision)]
@@ -1809,18 +1809,18 @@
   (.readLong ^ValueReader (.nth period 1)))
 
 (defmethod expr/codegen-call [:lower :tstz-range] [_]
-  {:return-type types/temporal-type, :return-col-type types/temporal-col-type
+  {:return-type #xt/type :instant, :return-col-type types/temporal-col-type
    :->call-code (fn [[arg]]
                   `(from ~arg))})
 
 (defmethod expr/codegen-call [:upper :tstz-range] [_]
-  {:return-type types/nullable-temporal-type, :return-col-type types/nullable-temporal-col-type
+  {:return-type #xt/type [:? :instant], :return-col-type types/nullable-temporal-col-type
    :continue-call (fn [f [arg]]
                     (let [to-sym (gensym 'to)]
                       `(let [~to-sym (to ~arg)]
                          (if (= Long/MAX_VALUE ~to-sym)
-                           ~(f :null nil)
-                           ~(f types/temporal-col-type to-sym)))))})
+                           ~(f #xt/type :null nil)
+                           ~(f #xt/type :instant to-sym)))))})
 
 (defmethod expr/codegen-call [:lower_inf :tstz-range] [_]
   {:return-type #xt/type :bool, :return-col-type :bool

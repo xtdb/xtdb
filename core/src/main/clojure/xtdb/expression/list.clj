@@ -18,7 +18,7 @@
                                     ~(-> expr/args-sym (expr/with-tag RelationReader))]
                                  (let [~@(expr/batch-bindings emitted-expr)]
                                    ~(continue (fn [t c]
-                                                (case (types/col-type-head t)
+                                                (case (types/col-type-head (types/vec-type->col-type t))
                                                   (:list :set :fixed-size-list)
                                                   `(let [~(expr/with-tag lvr-sym ListValueReader) ~c]
                                                      (reify ListExpression

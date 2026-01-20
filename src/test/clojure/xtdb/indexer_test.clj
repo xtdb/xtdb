@@ -679,7 +679,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
   ;; will likely have to remove this once we actually implement list concat
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :list [1 2]}]])
 
-  (t/is (anomalous? [:incorrect nil #"^No matching clause: \[:list :i64\]$"]
+  (t/is (anomalous? [:incorrect nil "No matching clause: [<List> <Int(64, true)>]"]
                     (xt/execute-tx tu/*node* ["UPDATE docs SET list = list || [3]"])))
 
   (t/is (= [{:xt/id 1, :list [1 2]}]
@@ -687,7 +687,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
 
   (t/is (= [{:xt/id 1,
              :committed false,
-             :error #xt/error [:incorrect ::err/illegal-arg "No matching clause: [:list :i64]"
+             :error #xt/error [:incorrect ::err/illegal-arg "No matching clause: [<List> <Int(64, true)>]"
                                {:sql "UPDATE docs SET list = list || [3]", :tx-op-idx 0, :arg-idx 0
                                 :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}],
              :system-time #xt/zoned-date-time "2020-01-02T00:00Z[UTC]"}]

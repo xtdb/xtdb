@@ -1,7 +1,6 @@
 (ns xtdb.expression.map
   (:require [xtdb.expression :as expr]
             [xtdb.expression.walk :as ewalk]
-            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import (java.util Map)
@@ -27,9 +26,9 @@
                    (reify IntBinaryOperator
                      (~'applyAsInt [_# ~left-idx ~right-idx]
                       ~(continue (fn [res-type code]
-                                   (case res-type
-                                     :null 0
-                                     :bool `(if ~code 1 -1))))))))
+                                   (condp = res-type
+                                     #xt/type :null 0
+                                     #xt/type :bool `(if ~code 1 -1))))))))
 
               #_(doto clojure.pprint/pprint)
               (eval))))

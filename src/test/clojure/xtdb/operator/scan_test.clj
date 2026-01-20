@@ -548,8 +548,8 @@
   (xt/submit-tx tu/*node* [[:put-docs :comments {:xt/id 1}]])
 
   (t/is (= {'_iid #xt/type [:fixed-size-binary 16]
-            '_valid_from types/temporal-type
-            '_valid_to types/nullable-temporal-type}
+            '_valid_from #xt/type :instant
+            '_valid_to #xt/type [:? :instant]}
 
            (:types (tu/query-ra '[:scan {:table #xt/table comments, :columns [_iid _valid_from _valid_to]}]
                                     {:node tu/*node*

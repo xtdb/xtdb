@@ -164,7 +164,7 @@
      :batch-bindings [[bloom-vec-sym `(some-> (.vectorForOrNull ~col-rdr-sym "bytes")
                                               (.vectorForOrNull "bloom"))]]
      :continue (fn [cont]
-                 (cont :bool
+                 (cont #xt/type :bool
                        `(boolean
                          (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~(str col) ~page-idx-sym)]
                            (if (neg? ~expr/idx-sym)
@@ -180,7 +180,7 @@
     {:return-type #xt/type :bool
      :batch-bindings [[presence-vec `(.vectorForOrNull ~col-rdr-sym ~(types/arrow-type->leg (.getArrowType value-type)))]]
      :continue (fn [cont]
-                 (cont :bool
+                 (cont #xt/type :bool
                        `(boolean
                          (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~(str col) ~page-idx-sym)]
                            (and (not (neg? ~expr/idx-sym))
@@ -193,7 +193,7 @@
     {:return-type #xt/type :bool
      :batch-bindings [[count-vec `(.vectorForOrNull ~col-rdr-sym "count")]]
      :continue (fn [cont]
-                 (cont :bool
+                 (cont #xt/type :bool
                        `(boolean
                          (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~(str col) ~page-idx-sym)]
                            (and (not (neg? ~expr/idx-sym))
@@ -223,23 +223,23 @@
   {:return-type #xt/type :null, :return-col-type :null, :->call-code (fn [& _args] nil)})
 
 (defmethod expr/codegen-expr :test-minmax [{:keys [f min-or-max col val-sym dbl-sym]} opts]
-  (case (get-in opts [:local-types dbl-sym])
-    :null {:return-type #xt/type :bool, :continue (fn [cont] (cont :bool true))}
+  (condp = (get-in opts [:local-types dbl-sym])
+    #xt/type :null {:return-type #xt/type :bool, :continue (fn [cont] (cont #xt/type :bool true))}
 
-    :f64 (let [col-name (str col)
-               col-sym (gensym 'meta_col)
-               val-type (get-in opts [:local-types val-sym])
-               flavour-col (MetadataFlavour/getMetaColName (MetadataFlavour/getMetadataFlavour (st/->type (st/->arrow-type val-type))))]
-           {:return-type #xt/type :bool
-            :batch-bindings [[(-> col-sym (expr/with-tag VectorReader))
-                              `(some-> (.vectorForOrNull ~col-rdr-sym ~flavour-col)
-                                       (.vectorForOrNull ~(name min-or-max)))]]
-            :continue (fn [cont]
-                        (cont :bool
-                              `(boolean
-                                (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~col-name ~page-idx-sym)]
-                                  (when (and ~col-sym (>= ~expr/idx-sym 0) (not (.isNull ~col-sym ~expr/idx-sym)))
-                                    (~(symbol f) (.getDouble ~col-sym ~expr/idx-sym) ~dbl-sym))))))})))
+    #xt/type :f64 (let [col-name (str col)
+                        col-sym (gensym 'meta_col)
+                        val-type (get-in opts [:local-types val-sym])
+                        flavour-col (MetadataFlavour/getMetaColName (MetadataFlavour/getMetadataFlavour val-type))]
+                    {:return-type #xt/type :bool
+                     :batch-bindings [[(-> col-sym (expr/with-tag VectorReader))
+                                       `(some-> (.vectorForOrNull ~col-rdr-sym ~flavour-col)
+                                                (.vectorForOrNull ~(name min-or-max)))]]
+                     :continue (fn [cont]
+                                 (cont #xt/type :bool
+                                       `(boolean
+                                          (let [~expr/idx-sym (.rowIndex ~table-metadata-sym ~col-name ~page-idx-sym)]
+                                            (when (and ~col-sym (>= ~expr/idx-sym 0) (not (.isNull ~col-sym ~expr/idx-sym)))
+                                              (~(symbol f) (.getDouble ~col-sym ~expr/idx-sym) ~dbl-sym))))))})))
 
 (defmethod ewalk/walk-expr :test-minmax [inner outer expr]
   (outer (-> expr (update :value-expr inner))))
@@ -248,8 +248,7 @@
 
 (def ^:private compile-meta-expr
   (-> (fn [expr opts]
-        (let [{:keys [param-types]} opts
-              expr (or (-> expr (expr/prepare-expr) (meta-expr opts) (expr/prepare-expr))
+        (let [expr (or (-> expr (expr/prepare-expr) (meta-expr opts) (expr/prepare-expr))
                        (expr/prepare-expr {:op :literal, :literal true}))
               {:keys [continue] :as emitted-expr} (expr/codegen-expr expr opts)]
           {:expr expr

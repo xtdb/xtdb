@@ -6,7 +6,7 @@
             [xtdb.serde.types :as st]
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
-           (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit)
+           (org.apache.arrow.vector.types FloatingPointPrecision)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb.arrow ArrowTypes MergeTypes VectorType)
            (xtdb.vector.extensions IntervalMDMType KeywordType OidType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
@@ -23,24 +23,6 @@
 (defn arrow-type->leg ^String [^ArrowType arrow-type]
   (ArrowTypes/toLeg arrow-type))
 
-(defn- date-unit->kw [unit]
-  (util/case-enum unit
-    DateUnit/DAY :day
-    DateUnit/MILLISECOND :milli))
-
-(defn- time-unit->kw [unit]
-  (util/case-enum unit
-    TimeUnit/SECOND :second
-    TimeUnit/MILLISECOND :milli
-    TimeUnit/MICROSECOND :micro
-    TimeUnit/NANOSECOND :nano))
-
-(defn- interval-unit->kw [unit]
-  (util/case-enum unit
-    IntervalUnit/DAY_TIME :day-time
-    IntervalUnit/MONTH_DAY_NANO :month-day-nano
-    IntervalUnit/YEAR_MONTH :year-month))
-
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]} ; xt.arrow/field-type reader macro
 (defn ->field-type ^org.apache.arrow.vector.types.pojo.FieldType [[arrow-type nullable? dictionary metadata]]
   (FieldType. nullable? arrow-type dictionary metadata))
@@ -50,9 +32,7 @@
   (Field. field-name field-type children))
 
 (def temporal-col-type [:timestamp-tz :micro "UTC"])
-(def temporal-type (st/->type :instant))
 (def nullable-temporal-col-type [:union #{:null temporal-col-type}])
-(def nullable-temporal-type (st/->type [:? :instant]))
 (def temporal-arrow-type (st/->arrow-type :instant))
 
 (defn ->type ^xtdb.arrow.VectorType [type-spec]
@@ -226,17 +206,6 @@
 (defmethod col-type->vec-type :tstz-range [nullable? _col-type]
   (VectorType/maybe VectorType/TSTZ_RANGE (boolean nullable?)))
 
-(defn col-type->leg [col-type]
-  (let [head (col-type-head col-type)]
-    (case head
-      (:struct :list :set :map) (str (symbol head))
-      :union (let [without-null (-> (flatten-union-types col-type)
-                                    (disj :null))]
-               (if (= 1 (count without-null))
-                 (recur (first without-null))
-                 (name :union)))
-      (col-type->field-name col-type))))
-
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti arrow-type->col-type
   (fn [arrow-type & child-fields] 
@@ -265,9 +234,6 @@
 
 (defn nullable-vec-type? [^VectorType vec-type]
   (boolean (some VectorType/.getNullable (.getLegs vec-type))))
-
-(defn null-vec-type? [^VectorType vec-type]
-  (instance? ArrowType$Null (.getArrowType vec-type)))
 
 ;;; fixed size binary
 
@@ -366,7 +332,7 @@
   (str (name type-head) "-" (name time-unit)))
 
 (defmethod arrow-type->col-type ArrowType$Timestamp [^ArrowType$Timestamp arrow-type]
-  (let [time-unit (time-unit->kw (.getUnit arrow-type))]
+  (let [time-unit (st/time-unit->kw (.getUnit arrow-type))]
     (if-let [tz (.getTimezone arrow-type)]
       [:timestamp-tz time-unit tz]
       [:timestamp-local time-unit])))
@@ -377,7 +343,7 @@
   (str (name type-head) "-" (name date-unit)))
 
 (defmethod arrow-type->col-type ArrowType$Date [^ArrowType$Date arrow-type]
-  [:date (date-unit->kw (.getUnit arrow-type))])
+  [:date (st/date-unit->kw (.getUnit arrow-type))])
 
 ;;; time
 
@@ -385,7 +351,7 @@
   (str (name type-head) "-" (name time-unit)))
 
 (defmethod arrow-type->col-type ArrowType$Time [^ArrowType$Time arrow-type]
-  [:time-local (time-unit->kw (.getUnit arrow-type))])
+  [:time-local (st/time-unit->kw (.getUnit arrow-type))])
 
 ;;; duration
 
@@ -393,7 +359,7 @@
   (str (name type-head) "-" (name time-unit)))
 
 (defmethod arrow-type->col-type ArrowType$Duration [^ArrowType$Duration arrow-type]
-  [:duration (time-unit->kw (.getUnit arrow-type))])
+  [:duration (st/time-unit->kw (.getUnit arrow-type))])
 
 ;;; interval
 
@@ -401,7 +367,7 @@
   (str (name type-head) "-" (name interval-unit)))
 
 (defmethod arrow-type->col-type ArrowType$Interval [^ArrowType$Interval arrow-type]
-  [:interval (interval-unit->kw (.getUnit arrow-type))])
+  [:interval (st/interval-unit->kw (.getUnit arrow-type))])
 
 ;;; extension types
 

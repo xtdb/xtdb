@@ -86,14 +86,20 @@ sealed class VectorType {
         }
 
         override val children get() = emptyMap<FieldName, VectorType>()
+
+        override fun toString() = "<$arrowType>"
     }
 
     data class Listy(override val arrowType: ArrowType, val elType: VectorType) : Mono() {
         override val children get() = mapOf(LIST_ELS_NAME to elType)
+
+        override fun toString() = "[<$arrowType> $elType]"
     }
 
     data class Struct(override val children: Map<FieldName, VectorType>) : Mono() {
         override val arrowType get() = STRUCT_TYPE
+
+        override fun toString() = children.entries.joinToString(prefix = "{", postfix = "}") { (n, t) -> "$n: $t" }
     }
 
     data class Maybe(val mono: Mono) : VectorType() {
@@ -107,6 +113,8 @@ sealed class VectorType {
 
         override fun toField(name: FieldName) =
             Field(name, fieldType, mono.children.map { (n, t) -> t.toField(n) })
+
+        override fun toString() = "[:? $mono]"
     }
 
     data class Poly(

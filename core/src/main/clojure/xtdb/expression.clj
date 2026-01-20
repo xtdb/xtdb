@@ -209,9 +209,9 @@
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti codegen-expr
   "Returns a map containing
-    * `:return-col-types` (set)
+    * `:return-type`
     * `:continue` (fn).
-      Returned fn expects a function taking a single return-col-type and the emitted code for that return-col-type.
+      Returned fn expects a function taking a single return-type and the emitted code for that return-type.
       May be called multiple times if there are multiple return types.
       Returned fn returns the emitted code for the expression (including the code supplied by the callback)."
   (fn [{:keys [op]} opts]
@@ -357,13 +357,13 @@
 
 (defmethod read-value-code :date [vec-type & args]
   (case (st/date-type->unit vec-type)
-    #xt.arrow/date-unit :day `(.readInt ~@args)
-    #xt.arrow/date-unit :milli `(.readLong ~@args)))
+    :day `(.readInt ~@args)
+    :milli `(.readLong ~@args)))
 
 (defmethod write-value-code :date [^VectorType$Mono vec-type & args]
   (case (st/date-type->unit vec-type)
-    #xt.arrow/date-unit :day `(.writeInt ~@args)
-    #xt.arrow/date-unit :milli `(.writeLong ~@args)))
+    :day `(.writeInt ~@args)
+    :milli `(.writeLong ~@args)))
 
 (defmethod write-value-code :oid [_ & args] `(.writeInt ~@args))
 
@@ -447,7 +447,7 @@
         literal-type (class literal)]
     {:return-type return-type
      :continue (fn [f]
-                 (f return-col-type (emit-value literal-type literal)))
+                 (f return-type (emit-value literal-type literal)))
      :literal literal}))
 
 (defn prepare-expr [expr]
@@ -466,13 +466,12 @@
             (update :batch-bindings (fnil conj []) [box-sym `(ValueBox.)])
             (assoc :continue (fn [f]
                                `(do
-                                  ~(continue (fn [return-col-type code]
-                                               (let [return-type (types/col-type->vec-type false return-col-type)]
-                                                 (write-value-code return-type box-sym (get legs return-type) code))))
+                                  ~(continue (fn [return-type code]
+                                               (write-value-code return-type box-sym (get legs return-type) code)))
 
                                   (case (.getLeg ~box-sym)
                                     ~@(->> (for [[ret-type leg] legs]
-                                             [leg (f (types/vec-type->col-type ret-type) (read-value-code ret-type box-sym))])
+                                             [leg (f ret-type (read-value-code ret-type box-sym))])
                                            (apply concat))))))))
 
       emitted-expr)))
@@ -493,9 +492,7 @@
      :continue (fn [f]
                  `(do
                     (.setPos ~var-rdr-sym ~idx)
-                    ~(continue-read (fn [vec-type code]
-                                      (f (types/vec-type->col-type vec-type) code))
-                                    return-type var-rdr-sym)))}))
+                    ~(continue-read f return-type var-rdr-sym)))}))
 
 (defmethod codegen-expr :param [{:keys [param]} {:keys [param-types]}]
   (codegen-expr {:op :variable, :variable param, :rel args-sym, :idx 0}
@@ -515,17 +512,15 @@
         (wrap-boxed-poly-return opts))))
 
 (defmethod codegen-expr :local [{:keys [local]} {:keys [local-types]}]
-  (let [return-col-type (get local-types local)
-        return-type (types/col-type->vec-type false return-col-type)]
+  (let [return-type (get local-types local)]
     {:return-type return-type
-     :continue (fn [f] (f return-col-type local))}))
+     :continue (fn [f] (f return-type local))}))
 
 (defmethod codegen-expr :let [{:keys [local expr body]} opts]
-  (let [{local-return-type :return-type, continue-expr :continue, :as emitted-expr} (codegen-expr expr opts)
-        local-col-types (types/flatten-union-types (types/vec-type->col-type local-return-type))
-        emitted-bodies (->> (for [local-col-type local-col-types]
-                              (MapEntry/create local-col-type
-                                               (codegen-expr body (assoc-in opts [:local-types local] local-col-type))))
+  (let [{^VectorType local-return-type :return-type, continue-expr :continue, :as emitted-expr} (codegen-expr expr opts)
+        emitted-bodies (->> (for [local-type (.getLegs local-return-type)]
+                              (MapEntry/create local-type
+                                               (codegen-expr body (assoc-in opts [:local-types local] local-type))))
                             (into {}))
         return-type (apply types/merge-types (into [] (map :return-type) (vals emitted-bodies)))]
     (-> {:return-type return-type
@@ -537,12 +532,12 @@
         (wrap-boxed-poly-return opts))))
 
 (defmethod codegen-expr :if-some [{:keys [local expr then else]} opts]
-  (let [{continue-expr :continue, expr-return-type :return-type, :as emitted-expr}
+  (let [{continue-expr :continue, ^VectorType expr-return-type :return-type, :as emitted-expr}
         (codegen-expr expr opts)
 
-        expr-rets (types/flatten-union-types (types/vec-type->col-type expr-return-type))
+        expr-rets (set (.getLegs expr-return-type))
 
-        emitted-thens (->> (for [local-type (disj expr-rets :null)]
+        emitted-thens (->> (for [local-type (disj expr-rets #xt/type :null)]
                              (MapEntry/create local-type
                                               (codegen-expr then (assoc-in opts [:local-types local] local-type))))
                            (into {}))
@@ -550,7 +545,7 @@
 
         children (cons emitted-expr (vals emitted-thens))]
 
-    (-> (if-not (contains? expr-rets :null)
+    (-> (if-not (contains? expr-rets #xt/type :null)
           {:return-type then-ret-type
            :children children
            :continue (fn [f]
@@ -564,7 +559,7 @@
              :children (cons emitted-else children)
              :continue (fn [f]
                          (continue-expr (fn [local-type code]
-                                          (if (= local-type :null)
+                                          (if (= local-type #xt/type :null)
                                             (e-cont f)
                                             `(let [~local ~code]
                                                ~((:continue (get emitted-thens local-type)) f))))))}))
@@ -606,7 +601,7 @@
                     normalise-fn-name)))
 
 (defn- cont-b3-call [arg-type code]
-  (if (= :null arg-type)
+  (if (= #xt/type :null arg-type)
     0
     `(long (if ~code 1 -1))))
 
@@ -617,8 +612,8 @@
     {:return-type return-type
      :continue (if-not nullable?
                  (fn [f]
-                   (f :bool `(and ~(l-cont (fn [_ code] `(boolean ~code)))
-                                  ~(r-cont (fn [_ code] `(boolean ~code))))))
+                   (f #xt/type :bool `(and ~(l-cont (fn [_ code] `(boolean ~code)))
+                                           ~(r-cont (fn [_ code] `(boolean ~code))))))
 
                  (let [l-sym (gensym 'l)
                        r-sym (gensym 'r)]
@@ -628,8 +623,8 @@
                                            -1
                                            ~(r-cont cont-b3-call)))]
                         (if (zero? (min ~l-sym ~r-sym))
-                          ~(f :null nil)
-                          ~(f :bool `(== 1 ~l-sym ~r-sym)))))))}))
+                          ~(f #xt/type :null nil)
+                          ~(f #xt/type :bool `(== 1 ~l-sym ~r-sym)))))))}))
 
 (defn- codegen-or [[{l-ret :return-type, l-cont :continue}
                     {r-ret :return-type, r-cont :continue}]]
@@ -638,8 +633,8 @@
     {:return-type return-type
      :continue (if-not nullable?
                  (fn [f]
-                   (f :bool `(or ~(l-cont (fn [_ code] `(boolean ~code)))
-                                 ~(r-cont (fn [_ code] `(boolean ~code))))))
+                   (f #xt/type :bool `(or ~(l-cont (fn [_ code] `(boolean ~code)))
+                                          ~(r-cont (fn [_ code] `(boolean ~code))))))
 
                  (let [l-sym (gensym 'l)
                        r-sym (gensym 'r)]
@@ -649,27 +644,27 @@
                                            1
                                            ~(r-cont cont-b3-call)))]
                         (if (zero? (max ~l-sym ~r-sym))
-                          ~(f :null nil)
-                          ~(f :bool `(not (== -1 ~l-sym ~r-sym))))))))}))
+                          ~(f #xt/type :null nil)
+                          ~(f #xt/type :bool `(not (== -1 ~l-sym ~r-sym))))))))}))
 
 (defn- codegen-call* [{:keys [f emitted-args] :as expr}]
   (let [shortcut-null? (shortcut-null-args? f)
 
-        all-arg-col-types (reduce (fn [acc {:keys [return-type]}]
-                                    (for [el acc
-                                          arg-col-type (types/flatten-union-types (types/vec-type->col-type return-type))]
-                                      (conj el arg-col-type)))
-                                  [[]]
-                                  emitted-args)
+        all-arg-types (reduce (fn [acc {:keys [^VectorType return-type]}]
+                                (for [el acc
+                                      arg-type (.getLegs return-type)]
+                                  (conj el arg-type)))
+                              [[]]
+                              emitted-args)
 
-        emitted-calls (->> (for [arg-col-types all-arg-col-types]
-                             (MapEntry/create arg-col-types
+        emitted-calls (->> (for [arg-types all-arg-types]
+                             (MapEntry/create arg-types
                                               (if (or (not shortcut-null?)
-                                                      (every? #(not= :null %) arg-col-types))
+                                                      (every? #(not= #xt/type :null %) arg-types))
                                                 (codegen-call (assoc expr
                                                                      :args emitted-args
-                                                                     :arg-col-types arg-col-types
-                                                                     :arg-types (mapv #(types/col-type->vec-type false %) arg-col-types)))
+                                                                     :arg-col-types (mapv types/vec-type->col-type arg-types)
+                                                                     :arg-types arg-types))
                                                 {:return-type #xt/type :null, :return-col-type :null, :->call-code (constantly nil)})))
                            (into {}))
 
@@ -683,23 +678,23 @@
                  (let [build-args-then-call
                        (reduce (fn step [build-next-arg {continue-this-arg :continue}]
                                  ;; step: emit this arg, and pass it through to the inner build-fn
-                                 (fn continue-building-args [arg-col-types emitted-args]
+                                 (fn continue-building-args [arg-types emitted-args]
                                    (continue-this-arg (fn [arg-type emitted-arg]
-                                                        (if (and shortcut-null? (= :null arg-type))
-                                                          (handle-emitted-expr :null nil)
-                                                          (build-next-arg (conj arg-col-types arg-type)
+                                                        (if (and shortcut-null? (= #xt/type :null arg-type))
+                                                          (handle-emitted-expr #xt/type :null nil)
+                                                          (build-next-arg (conj arg-types arg-type)
                                                                           (conj emitted-args emitted-arg)))))))
 
                                ;; innermost fn - we're done, call continue-call for these types
-                               (fn call-with-built-args [arg-col-types emitted-args]
-                                 (let [{:keys [return-col-type continue-call ->call-code]} (get emitted-calls arg-col-types)]
+                               (fn call-with-built-args [arg-types emitted-args]
+                                 (let [{:keys [return-type continue-call ->call-code]} (get emitted-calls arg-types)]
                                    (cond
                                      continue-call (continue-call handle-emitted-expr emitted-args)
-                                     ->call-code (handle-emitted-expr return-col-type (->call-code emitted-args))
+                                     ->call-code (handle-emitted-expr return-type (->call-code emitted-args))
                                      :else (throw (err/fault ::invalid-call-definition
                                                              (str "internal error: invalid call definition: "
-                                                             (pr-str {:f f, :arg-col-types arg-col-types
-                                                              :emitted-calls (keys emitted-calls)})))))))
+                                                             (pr-str {:f f, :arg-types arg-types
+                                                                      :emitted-calls (keys emitted-calls)})))))))
 
                                ;; reverse because we're working inside-out
                                (reverse emitted-args))]
@@ -1284,8 +1279,8 @@
                     (let [res (symbol 'ns)]
                       `(if-let [~res (-> (buf->str ~kw)
                                          (symbol) (namespace))]
-                         ~(f :utf8 `(str->buf ~res))
-                         ~(f :null nil))))})
+                         ~(f #xt/type :utf8 `(str->buf ~res))
+                         ~(f #xt/type :null nil))))})
 
 (defmethod codegen-call [:local_name :keyword] [_]
   {:return-type #xt/type :utf8
@@ -1444,7 +1439,7 @@
                                      resolved-args (map (fn [arg]
                                                           `(resolve-string ~arg))
                                                         arg-codes)]
-                                 (handle-emitted-expr :utf8
+                                 (handle-emitted-expr #xt/type :utf8
                                                       `(resolve-utf8-buf
                                                          (PgFormat/pgFormat (resolve-string ~fmt-code)
                                                                             [~@resolved-args])))))
@@ -1456,17 +1451,17 @@
   (when (< (count emitted-args) 2)
     (throw (err/incorrect :xtdb.expression/arity-error "Arity error, concat requires at least two arguments"
                           {:expr (dissoc expr :emitted-args :arg-col-types)})))
-  (let [return-type (apply types/merge-types (map :return-type emitted-args))
+  (let [^VectorType return-type (apply types/merge-types (map :return-type emitted-args))
         return-col-type (types/vec-type->col-type return-type)
-        possible-types (types/flatten-union-types return-col-type)
-        value-types (disj possible-types :null)
+        possible-types (set (.getLegs return-type))
+        value-types (disj possible-types #xt/type :null)
         _ (when (< 1 (count value-types))
             (throw (err/incorrect :xtdb.expression/type-error "All arguments to `concat` must be of the same type."
                                   {:types value-types})))
         value-type (first value-types)
-        ->concat-code (case value-type
-                        :utf8 #(do `(buf-concat (mapv resolve-utf8-buf [~@%])))
-                        :varbinary #(do `(buf-concat (mapv resolve-buf [~@%])))
+        ->concat-code (condp = value-type
+                        #xt/type :utf8 #(do `(buf-concat (mapv resolve-utf8-buf [~@%])))
+                        #xt/type :varbinary #(do `(buf-concat (mapv resolve-buf [~@%])))
                         nil nil)]
     {:return-type return-type
      :return-col-type return-col-type
@@ -1475,8 +1470,8 @@
                        (reduce (fn step [build-next-arg {continue-this-arg :continue}]
                                  (fn continue-building-args [emitted-args]
                                    (continue-this-arg (fn [arg-type emitted-arg]
-                                                        (if (= arg-type :null)
-                                                          (handle-emitted-expr :null nil)
+                                                        (if (= arg-type #xt/type :null)
+                                                          (handle-emitted-expr #xt/type :null nil)
                                                           (build-next-arg (conj emitted-args emitted-arg)))))))
                                (fn call-with-built-args [emitted-args]
                                  (handle-emitted-expr value-type (->concat-code emitted-args)))
@@ -1592,7 +1587,7 @@
                        (Math/floor (+ v# 0.5))
                        (Math/ceil (- v# 0.5)))))})
 
-(defmethod codegen-call [:round :num :int] [{[num-type _] :arg-col-types}]
+(defmethod codegen-call [:round :num :int] [_]
   {:return-type #xt/type :f64, :return-col-type :f64
    :->call-code (fn [[value scale]]
                   `(let [v# ~value]
@@ -1617,7 +1612,7 @@
                                               (Math/ceil (- divided# 0.5)))]
                                (* rounded# divisor#))))))))})
 
-(defmethod codegen-call [:round :decimal] [{[[_ precision scale bit-width]] :arg-col-types}]
+(defmethod codegen-call [:round :decimal] [{[[_ precision _scale bit-width]] :arg-col-types}]
   (let [ret-col-type [:decimal precision 0 bit-width]]
     {:return-type (types/col-type->vec-type false ret-col-type), :return-col-type ret-col-type
      :->call-code #(do `(.setScale ^BigDecimal ~@% 0 RoundingMode/HALF_UP))}))
@@ -1666,7 +1661,6 @@
                                                  (map (fn [{:keys [k], {:keys [return-type]} :emitted-expr}]
                                                         {(str k) return-type}))
                                                  emitted-vals)])
-        return-col-type (types/vec-type->col-type return-type)
         map-sym (gensym 'map)]
 
     {:return-type return-type
@@ -1683,22 +1677,19 @@
      :continue (fn [f]
                  `(do
                     ~@(for [{:keys [val-box], {:keys [continue]} :emitted-expr} emitted-vals]
-                        (continue (fn [val-col-type code]
-                                    (let [val-type (types/col-type->vec-type false val-col-type)]
-                                      (write-value-code val-type val-box (types/arrow-type->leg (.getArrowType val-type)) code)))))
+                        (continue (fn [^VectorType val-type code]
+                                    (write-value-code val-type val-box (types/arrow-type->leg (.getArrowType val-type)) code))))
 
-                    ~(f return-col-type map-sym)))}))
+                    ~(f return-type map-sym)))}))
 
 (defmethod codegen-call [:get_field :struct] [{[[_ field-types]] :arg-col-types, :keys [field]}]
   (if-let [val-col-type (get field-types field)]
     (let [val-type (types/col-type->vec-type false val-col-type)]
       {:return-type val-type, :return-col-type val-col-type
        :continue-call (fn [f [struct-code]]
-                        (continue-read (fn [vec-type code]
-                                         (f (types/vec-type->col-type vec-type) code))
-
-                                       val-type (-> `(.get ~struct-code ~(str field))
-                                                    (with-tag ValueReader))))})
+                        (continue-read f val-type
+                                       (-> `(.get ~struct-code ~(str field))
+                                           (with-tag ValueReader))))})
 
     {:return-type #xt/type :null, :return-col-type :null, :->call-code (constantly nil)}))
 
@@ -1738,10 +1729,10 @@
                                      ~(->> (for [[field inner-calls] inner-calls]
                                              (continue-read (fn [l-val-type l-val-code]
                                                               (continue-read (fn [r-val-type r-val-code]
-                                                                               (let [{:keys [return-col-type continue-call ->call-code]} (get inner-calls [l-val-type r-val-type])]
+                                                                               (let [{:keys [return-type continue-call ->call-code]} (get inner-calls [l-val-type r-val-type])]
                                                                                  (if continue-call
                                                                                    (continue-call cont-b3-call [l-val-code r-val-code])
-                                                                                   (cont-b3-call return-col-type (->call-code [l-val-code r-val-code])))))
+                                                                                   (cont-b3-call return-type (->call-code [l-val-code r-val-code])))))
                                                                              (get r-field-types field)
                                                                              (-> `(.get ~r-sym ~(str field))
                                                                                  (with-tag ValueReader))))
@@ -1755,8 +1746,8 @@
                                                           (min ~res-sym ~r-code))))
                                                    1))]
                                  (if (zero? ~res-sym)
-                                   ~(f :null nil)
-                                   ~(f :bool `(== ~return-code ~res-sym))))))})))))
+                                   ~(f #xt/type :null nil)
+                                   ~(f #xt/type :bool `(== ~return-code ~res-sym))))))})))))
 
 (defmethod codegen-call [:=== :struct :struct] [{[^VectorType$Struct l-type, ^VectorType$Struct r-type] :arg-types}]
   (let [l-field-types (.getChildren l-type)
@@ -1787,10 +1778,10 @@
                                    ~(->> (for [[field inner-calls] inner-calls]
                                            (continue-read (fn [l-val-type l-val-code]
                                                             (continue-read (fn [r-val-type r-val-code]
-                                                                             (let [{:keys [return-col-type continue-call ->call-code]} (get inner-calls [l-val-type r-val-type])]
+                                                                             (let [{:keys [return-type continue-call ->call-code]} (get inner-calls [l-val-type r-val-type])]
                                                                                (if continue-call
                                                                                  (continue-call cont-b3-call [l-val-code r-val-code])
-                                                                                 (cont-b3-call return-col-type (->call-code [l-val-code r-val-code])))))
+                                                                                 (cont-b3-call return-type (->call-code [l-val-code r-val-code])))))
                                                                            (get r-field-types field)
                                                                            (-> `(.get ~r-sym ~(str field))
                                                                                (with-tag ValueReader))))
@@ -1803,7 +1794,7 @@
                                                         -1
                                                         (min ~res-sym ~r-code))))
                                                  1))]
-                               ~(f :bool `(== 1 ~res-sym)))))}))))
+                               ~(f #xt/type :bool `(== 1 ~res-sym)))))}))))
 
 (defn -patch [^ValueReader l, ^ValueReader r]
   (if (.isNull r)
@@ -1819,7 +1810,7 @@
                                                   r-type
                                                   (let [l-type (get l-ks k :null)]
                                                     ;; if the r-val is null, we take the l-val
-                                                    (apply types/merge-col-types l-type (disj r-types :null)))))]))
+                                                    (apply types/merge-col-types l-type (disj r-types #xt/type :null)))))]))
                                     r-ks)]]
     {:return-type (types/col-type->vec-type false ret-col-type), :return-col-type ret-col-type
      :->call-code (fn [[l r]]
@@ -1843,7 +1834,7 @@
 (defmethod codegen-call [:_patch :null :struct] [{[_ [_ r-ks]] :arg-col-types}]
   (let [ret-col-type [:struct r-ks]]
     {:return-type (types/col-type->vec-type false ret-col-type), :return-col-type ret-col-type
-     :->call-code (fn [[l r]] r)}))
+     :->call-code (fn [[_ r]] r)}))
 
 (defmethod codegen-cast [:list :list] [{[_ source-el-type] :source-type
                                         [_ target-el-type :as target-type] :target-type}]
@@ -1870,8 +1861,7 @@
                                                   :emitted-el (codegen-expr el opts)}))))
 
         el-type (apply types/merge-types (map (comp :return-type :emitted-el) emitted-els))
-        return-type (types/->type [:list el-type])
-        return-col-type (types/vec-type->col-type return-type)]
+        return-type (types/->type [:list el-type])]
 
     {:return-type return-type
      :children (mapv :emitted-el emitted-els)
@@ -1880,7 +1870,7 @@
                           (mapv (fn [{:keys [el-box]}]
                                   [el-box `(ValueBox.)])))
      :continue (fn [f]
-                 (f return-col-type
+                 (f return-type
                     `(reify ListValueReader
                        (~'size [_#] ~(count emitted-els))
 
@@ -1888,9 +1878,8 @@
                         (case idx#
                           ~@(->> emitted-els
                                  (sequence (comp (map-indexed (fn [idx {:keys [el-box], {:keys [continue]} :emitted-el}]
-                                                                [idx (continue (fn [return-col-type code]
-                                                                                 (let [return-type (types/col-type->vec-type false return-col-type)
-                                                                                       leg (types/arrow-type->leg (.getArrowType return-type))]
+                                                                [idx (continue (fn [^VectorType return-type code]
+                                                                                 (let [leg (types/arrow-type->leg (.getArrowType return-type))]
                                                                                    `(do
                                                                                       ~(write-value-code return-type el-box leg code)
                                                                                       ~el-box))))]))
@@ -1899,13 +1888,12 @@
 (defmethod codegen-expr :set [expr opts]
   (let [{list-type :return-type, continue-list :continue, :as emitted-expr} (codegen-expr (assoc expr :op :list) opts)
         el-type (first (.getChildren (types/->field list-type)))
-        return-type (types/->type [:set el-type])
-        return-col-type (types/vec-type->col-type return-type)]
+        return-type (types/->type [:set el-type])]
     (-> emitted-expr
         (assoc :return-type return-type
                :continue (fn [f]
                            (continue-list (fn [_list-type code]
-                                            (f return-col-type code))))))))
+                                            (f return-type code))))))))
 
 (defmethod codegen-call [:nth :list :int] [{[[_ list-el-type] _n-type] :arg-col-types}]
   (let [return-col-type (types/merge-col-types list-el-type :null)
@@ -1918,9 +1906,8 @@
                                ~n-sym ~n-code]
                            (if (and (>= ~n-sym 0) (< ~n-sym (.size ~list-sym)))
                              (do
-                               ~(continue-read (fn [vec-type code] (f (types/vec-type->col-type vec-type) code))
-                                               list-el-vec-type `(.nth ~list-sym ~n-sym)))
-                             ~(f :null nil)))))}))
+                               ~(continue-read f list-el-vec-type `(.nth ~list-sym ~n-sym)))
+                             ~(f #xt/type :null nil)))))}))
 
 (defmethod codegen-call [:nth :any :int] [_]
   {:return-type #xt/type :null, :return-col-type :null, :->call-code (constantly nil)})
@@ -1971,8 +1958,9 @@
     (nth [_ idx] (.nth lst idx))))
 
 (defmethod codegen-call [:trim_array :list :int] [{[[_list list-el-type] _n-type] :arg-col-types}]
-  (let [return-col-type [:list list-el-type]]
-    {:return-type (types/col-type->vec-type false return-col-type), :return-col-type return-col-type
+  (let [return-col-type [:list list-el-type]
+        return-type (types/col-type->vec-type false return-col-type)]
+    {:return-type return-type, :return-col-type return-col-type
      :continue-call (fn [f [list-code n-code]]
                       (let [list-sym (gensym 'list)
                             n-sym (gensym 'n)]
@@ -1982,7 +1970,7 @@
                              (throw (err/incorrect :xtdb.expression/array-element-error
                                                    "Data exception - array element error."
                                                    {:nlen ~n-sym}))
-                             ~(f return-col-type (-> `(trim-array-view ~n-sym ~list-sym)
+                             ~(f return-type (-> `(trim-array-view ~n-sym ~list-sym)
                                                  (with-tag ListValueReader)))))))}))
 
 (doseq [[op return-code] [[:== 1] [:<> -1]]]
@@ -2024,17 +2012,17 @@
                                                                (fn cont-l [l-el-type l-el-code]
                                                                  `(do
                                                                     ~(continue-read (fn cont-r [r-el-type r-el-code]
-                                                                                      (let [{:keys [return-col-type continue-call ->call-code]} (get inner-calls [l-el-type r-el-type])]
+                                                                                      (let [{:keys [return-type continue-call ->call-code]} (get inner-calls [l-el-type r-el-type])]
                                                                                         (if continue-call
                                                                                           (continue-call cont-b3-call [l-el-code r-el-code])
-                                                                                          (cont-b3-call return-col-type (->call-code [l-el-code r-el-code])))))
+                                                                                          (cont-b3-call return-type (->call-code [l-el-code r-el-code])))))
                                                                                     r-el-type
                                                                                     `(.nth ~r-sym ~n-sym))))
                                                                l-el-type
                                                                `(.nth ~l-sym ~n-sym)))))))))]
                              (if (zero? ~res-sym)
-                               ~(f :null nil)
-                               ~(f :bool `(== ~return-code ~res-sym))))))})))
+                               ~(f #xt/type :null nil)
+                               ~(f #xt/type :bool `(== ~return-code ~res-sym))))))})))
 
 (defmethod codegen-call [:=== :list :list] [{[^VectorType$Listy l-type ^VectorType$Listy r-type] :arg-types}]
   (let [l-el-type (.getElType l-type)
@@ -2055,7 +2043,7 @@
      :children (vals inner-calls)
      :continue-call (fn continue-list= [f [l-code r-code]]
                       (let [l-sym (gensym 'l), r-sym (gensym 'r)]
-                        (f :bool
+                        (f #xt/type :bool
                            `(let [~l-sym ~l-code, ~r-sym ~r-code
                                   ~len-sym (.size ~l-sym)]
                               (if-not (= ~len-sym (.size ~r-sym))
@@ -2067,10 +2055,10 @@
                                                            (fn cont-l [l-el-type l-el-code]
                                                              `(do
                                                                 ~(continue-read (fn cont-r [r-el-type r-el-code]
-                                                                                  (let [{:keys [return-col-type continue-call ->call-code]} (get inner-calls [l-el-type r-el-type])]
+                                                                                  (let [{:keys [return-type continue-call ->call-code]} (get inner-calls [l-el-type r-el-type])]
                                                                                     (if continue-call
                                                                                       (continue-call cont-b3-call [l-el-code r-el-code])
-                                                                                      (cont-b3-call return-col-type (->call-code [l-el-code r-el-code])))))
+                                                                                      (cont-b3-call return-type (->call-code [l-el-code r-el-code])))))
                                                                                 r-el-type
                                                                                 `(.nth ~r-sym ~n-sym))))
                                                            l-el-type
@@ -2122,12 +2110,11 @@
                                                                  ~(types/arrow-type->leg (.getArrowType vec-type)))]))
                               writer-syms)
 
-       :write-value-out! (fn [value-type code]
-                           (let [vec-type (types/col-type->vec-type false value-type)]
-                             (write-value-code vec-type (get writer-syms vec-type) code)))})
+       :write-value-out! (fn [vec-type code]
+                           (write-value-code vec-type (get writer-syms vec-type) code))})
 
     {:write-value-out! (fn [value-type code]
-                         (write-value-code (types/col-type->vec-type false value-type) out-vec-sym code))}))
+                         (write-value-code value-type out-vec-sym code))}))
 
 (defn wrap-zone-id-cache-buster [f]
   (fn [expr opts]

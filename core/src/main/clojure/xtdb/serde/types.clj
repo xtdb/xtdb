@@ -24,18 +24,18 @@
            (when (odd? (count clauses))
              (list (last clauses)))))))
 
-(defn- date-unit->kw [unit]
+(defn date-unit->kw [unit]
   (case-enum unit
     DateUnit/DAY :day
     DateUnit/MILLISECOND :milli))
 
-(defn- kw->date-unit [kw]
+(defn kw->date-unit [kw]
   (case kw
     :day DateUnit/DAY
     :milli DateUnit/MILLISECOND))
 
 (defn date-type->unit ^org.apache.arrow.vector.types.DateUnit [^VectorType$Mono mono-type]
-  (ArrowType$Date/.getUnit (.getArrowType mono-type)))
+  (date-unit->kw (ArrowType$Date/.getUnit (.getArrowType mono-type))))
 
 (defn time-unit->kw [unit]
   (case-enum unit
@@ -44,7 +44,7 @@
     TimeUnit/MICROSECOND :micro
     TimeUnit/NANOSECOND :nano))
 
-(defn- kw->time-unit [kw]
+(defn kw->time-unit [kw]
   (case kw
     :second TimeUnit/SECOND
     :milli TimeUnit/MILLISECOND
@@ -57,7 +57,7 @@
     IntervalUnit/MONTH_DAY_NANO :month-day-nano
     IntervalUnit/YEAR_MONTH :year-month))
 
-(defn- kw->interval-unit [kw]
+(defn kw->interval-unit [kw]
   (case kw
     :day-time IntervalUnit/DAY_TIME
     :month-day-nano IntervalUnit/MONTH_DAY_NANO

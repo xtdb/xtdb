@@ -25,8 +25,8 @@
    :continue-call (fn [f [uri]]
                     (let [uri-part (gensym 'uri-part)]
                       `(if-let [~uri-part (~f-sym ~uri)]
-                         ~(f :utf8 `(expr/resolve-utf8-buf ~uri-part))
-                         ~(f :null nil))))})
+                         ~(f #xt/type :utf8 `(expr/resolve-utf8-buf ~uri-part))
+                         ~(f #xt/type :null nil))))})
 
 (defn uri->scheme [^URI uri] (some-> (.getScheme uri) expr/resolve-utf8-buf))
 
@@ -55,8 +55,8 @@
                     (let [uri-part (gensym 'uri-part)]
                       `(let [~uri-part (.getPort ~uri)]
                          (if (neg? ~uri-part)
-                           ~(f :null nil)
-                           ~(f :i32 uri-part)))))})
+                           ~(f #xt/type :null nil)
+                           ~(f #xt/type :i32 uri-part)))))})
 
 (defn uri->query [^URI uri] (some-> (.getQuery uri) expr/resolve-utf8-buf))
 
