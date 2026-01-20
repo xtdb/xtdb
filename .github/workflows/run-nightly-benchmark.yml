@@ -235,8 +235,8 @@ jobs:
             --from-literal=GITHUB_PAT="${{ secrets.BENCHMARK_GITHUB_PAT }}" \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Create AWS Datasets Secret (for clickbench)
-        if: (steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress') && inputs.bench_type == 'clickbench'
+      - name: Create AWS Datasets Secret (for S3 dataset benchmarks)
+        if: (steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress') && (inputs.bench_type == 'clickbench' || inputs.bench_type == 'products' || inputs.bench_type == 'ts-devices')
         run: |
           set -euo pipefail
           kubectl -n cloud-benchmark create secret generic xtdb-aws-datasets-secret \

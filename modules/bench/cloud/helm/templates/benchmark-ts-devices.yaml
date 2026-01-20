@@ -83,6 +83,10 @@ spec:
             - secretRef:
                 name: {{ .Values.providerConfig.existingSecret }}
             {{- end }}
+            {{- if index .Values "ts-devices" "awsSecretName" }}
+            - secretRef:
+                name: {{ index .Values "ts-devices" "awsSecretName" }}
+            {{- end }}
           env:
             - name: XTDB_NODE_ID
               valueFrom:

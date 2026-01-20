@@ -44,9 +44,11 @@ patch:
 
 products:
   limit: ""
+  awsSecretName: "xtdb-aws-datasets-secret"
 
 ts-devices:
   size: small
+  awsSecretName: "xtdb-aws-datasets-secret"
 
 tsbs-iot:
   devices: 2000
