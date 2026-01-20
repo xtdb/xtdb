@@ -91,9 +91,8 @@ class ReadOnlyLocalLog(
         }
     }
 
-    @Volatile
-    override var latestSubmittedOffset: LogOffset = readLatestSubmittedOffset(logFilePath)
-        private set
+    override val latestSubmittedOffset: LogOffset
+        get() = readLatestSubmittedOffset(logFilePath)
 
     override fun appendMessage(message: Message) =
         throw Incorrect("Cannot append to read-only database log")
@@ -149,8 +148,6 @@ class ReadOnlyLocalLog(
         val newLatestOffset = readLatestSubmittedOffset(logFilePath)
 
         if (newLatestOffset <= currentOffset) return null
-
-        latestSubmittedOffset = newLatestOffset
 
         var lastOffset = currentOffset
         FileChannel.open(logFilePath, READ).use { ch ->
