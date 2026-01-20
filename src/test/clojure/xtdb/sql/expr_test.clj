@@ -155,6 +155,18 @@
   (t/is (= '(position f/a f/b) (plan-expr-with-foo "POSITION(foo.a IN foo.b USING CHARACTERS)")))
   (t/is (= '(octet-position f/a f/b) (plan-expr-with-foo "POSITION(foo.a IN foo.b USING OCTETS)"))))
 
+(t/deftest test-position-with-substring
+  (t/is (= [{:sub "llo:world"}]
+           (xt/q tu/*node* "SELECT SUBSTRING('hello:world' FROM 3) as sub")))
+  (t/is (= [{:pos 4}]
+           (xt/q tu/*node* "SELECT POSITION(':' IN 'llo:world') as pos")))
+  (t/is (= [{:pos 4}]
+           (xt/q tu/*node* "SELECT POSITION(':' IN SUBSTRING('hello:world' FROM 3)) as pos")))
+  (t/is (= [{:pos 2}]
+           (xt/q tu/*node* "SELECT POSITION('o' IN SUBSTRING('hello:world' FROM 7)) as pos")))
+  (t/is (= [{:pos 0}]
+           (xt/q tu/*node* "SELECT POSITION('x' IN SUBSTRING('hello:world' FROM 3)) as pos"))))
+
 (t/deftest test-length-expr
   (t/is (= '(length f/a) (plan-expr-with-foo "LENGTH(foo.a)")))
   (t/is (= '(length "abc") (plan-expr-with-foo "LENGTH('abc')")))

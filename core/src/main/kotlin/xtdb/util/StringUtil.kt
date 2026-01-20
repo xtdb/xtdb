@@ -14,12 +14,14 @@ object StringUtil {
     @JvmStatic
     fun SqlBinPosition(needle: ByteBuffer, haystack: ByteBuffer): Int {
         if (needle.remaining() == 0) return 1
+        val needlePos = needle.position()
+        val haystackPos = haystack.position()
         var i = 0
         var j = 0
         while (true) {
             if (j == needle.remaining()) return i + 1
             if (i + j == haystack.remaining()) return 0
-            if (haystack[i + j] == needle[j]) j++ else { i++; j = 0 }
+            if (haystack[haystackPos + i + j] == needle[needlePos + j]) j++ else { i++; j = 0 }
         }
     }
 
@@ -34,9 +36,10 @@ object StringUtil {
     @JvmStatic
     @JvmOverloads
     fun utf8Length(buf: ByteBuffer, start: Int = 0, end: Int = buf.remaining()): Int {
+        val bufPos = buf.position()
         var len = 0
         for (i in start until end)
-            if (isUtf8Char(buf[i])) len++
+            if (isUtf8Char(buf[bufPos + i])) len++
         return len
     }
 
