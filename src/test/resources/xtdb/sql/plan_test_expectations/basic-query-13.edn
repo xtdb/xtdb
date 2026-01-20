@@ -1,5 +1,7 @@
 [:project
  {:projections [{lastname si.1/lastname} {name si.1/name}]}
- [:rename {:prefix si.1} [:select
+ [:rename
+  {:prefix si.1}
+  [:select
    {:predicate (== name lastname)}
    [:scan {:table #xt/table stars_in, :columns [lastname name]}]]]]

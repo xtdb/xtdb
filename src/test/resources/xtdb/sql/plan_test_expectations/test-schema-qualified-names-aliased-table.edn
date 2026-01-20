@@ -1,3 +1,7 @@
 [:project
  {:projections [{column_name f.1/column_name}]}
- [:rename {:prefix f.1} [:scan {:table #xt/table information_schema/columns, :columns [column_name]}]]]
+ [:rename
+  {:prefix f.1}
+  [:scan
+   {:table #xt/table information_schema/columns,
+    :columns [column_name]}]]]

@@ -2,7 +2,11 @@
  {:projections [{some_column (== 1 _sq_2)}]}
  [:apply
   {:mode :single-join, :columns {x.1/z ?_sq_z_3}}
-  [:rename {:prefix x.1} [:scan {:table #xt/table x, :columns [{y (== y 1)} z]}]]
+  [:rename
+   {:prefix x.1}
+   [:scan {:table #xt/table x, :columns [{y (== y 1)} z]}]]
   [:project
    {:projections [{_sq_2 (== foo.3/bar ?_sq_z_3)}]}
-   [:rename {:prefix foo.3} [:scan {:table #xt/table foo, :columns [bar]}]]]]]
+   [:rename
+    {:prefix foo.3}
+    [:scan {:table #xt/table foo, :columns [bar]}]]]]]

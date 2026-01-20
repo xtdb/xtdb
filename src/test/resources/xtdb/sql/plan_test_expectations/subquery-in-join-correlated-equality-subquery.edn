@@ -2,12 +2,19 @@
  {:projections [{a foo.1/a}]}
  [:mega-join
   {:conditions []}
-  [[:rename {:prefix foo.1} [:scan {:table #xt/table foo, :columns [a]}]]
+  [[:rename
+    {:prefix foo.1}
+    [:scan {:table #xt/table foo, :columns [a]}]]
    [:select
     {:predicate (== bar.2/c _sq_3)}
     [:apply
      {:mode :single-join, :columns {bar.2/b ?_sq_b_4}}
-     [:rename {:prefix bar.2} [:scan {:table #xt/table bar, :columns [c b]}]]
+     [:rename
+      {:prefix bar.2}
+      [:scan {:table #xt/table bar, :columns [c b]}]]
      [:project
       {:projections [{_sq_3 foo.4/b}]}
-      [:rename {:prefix foo.4} [:scan {:table #xt/table foo, :columns [{a (== a ?_sq_b_4)} b]}]]]]]]]]
+      [:rename
+       {:prefix foo.4}
+       [:scan
+        {:table #xt/table foo, :columns [{a (== a ?_sq_b_4)} b]}]]]]]]]]

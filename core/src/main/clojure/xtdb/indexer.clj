@@ -29,7 +29,6 @@
            (java.time.temporal ChronoUnit)
            (java.util List)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.api.TransactionKey
            (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            (xtdb.database Database Database$Catalog)

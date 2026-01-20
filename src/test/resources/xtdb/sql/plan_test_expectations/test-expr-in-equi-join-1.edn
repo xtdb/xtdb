@@ -3,4 +3,6 @@
  [:mega-join
   {:conditions [{(+ a.1/a 1) (+ b.2/b 1)}]}
   [[:rename {:prefix a.1} [:scan {:table #xt/table a, :columns [a]}]]
-   [:rename {:prefix b.2} [:scan {:table #xt/table bar, :columns [b]}]]]]]
+   [:rename
+    {:prefix b.2}
+    [:scan {:table #xt/table bar, :columns [b]}]]]]]

@@ -3,12 +3,13 @@
  [:map
   {:projections [{_sq_4 _row_count_7}]}
   [:group-by
-   {:columns [customers.1/country
-    customers.1/custno
-    customers.1/name
-    _sq_2
-    _row_number_0
-    {_row_count_7 (count _dep_countable_1)}]}
+   {:columns
+    [customers.1/country
+     customers.1/custno
+     customers.1/name
+     _sq_2
+     _row_number_0
+     {_row_count_7 (count _dep_countable_1)}]}
    [:left-outer-join
     {:conditions [{customers.1/custno orders.5/custno}]}
     [:map
@@ -17,10 +18,17 @@
       {:projections [{_sq_2 true}]}
       [:anti-join
        {:conditions [{customers.1/country country}]}
-       [:rename {:prefix customers.1} [:scan {:table #xt/table customers, :columns [country custno name]}]]
+       [:rename
+        {:prefix customers.1}
+        [:scan
+         {:table #xt/table customers, :columns [country custno name]}]]
        [:project
         {:projections [{country salesp.3/country}]}
-        [:rename {:prefix salesp.3} [:scan {:table #xt/table salesp, :columns [country]}]]]]]]
+        [:rename
+         {:prefix salesp.3}
+         [:scan {:table #xt/table salesp, :columns [country]}]]]]]]
     [:map
      {:projections [{_dep_countable_1 1}]}
-     [:rename {:prefix orders.5} [:scan {:table #xt/table orders, :columns [custno]}]]]]]]]
+     [:rename
+      {:prefix orders.5}
+      [:scan {:table #xt/table orders, :columns [custno]}]]]]]]]

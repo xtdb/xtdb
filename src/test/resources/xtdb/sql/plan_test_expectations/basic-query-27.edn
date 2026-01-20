@@ -4,4 +4,6 @@
   {:order-specs [[_ob2 {:direction :asc, :null-ordering :nulls-last}]]}
   [:project
    {:projections [si.1/movie_title {_ob2 si.1/year}]}
-   [:rename {:prefix si.1} [:scan {:table #xt/table stars_in, :columns [year movie_title]}]]]]]
+   [:rename
+    {:prefix si.1}
+    [:scan {:table #xt/table stars_in, :columns [year movie_title]}]]]]]

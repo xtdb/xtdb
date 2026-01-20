@@ -1,3 +1,9 @@
 [:project
  {:projections [{bar foo.2/bar}]}
- [:rename {:prefix foo.2} [:rename {:columns {si.1/name bar}} [:rename {:prefix si.1} [:scan {:table #xt/table stars_in, :columns [name]}]]]]]
+ [:rename
+  {:prefix foo.2}
+  [:rename
+   {:columns {si.1/name bar}}
+   [:rename
+    {:prefix si.1}
+    [:scan {:table #xt/table stars_in, :columns [name]}]]]]]

@@ -2,4 +2,6 @@
  {:projections [{_column_1 _sum_out_2}]}
  [:group-by
   {:columns [{_sum_out_2 (sum m.1/length)}]}
-  [:rename {:prefix m.1} [:scan {:table #xt/table movie, :columns [length]}]]]]
+  [:rename
+   {:prefix m.1}
+   [:scan {:table #xt/table movie, :columns [length]}]]]]

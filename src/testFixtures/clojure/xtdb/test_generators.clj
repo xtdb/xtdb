@@ -10,7 +10,7 @@
            [java.time.temporal Temporal]
            [java.util List Map Set]
            [org.apache.arrow.memory BufferAllocator]
-           [xtdb.arrow ArrowTypes MergeTypes Vector VectorType VectorType$Listy VectorType$Maybe VectorType$Null VectorType$Poly VectorType$Scalar VectorType$Struct]))
+           [xtdb.arrow ArrowTypes MergeTypes ValueTypes Vector VectorType VectorType$Listy VectorType$Maybe VectorType$Null VectorType$Poly VectorType$Scalar VectorType$Struct]))
 
 ;; Simple types
 ;; TODO: Ensure all arrow types are covered here
@@ -122,7 +122,7 @@
 
 (def arrow-type-gen
   (gen/let [v (recursive-value-gen)]
-    (ArrowTypes/toArrowType v)))
+    (ValueTypes/toArrowType v)))
 
 ;; TODO: Generating simple keys here for now, trying to ensure some overlap between records
 (defn generate-record
@@ -293,7 +293,7 @@
 (defn records->generator
   "Given a list of records, produce a generator that will generate similar records"
   [records]
-  (vec-type->value-generator (MergeTypes/mergeTypes (mapv VectorType/fromValue records))))
+  (vec-type->value-generator (MergeTypes/mergeTypes (mapv ValueTypes/fromValue records))))
 
 (defn info-schema->generator
   "Given an XTDB info schema for a specific table, produce a generator that will generate records"

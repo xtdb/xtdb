@@ -2,5 +2,9 @@
  {:projections [{foo d2.2/foo} {bar d1.1/bar}]}
  [:full-outer-join
   {:conditions [{d1.1/bar d2.2/foo}]}
-  [:rename {:prefix d1.1} [:scan {:table #xt/table d1, :columns [bar]}]]
-  [:rename {:prefix d2.2} [:scan {:table #xt/table d2, :columns [foo]}]]]]
+  [:rename
+   {:prefix d1.1}
+   [:scan {:table #xt/table d1, :columns [bar]}]]
+  [:rename
+   {:prefix d2.2}
+   [:scan {:table #xt/table d2, :columns [foo]}]]]]

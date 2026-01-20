@@ -1,4 +1,8 @@
 [:project
  {:projections [{_id foo.1/_id}]}
- [:rename {:prefix foo.1} [:scan
-   {:table #xt/table foo, :for-valid-time [:at ?_0], :columns [{_id (== _id ?_1)}]}]]]
+ [:rename
+  {:prefix foo.1}
+  [:scan
+   {:table #xt/table foo,
+    :columns [{_id (== _id ?_1)}],
+    :for-valid-time [:at ?_0]}]]]

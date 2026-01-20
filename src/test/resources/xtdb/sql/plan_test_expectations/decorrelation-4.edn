@@ -5,19 +5,27 @@
   [:select
    {:predicate (== e.2/grade _min_out_6)}
    [:group-by
-    {:columns [s.1/name
-     s.1/id
-     e.2/sid
-     e.2/grade
-     e.2/course
-     _row_number_0
-     {_min_out_6 (min e2.4/grade)}]}
+    {:columns
+     [s.1/name
+      s.1/id
+      e.2/sid
+      e.2/grade
+      e.2/course
+      _row_number_0
+      {_min_out_6 (min e2.4/grade)}]}
     [:left-outer-join
      {:conditions [{s.1/id e2.4/sid}]}
      [:map
       {:projections [{_row_number_0 (row-number)}]}
       [:mega-join
        {:conditions [{s.1/id e.2/sid}]}
-       [[:rename {:prefix s.1} [:scan {:table #xt/table students, :columns [name id]}]]
-        [:rename {:prefix e.2} [:scan {:table #xt/table exams, :columns [sid grade course]}]]]]]
-     [:rename {:prefix e2.4} [:scan {:table #xt/table exams, :columns [sid grade]}]]]]]]]
+       [[:rename
+         {:prefix s.1}
+         [:scan {:table #xt/table students, :columns [name id]}]]
+        [:rename
+         {:prefix e.2}
+         [:scan
+          {:table #xt/table exams, :columns [sid grade course]}]]]]]
+     [:rename
+      {:prefix e2.4}
+      [:scan {:table #xt/table exams, :columns [sid grade]}]]]]]]]

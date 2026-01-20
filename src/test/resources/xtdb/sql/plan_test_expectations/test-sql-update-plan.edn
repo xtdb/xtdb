@@ -1,27 +1,33 @@
 [:project
- {:projections [_iid
-  {_valid_from
-   (greatest
-    _valid_from
-    (cast
-     (coalesce #xt/date "2021-07-01" xtdb/start-of-time)
-     [:timestamp-tz :micro "UTC"]))}
-  {_valid_to _valid_to}
-  first_name
-  id
-  last_name]}
- [:project
-  {:projections [{_iid u.1/_iid}
-   {_valid_from u.1/_valid_from}
-   {_valid_to u.1/_valid_to}
-   {first_name "Sue"}
-   {id u.1/id}
-   {last_name u.1/last_name}]}
-  [:rename {:prefix u.1} [:scan
-    {:table #xt/table users,
-     :for-valid-time [:in #xt/date "2021-07-01" nil], :columns [_valid_to
-     last_name
-     {id (== id ?_0)}
+ {:projections
+  [_iid
+   {_valid_from
+    (greatest
      _valid_from
-     {first_name (or (not (boolean (=== "Sue" first_name))))}
-     _iid]}]]]]
+     (cast
+      (coalesce #xt/date "2021-07-01" xtdb/start-of-time)
+      #xt/type :instant))}
+   {_valid_to _valid_to}
+   first_name
+   id
+   last_name]}
+ [:project
+  {:projections
+   [{_iid u.1/_iid}
+    {_valid_from u.1/_valid_from}
+    {_valid_to u.1/_valid_to}
+    {first_name "Sue"}
+    {id u.1/id}
+    {last_name u.1/last_name}]}
+  [:rename
+   {:prefix u.1}
+   [:scan
+    {:table #xt/table users,
+     :columns
+     [_valid_to
+      last_name
+      {id (== id ?_0)}
+      _valid_from
+      {first_name (or (not (boolean (=== "Sue" first_name))))}
+      _iid],
+     :for-valid-time [:in #xt/date "2021-07-01" nil]}]]]]

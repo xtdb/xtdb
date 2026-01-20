@@ -10,13 +10,31 @@
      {:conditions [{t1.1/a1 t2.2/a2}]}
      [[:semi-join
        {:conditions [{t3.3/c1 xt.values.9/_column_1}]}
-       [:rename {:prefix t3.3} [:scan {:table #xt/table t3, :columns [c1]}]]
-       [:rename {:prefix xt.values.9} [:table {:output-cols [_column_1], :rows [{:_column_1 792} {:_column_1 14}]}]]]
+       [:rename
+        {:prefix t3.3}
+        [:scan {:table #xt/table t3, :columns [c1]}]]
+       [:rename
+        {:prefix xt.values.9}
+        [:table
+         {:output-cols [_column_1],
+          :rows [{:_column_1 792} {:_column_1 14}]}]]]
       [:semi-join
        {:conditions [{t1.1/b1 xt.values.5/_column_1}]}
-       [:rename {:prefix t1.1} [:scan {:table #xt/table t1, :columns [a1 b1]}]]
-       [:rename {:prefix xt.values.5} [:table {:output-cols [_column_1], :rows [{:_column_1 532} {:_column_1 593}]}]]]
+       [:rename
+        {:prefix t1.1}
+        [:scan {:table #xt/table t1, :columns [a1 b1]}]]
+       [:rename
+        {:prefix xt.values.5}
+        [:table
+         {:output-cols [_column_1],
+          :rows [{:_column_1 532} {:_column_1 593}]}]]]
       [:semi-join
        {:conditions [{t2.2/b1 xt.values.7/_column_1}]}
-       [:rename {:prefix t2.2} [:scan {:table #xt/table t2, :columns [a2 b1]}]]
-       [:rename {:prefix xt.values.7} [:table {:output-cols [_column_1], :rows [{:_column_1 808} {:_column_1 662}]}]]]]]]]]]
+       [:rename
+        {:prefix t2.2}
+        [:scan {:table #xt/table t2, :columns [a2 b1]}]]
+       [:rename
+        {:prefix xt.values.7}
+        [:table
+         {:output-cols [_column_1],
+          :rows [{:_column_1 808} {:_column_1 662}]}]]]]]]]]]

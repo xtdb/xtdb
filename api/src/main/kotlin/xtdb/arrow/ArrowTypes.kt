@@ -15,7 +15,6 @@ import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
 import org.apache.arrow.vector.types.pojo.Field
-import xtdb.arrow.VectorType.Companion.asVectorType
 import xtdb.vector.extensions.*
 
 @JvmField
@@ -132,7 +131,5 @@ fun ArrowType.toLeg(): String = accept(object : ArrowTypeVisitor<String> {
         else -> throw UnsupportedOperationException("not supported for $type")
     }
 })
-
-internal fun Any?.toArrowType() = asVectorType.arrowType
 
 fun Field.withName(name: FieldName) = Field(name, fieldType, children)

@@ -1,9 +1,14 @@
 [:project
- {:projections [{lastname foo.1/lastname}
-  {name foo.1/name}
-  {jame bar.2/jame}
-  {lastjame bar.2/lastjame}]}
+ {:projections
+  [{lastname foo.1/lastname}
+   {name foo.1/name}
+   {jame bar.2/jame}
+   {lastjame bar.2/lastjame}]}
  [:mega-join
   {:conditions []}
-  [[:rename {:prefix foo.1} [:scan {:table #xt/table foo, :columns [lastname name]}]]
-   [:rename {:prefix bar.2} [:scan {:table #xt/table bar, :columns [lastjame jame]}]]]]]
+  [[:rename
+    {:prefix foo.1}
+    [:scan {:table #xt/table foo, :columns [lastname name]}]]
+   [:rename
+    {:prefix bar.2}
+    [:scan {:table #xt/table bar, :columns [lastjame jame]}]]]]]

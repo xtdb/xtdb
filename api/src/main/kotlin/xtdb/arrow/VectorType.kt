@@ -15,7 +15,6 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.arrow.MergeTypes.Companion.mergeTypes
 import xtdb.error.Unsupported
 import xtdb.time.Interval
 import xtdb.time.MICRO_HZ
@@ -37,7 +36,7 @@ typealias VectorTypes = Map<FieldName, VectorType>
 
 fun schema(vararg fields: Field) = Schema(fields.asIterable())
 
-internal const val LIST_ELS_NAME = $$"$data$"
+const val LIST_ELS_NAME = $$"$data$"
 
 sealed class VectorType {
     abstract val arrowType: ArrowType
@@ -294,87 +293,5 @@ sealed class VectorType {
                 is ArrowType.Union -> fromLegs(children.map { it.asType })
                 else -> Scalar(type)
             }.let { maybe(it, isNullable) }
-
-        @JvmStatic
-        @get:JvmName("fromValue")
-        val Any?.asVectorType: Mono
-            get() = when (this) {
-                null -> Null
-                is ValueReader -> readObject().asVectorType
-                is ListValueReader -> listTypeOf(mergeTypes((0 until size()).map { nth(it).readObject().asVectorType }))
-                is Boolean -> BOOL
-                is Byte -> I8
-                is Short -> I16
-                is Int -> I32
-                is Long -> I64
-                is Float -> F32
-                is Double -> F64
-
-                is BigDecimal -> {
-                    val precision = when (precision()) {
-                        // Java Type only supports 128 and 256 bit widths
-                        in 0..32 -> 32
-                        in 33..64 -> 64
-                        else -> throw Unsupported("Unsupported precision: ${precision()}")
-                    }
-                    Scalar(ArrowType.Decimal(precision, scale(), precision * 4))
-                }
-
-                is ZonedDateTime -> Scalar(ArrowType.Timestamp(MICROSECOND, zone.toString()))
-                is OffsetDateTime -> Scalar(ArrowType.Timestamp(MICROSECOND, offset.toString()))
-                is Instant -> INSTANT
-                is Date -> INSTANT
-                is LocalDateTime -> TIMESTAMP_MICRO
-                is LocalDate -> DATE_DAY
-                is LocalTime -> TIME_NANO
-                is Duration -> DURATION_MICRO
-
-                is CharSequence -> UTF8
-                is ByteArray -> VAR_BINARY
-                is ByteBuffer -> VAR_BINARY
-                is UUID -> UUID
-                is URI -> URI
-                is RegClass -> REG_CLASS
-                is RegProc -> REG_PROC
-                is Keyword -> KEYWORD
-                is ClojureForm -> TRANSIT
-                is IllegalArgumentException -> TRANSIT
-                is RuntimeException -> TRANSIT
-
-                is List<*> -> listTypeOf(mergeTypes(map<Any?, VectorType> { it.asVectorType }))
-
-                is Set<*> -> setTypeOf(mergeTypes(map<Any?, VectorType> { it.asVectorType }))
-
-                // TODO support for Type maps
-                is Map<*, *> ->
-                    if (keys.all { it is String || it is Keyword }) {
-                        structOf(entries.associate { (k, v) ->
-                            val normalK = when (k) {
-                                is String -> k
-                                is Keyword -> normalForm(k).sym.toString()
-                                else -> error("k is of type ${k?.javaClass}")
-                            }
-                            normalK to v.asVectorType
-                        })
-                    } else {
-                        throw UnsupportedOperationException("Type Maps currently not supported")
-                    }
-
-                is Interval -> when {
-                    nanos % (NANO_HZ / MICRO_HZ) != 0L -> INTERVAL_MDN
-                    nanos != 0L || days != 0 -> INTERVAL_MDM
-                    else -> INTERVAL_YEAR
-                }
-
-                is PeriodDuration -> when {
-                    period.days == 0 && duration.equals(Duration.ZERO) -> INTERVAL_YEAR
-                    period.toTotalMonths() == 0L && duration.toNanos() % 1_000_000 == 0L -> INTERVAL_MDM
-                    else -> INTERVAL_MDN
-                }
-
-                is ZonedDateTimeRange -> TSTZ_RANGE
-
-                else -> throw UnsupportedOperationException("unknown object type: $javaClass")
-            }
     }
 }

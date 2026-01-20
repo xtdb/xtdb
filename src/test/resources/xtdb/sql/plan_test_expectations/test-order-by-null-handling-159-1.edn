@@ -1,5 +1,8 @@
 [:project
  {:projections [{a foo.1/a}]}
  [:order-by
-  {:order-specs [[foo.1/a {:direction :asc, :null-ordering :nulls-first}]]}
-  [:rename {:prefix foo.1} [:scan {:table #xt/table foo, :columns [a]}]]]]
+  {:order-specs
+   [[foo.1/a {:direction :asc, :null-ordering :nulls-first}]]}
+  [:rename
+   {:prefix foo.1}
+   [:scan {:table #xt/table foo, :columns [a]}]]]]

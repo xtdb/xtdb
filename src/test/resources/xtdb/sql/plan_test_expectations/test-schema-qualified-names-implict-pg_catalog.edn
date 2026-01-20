@@ -1,3 +1,6 @@
 [:project
  {:projections [{attname pg_attribute.1/attname}]}
- [:rename {:prefix pg_attribute.1} [:scan {:table #xt/table pg_catalog/pg_attribute, :columns [attname]}]]]
+ [:rename
+  {:prefix pg_attribute.1}
+  [:scan
+   {:table #xt/table pg_catalog/pg_attribute, :columns [attname]}]]]

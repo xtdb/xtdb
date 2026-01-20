@@ -3,7 +3,10 @@
  [:select
   {:predicate (> _sum_out_2 1)}
   [:group-by
-   {:columns [{_sum_out_4 (sum docs.1/_id)} {_sum_out_2 (sum _sum_in_3)}]}
+   {:columns
+    [{_sum_out_4 (sum docs.1/_id)} {_sum_out_2 (sum _sum_in_3)}]}
    [:map
     {:projections [{_sum_in_3 nil}]}
-    [:rename {:prefix docs.1} [:scan {:table #xt/table docs, :columns [_id]}]]]]]]
+    [:rename
+     {:prefix docs.1}
+     [:scan {:table #xt/table docs, :columns [_id]}]]]]]]

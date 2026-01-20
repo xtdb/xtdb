@@ -165,7 +165,7 @@
 
     (reducing-agg-factory (into agg-opts
                                 {:to-type to-type
-                                 :val-expr {:op :call, :f :cast, :target-type (types/vec-type->col-type to-type)
+                                 :val-expr {:op :call, :f :cast, :target-type to-type
                                             :args [{:op :variable, :variable from-name}]}
                                  :step-expr {:op :if,
                                              :pred {:op :call, :f compare-kw,

@@ -5,10 +5,16 @@
   [:select
    {:predicate (< 1000000 _sum_out_5)}
    [:group-by
-    {:columns [c.1/custkey _row_number_0 {_sum_out_5 (sum o.3/totalprice)}]}
+    {:columns
+     [c.1/custkey _row_number_0 {_sum_out_5 (sum o.3/totalprice)}]}
     [:left-outer-join
      {:conditions [{c.1/custkey o.3/custkey}]}
      [:map
       {:projections [{_row_number_0 (row-number)}]}
-      [:rename {:prefix c.1} [:scan {:table #xt/table customer, :columns [custkey]}]]]
-     [:rename {:prefix o.3} [:scan {:table #xt/table orders, :columns [custkey totalprice]}]]]]]]]
+      [:rename
+       {:prefix c.1}
+       [:scan {:table #xt/table customer, :columns [custkey]}]]]
+     [:rename
+      {:prefix o.3}
+      [:scan
+       {:table #xt/table orders, :columns [custkey totalprice]}]]]]]]]

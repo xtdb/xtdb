@@ -4,4 +4,6 @@
   {:conditions []}
   [[:rename {:prefix a.1} [:scan {:table #xt/table a, :columns []}]]
    [:rename {:prefix b.2} [:scan {:table #xt/table b, :columns []}]]
-   [:rename {:prefix c.3} [:scan {:table #xt/table c, :columns [c1]}]]]]]
+   [:rename
+    {:prefix c.3}
+    [:scan {:table #xt/table c, :columns [c1]}]]]]]

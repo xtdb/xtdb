@@ -9,4 +9,6 @@
     {:projections [{_sq_2 _max_out_4}]}
     [:group-by
      {:columns [{_max_out_4 (max foo.3/bar)}]}
-     [:rename {:prefix foo.3} [:scan {:table #xt/table foo, :columns [bar]}]]]]]]]
+     [:rename
+      {:prefix foo.3}
+      [:scan {:table #xt/table foo, :columns [bar]}]]]]]]]

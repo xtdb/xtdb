@@ -1,9 +1,13 @@
 [:project
- {:projections [{films si.1/films}
-  {_column_2 film.3/_unnest.4}
-  {_column_3 film.3/_ordinal.5}]}
+ {:projections
+  [{films si.1/films}
+   {_column_2 film.3/_unnest.4}
+   {_column_3 film.3/_ordinal.5}]}
  [:unnest
-  {:columns {film.3/_unnest.4 unnest}, :ordinality-column film.3/_ordinal.5}
+  {:columns {film.3/_unnest.4 unnest},
+   :ordinality-column film.3/_ordinal.5}
   [:map
    {:projections [{unnest si.1/films}]}
-   [:rename {:prefix si.1} [:scan {:table #xt/table stars_in, :columns [films]}]]]]]
+   [:rename
+    {:prefix si.1}
+    [:scan {:table #xt/table stars_in, :columns [films]}]]]]]

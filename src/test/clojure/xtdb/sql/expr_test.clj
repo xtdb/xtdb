@@ -431,11 +431,11 @@
     "INTERVAL -'3-10' YEAR TO MONTH" '(- (multi-field-interval "3-10" "YEAR" 2 "MONTH" 6))
     "INTERVAL -'3 10' DAY TO HOUR" '(- (multi-field-interval "3 10" "DAY" 2 "HOUR" 6))
     
-    "CAST(foo.a AS INTERVAL)" '(cast f/a :interval)
-    "CAST(foo.a AS INTERVAL YEAR)" '(cast f/a :interval {:start-field "YEAR",
-                                                         :end-field nil,
-                                                         :leading-precision 2,
-                                                         :fractional-precision 6})))
+    "CAST(foo.a AS INTERVAL)" '(cast-interval f/a nil)
+    "CAST(foo.a AS INTERVAL YEAR)" '(cast-interval f/a {:start-field "YEAR",
+                                                        :end-field nil,
+                                                        :leading-precision 2,
+                                                        :fractional-precision 6})))
 
 (t/deftest test-interval-comparison
   (t/is (= [{:gt true}]
@@ -534,25 +534,25 @@
   (t/are [sql expected]
       (= expected (plan-expr-with-foo sql))
 
-    "CAST(NULL AS INT)" '(cast nil :i32)
-    "CAST(NULL AS INTEGER)" '(cast nil :i32)
-    "CAST(NULL AS BIGINT)" '(cast nil :i64)
-    "CAST(NULL AS SMALLINT)" '(cast nil :i16)
-    "CAST(NULL AS FLOAT)" '(cast nil :f32)
-    "CAST(NULL AS REAL)" '(cast nil :f32)
-    "CAST(NULL AS DOUBLE PRECISION)" '(cast nil :f64)
-    "CAST(foo.a AS INT)" '(cast f/a :i32)
-    "CAST(42.0 AS INT)" '(cast 42.0 :i32)))
+    "CAST(NULL AS INT)" '(cast nil #xt/type :i32)
+    "CAST(NULL AS INTEGER)" '(cast nil #xt/type :i32)
+    "CAST(NULL AS BIGINT)" '(cast nil #xt/type :i64)
+    "CAST(NULL AS SMALLINT)" '(cast nil #xt/type :i16)
+    "CAST(NULL AS FLOAT)" '(cast nil #xt/type :f32)
+    "CAST(NULL AS REAL)" '(cast nil #xt/type :f32)
+    "CAST(NULL AS DOUBLE PRECISION)" '(cast nil #xt/type :f64)
+    "CAST(foo.a AS INT)" '(cast f/a #xt/type :i32)
+    "CAST(42.0 AS INT)" '(cast 42.0 #xt/type :i32)))
 
 (t/deftest test-postgres-cast-syntax
   (t/testing "planning"
     (t/are [sql expected]
         (= expected (plan-expr-with-foo sql))
 
-      "NULL::INT" '(cast nil :i32)
-      "foo.a::INT" '(cast f/a :i32)
-      "'42.0'::FLOAT" '(cast "42.0" :f32)
-      "43.1::TEXT" '(cast 43.1 :utf8)))
+      "NULL::INT" '(cast nil #xt/type :i32)
+      "foo.a::INT" '(cast f/a #xt/type :i32)
+      "'42.0'::FLOAT" '(cast "42.0" #xt/type :f32)
+      "43.1::TEXT" '(cast 43.1 #xt/type :utf8)))
   
   (t/testing "used within a query"
     (t/is (= [{:x 42}]

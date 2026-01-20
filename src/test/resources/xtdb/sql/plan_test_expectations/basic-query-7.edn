@@ -2,5 +2,9 @@
  {:projections [{title si.2/title}]}
  [:mega-join
   {:conditions [{m.1/title si.2/title}]}
-  [[:rename {:prefix m.1} [:scan {:table #xt/table movie, :columns [title]}]]
-   [:rename {:prefix si.2} [:scan {:table #xt/table stars_in, :columns [title]}]]]]]
+  [[:rename
+    {:prefix m.1}
+    [:scan {:table #xt/table movie, :columns [title]}]]
+   [:rename
+    {:prefix si.2}
+    [:scan {:table #xt/table stars_in, :columns [title]}]]]]]

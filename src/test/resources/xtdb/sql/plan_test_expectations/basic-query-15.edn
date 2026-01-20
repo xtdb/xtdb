@@ -1,9 +1,16 @@
-[:difference {}
- [:distinct {}
+[:difference
+ {}
+ [:distinct
+  {}
   [:project
    {:projections [{name si.1/name}]}
-   [:rename {:prefix si.1} [:scan {:table #xt/table stars_in, :columns [name]}]]]]
- [:distinct {}
+   [:rename
+    {:prefix si.1}
+    [:scan {:table #xt/table stars_in, :columns [name]}]]]]
+ [:distinct
+  {}
   [:project
    {:projections [{name si.2/name}]}
-   [:rename {:prefix si.2} [:scan {:table #xt/table stars_in, :columns [name]}]]]]]
+   [:rename
+    {:prefix si.2}
+    [:scan {:table #xt/table stars_in, :columns [name]}]]]]]

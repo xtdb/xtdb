@@ -2,4 +2,6 @@
  {:projections [{bar (- foo.1/a 4)}]}
  [:group-by
   {:columns [foo.1/a]}
-  [:rename {:prefix foo.1} [:scan {:table #xt/table foo, :columns [a]}]]]]
+  [:rename
+   {:prefix foo.1}
+   [:scan {:table #xt/table foo, :columns [a]}]]]]

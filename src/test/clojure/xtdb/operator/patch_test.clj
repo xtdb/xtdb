@@ -50,10 +50,10 @@
             (->> (tu/query-ra
                   [:patch-gaps {:valid-from (time/->instant #inst "2020-01-02")
                                 :valid-to (time/->instant #inst "2020-01-04")}
-                   [::tu/pages {'_iid #xt/type :uuid
-                                '_valid_from types/temporal-type
-                                '_valid_to types/nullable-temporal-type
-                                'doc #xt/type :i64}
+                   [::tu/pages '{_iid #xt/type :uuid
+                                 _valid_from #xt/type :instant
+                                 _valid_to #xt/type [:? :instant]
+                                 doc #xt/type :i64}
                     [(map (partial zipmap [:_iid :_valid_from :_valid_to :doc]) data)]]])
                  (mapv (juxt :xt/iid :xt/valid-from :xt/valid-to :doc))))]
 

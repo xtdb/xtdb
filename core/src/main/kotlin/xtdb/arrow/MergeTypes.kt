@@ -5,12 +5,11 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.arrow.VectorType.*
 import xtdb.arrow.VectorType.Companion.structOf
 import xtdb.arrow.VectorType.Companion.fromLegs
-import xtdb.trie.ColumnName
 
 data class MergeTypes(
     private val scalars: MutableSet<Scalar> = mutableSetOf(),
     private val listyTypes: MutableMap<ArrowType, MergeTypes> = mutableMapOf(),
-    private var structKeys: MutableMap<ColumnName, MergeTypes>? = null,
+    private var structKeys: MutableMap<FieldName, MergeTypes>? = null,
     private var nullable: Boolean = false,
 ) {
 

@@ -17,6 +17,11 @@
  xt/tstz-range xtdb.serde/tstz-range-reader
  xt/uri xtdb.serde/uri-reader
 
+ xt.arrow/type xtdb.serde.types/->arrow-type
+ xt/field xtdb.serde.types/->field
+ xt/schema xtdb.serde.types/->schema
+ xt/type xtdb.serde.types/->type
+
  xt/period xtdb.mirrors.time-literals/period
  xt/local-date xtdb.mirrors.time-literals/date
  xt/date xtdb.mirrors.time-literals/date

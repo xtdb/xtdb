@@ -6,6 +6,7 @@
             [cognitect.transit :as transit]
             [xtdb.error :as err]
             [xtdb.mirrors.time-literals :as tl]
+            [xtdb.serde.types :as st]
             [xtdb.table :as table]
             [xtdb.time :as time])
   (:import clojure.lang.Keyword
@@ -20,6 +21,7 @@
            (org.postgresql.util PGobject PSQLException)
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
            (xtdb.api.query IKeyFn IKeyFn$KeyFn)
+           (xtdb.arrow VectorType)
            xtdb.TaggedValue
            (xtdb.time Interval)
            (xtdb.types ClojureForm ZonedDateTimeRange)
@@ -179,6 +181,7 @@
             "xtdb/key-fn" (transit/read-handler read-key-fn)
             "xtdb/period-duration" period-duration-reader
             "xtdb/interval" (transit/read-handler interval-reader)
+            "xtdb/type" (transit/read-handler st/->type)
             "xtdb/tstz-range" (transit/read-handler tstz-range-reader)
             "f64" (transit/read-handler double)
             "f32" (transit/read-handler float)
@@ -215,6 +218,7 @@
 
           Interval (transit/write-handler "xtdb/interval" str)
 
+          VectorType (transit/write-handler "xtdb/type" st/render-type)
           ZonedDateTimeRange (transit/write-handler "xtdb/tstz-range" render-tstz-range)
           ByteBuffer (transit/write-handler "xtdb/byte-array" #(str "0x" (Hex/encodeHexString (bb->ba %))))
           Path (transit/write-handler "xtdb/path" #(str %))}))

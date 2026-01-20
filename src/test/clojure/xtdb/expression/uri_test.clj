@@ -7,16 +7,16 @@
 
 (t/deftest test-cast
   (t/is (= #xt/uri "https://xtdb.com"
-           (et/project1 '(cast "https://xtdb.com" :uri) {})))
+           (et/project1 '(cast "https://xtdb.com" #xt/type :uri) {})))
 
   (t/is (= #xt/uri "https://user:pass@xtdb.com"
-           (et/project1 '(cast "https://user:pass@xtdb.com" :uri) {})))
+           (et/project1 '(cast "https://user:pass@xtdb.com" #xt/type :uri) {})))
 
   (t/is (= #xt/uri "https://xtdb.com"
-           (et/project1 '(cast "https://xtdb.com" :uri) {})))
+           (et/project1 '(cast "https://xtdb.com" #xt/type :uri) {})))
 
   (t/is (= "https://user:pass@xtdb.com"
-           (et/project1 '(cast #xt/uri "https://user:pass@xtdb.com" :utf8) {}))))
+           (et/project1 '(cast #xt/uri "https://user:pass@xtdb.com" #xt/type :utf8) {}))))
 
 (t/deftest test-extract
   (t/is (= "https" (et/project1 '(uri-scheme #xt/uri "https://xtdb.com") {})))

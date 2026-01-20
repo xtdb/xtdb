@@ -1,5 +1,8 @@
 [:project
  {:projections [{bar foo.1/bar}]}
- [:rename {:prefix foo.1} [:scan
+ [:rename
+  {:prefix foo.1}
+  [:scan
    {:table #xt/table foo,
-    :for-valid-time [:at #xt/ldt "2999-01-01T00:00"], :columns [bar]}]]]
+    :columns [bar],
+    :for-valid-time [:at #xt/ldt "2999-01-01T00:00"]}]]]

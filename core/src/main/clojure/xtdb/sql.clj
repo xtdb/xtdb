@@ -949,18 +949,18 @@
 
 (defrecord CastArgsVisitor [env]
   SqlVisitor
-  (visitBooleanType [_ _] {:cast-type :bool})
+  (visitBooleanType [_ _] {:cast-type #xt/type :bool})
   (visitIntegerType [_ ctx]
-    {:cast-type (case (str/lower-case (.getText ctx))
-                  "smallint" :i16
-                  ("int" "integer") :i32
-                  "bigint" :i64)})
+    {:cast-type (types/->type (case (str/lower-case (.getText ctx))
+                                "smallint" :i16
+                                ("int" "integer") :i32
+                                "bigint" :i64))})
 
-  (visitFloatType [_ _] {:cast-type :f32})
-  (visitRealType [_ _] {:cast-type :f32})
-  (visitDoubleType [_ _] {:cast-type :f64})
+  (visitFloatType [_ _] {:cast-type #xt/type :f32})
+  (visitRealType [_ _] {:cast-type #xt/type :f32})
+  (visitDoubleType [_ _] {:cast-type #xt/type :f64})
 
-  (visitDateType [_ _] {:cast-type [:date :day]})
+  (visitDateType [_ _] {:cast-type #xt/type [:date :day]})
   (visitTimeType [_ ctx]
     (let [precision (some-> (.precision ctx) (.getText) (parse-long))
           time-unit (if precision
@@ -973,7 +973,7 @@
                              (when precision
                                [{:precision precision :unit time-unit}])))}
 
-        {:cast-type [:time-local time-unit]
+        {:cast-type (types/->type [:time-local time-unit])
          :cast-opts (when precision
                       {:precision precision})})))
 
@@ -988,7 +988,7 @@
                       (list 'cast-tstz ve
                             {:precision precision, :unit time-unit}))}
 
-        {:cast-type [:timestamp-local time-unit]
+        {:cast-type (types/->type [:timestamp-local time-unit])
          :cast-opts (when precision
                       {:precision precision})})))
 
@@ -1001,31 +1001,32 @@
           time-unit (if precision
                       (if (<= precision 6) :micro :nano)
                       :micro)]
-      {:cast-type [:duration time-unit]
+      {:cast-type (types/->type [:duration time-unit])
        :cast-opts (when precision {:precision precision})}))
 
   (visitIntervalType [_ ctx]
     (let [interval-qualifier (.intervalQualifier ctx)]
-      {:cast-type :interval
-       :cast-opts (when interval-qualifier (.accept interval-qualifier IntervalQualifierVisitor))}))
+      {:->cast-fn (fn [ve]
+                    (list 'cast-interval ve
+                          (some-> interval-qualifier (.accept IntervalQualifierVisitor))))}))
 
-  (visitKeywordType [_ _] {:cast-type :keyword})
-  (visitUuidType [_ _] {:cast-type :uuid})
-  (visitUriType [_ _] {:cast-type :uri})
-  (visitVarbinaryType [_ _] {:cast-type :varbinary})
+  (visitKeywordType [_ _] {:cast-type #xt/type :keyword})
+  (visitUuidType [_ _] {:cast-type #xt/type :uuid})
+  (visitUriType [_ _] {:cast-type #xt/type :uri})
+  (visitVarbinaryType [_ _] {:cast-type #xt/type :varbinary})
 
-  (visitOidType [_ _] {:cast-type :oid})
-  (visitRegClassType [_ _] {:cast-type :regclass, :cast-opts {}})
-  (visitRegProcType [_ _] {:cast-type :regproc, :cast-opts {}})
+  (visitOidType [_ _] {:cast-type #xt/type :oid})
+  (visitRegClassType [_ _] {:cast-type #xt/type :regclass, :cast-opts {}})
+  (visitRegProcType [_ _] {:cast-type #xt/type :regproc, :cast-opts {}})
 
-  (visitCharacterStringType [_ _] {:cast-type :utf8})
+  (visitCharacterStringType [_ _] {:cast-type #xt/type :utf8})
 
   (visitDecimalType [_ ctx]
     (let [precision (some-> (.precision ctx) (.getText) (parse-long) )
           scale (some-> (.scale ctx) (.getText) (parse-long))]
       (if (and precision (> precision 64))
         (add-err! env (->UnsupportedPrecision precision))
-        {:cast-type :decimal
+        {:cast-type #xt/type [:decimal 64 9 256]
          :cast-opts (cond-> {}
                       precision (assoc :precision precision)
                       scale (assoc :scale scale))}))))
@@ -1594,10 +1595,10 @@
   (visitPgGetExprFunction [_ _] nil)
   (visitPgGetIndexdefFunction [_ _] nil)
   (visitPgSleepFunction [this ctx]
-    (list 'sleep (list 'cast (.accept (.sleepSeconds ctx) this) [:duration :milli])))
+    (list 'sleep (list 'cast (.accept (.sleepSeconds ctx) this) #xt/type [:duration :milli])))
 
   (visitPgSleepForFunction [this ctx]
-    (list 'sleep (list 'cast (.accept (.sleepPeriod ctx) this) [:duration :milli])))
+    (list 'sleep (list 'cast (.accept (.sleepPeriod ctx) this) #xt/type [:duration :milli])))
 
   (visitCurrentDateFunction [_ _] '(current-date))
   (visitCurrentTimeFunction [_ ctx] (fn-with-precision 'current-time (.precision ctx)))
@@ -2560,7 +2561,7 @@
         (->QueryExpr [:project {:projections (mapv (fn [col-sym]
                                        {col-sym
                                         (if (types/temporal-col-name? col-sym)
-                                          (list 'cast col-sym types/temporal-col-type)
+                                          (list 'cast col-sym #xt/type :instant)
                                           col-sym)})
                                      col-syms)}
                       plan]
@@ -2582,7 +2583,7 @@
           (->QueryExpr [:project {:projections (mapv (fn [col-sym]
                                          {col-sym
                                           (if (types/temporal-col-name? (str col-sym))
-                                            (list 'cast col-sym types/temporal-col-type)
+                                            (list 'cast col-sym #xt/type :instant)
                                             col-sym)})
                                        col-syms)}
                         plan]
@@ -2601,7 +2602,7 @@
         (->QueryExpr [:project {:projections (mapv (fn [col-sym]
                                        {col-sym
                                         (if (types/temporal-col-name? (str col-sym))
-                                          (list 'cast col-sym types/temporal-col-type)
+                                          (list 'cast col-sym #xt/type :instant)
                                           col-sym)})
                                      col-syms)}
                       plan]
@@ -2637,12 +2638,12 @@
 (defn- dml-stmt-valid-time-portion [from-expr to-expr]
   {:for-valid-time [:in (or from-expr time/start-of-time) to-expr]
    :projection [{vf-col (xt/template
-                         (greatest ~vf-col (cast (coalesce ~from-expr xtdb/start-of-time) ~types/temporal-col-type)))}
+                         (greatest ~vf-col (cast (coalesce ~from-expr xtdb/start-of-time) #xt/type :instant)))}
 
                 {vt-col (if to-expr
                           (xt/template
                            (least (coalesce ~vt-col xtdb/end-of-time)
-                                  (coalesce (cast ~to-expr ~types/temporal-col-type) xtdb/end-of-time)))
+                                  (coalesce (cast ~to-expr #xt/type :instant) xtdb/end-of-time)))
 
                           vt-col)}]})
 
@@ -2718,9 +2719,9 @@
     (xt/template
      [:project {:projections [{_iid new/_iid}
                 {_valid_from (cast (coalesce old/_valid_from ~valid-from (current-timestamp))
-                                   ~types/temporal-col-type)}
+                                   #xt/type :instant)}
                 {_valid_to (cast (coalesce old/_valid_to ~valid-to xtdb/end-of-time)
-                                 ~types/temporal-col-type)}
+                                 #xt/type :instant)}
                 {doc (_patch old/doc new/doc)}]}
       [:left-outer-join {:conditions [{new/_iid old/_iid}]}
        [:rename {:prefix new}

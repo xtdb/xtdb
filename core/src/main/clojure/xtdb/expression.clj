@@ -222,26 +222,31 @@
     * `:return-type` (VectorType)
     * `:return-col-type` (col-type, deprecated)
     * `:->call-code` :: emitted-args -> code"
-  (fn [{:keys [source-type target-type]}]
-    [(types/col-type-head source-type) (types/col-type-head target-type)])
+  (fn [{:keys [^VectorType source-type, ^VectorType target-type]}]
+    [(types/col-type-head (types/vec-type->col-type source-type))
+     (types/col-type-head (types/vec-type->col-type target-type))])
   :default ::default
   :hierarchy #'types/col-type-hierarchy)
 
-(defmethod codegen-cast ::default [{:keys [source-type target-type]}]
+(defmethod codegen-cast ::default [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (if (= source-type target-type)
-    {:return-type (types/col-type->vec-type false target-type), :return-col-type target-type
+    {:return-type target-type, :return-col-type (types/vec-type->col-type target-type)
      :->call-code first}
-    (throw (err/incorrect :xtdb.expression/cast-error
-                          (format "Unsupported cast: '%s' -> '%s'" (pr-str source-type) (pr-str target-type))
-                          {:source-type source-type, :target-type target-type}))))
+
+    (let [source-col-type (types/vec-type->col-type source-type)
+          target-col-type (types/vec-type->col-type target-type)]
+      (throw (err/incorrect :xtdb.expression/cast-error
+                            (format "Unsupported cast: '%s' -> '%s'" (pr-str source-col-type) (pr-str target-col-type))
+                            {:source-type source-type, :target-type target-type})))))
 
 (doseq [int-type [:int :uint]]
   (defmethod codegen-cast [int-type :bool] [_]
     {:return-type #xt/type :bool, :return-col-type :bool, :->call-code #(do `(not (zero? ~@%)))}))
 
-(defmethod codegen-cast [:num :num] [{:keys [target-type]}]
-  {:return-type (types/col-type->vec-type false target-type), :return-col-type target-type
-   :->call-code #(do `(~(type->cast target-type) ~@%))})
+(defmethod codegen-cast [:num :num] [{:keys [^VectorType target-type]}]
+  (let [target-col-type (types/vec-type->col-type target-type)]
+    {:return-type target-type, :return-col-type target-col-type
+     :->call-code #(do `(~(type->cast target-col-type) ~@%))}))
 
 (defn- precision->bit-width [^long p]
   (cond (<= p 32) (int 128)
@@ -252,25 +257,28 @@
 (defmethod codegen-cast [:num :decimal] [{{:keys [precision scale]} :cast-opts}]
   (let [scale (if precision (or scale 0) 9)
         precision (or precision 64)
-        ret-col-type [:decimal precision scale (precision->bit-width precision)]]
-    {:return-type (types/col-type->vec-type false ret-col-type), :return-col-type ret-col-type
+        ret-col-type [:decimal precision scale (precision->bit-width precision)]
+        ret-type (types/->type ret-col-type)]
+    {:return-type ret-type, :return-col-type ret-col-type
      :->call-code #(do `(.setScale (bigdec ~@%) ~scale RoundingMode/HALF_EVEN))}))
 
 ;; We don't apply the default cast (i.e. [:decimal 64 9 256]) to decimals themselves.
 ;; This is to mainly preserve decimal scales passed via pgwire parameters with type annotations.
-(defmethod codegen-cast [:decimal :decimal] [{:keys [source-type] {:keys [precision scale]} :cast-opts}]
+(defmethod codegen-cast [:decimal :decimal] [{:keys [^VectorType source-type] {:keys [precision scale]} :cast-opts}]
   (if precision
-    (let [ret-col-type [:decimal precision (or scale 0) (precision->bit-width precision)]]
-      {:return-type (types/col-type->vec-type false ret-col-type), :return-col-type ret-col-type
+    (let [ret-col-type [:decimal precision (or scale 0) (precision->bit-width precision)]
+          ret-type (types/->type ret-col-type)]
+      {:return-type ret-type, :return-col-type ret-col-type
        :->call-code #(do `(.setScale (bigdec ~@%) ~scale RoundingMode/HALF_EVEN))})
-    {:return-type (types/col-type->vec-type false source-type), :return-col-type source-type
+    {:return-type source-type, :return-col-type (types/vec-type->col-type source-type)
      :->call-code first}))
 
 (defmethod codegen-cast [:utf8 :decimal] [{{:keys [precision scale]} :cast-opts}]
   (let [scale (if precision (or scale 0) 9)
         precision (or precision 64)
-        ret-col-type [:decimal precision scale (precision->bit-width precision)]]
-    {:return-type (types/col-type->vec-type false ret-col-type), :return-col-type ret-col-type
+        ret-col-type [:decimal precision scale (precision->bit-width precision)]
+        ret-type (types/->type ret-col-type)]
+    {:return-type ret-type, :return-col-type ret-col-type
      :->call-code #(do `(.setScale (bigdec (buf->str ~@%)) ~scale RoundingMode/HALF_EVEN))}))
 
 (defmethod codegen-cast [:num :utf8] [_]
@@ -1323,10 +1331,10 @@
   {:return-type #xt/type :utf8, :return-col-type :utf8
    :->call-code (constantly `(str->buf ""))})
 
-(defmethod codegen-call [:str :any] [{[src-type] :arg-col-types, :as expr}]
+(defmethod codegen-call [:str :any] [{[src-type] :arg-types, :as expr}]
   (codegen-cast (assoc expr
                        :source-type src-type
-                       :target-type :utf8)))
+                       :target-type #xt/type :utf8)))
 
 (defmethod codegen-call [:random] [_]
   {:return-type #xt/type :f64, :return-col-type :f64
@@ -1651,8 +1659,10 @@
   (defmethod codegen-cast [:utf8 col-type] [_]
     {:return-type (types/col-type->vec-type false col-type), :return-col-type col-type, :->call-code #(do `(~parse-sym (buf->str ~@%)))}))
 
-(defmethod codegen-call [:cast :any] [{[source-type] :arg-col-types, :keys [target-type cast-opts]}]
-  (codegen-cast {:source-type source-type, :target-type target-type :cast-opts cast-opts}))
+(defmethod codegen-call [:cast :any] [{[source-type] :arg-types, :keys [target-type cast-opts]}]
+  (codegen-cast {:source-type source-type
+                 :target-type target-type
+                 :cast-opts cast-opts}))
 
 (defmethod codegen-expr :struct [{:keys [entries]} opts]
   (let [emitted-vals (->> entries
@@ -1841,22 +1851,23 @@
     {:return-type (types/col-type->vec-type false ret-col-type), :return-col-type ret-col-type
      :->call-code (fn [[_ r]] r)}))
 
-(defmethod codegen-cast [:list :list] [{[_ source-el-type] :source-type
-                                        [_ target-el-type :as target-type] :target-type}]
-  (assert (types/union? target-el-type))
-  (if (types/union? source-el-type)
-    (let [target-types ^List (vec (second target-el-type))
-          type-id-mapping (->> (second source-el-type)
-                               (mapv (fn [source-type]
-                                       (.indexOf target-types source-type))))]
-      {:return-type (types/col-type->vec-type false target-type), :return-col-type target-type
-       :->call-code (fn [[code]]
-                      `(RemappedTypeIdReader. ~code (byte-array ~type-id-mapping)))})
+(defmethod codegen-cast [:list :list] [{:keys [^VectorType source-type, ^VectorType target-type]}]
+  (let [[_ source-el-type] (types/vec-type->col-type source-type)
+        [_ target-el-type :as target-col-type] (types/vec-type->col-type target-type)]
+    (assert (types/union? target-el-type))
+    (if (types/union? source-el-type)
+      (let [target-types ^List (vec (second target-el-type))
+            type-id-mapping (->> (second source-el-type)
+                                 (mapv (fn [source-type]
+                                         (.indexOf target-types source-type))))]
+        {:return-type target-type, :return-col-type target-col-type
+         :->call-code (fn [[code]]
+                        `(RemappedTypeIdReader. ~code (byte-array ~type-id-mapping)))})
 
-    (let [type-id (.indexOf ^List (vec (second target-el-type)) source-el-type)]
-      {:return-type (types/col-type->vec-type false target-type), :return-col-type target-type
-       :->call-code (fn [[code]]
-                      `(MonoToPolyReader. ~code ~type-id 0))})))
+      (let [type-id (.indexOf ^List (vec (second target-el-type)) source-el-type)]
+        {:return-type target-type, :return-col-type target-col-type
+         :->call-code (fn [[code]]
+                        `(MonoToPolyReader. ~code ~type-id 0))}))))
 
 (defmethod codegen-expr :list [{:keys [elements]} opts]
   (let [emitted-els (->> elements

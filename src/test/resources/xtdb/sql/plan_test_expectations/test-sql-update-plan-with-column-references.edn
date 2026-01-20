@@ -1,11 +1,16 @@
 [:project
- {:projections [{_iid foo.1/_iid}
-  {_valid_from foo.1/_valid_from}
-  {_valid_to foo.1/_valid_to}
-  {bar foo.1/baz}
-  {baz foo.1/baz}
-  {quux foo.1/quux}]}
- [:rename {:prefix foo.1} [:select
+ {:projections
+  [{_iid foo.1/_iid}
+   {_valid_from foo.1/_valid_from}
+   {_valid_to foo.1/_valid_to}
+   {bar foo.1/baz}
+   {baz foo.1/baz}
+   {quux foo.1/quux}]}
+ [:rename
+  {:prefix foo.1}
+  [:select
    {:predicate (or (not (boolean (=== baz bar))))}
    [:scan
-    {:table #xt/table foo, :for-valid-time :all-time, :columns [_valid_to bar baz quux _valid_from _iid]}]]]]
+    {:table #xt/table foo,
+     :columns [_valid_to bar baz quux _valid_from _iid],
+     :for-valid-time :all-time}]]]]

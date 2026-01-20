@@ -1,6 +1,9 @@
 [:project
  {:projections [{bar foo.1/bar}]}
- [:rename {:prefix foo.1} [:scan
+ [:rename
+  {:prefix foo.1}
+  [:scan
    {:table #xt/table foo,
+    :columns [bar],
     :for-valid-time :all-time,
-    :for-system-time :all-time, :columns [bar]}]]]
+    :for-system-time :all-time}]]]

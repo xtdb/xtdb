@@ -1,6 +1,11 @@
 [:project
- {:projections [{_iid users.1/_iid}
-  {_valid_from users.1/_valid_from}
-  {_valid_to users.1/_valid_to}]}
- [:rename {:prefix users.1} [:scan
-   {:table #xt/table users, :for-valid-time :all-time, :columns [_valid_to _valid_from _iid]}]]]
+ {:projections
+  [{_iid users.1/_iid}
+   {_valid_from users.1/_valid_from}
+   {_valid_to users.1/_valid_to}]}
+ [:rename
+  {:prefix users.1}
+  [:scan
+   {:table #xt/table users,
+    :columns [_valid_to _valid_from _iid],
+    :for-valid-time :all-time}]]]

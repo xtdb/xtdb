@@ -1,28 +1,35 @@
 [:project
- {:projections [{_iid foo.1/_iid}
-  {_valid_from foo.1/_valid_from}
-  {_valid_to foo.1/_valid_to}
-  {bar
-   (and
-    (<
-     (lower foo.1/_system_time)
-     (coalesce (upper foo.1/_valid_time) xtdb/end-of-time))
-    (>
-     (coalesce (upper foo.1/_system_time) xtdb/end-of-time)
-     (lower foo.1/_valid_time)))}
-  {baz foo.1/baz}]}
- [:rename {:prefix foo.1} [:select
-   {:predicate (or
-                (not
-                 (boolean
-                  (===
-                   (and
-                    (<
-                     (lower _system_time)
-                     (coalesce (upper _valid_time) xtdb/end-of-time))
-                    (>
-                     (coalesce (upper _system_time) xtdb/end-of-time)
-                     (lower _valid_time)))
-                   bar))))}
+ {:projections
+  [{_iid foo.1/_iid}
+   {_valid_from foo.1/_valid_from}
+   {_valid_to foo.1/_valid_to}
+   {bar
+    (and
+     (<
+      (lower foo.1/_system_time)
+      (coalesce (upper foo.1/_valid_time) xtdb/end-of-time))
+     (>
+      (coalesce (upper foo.1/_system_time) xtdb/end-of-time)
+      (lower foo.1/_valid_time)))}
+   {baz foo.1/baz}]}
+ [:rename
+  {:prefix foo.1}
+  [:select
+   {:predicate
+    (or
+     (not
+      (boolean
+       (===
+        (and
+         (<
+          (lower _system_time)
+          (coalesce (upper _valid_time) xtdb/end-of-time))
+         (>
+          (coalesce (upper _system_time) xtdb/end-of-time)
+          (lower _valid_time)))
+        bar))))}
    [:scan
-    {:table #xt/table foo, :for-valid-time :all-time, :columns [_valid_to bar baz _system_time _valid_from _valid_time _iid]}]]]]
+    {:table #xt/table foo,
+     :columns
+     [_valid_to bar baz _system_time _valid_from _valid_time _iid],
+     :for-valid-time :all-time}]]]]

@@ -2,4 +2,6 @@
  {:skip ?_0, :limit ?_1}
  [:project
   {:projections [{a foo.1/a}]}
-  [:rename {:prefix foo.1} [:scan {:table #xt/table foo, :columns [a]}]]]]
+  [:rename
+   {:prefix foo.1}
+   [:scan {:table #xt/table foo, :columns [a]}]]]]

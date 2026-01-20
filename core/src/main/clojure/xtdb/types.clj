@@ -8,7 +8,7 @@
   (:import (clojure.lang MapEntry)
            (org.apache.arrow.vector.types FloatingPointPrecision)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
-           (xtdb.arrow ArrowTypes MergeTypes VectorType)
+           (xtdb.arrow ArrowTypes MergeTypes ValueTypes VectorType)
            xtdb.types.LeastUpperBound
            (xtdb.vector.extensions IntervalMDMType KeywordType OidType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
@@ -145,7 +145,7 @@
   (MergeTypes/mergeTypes (vec types)))
 
 (defn value->vec-type ^xtdb.arrow.VectorType [v]
-  (VectorType/fromValue v))
+  (ValueTypes/fromValue v))
 
 (defn vec-type->field
   (^org.apache.arrow.vector.types.pojo.Field [^VectorType vec-type field-name] (->field (str field-name) vec-type))

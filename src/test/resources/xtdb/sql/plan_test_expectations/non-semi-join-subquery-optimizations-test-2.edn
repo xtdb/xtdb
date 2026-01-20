@@ -7,4 +7,6 @@
    [:rename {:prefix f.1} [:scan {:table #xt/table foo, :columns [a]}]]
    [:project
     {:projections [{c foo.3/c}]}
-    [:rename {:prefix foo.3} [:scan {:table #xt/table foo, :columns [c]}]]]]]]
+    [:rename
+     {:prefix foo.3}
+     [:scan {:table #xt/table foo, :columns [c]}]]]]]]

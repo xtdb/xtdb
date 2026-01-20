@@ -1,19 +1,28 @@
 [:project
  {:projections [{name foo.1/name}]}
  [:mega-join
-  {:conditions [(<
-    (greatest (lower foo.1/_valid_time) (lower bar.2/_valid_time))
-    (least
-     (coalesce (upper foo.1/_valid_time) xtdb/end-of-time)
-     (coalesce (upper bar.2/_valid_time) xtdb/end-of-time)))]}
-  [[:rename {:prefix foo.1} [:project
-     {:projections [name
-      _valid_from
-      _valid_to
-      {_valid_time (period _valid_from _valid_to)}]}
-     [:scan {:table #xt/table foo, :columns [name _valid_from _valid_to]}]]]
-   [:rename {:prefix bar.2} [:project
-     {:projections [_valid_from
-      _valid_to
-      {_valid_time (period _valid_from _valid_to)}]}
-     [:scan {:table #xt/table bar, :columns [_valid_from _valid_to]}]]]]]]
+  {:conditions
+   [(<
+     (greatest (lower foo.1/_valid_time) (lower bar.2/_valid_time))
+     (least
+      (coalesce (upper foo.1/_valid_time) xtdb/end-of-time)
+      (coalesce (upper bar.2/_valid_time) xtdb/end-of-time)))]}
+  [[:rename
+    {:prefix foo.1}
+    [:project
+     {:projections
+      [name
+       _valid_from
+       _valid_to
+       {_valid_time (period _valid_from _valid_to)}]}
+     [:scan
+      {:table #xt/table foo, :columns [name _valid_from _valid_to]}]]]
+   [:rename
+    {:prefix bar.2}
+    [:project
+     {:projections
+      [_valid_from
+       _valid_to
+       {_valid_time (period _valid_from _valid_to)}]}
+     [:scan
+      {:table #xt/table bar, :columns [_valid_from _valid_to]}]]]]]]

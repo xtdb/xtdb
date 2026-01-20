@@ -1624,19 +1624,19 @@
               (run-projection rel (list 'cast 'x col-type))))]
 
     (t/is (= [(Duration/ofMillis 1000)]
-             (:res (run-cast "1 SECOND" [:duration :milli]))))
+             (:res (run-cast "1 SECOND" #xt/type [:duration :milli]))))
 
     (t/is (= [(Duration/ofNanos 15e8)]
-             (:res (run-cast "1.5 SECOND" [:duration :nano]))))
+             (:res (run-cast "1.5 SECOND" #xt/type [:duration :nano]))))
 
     (t/is (= [(Duration/ofMillis 990)]
-             (:res (run-cast "0.99 second" [:duration :micro]))))
+             (:res (run-cast "0.99 second" #xt/type [:duration :micro]))))
 
     (t/is (= [(Duration/ofMillis (* 2 1000))]
-             (:res (run-cast "PT2S" [:duration :micro]))))
+             (:res (run-cast "PT2S" #xt/type [:duration :micro]))))
 
     (t/is (= [(Duration/ofMillis (* 1000 60))]
-             (:res (run-cast "PT1M" [:duration :milli]))))))
+             (:res (run-cast "PT1M" #xt/type [:duration :milli]))))))
 
 (t/deftest test-struct-literals
   (with-open [rel (tu/open-rel {:x [1.2 3.4]
@@ -2020,35 +2020,35 @@
   (letfn [(test-cast
             ([src tgt-type] (test-cast src tgt-type {}))
             ([src tgt-type opts] (project1 (list 'cast src tgt-type) opts)))]
-    (t/is (= nil (test-cast nil :i32)))
+    (t/is (= nil (test-cast nil #xt/type :i32)))
 
-    (t/is (= nil (test-cast nil :i64)))
-    (t/is (= nil (test-cast nil :i16)))
-    (t/is (= nil (test-cast nil :f32)))
-    (t/is (= nil (test-cast nil :f64)))
+    (t/is (= nil (test-cast nil #xt/type :i64)))
+    (t/is (= nil (test-cast nil #xt/type :i16)))
+    (t/is (= nil (test-cast nil #xt/type :f32)))
+    (t/is (= nil (test-cast nil #xt/type :f64)))
 
-    (t/is (= 42 (test-cast 42 :i32)))
+    (t/is (= 42 (test-cast 42 #xt/type :i32)))
 
-    (t/is (= 42 (test-cast 42.0 :i32)))
-    (t/is (= 42 (test-cast 42.0 :i16)))
-    (t/is (= 42 (test-cast 42.0 :i64)))
+    (t/is (= 42 (test-cast 42.0 #xt/type :i32)))
+    (t/is (= 42 (test-cast 42.0 #xt/type :i16)))
+    (t/is (= 42 (test-cast 42.0 #xt/type :i64)))
 
-    (t/is (= 42.0 (test-cast 42 :f32)))
-    (t/is (= 42.0 (test-cast 42 :f64)))
+    (t/is (= 42.0 (test-cast 42 #xt/type :f32)))
+    (t/is (= 42.0 (test-cast 42 #xt/type :f64)))
 
-    (t/is (= 42 (test-cast 'a :i32 {:a 42.0})))
+    (t/is (= 42 (test-cast 'a #xt/type :i32 {:a 42.0})))
 
-    (t/is (= "42" (test-cast 42 :utf8)))
+    (t/is (= "42" (test-cast 42 #xt/type :utf8)))
 
-    (t/is (= (byte 42) (test-cast "42" :i8)))
-    (t/is (= (short 42) (test-cast "42" :i16)))
-    (t/is (= (int 42) (test-cast "42" :i32)))
-    (t/is (= (long 42) (test-cast "42" :i64)))
-    (t/is (= (float 42) (test-cast "42" :f32)))
-    (t/is (= (double 42) (test-cast "42" :f64)))
+    (t/is (= (byte 42) (test-cast "42" #xt/type :i8)))
+    (t/is (= (short 42) (test-cast "42" #xt/type :i16)))
+    (t/is (= (int 42) (test-cast "42" #xt/type :i32)))
+    (t/is (= (long 42) (test-cast "42" #xt/type :i64)))
+    (t/is (= (float 42) (test-cast "42" #xt/type :f32)))
+    (t/is (= (double 42) (test-cast "42" #xt/type :f64)))
 
-    (t/is (= true (test-cast 42 :bool)))
-    (t/is (= false (test-cast 0 :bool)))))
+    (t/is (= true (test-cast 42 #xt/type :bool)))
+    (t/is (= false (test-cast 0 #xt/type :bool)))))
 
 (t/deftest test-cast-null
   (letfn [(test-null-cast [tgt-type]
@@ -2058,10 +2058,10 @@
               {:res (:res (first res))
                :type (get types 'res)}))]
     (let [exp {:res nil, :type #xt/type :null}]
-      (t/is (= exp (test-null-cast :i32)))
-      (t/is (= exp (test-null-cast :i64)))
-      (t/is (= exp (test-null-cast :utf8)))
-      (t/is (= exp (test-null-cast [:timestamp-local :milli]))))))
+      (t/is (= exp (test-null-cast #xt/type :i32)))
+      (t/is (= exp (test-null-cast #xt/type :i64)))
+      (t/is (= exp (test-null-cast #xt/type :utf8)))
+      (t/is (= exp (test-null-cast #xt/type [:timestamp-local :milli]))))))
 
 (t/deftest test-uuids
   (t/is (= true
@@ -2070,13 +2070,13 @@
 
 (t/deftest test-cast-uuids
   (t/is (= #uuid "123e4567-e89b-12d3-a456-426614174000"
-           (project1 '(cast "123e4567-e89b-12d3-a456-426614174000" :uuid) {})))
+           (project1 '(cast "123e4567-e89b-12d3-a456-426614174000" #xt/type :uuid) {})))
 
   (t/is (= "123e4567-e89b-12d3-a456-426614174000"
-           (project1 '(cast #uuid "123e4567-e89b-12d3-a456-426614174000" :utf8) {})))
+           (project1 '(cast #uuid "123e4567-e89b-12d3-a456-426614174000" #xt/type :utf8) {})))
 
   (t/is (= #uuid "123e4567-e89b-12d3-a456-426614174000"
-           (project1 '(cast (cast #uuid "123e4567-e89b-12d3-a456-426614174000" :utf8) :uuid) {}))))
+           (project1 '(cast (cast #uuid "123e4567-e89b-12d3-a456-426614174000" #xt/type :utf8) #xt/type :uuid) {}))))
 
 (t/deftest test-truthy-if
   (t/is (= :true (project1 '(if 42 :true :false) {})))
@@ -2098,8 +2098,8 @@
   (t/is (= :bar (project1 '(keyword "bar") {})))
   (t/is (= :foo/bar (project1 '(keyword "foo/bar") {})))
 
-  (t/is (= ":bar" (project1 '(cast :bar :utf8) {})))
-  (t/is (= ":foo/bar" (project1 '(cast :foo/bar :utf8) {}))))
+  (t/is (= ":bar" (project1 '(cast :bar #xt/type :utf8) {})))
+  (t/is (= ":foo/bar" (project1 '(cast :foo/bar #xt/type :utf8) {}))))
 
 (t/deftest test-str
   (t/is (= "" (project1 '(str) {})))

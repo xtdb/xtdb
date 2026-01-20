@@ -1,3 +1,5 @@
 [:project
  {:projections [{_id bar.1/_id} {x bar.1/x}]}
- [:rename {:prefix bar.1} [:scan {:table #xt/table foo/bar, :columns [x _id]}]]]
+ [:rename
+  {:prefix bar.1}
+  [:scan {:table #xt/table foo/bar, :columns [x _id]}]]]
