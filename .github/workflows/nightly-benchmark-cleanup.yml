@@ -609,8 +609,14 @@ jobs:
 
           log_path="$(pwd)/benchmark.log"
           summary=""
+          timeout_msg=""
           if [ -f "$log_path" ]; then
             summary="$(./modules/bench/cloud/scripts/tasks summarize-log --format slack "${{ inputs.benchType }}" "$log_path" 2>&1)" || summary=""
+            # Check for timeout in log
+            if grep -q "Benchmark exceeded timeout" "$log_path"; then
+              timeout_duration=$(grep -o "exceeded timeout ([^)]*)" "$log_path" | head -1 | sed 's/exceeded timeout (\(.*\))/\1/')
+              timeout_msg=":hourglass: *Timed out* after ${timeout_duration:-unknown duration}"
+            fi
           fi
 
           # Build base message
@@ -659,6 +665,9 @@ jobs:
           {
             echo "msg<<EOF"
             echo "$base"
+            if [ -n "$timeout_msg" ]; then
+              echo "$timeout_msg"
+            fi
             if [ -n "$GIT_INFO" ]; then
               echo "$GIT_INFO"
             fi
