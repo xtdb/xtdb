@@ -235,12 +235,12 @@
                                     [(str col-name) (get children (str col-name))])))))
 
 (def ^:private explain-analyze-types
-  (LinkedHashMap. ^Map (identity {"depth" (types/->type :utf8)
-                                  "op" (types/->type :keyword)
-                                  "total_time" (types/->type [:duration :micro])
-                                  "time_to_first_page" (types/->type [:duration :micro])
-                                  "page_count" (types/->type :i64)
-                                  "row_count" (types/->type :i64)})))
+  (LinkedHashMap. ^Map (identity {"depth" #xt/type :utf8
+                                  "op" #xt/type :keyword
+                                  "total_time" #xt/type [:duration :micro]
+                                  "time_to_first_page" #xt/type [:duration :micro]
+                                  "page_count" #xt/type :i64
+                                  "row_count" #xt/type :i64})))
 
 (defn- explain-analyze-results [^IResultCursor cursor]
   (letfn [(->results [^ICursor cursor, depth]

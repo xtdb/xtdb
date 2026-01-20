@@ -51,6 +51,24 @@
     :micro TimeUnit/MICROSECOND
     :nano TimeUnit/NANOSECOND))
 
+(defn time-type->unit [^VectorType$Mono mono-type]
+  (time-unit->kw (.getUnit ^ArrowType$Time (.getArrowType mono-type))))
+
+(defn duration-type->unit [^VectorType$Mono mono-type]
+  (time-unit->kw (.getUnit ^ArrowType$Duration (.getArrowType mono-type))))
+
+(defn timestamp-type->unit [^VectorType$Mono mono-type]
+  (time-unit->kw (.getUnit ^ArrowType$Timestamp (.getArrowType mono-type))))
+
+(defn timestamp-type->tz [^VectorType$Mono mono-type]
+  (.getTimezone ^ArrowType$Timestamp (.getArrowType mono-type)))
+
+(defn timestamp-type->unit+tz [^VectorType$Mono mono-type]
+  (let [^ArrowType$Timestamp arrow-type (.getArrowType mono-type)
+        time-unit (time-unit->kw (.getUnit arrow-type))
+        tz (.getTimezone arrow-type)]
+    [time-unit tz]))
+
 (defn interval-unit->kw [unit]
   (case-enum unit
     IntervalUnit/DAY_TIME :day-time
@@ -62,6 +80,12 @@
     :day-time IntervalUnit/DAY_TIME
     :month-day-nano IntervalUnit/MONTH_DAY_NANO
     :year-month IntervalUnit/YEAR_MONTH))
+
+(defn interval-type->unit [^VectorType$Mono mono-type]
+  (let [arrow-type (.getArrowType mono-type)]
+    (if (instance? org.apache.arrow.vector.types.pojo.ArrowType$Interval arrow-type)
+      (interval-unit->kw (.getUnit ^ArrowType$Interval arrow-type))
+      :month-day-micro)))
 
 (extend-protocol FromArrowType
   ArrowType$Null (<-arrow-type [_] :null)

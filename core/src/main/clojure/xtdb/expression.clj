@@ -16,7 +16,7 @@
            (java.util.regex Pattern)
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration)
-           (org.apache.arrow.vector.types.pojo ArrowType$Date)
+           (org.apache.arrow.vector.types.pojo ArrowType$Decimal)
            (org.apache.commons.codec.binary Hex)
            (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
@@ -574,7 +574,6 @@
 (defmulti codegen-call
   "Expects a map containing the expression and:
     * `:arg-types` - a vector of VectorTypes
-    * `:arg-col-types` - a vector of col-types (deprecated)
    These vectors should be monomorphic - if the args are polymorphic, call this multimethod multiple times.
 
    Returns a map containing
@@ -584,17 +583,17 @@
     * for polymorphic return types: `:continue-call` :: f, emitted-args -> code
         where f :: return-type, code -> code"
 
-  (fn [{:keys [f arg-col-types]}]
+  (fn [{:keys [f arg-types]}]
     (vec (cons (normalise-fn-name f)
-               (map types/col-type-head arg-col-types))))
+               (map (comp types/col-type-head st/render-type) arg-types))))
 
   :hierarchy #'types/col-type-hierarchy
   :default ::default)
 
-(defmethod codegen-call ::default [{:keys [f arg-col-types]}]
+(defmethod codegen-call ::default [{:keys [f arg-types]}]
   (throw (err/incorrect :xtdb.expression/function-type-mismatch
                         (apply str (name (normalise-fn-name f)) " not applicable to types "
-                               (let [types (map (comp name types/col-type-head) arg-col-types)]
+                               (let [types (map (comp name types/col-type-head st/render-type) arg-types)]
                                  (concat (interpose ", " (butlast types))
                                          (when (seq (butlast types)) [" and "])
                                          [(last types)]))))))
@@ -668,7 +667,6 @@
                                                       (every? #(not= #xt/type :null %) arg-types))
                                                 (codegen-call (assoc expr
                                                                      :args emitted-args
-                                                                     :arg-col-types (mapv types/vec-type->col-type arg-types)
                                                                      :arg-types arg-types))
                                                 {:return-type #xt/type :null, :->call-code (constantly nil)})))
                            (into {}))
@@ -836,14 +834,15 @@
     {:return-type return-type
      :->call-code #(do `(- ~@%))}))
 
-(defmethod codegen-call [:- :num] [{[x-type] :arg-col-types}]
-  {:return-type (types/col-type->vec-type false x-type)
-   :->call-code (fn [emitted-args]
-                  (list (type->cast x-type)
-                        `(Math/negateExact ~@(with-math-integer-cast x-type emitted-args))))})
+(defmethod codegen-call [:- :num] [{[x-type] :arg-types}]
+  (let [x-col-type (types/vec-type->col-type x-type)]
+    {:return-type x-type
+     :->call-code (fn [emitted-args]
+                    (list (type->cast x-col-type)
+                          `(Math/negateExact ~@(with-math-integer-cast x-col-type emitted-args))))}))
 
-(defmethod codegen-call [:- :num] [{[x-type] :arg-col-types}]
-  {:return-type (types/col-type->vec-type false x-type)
+(defmethod codegen-call [:- :num] [{[x-type] :arg-types}]
+  {:return-type x-type
    :->call-code #(do `(- ~@%))})
 
 (defmethod codegen-call [:* :int :int] [{:keys [arg-types]}]
@@ -864,35 +863,37 @@
 (defn- combine-precision [^long p1 ^long p2]
   (if (and (<= p1 32) (<= p2 32)) 32 64))
 
-(defmethod codegen-call [:+ :decimal :decimal] [{[[_ p1 ^long s1] [_ p2 ^long s2]] :arg-col-types}]
-  (let [precision (combine-precision p1 p2)
-        ret-col-type [:decimal precision (max s1 s2) (precision->bit-width precision)]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
-     :->call-code #(do `(.add ^BigDecimal ~@%))}))
-
-(defmethod codegen-call [:- :decimal :decimal] [{[[_ p1 ^long s1] [_ p2 ^long s2]] :arg-col-types}]
-  (let [precision (combine-precision p1 p2)
-        ret-col-type [:decimal precision (max s1 s2) (precision->bit-width precision)]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
-     :->call-code #(do `(.subtract ^BigDecimal ~@%))}))
-
-(defmethod codegen-call [:* :decimal :decimal] [{[[_ p1 ^long s1] [_ p2 ^long s2]] :arg-col-types}]
-  (let [precision (combine-precision p1 p2)
-        ret-col-type [:decimal precision (+ s1 s2) (precision->bit-width precision)]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
-     :->call-code #(do `(.multiply ^BigDecimal ~@%))}))
-
-(defmethod codegen-call [:/ :decimal :decimal] [{[[_ p1 ^long s1] [_ p2 ^long s2]] :arg-col-types}]
-  (let [scale (max 6 (+ s1 s2 1))
-        precision (combine-precision p1 p2)
+(defn- combine-decimal-types ^xtdb.arrow.VectorType [scale-fn ^VectorType d1-type, ^VectorType d2-type]
+  (let [^ArrowType$Decimal d1-arrow-type (.getArrowType d1-type)
+        ^ArrowType$Decimal d2-arrow-type (.getArrowType d2-type)
+        precision (combine-precision (.getPrecision d1-arrow-type)
+                                     (.getPrecision d2-arrow-type))
+        scale (scale-fn (.getScale d1-arrow-type) (.getScale d2-arrow-type))
         ret-col-type [:decimal precision scale (precision->bit-width precision)]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
+    (types/col-type->vec-type false ret-col-type)))
+
+(defmethod codegen-call [:+ :decimal :decimal] [{[d1-type d2-type] :arg-types}]
+  {:return-type (combine-decimal-types max d1-type d2-type)
+   :->call-code #(do `(.add ^BigDecimal ~@%))})
+
+(defmethod codegen-call [:- :decimal :decimal] [{[d1-type d2-type] :arg-types}]
+  {:return-type (combine-decimal-types max d1-type d2-type)
+   :->call-code #(do `(.subtract ^BigDecimal ~@%))})
+
+(defmethod codegen-call [:* :decimal :decimal] [{[d1-type d2-type] :arg-types}]
+  {:return-type (combine-decimal-types + d1-type d2-type)
+   :->call-code #(do `(.multiply ^BigDecimal ~@%))})
+
+(defmethod codegen-call [:/ :decimal :decimal] [{[d1-type d2-type] :arg-types}]
+  (let [return-type (combine-decimal-types (fn [^long s1, ^long s2] (max 6 (+ s1 s2 1))) d1-type d2-type)
+        scale (ArrowType$Decimal/.getScale (.getArrowType return-type))]
+    {:return-type return-type
      :->call-code #(do `(.divide ^BigDecimal ~@% ~scale RoundingMode/HALF_EVEN))}))
 
 ;; least, greatest for decimals currently work by extension to `<` and `>`, see `expression/macro.clj`
 
-(defmethod codegen-call [:bit_not :int] [{[x-type] :arg-col-types}]
-  {:return-type (types/col-type->vec-type false x-type)
+(defmethod codegen-call [:bit_not :int] [{[x-type] :arg-types}]
+  {:return-type x-type
    :->call-code #(do `(bit-not ~@%))})
 
 (defmethod codegen-call [:bit_and :int :int] [{:keys [arg-types]}]
@@ -919,16 +920,18 @@
                     (list (type->cast return-col-type)
                           `(bit-xor ~@(with-math-integer-cast return-col-type emitted-args))))}))
 
-(defmethod codegen-call [:bit_shift_left :int :int] [{[left-arg-type _] :arg-col-types}]
-  {:return-type (types/col-type->vec-type false left-arg-type)
-   :->call-code (fn [emitted-args]
-                  (list (type->unchecked-cast left-arg-type)
-                    `(bit-shift-left ~@(with-math-integer-cast left-arg-type emitted-args))))})
+(defmethod codegen-call [:bit_shift_left :int :int] [{[left-arg-type _] :arg-types}]
+  (let [left-col-type (types/vec-type->col-type left-arg-type)]
+    {:return-type left-arg-type
+     :->call-code (fn [emitted-args]
+                    (list (type->unchecked-cast left-col-type)
+                      `(bit-shift-left ~@(with-math-integer-cast left-col-type emitted-args))))}))
 
-(defmethod codegen-call [:bit_shift_right :int :int] [{[left-arg-type _] :arg-col-types}]
-  {:return-type (types/col-type->vec-type false left-arg-type)
-   :->call-code (fn [emitted-args]
-                  `(bit-shift-right ~@(with-math-integer-cast left-arg-type emitted-args)))})
+(defmethod codegen-call [:bit_shift_right :int :int] [{[left-arg-type _] :arg-types}]
+  (let [left-col-type (types/vec-type->col-type left-arg-type)]
+    {:return-type left-arg-type
+     :->call-code (fn [emitted-args]
+                    `(bit-shift-right ~@(with-math-integer-cast left-col-type emitted-args)))}))
 
 (defmethod codegen-call [:mod :num :num] [{:keys [arg-types]}]
   (let [return-type (types/least-upper-bound arg-types)]
@@ -952,8 +955,8 @@
                          (throw-div-0)
                          (/ l# r#))))}))
 
-(defmethod codegen-call [:/ :duration :num] [{[dur-type _num-type] :arg-col-types}]
-  {:return-type (types/col-type->vec-type false dur-type)
+(defmethod codegen-call [:/ :duration :num] [{[dur-type _num-type] :arg-types}]
+  {:return-type dur-type
    :->call-code (fn [[dur num]]
                   `(let [dur# ~dur, num# ~num]
                      (if (zero? num#)
@@ -1361,10 +1364,11 @@
 (defn sleep [^long duration unit]
   (Thread/sleep (long (* duration (quot (types/ts-units-per-second unit) 1000)))))
 
-(defmethod codegen-call [:sleep :duration] [{[[_duration unit] _] :arg-col-types}]
-  {:return-type #xt/type :null
-   :->call-code (fn [[lit]]
-                  `(sleep ~lit ~unit))})
+(defmethod codegen-call [:sleep :duration] [{[duration-type _] :arg-types}]
+  (let [unit (st/duration-type->unit duration-type)]
+    {:return-type #xt/type :null
+     :->call-code (fn [[lit]]
+                    `(sleep ~lit ~unit))}))
 
 (defn- allocate-concat-out-buffer ^ByteBuffer [bufs]
   (loop [i (int 0)
@@ -1429,7 +1433,7 @@
 (defn- codegen-concat [{:keys [emitted-args] :as expr}]
   (when (< (count emitted-args) 2)
     (throw (err/incorrect :xtdb.expression/arity-error "Arity error, concat requires at least two arguments"
-                          {:expr (dissoc expr :emitted-args :arg-col-types)})))
+                          {:expr (dissoc expr :emitted-args)})))
   (let [^VectorType return-type (apply types/merge-types (map :return-type emitted-args))
         possible-types (set (.getLegs return-type))
         value-types (disj possible-types #xt/type :null)
@@ -1535,18 +1539,19 @@
     {:return-type #xt/type :f64
      :->call-code #(do `(~math-method ~@%))}))
 
-(defmethod codegen-call [:round :int] [{[int-type] :arg-col-types}]
-  {:return-type (types/col-type->vec-type false int-type)
+(defmethod codegen-call [:round :int] [{[int-type] :arg-types}]
+  {:return-type int-type
    :->call-code (fn [[value]]
                   value)})
 
-(defmethod codegen-call [:round :int :int] [{[int-type _] :arg-col-types :keys [args]}]
-  (let [[_ scale-arg] args
+(defmethod codegen-call [:round :int :int] [{[int-type _] :arg-types :keys [args]}]
+  (let [int-col-type (types/vec-type->col-type int-type)
+        [_ scale-arg] args
         scale-literal (:literal scale-arg)]
     (when-not (integer? scale-literal)
       (throw (err/unsupported ::non-literal-scale "ROUND(INTEGER, INTEGER) with non-constant scale is not supported. Use ROUND(val::DOUBLE, scale) for dynamic scales.")))
     (let [bit-width 128
-          precision (case int-type
+          precision (case int-col-type
                       :i32 10
                       :i64 19)
           ret-col-type [:decimal precision scale-literal bit-width]]
@@ -1589,13 +1594,19 @@
                                               (Math/ceil (- divided# 0.5)))]
                                (* rounded# divisor#))))))))})
 
-(defmethod codegen-call [:round :decimal] [{[[_ precision _scale bit-width]] :arg-col-types}]
-  (let [ret-col-type [:decimal precision 0 bit-width]]
+(defmethod codegen-call [:round :decimal] [{[^VectorType d-type] :arg-types}]
+  (let [^ArrowType$Decimal d-arrow (.getArrowType d-type)
+        precision (.getPrecision d-arrow)
+        bit-width (.getBitWidth d-arrow)
+        ret-col-type [:decimal precision 0 bit-width]]
     {:return-type (types/col-type->vec-type false ret-col-type)
      :->call-code #(do `(.setScale ^BigDecimal ~@% 0 RoundingMode/HALF_UP))}))
 
-(defmethod codegen-call [:round :decimal :int] [{[[_ precision _ bit-width] _] :arg-col-types :keys [args]}]
-  (let [[_ scale-arg] args
+(defmethod codegen-call [:round :decimal :int] [{[^VectorType d-type _] :arg-types :keys [args]}]
+  (let [^ArrowType$Decimal d-arrow (.getArrowType d-type)
+        precision (.getPrecision d-arrow)
+        bit-width (.getBitWidth d-arrow)
+        [_ scale-arg] args
         scale-literal (:literal scale-arg)]
     (when-not (integer? scale-literal)
       (throw (err/unsupported ::non-literal-scale "ROUND(DECIMAL, INTEGER) with non-constant scale is not supported. Use ROUND(val::DOUBLE, scale) for dynamic scales.")))
@@ -1661,14 +1672,13 @@
 
                     ~(f return-type map-sym)))}))
 
-(defmethod codegen-call [:get_field :struct] [{[[_ field-types]] :arg-col-types, :keys [field]}]
-  (if-let [val-col-type (get field-types field)]
-    (let [val-type (types/col-type->vec-type false val-col-type)]
-      {:return-type val-type
-       :continue-call (fn [f [struct-code]]
-                        (continue-read f val-type
-                                       (-> `(.get ~struct-code ~(str field))
-                                           (with-tag ValueReader))))})
+(defmethod codegen-call [:get_field :struct] [{[^VectorType$Struct struct-type] :arg-types, :keys [field]}]
+  (if-let [val-type (.get (.getChildren struct-type) (str field))]
+    {:return-type val-type
+     :continue-call (fn [f [struct-code]]
+                      (continue-read f val-type
+                                     (-> `(.get ~struct-code ~(str field))
+                                         (with-tag ValueReader))))}
 
     {:return-type #xt/type :null, :->call-code (constantly nil)}))
 
@@ -1690,10 +1700,7 @@
                                                          (MapEntry/create [l-val-type r-val-type]
                                                                           (if (or (= #xt/type :null l-val-type) (= #xt/type :null r-val-type))
                                                                             {:return-type #xt/type :null, :->call-code (constantly nil)}
-                                                                            (codegen-call {:f :==, 
-                                                                                           :arg-col-types [(types/vec-type->col-type l-val-type)
-                                                                                                           (types/vec-type->col-type r-val-type)]
-                                                                                           :arg-types [l-val-type r-val-type]}))))
+                                                                            (codegen-call {:f :==, :arg-types [l-val-type r-val-type] }))))
                                                        (into {}))))
                                (into {}))
               l-sym (gensym 'l-struct)
@@ -1739,10 +1746,7 @@
                                                 (->> (for [l-val-type (VectorType/.getLegs (get l-field-types field))
                                                            r-val-type (VectorType/.getLegs (get r-field-types field))]
                                                        (MapEntry/create [l-val-type r-val-type]
-                                                                        (codegen-call {:f :===, 
-                                                                                       :arg-types [l-val-type r-val-type]
-                                                                                       :arg-col-types [(types/vec-type->col-type l-val-type)
-                                                                                                       (types/vec-type->col-type r-val-type)]})))
+                                                                        (codegen-call {:f :===, :arg-types [l-val-type r-val-type]})))
                                                      (into {}))))
                              (into {}))
             l-sym (gensym 'l-struct)
@@ -1780,18 +1784,22 @@
     l
     r))
 
-(defmethod codegen-call [:_patch :struct :struct] [{[[_ l-ks] [_ r-ks]] :arg-col-types}]
-  (let [flattened-r-types (-> r-ks (update-vals types/flatten-union-types))
-        ret-col-type [:struct (into l-ks
-                                    (map (fn [[k r-type]]
-                                           [k (let [r-types (flattened-r-types k)]
-                                                (if-not (contains? r-types :null)
-                                                  r-type
-                                                  (let [l-type (get l-ks k :null)]
-                                                    ;; if the r-val is null, we take the l-val
-                                                    (apply types/merge-col-types l-type (disj r-types #xt/type :null)))))]))
-                                    r-ks)]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
+(defmethod codegen-call [:_patch :struct :struct] [{[^VectorType$Struct l-type, ^VectorType$Struct r-type] :arg-types}]
+  (let [l-ks (into {} (.getChildren l-type))
+        r-ks (into {} (.getChildren r-type))
+        flattened-r-types (update-vals r-ks (fn [^VectorType r-field-type]
+                                               (set (.getLegs r-field-type))))
+        ret-type (VectorType/structOf (into l-ks
+                                            (map (fn [[k ^VectorType r-field-type]]
+                                                   (let [r-types (get flattened-r-types k)]
+                                                     (MapEntry/create k
+                                                                      (if-not (contains? r-types #xt/type :null)
+                                                                        r-field-type
+                                                                        (let [l-field-type (get l-ks k #xt/type :null)]
+                                                                          ;; if the r-val is null, we take the l-val
+                                                                          (apply types/merge-types l-field-type (disj r-types #xt/type :null))))))))
+                                            r-ks))]
+    {:return-type ret-type
      :->call-code (fn [[l r]]
                     (let [l-sym (gensym 'l)
                           r-sym (gensym 'r)]
@@ -1805,15 +1813,14 @@
                                            (let [k-str (str k)]
                                              [k-str
                                               (if (and (contains? l-ks k)
-                                                       (get-in flattened-r-types [k :null]))
+                                                       (get-in flattened-r-types [k #xt/type :null]))
                                                 `(-patch (get ~l-sym ~k-str) (get ~r-sym ~k-str))
                                                 `(get ~r-sym ~k-str))])))
                                     (keys r-ks))))))}))
 
-(defmethod codegen-call [:_patch :null :struct] [{[_ [_ r-ks]] :arg-col-types}]
-  (let [ret-col-type [:struct r-ks]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
-     :->call-code (fn [[_ r]] r)}))
+(defmethod codegen-call [:_patch :null :struct] [{[_ ^VectorType$Struct r-type] :arg-types}]
+  {:return-type r-type
+   :->call-code (fn [[_ r]] r)})
 
 (defmethod codegen-cast [:list :list] [{:keys [^VectorType source-type, ^VectorType target-type]}]
   (let [[_ source-el-type] (types/vec-type->col-type source-type)
@@ -1875,10 +1882,10 @@
                            (continue-list (fn [_list-type code]
                                             (f return-type code))))))))
 
-(defmethod codegen-call [:nth :list :int] [{[[_ list-el-type] _n-type] :arg-col-types}]
-  (let [return-col-type (types/merge-col-types list-el-type :null)
-        list-el-vec-type (types/col-type->vec-type false list-el-type)]
-    {:return-type (types/col-type->vec-type false return-col-type)
+(defmethod codegen-call [:nth :list :int] [{[^VectorType list-type _n-type] :arg-types}]
+  (let [list-el-vec-type (types/unnest-type list-type)
+        return-type (types/merge-types list-el-vec-type #xt/type :null)]
+    {:return-type return-type
      :continue-call (fn [f [list-code n-code]]
                       (let [list-sym (gensym 'list)
                             n-sym (gensym 'n)]
@@ -1937,21 +1944,19 @@
     (size [_] trimmed-value-count)
     (nth [_ idx] (.nth lst idx))))
 
-(defmethod codegen-call [:trim_array :list :int] [{[[_list list-el-type] _n-type] :arg-col-types}]
-  (let [return-col-type [:list list-el-type]
-        return-type (types/col-type->vec-type false return-col-type)]
-    {:return-type return-type
-     :continue-call (fn [f [list-code n-code]]
-                      (let [list-sym (gensym 'list)
-                            n-sym (gensym 'n)]
-                        `(let [~list-sym ~list-code
-                               ~n-sym (- (.size ~list-sym) ~n-code)]
-                           (if (neg? ~n-sym)
-                             (throw (err/incorrect :xtdb.expression/array-element-error
-                                                   "Data exception - array element error."
-                                                   {:nlen ~n-sym}))
-                             ~(f return-type (-> `(trim-array-view ~n-sym ~list-sym)
-                                                 (with-tag ListValueReader)))))))}))
+(defmethod codegen-call [:trim_array :list :int] [{[^VectorType list-type _n-type] :arg-types}]
+  {:return-type list-type
+   :continue-call (fn [f [list-code n-code]]
+                    (let [list-sym (gensym 'list)
+                          n-sym (gensym 'n)]
+                      `(let [~list-sym ~list-code
+                             ~n-sym (- (.size ~list-sym) ~n-code)]
+                         (if (neg? ~n-sym)
+                           (throw (err/incorrect :xtdb.expression/array-element-error
+                                                 "Data exception - array element error."
+                                                 {:nlen ~n-sym}))
+                           ~(f list-type (-> `(trim-array-view ~n-sym ~list-sym)
+                                             (with-tag ListValueReader)))))))})
 
 (doseq [[op return-code] [[:== 1] [:<> -1]]]
   (defmethod codegen-call [op :list :list] [{[^VectorType$Listy l-type ^VectorType$Listy r-type] :arg-types}]
@@ -1965,10 +1970,7 @@
                              (MapEntry/create [l-el-type r-el-type]
                                               (if (or (= #xt/type :null l-el-type) (= #xt/type :null r-el-type))
                                                 {:return-type #xt/type :null, :->call-code (constantly nil)}
-                                                (codegen-call {:f :==,
-                                                               :arg-col-types [(types/vec-type->col-type l-el-type)
-                                                                               (types/vec-type->col-type r-el-type)]
-                                                               :arg-types [l-el-type r-el-type]}))))
+                                                (codegen-call {:f :==, :arg-types [l-el-type r-el-type]}))))
                            (into {}))]
 
       {:return-type #xt/type [:? :bool]
@@ -2013,10 +2015,7 @@
         inner-calls (->> (for [l-el-type (.getLegs l-el-type)
                                r-el-type (.getLegs r-el-type)]
                            (MapEntry/create [l-el-type r-el-type]
-                                            (codegen-call {:f :===, 
-                                                           :arg-types [l-el-type r-el-type]
-                                                           :arg-col-types [(types/vec-type->col-type l-el-type)
-                                                                           (types/vec-type->col-type r-el-type)]})))
+                                            (codegen-call {:f :===, :arg-types [l-el-type r-el-type]})))
                          (into {}))]
 
     {:return-type #xt/type :bool
@@ -2063,10 +2062,10 @@
    :->call-code (fn [[start end step]]
                   `(series (long ~start) (long ~end) (long ~step)))})
 
-(defmethod codegen-call [:== :set :set] [{[[_ _l-el-type] [_ _r-el-type]] :arg-col-types}]
+(defmethod codegen-call [:== :set :set] [_]
   (throw (UnsupportedOperationException. "TODO: `==` on sets")))
 
-(defmethod codegen-call [:<> :set :set] [{[[_ _l-el-type] [_ _r-el-type]] :arg-col-types}]
+(defmethod codegen-call [:<> :set :set] [_]
   (throw (UnsupportedOperationException. "TODO: `<>` on sets")))
 
 (def out-vec-sym (gensym 'out_vec))

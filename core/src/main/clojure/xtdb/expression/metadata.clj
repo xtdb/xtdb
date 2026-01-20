@@ -8,7 +8,7 @@
   (:import java.util.function.IntPredicate
            java.util.List
            org.apache.arrow.memory.BufferAllocator
-           (xtdb.arrow RelationReader Vector VectorReader VectorType)
+           (xtdb.arrow RelationReader Vector VectorReader VectorType VectorType$Mono)
            (xtdb.arrow.metadata MetadataFlavour MetadataFlavour$Bytes MetadataFlavour$Presence)
            (xtdb.bloom BloomUtils)
            (xtdb.metadata MetadataPredicate PageMetadata)))
@@ -204,20 +204,24 @@
 (defmethod expr/codegen-call [:_meta_double :num] [_expr]
   {:return-type #xt/type :f64, :->call-code #(do `(double ~@%))})
 
-(defmethod expr/codegen-call [:_meta_double :timestamp-tz] [{[[_ts-tz ts-unit _zone]] :arg-col-types}]
-  {:return-type #xt/type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+(defmethod expr/codegen-call [:_meta_double :timestamp-tz] [{[^VectorType$Mono ts-type] :arg-types}]
+  (let [ts-unit (st/timestamp-type->unit ts-type)]
+    {:return-type #xt/type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))}))
 
-(defmethod expr/codegen-call [:_meta_double :timestamp-local] [{[[_ts-local ts-unit]] :arg-col-types}]
-  {:return-type #xt/type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+(defmethod expr/codegen-call [:_meta_double :timestamp-local] [{[^VectorType$Mono ts-type] :arg-types}]
+  (let [ts-unit (st/timestamp-type->unit ts-type)]
+    {:return-type #xt/type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))}))
 
 (defmethod expr/codegen-call [:_meta_double :date] [_]
   {:return-type #xt/type :f64, :->call-code #(do `(* ~@% 86400.0))})
 
-(defmethod expr/codegen-call [:_meta_double :time-local] [{[[_time-local ts-unit]] :arg-col-types}]
-  {:return-type #xt/type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+(defmethod expr/codegen-call [:_meta_double :time-local] [{[^VectorType$Mono time-type] :arg-types}]
+  (let [ts-unit (st/time-type->unit time-type)]
+    {:return-type #xt/type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))}))
 
-(defmethod expr/codegen-call [:_meta_double :duration] [{[[_duration ts-unit]] :arg-col-types}]
-  {:return-type #xt/type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))})
+(defmethod expr/codegen-call [:_meta_double :duration] [{[^VectorType$Mono dur-type] :arg-types}]
+  (let [ts-unit (st/duration-type->unit dur-type)]
+    {:return-type #xt/type :f64, :->call-code #(do `(/ ~@% (double ~(types/ts-units-per-second ts-unit))))}))
 
 (defmethod expr/codegen-call [:_meta_double :any] [_]
   {:return-type #xt/type :null, :->call-code (fn [& _args] nil)})
