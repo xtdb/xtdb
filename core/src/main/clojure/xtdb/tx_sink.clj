@@ -115,13 +115,18 @@
 
 (def ^:dynamic *after-block-hook* nil)
 
+(defn gt [a b] (pos? (compare a b)))
+
 (defn- output-block-txs!
-  [^Log output-log grouped-txs db-name block-idx encode-fn]
-  (reduce (fn [_ [system-time events]]
-            (let [{:keys [tx-key message]} (events->tx-output system-time events db-name block-idx encode-fn)]
-              @(.appendMessage output-log message)
-              tx-key))
-          nil
+  [^Log output-log grouped-txs db-name block-idx encode-fn last-key]
+  (reduce (fn [last-key [system-time events]]
+            (let [{tx-key' :tx-key :keys [message]} (events->tx-output system-time events db-name block-idx encode-fn)]
+              (if (or (nil? last-key) (gt tx-key' last-key))
+                (do
+                  @(.appendMessage output-log message)
+                  tx-key')
+                last-key)))
+          last-key
           grouped-txs))
 
 (defn backfill-from-l0!
@@ -131,12 +136,14 @@
             (->> (trie-cat/l0-blocks trie-cat)
                  (drop-while #(>= (or last-block-idx -1) (:block-idx %)))))]
     (loop [last-key (some-> last-message :transaction :id)
-           last-block-idx (some-> last-message :source :block-idx)]
+           ;; Decrement because the last block may not have been fully processed
+           ;; (e.g. if the last message was from the live index before a flush)
+           last-block-idx (some-> last-message :source :block-idx dec)]
       (if-let [blocks (seq (fetch-new-blocks last-block-idx))]
         (let [[new-last-key new-last-block-idx]
-              (reduce (fn [_ {:keys [block-idx tables]}]
+              (reduce (fn [[last-key _] {:keys [block-idx tables]}]
                         (let [grouped-txs (->> tables (read-l0-events al bp) group-events-by-system-time)
-                              new-last-key (output-block-txs! output-log grouped-txs db-name block-idx encode-fn)]
+                              new-last-key (output-block-txs! output-log grouped-txs db-name block-idx encode-fn last-key)]
                           (when *after-block-hook* (*after-block-hook* block-idx))
                           [new-last-key block-idx]))
                       [last-key last-block-idx]
@@ -165,8 +172,6 @@
    ::output-log {:tx-sink-conf tx-sink-conf
                  :base base
                  :db-name db-name}})
-
-(defn gt [a b] (pos? (compare a b)))
 
 (defrecord TxSink [^Log output-log encode-fn ^BlockCatalog block-cat db-name last-tx-key]
   Indexer$TxSink

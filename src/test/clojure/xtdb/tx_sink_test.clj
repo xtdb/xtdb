@@ -504,6 +504,39 @@
           msgs (->> (.getMessages output-log) (map decode-record))]
       (t/is (empty? msgs) "Should have no messages when no blocks exist"))))
 
+(t/deftest test-node-restart-partially-from-block
+  ; TxSink processes 1 message from the live index but doesn't flush
+  (util/with-tmp-dirs #{node-dir}
+    (let [original-messages
+          (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                            :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
+                                            :compactor {:threads 1}
+                                            :tx-sink {:enable true
+                                                      :output-log [::tu/recording {}]
+                                                      :format :transit+json}})]
+            ; Block with single transaction
+            (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
+            (.getMessages ^RecordingLog (tu/get-output-log node)))]
+      (t/is (= 1 (count original-messages)) "Should have 1 original message")
+
+      ; Non-TxSink node pushes 1 more tx and flushes
+      (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                        :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
+                                        :compactor {:threads 0}})]
+        (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
+        (tu/flush-block! node))
+      (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                        :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
+                                        :compactor {:threads 0}
+                                        :tx-sink {:enable true
+                                                  :output-log [::tu/recording {:messages original-messages}]
+                                                  :format :transit+json}})]
+        (xt-log/sync-node node #xt/duration "PT5S")
+        (let [^RecordingLog output-log (tu/get-output-log node)
+              msgs (->> (.getMessages output-log) (map decode-record))]
+          (t/is (= 2 (count msgs))
+                "Should have processed both messages"))))))
+
 (comment
   (util/with-tmp-dirs #{test-dir}
     (let [test-dir (java.nio.file.Files/createTempDirectory
