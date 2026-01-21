@@ -42,7 +42,6 @@
                              :table "docs"
                              :ops [{:op :put
                                     :iid (util/->iid :doc1)
-                                    :system-from #xt/instant "2020-01-01T00:00Z"
                                     :valid-from  #xt/instant "2020-01-01T00:00Z"
                                     :valid-to nil
                                     :doc {:xt/id :doc1, :value "test"}}]}
@@ -51,7 +50,6 @@
                              :table "txs"
                              :ops [{:op :put
                                     :iid (util/->iid 0)
-                                    :system-from #xt/instant "2020-01-01T00:00Z"
                                     :valid-from  #xt/instant "2020-01-01T00:00Z"
                                     :valid-to nil
                                     :doc {:xt/id 0
@@ -209,7 +207,6 @@
         (t/testing "all rows have required temporal fields"
           (t/is (every? :iid rows))
           (t/is (every? :valid-from rows))
-          (t/is (every? :system-from rows))
           (t/is (every? #(contains? % :valid-to) rows)))))))
 
 (t/deftest test-read-l0-events

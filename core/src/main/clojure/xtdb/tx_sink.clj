@@ -44,7 +44,7 @@
     {:db (.getDbName table)
      :schema (.getSchemaName table)
      :table (.getTableName table)
-     :ops (read-relation-rows live-relation start-pos)}))
+     :ops (map #(dissoc % :system-from) (read-relation-rows live-relation start-pos))}))
 
 (defn ->encode-fn [fmt]
   (case fmt
@@ -108,7 +108,7 @@
                                        {:db (.getDbName table)
                                         :schema (.getSchemaName table)
                                         :table (.getTableName table)
-                                        :ops events}))
+                                        :ops (map #(dissoc % :system-from) events)}))
                                 (into []))}
                   encode-fn
                   Log$Message$Tx.)}))
