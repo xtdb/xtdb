@@ -23,7 +23,7 @@
 ;;   1. organisation    - Manufacturers (5 rows)
 ;;   2. device_series   - Device series per org (25 rows, 5 per org)
 ;;   3. device_model    - Reference data (50 rows, 2 per series)
-;;   4. site            - Location data (NMI meter IDs, ~= system count)
+;;   4. site            - Location data (~= system count)
 ;;   5. system          - Main table, constantly updated (configurable count, default 10k)
 ;;   6. device          - Links systems to device models (2× system count)
 ;;   7. readings        - High volume time-series (system_id, value, valid_time)
@@ -104,21 +104,21 @@
    :name model-name
    :capacity-kw (random-float rng 5 15)})
 
-(defn generate-site [rng nmi]
-  {:xt/id nmi
+(defn generate-site [rng site-id]
+  {:xt/id site-id
    :address (str (random-int rng 1 999) " Solar Street")
    :postcode (str (random-int rng 1000 9999))
    :state (random/uniform-nth rng ["NSW" "VIC" "QLD" "SA" "WA"])})
 
-(defn generate-system-record [rng system-id nmi base-time]
+(defn generate-system-record [rng system-id site-id base-time]
   (let [modes-enabled ["default" "eco"]
         modes-supported ["default" "eco" "grid-charge" "grid-discharge"]
-        doe-modes-enabled ["doe-mode-1"]
-        doe-modes-supported ["doe-mode-1" "doe-mode-2" "doe-mode-3"]
-        vpp-modes-enabled ["vpp-frequency" "vpp-voltage"]
-        vpp-modes-supported ["vpp-frequency" "vpp-voltage" "vpp-reserve"]]
+        feature-a-modes-enabled ["feature-a-1"]
+        feature-a-modes-supported ["feature-a-1" "feature-a-2" "feature-a-3"]
+        feature-b-modes-enabled ["feature-b-1" "feature-b-2"]
+        feature-b-modes-supported ["feature-b-1" "feature-b-2" "feature-b-3"]]
     {:xt/id system-id
-     :nmi nmi
+     :site-id site-id
      :type (random/next-int rng 10)
      :created-at base-time
      :registration-date base-time
@@ -155,14 +155,14 @@
      :modes-enabled-set modes-enabled
      :modes-supported (str/join "," modes-supported)
      :modes-supported-set modes-supported
-     :doe-modes-enabled (str/join "," doe-modes-enabled)
-     :doe-modes-enabled-set doe-modes-enabled
-     :doe-modes-supported (str/join "," doe-modes-supported)
-     :doe-modes-supported-set doe-modes-supported
-     :vpp-modes-enabled (str/join "," vpp-modes-enabled)
-     :vpp-modes-enabled-set vpp-modes-enabled
-     :vpp-modes-supported (str/join "," vpp-modes-supported)
-     :vpp-modes-supported-set vpp-modes-supported
+     :feature-a-modes-enabled (str/join "," feature-a-modes-enabled)
+     :feature-a-modes-enabled-set feature-a-modes-enabled
+     :feature-a-modes-supported (str/join "," feature-a-modes-supported)
+     :feature-a-modes-supported-set feature-a-modes-supported
+     :feature-b-modes-enabled (str/join "," feature-b-modes-enabled)
+     :feature-b-modes-enabled-set feature-b-modes-enabled
+     :feature-b-modes-supported (str/join "," feature-b-modes-supported)
+     :feature-b-modes-supported-set feature-b-modes-supported
 
      ;; Credential/controller fields (sparse, like production)
      :certificate-credential-id (when (random/chance? rng 0.3)
@@ -249,7 +249,7 @@
                                             (partition-all batch-size system-ids)
                                             (partition-all batch-size site-ids))]
           (xt/submit-tx node [(into [:put-docs :system]
-                                    (map (fn [sid nmi] (generate-system-record random sid nmi base-time))
+                                    (map (fn [sid site-id] (generate-system-record random sid site-id base-time))
                                          sys-batch site-batch))]))
 
         (log/infof "Inserting %d device records" (count device-ids))
@@ -394,7 +394,7 @@
                LEFT OUTER JOIN device_model ON device_model._id = device.device_model_id AND device_model._valid_time CONTAINS dates.d
                LEFT OUTER JOIN device_series ON device_series._id = device_model.device_series_id AND device_series._valid_time CONTAINS dates.d
                LEFT OUTER JOIN organisation ON organisation._id = device_series.organisation_id AND organisation._valid_time CONTAINS dates.d
-               LEFT OUTER JOIN site ON site._id = system.nmi AND site._valid_time CONTAINS dates.d
+               LEFT OUTER JOIN site ON site._id = system.site_id AND site._valid_time CONTAINS dates.d
                GROUP BY dates.d
                ORDER BY dates.d" start end] opts))
 
@@ -467,7 +467,7 @@
                         COALESCE(passing_test_cases.count, 0) AS passing_test_cases
                  FROM gen
                  JOIN system ON system._valid_time CONTAINS gen.t
-                 LEFT OUTER JOIN site ON site._id = system.nmi AND site._valid_time CONTAINS gen.t
+                 LEFT OUTER JOIN site ON site._id = system.site_id AND site._valid_time CONTAINS gen.t
                  LEFT OUTER JOIN device ON device.system_id = system._id AND device._valid_time CONTAINS gen.t
                  LEFT OUTER JOIN device_model ON device_model._id = device.device_model_id AND device_model._valid_time CONTAINS gen.t
                  LEFT OUTER JOIN latest_test_suite_run ON latest_test_suite_run.system_id = system._id
@@ -526,7 +526,7 @@
   (let [setup-rng (java.util.Random. seed)
         base-time (.minus (Instant/now) (Duration/ofDays 3))
         system-ids (generate-ids setup-rng devices)
-        site-ids (mapv #(str "NMI-" %) (range devices))
+        site-ids (mapv #(str "SITE-" %) (range devices))
         organisation-ids (generate-ids setup-rng 5)
         device-series-ids (generate-ids setup-rng 25) ; 5 series per org
         device-model-ids (generate-ids setup-rng 50) ; 2 models per series
