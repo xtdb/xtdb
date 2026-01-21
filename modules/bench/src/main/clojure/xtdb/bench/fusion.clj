@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
+            [hugsql.core :as hugsql]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.bench.random :as random]
@@ -9,6 +10,8 @@
             [xtdb.util :as util])
   (:import (java.time Duration Instant)
            (java.util UUID)))
+
+(hugsql/def-sqlvec-fns "xtdb/bench/fusion.sql")
 
 ;; ============================================================================
 ;; FUSION BENCHMARK
@@ -357,144 +360,25 @@
         (b/finish-block! node)
         (b/compact! node))})
 
-(defn query-system-settings
-  "Simple point-in-time system lookup - common query pattern"
-  [node system-id opts]
-  (xt/q node ["SELECT *, _valid_from, _system_from FROM system WHERE _id = ?" system-id] opts))
+(defn run-query
+  "Execute a HugSQL sqlvec against XTDB node"
+  [node sqlvec opts]
+  (xt/q node sqlvec opts))
 
-(defn query-readings-for-system
-  "Time-series scan for specific system - production metabase query
+(defn exec-system-settings [node system-id opts]
+  (run-query node (query-system-settings-sqlvec {:system-id system-id}) opts))
 
-  NOTE: Production query is missing temporal join constraint (CONTAINS predicate).
-  Without 'system._valid_time CONTAINS readings._valid_from', this produces a cartesian
-  product - each reading is joined with ALL versions of the system. If a system has been
-  updated N times, each reading appears N times in the result. Benchmarking the actual
-  production query to capture realistic performance characteristics."
-  [node system-id start end opts]
-  (xt/q node ["SELECT readings._valid_to as reading_time, readings.value::float AS reading_value
-               FROM readings FOR ALL VALID_TIME
-               JOIN system FOR ALL VALID_TIME ON system._id = readings.system_id
-               WHERE system._id = ? AND readings._valid_from >= ? AND readings._valid_from < ?
-               ORDER BY reading_time" system-id start end] opts))
+(defn exec-readings-for-system [node system-id start end opts]
+  (run-query node (query-readings-for-system-sqlvec {:system-id system-id :start start :end end}) opts))
 
-(defn query-system-count-over-time
-  "Complex temporal aggregation with multi-table joins - production analytics query
+(defn exec-system-count-over-time [node start end opts]
+  (run-query node (query-system-count-over-time-sqlvec {:start start :end end}) opts))
 
-  Matches production 'System count over a period' query with full table hierarchy:
-  system -> device -> device_model -> device_series -> organisation, plus site."
-  [node start end opts]
-  (xt/q node ["WITH dates AS (
-                 SELECT d::timestamptz AS d
-                 FROM generate_series(DATE_BIN(INTERVAL 'PT1H', ?::timestamptz), ?::timestamptz, INTERVAL 'PT1H') AS x(d)
-               )
-               SELECT dates.d, COUNT(DISTINCT system._id) AS c
-               FROM dates
-               LEFT OUTER JOIN system ON system._valid_time CONTAINS dates.d
-               LEFT OUTER JOIN device ON device.system_id = system._id AND device._valid_time CONTAINS dates.d
-               LEFT OUTER JOIN device_model ON device_model._id = device.device_model_id AND device_model._valid_time CONTAINS dates.d
-               LEFT OUTER JOIN device_series ON device_series._id = device_model.device_series_id AND device_series._valid_time CONTAINS dates.d
-               LEFT OUTER JOIN organisation ON organisation._id = device_series.organisation_id AND organisation._valid_time CONTAINS dates.d
-               LEFT OUTER JOIN site ON site._id = system.site_id AND site._valid_time CONTAINS dates.d
-               GROUP BY dates.d
-               ORDER BY dates.d" start end] opts))
+(defn exec-readings-range-bins [node start end opts]
+  (run-query node (query-readings-range-bins-sqlvec {:start start :end end}) opts))
 
-(defn query-readings-range-bins
-  "Hourly aggregation using range_bins - production power readings query"
-  [node start end opts]
-  (xt/q node ["WITH corrected_readings AS (
-                 SELECT r.*, r._valid_from, r._valid_to,
-                        (bin)._from AS corrected_from,
-                        (bin)._weight AS corrected_weight,
-                        r.value * (bin)._weight AS corrected_portion
-                 FROM readings AS r, UNNEST(range_bins(INTERVAL 'PT1H', r._valid_time)) AS b(bin)
-                 WHERE r._valid_from >= ? AND r._valid_from < ?
-               )
-               SELECT corrected_from AS t, SUM(corrected_portion) / SUM(corrected_weight) AS value
-               FROM corrected_readings
-               GROUP BY corrected_from
-               ORDER BY t" start end] opts))
-
-(defn query-cumulative-registration
-  "Complex registration tracking query with multiple CTEs, window functions, and multi-way temporal joins"
-  [node start end opts]
-  (xt/q node ["WITH gen AS (
-                 SELECT d::timestamptz AS t
-                 FROM generate_series(?::timestamptz, ?::timestamptz, INTERVAL 'PT1H') AS x(d)
-               ),
-               latest_test_suite_run AS (
-                 SELECT ranked.* FROM (
-                   SELECT gen.t,
-                          test_suite_run.*,
-                          ROW_NUMBER() OVER (
-                            PARTITION BY gen.t, test_suite_run.system_id
-                            ORDER BY test_suite_run._system_from DESC
-                          ) AS rn
-                   FROM gen
-                   JOIN test_suite_run ON test_suite_run._valid_time CONTAINS gen.t
-                   JOIN test_suite ON test_suite._id = test_suite_run.test_suite_id
-                                   AND test_suite._valid_time CONTAINS gen.t
-                 ) ranked WHERE ranked.rn = 1
-               ),
-               expected_test_cases AS (
-                 SELECT latest_test_suite_run.t AS t,
-                        latest_test_suite_run._id AS test_suite_run_id,
-                        COUNT(*) AS count
-                 FROM latest_test_suite_run
-                 JOIN test_suite ON test_suite._id = latest_test_suite_run.test_suite_id
-                                 AND test_suite._valid_time CONTAINS latest_test_suite_run.t
-                 JOIN test_case ON test_case.test_suite_id = test_suite._id
-                                AND test_case._valid_time CONTAINS latest_test_suite_run.t
-                 GROUP BY latest_test_suite_run.t, latest_test_suite_run._id
-               ),
-               passing_test_cases AS (
-                 SELECT latest_test_suite_run.t AS t,
-                        latest_test_suite_run._id AS test_suite_run_id,
-                        COUNT(*) AS count
-                 FROM latest_test_suite_run
-                 JOIN test_case_run ON test_case_run.test_suite_run_id = latest_test_suite_run._id
-                                    AND test_case_run._valid_time CONTAINS latest_test_suite_run.t
-                 WHERE test_case_run.status = 'OK'
-                 GROUP BY latest_test_suite_run.t, latest_test_suite_run._id
-               ),
-               data AS (
-                 SELECT gen.t,
-                        system._id AS system_id,
-                        system.created_at AS created_at,
-                        site._id IS NOT NULL AS site_linked,
-                        COUNT(device._id) >= 1 AS devices_linked,
-                        COALESCE(latest_test_suite_run.status = 'DONE', FALSE) AS test_suite_run_ok,
-                        COALESCE(expected_test_cases.count, 0) AS expected_test_cases,
-                        COALESCE(passing_test_cases.count, 0) AS passing_test_cases
-                 FROM gen
-                 JOIN system ON system._valid_time CONTAINS gen.t
-                 LEFT OUTER JOIN site ON site._id = system.site_id AND site._valid_time CONTAINS gen.t
-                 LEFT OUTER JOIN device ON device.system_id = system._id AND device._valid_time CONTAINS gen.t
-                 LEFT OUTER JOIN device_model ON device_model._id = device.device_model_id AND device_model._valid_time CONTAINS gen.t
-                 LEFT OUTER JOIN latest_test_suite_run ON latest_test_suite_run.system_id = system._id
-                                                       AND latest_test_suite_run.t = gen.t
-                 LEFT OUTER JOIN expected_test_cases ON expected_test_cases.test_suite_run_id = latest_test_suite_run._id
-                                                     AND expected_test_cases.t = gen.t
-                 LEFT OUTER JOIN passing_test_cases ON passing_test_cases.test_suite_run_id = latest_test_suite_run._id
-                                                    AND passing_test_cases.t = gen.t
-                 GROUP BY gen.t, system._id, system.created_at, site._id, latest_test_suite_run.status,
-                          expected_test_cases.count, passing_test_cases.count
-               ),
-               data_with_status AS (
-                 SELECT t,
-                        system_id,
-                        CASE
-                          WHEN (site_linked AND devices_linked AND test_suite_run_ok
-                                AND expected_test_cases = passing_test_cases) THEN 'Success'
-                          WHEN (created_at + INTERVAL 'PT48H' < t) THEN 'Failed'
-                          ELSE 'Pending'
-                        END AS registration_status
-                 FROM data
-               )
-               SELECT gen.t, registration_status, COUNT(system_id) AS c
-               FROM gen
-               LEFT OUTER JOIN data_with_status ON data_with_status.t = gen.t
-               GROUP BY gen.t, registration_status
-               ORDER BY gen.t, registration_status" start end] opts))
+(defn exec-cumulative-registration [node start end opts]
+  (run-query node (query-cumulative-registration-sqlvec {:start start :end end}) opts))
 
 (defn ->query-stage [query-type]
   {:t :call
@@ -504,12 +388,11 @@
               opts {:current-time (:system-time latest-completed-tx)}
               sample-system-id (first system-ids)]
           (case query-type
-            ;; Production queries
-            :system-settings (query-system-settings node sample-system-id opts)
-            :readings-for-system (query-readings-for-system node sample-system-id min-valid-time max-valid-time opts)
-            :system-count-over-time (query-system-count-over-time node min-valid-time max-valid-time opts)
-            :readings-range-bins (query-readings-range-bins node min-valid-time max-valid-time opts)
-            :cumulative-registration (query-cumulative-registration node min-valid-time max-valid-time opts))))})
+            :system-settings (exec-system-settings node sample-system-id opts)
+            :readings-for-system (exec-readings-for-system node sample-system-id min-valid-time max-valid-time opts)
+            :system-count-over-time (exec-system-count-over-time node min-valid-time max-valid-time opts)
+            :readings-range-bins (exec-readings-range-bins node min-valid-time max-valid-time opts)
+            :cumulative-registration (exec-cumulative-registration node min-valid-time max-valid-time opts))))})
 
 (defmethod b/cli-flags :fusion [_]
   [[nil "--devices DEVICES" "Number of systems" :parse-fn parse-long :default 10000]
