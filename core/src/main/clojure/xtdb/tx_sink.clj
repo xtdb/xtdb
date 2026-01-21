@@ -115,6 +115,16 @@
 
 (def ^:dynamic *after-block-hook* nil)
 
+(defn- output-block-txs!
+  [^Log output-log grouped-txs db-name block-idx encode-fn]
+  (loop [remaining-txs grouped-txs
+         tx-key nil]
+    (if-let [[system-time events] (first remaining-txs)]
+      (let [{:keys [tx-key message]} (events->tx-output system-time events db-name block-idx encode-fn)]
+        @(.appendMessage output-log message)
+        (recur (rest remaining-txs) tx-key))
+      tx-key)))
+
 (defn backfill-from-l0!
   [^BufferAllocator al ^BufferPool bp ^Log output-log db-name encode-fn ^TrieCatalog trie-cat last-message refresh!]
   (loop [remaining-blocks nil
@@ -122,14 +132,7 @@
          last-block-idx (some-> last-message :source :block-idx)]
     (if-let [{:keys [block-idx tables]} (first remaining-blocks)]
       (let [grouped-txs (->> tables (read-l0-events al bp) group-events-by-system-time)
-            new-last-key
-            (loop [remaining-txs grouped-txs
-                   tx-key nil]
-              (if-let [[system-time events] (first remaining-txs)]
-                (let [{:keys [tx-key message]} (events->tx-output system-time events db-name block-idx encode-fn)]
-                  @(.appendMessage output-log message)
-                  (recur (rest remaining-txs) tx-key))
-                tx-key))]
+            new-last-key (output-block-txs! output-log grouped-txs db-name block-idx encode-fn)]
         (when *after-block-hook* (*after-block-hook* block-idx))
         (recur (rest remaining-blocks) new-last-key block-idx))
       (do
