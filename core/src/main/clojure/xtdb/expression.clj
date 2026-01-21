@@ -2138,7 +2138,7 @@
                                  eval))
 
            :return-type return-type}))
-      #_(util/lru-memoize) ; <<no-commit>>
+      (util/lru-memoize) ; <<no-commit>>
       wrap-zone-id-cache-buster))
 
 (defn ->param-types [^RelationReader args]
