@@ -117,13 +117,12 @@
 
 (defn- output-block-txs!
   [^Log output-log grouped-txs db-name block-idx encode-fn]
-  (loop [remaining-txs grouped-txs
-         tx-key nil]
-    (if-let [[system-time events] (first remaining-txs)]
-      (let [{:keys [tx-key message]} (events->tx-output system-time events db-name block-idx encode-fn)]
-        @(.appendMessage output-log message)
-        (recur (rest remaining-txs) tx-key))
-      tx-key)))
+  (reduce (fn [_ [system-time events]]
+            (let [{:keys [tx-key message]} (events->tx-output system-time events db-name block-idx encode-fn)]
+              @(.appendMessage output-log message)
+              tx-key))
+          nil
+          grouped-txs))
 
 (defn backfill-from-l0!
   [^BufferAllocator al ^BufferPool bp ^Log output-log db-name encode-fn ^TrieCatalog trie-cat last-message refresh!]
