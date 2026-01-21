@@ -17,7 +17,7 @@
 (defn download-dataset []
   (when-not (.exists products-file)
     (log/info "downloading" (str products-file))
-    (io/make-parents (io/file "datasets"))
+    (io/make-parents products-file)
 
     (.getObject (S3Client/create)
                 (-> (GetObjectRequest/builder)
@@ -28,7 +28,7 @@
 
 (defn store-documents! [node docs]
   (dorun (->> docs
-              (partition-all 1000)
+              (partition-all 500) ; reduced from 1000 - product docs are large
               (map-indexed (fn [idx docs]
                              (log/debug "batch" idx)
                              (xt/submit-tx node [(into [:put-docs :products] docs)]))))))
