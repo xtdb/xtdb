@@ -273,6 +273,7 @@ locals {
   # Dashboard KQL queries per benchmark
   # auctionmark uses string comparison (ISO duration), others use numeric comparison
   # Also filters by github-repo and git-branch
+  # Note: duration_minutes benchmarks need ms -> minutes conversion (/ 60000)
   dashboard_queries = {
     for key, bench in local.benchmarks : key => bench.param_is_string ? trimspace(<<-KQL
       ContainerLog
@@ -283,9 +284,10 @@ locals {
                filter_param = tostring(log.${bench.param_path}),
                github_repo = tostring(log['github-repo']),
                git_branch = tostring(log['git-branch']),
-               ${bench.metric_name} = todouble(log[${bench.metric_path}])
+               duration_ms = todouble(log[${bench.metric_path}])
       | where benchmark == "${bench.name}" and filter_param == "${bench.param_value}" and github_repo == "${var.anomaly_repo}" and git_branch == "${var.anomaly_branch}"
       | top ${var.anomaly_baseline_n} by TimeGenerated desc
+      ${bench.metric_name == "duration_minutes" ? "| extend duration_minutes = todouble(duration_ms) / 60000" : "| extend ${bench.metric_name} = duration_ms"}
       | order by TimeGenerated asc
       | project TimeGenerated, ${bench.metric_name}
     KQL
