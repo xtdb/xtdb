@@ -86,7 +86,20 @@ jobs:
           echo "Generated image tag: ${IMAGE_TAG}"
           echo "Full image reference: ${IMAGE_FULL}"
 
+      - name: Check if image already exists
+        id: check-image
+        run: |
+          IMAGE_FULL="${{ steps.image-tag.outputs.full }}"
+          if docker manifest inspect "$IMAGE_FULL" > /dev/null 2>&1; then
+            echo "Image already exists: $IMAGE_FULL"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Image does not exist: $IMAGE_FULL"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Docker meta for xtdb-bench
+        if: steps.check-image.outputs.exists != 'true'
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
@@ -99,12 +112,15 @@ jobs:
             type=raw,value=${{ steps.image-tag.outputs.tag }}
 
       - name: Setup Gradle
+        if: steps.check-image.outputs.exists != 'true'
         uses: gradle/actions/setup-gradle@4d9f0ba0025fe599b4ebab900eb7f3a1d93ef4c2 # v5.0.0
 
       - name: Build shadowJar for bench
+        if: steps.check-image.outputs.exists != 'true'
         run: ./gradlew shadowJar
 
       - name: Build and Push xtdb-bench Image
+        if: steps.check-image.outputs.exists != 'true'
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
@@ -115,3 +131,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             GIT_SHA=${{ github.sha }}
+
+      - name: Skip build (image exists)
+        if: steps.check-image.outputs.exists == 'true'
+        run: echo "Skipping build - image ${{ steps.image-tag.outputs.full }} already exists"

@@ -134,7 +134,15 @@ jobs:
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v5
 
+      - name: Cache Babashka
+        id: cache-bb
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: /usr/local/bin/bb
+          key: babashka-1.12.209
+
       - name: Install Babashka
+        if: steps.cache-bb.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           BABASHKA_VERSION=1.12.209
