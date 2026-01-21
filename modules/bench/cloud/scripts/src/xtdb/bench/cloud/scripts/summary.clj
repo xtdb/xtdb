@@ -143,6 +143,14 @@
     {:rows rows-with-percent
      :total-ms total-ms}))
 
+(defn adjusted-total-ms
+  [sum-ms benchmark-total-time-ms]
+  (if (and benchmark-total-time-ms
+           (pos? benchmark-total-time-ms)
+           (> sum-ms benchmark-total-time-ms))
+    benchmark-total-time-ms
+    sum-ms))
+
 (defn ingest-tx-overhead-summary->stage-rows
   [summary]
   (let [rows (->> (:batch-stages summary)
@@ -150,7 +158,8 @@
                   (remove nil?)
                   (sort-by :batch-size >)
                   vec)
-        total-ms (reduce + (map :time-taken-ms rows))
+        sum-ms (reduce + (map :time-taken-ms rows))
+        total-ms (adjusted-total-ms sum-ms (:benchmark-total-time-ms summary))
         rows-with-percent (mapv (fn [row]
                                   (let [ms (:time-taken-ms row)
                                         pct (if (pos? total-ms)
@@ -159,6 +168,26 @@
                                     (-> row
                                         (assoc :percent-of-total (format "%.2f%%" pct))
                                         (dissoc :stage-order :batch-size))))
+                                rows)]
+    {:rows rows-with-percent
+     :total-ms total-ms}))
+
+(defn products-summary->stage-rows
+  [summary]
+  (let [rows (->> (:ingest-stages summary)
+                  (map-indexed clickbench-stage->row)
+                  (sort-by :stage-order)
+                  vec)
+        sum-ms (reduce + (map :time-taken-ms rows))
+        total-ms (adjusted-total-ms sum-ms (:benchmark-total-time-ms summary))
+        rows-with-percent (mapv (fn [row]
+                                  (let [ms (:time-taken-ms row)
+                                        pct (if (pos? total-ms)
+                                              (* 100.0 (/ ms total-ms))
+                                              0.0)]
+                                    (-> row
+                                        (assoc :percent-of-total (format "%.2f%%" pct))
+                                        (dissoc :stage-order))))
                                 rows)]
     {:rows rows-with-percent
      :total-ms total-ms}))
@@ -232,31 +261,31 @@
 
 (defmethod summary->table "clickbench" [summary]
   (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
-    (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
+    (str (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
          "\n\n"
          (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
 
 (defmethod summary->table "ingest-tx-overhead" [summary]
   (let [{:keys [rows total-ms]} (ingest-tx-overhead-summary->stage-rows summary)]
-    (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
+    (str (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
          "\n\n"
          (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
 
 (defmethod summary->table "patch" [summary]
   (let [{:keys [rows total-ms]} (patch-summary->stage-rows summary)]
-    (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
+    (str (util/totals->string total-ms (:benchmark-total-time-ms summary) "patch")
          "\n\n"
          (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
 
 (defmethod summary->table "products" [summary]
-  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
-    (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
+  (let [{:keys [rows total-ms]} (products-summary->stage-rows summary)]
+    (str (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
          "\n\n"
          (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
 
 (defmethod summary->table "ts-devices" [summary]
   (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
-    (str (util/totals->string total-ms (:benchmark-total-time-ms summary))
+    (str (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
          "\n\n"
          (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
 
@@ -299,7 +328,7 @@
 (defmethod summary->slack "clickbench" [summary]
   (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
     (str
-     (util/totals->string total-ms (:benchmark-total-time-ms summary))
+     (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
      "\n\n"
      (util/wrap-slack-code
       (rows->string [:stage :duration] rows)))))
@@ -307,7 +336,7 @@
 (defmethod summary->slack "ingest-tx-overhead" [summary]
   (let [{:keys [rows total-ms]} (ingest-tx-overhead-summary->stage-rows summary)]
     (str
-     (util/totals->string total-ms (:benchmark-total-time-ms summary))
+     (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
      "\n\n"
      (util/wrap-slack-code
       (rows->string [:stage :duration] rows)))))
@@ -315,15 +344,15 @@
 (defmethod summary->slack "patch" [summary]
   (let [{:keys [rows total-ms]} (patch-summary->stage-rows summary)]
     (str
-     (util/totals->string total-ms (:benchmark-total-time-ms summary))
+     (util/totals->string total-ms (:benchmark-total-time-ms summary) "patch")
      "\n\n"
      (util/wrap-slack-code
       (rows->string [:stage :duration] rows)))))
 
 (defmethod summary->slack "products" [summary]
-  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
+  (let [{:keys [rows total-ms]} (products-summary->stage-rows summary)]
     (str
-     (util/totals->string total-ms (:benchmark-total-time-ms summary))
+     (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
      "\n\n"
      (util/wrap-slack-code
       (rows->string [:stage :duration] rows)))))
@@ -331,7 +360,7 @@
 (defmethod summary->slack "ts-devices" [summary]
   (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
     (str
-     (util/totals->string total-ms (:benchmark-total-time-ms summary))
+     (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
      "\n\n"
      (util/wrap-slack-code
       (rows->string [:stage :duration] rows)))))
@@ -391,7 +420,7 @@
                  {:key :percent-of-total :header "% of total"}]]
     (str (util/github-table columns rows)
          "\n\n"
-         (util/totals->string total-ms (:benchmark-total-time-ms summary)))))
+         (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest"))))
 
 (defmethod summary->github-markdown "ingest-tx-overhead" [summary]
   (let [{:keys [rows total-ms]} (ingest-tx-overhead-summary->stage-rows summary)
@@ -401,7 +430,7 @@
                  {:key :percent-of-total :header "% of total"}]]
     (str (util/github-table columns rows)
          "\n\n"
-         (util/totals->string total-ms (:benchmark-total-time-ms summary)))))
+         (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest"))))
 
 (defmethod summary->github-markdown "patch" [summary]
   (let [{:keys [rows total-ms]} (patch-summary->stage-rows summary)
@@ -411,17 +440,17 @@
                  {:key :percent-of-total :header "% of total"}]]
     (str (util/github-table columns rows)
          "\n\n"
-         (util/totals->string total-ms (:benchmark-total-time-ms summary)))))
+         (util/totals->string total-ms (:benchmark-total-time-ms summary) "patch"))))
 
 (defmethod summary->github-markdown "products" [summary]
-  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)
+  (let [{:keys [rows total-ms]} (products-summary->stage-rows summary)
         columns [{:key :stage :header "Stage"}
                  {:key :time-taken-ms :header "Time (ms)"}
                  {:key :duration :header "Duration"}
                  {:key :percent-of-total :header "% of total"}]]
     (str (util/github-table columns rows)
          "\n\n"
-         (util/totals->string total-ms (:benchmark-total-time-ms summary)))))
+         (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest"))))
 
 (defmethod summary->github-markdown "ts-devices" [summary]
   (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)
@@ -431,7 +460,7 @@
                  {:key :percent-of-total :header "% of total"}]]
     (str (util/github-table columns rows)
          "\n\n"
-         (util/totals->string total-ms (:benchmark-total-time-ms summary)))))
+         (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest"))))
 
 ;; Render summary
 
@@ -447,27 +476,35 @@
         normalized (if (contains? supported-formats fmt) fmt :table)]
     normalized))
 
+(defn tsbs-ingest-duration-ms
+  "Prefer the top-level ingest stage duration; fall back to summing sub-stages."
+  [ingest-stages]
+  (or (some->> ingest-stages
+               (some #(when (= "ingest" (name (:stage %)))
+                        (:time-taken-ms %))))
+      (reduce + 0 (map :time-taken-ms ingest-stages))))
+
 (defmethod summary->table "tsbs-iot" [summary]
   (let [{:keys [benchmark-total-time-ms ingest-stages]} summary
-        ingest-time-ms (reduce + 0 (map :time-taken-ms ingest-stages))]
+        ingest-time-ms (tsbs-ingest-duration-ms ingest-stages)]
     (format "TSBS IoT | Total: %s | Ingest: %s"
             (util/format-duration :millis benchmark-total-time-ms)
             (util/format-duration :millis ingest-time-ms))))
 
 (defmethod summary->slack "tsbs-iot" [summary]
   (let [{:keys [benchmark-total-time-ms ingest-stages]} summary
-        ingest-time-ms (reduce + 0 (map :time-taken-ms ingest-stages))]
+        ingest-time-ms (tsbs-ingest-duration-ms ingest-stages)]
     (str
-     (util/totals->string ingest-time-ms benchmark-total-time-ms)
+     (util/totals->string ingest-time-ms benchmark-total-time-ms "ingest")
      "\n\nTSBS IoT time series benchmark completed")))
 
 (defmethod summary->github-markdown "tsbs-iot" [summary]
   (let [{:keys [benchmark-total-time-ms ingest-stages]} summary
-        ingest-time-ms (reduce + 0 (map :time-taken-ms ingest-stages))]
+        ingest-time-ms (tsbs-ingest-duration-ms ingest-stages)]
     (str
      "### TSBS IoT Benchmark\n\n"
-     (format "- **Total Time**: %s\n" (util/format-duration :millis benchmark-total-time-ms))
-     (format "- **Ingest Time**: %s\n" (util/format-duration :millis ingest-time-ms)))))
+     (format "- **Ingest Time**: %s\n" (util/format-duration :millis ingest-time-ms))
+     (format "- **Total Time**: %s\n" (util/format-duration :millis benchmark-total-time-ms)))))
 
 (defn render-summary
   [summary {:keys [format]}]

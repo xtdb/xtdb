@@ -60,12 +60,15 @@
   (str "```\n" (str/join strings) "\n```"))
 
 (defn totals->string
-  "Format query and benchmark totals as string."
-  [query-ms benchmark-ms]
-  (str (format "Total query time: %s (%s)"
-               (or (format-duration :millis query-ms) "N/A")
-               (if query-ms (java.time.Duration/ofMillis query-ms) "N/A"))
-       "\n"
-       (format "Total benchmark time: %s (%s)"
-               (or (format-duration :millis benchmark-ms) "N/A")
-               (if benchmark-ms (java.time.Duration/ofMillis benchmark-ms) "N/A"))))
+  "Format stage and benchmark totals as string.
+   label: describes the type of stages summed (e.g. \"query\", \"ingest\", \"batch\")"
+  ([stage-ms benchmark-ms] (totals->string stage-ms benchmark-ms "query"))
+  ([stage-ms benchmark-ms label]
+   (str (format "Total %s time: %s (%s)"
+                label
+                (or (format-duration :millis stage-ms) "N/A")
+                (if stage-ms (java.time.Duration/ofMillis stage-ms) "N/A"))
+        "\n"
+        (format "Total benchmark time: %s (%s)"
+                (or (format-duration :millis benchmark-ms) "N/A")
+                (if benchmark-ms (java.time.Duration/ofMillis benchmark-ms) "N/A")))))
