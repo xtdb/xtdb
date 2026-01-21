@@ -404,6 +404,43 @@ jobs:
             echo "Monitoring stack not found; skipping."
           fi
 
+      - name: Capture Full Pod Logs on Failure
+        id: capture-logs
+        if: failure() && steps.immediate-check.outputs.immediate_failure == 'true'
+        env:
+          POD_NAME: ${{ steps.immediate-check.outputs.immediate_failure_pod }}
+          BENCH_TYPE: ${{ inputs.bench_type }}
+        run: |
+          set -euo pipefail
+          LOGS_DIR="$RUNNER_TEMP/benchmark-logs"
+          mkdir -p "$LOGS_DIR"
+          echo "logs_dir=${LOGS_DIR}" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$POD_NAME" ]; then
+            echo "Fetching full logs for pod: $POD_NAME"
+            # Get all container logs (main + init containers)
+            kubectl logs "$POD_NAME" -n cloud-benchmark --all-containers=true --ignore-errors > "$LOGS_DIR/${BENCH_TYPE}-${POD_NAME}.log" 2>&1 || true
+
+            # Also get pod describe for debugging
+            kubectl describe pod "$POD_NAME" -n cloud-benchmark > "$LOGS_DIR/${BENCH_TYPE}-${POD_NAME}-describe.txt" 2>&1 || true
+
+            # Get events for the namespace
+            kubectl get events -n cloud-benchmark --sort-by='.lastTimestamp' > "$LOGS_DIR/${BENCH_TYPE}-events.txt" 2>&1 || true
+
+            echo "Captured logs:"
+            ls -la "$LOGS_DIR"
+          else
+            echo "No pod name available for log capture"
+          fi
+
+      - name: Upload Failure Logs
+        if: failure() && steps.capture-logs.outputs.logs_dir != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: benchmark-failure-logs-${{ inputs.bench_type }}-${{ github.run_id }}
+          path: ${{ steps.capture-logs.outputs.logs_dir }}
+          retention-days: 14
+
       - name: Compose Slack Message
         id: compose
         if: always()
