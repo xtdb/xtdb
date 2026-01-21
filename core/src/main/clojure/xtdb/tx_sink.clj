@@ -130,17 +130,19 @@
             (refresh!)
             (->> (trie-cat/l0-blocks trie-cat)
                  (drop-while #(>= (or last-block-idx -1) (:block-idx %)))))]
-    (loop [remaining-blocks nil
-           last-key (some-> last-message :transaction :id)
+    (loop [last-key (some-> last-message :transaction :id)
            last-block-idx (some-> last-message :source :block-idx)]
-      (if-let [{:keys [block-idx tables]} (first remaining-blocks)]
-        (let [grouped-txs (->> tables (read-l0-events al bp) group-events-by-system-time)
-              new-last-key (output-block-txs! output-log grouped-txs db-name block-idx encode-fn)]
-          (when *after-block-hook* (*after-block-hook* block-idx))
-          (recur (rest remaining-blocks) new-last-key block-idx))
-        (if-let [new-blocks (seq (fetch-new-blocks last-block-idx))]
-          (recur new-blocks last-key last-block-idx)
-          last-key)))))
+      (if-let [blocks (seq (fetch-new-blocks last-block-idx))]
+        (let [[new-last-key new-last-block-idx]
+              (reduce (fn [_ {:keys [block-idx tables]}]
+                        (let [grouped-txs (->> tables (read-l0-events al bp) group-events-by-system-time)
+                              new-last-key (output-block-txs! output-log grouped-txs db-name block-idx encode-fn)]
+                          (when *after-block-hook* (*after-block-hook* block-idx))
+                          [new-last-key block-idx]))
+                      [last-key last-block-idx]
+                      blocks)]
+          (recur new-last-key new-last-block-idx))
+        last-key))))
 
 (defmethod xtn/apply-config! :xtdb/tx-sink [^Xtdb$Config config _ {:keys [output-log format enable db-name initial-scan]}]
   (.txSink config
