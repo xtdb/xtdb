@@ -1,6 +1,5 @@
 (ns xtdb.types
   (:require [clojure.set :as set]
-            [clojure.string :as str]
             [xtdb.api]
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.serde.types :as st]
@@ -21,7 +20,8 @@
 
 ;;;; fields
 
-(defn arrow-type->leg ^String [^ArrowType arrow-type]
+(defn ^:deprecated arrow-type->leg ^String [^ArrowType arrow-type]
+  ;; use it directly
   (ArrowTypes/toLeg arrow-type))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]} ; xt.arrow/field-type reader macro
@@ -32,22 +32,25 @@
 (defn ->field* ^org.apache.arrow.vector.types.pojo.Field [[field-name field-type & children]]
   (Field. field-name field-type children))
 
-(def temporal-col-type [:timestamp-tz :micro "UTC"])
-(def nullable-temporal-col-type [:union #{:null temporal-col-type}])
-(def temporal-arrow-type (st/->arrow-type :instant))
+(def ^:deprecated temporal-col-type [:timestamp-tz :micro "UTC"])
+
+;; should probably use the vec-type
+(def ^:deprecated temporal-arrow-type (st/->arrow-type :instant))
 
 (defn ->type ^xtdb.arrow.VectorType [type-spec]
   (st/->type type-spec))
 
-(defn ->nullable-type ^xtdb.arrow.VectorType [type-spec]
+(defn ^:deprecated ->nullable-type ^xtdb.arrow.VectorType [type-spec]
+  ;; only ever used on types, so call me VectorType/maybe
   (VectorType/maybe (->type type-spec)))
 
-(defn ->field
+(defn ^:deprecated ->field
+  ;; mostly now used for (->field vec-type), there's a .toField on vec-type.
   (^org.apache.arrow.vector.types.pojo.Field [type-spec] (st/->field type-spec))
 
   (^org.apache.arrow.vector.types.pojo.Field [field-name type-spec] (st/->field* field-name type-spec)))
 
-(defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, name]
+(defn ^:deprecated field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, name]
   (Field. name (.getFieldType field) (.getChildren field)))
 
 (def temporal-vec-types
@@ -95,7 +98,7 @@
     (.getChildren field)
     [field]))
 
-(defn merge-col-types [& col-types]
+(defn ^:deprecated merge-col-types [& col-types]
   (letfn [(merge-col-type* [acc col-type]
             (zmatch col-type
               [:union inner-types] (reduce merge-col-type* acc inner-types)
@@ -167,7 +170,7 @@
 ;;; multis
 
 #_{:clj-kondo/ignore [:unused-binding]}
-(defmulti arrow-type->col-type
+(defmulti ^:deprecated arrow-type->col-type
   (fn [arrow-type & child-fields] 
     (class arrow-type)))
 
@@ -178,18 +181,18 @@
 (defmethod arrow-type->col-type ArrowType$Decimal  [^ArrowType$Decimal arrow-type]
   [:decimal (.getPrecision arrow-type) (.getScale arrow-type) (.getBitWidth arrow-type)])
 
-(defn col-type->nullable-col-type [col-type]
+(defn- ^:deprecated col-type->nullable-col-type [col-type]
   (zmatch col-type
     [:union inner-types] [:union (conj inner-types :null)]
     :null :null
     [:union #{:null col-type}]))
 
-(defn field->col-type [^Field field]
+(defn ^:deprecated field->col-type [^Field field]
   (let [inner-type (apply arrow-type->col-type (.getType field) (or (.getChildren field) []))]
     (cond-> inner-type
       (.isNullable field) col-type->nullable-col-type)))
 
-(defn vec-type->col-type [^VectorType vec-type]
+(defn ^:deprecated vec-type->col-type [^VectorType vec-type]
   (field->col-type (VectorType/field vec-type)))
 
 (defn nullable-vec-type? [^VectorType vec-type]
@@ -294,7 +297,7 @@
 ;; the decimal widening to other types currently only works without
 ;; casting elsewhere because we are using Clojure's polymorphic functions
 ;; or the Math/* functions cast things to the correct type.
-(def widening-hierarchy
+(def ^:deprecated widening-hierarchy
   (-> col-type-hierarchy
       (derive :i8 :i16) (derive :i16 :i32) (derive :i32 :i64)
       (derive :decimal :float) (derive :decimal :f64) (derive :decimal :f32)
