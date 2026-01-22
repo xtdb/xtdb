@@ -868,9 +868,8 @@
         ^ArrowType$Decimal d2-arrow-type (.getArrowType d2-type)
         precision (combine-precision (.getPrecision d1-arrow-type)
                                      (.getPrecision d2-arrow-type))
-        scale (scale-fn (.getScale d1-arrow-type) (.getScale d2-arrow-type))
-        ret-col-type [:decimal precision scale (precision->bit-width precision)]]
-    (types/col-type->vec-type false ret-col-type)))
+        scale (scale-fn (.getScale d1-arrow-type) (.getScale d2-arrow-type))]
+    (st/->type [:decimal precision scale (precision->bit-width precision)])))
 
 (defmethod codegen-call [:+ :decimal :decimal] [{[d1-type d2-type] :arg-types}]
   {:return-type (combine-decimal-types max d1-type d2-type)
@@ -1553,9 +1552,8 @@
     (let [bit-width 128
           precision (case int-col-type
                       :i32 10
-                      :i64 19)
-          ret-col-type [:decimal precision scale-literal bit-width]]
-      {:return-type (types/col-type->vec-type false ret-col-type)
+                      :i64 19)]
+      {:return-type (st/->type [:decimal precision scale-literal bit-width])
        :->call-code (fn [[value scale-code]]
                       `(.setScale (java.math.BigDecimal/valueOf (long ~value))
                                   ~scale-code
@@ -1595,11 +1593,8 @@
                                (* rounded# divisor#))))))))})
 
 (defmethod codegen-call [:round :decimal] [{[^VectorType d-type] :arg-types}]
-  (let [^ArrowType$Decimal d-arrow (.getArrowType d-type)
-        precision (.getPrecision d-arrow)
-        bit-width (.getBitWidth d-arrow)
-        ret-col-type [:decimal precision 0 bit-width]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
+  (let [^ArrowType$Decimal d-arrow (.getArrowType d-type)]
+    {:return-type (st/->type [:decimal (.getPrecision d-arrow) 0 (.getBitWidth d-arrow)])
      :->call-code #(do `(.setScale ^BigDecimal ~@% 0 RoundingMode/HALF_UP))}))
 
 (defmethod codegen-call [:round :decimal :int] [{[^VectorType d-type _] :arg-types :keys [args]}]
@@ -1610,10 +1605,10 @@
         scale-literal (:literal scale-arg)]
     (when-not (integer? scale-literal)
       (throw (err/unsupported ::non-literal-scale "ROUND(DECIMAL, INTEGER) with non-constant scale is not supported. Use ROUND(val::DOUBLE, scale) for dynamic scales.")))
-    (let [ret-col-type [:decimal precision scale-literal bit-width]]
-      {:return-type (types/col-type->vec-type false ret-col-type)
-       :->call-code (fn [[value scale-code]]
-                      `(.setScale ^BigDecimal ~value ~scale-code RoundingMode/HALF_UP))})))
+
+    {:return-type (st/->type [:decimal precision scale-literal bit-width])
+     :->call-code (fn [[value scale-code]]
+                    `(.setScale ^BigDecimal ~value ~scale-code RoundingMode/HALF_UP))}))
 
 (defn buf->str ^String [^ByteBuffer buf]
   (let [bs (byte-array (.remaining buf))
@@ -1630,9 +1625,10 @@
                               [:i32 `Integer/parseInt]
                               [:i64 `Long/parseLong]
                               [:f32 `Float/parseFloat]
-                              [:f64 `Double/parseDouble]]]
+                              [:f64 `Double/parseDouble]]
+        :let [vec-type (st/->type col-type)]]
   (defmethod codegen-cast [:utf8 col-type] [_]
-    {:return-type (types/col-type->vec-type false col-type), :->call-code #(do `(~parse-sym (buf->str ~@%)))}))
+    {:return-type vec-type, :->call-code #(do `(~parse-sym (buf->str ~@%)))}))
 
 (defmethod codegen-call [:cast :any] [{[source-type] :arg-types, :keys [target-type cast-opts]}]
   (codegen-cast {:source-type source-type
@@ -1646,14 +1642,14 @@
                                     {:k k
                                      :val-box (gensym (str (util/symbol->normal-form-symbol k) "-box"))
                                      :emitted-expr (codegen-expr expr opts)}))))
-
-        return-type (types/->type [:struct (into {}
-                                                 (map (fn [{:keys [k], {:keys [return-type]} :emitted-expr}]
-                                                        {(str k) return-type}))
-                                                 emitted-vals)])
         map-sym (gensym 'map)]
 
-    {:return-type return-type
+    {:return-type (VectorType/structOf 
+                    (into {}
+                          (map (fn [{:keys [k], {:keys [return-type]} :emitted-expr}]
+                                 {(str k) return-type}))
+                          emitted-vals))
+
      :batch-bindings (conj (->> emitted-vals
                                 (mapv (fn [{:keys [val-box]}]
                                         [val-box `(ValueBox.)])))
@@ -1670,7 +1666,10 @@
                         (continue (fn [^VectorType val-type code]
                                     (write-value-code val-type val-box (types/arrow-type->leg (.getArrowType val-type)) code))))
 
-                    ~(f return-type map-sym)))}))
+                    ~(f (types/->type [:struct (into {}
+                                                 (map (fn [{:keys [k], {:keys [return-type]} :emitted-expr}]
+                                                        {(str k) return-type}))
+                                                 emitted-vals)]) map-sym)))}))
 
 (defmethod codegen-call [:get_field :struct] [{[^VectorType$Struct struct-type] :arg-types, :keys [field]}]
   (if-let [val-type (.get (.getChildren struct-type) (str field))]

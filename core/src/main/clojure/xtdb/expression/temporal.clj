@@ -37,24 +37,20 @@
 
 (defn- with-arg-unit-conversion [unit1 unit2 ->ret-type ->call-code]
   (if (= unit1 unit2)
-    (let [ret-col-type (->ret-type unit1)]
-      {:return-type (types/col-type->vec-type false ret-col-type), :->call-code ->call-code})
+    {:return-type (st/->type (->ret-type unit1)), :->call-code ->call-code}
 
-    (let [res-unit (types/smallest-ts-unit unit1 unit2)
-          ret-col-type (->ret-type res-unit)]
-      {:return-type (types/col-type->vec-type false ret-col-type)
+    (let [res-unit (types/smallest-ts-unit unit1 unit2)]
+      {:return-type (st/->type (->ret-type res-unit))
        :->call-code (fn [[arg1 arg2]]
                       (->call-code [(with-conversion arg1 unit1 res-unit) (with-conversion arg2 unit2 res-unit)]))})))
 
 (defn- with-first-arg-unit-conversion [arg-unit unit-lower-bound ->ret-type ->call-code]
   (if (= arg-unit unit-lower-bound)
-    (let [ret-col-type (->ret-type arg-unit)]
-      {:return-type (types/col-type->vec-type false ret-col-type)
-       :->call-code #(->call-code arg-unit %)})
+    {:return-type (st/->type (->ret-type arg-unit))
+     :->call-code #(->call-code arg-unit %)}
 
-    (let [res-unit (types/smallest-ts-unit arg-unit unit-lower-bound)
-          ret-col-type (->ret-type res-unit)]
-      {:return-type (types/col-type->vec-type false ret-col-type)
+    (let [res-unit (types/smallest-ts-unit arg-unit unit-lower-bound)]
+      {:return-type (st/->type (->ret-type res-unit))
        :->call-code (fn [[arg1 & args]]
                       (->call-code res-unit (into [(with-conversion arg1 arg-unit res-unit)] args)))})))
 
@@ -153,30 +149,30 @@
   {:return-type target-type, :->call-code first})
 
 (defmethod expr/codegen-cast [:time-local :time-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[_ src-tsunit] (types/vec-type->col-type source-type)
-        [_ tgt-tsunit :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [src-tsunit (st/time-type->unit source-type)
+        tgt-tsunit (st/time-type->unit target-type)]
     {:return-type target-type
      :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)}))
 
 (defmethod expr/codegen-cast [:timestamp-local :timestamp-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[_ src-tsunit] (types/vec-type->col-type source-type)
-        [_ tgt-tsunit :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [src-tsunit (st/timestamp-type->unit source-type)
+        tgt-tsunit (st/timestamp-type->unit target-type)]
     {:return-type target-type
      :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)}))
 
 (defmethod expr/codegen-cast [:timestamp-tz :timestamp-tz] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[_ src-tsunit _] (types/vec-type->col-type source-type)
-        [_ tgt-tsunit _ :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [src-tsunit (st/timestamp-type->unit source-type)
+        tgt-tsunit (st/timestamp-type->unit target-type)]
     {:return-type target-type
      :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)}))
 
 (defmethod expr/codegen-cast [:duration :duration] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[_ src-tsunit] (types/vec-type->col-type source-type)
-        [_ tgt-tsunit :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [src-tsunit (st/duration-type->unit source-type)
+        tgt-tsunit (st/duration-type->unit target-type)]
     {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)}))
 
 (defmethod expr/codegen-cast [:date :timestamp-local] [{:keys [^VectorType target-type]}]
-  (let [[_ tgt-tsunit :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [tgt-tsunit (st/timestamp-type->unit target-type)]
     {:return-type target-type
      :->call-code (fn [[dt]]
                     `(-> (LocalDate/ofEpochDay ~dt)
@@ -185,7 +181,7 @@
                          (Math/multiplyExact ~(types/ts-units-per-second tgt-tsunit))))}))
 
 (defmethod expr/codegen-cast [:date :timestamp-tz] [{:keys [^VectorType target-type]}]
-  (let [[_ tgt-tsunit _tgt-tz :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [tgt-tsunit (st/timestamp-type->unit target-type)]
     {:return-type target-type
      :->call-code (fn [[dt]]
                     (-> `(-> (LocalDate/ofEpochDay ~dt)
@@ -194,8 +190,8 @@
                         (inst->ts tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:time-local :timestamp-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[_ src-tsunit] (types/vec-type->col-type source-type)
-        [_ tgt-tsunit :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [src-tsunit (st/time-type->unit source-type)
+        tgt-tsunit (st/timestamp-type->unit target-type)]
     {:return-type target-type
      :->call-code (fn [[tm]]
                     (-> `(LocalDateTime/of (LocalDate/ofInstant (expr/current-time) expr/*default-tz*)
@@ -203,8 +199,8 @@
                         (ldt->ts tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:time-local :timestamp-tz] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[_ src-tsunit] (types/vec-type->col-type source-type)
-        [_ tgt-tsunit _tgt-tz :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [src-tsunit (st/time-type->unit source-type)
+        tgt-tsunit (st/timestamp-type->unit target-type)]
     {:return-type target-type
      :->call-code (fn [[tm]]
                     (-> `(-> (ZonedDateTime/of (LocalDate/ofInstant (expr/current-time) expr/*default-tz*)
@@ -214,7 +210,7 @@
                         (inst->ts tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:timestamp-local :date] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[_ src-tsunit] (types/vec-type->col-type source-type)]
+  (let [src-tsunit (st/timestamp-type->unit source-type)]
     {:return-type target-type
      :->call-code (fn [[ts]]
                     `(-> ~(ts->ldt ts src-tsunit)
@@ -222,8 +218,8 @@
                          (.toEpochDay)))}))
 
 (defmethod expr/codegen-cast [:timestamp-local :time-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[_ src-tsunit _] (types/vec-type->col-type source-type)
-        [_ tgt-tsunit _ :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [src-tsunit (st/timestamp-type->unit source-type)
+        tgt-tsunit (st/time-type->unit target-type)]
     {:return-type target-type
      :->call-code (fn [[ts]]
                     (-> `(-> ~(ts->ldt ts src-tsunit)
@@ -232,8 +228,8 @@
                         (with-conversion :nano tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:timestamp-local :timestamp-tz] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[_ src-tsunit] (types/vec-type->col-type source-type)
-        [_ tgt-tsunit _tgt-tz :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [src-tsunit (st/timestamp-type->unit source-type)
+        tgt-tsunit (st/timestamp-type->unit target-type)]
     {:return-type target-type
      :->call-code (fn [[ts]]
                     (-> `(-> ~(ts->ldt ts src-tsunit)
@@ -242,7 +238,7 @@
                         (inst->ts tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:timestamp-tz :date] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[_ src-tsunit src-tz] (types/vec-type->col-type source-type)
+  (let [[src-tsunit src-tz] (st/timestamp-type->unit+tz source-type)
         src-tz-sym (gensym 'src-tz)]
     {:return-type target-type
      :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
@@ -253,8 +249,8 @@
                          (.toEpochDay)))}))
 
 (defmethod expr/codegen-cast [:timestamp-tz :time-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[_ src-tsunit src-tz] (types/vec-type->col-type source-type)
-        [_ tgt-tsunit :as target-col-type] (types/vec-type->col-type target-type)
+  (let [[src-tsunit src-tz] (st/timestamp-type->unit+tz source-type)
+        tgt-tsunit (st/time-type->unit target-type)
         src-tz-sym (gensym 'src-tz)]
     {:return-type target-type
      :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
@@ -266,8 +262,8 @@
                         (with-conversion :nano tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:timestamp-tz :timestamp-local] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[_ src-tsunit src-tz] (types/vec-type->col-type source-type)
-        [_ tgt-tsunit :as target-col-type] (types/vec-type->col-type target-type)
+  (let [[src-tsunit src-tz] (st/timestamp-type->unit+tz source-type)
+        tgt-tsunit (st/timestamp-type->unit target-type)
         src-tz-sym (gensym 'src-tz)]
     {:return-type target-type
      :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
@@ -278,8 +274,8 @@
                         (ldt->ts tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:time-local :duration] [{:keys [^VectorType source-type, ^VectorType target-type]}]
-  (let [[_ src-tsunit] (types/vec-type->col-type source-type)
-        [_ tgt-tsunit :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [src-tsunit (st/time-type->unit source-type)
+        tgt-tsunit (st/duration-type->unit target-type)]
     {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)}))
 
 (defn- ensure-fractional-precision-valid [^long fractional-precision]
@@ -328,7 +324,7 @@
                              ts-str))
 
 (defmethod expr/codegen-cast [:utf8 :timestamp-local] [{:keys [^VectorType target-type] {:keys [precision]} :cast-opts}]
-  (let [[_ tgt-tsunit :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [tgt-tsunit (st/timestamp-type->unit target-type)]
     (when precision (ensure-fractional-precision-valid precision))
     {:return-type target-type
      :->call-code (fn [[s]]
@@ -346,7 +342,7 @@
                              ts-str))
 
 (defmethod expr/codegen-cast [:utf8 :timestamp-tz] [{:keys [^VectorType target-type] {:keys [precision]} :cast-opts}]
-  (let [[_ tgt-tsunit :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [tgt-tsunit (st/timestamp-type->unit target-type)]
     (when precision (ensure-fractional-precision-valid precision))
     {:return-type target-type
      :->call-code (fn [[s]]
@@ -370,7 +366,7 @@
   (.toNanoOfDay t))
 
 (defmethod expr/codegen-cast [:utf8 :time-local] [{:keys [^VectorType target-type] {:keys [precision]} :cast-opts}]
-  (let [[_ tgt-tsunit :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [tgt-tsunit (st/time-type->unit target-type)]
     (when precision (ensure-fractional-precision-valid precision))
     {:return-type target-type
      :->call-code (fn [[s]]
@@ -401,7 +397,7 @@
       (Duration/ofMillis millis))))
 
 (defmethod expr/codegen-cast [:utf8 :duration] [{:keys [^VectorType target-type] {:keys [precision]} :cast-opts}]
-  (let [[_ tgt-tsunit :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [tgt-tsunit (st/duration-type->unit target-type)]
     (when precision (ensure-fractional-precision-valid precision))
     {:return-type target-type
      :->call-code (fn [[s]]
@@ -415,7 +411,7 @@
   (ByteBuffer/wrap (.getBytes s StandardCharsets/UTF_8)))
 
 (defmethod expr/codegen-cast [:timestamp-local :utf8] [{:keys [^VectorType source-type]}]
-  (let [[_ts ts-unit] (types/vec-type->col-type source-type)]
+  (let [ts-unit (st/timestamp-type->unit source-type)]
     {:return-type #xt/type :utf8
      :->call-code (fn [[ts]]
                     `(-> ~(ts->ldt ts ts-unit)
@@ -423,7 +419,7 @@
                          (string->byte-buffer)))}))
 
 (defmethod expr/codegen-cast [:timestamp-tz :utf8] [{:keys [^VectorType source-type]}]
-  (let [[_ts ts-unit tz] (types/vec-type->col-type source-type)
+  (let [[ts-unit tz] (st/timestamp-type->unit+tz source-type)
         zone-id-sym (gensym 'zone-id)]
     {:return-type #xt/type :utf8
      :batch-bindings [[zone-id-sym (ZoneId/of tz)]]
@@ -441,7 +437,7 @@
                        (string->byte-buffer)))})
 
 (defmethod expr/codegen-cast [:time-local :utf8] [{:keys [^VectorType source-type]}]
-  (let [[_ t-unit] (types/vec-type->col-type source-type)]
+  (let [t-unit (st/time-type->unit source-type)]
     {:return-type #xt/type :utf8
      :->call-code (fn [[t]]
                     `(-> ~(with-conversion t t-unit :nano)
@@ -450,7 +446,7 @@
                          (string->byte-buffer)))}))
 
 (defmethod expr/codegen-cast [:duration :utf8] [{:keys [^VectorType source-type]}]
-  (let [[_ t-unit] (types/vec-type->col-type source-type)]
+  (let [t-unit (st/duration-type->unit source-type)]
     {:return-type #xt/type :utf8
      :->call-code (fn [[t]]
                     `(-> ~(with-conversion t t-unit :nano)
@@ -491,8 +487,8 @@
       (.plusDays (.getDuration x) (.getDays period)))))
 
 (defmethod expr/codegen-cast [:interval :duration] [{:keys [^VectorType source-type, ^VectorType target-type] {:keys [precision]} :cast-opts}]
-  (let [[_ iunit] (types/vec-type->col-type source-type)
-        [_ tgt-tsunit :as target-col-type] (types/vec-type->col-type target-type)]
+  (let [iunit (st/interval-type->unit source-type)
+        tgt-tsunit (st/duration-type->unit target-type)]
     (when-not (or (= iunit :month-day-nano)
                   (= iunit :month-day-micro))
       (throw (err/incorrect ::expr/invalid-cast
@@ -584,7 +580,7 @@
 
 (defmethod expr/codegen-cast [:duration :interval]
   [{:keys [^VectorType source-type] {:keys [start-field end-field leading-precision fractional-precision] :as interval-qualifier} :cast-opts}]
-  (let [[_ d-unit] (types/vec-type->col-type source-type)]
+  (let [d-unit (st/duration-type->unit source-type)]
     (if interval-qualifier
       (do
         (when (or (= "YEAR" start-field) (= "MONTH" start-field))
@@ -614,7 +610,7 @@
       ["MONTH" nil] (PeriodDuration. (Period/ofMonths total-months-in-period) Duration/ZERO))))
 
 (defmethod expr/codegen-cast [:interval :interval] [{:keys [^VectorType source-type] interval-qualifier :cast-opts}]
-  (let [source-col-type (types/vec-type->col-type source-type)]
+  (let [source-unit (st/interval-type->unit source-type)]
     (if (empty? interval-qualifier)
       {:return-type source-type, :->call-code first}
       (let [{:keys [start-field end-field leading-precision ^long fractional-precision]} interval-qualifier
@@ -624,13 +620,13 @@
         (when end-field (ensure-interval-units-valid start-field end-field))
         (when (= "SECOND" end-field) (ensure-interval-fractional-precision-valid fractional-precision))
         ;; Assert that we are not casting year-month intervals to month-day-* intervals and vice versa
-        (when (and ym-cast? (not= source-col-type [:interval :year-month]))
+        (when (and ym-cast? (not= source-unit :year-month))
           (throw (err/unsupported ::expr/unsupported-cast "Cannot cast a non Year-Month interval with a Year-Month interval qualifier"
-                                  {:source-type source-col-type})))
+                                  {:source-type [:interval source-unit]})))
 
-        (when (and (not ym-cast?) (= source-col-type [:interval :year-month]))
+        (when (and (not ym-cast?) (= source-unit :year-month))
           (throw (err/unsupported ::expr/unsupported-cast "Cannot cast a Year-Month interval with a non Year-Month interval qualifier"
-                                  {:source-type source-col-type})))
+                                  {:source-type [:interval source-unit]})))
 
 
         ;;TODO logic to cast any arbitrary mdm to mdn and vice versa, would just be changing the precision of the seconds
@@ -691,7 +687,7 @@
   (long (* seconds (types/ts-units-per-second unit))))
 
 (defmethod expr/codegen-cast [:f64 :duration] [{:keys [^VectorType target-type]}]
-  (let [[_duration unit] (types/vec-type->col-type target-type)]
+  (let [unit (st/duration-type->unit target-type)]
     {:return-type target-type
      :->call-code (fn [[x]]
                     `(duration-from-seconds ~x ~unit))}))
@@ -765,10 +761,9 @@
 
 ;;; addition
 
-(defmethod expr/codegen-call [:+ :date :time-local] [{[_ ^VectorType$Mono time-type :as arg-types] :arg-types, :as expr}]
-  (let [time-unit (st/time-type->unit time-type)
-        arg2 (types/vec-type->col-type (second arg-types))]
-    (-> expr (recall-with-cast2 [:timestamp-local time-unit] arg2))))
+(defmethod expr/codegen-call [:+ :date :time-local] [{[_ ^VectorType$Mono time-type] :arg-types, :as expr}]
+  (let [time-unit (st/time-type->unit time-type)]
+    (-> expr (recall-with-cast2 [:timestamp-local time-unit] [:time-local time-unit]))))
 
 (defmethod expr/codegen-call [:+ :timestamp-local :time-local] [{[^VectorType$Mono ts-type, ^VectorType$Mono time-type] :arg-types}]
   (let [ts-unit (st/timestamp-type->unit ts-type)
@@ -783,9 +778,8 @@
       #(do [:timestamp-tz % tz]) #(do `(Math/addExact ~@%)))))
 
 (defmethod expr/codegen-call [:+ :date :duration] [{[_ ^VectorType$Mono dur-type] :arg-types, :as expr}]
-  (let [dur-unit (st/duration-type->unit dur-type)
-        arg2 (types/vec-type->col-type dur-type)]
-    (-> expr (recall-with-cast2 [:timestamp-local dur-unit] arg2))))
+  (let [dur-unit (st/duration-type->unit dur-type)]
+    (-> expr (recall-with-cast2 [:timestamp-local dur-unit] [:duration dur-unit]))))
 
 (defmethod expr/codegen-call [:+ :timestamp-local :duration] [{[^VectorType$Mono ts-type, ^VectorType$Mono dur-type] :arg-types}]
   (let [ts-unit (st/timestamp-type->unit ts-type)
@@ -808,14 +802,13 @@
 (doseq [[f-kw method-sym] [[:+ '.plus]
                            [:- '.minus]]]
   (defmethod expr/codegen-call [f-kw :date :interval] [{[dt-type, ^VectorType$Mono i-type] :arg-types, :as expr}]
-    (let [iunit (st/interval-type->unit i-type)
-          itype (types/vec-type->col-type i-type)]
+    (let [iunit (st/interval-type->unit i-type)]
       (case iunit
         :year-month {:return-type dt-type
                      :->call-code (fn [[x-arg y-arg]]
                                     `(.toEpochDay (~method-sym (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))}
-        :month-day-micro (recall-with-cast2 expr [:timestamp-local :micro] itype)
-        :month-day-nano (recall-with-cast2 expr [:timestamp-local :nano] itype))))
+        :month-day-micro (recall-with-cast2 expr [:timestamp-local :micro] [:interval :month-day-micro])
+        :month-day-nano (recall-with-cast2 expr [:timestamp-local :nano] [:interval :month-day-nano]))))
 
   (defmethod expr/codegen-call [f-kw :timestamp-local :interval] [{[^VectorType$Mono ts-type, ^VectorType$Mono i-type] :arg-types}]
     (let [ts-unit (st/timestamp-type->unit ts-type)
@@ -932,9 +925,8 @@
       #(do [:timestamp-tz % tz]) #(do `(Math/subtractExact ~@%)))))
 
 (defmethod expr/codegen-call [:- :date :duration] [{[_ ^VectorType$Mono dur-type] :arg-types, :as expr}]
-  (let [dur-unit (st/duration-type->unit dur-type)
-        arg2 (types/vec-type->col-type dur-type)]
-    (-> expr (recall-with-cast2 [:timestamp-local dur-unit] arg2))))
+  (let [dur-unit (st/duration-type->unit dur-type)]
+    (-> expr (recall-with-cast2 [:timestamp-local dur-unit] [:duration dur-unit]))))
 
 (defmethod expr/codegen-call [:- :timestamp-local :duration] [{[^VectorType$Mono ts-type, ^VectorType$Mono dur-type] :arg-types}]
   (let [ts-unit (st/timestamp-type->unit ts-type)
@@ -949,14 +941,13 @@
       #(do [:duration %]) #(do `(Math/subtractExact ~@%)))))
 
 (defmethod expr/codegen-call [:- :date :interval] [{[dt-type, ^VectorType$Mono i-type] :arg-types, :as expr}]
-  (let [iunit (st/interval-type->unit i-type)
-        itype (types/vec-type->col-type i-type)]
+  (let [iunit (st/interval-type->unit i-type)]
     (case iunit
       :year-month {:return-type dt-type
                    :->call-code (fn [[x-arg y-arg]]
                                   `(.toEpochDay (.minus (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))}
-      :month-day-nano (recall-with-cast2 expr [:timestamp-local :nano] itype)
-      :month-day-micro (recall-with-cast2 expr [:timestamp-local :micro] itype))))
+      :month-day-nano (recall-with-cast2 expr [:timestamp-local :nano] [:interval :month-day-nano])
+      :month-day-micro (recall-with-cast2 expr [:timestamp-local :micro] [:interval :month-day-micro]))))
 
 ;;; multiply, divide
 
@@ -985,9 +976,9 @@
    :->call-code (fn [emitted-args]
                   `(quot ~@emitted-args))})
 
-(defmethod expr/codegen-call [:/ :duration :interval] [{[d-type _i-type] :arg-types, :as expr}]
-  (let [d-col-type (types/vec-type->col-type d-type)]
-    (recall-with-cast2 expr d-col-type d-col-type)))
+(defmethod expr/codegen-call [:/ :duration :interval] [{[^VectorType$Mono d-type _i-type] :arg-types, :as expr}]
+  (let [d-unit (st/duration-type->unit d-type)]
+    (recall-with-cast2 expr [:duration d-unit] [:duration d-unit])))
 
 (defmethod expr/codegen-call [:/ :duration :duration] [{[x-type y-type] :arg-types}]
   (let [x-unit (st/duration-type->unit x-type)
@@ -1010,11 +1001,11 @@
       (constantly :i32) #(do `(Long/compare ~@%)))))
 
 (defmethod expr/codegen-call [:compare :timestamp-local :timestamp-tz] [{[x y] :arg-types, :as expr}]
-  (let [[_ y-unit _] (types/vec-type->col-type y)]
+  (let [y-unit (st/timestamp-type->unit y)]
     (-> expr (recall-with-cast2 x [:timestamp-local y-unit]))))
 
 (defmethod expr/codegen-call [:compare :timestamp-tz :timestamp-local] [{[x y] :arg-types, :as expr}]
-  (let [[_ x-unit] (types/vec-type->col-type x)]
+  (let [x-unit (st/timestamp-type->unit x)]
     (-> expr (recall-with-cast2 [:timestamp-local x-unit] y))))
 
 (defmethod expr/codegen-call [:compare :date :date] [expr]
@@ -1028,8 +1019,8 @@
     (-> expr (recall-with-cast2 t1 [:timestamp-local :micro]))))
 
 (defmethod expr/codegen-call [:compare :time-local :time-local] [{[t1 t2] :arg-types, :as expr}]
-  (let [[_ time-unit1] (types/vec-type->col-type t1)
-        [_ time-unit2] (types/vec-type->col-type t2)]
+  (let [time-unit1 (st/time-type->unit t1)
+        time-unit2 (st/time-type->unit t2)]
     (-> expr (recall-with-cast2 [:duration time-unit1] [:duration time-unit2]))))
 
 (defmethod expr/codegen-call [:compare :duration :duration] [{[^VectorType$Mono x-type, ^VectorType$Mono y-type] :arg-types}]
@@ -1209,7 +1200,7 @@
 
   If you add two YearMonth intervals, you can use an YearMonth representation for the result, if you add a YearMonth
   and a MonthDayNano, you must use MonthDayNano to represent the result."
-  [[_interval l-unit] [_interval r-unit]]
+  [l-unit r-unit]
   (cond
     (= l-unit r-unit) l-unit
     (or (= l-unit :month-day-nano) (= r-unit :month-day-nano)) :month-day-nano
@@ -1218,18 +1209,14 @@
     :else :month-day-micro))
 
 (defmethod expr/codegen-call [:+ :interval :interval] [{[l-type r-type] :arg-types}]
-  (let [l-col-type (types/vec-type->col-type l-type)
-        r-col-type (types/vec-type->col-type r-type)
-        ret-col-type [:interval (choose-interval-arith-return l-col-type r-col-type)]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
-     :->call-code (fn [[l r]] `(pd-add ~l ~r))}))
+  {:return-type (st/->type [:interval (choose-interval-arith-return (st/interval-type->unit l-type)
+                                                                    (st/interval-type->unit r-type))])
+   :->call-code (fn [[l r]] `(pd-add ~l ~r))})
 
 (defmethod expr/codegen-call [:- :interval :interval] [{[l-type r-type] :arg-types}]
-  (let [l-col-type (types/vec-type->col-type l-type)
-        r-col-type (types/vec-type->col-type r-type)
-        ret-col-type [:interval (choose-interval-arith-return l-col-type r-col-type)]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
-     :->call-code (fn [[l r]] `(pd-sub ~l ~r))}))
+  {:return-type (st/->type [:interval (choose-interval-arith-return (st/interval-type->unit l-type)
+                                                                    (st/interval-type->unit r-type))])
+   :->call-code (fn [[l r]] `(pd-sub ~l ~r))})
 
 (defmethod expr/codegen-call [:- :interval] [{[interval-type] :arg-types}]
   {:return-type interval-type
@@ -1469,14 +1456,13 @@
       (ensure-interval-fractional-precision-valid fractional-precision))
 
     ;; TODO choose a more specific representation when possible
-    (let [ret-col-type (case [unit1 unit2]
-                         ["YEAR" "MONTH"] [:interval :year-month]
-                         (if (< 6 fractional-precision)
-                           [:interval :month-day-nano]
-                           [:interval :month-day-micro]))]
-      {:return-type (types/col-type->vec-type false ret-col-type)
-       :->call-code (fn [[s & _]]
-                      `(parse-multi-field-interval (expr/resolve-string ~s) ~unit1 ~unit2 ~fractional-precision))})))
+    {:return-type (st/->type (case [unit1 unit2]
+                               ["YEAR" "MONTH"] [:interval :year-month]
+                               (if (< 6 fractional-precision)
+                                 [:interval :month-day-nano]
+                                 [:interval :month-day-micro])))
+     :->call-code (fn [[s & _]]
+                    `(parse-multi-field-interval (expr/resolve-string ~s) ~unit1 ~unit2 ~fractional-precision))}))
 
 (defn time-field->ChronoField [field]
   (case field
@@ -1799,9 +1785,8 @@
       `(* ~modulus (quot ~code ~modulus)))))
 
 (defn- current-timestamp [^long precision]
-  (let [precision (bound-precision precision)
-        ret-col-type [:timestamp-tz (precision-timeunits precision) (str expr/*default-tz*)]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
+  (let [precision (bound-precision precision)]
+    {:return-type (st/->type [:timestamp-tz (precision-timeunits precision) (str expr/*default-tz*)])
      :->call-code (fn [_]
                     (-> `(long (let [inst# (expr/current-time)]
                                  (+ (* ~(seconds-multiplier precision) (.getEpochSecond inst#))
@@ -1830,9 +1815,8 @@
   ;; TODO check the specs on this one - I read the SQL spec as being returned in local,
   ;; but Type expects Times to be in UTC.
   ;; we then turn times into LocalTimes, which confuses things further.
-  (let [precision (bound-precision precision)
-        ret-col-type [:time-local (precision-timeunits precision)]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
+  (let [precision (bound-precision precision) ]
+    {:return-type (st/->type [:time-local (precision-timeunits precision)])
      :->call-code (fn [_]
                     (-> `(long (-> (ZonedDateTime/ofInstant (expr/current-time) ZoneOffset/UTC)
                                    (.toLocalTime)
@@ -1855,9 +1839,8 @@
                              (.toEpochDay))))})
 
 (defn- local-timestamp [^long precision]
-  (let [precision (bound-precision precision)
-        ret-col-type [:timestamp-local (precision-timeunits precision)]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
+  (let [precision (bound-precision precision)]
+    {:return-type (st/->type [:timestamp-local (precision-timeunits precision)])
      :->call-code (fn [_]
                     (-> `(long (let [ldt# (-> (ZonedDateTime/ofInstant (expr/current-time) expr/*default-tz*)
                                               (.toLocalDateTime))]
@@ -1873,9 +1856,8 @@
   (local-timestamp precision))
 
 (defn- local-time [^long precision]
-  (let [precision (bound-precision precision)
-        ret-col-type [:time-local (precision-timeunits precision)]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
+  (let [precision (bound-precision precision)]
+    {:return-type (st/->type [:time-local (precision-timeunits precision)])
      :->call-code (fn [_]
                     (-> `(long (-> (ZonedDateTime/ofInstant (expr/current-time) expr/*default-tz*)
                                    (.toLocalTime)
@@ -1995,7 +1977,7 @@
 
 (defmethod expr/codegen-call [:contains? :tstz-range :timestamp-local] [{[arg1 ^VectorType$Mono arg2-type] :arg-types, :as expr}]
   (let [arg2-unit (st/timestamp-type->unit arg2-type)
-        arg1-col (types/vec-type->col-type arg1)]
+        arg1-col (st/render-type arg1)]
     (-> expr (recall-with-cast2 arg1-col [:timestamp-tz arg2-unit (str expr/*default-tz*)]))))
 
 (defmethod expr/codegen-call [:contains? :tstz-range :date] [{[arg1 _arg2] :arg-types, :as expr}]
@@ -2147,35 +2129,30 @@
                                       r-size))
           box)))))
 
-(defmethod expr/codegen-call [:range_bins :interval :timestamp-tz :timestamp-tz :timestamp-tz] [{[i-type from-type to-type origin-type] :arg-types}]
-  (let [from-col-type (types/vec-type->col-type from-type)
-        to-col-type (types/vec-type->col-type to-type)
-        origin-col-type (types/vec-type->col-type origin-type)]
-    (assert (= (subvec from-col-type 0 2)
-               (subvec to-col-type 0 2)
-               (subvec origin-col-type 0 2)
-               (subvec types/temporal-col-type 0 2))
+(defmethod expr/codegen-call [:range_bins :interval :timestamp-tz :timestamp-tz :timestamp-tz] [{[i-type ^VectorType$Mono from-type ^VectorType$Mono to-type ^VectorType$Mono origin-type] :arg-types}]
+  (let [[from-unit from-tz] (st/timestamp-type->unit+tz from-type)
+        [to-unit to-tz] (st/timestamp-type->unit+tz to-type)
+        [origin-unit origin-tz] (st/timestamp-type->unit+tz origin-type)]
+    (assert (= from-unit to-unit origin-unit :micro)
             (format "TODO: from-type = %s; to-type = %s; origin-type = %s"
-                    (pr-str from-col-type) (pr-str to-col-type) (pr-str origin-col-type))))
+                    (pr-str [:timestamp-tz from-unit from-tz])
+                    (pr-str [:timestamp-tz to-unit to-tz])
+                    (pr-str [:timestamp-tz origin-unit origin-tz]))))
 
-  (let [{bb1 :batch-bindings, stride->duration :->call-code} (expr/codegen-cast {:source-type i-type, :target-type #xt/type [:duration :micro]})
-        ret-col-type [:list [:struct {'_from types/temporal-col-type,
-                                      '_to types/temporal-col-type,
-                                      '_weight :f64}]]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
+  (let [{bb1 :batch-bindings, stride->duration :->call-code} (expr/codegen-cast {:source-type i-type, :target-type #xt/type [:duration :micro]})]
+    {:return-type (st/->type [:list [:struct {'_from :instant, '_to :instant, '_weight :f64}]]) 
      :batch-bindings bb1
      :->call-code (fn [[stride-code from-code to-code origin-code]]
                     `(emit-range-bins ~(stride->duration [stride-code])
                                       ~from-code ~to-code ~origin-code))}))
 
 (defmethod expr/codegen-call [:range_bins :interval :date-time :date-time :date-time] [{[i-type from-type to-type origin-type] :arg-types}]
-  (let [temporal-vec-type #xt/type :instant
-        {bb-from :batch-bindings, ->from-code :->call-code} (expr/codegen-cast {:source-type from-type, :target-type temporal-vec-type})
-        {bb-to :batch-bindings, ->to-code :->call-code} (expr/codegen-cast {:source-type to-type, :target-type temporal-vec-type})
-        {bb-origin :batch-bindings, ->origin-code :->call-code} (expr/codegen-cast {:source-type origin-type, :target-type temporal-vec-type})
+  (let [{bb-from :batch-bindings, ->from-code :->call-code} (expr/codegen-cast {:source-type from-type, :target-type #xt/type :instant})
+        {bb-to :batch-bindings, ->to-code :->call-code} (expr/codegen-cast {:source-type to-type, :target-type #xt/type :instant})
+        {bb-origin :batch-bindings, ->origin-code :->call-code} (expr/codegen-cast {:source-type origin-type, :target-type #xt/type :instant})
 
         {ret-type :return-type, bb :batch-bindings, ->call-code :->call-code}
-        (expr/codegen-call {:f :range_bins, :arg-types [i-type temporal-vec-type temporal-vec-type temporal-vec-type]})]
+        (expr/codegen-call {:f :range_bins, :arg-types [i-type, #xt/type :instant, #xt/type :instant, #xt/type :instant]})]
 
     {:return-type ret-type
      :batch-bindings (concat bb-from bb-to bb-origin bb)
@@ -2206,22 +2183,21 @@
           (.writeLong (.toEpochDay ^LocalDate (nth res idx))))))))
 
 (defmethod expr/codegen-call [:generate_series :date :date :interval] [{[from-type to-type ^VectorType$Mono i-type-vec] :arg-types, :as expr}]
-  (let [from-col-type (types/vec-type->col-type from-type)
-        to-col-type (types/vec-type->col-type to-type)
-        i-unit (st/interval-type->unit i-type-vec)
-        i-type (types/vec-type->col-type i-type-vec)]
-    (when-not (= from-col-type [:date :day])
+  (let [from-unit (st/date-type->unit from-type)
+        to-unit (st/date-type->unit to-type)
+        i-unit (st/interval-type->unit i-type-vec)]
+    (when-not (= from-unit :day)
       (throw (err/unsupported ::expr/unsupported "generate_series with date-from of type date-milli")))
 
-    (when-not (= to-col-type [:date :day])
+    (when-not (= to-unit :day)
       (throw (err/unsupported ::expr/unsupported "generate_series with date-to of type date-milli")))
 
     (case i-unit
       :year-month {:return-type #xt/type [:list [:date :day]]
                    :->call-code (fn [[x-arg y-arg stride]]
                                   `(date-series (LocalDate/ofEpochDay ~x-arg) (LocalDate/ofEpochDay ~y-arg) ~stride))}
-      :month-day-micro (recall-with-cast3 expr [:timestamp-local :micro] [:timestamp-local :micro] i-type)
-      :month-day-nano (recall-with-cast3 expr [:timestamp-local :nano] [:timestamp-local :nano] i-type))))
+      :month-day-micro (recall-with-cast3 expr [:timestamp-local :micro] [:timestamp-local :micro] [:interval :month-day-micro])
+      :month-day-nano (recall-with-cast3 expr [:timestamp-local :nano] [:timestamp-local :nano] [:interval :month-day-nano]))))
 
 (defn ts-series [^LocalDateTime from, ^LocalDateTime to, ^PeriodDuration stride, write-ldt]
   (let [period (.getPeriod stride)
@@ -2250,9 +2226,8 @@
                                          (case i-unit
                                            :year-month :second
                                            :month-day-nano :nano
-                                           :month-day-micro :micro))
-        ret-col-type [:list [:timestamp-local out-unit]]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
+                                           :month-day-micro :micro))]
+    {:return-type (st/->type [:list [:timestamp-local out-unit]])
      :->call-code (fn [[from-arg to-arg i-arg]]
                     (-> `(ts-series ~(ts->ldt from-arg from-unit)
                                     ~(ts->ldt to-arg to-unit)
@@ -2292,9 +2267,8 @@
                                            :month-day-nano :nano
                                            :month-day-micro :micro))
         out-tz-sym (gensym 'out-tz)
-        out-tz (if (= from-tz to-tz) from-tz "UTC")
-        ret-col-type [:list [:timestamp-tz out-unit out-tz]]]
-    {:return-type (types/col-type->vec-type false ret-col-type)
+        out-tz (if (= from-tz to-tz) from-tz "UTC")]
+    {:return-type (st/->type [:list [:timestamp-tz out-unit out-tz]])
      :batch-bindings [[out-tz-sym (ZoneId/of out-tz)]]
      :->call-code (fn [[from-arg to-arg i-arg]]
                     (-> `(tstz-series ~(ts->zdt from-arg from-unit out-tz-sym)

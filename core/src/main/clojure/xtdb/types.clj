@@ -90,11 +90,6 @@
 
       (derive :list :any) (derive :struct :any) (derive :set :any) (derive :map :any)))
 
-(defn flatten-union-types [col-type]
-  (if (= :union (col-type-head col-type))
-    (second col-type)
-    #{col-type}))
-
 (defn flatten-union-field [^Field field]
   (if (instance? ArrowType$Union (.getType field))
     (.getChildren field)
@@ -171,30 +166,6 @@
 
 ;;; multis
 
-(defmulti ^String col-type->field-name col-type-head, :default ::default, :hierarchy #'col-type-hierarchy)
-(defmethod col-type->field-name ::default [col-type] (name (col-type-head col-type)))
-(defmethod col-type->field-name :varbinary [_col-type] "binary")
-
-#_{:clj-kondo/ignore [:unused-binding]}
-(defmulti col-type->vec-type
-  (fn [nullable? col-type]
-    (col-type-head col-type))
-  :default ::default, :hierarchy #'col-type-hierarchy)
-
-(alter-meta! #'col-type->vec-type assoc :tag VectorType)
-
-(defmethod col-type->vec-type ::default [nullable? col-type]
-  (-> (VectorType/scalar (st/->arrow-type col-type))
-      (VectorType/maybe nullable?)))
-
-(defmethod col-type->vec-type :null [_ _] #xt/type :null)
-
-(defmethod col-type->field-name :decimal [[type-head precision scale bit-width]]
-  (str (name type-head) "-" precision "-" scale "-" bit-width))
-
-(defmethod col-type->vec-type :tstz-range [nullable? _col-type]
-  (VectorType/maybe VectorType/TSTZ_RANGE (boolean nullable?)))
-
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti arrow-type->col-type
   (fn [arrow-type & child-fields] 
@@ -231,31 +202,14 @@
 
 ;;; list
 
-(defmethod col-type->vec-type :list [nullable? [_ inner-col-type]]
-  (-> (VectorType/listy ArrowType$List/INSTANCE (col-type->vec-type false inner-col-type))
-      (VectorType/maybe nullable?)))
-
 (defmethod arrow-type->col-type ArrowType$List [_ & [data-field]]
   [:list (or (some-> data-field field->col-type) :null)])
-
-(defmethod col-type->vec-type :fixed-size-list [nullable? [_ list-size inner-col-type]]
-  (-> (VectorType/listy (ArrowType$FixedSizeList. list-size) (col-type->vec-type false inner-col-type))
-      (VectorType/maybe nullable?)))
 
 (defmethod arrow-type->col-type ArrowType$FixedSizeList [^ArrowType$FixedSizeList list-type & [data-field]]
   [:fixed-size-list (.getListSize list-type) (or (some-> data-field field->col-type) :null)])
 
-(defmethod col-type->vec-type :set [nullable? [_ inner-col-type]]
-  (-> (VectorType/listy SetType/INSTANCE (col-type->vec-type false inner-col-type))
-      (VectorType/maybe nullable?)))
-
 (defmethod arrow-type->col-type SetType [_ & [data-field]]
   [:set (or (some-> data-field field->col-type) :null)])
-
-(defmethod col-type->vec-type :map [nullable? [_ {:keys [sorted?]} inner-col-type]]
-  (-> (VectorType/listy (ArrowType$Map. (boolean sorted?))
-                        (col-type->vec-type false inner-col-type))
-      (VectorType/maybe nullable?)))
 
 (defmethod arrow-type->col-type ArrowType$Map [^ArrowType$Map arrow-field & [data-field]]
   [:map {:sorted? (.getKeysSorted arrow-field)} (field->col-type data-field)])
@@ -269,28 +223,12 @@
 
 ;;; struct
 
-(defmethod col-type->vec-type :struct [nullable? [_ inner-col-types]]
-  (-> (VectorType/structOf (into {} (for [[col-name col-type] inner-col-types]
-                                      [(str col-name) (col-type->vec-type false col-type)])))
-      (VectorType/maybe nullable?)))
-
 (defmethod arrow-type->col-type ArrowType$Struct [_ & child-fields]
   [:struct (->> (for [^Field child-field child-fields]
                   [(symbol (.getName child-field)) (field->col-type child-field)])
                 (into {}))])
 
 ;;; union
-
-(defmethod col-type->vec-type :union [nullable? col-type]
-  (let [col-types (cond-> (flatten-union-types col-type)
-                    nullable? (conj :null))
-        nullable? (contains? col-types :null)
-        without-null (disj col-types :null)]
-    (case (count without-null)
-      0 (col-type->vec-type true :null)
-      1 (col-type->vec-type nullable? (first without-null))
-
-      (VectorType/fromLegs (into #{} (map #(col-type->vec-type false %)) col-types)))))
 
 (defmethod arrow-type->col-type ArrowType$Union [_ & child-fields]
   (->> child-fields
@@ -314,12 +252,6 @@
 
 ;;; timestamp
 
-(defmethod col-type->field-name :timestamp-tz [[type-head time-unit tz]]
-  (str (name type-head) "-" (name time-unit) "-" (-> (str/lower-case tz) (str/replace #"[/:]" "_"))))
-
-(defmethod col-type->field-name :timestamp-local [[type-head time-unit]]
-  (str (name type-head) "-" (name time-unit)))
-
 (defmethod arrow-type->col-type ArrowType$Timestamp [^ArrowType$Timestamp arrow-type]
   (let [time-unit (st/time-unit->kw (.getUnit arrow-type))]
     (if-let [tz (.getTimezone arrow-type)]
@@ -328,32 +260,20 @@
 
 ;;; date
 
-(defmethod col-type->field-name :date [[type-head date-unit]]
-  (str (name type-head) "-" (name date-unit)))
-
 (defmethod arrow-type->col-type ArrowType$Date [^ArrowType$Date arrow-type]
   [:date (st/date-unit->kw (.getUnit arrow-type))])
 
 ;;; time
-
-(defmethod col-type->field-name :time-local [[type-head time-unit]]
-  (str (name type-head) "-" (name time-unit)))
 
 (defmethod arrow-type->col-type ArrowType$Time [^ArrowType$Time arrow-type]
   [:time-local (st/time-unit->kw (.getUnit arrow-type))])
 
 ;;; duration
 
-(defmethod col-type->field-name :duration [[type-head time-unit]]
-  (str (name type-head) "-" (name time-unit)))
-
 (defmethod arrow-type->col-type ArrowType$Duration [^ArrowType$Duration arrow-type]
   [:duration (st/time-unit->kw (.getUnit arrow-type))])
 
 ;;; interval
-
-(defmethod col-type->field-name :interval [[type-head interval-unit]]
-  (str (name type-head) "-" (name interval-unit)))
 
 (defmethod arrow-type->col-type ArrowType$Interval [^ArrowType$Interval arrow-type]
   [:interval (st/interval-unit->kw (.getUnit arrow-type))])
