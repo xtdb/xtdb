@@ -137,6 +137,35 @@
   (t/is (= '(concat "a" f/b) (plan-expr-with-foo "'a' || foo.b")))
   (t/is (= '(concat (concat f/a "a") "b") (plan-expr-with-foo "foo.a || 'a' || 'b'"))))
 
+(t/deftest test-concat-function-expr
+  (t/testing "CONCAT function planning - transforms to use coalesce and str for NULL handling"
+    (t/is (= '(coalesce (str f/a) "") (plan-expr-with-foo "CONCAT(foo.a)")))
+    (t/is (= '(concat (coalesce (str f/a) "") (coalesce (str f/b) ""))
+             (plan-expr-with-foo "CONCAT(foo.a, foo.b)")))
+    (t/is (= '(concat (coalesce (str f/a) "") (coalesce (str f/b) "") (coalesce (str "c") ""))
+             (plan-expr-with-foo "CONCAT(foo.a, foo.b, 'c')")))))
+
+(t/deftest test-concat-function-query
+  (t/testing "CONCAT function ignores NULL values (unlike || operator)"
+    (t/is (= [{:result "hello world"}]
+             (xt/q tu/*node* "SELECT CONCAT('hello', ' ', 'world') AS result")))
+    (t/is (= [{:result "hello world"}]
+             (xt/q tu/*node* "SELECT CONCAT('hello', NULL, ' world') AS result")))
+    (t/is (= [{:result ""}]
+             (xt/q tu/*node* "SELECT CONCAT(NULL, NULL) AS result"))))
+
+  (t/testing "CONCAT converts non-string types to text"
+    (t/is (= [{:result "value: 42"}]
+             (xt/q tu/*node* "SELECT CONCAT('value: ', 42) AS result")))
+    (t/is (= [{:result "flag: true"}]
+             (xt/q tu/*node* "SELECT CONCAT('flag: ', true) AS result"))))
+
+  (t/testing "CONCAT with single argument"
+    (t/is (= [{:result "hello"}]
+             (xt/q tu/*node* "SELECT CONCAT('hello') AS result")))
+    (t/is (= [{:result ""}]
+             (xt/q tu/*node* "SELECT CONCAT(NULL) AS result")))))
+
 (t/deftest test-character-length-expr
   (t/is (= '(character-length f/a) (plan-expr-with-foo "CHARACTER_LENGTH(foo.a)")))
   (t/is (= '(character-length f/a) (plan-expr-with-foo "CHARACTER_LENGTH(foo.a USING CHARACTERS)")))

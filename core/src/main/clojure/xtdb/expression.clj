@@ -242,6 +242,10 @@
   (defmethod codegen-cast [int-type :bool] [_]
     {:return-type #xt/type :bool, :->call-code #(do `(not (zero? ~@%)))}))
 
+(defmethod codegen-cast [:bool :utf8] [_]
+  {:return-type #xt/type :utf8
+   :->call-code #(do `(resolve-utf8-buf (if ~@% "true" "false")))})
+
 (defmethod codegen-cast [:num :num] [{:keys [^VectorType target-type]}]
   (let [target-col-type (types/vec-type->col-type target-type)]
     {:return-type target-type

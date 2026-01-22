@@ -1093,6 +1093,15 @@
 
             (list* '~f planned-args#)))))
 
+(defmethod plan-fn 'concat [env _f planned-args]
+  ;; Postgres `CONCAT` function - null is converted to empty string
+  (let [wrapped-args (for [arg planned-args]
+                       (xt/template (coalesce (str ~arg) "")))]
+    (case (count planned-args)
+      0 (add-err! env (->ArityMismatch 'concat 1 Long/MAX_VALUE 0))
+      1 (first wrapped-args)
+      (xt/template (concat ~@wrapped-args)))))
+
 ;; mathy
 (def-sql-fns [octet_length length cardinality] 1 1)
 (def-sql-fns [array_upper] 2 2)

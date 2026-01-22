@@ -4,11 +4,29 @@ title: String functions
 
 :::note
 - String positions are 1-based, in line with the SQL spec.
-- If any argument to these functions is null, the function will return null.
+- Unless otherwise specified, if any argument to these functions is null, the function will return null.
 :::
 
 `CHARACTER_LENGTH(s)` | `CHAR_LENGTH(s)`
 : length of string, in UTF8 characters
+
+`CONCAT(val1, val2, ...)`
+: Concatenates all arguments after converting to text.
+  Unlike the `||` operator, `CONCAT` ignores NULL arguments instead of returning NULL.
+
+  ```sql
+  CONCAT('Hello', ' ', 'World')
+  -- 'Hello World'
+
+  CONCAT('Hello', NULL, ' World')
+  -- 'Hello World'
+
+  CONCAT(NULL, NULL)
+  -- ''
+
+  CONCAT('Value: ', 42)
+  -- 'Value: 42'
+  ```
 
 `FORMAT(format_str, ...)`
 : Formats arguments according to a format string (PostgreSQL-compatible).
