@@ -97,3 +97,26 @@ async fn test_temporal_queries() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_uuid_binary_encoding_5174() -> Result<()> {
+    let pool = create_pool().await?;
+
+    // Insert a UUID v4
+    let original_uuid = Uuid::new_v4();
+    sqlx::query("INSERT INTO test (_id) VALUES ($1)")
+        .bind(original_uuid)
+        .execute(&pool)
+        .await?;
+
+    // Read it back - this should work with proper binary encoding
+    let row = sqlx::query("SELECT _id FROM test")
+        .fetch_one(&pool)
+        .await?;
+
+    let retrieved_uuid: Uuid = row.get("_id");
+
+    assert_eq!(retrieved_uuid, original_uuid, "UUID mismatch");
+
+    Ok(())
+}
