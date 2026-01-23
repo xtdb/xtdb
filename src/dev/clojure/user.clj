@@ -39,5 +39,5 @@
   (logging/set-log-level! ns level))
 
 (comment
-  (set-log-level! 'xtdb.pgwire :debug)
+  (set-log-level! 'xtdb.pgwire :trace)
   (set-log-level! 'xtdb.pgwire :info))

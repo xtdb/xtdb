@@ -1035,23 +1035,30 @@
 
       (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "PREPARE"}))))
 
-(defn- ->xtify-arg [_session {:keys [arg-format param-oids]}]
-  (fn xtify-arg [arg-idx arg]
-    (when (some? arg)
-      (let [param-oid (nth param-oids arg-idx)
-            arg-format (nth arg-format arg-idx :text)
-            ^PgType pg-type (or (PgType/fromOid param-oid)
-                                (throw (err/unsupported ::unsupported-param-type "Unsupported param type provided for read"
-                                                        {:param-oid param-oid, :arg-format arg-format, :arg arg})))]
+(defn- normalize-arg-formats [arg-format arg-count]
+  (case (count arg-format)
+    0 (repeat arg-count :text)
+    1 (repeat arg-count (first arg-format))
+    arg-format))
 
-        (try
-          (if (= :binary arg-format)
-            (.readBinary pg-type arg)
-            (.readText pg-type arg))
-          (catch Exception e
-            (let [ex-msg (or (ex-message e) (str "invalid arg representation - " e))]
-              (throw (err/incorrect ::invalid-arg-representation ex-msg
-                                    {:arg-format arg-format, :arg-idx arg-idx})))))))))
+(defn- ->xtify-arg [_session {:keys [arg-format param-oids]}]
+  (let [arg-formats (normalize-arg-formats arg-format (count param-oids))]
+    (fn xtify-arg [arg-idx arg]
+      (when (some? arg)
+        (let [param-oid (nth param-oids arg-idx)
+              arg-format (nth arg-formats arg-idx :text)
+              ^PgType pg-type (or (PgType/fromOid param-oid)
+                                  (throw (err/unsupported ::unsupported-param-type "Unsupported param type provided for read"
+                                                          {:param-oid param-oid, :arg-format arg-format, :arg arg})))]
+
+          (try
+            (if (= :binary arg-format)
+              (.readBinary pg-type arg)
+              (.readText pg-type arg))
+            (catch Exception e
+              (let [ex-msg (or (ex-message e) (str "invalid arg representation - " e))]
+                (throw (err/incorrect ::invalid-arg-representation ex-msg
+                                      {:arg-format arg-format, :arg-idx arg-idx}))))))))))
 
 (defn- xtify-args [{:keys [conn-state] :as _conn} args stmt]
   (into [] (map-indexed (->xtify-arg (:session @conn-state) stmt) args)))

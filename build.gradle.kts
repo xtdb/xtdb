@@ -422,6 +422,8 @@ dependencies {
         devImplementation(mainSourceSet.resources.sourceDirectories)
     }
 
+    implementation(project(":xtdb-main"))
+
     projectDep(":xtdb-api")
     projectDep(":xtdb-core")
     projectDep(":xtdb-main")

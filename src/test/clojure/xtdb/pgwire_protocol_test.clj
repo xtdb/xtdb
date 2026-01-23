@@ -435,3 +435,40 @@
         (t/is (= [[:msg-command-complete {:command "SELECT 2"}]
                   [:msg-ready {:status :transaction}]]
                  @!in-msgs))))))
+
+(deftest test-single-arg-format-applies-to-all-params-5174
+  ;; Per PostgreSQL wire protocol, when format code count = 1, that format applies to ALL parameters.
+  ;; https://www.postgresql.org/docs/current/protocol-message-formats.html
+  (let [{:keys [!in-msgs] :as frontend} (->recording-frontend)
+        uuid-oid (.getOid PgType/PG_UUID)
+        uuid1 (random-uuid)
+        uuid2 (random-uuid)
+        portal-name "test-portal"
+        stmt-name "test-stmt"]
+    (with-open [conn (->conn frontend {"user" "xtdb" "database" "xtdb"})]
+      (reset! !in-msgs [])
+
+      ;; Parse with two UUID parameters
+      (pgwire/handle-msg conn {:msg-name :msg-parse
+                               :stmt-name stmt-name
+                               :query "INSERT INTO test (_id, other_uuid) VALUES ($1, $2)"
+                               :param-oids [uuid-oid uuid-oid]})
+
+      ;; Bind with ONE format code (binary) - should apply to BOTH parameters
+      (pgwire/handle-msg conn {:msg-name :msg-bind
+                               :portal-name portal-name
+                               :stmt-name stmt-name
+                               :arg-format [:binary]  ; single format applies to all
+                               :args [(util/uuid->bytes uuid1)
+                                      (util/uuid->bytes uuid2)]
+                               :result-format nil})
+
+      (pgwire/handle-msg conn {:msg-name :msg-execute :portal-name portal-name :limit 0})
+      (pgwire/handle-msg conn {:msg-name :msg-sync})
+
+      (t/is (= [[:msg-parse-complete]
+                [:msg-bind-complete]
+                [:msg-command-complete {:command "INSERT 0 0"}]
+                [:msg-ready {:status :idle}]]
+               @!in-msgs)
+            "Both binary-encoded UUIDs should be parsed correctly when single format code is provided"))))

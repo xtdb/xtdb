@@ -833,6 +833,7 @@ sealed class PgType(
         @JvmField val PG_JSON = Json
         @JvmField val PG_JSON_LD = JsonLd
         @JvmField val PG_TRANSIT = Transit
+        @JvmField val PG_UUID = Uuid
 
         // All concrete PgTypes (excluding Default and Null which are special)
         @JvmField

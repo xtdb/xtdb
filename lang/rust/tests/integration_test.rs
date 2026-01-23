@@ -1,4 +1,5 @@
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::{PgPool, Row};
 use std::env;
@@ -102,21 +103,52 @@ async fn test_temporal_queries() -> Result<()> {
 async fn test_uuid_binary_encoding_5174() -> Result<()> {
     let pool = create_pool().await?;
 
-    // Insert a UUID v4
-    let original_uuid = Uuid::new_v4();
-    sqlx::query("INSERT INTO test (_id) VALUES ($1)")
-        .bind(original_uuid)
+    let id = Uuid::new_v4();
+    let other_uuid = Uuid::new_v4();
+    sqlx::query("INSERT INTO test (_id, other_uuid) VALUES ($1, $2)")
+        .bind(id)
+        .bind(other_uuid)
         .execute(&pool)
         .await?;
 
-    // Read it back - this should work with proper binary encoding
-    let row = sqlx::query("SELECT _id FROM test")
+    let row = sqlx::query("SELECT _id, other_uuid FROM test")
+        .fetch_one(&pool)
+        .await?;
+
+    assert_eq!(row.get::<Uuid, &str>("_id"), id);
+    assert_eq!(row.get::<Uuid, &str>("other_uuid"), other_uuid);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_timestamptz_binary_encoding_5175() -> Result<()> {
+    let pool = create_pool().await?;
+
+    // Create a known timestamp
+    let now: DateTime<Utc> = Utc::now();
+    let uuid = Uuid::new_v4();
+
+    // sqlx sends DateTime<Utc> as binary timestamptz by default
+    // This should work but currently fails with "invalid timestamp: Text"
+    sqlx::query("INSERT INTO events (_id, created_at) VALUES ($1, $2)")
+        .bind(uuid)
+        .bind(now)
+        .execute(&pool)
+        .await?;
+
+    // Read it back
+    let row = sqlx::query("SELECT _id, created_at FROM events")
         .fetch_one(&pool)
         .await?;
 
     let retrieved_uuid: Uuid = row.get("_id");
+    let retrieved_ts: DateTime<Utc> = row.get("created_at");
 
-    assert_eq!(retrieved_uuid, original_uuid, "UUID mismatch");
+    assert_eq!(retrieved_uuid, uuid);
+    // Allow some tolerance for microsecond precision
+    assert!((retrieved_ts - now).num_milliseconds().abs() < 1000,
+        "Timestamp mismatch: expected {:?}, got {:?}", now, retrieved_ts);
 
     Ok(())
 }
