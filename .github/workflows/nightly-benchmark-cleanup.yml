@@ -172,7 +172,7 @@ jobs:
       - name: Upload Benchmark Logs
         id: upload-logs
         if: steps.check-deployment.outcome == 'success' && hashFiles('benchmark.log', 'pod-logs/*.log') != ''
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: benchmark-logs-${{ inputs.benchType }}-${{ steps.timestamp.outputs.value }}-${{ inputs.nodeId }}-${{ steps.derive.outputs.bench_status || inputs.status }}
           path: |
@@ -306,7 +306,7 @@ jobs:
       - name: Upload Grafana Panels
         if: steps.check-deployment.outcome == 'success' && hashFiles('grafana-panels/*.png') != ''
         id: upload-grafana
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: grafana-panels-${{ inputs.benchType }}-${{ steps.timestamp.outputs.value }}-${{ inputs.nodeId }}-${{ inputs.status }}
           path: grafana-panels/*.png
@@ -508,7 +508,7 @@ jobs:
 
       - name: Upload Benchmark Timeseries Chart
         if: steps.check-deployment.outcome == 'success' && steps.timeseries-chart.outputs.has_chart == 'true'
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: ${{ inputs.benchType }}-timeseries-${{ steps.timestamp.outputs.value }}
           path: ${{ steps.timeseries-chart.outputs.svg_file }}
