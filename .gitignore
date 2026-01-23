@@ -23,6 +23,7 @@ buildRepl
 .claude/*
 !.claude/commands/
 !.claude/skills/
+!.claude/agents/
 
 .tasks/
 
