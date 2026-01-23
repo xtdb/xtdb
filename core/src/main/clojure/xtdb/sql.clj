@@ -1128,6 +1128,19 @@
 ;; system info
 (def-sql-fns [col_description] 2 2)
 
+(defn- json-field-access [obj-expr field-expr]
+  (cond
+    (string? field-expr)
+    (list '. obj-expr (keyword field-expr))
+
+    (integer? field-expr)
+    (list 'nth obj-expr field-expr)
+
+    :else
+    (throw (err/unsupported ::non-literal-field-access
+                            "PostgreSQL JSON operators currently only support string/integer literal field names"
+                            {:obj-expr obj-expr :field-expr field-expr}))))
+
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor
   (visitSearchCondition [this ctx] (list* 'and (mapv (partial accept-visitor this) (.expr ctx))))
@@ -1230,41 +1243,36 @@
                       (list '- n 1)))))
 
   ;; PostgreSQL -> operator: extracts field/element (preserves type)
-  ;; e.g., data -> 'field_name' -> (data).field_name
-  ;; e.g., array -> 0 -> (nth array 0)
-  ;; Only supports string/integer literals for now (not dynamic expressions)
   (visitJsonArrowExpr [this ctx]
-    (let [struct-expr (-> (.obj ctx) (.accept this))
-          field-expr (-> (.field ctx) (.accept this))]
-      (cond
-        (string? field-expr)
-        (list '. struct-expr (keyword field-expr))
-
-        (integer? field-expr)
-        (list 'nth struct-expr field-expr)
-
-        :else
-        (throw (err/unsupported ::dynamic-json-arrow
-                                "PostgreSQL -> operator currently only supports string/integer literal field names"
-                                {:struct-expr struct-expr :field-expr field-expr})))))
+    (json-field-access (-> (.obj ctx) (.accept this))
+                       (-> (.field ctx) (.accept this))))
 
   ;; PostgreSQL ->> operator: extracts field/element as text
-  ;; e.g., data ->> 'field_name' -> cast((data).field_name, utf8)
-  ;; e.g., array ->> 0 -> cast((nth array 0), utf8)
-  ;; Only supports string/integer literals for now (not dynamic expressions)
   (visitJsonArrowTextExpr [this ctx]
-    (let [struct-expr (-> (.obj ctx) (.accept this))
-          field-expr (-> (.field ctx) (.accept this))]
-      (cond
-        (string? field-expr)
-        (list 'cast (list '. struct-expr (keyword field-expr)) #xt/type :utf8)
+    (let [result (json-field-access (-> (.obj ctx) (.accept this))
+                                    (-> (.field ctx) (.accept this)))]
+      (list 'cast result #xt/type :utf8)))
 
-        (integer? field-expr)
-        (list 'cast (list 'nth struct-expr field-expr) #xt/type :utf8)
+  ;; PostgreSQL #> operator: extracts nested field by path (preserves type)
+  (visitJsonPathExpr [this ctx]
+    (let [obj-expr (-> (.obj ctx) (.accept this))
+          path-expr (-> (.path ctx) (.accept this))]
+      (if-not (vector? path-expr)
+        (throw (err/unsupported ::non-literal-json-path
+                                "PostgreSQL #> operator currently only supports literal array paths"
+                                {:obj-expr obj-expr :path-expr path-expr}))
+        (reduce json-field-access obj-expr path-expr))))
 
-        :else
-        (throw (err/unsupported ::dynamic-json-arrow-text
-                                "PostgreSQL ->> operator currently only supports string/integer literal field names")))))
+  ;; PostgreSQL #>> operator: extracts nested field by path as text
+  (visitJsonPathTextExpr [this ctx]
+    (let [obj-expr (-> (.obj ctx) (.accept this))
+          path-expr (-> (.path ctx) (.accept this))]
+      (if-not (vector? path-expr)
+        (throw (err/unsupported ::non-literal-json-path
+                                "PostgreSQL #>> operator currently only supports literal array paths"
+                                {:obj-expr obj-expr :path-expr path-expr}))
+        (let [result (reduce json-field-access obj-expr path-expr)]
+          (list 'cast result #xt/type :utf8)))))
 
   (visitUnaryPlusExpr [this ctx] (-> (.numericExpr ctx) (.accept this)))
 

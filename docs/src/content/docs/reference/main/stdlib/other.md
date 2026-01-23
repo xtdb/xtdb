@@ -32,3 +32,20 @@ title: Other Functions
   - Returns NULL if the field does not exist
   - Example: `data->>'age'` returns the `age` field from the `data` struct as text
   - Supports chaining: `data->'nested'->>'inner'` accesses nested fields and returns as text
+
+`obj#>path`
+: PostgreSQL-compatible JSON path access operator. Extracts a nested field by following a path (preserving the original type).
+  - `path` must be a literal array of string/integer elements (e.g., `ARRAY['nested', 'inner']`)
+  - Returns the value at the specified path
+  - Returns NULL if any step in the path does not exist
+  - Example: `data #> ARRAY['nested', 'inner']` accesses `data.nested.inner`
+  - Equivalent to chaining `->` operators but more concise for deep paths
+
+`obj#>>path`
+: PostgreSQL-compatible JSON path access operator. Extracts a nested field by following a path as text.
+  - Same as `#>` but casts the result to text (string)
+  - `path` must be a literal array of string/integer elements (e.g., `ARRAY['nested', 'inner']`)
+  - Returns the value at the specified path as a string
+  - Returns NULL if any step in the path does not exist
+  - Example: `data #>> ARRAY['nested', 'inner']` accesses `data.nested.inner` as text
+  - Equivalent to chaining `->` operators and ending with `->>`

@@ -161,3 +161,40 @@
   (t/is (= [{}]
            (xt/q tu/*node* "SELECT data->>'nonexistent' AS v FROM json_data"))
         "non-existent field returns NULL"))
+
+(t/deftest test-json-path-operator
+  (xt/submit-tx tu/*node* [[:put-docs :json_data {:xt/id 1 :data {:age 25 :name "Alice" :nested {:inner 42}}}]])
+
+  (t/is (= [{:v 42}]
+           (xt/q tu/*node* "SELECT data #> ARRAY['nested', 'inner'] AS v FROM json_data"))
+        "#> with path array accesses nested fields")
+
+  (t/is (= [{:v 25}]
+           (xt/q tu/*node* "SELECT data #> ARRAY['age'] AS v FROM json_data"))
+        "#> with single element path")
+
+  (t/is (= [{}]
+           (xt/q tu/*node* "SELECT data #> ARRAY['nonexistent'] AS v FROM json_data"))
+        "non-existent path returns NULL")
+
+  (t/is (= Long (type (:v (first (xt/q tu/*node* "SELECT data #> ARRAY['nested', 'inner'] AS v FROM json_data")))))
+        "preserves type (returns integer, not string)"))
+
+(t/deftest test-json-path-text-operator
+  (xt/submit-tx tu/*node* [[:put-docs :json_data {:xt/id 1 :data {:age 25 :name "Alice" :nested {:inner 42}}}]])
+
+  (t/is (= [{:v "42"}]
+           (xt/q tu/*node* "SELECT data #>> ARRAY['nested', 'inner'] AS v FROM json_data"))
+        "#>> with path array accesses nested fields as text")
+
+  (t/is (= [{:v "25"}]
+           (xt/q tu/*node* "SELECT data #>> ARRAY['age'] AS v FROM json_data"))
+        "#>> with single element path returns text")
+
+  (t/is (= [{:v "Alice"}]
+           (xt/q tu/*node* "SELECT data #>> ARRAY['name'] AS v FROM json_data"))
+        "string field returns string value")
+
+  (t/is (= [{}]
+           (xt/q tu/*node* "SELECT data #>> ARRAY['nonexistent'] AS v FROM json_data"))
+        "non-existent path returns NULL"))

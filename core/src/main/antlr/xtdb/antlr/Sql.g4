@@ -260,6 +260,8 @@ exprPrimary
     | exprPrimary '||' exprPrimary #ConcatExpr
     | obj=exprPrimary JSON_ARROW field=exprPrimary #JsonArrowExpr
     | obj=exprPrimary JSON_ARROW_TEXT field=exprPrimary #JsonArrowTextExpr
+    | obj=exprPrimary JSON_PATH path=exprPrimary #JsonPathExpr
+    | obj=exprPrimary JSON_PATH_TEXT path=exprPrimary #JsonPathTextExpr
 
     | parameterSpecification # ParamExpr
     | columnReference # ColumnExpr
