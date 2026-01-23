@@ -1,5 +1,7 @@
 (ns xtdb.tx-sink-test
   (:require [clojure.test :as t]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
@@ -533,6 +535,80 @@
               msgs (->> (.getMessages output-log) (map decode-record))]
           (t/is (= 2 (count msgs))
                 "Should have processed both messages"))))))
+
+(def ^:private gen-doc (gen/hash-map :xt/id (gen/elements [:a :b :c :d]) :v gen/nat))
+(def ^:private gen-tx (gen/vector gen-doc))
+(def ^:private gen-batches (gen/vector gen-tx))
+
+(t/deftest ^:property event-ordering-within-iid-test
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [batches gen-batches]
+                 (with-open [node (xtn/start-node (merge tu/*node-opts*
+                                                         {:tx-sink {:enable true
+                                                                    :output-log [::tu/recording {}]
+                                                                    :format :transit+json}}))]
+                   (let [non-empty-batches (filter (some-fn keyword? seq) batches)]
+                     (doseq [docs non-empty-batches]
+                       (xt/execute-tx node [(into [:put-docs :docs] docs)])
+                       (tu/finish-block! node))
+
+                     (let [^RecordingLog output-log (tu/get-output-log node)
+                           messages (map decode-record (.getMessages output-log))
+                           output-docs-per-msg (for [msg messages]
+                                                 (->> (:tables msg)
+                                                      (filter #(= (:table %) "docs"))
+                                                      (mapcat :ops)
+                                                      (map :doc)))]
+                       (and (= (count non-empty-batches) (count messages))
+                            (every? (fn [[input-docs output-docs]]
+                                      (let [input-by-id (group-by :xt/id input-docs)
+                                            output-by-id (group-by :xt/id output-docs)]
+                                        (every? (fn [[id docs]]
+                                                  (= (map :v docs)
+                                                     (map :v (get output-by-id id))))
+                                                input-by-id)))
+                                    (map vector non-empty-batches output-docs-per-msg)))))))))
+
+(t/deftest ^:property event-ordering-within-iid-test-backfill
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [batches gen-batches]
+                 (util/with-tmp-dirs #{node-dir}
+                   (let [non-empty-batches (filter (some-fn keyword? seq) batches)]
+                     ; Create blocks
+                     (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                                       :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
+                                                       :compactor {:threads 1}})]
+                       (doseq [docs non-empty-batches]
+                         (xt/execute-tx node [(into [:put-docs :docs] docs)])
+                         (tu/finish-block! node)))
+
+                     ; Backfill w/ TxSink
+                     (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
+                                                       :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
+                                                       :compactor {:threads 1}
+                                                       :tx-sink {:enable true
+                                                                 :initial-scan true
+                                                                 :output-log [::tu/recording {}]
+                                                                 :format :transit+json}})]
+                       (xt-log/sync-node node #xt/duration "PT1S")
+                       (let [^RecordingLog output-log (tu/get-output-log node)
+                             messages (map decode-record (.getMessages output-log))
+                             output-docs-per-msg (for [msg messages]
+                                                   (->> (:tables msg)
+                                                        (filter #(= (:table %) "docs"))
+                                                        (mapcat :ops)
+                                                        (map :doc)))]
+                         (and (= (count non-empty-batches) (count messages))
+                              (every? (fn [[input-docs output-docs]]
+                                        (let [input-by-id (group-by :xt/id input-docs)
+                                              output-by-id (group-by :xt/id output-docs)]
+                                          (every? (fn [[id docs]]
+                                                    (= (map :v docs)
+                                                       (map :v (get output-by-id id))))
+                                                  input-by-id)))
+                                      (map vector non-empty-batches output-docs-per-msg))))))))))
 
 (comment
   (util/with-tmp-dirs #{test-dir}
