@@ -30,3 +30,10 @@ services:
     environment:
       PG_HOST: xtdb
       PG_PORT: 5439
+
+  rust:
+    build:
+      context: rust
+    environment:
+      PG_HOST: xtdb
+      PG_PORT: 5439

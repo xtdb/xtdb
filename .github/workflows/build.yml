@@ -101,6 +101,11 @@ jobs:
         run: |
           docker compose run elixir
 
+      - name: Rust test
+        working-directory: "lang"
+        run: |
+          docker compose run rust
+
       - name: Dump all logs on test failure
         if: failure()
         working-directory: "lang"

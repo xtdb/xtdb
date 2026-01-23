@@ -1,12 +1,16 @@
 [package]
-name = "xtdb"
+name = "xtdb-test"
 version = "0.1.0-pre.1"
 edition = "2021"
-description = "Rust client for XTDB"
+description = "Rust tests for XTDB"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 homepage = "https://xtdb.com/"
 repository = "https://github.com/xtdb/xtdb"
 license = "MPL-2.0"
 
 [dependencies]
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono"] }
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = "0.4"
+anyhow = "1"
