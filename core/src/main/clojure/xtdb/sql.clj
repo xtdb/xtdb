@@ -1229,6 +1229,43 @@
                       (dec n)
                       (list '- n 1)))))
 
+  ;; PostgreSQL -> operator: extracts field/element (preserves type)
+  ;; e.g., data -> 'field_name' -> (data).field_name
+  ;; e.g., array -> 0 -> (nth array 0)
+  ;; Only supports string/integer literals for now (not dynamic expressions)
+  (visitJsonArrowExpr [this ctx]
+    (let [struct-expr (-> (.obj ctx) (.accept this))
+          field-expr (-> (.field ctx) (.accept this))]
+      (cond
+        (string? field-expr)
+        (list '. struct-expr (keyword field-expr))
+
+        (integer? field-expr)
+        (list 'nth struct-expr field-expr)
+
+        :else
+        (throw (err/unsupported ::dynamic-json-arrow
+                                "PostgreSQL -> operator currently only supports string/integer literal field names"
+                                {:struct-expr struct-expr :field-expr field-expr})))))
+
+  ;; PostgreSQL ->> operator: extracts field/element as text
+  ;; e.g., data ->> 'field_name' -> cast((data).field_name, utf8)
+  ;; e.g., array ->> 0 -> cast((nth array 0), utf8)
+  ;; Only supports string/integer literals for now (not dynamic expressions)
+  (visitJsonArrowTextExpr [this ctx]
+    (let [struct-expr (-> (.obj ctx) (.accept this))
+          field-expr (-> (.field ctx) (.accept this))]
+      (cond
+        (string? field-expr)
+        (list 'cast (list '. struct-expr (keyword field-expr)) #xt/type :utf8)
+
+        (integer? field-expr)
+        (list 'cast (list 'nth struct-expr field-expr) #xt/type :utf8)
+
+        :else
+        (throw (err/unsupported ::dynamic-json-arrow-text
+                                "PostgreSQL ->> operator currently only supports string/integer literal field names")))))
+
   (visitUnaryPlusExpr [this ctx] (-> (.numericExpr ctx) (.accept this)))
 
   (visitUnaryMinusExpr [this ctx]

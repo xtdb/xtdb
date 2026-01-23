@@ -258,6 +258,8 @@ exprPrimary
     | exprPrimary '[' expr ']' #ArrayAccess
     | exprPrimary '::' dataType #PostgresCastExpr
     | exprPrimary '||' exprPrimary #ConcatExpr
+    | obj=exprPrimary JSON_ARROW field=exprPrimary #JsonArrowExpr
+    | obj=exprPrimary JSON_ARROW_TEXT field=exprPrimary #JsonArrowTextExpr
 
     | parameterSpecification # ParamExpr
     | columnReference # ColumnExpr

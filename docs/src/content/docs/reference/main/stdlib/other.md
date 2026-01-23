@@ -15,3 +15,20 @@ title: Other Functions
 
 `TRIM_ARRAY(array, n)`
 : returns a copy of `array` with the last `n` elements removed.
+
+`obj->field`
+: PostgreSQL-compatible JSON field access operator. Extracts a field from a struct by key (preserving the original type).
+  - `field` must be a string literal (field name) or integer literal (for array index access)
+  - Returns the value at the specified field/index
+  - Returns NULL if the field does not exist
+  - Example: `data->'age'` returns the `age` field from the `data` struct
+  - Supports chaining: `data->'nested'->'inner'` accesses nested fields
+
+`obj->>field`
+: PostgreSQL-compatible JSON field access operator. Extracts a field from a struct by key as text.
+  - Same as `->` but casts the result to text (string)
+  - `field` must be a string literal (field name) or integer literal (for array index access)
+  - Returns the value at the specified field/index as a string
+  - Returns NULL if the field does not exist
+  - Example: `data->>'age'` returns the `age` field from the `data` struct as text
+  - Supports chaining: `data->'nested'->>'inner'` accesses nested fields and returns as text

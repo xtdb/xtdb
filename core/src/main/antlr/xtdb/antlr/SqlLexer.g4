@@ -54,6 +54,9 @@ TILDE : '~' ;
 AMPERSAND : '&' ;
 
 PLUS : '+' ;
+// PostgreSQL JSON operators (must come before MINUS and BITWISE_SHIFT_RIGHT)
+JSON_ARROW_TEXT : '->>' ;
+JSON_ARROW : '->' ;
 MINUS : '-' ;
 ASTERISK : '*' ;
 SOLIDUS : '/' ;

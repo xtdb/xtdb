@@ -124,3 +124,40 @@
            (xt/q tu/*node* "SELECT 'pg_class'::regclass v")
            (xt/q tu/*node* "SELECT 'pg_catalog.pg_class'::regclass v"))
         "matches pg_catalog.pg_class over public.pg_class as the former comes first in the search path"))
+
+(t/deftest test-json-arrow-operator
+  (xt/submit-tx tu/*node* [[:put-docs :json_data {:xt/id 1 :data {:age 25 :name "Alice" :nested {:inner 42}}}]])
+
+  (t/is (= [{:v 25}]
+           (xt/q tu/*node* "SELECT data->'age' AS v FROM json_data"))
+        "-> with string literal field access")
+
+  (t/is (= [{:v 42}]
+           (xt/q tu/*node* "SELECT data->'nested'->'inner' AS v FROM json_data"))
+        "nested field access with chained ->")
+
+  (t/is (= [{}]
+           (xt/q tu/*node* "SELECT data->'nonexistent' AS v FROM json_data"))
+        "non-existent field returns NULL")
+
+  (t/is (= Long (type (:v (first (xt/q tu/*node* "SELECT data->'age' AS v FROM json_data")))))
+        "preserves type (returns integer, not string)"))
+
+(t/deftest test-json-arrow-text-operator
+  (xt/submit-tx tu/*node* [[:put-docs :json_data {:xt/id 1 :data {:age 25 :name "Alice" :nested {:inner 42}}}]])
+
+  (t/is (= [{:v "25"}]
+           (xt/q tu/*node* "SELECT data->>'age' AS v FROM json_data"))
+        "->> with string literal field access returns text")
+
+  (t/is (= [{:v "42"}]
+           (xt/q tu/*node* "SELECT data->'nested'->>'inner' AS v FROM json_data"))
+        "nested field access with chained ->> returns text")
+
+  (t/is (= [{:v "Alice"}]
+           (xt/q tu/*node* "SELECT data->>'name' AS v FROM json_data"))
+        "string field returns string value")
+
+  (t/is (= [{}]
+           (xt/q tu/*node* "SELECT data->>'nonexistent' AS v FROM json_data"))
+        "non-existent field returns NULL"))
