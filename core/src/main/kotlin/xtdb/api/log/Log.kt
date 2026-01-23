@@ -16,7 +16,9 @@ import xtdb.database.proto.DatabaseConfig.LogCase.*
 import xtdb.log.proto.*
 import xtdb.log.proto.LogMessage.MessageCase
 import xtdb.storage.StorageEpoch
+import xtdb.table.TableRef
 import xtdb.trie.BlockIndex
+import xtdb.trie.TrieKey
 import xtdb.util.MsgIdUtil
 import xtdb.util.asPath
 import java.nio.ByteBuffer
@@ -106,6 +108,15 @@ interface Log : AutoCloseable {
 
                                 MessageCase.DETACH_DATABASE -> DetachDatabase(msg.detachDatabase.dbName)
 
+                                MessageCase.TRIES_DELETED -> msg.triesDeleted.let {
+                                    TriesDeleted(
+                                        it.storageVersion,
+                                        it.storageEpoch,
+                                        it.tableName,
+                                        it.trieKeysList.toSet()
+                                    )
+                                }
+
                                 else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
                             }
                         }
@@ -143,6 +154,22 @@ interface Log : AutoCloseable {
             override fun toLogMessage() = logMessage {
                 detachDatabase = detachDatabase {
                     this.dbName = this@DetachDatabase.dbName
+                }
+            }
+        }
+
+        data class TriesDeleted(
+            val storageVersion: Int,
+            val storageEpoch: StorageEpoch,
+            val tableName: String,
+            val trieKeys: Set<TrieKey>
+        ) : ProtobufMessage() {
+            override fun toLogMessage() = logMessage {
+                triesDeleted = triesDeleted {
+                    storageVersion = this@TriesDeleted.storageVersion
+                    storageEpoch = this@TriesDeleted.storageEpoch
+                    tableName = this@TriesDeleted.tableName
+                    trieKeys.addAll(this@TriesDeleted.trieKeys)
                 }
             }
         }
