@@ -8,8 +8,13 @@ See developer documentation in `/dev` in this repo, particularly @dev/README.ado
 We develop using 'tidy-first' methodology - endeavouring to separate 'equivalence' changes (changes which do not affect runtime behaviour, changes which increase our options) from changes that advance the behaviour of XT.
 For example, even when we're working on a feature branch, we will often separate a tidying change in a separate commit and cherry-pick it onto `main`, so that the resulting PR is easier to review.
 
+We take great inspiration from the principle of 'making illegal states unrepresentable' - prefer type systems, data structures, and APIs that prevent invalid states at compile time rather than requiring runtime validation.
+
 * This is a Gradle project - do not use Clojure CLI tools to run code within the project, they will not bring in the dependencies correctly.
 * Modules are named `xtdb-<directory>` - e.g. `:xtdb-core`, `:modules:xtdb-kafka` - so that the Maven artifacts have the `xtdb-` prefix.
+* We use conventional commits for commit messages. Common prefixes: `feat:`, `fix:`, `refactor:`, `tidy:`, `build:`, `test:`, `dev:`, `ai:`.
+  * Use sub-tags/scopes in parentheses where relevant, e.g. `fix(ee):`, `feat(sql):`, `refactor(logical-plan):`.
+  * Indicate breaking changes with `!`, e.g. `tidy!:`.
 * If you need to create git worktrees, create them in the `.tasks` directory in the repo root without setting upstream tracking (e.g., `git worktree add .tasks/<branch-name> -b <branch-name> origin/main`). This allows developers to explicitly push to their own forks.
   * Check to see whether you're in a worktree when you start up - if you are, ensure that any reads and updates are done within that worktree.
 * When tests fail, read the test report at `build/reports/tests/test/index.html` instead of re-running tests with different flags to get error details.
