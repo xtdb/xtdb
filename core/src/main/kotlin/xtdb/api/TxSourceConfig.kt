@@ -4,7 +4,7 @@ import kotlinx.serialization.UseSerializers
 import xtdb.api.log.Log
 
 @Serializable
-data class TxSinkConfig(
+data class TxSourceConfig(
     var dbName: String = "xtdb",
     var format: String = "transit+json",
     var outputLog: Log.Factory = Log.inMemoryLog,

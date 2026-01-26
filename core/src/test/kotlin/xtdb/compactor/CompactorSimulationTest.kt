@@ -69,7 +69,7 @@ class MockDb(
 
     override val logProcessor: LogProcessor get() = unsupported("logProcessor")
     override val compactor: Compactor.ForDatabase get() = unsupported("compactor")
-    override val txSink: Indexer.TxSink get() = unsupported("txSink")
+    override val txSource: Indexer.TxSource get() = unsupported("txSource")
 }
 
 private val LOGGER = CompactorMockDriver::class.logger

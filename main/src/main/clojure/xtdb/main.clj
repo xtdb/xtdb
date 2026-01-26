@@ -21,7 +21,7 @@
   (println " * `playground`: starts a 'playground', an in-memory node which accepts any database name, creating it if required")
   (println " * `reset-compactor <db-name>`: resets the compacted files on the given node.")
   (println " * `export-snapshot <db-name>`: exports a consistent snapshot of object storage for the given database.")
-  (println " * `tx-sink`: runs a node which replicates the transaction log to an external log")
+  (println " * `tx-source`: runs a node which replicates the transaction log to an external log")
   (newline)
   (println "For more information about any command, run `<command> --help`, e.g. `playground --help`"))
 
@@ -159,15 +159,15 @@
 
     ((requiring-resolve 'xtdb.compactor.reset/reset-compactor!) (file->node-opts file) db-name {:dry-run? dry-run?})))
 
-(def tx-sink-cli-spec
+(def tx-source-cli-spec
   [config-file-opt
    ["-h" "--help"]])
 
-(defn- tx-sink! [args]
-  (let [{{:keys [file]} :options} (-> (parse-args args tx-sink-cli-spec)
+(defn- tx-source! [args]
+  (let [{{:keys [file]} :options} (-> (parse-args args tx-source-cli-spec)
                                       (handling-arg-errors-or-help))]
-    (util/with-open [_node ((requiring-resolve 'xtdb.tx-sink/open!) (file->node-opts file))]
-      (log/info "Tx Sink node started")
+    (util/with-open [_node ((requiring-resolve 'xtdb.tx-source/open!) (file->node-opts file))]
+      (log/info "Tx Source node started")
       @(shutdown-hook-promise))))
 
 (def export-snapshot-cli-spec
@@ -279,9 +279,9 @@
                             (reset-compactor! more-args)
                             (System/exit 0))
 
-        "tx-sink" (do
-                    (tx-sink! more-args)
-                    (System/exit 0))
+        "tx-source" (do
+                      (tx-source! more-args)
+                      (System/exit 0))
 
         "export-snapshot" (do
                             (export-snapshot! more-args)

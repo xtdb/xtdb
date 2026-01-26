@@ -63,7 +63,7 @@ data class MockDatabase(
     override val log: Log get() = unsupported("log")
     override val metadataManager: PageMetadata.Factory get() = unsupported("metadataManager")
     override val logProcessor: LogProcessor get() = unsupported("logProcessor")
-    override val txSink: Indexer.TxSink get() = unsupported("txSink")
+    override val txSource: Indexer.TxSource get() = unsupported("txSource")
     fun withCompactor(compactor: Compactor.ForDatabase) = copy(compactorOrNull = compactor)
 }
 

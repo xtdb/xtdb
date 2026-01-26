@@ -1,4 +1,4 @@
-(ns xtdb.tx-sink-test
+(ns xtdb.tx-source-test
   (:require [clojure.test :as t]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
@@ -13,7 +13,7 @@
             [xtdb.util :as util]
             [xtdb.log :as xt-log]
             [xtdb.trie-catalog :as trie-cat]
-            [xtdb.tx-sink :as tx-sink])
+            [xtdb.tx-source :as tx-source])
   (:import [xtdb.api.log Log$Message]
            [xtdb.table TableRef]
            [xtdb.test.log RecordingLog]))
@@ -24,11 +24,11 @@
   ([msg] (decode-record msg :json))
   ([msg fmt] (-> msg Log$Message/.encode (xtdb.serde/read-transit fmt))))
 
-(t/deftest test-tx-sink-output
+(t/deftest test-tx-source-output
   (with-open [node (xtn/start-node (merge tu/*node-opts*
-                                          {:tx-sink {:enable true
-                                                     :output-log [::tu/recording {}]
-                                                     :format :transit+json}}))]
+                                          {:tx-source {:enable true
+                                                       :output-log [::tu/recording {}]
+                                                       :format :transit+json}}))]
     (let [^RecordingLog output-log (tu/get-output-log node)]
       (t/is (= [] (.getMessages output-log)))
 
@@ -76,12 +76,12 @@
                  (->> docs-payloads (mapcat :ops) (map :op))))
         (t/is (= [:put] (->> other-payloads (mapcat :ops) (map :op))))))))
 
-(t/deftest test-tx-sink-formats
+(t/deftest test-tx-source-formats
   (t/testing "transit+json"
     (with-open [node (xtn/start-node (merge tu/*node-opts*
-                                            {:tx-sink {:enable true
-                                                       :output-log [::tu/recording {}]
-                                                       :format :transit+json}}))]
+                                            {:tx-source {:enable true
+                                                         :output-log [::tu/recording {}]
+                                                         :format :transit+json}}))]
       (let [^RecordingLog output-log (tu/get-output-log node)]
         (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1, :value "test"}]])
         (let [msg (-> (.getMessages output-log) first (decode-record :json))]
@@ -89,20 +89,20 @@
           (t/is (= "xtdb" (-> msg :source :db)))))))
   (t/testing "transit+msgpack"
     (with-open [node (xtn/start-node (merge tu/*node-opts*
-                                            {:tx-sink {:enable true
-                                                       :output-log [::tu/recording {}]
-                                                       :format :transit+msgpack}}))]
+                                            {:tx-source {:enable true
+                                                         :output-log [::tu/recording {}]
+                                                         :format :transit+msgpack}}))]
       (let [^RecordingLog output-log (tu/get-output-log node)]
         (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1, :value "test"}]])
         (let [msg (-> (.getMessages output-log) first (decode-record :msgpack))]
           (t/is (= #{:transaction :system-time :source :tables} (set (keys msg))))
           (t/is (= "xtdb" (-> msg :source :db))))))))
 
-(t/deftest test-tx-sink-output-with-tx
+(t/deftest test-tx-source-output-with-tx
   (with-open [node (xtn/start-node (merge tu/*node-opts*
-                                          {:tx-sink {:enable true
-                                                     :output-log [::tu/recording {}]
-                                                     :format :transit+json}}))]
+                                          {:tx-source {:enable true
+                                                       :output-log [::tu/recording {}]
+                                                       :format :transit+json}}))]
     (let [^RecordingLog output-log (tu/get-output-log node)]
       ;; TODO: Remove once #5012 is solved
       (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
@@ -126,11 +126,11 @@
                  (->> docs-payloads (mapcat :ops) (map :op))))
         (t/is (= [:put] (->> other-payloads (mapcat :ops) (map :op))))))))
 
-(t/deftest test-tx-sink-block-idx-increments
+(t/deftest test-tx-source-block-idx-increments
   (with-open [node (xtn/start-node (merge tu/*node-opts*
-                                          {:tx-sink {:enable true
-                                                     :output-log [::tu/recording {}]
-                                                     :format :transit+json}}))]
+                                          {:tx-source {:enable true
+                                                       :output-log [::tu/recording {}]
+                                                       :format :transit+json}}))]
     (let [^RecordingLog output-log (tu/get-output-log node)]
       (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1}]])
       (t/is (= 0 (-> (.getMessages output-log) first decode-record :source :block-idx)))
@@ -140,15 +140,15 @@
       (xt/execute-tx node [[:put-docs :docs {:xt/id :doc2}]])
       (t/is (= 1 (-> (.getMessages output-log) last decode-record :source :block-idx))))))
 
-(t/deftest test-tx-sink-disabled
+(t/deftest test-tx-source-disabled
   (with-open [node (xtn/start-node tu/*node-opts*)]
     (t/is (nil? (tu/get-output-log node)))))
 
-(t/deftest test-tx-sink-multi-db
-  (with-open [node (xtn/start-node {:tx-sink {:enable true
-                                              :db-name "secondary"
-                                              :output-log [::tu/recording {}]
-                                              :format :transit+json}})]
+(t/deftest test-tx-source-multi-db
+  (with-open [node (xtn/start-node {:tx-source {:enable true
+                                                :db-name "secondary"
+                                                :output-log [::tu/recording {}]
+                                                :format :transit+json}})]
     (t/testing "not enabled for primary db"
       (t/is (nil? (tu/get-output-log node))))
     (t/testing "enabled for secondary db"
@@ -160,21 +160,21 @@
         (jdbc/execute! secondary ["INSERT INTO docs RECORDS {_id: 1}"])
         (t/is (= 1 (count (.getMessages output-log))))))))
 
-(t/deftest test-tx-sink-restart
-  (t/testing "after restart, tx-sink does not resend old messages"
+(t/deftest test-tx-source-restart
+  (t/testing "after restart, tx-source does not resend old messages"
     (util/with-tmp-dirs #{local-path}
       (let [messages (with-open [node (xtn/start-node {:log [:local {:path (.resolve local-path "log")}]
-                                                       :tx-sink {:enable true
-                                                                 :output-log [::tu/recording {}]
-                                                                 :format :transit+json}})]
+                                                       :tx-source {:enable true
+                                                                   :output-log [::tu/recording {}]
+                                                                   :format :transit+json}})]
                        (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1}]])
                        (let [^RecordingLog output-log (tu/get-output-log node)]
                          (.getMessages output-log)))]
         (t/is (= 1 (count messages)))
         (with-open [node (xtn/start-node {:log [:local {:path (.resolve local-path "log")}]
-                                          :tx-sink {:enable true
-                                                    :output-log [::tu/recording {:messages messages}]
-                                                    :format :transit+json}})]
+                                          :tx-source {:enable true
+                                                      :output-log [::tu/recording {:messages messages}]
+                                                      :format :transit+json}})]
           (xt-log/sync-node node #xt/duration "PT1S")
           (let [^RecordingLog output-log (tu/get-output-log node)]
             (t/is (= 1 (count (.getMessages output-log))))
@@ -191,7 +191,7 @@
             live-index (.getLiveIndex xtdb-db)
             live-table (.liveTable live-index #xt/table docs)
             live-rel (.getLiveRelation live-table)
-            rows (tx-sink/read-relation-rows live-rel)]
+            rows (tx-source/read-relation-rows live-rel)]
 
         (t/is (= 3 (count rows)))
 
@@ -233,12 +233,12 @@
             event-values #(get-in % [:doc :value])]
         (t/is (= [0 1] (map :block-idx blocks)))
         (let [{:keys [tables]} (first blocks)
-              events (tx-sink/read-l0-events allocator bp tables)
+              events (tx-source/read-l0-events allocator bp tables)
               foo-events (table-events "foo" events)]
           (t/is (= 1 (count foo-events)))
           (t/is (= #{"first"} (->> foo-events (map event-values) set))))
         (let [{:keys [tables]} (second blocks)
-              events (tx-sink/read-l0-events allocator bp tables)
+              events (tx-source/read-l0-events allocator bp tables)
               foo-events (table-events "foo" events)]
           (t/is (= 2 (count foo-events)))
           (t/is (= #{"second" "third"} (->> foo-events (map event-values) set))))))))
@@ -253,7 +253,7 @@
                 {:table :table-b :event {:system-from t1 :id 10}}
                 {:table :table-b :event {:system-from t2 :id 20}}
                 {:table :table-b :event {:system-from t2 :id 30}}]
-        grouped (tx-sink/group-events-by-system-time events)]
+        grouped (tx-source/group-events-by-system-time events)]
 
     (t/testing "returns a seq with system-from as keys"
       (t/is (= [t1 t2 t3] (map first grouped))))
@@ -278,16 +278,16 @@
 (t/deftest test-events->tx-output-requires-txs-table
   (let [t1 #inst "2020-01-01T00:00:00Z"
         table->events {#xt/table "xtdb/foo" [{:doc {:xt/id 1}}]}]
-    (t/is (anomalous? [:fault :xtdb.tx-sink/missing-txs-table
+    (t/is (anomalous? [:fault :xtdb.tx-source/missing-txs-table
                        "Expected xt.txs table"]
-                      (tx-sink/events->tx-output t1 table->events "xtdb" 0 identity)))))
+                      (tx-source/events->tx-output t1 table->events "xtdb" 0 identity)))))
 
 (t/deftest test-events->tx-output-requires-exactly-one-txs-event
   (let [t1 #inst "2020-01-01T00:00:00Z"
         table->events {#xt/table "xt/txs" [{:doc {:xt/id 1}} {:doc {:xt/id 2}}]}]
-    (t/is (anomalous? [:fault :xtdb.tx-sink/unexpected-txs-count
+    (t/is (anomalous? [:fault :xtdb.tx-source/unexpected-txs-count
                        "Expected exactly 1 xt.txs event"]
-                      (tx-sink/events->tx-output t1 table->events "xtdb" 0 identity)))))
+                      (tx-source/events->tx-output t1 table->events "xtdb" 0 identity)))))
 
 (t/deftest test-events->tx-output-produces-valid-tx-key
   (let [t1 #inst "2020-01-01T00:00:00Z"
@@ -296,8 +296,8 @@
                                             :iid (util/->iid 42)
                                             :valid-from t1
                                             :valid-to nil}]}
-        encode-fn (tx-sink/->encode-fn :transit+json)
-        {:keys [tx-key]} (tx-sink/events->tx-output t1 table->events "xtdb" 0 encode-fn)]
+        encode-fn (tx-source/->encode-fn :transit+json)
+        {:keys [tx-key]} (tx-source/events->tx-output t1 table->events "xtdb" 0 encode-fn)]
     (t/is (= 42 (:tx-id tx-key)) "tx-key should have correct tx-id")))
 
 (t/deftest test-initial-scan-disabled
@@ -306,9 +306,9 @@
     (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                       :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
                                       :compactor {:threads 0}
-                                      :tx-sink {:enable true
-                                                :output-log [::tu/recording {}]
-                                                :format :transit+json}})]
+                                      :tx-source {:enable true
+                                                  :output-log [::tu/recording {}]
+                                                  :format :transit+json}})]
       (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
       (tu/flush-block! node))
 
@@ -316,10 +316,10 @@
     (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                       :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
                                       :compactor {:threads 0}
-                                      :tx-sink {:enable true
-                                                :initial-scan false
-                                                :output-log [::tu/recording {}]
-                                                :format :transit+json}})]
+                                      :tx-source {:enable true
+                                                  :initial-scan false
+                                                  :output-log [::tu/recording {}]
+                                                  :format :transit+json}})]
       (xt-log/sync-node node #xt/duration "PT5S")
 
       (let [^RecordingLog output-log (tu/get-output-log node)
@@ -330,10 +330,10 @@
     (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                       :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
                                       :compactor {:threads 0}
-                                      :tx-sink {:enable true
-                                                :initial-scan true
-                                                :output-log [::tu/recording {}]
-                                                :format :transit+json}})]
+                                      :tx-source {:enable true
+                                                  :initial-scan true
+                                                  :output-log [::tu/recording {}]
+                                                  :format :transit+json}})]
       (xt-log/sync-node node #xt/duration "PT5S")
 
       (let [^RecordingLog output-log (tu/get-output-log node)
@@ -346,9 +346,9 @@
           (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                             :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
                                             :compactor {:threads 0}
-                                            :tx-sink {:enable true
-                                                      :output-log [::tu/recording {}]
-                                                      :format :transit+json}})]
+                                            :tx-source {:enable true
+                                                        :output-log [::tu/recording {}]
+                                                        :format :transit+json}})]
             ; Block with single transaction
             (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
             (tu/flush-block! node)
@@ -371,10 +371,10 @@
       (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                         :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
                                         :compactor {:threads 0}
-                                        :tx-sink {:enable true
-                                                  :initial-scan true
-                                                  :output-log [::tu/recording {}]
-                                                  :format :transit+json}})]
+                                        :tx-source {:enable true
+                                                    :initial-scan true
+                                                    :output-log [::tu/recording {}]
+                                                    :format :transit+json}})]
         (xt-log/sync-node node #xt/duration "PT5S")
 
         (let [^RecordingLog output-log (tu/get-output-log node)
@@ -404,9 +404,9 @@
           (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                             :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
                                             :compactor {:threads 0}
-                                            :tx-sink {:enable true
-                                                      :output-log [::tu/recording {}]
-                                                      :format :transit+json}})]
+                                            :tx-source {:enable true
+                                                        :output-log [::tu/recording {}]
+                                                        :format :transit+json}})]
             (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1, value: 'first'}"])
             (tu/flush-block! node)
             (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 2, value: 'second'}"])
@@ -416,10 +416,10 @@
       (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                         :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
                                         :compactor {:threads 0}
-                                        :tx-sink {:enable true
-                                                  :initial-scan true
-                                                  :output-log [::tu/recording {}]
-                                                  :format :transit+json}})]
+                                        :tx-source {:enable true
+                                                    :initial-scan true
+                                                    :output-log [::tu/recording {}]
+                                                    :format :transit+json}})]
         (xt-log/sync-node node #xt/duration "PT5S")
 
         (let [^RecordingLog output-log (tu/get-output-log node)
@@ -432,17 +432,17 @@
           (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                             :log [:local {:path (.resolve node-dir "log")}]
                                             :compactor {:threads 0}
-                                            :tx-sink {:enable true
-                                                      :initial-scan true
-                                                      :output-log [::tu/recording {}]
-                                                      :format :transit+json}})]
+                                            :tx-source {:enable true
+                                                        :initial-scan true
+                                                        :output-log [::tu/recording {}]
+                                                        :format :transit+json}})]
             (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
             (tu/flush-block! node)
             (.getMessages ^RecordingLog (tu/get-output-log node)))]
       (t/is (= 1 (count original-messages))
             "Should have 1 original message")
 
-      ; While the tx-sink is down, more blocks are added
+      ; While the tx-source is down, more blocks are added
       (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                         :log [:local {:path (.resolve node-dir "log")}]
                                         :compactor {:threads 0}})]
@@ -454,10 +454,10 @@
       (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                         :log [:local {:path (.resolve node-dir "log")}]
                                         :compactor {:threads 0}
-                                        :tx-sink {:enable true
-                                                  :initial-scan true
-                                                  :output-log [::tu/recording {:messages original-messages}]
-                                                  :format :transit+json}})]
+                                        :tx-source {:enable true
+                                                    :initial-scan true
+                                                    :output-log [::tu/recording {:messages original-messages}]
+                                                    :format :transit+json}})]
         (xt-log/sync-node node #xt/duration "PT5S")
         (let [^RecordingLog output-log (tu/get-output-log node)]
           (t/is (= 3 (count (.getMessages output-log)))))))))
@@ -482,10 +482,10 @@
     (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                       :log [:local {:path (.resolve node-dir "log")}]
                                       :compactor {:threads 0}
-                                      :tx-sink {:enable true
-                                                :initial-scan true
-                                                :output-log [::tu/recording {}]
-                                                :format :transit+json}})]
+                                      :tx-source {:enable true
+                                                  :initial-scan true
+                                                  :output-log [::tu/recording {}]
+                                                  :format :transit+json}})]
       (xt-log/sync-node node #xt/duration "PT5S")
 
       (let [^RecordingLog output-log (tu/get-output-log node)
@@ -495,30 +495,30 @@
 
 (t/deftest test-initial-scan-with-no-block-files
   (with-open [node (xtn/start-node {:compactor {:threads 0}
-                                    :tx-sink {:enable true
-                                              :initial-scan true
-                                              :output-log [::tu/recording {}]
-                                              :format :transit+json}})]
+                                    :tx-source {:enable true
+                                                :initial-scan true
+                                                :output-log [::tu/recording {}]
+                                                :format :transit+json}})]
     (let [^RecordingLog output-log (tu/get-output-log node)
           msgs (->> (.getMessages output-log) (map decode-record))]
       (t/is (empty? msgs) "Should have no messages when no blocks exist"))))
 
 (t/deftest test-node-restart-partially-from-block
-  ; TxSink processes 1 message from the live index but doesn't flush
+  ; TxSource processes 1 message from the live index but doesn't flush
   (util/with-tmp-dirs #{node-dir}
     (let [original-messages
           (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                             :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
                                             :compactor {:threads 1}
-                                            :tx-sink {:enable true
-                                                      :output-log [::tu/recording {}]
-                                                      :format :transit+json}})]
+                                            :tx-source {:enable true
+                                                        :output-log [::tu/recording {}]
+                                                        :format :transit+json}})]
             ; Block with single transaction
             (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
             (.getMessages ^RecordingLog (tu/get-output-log node)))]
       (t/is (= 1 (count original-messages)) "Should have 1 original message")
 
-      ; Non-TxSink node pushes 1 more tx and flushes
+      ; Non-TxSource node pushes 1 more tx and flushes
       (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                         :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
                                         :compactor {:threads 0}})]
@@ -527,9 +527,9 @@
       (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                         :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
                                         :compactor {:threads 0}
-                                        :tx-sink {:enable true
-                                                  :output-log [::tu/recording {:messages original-messages}]
-                                                  :format :transit+json}})]
+                                        :tx-source {:enable true
+                                                    :output-log [::tu/recording {:messages original-messages}]
+                                                    :format :transit+json}})]
         (xt-log/sync-node node #xt/duration "PT5S")
         (let [^RecordingLog output-log (tu/get-output-log node)
               msgs (->> (.getMessages output-log) (map decode-record))]
@@ -545,9 +545,9 @@
    {:num-tests tu/property-test-iterations}
    (prop/for-all [batches gen-batches]
                  (with-open [node (xtn/start-node (merge tu/*node-opts*
-                                                         {:tx-sink {:enable true
-                                                                    :output-log [::tu/recording {}]
-                                                                    :format :transit+json}}))]
+                                                         {:tx-source {:enable true
+                                                                      :output-log [::tu/recording {}]
+                                                                      :format :transit+json}}))]
                    (let [non-empty-batches (filter (some-fn keyword? seq) batches)]
                      (doseq [docs non-empty-batches]
                        (xt/execute-tx node [(into [:put-docs :docs] docs)])
@@ -584,14 +584,14 @@
                          (xt/execute-tx node [(into [:put-docs :docs] docs)])
                          (tu/finish-block! node)))
 
-                     ; Backfill w/ TxSink
+                     ; Backfill w/ TxSource
                      (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
                                                        :log [:local {:path (.resolve node-dir "log") :instant-src (tu/->mock-clock)}]
                                                        :compactor {:threads 1}
-                                                       :tx-sink {:enable true
-                                                                 :initial-scan true
-                                                                 :output-log [::tu/recording {}]
-                                                                 :format :transit+json}})]
+                                                       :tx-source {:enable true
+                                                                   :initial-scan true
+                                                                   :output-log [::tu/recording {}]
+                                                                   :format :transit+json}})]
                        (xt-log/sync-node node #xt/duration "PT1S")
                        (let [^RecordingLog output-log (tu/get-output-log node)
                              messages (map decode-record (.getMessages output-log))
@@ -635,7 +635,7 @@
               trie-cat (.getTrieCatalog xtdb-db)
               allocator (.getAllocator node)
               [{:keys [tables]}] (trie-cat/l0-blocks trie-cat)
-              events (tx-sink/read-l0-events allocator bp tables)
+              events (tx-source/read-l0-events allocator bp tables)
               fmt-instant #(some-> % str (subs 11 23))]
 
           (println "\n=== Events as stored in L0 ===")
@@ -652,7 +652,7 @@
                       (pr-str doc))))
 
           (println "\n=== After group-events-by-system-time ===\n")
-          (let [grouped (tx-sink/group-events-by-system-time events)]
+          (let [grouped (tx-source/group-events-by-system-time events)]
             (doseq [[system-time table->events] grouped]
               (println "TX at" (fmt-instant system-time))
               (doseq [[^TableRef table-ref ops] table->events]
