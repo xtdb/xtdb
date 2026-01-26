@@ -9,7 +9,8 @@
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (java.time Duration Instant)
-           (java.util UUID)))
+           (java.util UUID)
+           (java.util.concurrent.atomic AtomicLong)))
 
 ;; See fusion.md for benchmark documentation
 
@@ -316,6 +317,66 @@
 (defn exec-cumulative-registration [node start end opts]
   (run-query node (query-cumulative-registration-sqlvec {:start start :end end}) opts))
 
+;; OLTP mixed workload procs
+
+(defn proc-insert-readings
+  "Insert a batch of readings for random systems"
+  [{:keys [node random !state]}]
+  (let [{:keys [system-ids base-time ^AtomicLong !reading-idx]} @!state
+        idx (.getAndIncrement !reading-idx)
+        start (.plus ^Instant base-time (Duration/ofMinutes (* 5 idx)))
+        end (.plus start (Duration/ofMinutes 5))
+        batch-size (min 100 (count system-ids))
+        batch (vec (repeatedly batch-size #(random/uniform-nth random system-ids)))]
+    (xt/submit-tx node [(->readings-docs random batch idx start end)])))
+
+(defn proc-update-system
+  "Update a random system's fields"
+  [{:keys [node random !state]}]
+  (let [{:keys [system-ids]} @!state
+        sid (random/uniform-nth random system-ids)]
+    (xt/execute-tx node
+                   [[:sql "UPDATE system SET updated_time = ?, set_max_w = ? WHERE _id = ?"
+                     [(double (System/currentTimeMillis))
+                      (random-float random 500 5000)
+                      sid]]])))
+
+(defn proc-query-system-settings
+  "Query a random system's settings"
+  [{:keys [node random !state]}]
+  (let [{:keys [system-ids]} @!state
+        sid (random/uniform-nth random system-ids)]
+    (exec-system-settings node sid {})))
+
+(defn proc-query-readings
+  "Query readings for a random system over a time window"
+  [{:keys [node random !state]}]
+  (let [{:keys [system-ids min-valid-time max-valid-time]} @!state]
+    (when (and min-valid-time max-valid-time)
+      (let [sid (random/uniform-nth random system-ids)]
+        (exec-readings-for-system node sid min-valid-time max-valid-time {})))))
+
+(defn proc-query-system-count
+  "Run the system count over time aggregation"
+  [{:keys [node !state]}]
+  (let [{:keys [min-valid-time max-valid-time]} @!state]
+    (when (and min-valid-time max-valid-time)
+      (exec-system-count-over-time node min-valid-time max-valid-time {}))))
+
+(defn proc-query-range-bins
+  "Run the range_bins aggregation query"
+  [{:keys [node !state]}]
+  (let [{:keys [min-valid-time max-valid-time]} @!state]
+    (when (and min-valid-time max-valid-time)
+      (exec-readings-range-bins node min-valid-time max-valid-time {}))))
+
+(defn proc-query-registration
+  "Run the cumulative registration query"
+  [{:keys [node !state]}]
+  (let [{:keys [min-valid-time max-valid-time]} @!state]
+    (when (and min-valid-time max-valid-time)
+      (exec-cumulative-registration node min-valid-time max-valid-time {}))))
+
 (defn ->query-stage [query-type]
   {:t :call
    :stage (keyword (str "query-" (name query-type)))
@@ -332,17 +393,21 @@
 
 (defmethod b/cli-flags :fusion [_]
   [[nil "--devices DEVICES" "Number of systems" :parse-fn parse-long :default 10000]
-   [nil "--readings READINGS" "Readings per system" :parse-fn parse-long :default 1000]
+   [nil "--readings READINGS" "Readings per system (load phase)" :parse-fn parse-long :default 1000]
    [nil "--batch-size BATCH" "Insert batch size" :parse-fn parse-long :default 1000]
    [nil "--update-batch-size BATCH" "Update batch size" :parse-fn parse-long :default 30]
-   [nil "--updates-per-system UPDATES" "UPDATE rounds" :parse-fn parse-long :default 10]
+   [nil "--updates-per-system UPDATES" "UPDATE rounds (load phase)" :parse-fn parse-long :default 10]
+   ["-d" "--duration DURATION" "OLTP phase duration" :parse-fn #(Duration/parse %) :default (Duration/parse "PT30S")]
+   ["-t" "--threads THREADS" "OLTP thread count" :parse-fn parse-long :default 4]
+   [nil "--staged-only" "Run staged workload only, skip OLTP" :id :staged-only?]
    ["-h" "--help"]])
 
 (defmethod b/->benchmark :fusion [_ {:keys [devices readings batch-size update-batch-size
-                                            updates-per-system seed no-load?]
+                                            updates-per-system seed no-load? duration threads staged-only?]
                                      :or {seed 0 batch-size 1000 update-batch-size 30
-                                          updates-per-system 10}}]
-  (let [setup-rng (java.util.Random. seed)
+                                          updates-per-system 10 duration (Duration/parse "PT30S") threads 4}}]
+  (let [^Duration duration (cond-> duration (string? duration) Duration/parse)
+        setup-rng (java.util.Random. seed)
         base-time (.minus (Instant/now) (Duration/ofDays 3))
         system-ids (generate-ids setup-rng devices)
         site-ids (mapv #(str "SITE-" %) (range devices))
@@ -353,13 +418,17 @@
         test-suite-id (random/next-uuid setup-rng)
         test-case-ids (generate-ids setup-rng 5)] ; 5 test cases per suite
     (log/info {:devices devices :readings readings :batch-size batch-size
-               :update-batch-size update-batch-size :updates-per-system updates-per-system})
+               :update-batch-size update-batch-size :updates-per-system updates-per-system
+               :duration duration :threads threads :staged-only? staged-only?})
     {:title "Fusion benchmark"
      :benchmark-type :fusion
      :seed seed
      :parameters {:devices devices :readings readings :batch-size batch-size
-                  :update-batch-size update-batch-size :updates-per-system updates-per-system}
-     :->state #(do {:!state (atom {:system-ids system-ids})})
+                  :update-batch-size update-batch-size :updates-per-system updates-per-system
+                  :duration duration :threads threads :staged-only? staged-only?}
+     :->state #(do {:!state (atom {:system-ids system-ids
+                                   :base-time base-time
+                                   :!reading-idx (AtomicLong. readings)})})
      :tasks (concat
              (when-not no-load?
                [(->init-tables-stage system-ids site-ids organisation-ids device-series-ids device-model-ids device-ids test-suite-id test-case-ids update-batch-size base-time)
@@ -382,12 +451,36 @@
                                           :max-valid-time max-vt
                                           :min-valid-time min-vt})))}]
 
-             [;; Production queries from design partner
-              (->query-stage :system-settings)
-              (->query-stage :readings-for-system)
-              (->query-stage :system-count-over-time)
-              (->query-stage :readings-range-bins)
-              (->query-stage :cumulative-registration)])}))
+             (when staged-only?
+               [;; Staged queries (sequential, non-interleaved)
+                (->query-stage :system-settings)
+                (->query-stage :readings-for-system)
+                (->query-stage :system-count-over-time)
+                (->query-stage :readings-range-bins)
+                (->query-stage :cumulative-registration)])
+
+             (when-not staged-only?
+               [;; OLTP mixed workload - interleaved reads and writes
+                {:t :concurrently
+                 :stage :oltp
+                 :duration duration
+                 :join-wait (Duration/ofMinutes 1)
+                 :thread-tasks [{:t :pool
+                                 :duration duration
+                                 :join-wait (Duration/ofMinutes 1)
+                                 :thread-count threads
+                                 :think Duration/ZERO
+                                 :pooled-task {:t :pick-weighted
+                                               :choices [;; Writes (30%)
+                                                         [20.0 {:t :call, :transaction :insert-readings, :f (b/wrap-in-catch proc-insert-readings)}]
+                                                         [10.0 {:t :call, :transaction :update-system, :f (b/wrap-in-catch proc-update-system)}]
+                                                         ;; Reads (70%)
+                                                         [25.0 {:t :call, :transaction :query-system-settings, :f (b/wrap-in-catch proc-query-system-settings)}]
+                                                         [20.0 {:t :call, :transaction :query-readings, :f (b/wrap-in-catch proc-query-readings)}]
+                                                         [10.0 {:t :call, :transaction :query-system-count, :f (b/wrap-in-catch proc-query-system-count)}]
+                                                         [10.0 {:t :call, :transaction :query-range-bins, :f (b/wrap-in-catch proc-query-range-bins)}]
+                                                         [5.0 {:t :call, :transaction :query-registration, :f (b/wrap-in-catch proc-query-registration)}]]}}]}
+                {:t :call, :stage :sync-after-oltp, :f (fn [{:keys [node]}] (b/sync-node node))}]))}))
 
 ;; ============================================================================
 ;; Tests

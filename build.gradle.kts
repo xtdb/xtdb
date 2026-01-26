@@ -703,7 +703,10 @@ createBench("fusion", mapOf(
     "readingCount" to "--readings",
     "batchSize" to "--batch-size",
     "updateBatchSize" to "--update-batch-size",
-    "updatesPerDevice" to "--updates-per-device"
+    "updatesPerSystem" to "--updates-per-system",
+    "duration" to "--duration",
+    "threads" to "--threads",
+    "stagedOnly" to "--staged-only"
 ))
 
 createBench("patch", mapOf("docCount" to "--doc-count", "patchCount" to "--patch-count"))
