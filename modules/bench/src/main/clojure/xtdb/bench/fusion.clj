@@ -256,6 +256,62 @@
                system-time
                (conj result [idx system-time]))))))
 
+(defn do-update-round
+  "Execute a single update round for given systems. Returns remaining active systems (with attrition)."
+  [node random active-systems update-batch-size]
+  (doseq [batch (partition-all update-batch-size active-systems)]
+    (doseq [sid batch]
+      (xt/execute-tx node
+                     [[:sql "UPDATE system SET updated_time = ?, set_max_w = ? WHERE _id = ?"
+                       [(double (System/currentTimeMillis))
+                        (random-float random 500 5000)
+                        sid]]])))
+  ;; Return 90% of systems for next round (attrition)
+  (->> active-systems
+       (random/shuffle random)
+       (take (int (* 0.9 (count active-systems))))
+       vec))
+
+(defn ->ingest-interleaved-stage
+  "Interleave readings ingestion with system updates.
+   Updates happen every (readings/updates-per-system) intervals, simulating
+   realistic mixed workload where readings and updates arrive concurrently."
+  [system-ids readings updates-per-system batch-size update-batch-size base-time]
+  {:t :call, :stage :ingest-interleaved
+   :f (fn [{:keys [node random]}]
+        (log/infof "Inserting %d readings with %d interleaved update rounds" readings updates-per-system)
+        (let [intervals (->> (tu/->instants :minute 5 base-time)
+                             (partition 2 1)
+                             (take readings))
+              batches (partition-all batch-size system-ids)
+              base-system-time (Instant/now)
+              system-times (generate-reading-system-times random readings base-system-time)
+              update-interval (max 1 (quot readings updates-per-system))]
+          (loop [reading-data (map vector system-times intervals)
+                 active-systems (vec system-ids)
+                 update-round 0]
+            (when-let [[[idx system-time] [start end]] (first reading-data)]
+              ;; Insert readings
+              (when (zero? (mod idx 1000))
+                (log/infof "Readings batch %d" idx))
+              (doseq [batch batches]
+                (xt/submit-tx node
+                              [(->readings-docs random (vec batch) idx start end)]
+                              {:system-time system-time}))
+              ;; Do update round at intervals (if we have rounds remaining)
+              (let [should-update? (and (pos? (count active-systems))
+                                        (< update-round updates-per-system)
+                                        (zero? (mod (inc idx) update-interval)))
+                    new-active (if should-update?
+                                 (do
+                                   (log/infof "Update round %d at reading %d: %d active systems"
+                                              (inc update-round) idx (count active-systems))
+                                   (do-update-round node random active-systems update-batch-size))
+                                 active-systems)
+                    new-round (if should-update? (inc update-round) update-round)]
+                (recur (rest reading-data) new-active new-round))))))})
+
+;; Keep separate stages for backwards compat / testing
 (defn ->ingest-readings-stage [system-ids readings batch-size base-time]
   {:t :call, :stage :ingest-readings
    :f (fn [{:keys [node random]}]
@@ -284,18 +340,8 @@
             (log/infof "Update round %d: %d active systems"
                        (- updates-per-system rounds-remaining -1)
                        (count active-systems))
-            (doseq [batch (partition-all update-batch-size active-systems)]
-              (doseq [sid batch]
-                (xt/execute-tx node
-                              [[:sql "UPDATE system SET updated_time = ?, set_max_w = ? WHERE _id = ?"
-                                [(double (System/currentTimeMillis))
-                                 (random-float random 500 5000)
-                                 sid]]])))
-            (recur (->> active-systems
-                        (random/shuffle random)
-                        (take (int (* 0.9 (count active-systems))))
-                        vec)
-                   (dec rounds-remaining)))))})
+            (let [remaining (do-update-round node random active-systems update-batch-size)]
+              (recur remaining (dec rounds-remaining))))))})
 
 (defn ->sync-stage []
   {:t :call, :stage :sync
@@ -442,8 +488,7 @@
      :tasks (concat
              (when-not no-load?
                [(->init-tables-stage system-ids site-ids organisation-ids device-series-ids device-model-ids device-ids test-suite-id test-case-ids update-batch-size base-time)
-                (->ingest-readings-stage system-ids readings batch-size base-time)
-                (->update-system-stage system-ids updates-per-system update-batch-size)
+                (->ingest-interleaved-stage system-ids readings updates-per-system batch-size update-batch-size base-time)
                 (->sync-stage)
                 (->compact-stage)])
 
