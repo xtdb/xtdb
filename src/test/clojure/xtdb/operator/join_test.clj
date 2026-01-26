@@ -1289,3 +1289,28 @@
                                [:rename {:columns {_id foo}} [:scan {:table #xt/table foo, :columns [_id a]}]]
                                [:rename {:columns {_id bar}} [:scan {:table #xt/table bar, :columns [_id b]}]]]]
                             {:node node}))))))
+
+;; Regression test for #5153 fix: semi-join IID pushdown for UUID columns
+;; The bug was that VectorType was being compared against ArrowType (#xt.arrow/type vs #xt/type),
+;; which never matched, so IID pushdown was disabled for all UUID _id lookups.
+(t/deftest semi-join-uuid-iid-pushdown-test
+  (util/with-open [node (xtn/start-node)]
+    (let [doc-count 1000
+          ids (repeatedly doc-count random-uuid)
+          lookup-ids (take 3 ids)]
+
+      (xt/execute-tx node [(into [:put-docs :docs]
+                                 (map-indexed (fn [i id] {:xt/id id :idx i}) ids))])
+
+      (let [result (xt/q node
+                         (into ["EXPLAIN ANALYZE SELECT d._id, d.idx FROM docs d WHERE d._id IN (?, ?, ?)"]
+                               lookup-ids))
+            scan-op (->> result (filter #(= (:op %) :scan)) first)]
+
+        (t/is (some? scan-op) "should have a scan operator")
+
+        ;; With IID pushdown working, scan-row-count should match the number of IDs in the IN clause
+        ;; Without pushdown (the bug), it would scan all 1000 rows
+        (t/is (= 3 (:row-count scan-op))
+              (format "scan should only read %d rows with IID pushdown, not full table scan (got %d)"
+                      (count lookup-ids) (:row-count scan-op)))))))
