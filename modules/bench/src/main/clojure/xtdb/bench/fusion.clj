@@ -277,15 +277,25 @@
 (defn ->update-system-stage [system-ids updates-per-system update-batch-size]
   {:t :call, :stage :update-system
    :f (fn [{:keys [node random]}]
-        (log/infof "Running %d UPDATE rounds" updates-per-system)
-        (dotimes [round updates-per-system]
-          (doseq [batch (partition-all update-batch-size system-ids)]
-            (doseq [sid batch]
-              (xt/execute-tx node
-                             [[:sql "UPDATE system SET updated_time = ?, set_max_w = ? WHERE _id = ?"
-                               [(double (System/currentTimeMillis))
-                                (random-float random 500 5000)
-                                sid]]])))))})
+        (log/infof "Running %d UPDATE rounds with system attrition (10%% dropout per round)" updates-per-system)
+        (loop [active-systems (vec system-ids)
+               rounds-remaining updates-per-system]
+          (when (and (seq active-systems) (pos? rounds-remaining))
+            (log/infof "Update round %d: %d active systems"
+                       (- updates-per-system rounds-remaining -1)
+                       (count active-systems))
+            (doseq [batch (partition-all update-batch-size active-systems)]
+              (doseq [sid batch]
+                (xt/execute-tx node
+                              [[:sql "UPDATE system SET updated_time = ?, set_max_w = ? WHERE _id = ?"
+                                [(double (System/currentTimeMillis))
+                                 (random-float random 500 5000)
+                                 sid]]])))
+            (recur (->> active-systems
+                        (random/shuffle random)
+                        (take (int (* 0.9 (count active-systems))))
+                        vec)
+                   (dec rounds-remaining)))))})
 
 (defn ->sync-stage []
   {:t :call, :stage :sync
