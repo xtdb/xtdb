@@ -33,7 +33,7 @@
            (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            (xtdb.database Database Database$Catalog)
            (xtdb.error Anomaly$Caller Interrupted)
-           (xtdb.indexer Indexer Indexer$ForDatabase Indexer$TxSink LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
+           (xtdb.indexer Indexer Indexer$ForDatabase Indexer$TxSource LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
            (xtdb.table TableRef)
            (xtdb.query IQuerySource PreparedQuery)))
 
@@ -636,9 +636,9 @@
              :tracer (ig/ref :xtdb/tracer)}
             opts)})
 
-(defn- commit [tx-key ^LiveIndex$Tx live-idx-tx ^Indexer$TxSink tx-sink]
+(defn- commit [tx-key ^LiveIndex$Tx live-idx-tx ^Indexer$TxSource tx-source]
   (.commit live-idx-tx)
-  (some-> tx-sink (.onCommit tx-key live-idx-tx)))
+  (some-> tx-source (.onCommit tx-key live-idx-tx)))
 
 (defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
                                ^Database db, ^LiveIndex live-index, table-catalog
@@ -673,7 +673,7 @@
               (when tx-error-counter
                 (.increment tx-error-counter))
               (add-tx-row! db-name live-idx-tx tx-key err user-metadata)
-              (commit tx-key live-idx-tx (.getTxSink db)))
+              (commit tx-key live-idx-tx (.getTxSource db)))
 
             (serde/->tx-aborted msg-id default-system-time err))
 
@@ -685,7 +685,7 @@
                   (.abort live-idx-tx)
                   (util/with-open [live-idx-tx (.startTx live-index tx-key)]
                     (add-tx-row! db-name live-idx-tx tx-key skipped-exn user-metadata)
-                    (commit tx-key live-idx-tx (.getTxSink db)))
+                    (commit tx-key live-idx-tx (.getTxSource db)))
 
                   (serde/->tx-aborted msg-id system-time skipped-exn))
 
@@ -744,19 +744,19 @@
                         (when tx-error-counter
                           (.increment tx-error-counter))
                         (add-tx-row! db-name live-idx-tx tx-key e user-metadata)
-                        (commit tx-key live-idx-tx (.getTxSink db)))
+                        (commit tx-key live-idx-tx (.getTxSource db)))
 
                       (serde/->tx-aborted msg-id system-time e))
 
                     (do
                       (add-tx-row! db-name live-idx-tx tx-key nil user-metadata)
-                      (commit tx-key live-idx-tx (.getTxSink db))
+                      (commit tx-key live-idx-tx (.getTxSource db))
                       (serde/->tx-committed msg-id system-time)))))))))))
 
   (addTxRow [_ tx-key e]
     (util/with-open [live-idx-tx (.startTx live-index tx-key)]
       (add-tx-row! (.getName db) live-idx-tx tx-key e {})
-      (commit tx-key live-idx-tx (.getTxSink db)))))
+      (commit tx-key live-idx-tx (.getTxSource db)))))
 
 (defmethod ig/init-key :xtdb/indexer [_ {:keys [config, q-src, metrics-registry, ^Tracer tracer]}]
   (let [tx-timer (metrics/add-timer metrics-registry "tx.op.timer"
@@ -780,7 +780,7 @@
 (defmethod ig/expand-key ::for-db [k {:keys [base]}]
   {k {:base base
       :query-db (ig/ref :xtdb.db-catalog/for-query)
-      :tx-sink (ig/ref :xtdb.tx-sink/for-db)}})
+      :tx-source (ig/ref :xtdb.tx-source/for-db)}})
 
 (defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base,
                                     :keys [query-db]}]

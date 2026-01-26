@@ -25,7 +25,7 @@ import xtdb.database.proto.DatabaseMode
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.LogProcessor
 import xtdb.indexer.Snapshot
-import xtdb.indexer.Indexer.TxSink
+import xtdb.indexer.Indexer.TxSource
 import xtdb.metadata.PageMetadata
 import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
@@ -43,7 +43,7 @@ interface IDatabase {
     val metadataManager: PageMetadata.Factory
     val logProcessor: LogProcessor
     val compactor: Compactor.ForDatabase
-    val txSink: TxSink?
+    val txSource: TxSource?
 }
 
 data class Database(
@@ -58,7 +58,7 @@ data class Database(
 
     val logProcessorOrNull: LogProcessor?,
     private val compactorOrNull: Compactor.ForDatabase?,
-    override val txSink: TxSink?,
+    override val txSource: TxSource?,
 ): IDatabase {
     override val logProcessor: LogProcessor get() = logProcessorOrNull ?: error("log processor not initialised")
     override val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")

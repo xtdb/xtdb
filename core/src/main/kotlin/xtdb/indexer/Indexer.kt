@@ -20,7 +20,7 @@ interface Indexer : AutoCloseable {
         fun addTxRow(txKey: TransactionKey, error: Throwable?)
     }
 
-    interface TxSink {
+    interface TxSource {
         fun onCommit(txKey: TransactionKey, liveIdxTx: LiveIndex.Tx)
     }
 

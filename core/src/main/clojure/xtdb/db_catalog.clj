@@ -26,15 +26,15 @@
       :buffer-pool (ig/ref :xtdb/buffer-pool)
       :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)
       :live-index (ig/ref :xtdb.indexer/live-index)
-      :tx-sink (ig/ref :xtdb.tx-sink/for-db)}})
+      :tx-source (ig/ref :xtdb.tx-source/for-db)}})
 
 (defmethod ig/init-key ::for-query [_ {:keys [allocator db-name db-config block-cat table-cat
                                               trie-cat log buffer-pool metadata-manager
-                                              live-index tx-sink]}]
+                                              live-index tx-source]}]
   (Database. db-name db-config allocator block-cat table-cat trie-cat
              log buffer-pool metadata-manager live-index
              live-index ; snap-src
-             nil nil tx-sink))
+             nil nil tx-source))
 
 (defmethod ig/expand-key :xtdb/db-catalog [k _]
   {k {:base {:allocator (ig/ref :xtdb/allocator)
@@ -62,7 +62,7 @@
 
          ::for-query (assoc opts :db-config db-config)
 
-         :xtdb.tx-sink/for-db (assoc opts :tx-sink-conf (.getTxSink conf))
+         :xtdb.tx-source/for-db (assoc opts :tx-source-conf (.getTxSource conf))
          :xtdb.indexer/for-db opts
          :xtdb.compactor/for-db (assoc opts :mode mode)
          :xtdb.log/processor (assoc opts :indexer-conf indexer-conf :mode mode)}

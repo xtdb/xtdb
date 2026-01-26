@@ -1,4 +1,4 @@
-(ns ^:kafka xtdb.tx-sink-kafka-test
+(ns ^:kafka xtdb.tx-source-kafka-test
   (:require [clojure.test :as t]
             [next.jdbc :as jdbc]
             [xtdb.db-catalog :as db]
@@ -6,7 +6,7 @@
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
-            [xtdb.tx-sink :as tx-sink]
+            [xtdb.tx-source :as tx-source]
             [xtdb.util :as util]
             [xtdb.api :as xt])
   (:import [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
@@ -48,15 +48,15 @@
       (let [records (.poll consumer (java.time.Duration/ofSeconds 5))]
         (mapv (fn [^ConsumerRecord record] (.value record)) records)))))
 
-(t/deftest ^:integration test-tx-sink-kafka-log
+(t/deftest ^:integration test-tx-source-kafka-log
   (let [output-topic (str "xtdb.kafka-test." (random-uuid))]
     (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
                                                                         :poll-duration "PT2S"}]}
                                       :log [:in-memory]
                                       :storage [:in-memory]
                                       :compactor {:threads 0}
-                                      :tx-sink {:enable true
-                                                :output-log [:kafka {:cluster :my-kafka, :topic output-topic}]}})]
+                                      :tx-source {:enable true
+                                                  :output-log [:kafka {:cluster :my-kafka, :topic output-topic}]}})]
       (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1, a: 1, b: {c: [1, 2, 3], d: 'test'}}, {_id: 2, a: 2}, {_id: 3, a: 3}"])
       (jdbc/execute! node ["UPDATE docs SET a = 4 WHERE _id = 1"])
       (jdbc/execute! node ["DELETE FROM docs WHERE _id = 1"])
@@ -76,7 +76,7 @@
                  (->> docs-payloads (mapcat :ops) (map :op))))
         (t/is (= [:put] (->> other-payloads (mapcat :ops) (map :op))))))))
 
-(t/deftest ^:integration test-tx-sink-restart-behaviour
+(t/deftest ^:integration test-tx-source-restart-behaviour
   (util/with-tmp-dirs #{node-dir}
     (let [log-topic (str "xtdb.kafka-test." (random-uuid))
           output-topic (str "xtdb.kafka-test." (random-uuid))
@@ -85,9 +85,9 @@
                             :log [:kafka {:cluster :my-kafka :topic log-topic}]
                             :storage [:local {:path (.resolve node-dir "storage")}]
                             :compactor {:threads 0}
-                            :tx-sink {:enable true
-                                      :output-log [:kafka {:cluster :my-kafka, :topic output-topic}]
-                                      :format :transit+json}})]
+                            :tx-source {:enable true
+                                        :output-log [:kafka {:cluster :my-kafka, :topic output-topic}]
+                                        :format :transit+json}})]
       (with-open [node (xtn/start-node node-opts)]
         (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
         (let [msgs (consume-messages *bootstrap-servers* output-topic)]
@@ -102,8 +102,8 @@
           ; above + duplicate = 2
           (t/is (= 2 (count msgs))))))))
 
-(t/deftest ^:integration test-tx-sink-main-test
-  ;; Tests that tx-sink tails the main node
+(t/deftest ^:integration test-tx-source-main-test
+  ;; Tests that tx-source tails the main node
   (util/with-tmp-dirs #{node-dir}
     (let [log-topic (str "xtdb.kafka-test." (random-uuid))
           output-topic (str "xtdb.kafka-test." (random-uuid))
@@ -116,9 +116,9 @@
         (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
         (let [msgs (consume-messages *bootstrap-servers* output-topic)]
           (t/is (= 0 (count msgs))))
-        (with-open [_tx-sink-node (tx-sink/open! (merge node-opts
-                                                        {:tx-sink {:output-log [:kafka {:cluster :my-kafka, :topic output-topic}]
-                                                                   :format :transit+json}}))]
+        (with-open [_tx-source-node (tx-source/open! (merge node-opts
+                                                            {:tx-source {:output-log [:kafka {:cluster :my-kafka, :topic output-topic}]
+                                                                         :format :transit+json}}))]
           (let [msgs (consume-messages *bootstrap-servers* output-topic)]
             (t/is (= 1 (count msgs))))
           (jdbc/execute! node ["INSERT INTO docs RECORDS {_id: 1}"])
@@ -144,10 +144,10 @@
             result (promise)
             done (promise)]
         ;; Start backfill in background thread then block
-        ;; This is to simulate the tx-sink taking so long that other nodes have moved on
+        ;; This is to simulate the tx-source taking so long that other nodes have moved on
         (future
           (try
-            (binding [tx-sink/*after-block-hook*
+            (binding [tx-source/*after-block-hook*
                       (fn [block-idx]
                         (when (= block-idx 0)
                           (deliver first-block-done true)
@@ -156,10 +156,10 @@
                                                 :log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
                                                 :log [:kafka {:cluster :my-kafka :topic log-topic}]
                                                 :compactor {:threads 0}
-                                                :tx-sink {:enable true
-                                                          :initial-scan true
-                                                          :output-log [::tu/recording {}]
-                                                          :format :transit+json}})]
+                                                :tx-source {:enable true
+                                                            :initial-scan true
+                                                            :output-log [::tu/recording {}]
+                                                            :format :transit+json}})]
                 ; Works where sync & await-node don't for some reason
                 (xt/submit-tx node [[:put-docs :docs {:xt/id 2}]])
                 (deliver result (count (.getMessages ^RecordingLog (tu/get-output-log node))))))
@@ -195,7 +195,7 @@
                   "After GC, only block 1 should exist")))
 
         (deliver resume-backfill true)
-        ; TxSink will now resume and move onto indexing
+        ; TxSource will now resume and move onto indexing
 
         (t/is (= (deref result 5000 :timeout) 3))
         (t/is (not= (deref done 5000 :timeout) :timeout))))))
@@ -216,10 +216,10 @@
             result (promise)
             done (promise)]
         ;; Start backfill in background thread then block
-        ;; This is to simulate the tx-sink taking so long that other nodes have moved on
+        ;; This is to simulate the tx-source taking so long that other nodes have moved on
         (future
           (try
-            (binding [tx-sink/*after-block-hook*
+            (binding [tx-source/*after-block-hook*
                       (fn [block-idx]
                         (when (= block-idx 0)
                           (deliver first-block-done true)
@@ -228,10 +228,10 @@
                                                 :log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
                                                 :log [:kafka {:cluster :my-kafka :topic log-topic}]
                                                 :compactor {:threads 0}
-                                                :tx-sink {:enable true
-                                                          :initial-scan true
-                                                          :output-log [::tu/recording {}]
-                                                          :format :transit+json}})]
+                                                :tx-source {:enable true
+                                                            :initial-scan true
+                                                            :output-log [::tu/recording {}]
+                                                            :format :transit+json}})]
                 ; Works where sync & await-node don't for some reason
                 (xt/submit-tx node [[:put-docs :docs {:xt/id 2}]])
                 (deliver result (count (.getMessages ^RecordingLog (tu/get-output-log node))))))
@@ -254,7 +254,7 @@
         (truncate-topic log-topic)
 
         (deliver resume-backfill true)
-        ; TxSink will now resume and move onto indexing
+        ; TxSource will now resume and move onto indexing
 
         (t/is (= (deref result 5000 :timeout) 3))
         (t/is (not= (deref done 5000 :timeout) :timeout))))))
