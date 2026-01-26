@@ -116,6 +116,15 @@
                         (:id biggest-feed)]
                        (:titles biggest-feed))))}])
 
+(defn item-pk-lookup-queries
+  [item-ids]
+  (for [n [1 10 100 1000]
+        :let [ids (take n item-ids)]
+        :when (= (count ids) n)]
+    {:id (keyword (str "items-by-pks-" n))
+     :f #(xt/q % (vec (concat [(str "select _id, item$url from items where _id in " (?s n))]
+                              ids)))}))
+
 (defn user-specific-benchmarks-queries
   [{:keys [user-id user-email]}]
   [{:id :get-user-by-email
@@ -263,6 +272,10 @@
             titles (concat titles random-titles)]
         {:id (:xt/id feed)
          :titles titles}))))
+
+(defn get-random-item-ids
+  [conn n]
+  (mapv :xt/id (xt/q conn [(str "select _id from items limit " n)])))
 
 (defn profile-data
   [pstats]
@@ -422,7 +435,8 @@
                    (swap! !state merge {:max-user (get-max-user conn)
                                         :mean-user (get-mean-user conn)
                                         :active-users (get-active-users conn random scale-factor)
-                                        :biggest-feed (get-biggest-feed conn random)})))}
+                                        :biggest-feed (get-biggest-feed conn random)
+                                        :random-item-ids (get-random-item-ids conn 1000)})))}
 
            {:t :call
             :stage :profile-global-queries
@@ -445,6 +459,13 @@
                  (let [{:keys [mean-user]} @!state
                        {:keys [profile formatted]} (profile node 50 (user-specific-benchmarks-queries mean-user))]
                    (swap! !state update :profiles assoc :mean-user profile)
+                   (println formatted)))}
+           {:t :call
+            :stage :profile-pk-lookups
+            :f (fn [{:keys [node !state]}]
+                 (let [{:keys [random-item-ids]} @!state
+                       {:keys [profile formatted]} (profile node 50 (item-pk-lookup-queries random-item-ids))]
+                   (swap! !state update :profiles assoc :pk-lookups profile)
                    (println formatted)))}
            {:t :call
             :stage :inspect
