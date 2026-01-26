@@ -32,6 +32,9 @@ dependencies {
     api(libs.hiccup)
     api(libs.testcontainers)
     api(libs.kixi.stats)
+    api(libs.hugsql.core)
+    api(libs.hugsql.adapter.next.jdbc)
+    api(libs.next.jdbc)
 
     api(libs.aws.s3)
     api(libs.clj.http)

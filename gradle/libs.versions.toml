@@ -170,6 +170,8 @@ deep-diff2 = { group = "lambdaisland", name = "deep-diff2", version = "2.12.219"
 
 # Bench dependencies
 oshi-core = { group = "com.github.oshi", name = "oshi-core", version = "6.3.0" }
+hugsql-core = { group = "com.layerware", name = "hugsql-core", version = "0.5.3" }
+hugsql-adapter-next-jdbc = { group = "com.layerware", name = "hugsql-adapter-next-jdbc", version = "0.5.3" }
 hiccup = { group = "pro.juxt.clojars-mirrors.hiccup", name = "hiccup", version = "2.0.0-alpha2" }
 kixi-stats = { group = "kixi", name = "stats", version = "0.5.7" }
 

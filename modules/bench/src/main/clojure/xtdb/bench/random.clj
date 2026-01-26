@@ -99,3 +99,17 @@
 
 (defn next-local-time [^java.util.Random random]
   (LocalTime/of (next-int random 24) (next-int random 60) (next-int random 60)))
+
+(defn shuffle
+  "Shuffle a collection using the provided RNG (Fisher-Yates)."
+  [^java.util.Random random coll]
+  (let [arr (object-array coll)
+        n (alength arr)]
+    (loop [i (dec n)]
+      (when (pos? i)
+        (let [j (next-int random (inc i))
+              tmp (aget arr i)]
+          (aset arr i (aget arr j))
+          (aset arr j tmp)
+          (recur (dec i)))))
+    (vec arr)))

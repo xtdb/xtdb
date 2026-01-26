@@ -424,7 +424,16 @@
                                                                   :transactions tx-metrics)
                                            throughput (assoc :throughput throughput)
                                            timeout (assoc :timeout timeout)
-                                           (seq run-context) (merge run-context)))))))]
+                                           (seq run-context) (merge run-context)))
+                      ;; Human-readable summary
+                      (let [secs (/ total-ms 1000.0)
+                            mins (int (/ secs 60))
+                            remaining-secs (- secs (* mins 60))]
+                        (if (>= mins 1)
+                          (log/infof "Benchmark Total Time: %dm %.1fs"
+                                    mins remaining-secs)
+                          (log/infof "Benchmark Total Time: %.1fs"
+                                    secs)))))))]
         (run-with-timeout execute timeout)))))
 
 (defn sync-node
