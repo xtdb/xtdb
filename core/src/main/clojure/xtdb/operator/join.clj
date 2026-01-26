@@ -402,9 +402,9 @@
                            pushdown-iids (->> build-key-col-names
                                               (mapv (fn [col-name]
                                                       (let [^VectorType build-col-type (get build-vec-types col-name)]
-                                                        (when (or (and (= build-col-type #xt.arrow/type :varbinary)
+                                                        (when (or (and (= build-col-type #xt/type :varbinary)
                                                                        (str/ends-with? col-name "/_iid"))
-                                                                  (= build-col-type #xt.arrow/type :uuid))
+                                                                  (= build-col-type #xt/type :uuid))
                                                           (TreeSet. Bytes/COMPARATOR))))))
                            cmp-factory (->cmp-factory {:build-vec-types build-vec-types
                                                        :probe-vec-types probe-vec-types
