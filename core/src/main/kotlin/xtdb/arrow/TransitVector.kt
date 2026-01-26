@@ -24,15 +24,12 @@ class TransitVector(override val inner: VarBinaryVector) : ExtensionVector(), Me
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>) = transitReader(inner.getObject0(idx, keyFn)).read<Any>()
 
     override fun writeObject0(value: Any) =
-        when (value) {
-            is ClojureForm, is Anomaly, is Throwable,
-            -> inner.writeObject(requiringResolve("xtdb.serde/write-transit")(value) as ByteArray)
-
-            else -> throw InvalidWriteObjectException(this, value)
-        }
+        inner.writeBytes(requiringResolve("xtdb.serde/write-transit")(value) as ByteArray)
 
     override val metadataFlavours get() = listOf(this)
 
     override fun openSlice(al: BufferAllocator) = TransitVector(inner.openSlice(al))
 
+    // we override this because we want getObject to return the object itself
+    override fun valueReader() = ValueReader.ForVector(this)
 }
