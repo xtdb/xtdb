@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.expression.macro :as macro]
+            [xtdb.serde :as serde]
             [xtdb.serde.types :as st]
             [xtdb.time :as time]
             [xtdb.types :as types]
@@ -310,6 +311,15 @@
 (defmethod codegen-cast [:varbinary :utf8] [_]
   {:return-type #xt/type :utf8
    :->call-code #(do `(str->buf (str "\\x" (Hex/encodeHexString (resolve-bytes ~@%)))))})
+
+(defmethod codegen-cast [:transit :utf8] [_]
+  {:return-type #xt/type :utf8
+   :->call-code (fn [[transit-code]]
+                  `(resolve-utf8-buf
+                     (let [v# ~transit-code]
+                       (if (string? v#)
+                         v#
+                         (pr-str v#)))))})
 
 (defn resolve-string ^String [x]
   (cond
@@ -1738,6 +1748,25 @@
 
 (defmethod codegen-call [:get_field :any] [_]
   {:return-type #xt/type :null, :->call-code (constantly nil)})
+
+(defn extract-transit-field
+  "Deserializes transit, extracts field (by string or keyword), returns value or nil.
+   Handles Throwable->ex-data unwrapping for error columns."
+  [obj field-name]
+  (let [data (if (instance? Throwable obj)
+               (ex-data obj)
+               obj)]
+    (when (map? data)
+      (or (get data field-name)
+          (get data (str (symbol field-name)))))))
+
+(defmethod codegen-call [:get_field :transit] [{:keys [field]}]
+  {:return-type #xt/type [:? :transit]
+   :continue-call (fn [f [transit-code]]
+                    (let [val-sym (gensym 'val)]
+                      `(if-let [~val-sym (extract-transit-field ~transit-code ~(keyword field))]
+                         ~(f #xt/type :transit val-sym)
+                         ~(f #xt/type :null nil))))})
 
 (doseq [[op return-code] [[:== 1] [:<> -1]]]
   (defmethod codegen-call [op :struct :struct] [{[^VectorType$Struct l-type, ^VectorType$Struct r-type] :arg-types}]

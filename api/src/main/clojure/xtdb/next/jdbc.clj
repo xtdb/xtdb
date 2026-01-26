@@ -18,7 +18,9 @@
                         (cond-> v
                           (instance? Map v) (->> (into {} (keep (fn [[k v]]
                                                                   (when (some? v)
-                                                                    [(.denormalize key-fn k) v])))))
+                                                                    [(cond->> k
+                                                                       (string? k) (.denormalize key-fn))
+                                                                     v])))))
                           (instance? List v) vec
                           (instance? Set v) set))))))
 

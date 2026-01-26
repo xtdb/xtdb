@@ -62,6 +62,11 @@ abstract class VariableWidthVector : MonoVector() {
         dataBuffer.writeBytes(v.duplicate())
     }
 
+    override fun writeBytes(v: ByteArray) {
+        writeNotNull(v.size)
+        dataBuffer.writeBytes(v)
+    }
+
     override fun writeValue0(v: ValueReader) = writeBytes(v.readBytes())
 
     override fun getPointer(idx: Int, reuse: ArrowBufPointer): ArrowBufPointer =

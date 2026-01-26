@@ -198,3 +198,36 @@
   (t/is (= [{}]
            (xt/q tu/*node* "SELECT data #>> ARRAY['nonexistent'] AS v FROM json_data"))
         "non-existent path returns NULL"))
+
+(t/deftest test-transit-field-access
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
+  (try
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO bar SELECT * FROM nonexistent"]])
+    (catch Exception _))
+
+  (t/testing "-> operator returns transit"
+    (t/is (seq (xt/q tu/*node*
+                     "SELECT error->'sql' AS v FROM xt.txs WHERE error IS NOT NULL"))))
+
+  (t/testing "->> operator returns text"
+    (t/is (= [{:v "INSERT INTO bar SELECT * FROM nonexistent"}]
+             (xt/q tu/*node*
+                   "SELECT error->>'sql' AS v FROM xt.txs WHERE error IS NOT NULL"))))
+
+  (t/testing "#> path access"
+    (t/is (seq (xt/q tu/*node*
+                     "SELECT error #> ARRAY['tx-key'] AS v FROM xt.txs WHERE error IS NOT NULL"))))
+
+  (t/testing "#>> path access returns text"
+    (let [result (xt/q tu/*node*
+                       "SELECT error #>> ARRAY['tx-key', 'tx-id'] AS v FROM xt.txs WHERE error IS NOT NULL")]
+      (t/is (string? (:v (first result))))))
+
+  (t/testing "chained access"
+    (t/is (seq (xt/q tu/*node*
+                     "SELECT (error->'tx-key')->>'tx-id' AS v FROM xt.txs WHERE error IS NOT NULL"))))
+
+  (t/testing "cast to decimal"
+    (let [result (xt/q tu/*node*
+                       "SELECT (error->>'tx-op-idx')::decimal AS v FROM xt.txs WHERE error IS NOT NULL")]
+      (t/is (decimal? (:v (first result)))))))
