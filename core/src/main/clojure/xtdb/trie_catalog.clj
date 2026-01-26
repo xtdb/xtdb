@@ -283,6 +283,25 @@
        ;; the sort is needed as the table blocks need the current tries to be in the total order for restart
        (sort-by (juxt :level :block-idx #(or (:recency %) LocalDate/MAX)))))
 
+(defn l0-tries
+  [{:keys [tries]}]
+  (let [{:keys [live garbage]} (get tries [0 nil []])]
+    (concat live garbage)))
+
+(defn l0-blocks
+  "Returns a sorted seq of L0 blocks: [{:block-idx N, :tables [{:table TableRef, :trie-key String}]}]"
+  [^xtdb.trie.TrieCatalog trie-cat]
+  (->> (.getTables trie-cat)
+       (mapcat (fn [table]
+                 (map (fn [{:keys [block-idx trie-key]}]
+                        [block-idx {:table table :trie-key trie-key}])
+                      (l0-tries (trie-state trie-cat table)))))
+       (group-by first)
+       (map (fn [[block-idx pairs]]
+              {:block-idx block-idx
+               :tables (mapv second pairs)}))
+       (sort-by :block-idx)))
+
 (defn partitions [{:keys [tries]}]
   (map (fn [[[level recency part] {:keys [max-block-idx live nascent garbage]}]]
          {:level level

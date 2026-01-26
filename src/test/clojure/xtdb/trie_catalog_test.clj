@@ -16,7 +16,8 @@
            (java.util.concurrent ConcurrentHashMap)
            (xtdb.api.storage ObjectStore$StoredObject)
            (xtdb.log.proto TemporalMetadata TrieMetadata)
-           (xtdb.trie_catalog TrieCatalog)))
+           (xtdb.trie_catalog TrieCatalog)
+           (xtdb.table TableRef)))
 
 (t/use-fixtures :once tu/with-allocator)
 
@@ -761,3 +762,44 @@
                  "l03-rc-p00-b01" "l03-rc-p01-b01" "l03-rc-p02-b01" "l03-rc-p03-b01"}
                (trie-keys (cat/all-tries (cat/trie-state cat table))))
             "garbage tries are removed"))))
+
+(t/deftest test-l0-blocks
+  (tu/with-tmp-dirs #{node-dir}
+    (with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 0})]
+      (let [trie-cat (.getTrieCatalog (db/primary-db node))]
+        (t/is (empty? (cat/l0-blocks trie-cat))
+              "Empty node should have no L0 blocks")
+
+        (xt/execute-tx node [[:put-docs :table_a {:xt/id 1}]
+                             [:put-docs :table_b {:xt/id 2}]])
+        (t/is (empty? (cat/l0-blocks trie-cat))
+              "Before finish-block, should still have no L0 blocks")
+
+        (tu/finish-block! node)
+        (t/is (= [0] (map :block-idx (cat/l0-blocks trie-cat)))
+              "Should have 1 block after first finish-block")
+
+        (xt/execute-tx node [[:put-docs :table_c {:xt/id 3}]])
+        (tu/finish-block! node)
+        (let [blocks (cat/l0-blocks trie-cat)
+              tables (for [block blocks]
+                       (for [t (:tables block)]
+                         (-> t :table TableRef/.getTableName keyword)))]
+          (t/is (= 2 (count blocks)) "Should have 2 blocks after second finish-block")
+          (t/is (= [0 1] (map :block-idx blocks)))
+          (t/is (= [[:table_a :table_b :txs] [:table_c :txs]] tables)))))))
+
+(t/deftest test-l0-blocks-includes-garbage
+  (tu/with-tmp-dirs #{node-dir}
+    (with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 1})]
+      (doseq [i (range 4)]
+        (xt/execute-tx node [[:put-docs :foo {:xt/id i}]])
+        (tu/finish-block! node))
+      (c/compact-all! node #xt/duration "PT1S")
+
+      (let [trie-cat (.getTrieCatalog (db/primary-db node))
+            blocks (cat/l0-blocks trie-cat)]
+        (t/is (seq (cat/compacted-trie-keys (cat/trie-state trie-cat #xt/table foo)))
+              "Compaction should have created non-L0 files")
+        (t/is (= 4 (count blocks))
+              "All L0 blocks should be visible even after compaction")))))
