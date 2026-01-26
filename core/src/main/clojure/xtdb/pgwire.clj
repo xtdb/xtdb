@@ -29,6 +29,7 @@
            [java.lang Thread$State]
            [java.net InetAddress ServerSocket Socket SocketException]
            [java.nio ByteBuffer]
+           [java.nio.charset StandardCharsets]
            [java.nio.channels FileChannel]
            [java.nio.file Path]
            [java.security KeyStore]
@@ -48,6 +49,7 @@
            xtdb.IResultCursor
            (xtdb.pgwire PgType PgTypes)
            xtdb.JsonSerde
+           xtdb.JsonLdSerde
            (xtdb.query PreparedQuery)
            (xtdb.tx TxOpts)
            (xtdb.tx_ops Sql)))
@@ -191,7 +193,7 @@
                             "options" (parse-session-params (for [[_ k v] (re-seq #"-c ([\w_]*)=([\w_]*)" v)]
                                                               [k v]))
                             [[k (case k
-                                  "fallback_output_format" (#{:json :transit} (util/->kebab-case-kw v))
+                                  "fallback_output_format" (#{:json :json-ld :transit} (util/->kebab-case-kw v))
                                   v)]]))))))
 
 (def time-zone-nf-param-name "timezone")
@@ -273,9 +275,11 @@
           (ex-data ex)
           (let [ex (err/->anomaly ex {})]
             (-> (ex->pgw-err ex)
-                (assoc :detail (case (get-in @conn-state [:session :parameters "fallback_output_format"])
-                                 :transit (serde/write-transit ex :json)
-                                 (JsonSerde/encodeToBytes ex))))))
+                (assoc :detail (let [format (get-in @conn-state [:session :parameters "fallback_output_format"] :json)]
+                                 (case format
+                                   :json (String. (JsonSerde/encodeToBytes ex) StandardCharsets/UTF_8)
+                                   :json-ld (String. (JsonLdSerde/encodeJsonLdToBytes ex) StandardCharsets/UTF_8)
+                                   :transit (serde/write-transit ex :json)))))))
 
         severity-str (str/upper-case (name severity))]
     (pgio/cmd-write-msg conn pgio/msg-error-response
@@ -591,6 +595,7 @@
 (defn- fallback-type [session]
   (case (get-in session [:parameters "fallback_output_format"] :json)
     :json PgType/PG_JSON
+    :json-ld PgType/PG_JSON_LD
     :transit PgType/PG_TRANSIT))
 
 (defn- type->pg-col [col-name ^VectorType vec-type]

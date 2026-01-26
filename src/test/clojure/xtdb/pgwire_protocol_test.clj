@@ -12,7 +12,7 @@
   (:import [java.lang AutoCloseable]
            [java.nio.charset StandardCharsets]
            [java.time Clock InstantSource]
-           xtdb.JsonSerde
+           xtdb.JsonLdSerde
            [xtdb.pgwire PgType]))
 
 (def ^:dynamic ^:private *port* nil)
@@ -37,10 +37,12 @@
     (let [data (case (:name msg-def)
                  :msg-data-row (update data :vals (partial mapv bytes->str))
                  :msg-error-response (update-in data [:error-fields :detail]
-                                                (fn [detail]
-                                                  (if (bytes? detail)
-                                                    (JsonSerde/decode (String. ^bytes detail))
-                                                    detail)))
+                                                (fn [^String detail]
+                                                  (try
+                                                    (some-> detail (JsonLdSerde/decodeJsonLd))
+                                                    (catch Exception e
+                                                      (prn detail)
+                                                      detail))))
                  data)]
       (swap! !in-msgs conj [(:name msg-def) data]))
     nil)

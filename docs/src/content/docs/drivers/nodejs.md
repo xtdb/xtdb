@@ -65,6 +65,7 @@ const sql = postgres({
 
   connection: {
     // Record objects will be returned fully typed using the transit format:
+    // Options: "json" (default, simple strings), "json-ld" (structured with @type/@value), "transit"
     fallback_output_format: "transit",
   },
 

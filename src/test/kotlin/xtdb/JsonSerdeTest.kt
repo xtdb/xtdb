@@ -41,129 +41,88 @@ class JsonSerdeTest {
     }
 
     @Test
-    fun `parses JSON-LD numbers`() {
-        assertEquals(42L, JSON_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:long\", \"@value\": 42 }"))
-        assertEquals(42L, JSON_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:long\", \"@value\": \"42\" }"))
+    fun `encodes big-decimals as strings`() {
+        val json = JSON_SERDE.encodeToString<Any>(BigDecimal("1.0010"))
+        assertEquals("\"1.0010\"", json)
 
-        assertEquals(42.0, JSON_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:double\", \"@value\": 42 }"))
-        assertEquals(42.0, JSON_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:double\", \"@value\": 42.0 }"))
-        assertEquals(42.0, JSON_SERDE.decodeFromString<Any>("{ \"@type\": \"xt:double\", \"@value\": \"42.0\" }"))
+        assertEquals("\"1.0010000000000000000\"", JSON_SERDE.encodeToString<Any>(BigDecimal("1.0010000000000000000")))
+        assertEquals("\"1001000000000000000000023421.21923989823429893842\"",
+            JSON_SERDE.encodeToString<Any>(BigDecimal("1001000000000000000000023421.21923989823429893842")))
     }
 
     @Test
-    fun `round-trips big-decimals`() {
-        BigDecimal("1.0010").assertRoundTrip("""{"@type":"xt:decimal","@value":"1.0010"}""")
-
-        "1.0010000000000000000".let {
-            BigDecimal(it).assertRoundTrip("""{"@type":"xt:decimal","@value":"$it"}""")
-        }
-
-        "1001000000000000000000023421.21923989823429893842".let {
-            BigDecimal(it).assertRoundTrip("""{"@type":"xt:decimal","@value":"$it"}""")
-        }
-    }
-
-    @Test
-    fun `date round-tripped to instant`() {
+    fun `encodes date as instant string`() {
         val instant = Instant.parse("2023-01-01T12:34:56.789Z")
         val date = Date.from(instant)
         val json = JSON_SERDE.encodeToString<Any?>(date)
-        assertEquals("""{"@type":"xt:instant","@value":"2023-01-01T12:34:56.789Z"}""", json)
-        assertEquals(instant, JSON_SERDE.decodeFromString<Any?>(json))
+        assertEquals("\"2023-01-01T12:34:56.789Z\"", json)
     }
 
     @Test
-    fun `round-trips java-time`() {
-        "2023-01-01T12:34:56.789Z".let { inst ->
-            Instant.parse(inst)
-                .assertRoundTrip("""{"@type":"xt:instant","@value":"$inst"}""")
-        }
+    fun `encodes java-time as strings`() {
+        assertEquals("\"2023-01-01T12:34:56.789Z\"",
+            JSON_SERDE.encodeToString<Any>(Instant.parse("2023-01-01T12:34:56.789Z")))
 
-        "2023-08-01T12:34:56.789+01:00[Europe/London]".let { zdt ->
-            ZonedDateTime.parse(zdt)
-                .assertRoundTrip("""{"@type":"xt:timestamptz","@value":"$zdt"}""")
-        }
+        assertEquals("\"2023-08-01T12:34:56.789+01:00[Europe/London]\"",
+            JSON_SERDE.encodeToString<Any>(ZonedDateTime.parse("2023-08-01T12:34:56.789+01:00[Europe/London]")))
 
-        "PT3H5M12.423S".let { d ->
-            Duration.parse(d).assertRoundTrip("""{"@type":"xt:duration","@value":"$d"}""")
-        }
+        assertEquals("\"PT3H5M12.423S\"",
+            JSON_SERDE.encodeToString<Any>(Duration.parse("PT3H5M12.423S")))
 
-        "Europe/London".let { tz ->
-            ZoneId.of(tz)
-                .assertRoundTrip("""{"@type":"xt:timeZone","@value":"$tz"}""")
-        }
+        assertEquals("\"Europe/London\"",
+            JSON_SERDE.encodeToString<Any>(ZoneId.of("Europe/London")))
 
-        "2023-08-01".let { ld ->
-            LocalDate.parse(ld)
-                .assertRoundTrip("""{"@type":"xt:date","@value":"$ld"}""")
-        }
+        assertEquals("\"2023-08-01\"",
+            JSON_SERDE.encodeToString<Any>(LocalDate.parse("2023-08-01")))
 
-        "2023-08-01T12:34:56.789".let { ldt ->
-            LocalDateTime.parse(ldt)
-                .assertRoundTrip("""{"@type":"xt:timestamp","@value":"$ldt"}""")
-        }
+        assertEquals("\"2023-08-01T12:34:56.789\"",
+            JSON_SERDE.encodeToString<Any>(LocalDateTime.parse("2023-08-01T12:34:56.789")))
 
-        "13:31:55".let { lt ->
-            LocalTime.parse(lt)
-                .assertRoundTrip("""{"@type":"xt:time","@value":"$lt"}""")
-        }
+        assertEquals("\"13:31:55\"",
+            JSON_SERDE.encodeToString<Any>(LocalTime.parse("13:31:55")))
     }
 
     @Test
-    fun `round-trips keywords`() {
-        Keyword.intern("foo-bar").assertRoundTrip("""{"@type":"xt:keyword","@value":"foo-bar"}""")
-        Keyword.intern("xt", "id").assertRoundTrip("""{"@type":"xt:keyword","@value":"xt/id"}""")
+    fun `encodes keywords as strings`() {
+        assertEquals("\"foo-bar\"", JSON_SERDE.encodeToString<Any>(Keyword.intern("foo-bar")))
+        assertEquals("\"xt/id\"", JSON_SERDE.encodeToString<Any>(Keyword.intern("xt", "id")))
     }
 
     @Test
-    fun `round-trips symbols`() {
-        Symbol.intern("foo-bar").assertRoundTrip("""{"@type":"xt:symbol","@value":"foo-bar"}""")
-        Symbol.intern("xt", "id").assertRoundTrip("""{"@type":"xt:symbol","@value":"xt/id"}""")
+    fun `encodes symbols as strings`() {
+        assertEquals("\"foo-bar\"", JSON_SERDE.encodeToString<Any>(Symbol.intern("foo-bar")))
+        assertEquals("\"xt/id\"", JSON_SERDE.encodeToString<Any>(Symbol.intern("xt", "id")))
     }
 
     @Test
-    fun `round-trips sets`() {
-        emptySet<Any>().assertRoundTrip("""{"@type":"xt:set","@value":[]}""")
-        setOf(4L, 5L, 6.0).assertRoundTrip("""{"@type":"xt:set","@value":[4,5,6.0]}""")
+    fun `encodes sets as arrays`() {
+        assertEquals("[]", JSON_SERDE.encodeToString<Any>(emptySet<Any>()))
+        assertEquals("[4,5,6.0]", JSON_SERDE.encodeToString<Any>(setOf(4L, 5L, 6.0)))
     }
 
     @Test
-    fun shouldDeserializeIncorrect() {
-        Incorrect(
+    fun shouldSerializeIncorrect() {
+        val json = JSON_SERDE.encodeToString<Any>(Incorrect(
             message = "sort your request out!",
             errorCode = "xtdb/malformed-req",
             data = mapOf("a" to 1L),
-        ).assertRoundTrip(
-            """{
-              "@type": "xt:incorrect",
-              "@value": {
-                "xtdb.error/message": "sort your request out!",
-                "xtdb.error/data": {
-                  "xtdb.error/code": {"@type":"xt:keyword","@value":"xtdb/malformed-req"},
-                  "a": 1
-                }
-              }
-            }""".trimJson()
+        ))
+        assertEquals(
+            """{"@type":"xt:incorrect","@value":{"xtdb.error/message":"sort your request out!","xtdb.error/data":{"xtdb.error/code":{"@type":"xt:keyword","@value":"xtdb/malformed-req"},"a":1}}}""",
+            json
         )
     }
 
     @Test
-    fun shouldDeserializeUnsupported() {
-        Unsupported(
+    fun shouldSerializeUnsupported() {
+        val json = JSON_SERDE.encodeToString<Any>(Unsupported(
             message = "ruh roh.",
             errorCode = "xtdb/boom",
             mapOf("a" to 1L)
-        ).assertRoundTrip(
-            """{
-              "@type": "xt:unsupported",
-              "@value": {
-                "xtdb.error/message": "ruh roh.",
-                "xtdb.error/data": {
-                  "xtdb.error/code": {"@type":"xt:keyword","@value":"xtdb/boom"},
-                  "a": 1
-                }
-              }
-            }""".trimJson()
+        ))
+        assertEquals(
+            """{"@type":"xt:unsupported","@value":{"xtdb.error/message":"ruh roh.","xtdb.error/data":{"xtdb.error/code":{"@type":"xt:keyword","@value":"xtdb/boom"},"a":1}}}""",
+            json
         )
     }
 

@@ -24,6 +24,7 @@ import xtdb.arrow.VectorType.Companion.VAR_BINARY
 import xtdb.arrow.unsupported
 import xtdb.decode as jsonDecode
 import xtdb.encode as jsonEncode
+import xtdb.encodeJsonLd
 import xtdb.pg.codec.decode
 import xtdb.pg.codec.encode
 import xtdb.pgwire.TypCategory.*
@@ -763,11 +764,30 @@ sealed class PgType(
 
         override fun readText(data: ByteArray): Any = jsonDecode(ByteArrayInputStream(data))
 
-        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
+        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int) =
             jsonEncode(rdr.getObject(idx)!!).toByteArray()
 
-        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int): ByteArray =
+        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int) =
             jsonEncode(rdr.getObject(idx)!!).toByteArray()
+    }
+
+    data object JsonLd : PgType(
+        typname = "json",
+        xtType = null,
+        oid = 114,
+        typcategory = USER_DEFINED,
+        typsend = "json_send",
+        typreceive = "json_recv",
+    ) {
+        override fun readBinary(data: ByteArray): Any = jsonDecode(ByteArrayInputStream(data))
+
+        override fun readText(data: ByteArray): Any = jsonDecode(ByteArrayInputStream(data))
+
+        override fun writeBinary(env: PgSessionEnv, rdr: VectorReader, idx: Int) =
+            encodeJsonLd(rdr.getObject(idx)!!).toByteArray()
+
+        override fun writeText(env: PgSessionEnv, rdr: VectorReader, idx: Int) =
+            encodeJsonLd(rdr.getObject(idx)!!).toByteArray()
     }
 
     data object Jsonb : PgType(
@@ -811,6 +831,7 @@ sealed class PgType(
         @JvmField val PG_TIMESTAMPTZ = TimestampTz
         @JvmField val PG_DATE = Date
         @JvmField val PG_JSON = Json
+        @JvmField val PG_JSON_LD = JsonLd
         @JvmField val PG_TRANSIT = Transit
 
         // All concrete PgTypes (excluding Default and Null which are special)

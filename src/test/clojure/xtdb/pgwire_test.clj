@@ -22,14 +22,14 @@
   (:import (java.io InputStream)
            (java.lang Thread$State)
            (java.net Socket)
-           (java.nio ByteBuffer)
            (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
+           (java.time.temporal Temporal)
            (java.util Arrays Calendar List TimeZone)
            (java.util.concurrent CountDownLatch TimeUnit)
            (org.postgresql.util PGobject PSQLException)
            (xtdb.pgwire PgType)
-           (xtdb JsonSerde)
+           (xtdb JsonSerde JsonLdSerde)
            (xtdb.api DataSource$ConnectionBuilder)
            xtdb.api.log.Log$Message$FlushBlock
            xtdb.pgwire.Server))
@@ -337,23 +337,42 @@
      {:sql "ARRAY []", :clj []}
      {:sql "ARRAY [ARRAY ['42'], 42, '42']", :clj [["42"] 42 "42"]}]))
 
-(deftest json-representation-test
+(deftest json-ld-representation-test
   (with-open [conn (jdbc-conn)]
-    (jdbc/execute! conn ["SET FALLBACK_OUTPUT_FORMAT = 'json'"])
+    (jdbc/execute! conn ["SET FALLBACK_OUTPUT_FORMAT = 'json-ld'"])
     (doseq [{:keys [sql, clj, clj-pred]} json-representation-examples]
       (testing (str "SQL expression " sql " should parse to " clj)
         (with-open [stmt (.prepareStatement conn (format "SELECT a FROM (VALUES (%s), (ARRAY [])) a (a)" sql))]
-          ;; empty array to force polymoprhic/json return
           (with-open [rs (.executeQuery stmt)]
             ;; one row in result set
             (.next rs)
 
-            (testing "json parses to expected clj value"
+            (testing "json-ld parses to expected clj value"
               (let [clj-value (.getObject rs 1)]
                 (when clj
                   (is (= clj clj-value) "parsed value should = :clj"))
                 (when clj-pred
                   (is (clj-pred clj-value) "parsed value should pass :clj-pred"))))))))))
+
+(deftest json-representation-test
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["SET FALLBACK_OUTPUT_FORMAT = 'json'"])
+    (doseq [{:keys [clj clj-pred] :as ex} json-representation-examples
+            :when (nil? clj-pred)
+            :let [{:keys [sql clj]} (cond
+                                      ;; temporal types -> strings
+                                      (instance? Temporal clj) (update ex :clj str)
+                                      (instance? xtdb.time.Interval clj) (update ex :clj str)
+                                      ;; everything else stays the same
+                                      :else ex)]]
+      (testing (str "SQL expression " sql " should parse to " clj)
+        (with-open [stmt (.prepareStatement conn (format "SELECT a FROM (VALUES (%s), (ARRAY [])) a (a)" sql))]
+          (with-open [rs (.executeQuery stmt)]
+            (.next rs)
+
+            (testing "json parses to expected clj value (as string for temporal types)"
+              (let [clj-value (.getObject rs 1)]
+                (is (= clj clj-value) "parsed value should = :clj")))))))))
 
 (defn check-server-resources-freed [server]
   (testing "accept socket"
