@@ -695,7 +695,10 @@ createBench("tsbs-iot", mapOf(
     "file" to "--file",
     "deviceCount" to "--devices",
     "timestampStart" to "--timestamp-start",
-    "timestampEnd" to "--timestamp-end"
+    "timestampEnd" to "--timestamp-end",
+    "queryIterations" to "--query-iterations",
+    "workers" to "--workers",
+    "burnIn" to "--burn-in"
 ))
 
 createBench("patch", mapOf("docCount" to "--doc-count", "patchCount" to "--patch-count"))
