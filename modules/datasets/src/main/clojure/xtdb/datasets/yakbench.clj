@@ -107,7 +107,7 @@
          cycle
          (mapcat (fn [{user :xt/id
                        user-k :user/k}]
-                   (let [k (min (long (* user-k 0.25)) n-feeds)]
+                   (let [k (max (min (long (* user-k 0.25)) n-feeds) 1)]
                      (for [f (->> (repeatedly #(random/next-int random n-feeds))
                                   (distinct)
                                   (take k)

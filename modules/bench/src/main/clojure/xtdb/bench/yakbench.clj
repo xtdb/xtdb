@@ -488,10 +488,11 @@
                         (util/delete-dir path)))]
       (println "Clear dir")
       (clear-dir dir)
-      (with-open [node (tu/->local-node {:node-dir dir})
+      (with-open [node (tu/->local-node {:node-dir dir
+                                         :instant-src (java.time.InstantSource/system)})
                   conn (get-conn node)]
         (println "Load data")
-        (yakbench/load-data! node random scale)
+        (yakbench/load-data! conn random scale)
         (println "Flush block")
         (b/sync-node node)
         (tu/flush-block! node)
