@@ -18,9 +18,20 @@ We take great inspiration from the principle of 'making illegal states unreprese
 * If you need to create git worktrees, create them in the `.tasks` directory in the repo root without setting upstream tracking (e.g., `git worktree add .tasks/<branch-name> -b <branch-name> origin/main`). This allows developers to explicitly push to their own forks.
   * After creating a worktree, `cd` into it before performing any further operations.
   * Check to see whether you're in a worktree when you start up - if you are, ensure that any reads and updates are done within that worktree.
-* When tests fail, read the test report at `build/reports/tests/test/index.html` instead of re-running tests with different flags to get error details.
 * For file operations (reading, searching, editing, writing), use the built-in tools (`Read`, `Edit`, `Write`, `Glob`, `Grep`).
 * For REPL evaluation, use the `clj-nrepl-eval` command via Bash or the `/clojure-eval` skill (see `skills/clojure-eval/SKILL.md`).
+
+## Definition of done
+
+* Include tests for new/changed functionality.
+* Run tests locally to verify they pass.
+
+For user-visible features:
+* Update relevant docs in `/dev/doc/` or user-facing documentation when implementing new features or changing existing behaviour.
+
+## Style
+
+Use sentence-per-line in documentation files (one sentence per line) - this makes diffs cleaner and easier to review.
 
 ## Running tests
 
