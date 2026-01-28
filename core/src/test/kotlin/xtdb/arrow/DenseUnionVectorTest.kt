@@ -217,4 +217,70 @@ class DenseUnionVectorTest {
             }
         }
     }
+
+    @Test
+    fun `copy whole DUV into empty DUV`() {
+        DenseUnionVector(
+            allocator, "src",
+            listOf(
+                IntVector.open(allocator, "i32", false),
+                Utf8Vector(allocator, "utf8", true)
+            )
+        ).use { src ->
+            src.vectorFor("i32").writeInt(12)
+            src.vectorFor("utf8").writeObject("hello")
+            src.vectorFor("i32").writeInt(34)
+            src.vectorFor("utf8").writeNull()
+
+            DenseUnionVector(
+                allocator, "dest",
+                listOf(
+                    IntVector.open(allocator, "i32", false),
+                    Utf8Vector(allocator, "utf8", true)
+                )
+            ).use { dest ->
+                src.rowCopier(dest).copyRange(0, src.valueCount)
+
+                assertEquals(src.valueCount, dest.valueCount)
+                assertEquals(src.asList, dest.asList)
+                assertEquals(src.typeIds(), dest.typeIds())
+                assertEquals(src.offsets(), dest.offsets())
+            }
+        }
+    }
+
+    @Test
+    fun `copy whole DUV into DUV with existing rows`() {
+        DenseUnionVector(
+            allocator, "src",
+            listOf(
+                IntVector.open(allocator, "i32", false),
+                Utf8Vector(allocator, "utf8", true)
+            )
+        ).use { src ->
+            src.vectorFor("i32").writeInt(12)
+            src.vectorFor("utf8").writeObject("hello")
+            src.vectorFor("i32").writeInt(34)
+
+            DenseUnionVector(
+                allocator, "dest",
+                listOf(
+                    IntVector.open(allocator, "i32", false),
+                    Utf8Vector(allocator, "utf8", true)
+                )
+            ).use { dest ->
+                dest.vectorFor("utf8").writeObject("existing")
+                dest.vectorFor("i32").writeInt(99)
+
+                assertEquals(2, dest.valueCount)
+
+                src.rowCopier(dest).copyRange(0, src.valueCount)
+
+                assertEquals(5, dest.valueCount)
+                assertEquals(listOf("existing", 99, 12, "hello", 34), dest.asList)
+                assertEquals(listOf(1, 0, 0, 1, 0).map { it.toByte() }, dest.typeIds())
+                assertEquals(listOf(0, 0, 1, 1, 2), dest.offsets())
+            }
+        }
+    }
 }

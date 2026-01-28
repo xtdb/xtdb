@@ -136,7 +136,7 @@ class DenseUnionVector private constructor(
     }
 
     internal inner class LegVector(
-        private val typeId: Byte, private val inner: VectorWriter, private val nested: Boolean = false,
+        internal val typeId: Byte, internal val inner: VectorWriter, private val nested: Boolean = false,
         private val reader: LegReader = LegReader(valueCount, typeBuffer, offsetBuffer, false, typeId, inner, nested)
     ) : VectorReader by reader, VectorWriter {
 
@@ -318,19 +318,54 @@ class DenseUnionVector private constructor(
     override fun rowCopier0(src: VectorReader): RowCopier =
         when {
             src is DenseUnionVector -> {
-                val copierMapping = src.legVectors.map { childVec ->
-                    childVec.rowCopier(legVectorFor(childVec.name, childVec.arrowType, childVec.nullable))
+                class LegCopier(val src: VectorReader, val dest: LegVector) {
+                    // TODO cut down on double rowCopiers here
+                    val copier = this.src.rowCopier(this.dest)
+                    val innerCopier = this.src.rowCopier(this.dest.inner)
                 }
 
-                RowCopier { srcIdx ->
-                    val typeId = src.getTypeId(srcIdx).toInt()
+                object : RowCopier {
+                    val pairs = src.legVectors.map { it to legVectorFor(it.name, it.arrowType, it.nullable) }
+                    val destTypeIds = ByteArray(pairs.size) { pairs[it].second.typeId }
+                    val copiers = pairs.map { (srcLeg, destLeg) -> LegCopier(srcLeg, destLeg) }
 
-                    if (typeId < 0)
-                        writeUndefined()
-                    else
-                        copierMapping[typeId].copyRow(src.getOffset(srcIdx))
-                }
-            }
+                    override fun copyRow(srcIdx: Int) {
+                        val typeId = src.getTypeId(srcIdx).toInt()
+
+                        if (typeId < 0) writeUndefined() else copiers[typeId].copier.copyRow(src.getOffset(srcIdx))
+                    }
+
+                    override fun copyRange(startIdx: Int, len: Int) {
+                        if (startIdx == 0 && len == src.valueCount) {
+                            val srcTypeBuffer = src.typeBuffer
+                            val destTypeBuffer = this@DenseUnionVector.typeBuffer
+                            val srcOffsetBuffer = src.offsetBuffer
+                            val destOffsetBuffer = this@DenseUnionVector.offsetBuffer
+                            val destOffsets = IntArray(pairs.size) { pairs[it].second.inner.valueCount }
+
+                            repeat(len) { srcIdx -> 
+                                val srcTypeId = srcTypeBuffer.getByte(srcIdx).toInt()
+                                if (srcTypeId < 0) {
+                                    destTypeBuffer.writeByte(-1)
+                                    destOffsetBuffer.writeInt(0)
+                                } else {
+                                    val destTypeId = destTypeIds[srcTypeId]
+                                    destTypeBuffer.writeByte(destTypeId)
+                                    destOffsetBuffer.writeInt(srcOffsetBuffer.getInt(srcIdx) + destOffsets[srcTypeId])
+                                }
+                            }
+
+                            copiers.forEach {
+                                it.innerCopier.copyRange(0, it.src.valueCount)
+                            }
+
+                            this@DenseUnionVector.valueCount += len
+                        } else {
+                            repeat(len) { copyRow(startIdx + it) }
+                        }
+                    }
+                }}
+            
 
             else -> src.rowCopier(legVectorFor(src.arrowType.toLeg(), src.arrowType, src.nullable))
         }

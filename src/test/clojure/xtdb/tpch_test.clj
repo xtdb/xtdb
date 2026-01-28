@@ -95,11 +95,12 @@
     (t/run-test test-001-ra)))
 
 (t/deftest ^:integration test-01-ra
-  (with-tpch-data {:method :rels, :scale-factor 0.01
-                   :node-dir (util/->path "target/tpch-queries-ra-sf-01")}
-    (fn []
-      (dorun
-       (map-indexed test-ra-query results-sf-01)))))
+  (time
+    (with-tpch-data {:method :rels, :scale-factor 0.01
+                     :node-dir (util/->path "target/tpch-queries-ra-sf-01")}
+      (fn []
+        (dorun
+          (map-indexed test-ra-query results-sf-01))))))
 
 (t/deftest ^:integration test-01-ra-dbj
   (with-tpch-data {:method :docs, :scale-factor 0.01
