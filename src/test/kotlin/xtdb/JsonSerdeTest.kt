@@ -59,12 +59,19 @@ class JsonSerdeTest {
     }
 
     @Test
+    fun `encodes ZonedDateTime as OffsetDateTime string`() {
+        // ZonedDateTime.toString() produces "[zone]" suffix which breaks JS Date parsing, so we encode as OffsetDateTime
+        assertEquals("\"2023-08-01T12:34:56.789+01:00\"",
+            JSON_SERDE.encodeToString<Any>(ZonedDateTime.parse("2023-08-01T12:34:56.789+01:00[Europe/London]")))
+
+        assertEquals("\"2026-01-01T10:00:00.001Z\"",
+            JSON_SERDE.encodeToString<Any>(ZonedDateTime.parse("2026-01-01T10:00:00.001Z[UTC]")))
+    }
+
+    @Test
     fun `encodes java-time as strings`() {
         assertEquals("\"2023-01-01T12:34:56.789Z\"",
             JSON_SERDE.encodeToString<Any>(Instant.parse("2023-01-01T12:34:56.789Z")))
-
-        assertEquals("\"2023-08-01T12:34:56.789+01:00[Europe/London]\"",
-            JSON_SERDE.encodeToString<Any>(ZonedDateTime.parse("2023-08-01T12:34:56.789+01:00[Europe/London]")))
 
         assertEquals("\"PT3H5M12.423S\"",
             JSON_SERDE.encodeToString<Any>(Duration.parse("PT3H5M12.423S")))

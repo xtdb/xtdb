@@ -49,6 +49,7 @@ object AnySerde : KSerializer<Any> {
         is Keyword -> JsonPrimitive(sym.toString())
         is Symbol -> JsonPrimitive(toString())
         is UUID -> JsonPrimitive(toString())
+        is ZonedDateTime -> JsonPrimitive(toOffsetDateTime().toString())
         is Temporal -> JsonPrimitive(toString())
         is ZoneId -> JsonPrimitive(toString())
         is Period -> JsonPrimitive(toString())
