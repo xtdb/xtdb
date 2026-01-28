@@ -35,6 +35,7 @@ Use sentence-per-line in documentation files (one sentence per line) - this make
 
 ## Running tests
 
+* DO NOT run tests yourself - use sub-agents.
 * For Clojure tests (testing Clojure code in `/src/test/clojure`): use the `repl-explorer` agent via the Task tool. This gives faster feedback and allows interactive debugging.
 * For all other tests (Java, integration tests, or when REPL isn't available): use the `gradle-tests` agent via the Task tool.
 - Proactively run relevant tests after code changes to verify they work.
