@@ -164,6 +164,18 @@
                    {:table-info {#xt/table t1 #{"a"}}}))
         "implicit SELECT *"))
 
+(t/deftest test-is-distinct-from
+  (t/is (= [{:r false}] (xt/q tu/*node* "SELECT NULL IS DISTINCT FROM NULL AS r")))
+  (t/is (= [{:r true}] (xt/q tu/*node* "SELECT NULL IS NOT DISTINCT FROM NULL AS r")))
+  (t/is (= [{:r true}] (xt/q tu/*node* "SELECT 1 IS DISTINCT FROM NULL AS r")))
+  (t/is (= [{:r true}] (xt/q tu/*node* "SELECT NULL IS DISTINCT FROM 1 AS r")))
+  (t/is (= [{:r false}] (xt/q tu/*node* "SELECT 1 IS NOT DISTINCT FROM NULL AS r")))
+  (t/is (= [{:r true}] (xt/q tu/*node* "SELECT 1 IS NOT DISTINCT FROM 1 AS r")))
+  (t/is (= [{:r false}] (xt/q tu/*node* "SELECT 1 IS DISTINCT FROM 1 AS r")))
+  (t/is (= [{:r true}] (xt/q tu/*node* "SELECT 1 IS DISTINCT FROM 2 AS r")))
+  (t/is (= [{:r false}] (xt/q tu/*node* "SELECT 1 IS NOT DISTINCT FROM 2 AS r")))
+  (t/is (= [{:r "yes"}] (xt/q tu/*node* "SELECT CASE WHEN NULL IS NOT DISTINCT FROM NULL THEN 'yes' ELSE 'no' END AS r"))))
+
 (t/deftest test-case
   (t/is (=plan-file
          "basic-query-34"

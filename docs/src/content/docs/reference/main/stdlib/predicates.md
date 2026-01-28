@@ -45,3 +45,6 @@ These aren't strictly predicates - they return the greatest/least value of their
 
 `expr IS [NOT] NULL`
 : returns true if `expr` is \[not\] null, false otherwise
+
+`expr1 IS [NOT] DISTINCT FROM expr2`
+: NULL-safe comparison. Returns true if `expr1` and `expr2` are \[not\] distinct - two NULLs are considered not distinct from each other, unlike standard equality.

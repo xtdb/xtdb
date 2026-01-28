@@ -211,6 +211,7 @@ expr
     | expr 'NOT'? 'LIKE_REGEX' xqueryPattern=exprPrimary ('FLAG' xqueryOptionFlag=exprPrimary)? # LikeRegexPredicate
     | expr postgresRegexOperator xqueryPattern=exprPrimary # PostgresRegexPredicate
     | expr 'IS' 'NOT'? 'NULL' # NullPredicate
+    | expr 'IS' 'NOT'? 'DISTINCT' 'FROM' expr # DistinctFromPredicate
 
     // period predicates
     | expr 'OVERLAPS' expr # PeriodOverlapsPredicate
@@ -712,6 +713,7 @@ predicatePart2
     | 'NOT'? 'LIKE_REGEX' xqueryPattern=exprPrimary ('FLAG' xqueryOptionFlag=exprPrimary)? # LikeRegexPredicatePart2
     | postgresRegexOperator xqueryPattern=exprPrimary # PostgresRegexPredicatePart2
     | 'IS' 'NOT'? 'NULL' # NullPredicatePart2
+    | 'IS' 'NOT'? 'DISTINCT' 'FROM' expr # DistinctFromPredicatePart2
     | compOp quantifier quantifiedComparisonPredicatePart3 # QuantifiedComparisonPredicatePart2
     ;
 

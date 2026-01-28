@@ -1416,6 +1416,21 @@
         (list 'not expr)
         expr)))
 
+  (visitDistinctFromPredicate [this ctx]
+    (let [left (-> (.expr ctx 0) (.accept this))
+          right (-> (.expr ctx 1) (.accept this))
+          distinct-expr (list 'distinct-from left right)]
+      (if (.NOT ctx)
+        (list 'not distinct-expr)
+        distinct-expr)))
+
+  (visitDistinctFromPredicatePart2 [{:keys [pt1] :as this} ctx]
+    (let [right (-> (.expr ctx) (.accept (dissoc this :pt1)))
+          distinct-expr (list 'distinct-from pt1 right)]
+      (if (.NOT ctx)
+        (list 'not distinct-expr)
+        distinct-expr)))
+
   (visitBetweenPredicate [this ctx]
     (let [between-expr (list (cond
                                (.SYMMETRIC ctx) 'between-symmetric
