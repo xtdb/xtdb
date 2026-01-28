@@ -20,3 +20,9 @@ We take great inspiration from the principle of 'making illegal states unreprese
 * When tests fail, read the test report at `build/reports/tests/test/index.html` instead of re-running tests with different flags to get error details.
 * For file operations (reading, searching, editing, writing), use the built-in tools (`Read`, `Edit`, `Write`, `Glob`, `Grep`).
 * For REPL evaluation, use the `clj-nrepl-eval` command via Bash or the `/clojure-eval` skill (see `skills/clojure-eval/SKILL.md`).
+
+## Running tests
+
+* For Clojure tests (testing Clojure code in `/src/test/clojure`): use the `repl-explorer` agent via the Task tool. This gives faster feedback and allows interactive debugging.
+* For all other tests (Java, integration tests, or when REPL isn't available): use the `gradle-tests` agent via the Task tool.
+- Proactively run relevant tests after code changes to verify they work.
