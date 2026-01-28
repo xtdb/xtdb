@@ -287,4 +287,88 @@ class StructVectorTest {
             )
         }
     }
+
+    @Test
+    fun `copy whole struct into empty struct`() {
+        StructVector(allocator, "src", true, linkedMapOf(
+            "i32" to IntVector.open(allocator, "i32", false),
+            "utf8" to Utf8Vector(allocator, "utf8", true)
+        )).use { src ->
+            src.writeObject(mapOf("i32" to 1, "utf8" to "one"))
+            src.writeNull()
+            src.writeObject(mapOf("i32" to 3, "utf8" to "three"))
+
+            StructVector(allocator, "dest", true, linkedMapOf(
+                "i32" to IntVector.open(allocator, "i32", false),
+                "utf8" to Utf8Vector(allocator, "utf8", true)
+            )).use { dest ->
+                src.rowCopier(dest).copyRange(0, src.valueCount)
+
+                assertEquals(src.valueCount, dest.valueCount)
+                assertEquals(src.asList, dest.asList)
+            }
+        }
+    }
+
+    @Test
+    fun `copy whole struct into struct with existing rows`() {
+        StructVector(allocator, "src", false, linkedMapOf(
+            "i32" to IntVector.open(allocator, "i32", false),
+            "utf8" to Utf8Vector(allocator, "utf8", true)
+        )).use { src ->
+            src.writeObject(mapOf("i32" to 10, "utf8" to "ten"))
+            src.writeObject(mapOf("i32" to 20, "utf8" to "twenty"))
+
+            StructVector(allocator, "dest", false, linkedMapOf(
+                "i32" to IntVector.open(allocator, "i32", false),
+                "utf8" to Utf8Vector(allocator, "utf8", true)
+            )).use { dest ->
+                dest.writeObject(mapOf("i32" to 1, "utf8" to "existing"))
+
+                src.rowCopier(dest).copyRange(0, src.valueCount)
+
+                assertEquals(3, dest.valueCount)
+                assertEquals(
+                    listOf(
+                        mapOf("i32" to 1, "utf8" to "existing"),
+                        mapOf("i32" to 10, "utf8" to "ten"),
+                        mapOf("i32" to 20, "utf8" to "twenty")
+                    ),
+                    dest.asList
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `copy partial range from struct`() {
+        StructVector(allocator, "src", true, linkedMapOf(
+            "i32" to IntVector.open(allocator, "i32", false),
+            "utf8" to Utf8Vector(allocator, "utf8", true)
+        )).use { src ->
+            src.writeObject(mapOf("i32" to 1, "utf8" to "one"))
+            src.writeObject(mapOf("i32" to 2, "utf8" to "two"))
+            src.writeNull()
+            src.writeObject(mapOf("i32" to 4, "utf8" to "four"))
+            src.writeObject(mapOf("i32" to 5, "utf8" to "five"))
+
+            StructVector(allocator, "dest", true, linkedMapOf(
+                "i32" to IntVector.open(allocator, "i32", false),
+                "utf8" to Utf8Vector(allocator, "utf8", true)
+            )).use { dest ->
+                // Copy rows 1-3 (indices 1, 2, 3)
+                src.rowCopier(dest).copyRange(1, 3)
+
+                assertEquals(3, dest.valueCount)
+                assertEquals(
+                    listOf(
+                        mapOf("i32" to 2, "utf8" to "two"),
+                        null,
+                        mapOf("i32" to 4, "utf8" to "four")
+                    ),
+                    dest.asList
+                )
+            }
+        }
+    }
 }

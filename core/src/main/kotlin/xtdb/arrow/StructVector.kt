@@ -9,6 +9,7 @@ import org.apache.arrow.vector.complex.NonNullableStructVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
+import xtdb.arrow.VectorIndirection.Companion.Slice
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Incorrect
 import xtdb.util.Hasher
@@ -184,12 +185,20 @@ class StructVector private constructor(
             srcVec.rowCopier(vectorFor(colName, srcVec.arrowType, srcVec.nullable))
         }
 
-        return RowCopier { srcIdx ->
-            if (src.isNull(srcIdx)) {
-                writeNull()
-            } else {
-                childCopiers.forEach { it.copyRow(srcIdx) }
-                endStruct()
+        return object : RowCopier {
+            override fun copyRow(srcIdx: Int) {
+                if (src.isNull(srcIdx)) {
+                    writeNull()
+                } else {
+                    childCopiers.forEach { it.copyRow(srcIdx) }
+                    endStruct()
+                }
+            }
+
+            override fun copyRange(startIdx: Int, len: Int) {
+                validityBuffer?.writeBits(src.validityBuffer, Slice(startIdx, len))
+                childCopiers.forEach { it.copyRange(startIdx, len) }
+                valueCount += len
             }
         }
     }
