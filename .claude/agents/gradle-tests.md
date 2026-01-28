@@ -118,3 +118,4 @@ When invoked:
 - For Clojure namespaces in commands, replace dashes with underscores (e.g., `api_test` not `api-test`)
 - Test reports accumulate - always check timestamps to ensure you're reading current results
 - If docker-compose is required but not running, report that clearly rather than showing cryptic connection errors
+- You very rarely need to `clean` this project - only do so if requested or you are seeing clear signs of build artifact/cache corruption.
