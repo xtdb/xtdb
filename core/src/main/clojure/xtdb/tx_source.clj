@@ -1,7 +1,7 @@
 (ns xtdb.tx-source
   (:require [integrant.core :as ig]
             [xtdb.error :as err]
-            [xtdb.log :as log]
+            [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             xtdb.node.impl
             [xtdb.serde :as serde]
@@ -156,7 +156,7 @@
              (cond-> (TxSourceConfig.)
                (some? enable) (.enable enable)
                (some? initial-scan) (.initialScan initial-scan)
-               (some? output-log) (.outputLog (log/->log-factory (first output-log) (second output-log)))
+               (some? output-log) (.outputLog (xt-log/->log-factory (first output-log) (second output-log)))
                (some? db-name) (.dbName db-name)
                (some? format) (.format (str (symbol format))))))
 
