@@ -37,6 +37,14 @@ class MemoryHashTrie(
 
     operator fun plus(idx: Int) = MemoryHashTrie(rootNode.add(this, idx), iidReader, logLimit, pageLimit)
 
+    fun addRange(startIdx: Int, count: Int): MemoryHashTrie {
+        var result = this
+        for (i in startIdx until startIdx + count) {
+            result += i
+        }
+        return result
+    }
+
     @Suppress("unused")
     fun withIidReader(iidReader: VectorReader) = MemoryHashTrie(rootNode, iidReader, logLimit, pageLimit)
 

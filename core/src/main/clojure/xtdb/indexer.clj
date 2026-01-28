@@ -59,8 +59,18 @@
                   (ByteBuffer/wrap (.getAsProto (.getLiveTrie (.liveTable live-idx table))))))
 
     (when live-table-tx
-      (with-open [live-rel (.openDirectSlice (.getLiveRelation live-table-tx) allocator)
-                  wtr (.openArrowWriter buffer-pool (.resolve crash-dir "live-table-tx.arrow") live-rel)]
+      ;; Write committed live-table data
+      (when (and live-idx table)
+        (let [live-table (.liveTable live-idx table)]
+          (when (pos? (.getRowCount (.getLiveRelation live-table)))
+            (with-open [live-rel (.openDirectSlice (.getLiveRelation live-table) allocator)
+                        wtr (.openArrowWriter buffer-pool (.resolve crash-dir "live-table.arrow") live-rel)]
+              (.writePage wtr)
+              (.end wtr)))))
+
+      ;; Write transaction-scoped data
+      (with-open [tx-rel (.openDirectSlice (.getTxRelation live-table-tx) allocator)
+                  wtr (.openArrowWriter buffer-pool (.resolve crash-dir "live-table-tx.arrow") tx-rel)]
         (.writePage wtr)
         (.end wtr))
 

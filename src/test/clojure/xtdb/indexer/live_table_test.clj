@@ -40,30 +40,30 @@
                          allocator (RootAllocator.)
                          live-table (LiveTable. allocator bp #xt/table foo (RowCounter.) (partial trie/->live-trie 2 4))]
 
-          (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
-                doc-wtr (.getDocWriter live-table-tx)]
-            (dotimes [_n n]
-              (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid))
-                       0 0
-                       (fn []
-                         (.endStruct doc-wtr))))
+          (with-open [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)]
+            (let [doc-wtr (.getDocWriter live-table-tx)]
+              (dotimes [_n n]
+                (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid))
+                         0 0
+                         (fn []
+                           (.endStruct doc-wtr))))
 
-            (.commit live-table-tx)
+              (.commit live-table-tx)
 
-            (let [leaves (.getLeaves (.compactLogs (.getLiveTrie live-table)))
-                  leaf ^MemoryHashTrie$Leaf (first leaves)]
+              (let [leaves (.getLeaves (.compactLogs (.getLiveTrie live-table)))
+                    leaf ^MemoryHashTrie$Leaf (first leaves)]
 
-              (t/is (= 1 (count leaves)))
+                (t/is (= 1 (count leaves)))
 
-              (t/is (uuid-equal-to-path? uuid (.getPath leaf)))
+                (t/is (uuid-equal-to-path? uuid (.getPath leaf)))
 
-              (t/is (= (reverse (range n))
-                       (vec (.getData leaf)))))
+                (t/is (= (reverse (range n))
+                         (vec (.getData leaf)))))
 
-            (.finishBlock live-table 0)
+              (.finishBlock live-table 0)
 
-            (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-s")))
-                                     (.resolve path "objects"))))))
+              (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-s")))
+                                       (.resolve path "objects")))))))
 
     (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
           n 50000]
@@ -72,30 +72,30 @@
                          bp (.getBufferPool (db/primary-db node))
                          allocator (RootAllocator.)
                          live-table (LiveTable. allocator bp #xt/table foo (RowCounter.))]
-          (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
-                doc-wtr (.getDocWriter live-table-tx)]
+          (with-open [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)]
+            (let [doc-wtr (.getDocWriter live-table-tx)]
 
-            (dotimes [_n n]
-              (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
-                       (fn []
-                         (.endStruct doc-wtr))))
+              (dotimes [_n n]
+                (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
+                         (fn []
+                           (.endStruct doc-wtr))))
 
-            (.commit live-table-tx)
+              (.commit live-table-tx)
 
-            (let [leaves (.getLeaves (.compactLogs (.getLiveTrie live-table)))
-                  leaf ^MemoryHashTrie$Leaf (first leaves)]
+              (let [leaves (.getLeaves (.compactLogs (.getLiveTrie live-table)))
+                    leaf ^MemoryHashTrie$Leaf (first leaves)]
 
-              (t/is (= 1 (count leaves)))
+                (t/is (= 1 (count leaves)))
 
-              (t/is (uuid-equal-to-path? uuid (.getPath leaf)))
+                (t/is (uuid-equal-to-path? uuid (.getPath leaf)))
 
-              (t/is (= (reverse (range n))
-                       (vec (.getData leaf)))))
+                (t/is (= (reverse (range n))
+                         (vec (.getData leaf)))))
 
-            (.finishBlock live-table 0)
+              (.finishBlock live-table 0)
 
-            (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
-                                     (.resolve path "objects"))))))))
+              (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
+                                       (.resolve path "objects")))))))))
 
 (defn live-table-snap->data [^LiveTable$Snapshot live-table-snap]
   (let [live-rel-data (.getAsMaps (.getLiveRelation live-table-snap))
@@ -154,36 +154,34 @@
             live-index-allocator (util/->child-allocator allocator "live-index")]
         (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator "xtdb" bp log
                                                                block-cat table-catalog trie-catalog
-
                                                                nil (HashMap.)
                                                                nil (StampedLock.)
                                                                (RefCounter.)
                                                                (RowCounter.) 102400
                                                                64 1024
                                                                [])]
-          (let [tx-key (serde/->TxKey 0 (.toInstant #inst "2000"))
-                live-index-tx (.startTx live-index tx-key)
-                live-table-tx (.liveTable live-index-tx table)
-                doc-wtr (.getDocWriter live-table-tx)]
+          (with-open [live-index-tx (.startTx live-index (serde/->TxKey 0 (.toInstant #inst "2000")))]
+            (let [live-table-tx (.liveTable live-index-tx table)
+                  doc-wtr (.getDocWriter live-table-tx)]
 
-            (doseq [uuid uuids]
-              (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
-                       (fn []
-                         (.endStruct doc-wtr))))
+              (doseq [uuid uuids]
+                (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
+                         (fn []
+                           (.endStruct doc-wtr))))
 
-            (.commit live-index-tx)
+              (.commit live-index-tx)
 
-            (with-open [snap (.openSnapshot live-index)]
-              (let [live-index-snap (.getLiveIndex snap)
-                    live-table-before (live-table-snap->data (.liveTable live-index-snap table))]
+              (with-open [snap (.openSnapshot live-index)]
+                (let [live-index-snap (.getLiveIndex snap)
+                      live-table-before (live-table-snap->data (.liveTable live-index-snap table))]
 
-                (.finishBlock live-index 0)
+                  (.finishBlock live-index 0)
 
-                (let [live-table-after (live-table-snap->data (.liveTable live-index-snap table))]
+                  (let [live-table-after (live-table-snap->data (.liveTable live-index-snap table))]
 
-                  (t/is (= (:live-trie-iids live-table-before)
-                           (:live-trie-iids live-table-after)
-                           uuids))
+                    (t/is (= (:live-trie-iids live-table-before)
+                             (:live-trie-iids live-table-after)
+                             uuids))
 
-                  (t/is (= (util/->clj live-table-before)
-                           (util/->clj live-table-after))))))))))))
+                    (t/is (= (util/->clj live-table-before)
+                             (util/->clj live-table-after)))))))))))))

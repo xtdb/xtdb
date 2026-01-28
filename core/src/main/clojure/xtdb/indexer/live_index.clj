@@ -121,7 +121,8 @@
               (close [_] (util/close snaps)))))
 
         AutoCloseable
-        (close [_]))))
+        (close [_]
+          (util/close table-txs)))))
 
   (openSnapshot [this]
     (let [snap-read-stamp (.readLock snap-lock)]

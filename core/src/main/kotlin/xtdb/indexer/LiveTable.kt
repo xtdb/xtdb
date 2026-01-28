@@ -58,10 +58,14 @@ constructor(
 
     class Snapshot(
         val columnTypes: Map<ColumnName, VectorType>,
-        val segment: MemorySegment
+        val segment: MemorySegment,
+        val txSegment: MemorySegment? = null
     ) : AutoCloseable {
         val liveRelation: RelationReader get() = segment.rel
         val liveTrie: MemoryHashTrie get() = segment.trie
+
+        val txRelation: RelationReader? get() = txSegment?.rel
+        val txTrie: MemoryHashTrie? get() = txSegment?.trie
 
         fun columnType(col: ColumnName): VectorType = columnTypes[col] ?: Null
 
@@ -69,6 +73,7 @@ constructor(
 
         override fun close() {
             segment.rel.close()
+            txSegment?.rel?.close()
         }
     }
 
@@ -79,62 +84,77 @@ constructor(
         var transientTrie = liveTrie; private set
         private val systemFrom: InstantMicros = txKey.systemTime.asMicros
 
-        fun openSnapshot(): Snapshot = openSnapshot(transientTrie)
-        val docWriter: VectorWriter by lazy { putVec }
-        val liveRelation: RelationWriter = this@LiveTable.liveRelation
+        // Transaction-scoped relation and trie (indices are 0-based in txRelation)
+        val txRelation: Relation = Trie.openLogDataWriter(al)
+        private val txIidVec = txRelation["_iid"]
+        private val txSystemFromVec = txRelation["_system_from"]
+        private val txValidFromVec = txRelation["_valid_from"]
+        private val txValidToVec = txRelation["_valid_to"]
+        private val txOpVec = txRelation["op"]
+        private val txPutVec by lazy { txOpVec.vectorFor("put", STRUCT_TYPE, false) }
+        private val txDeleteVec = txOpVec["delete"]
+        private val txEraseVec = txOpVec["erase"]
+        private var txTrie: MemoryHashTrie = MemoryHashTrie.emptyTrie(txIidVec)
 
-        val startPos = liveRelation.rowCount
+        fun openSnapshot(): Snapshot = openSnapshot(transientTrie, txTrie, txRelation)
+        val docWriter: VectorWriter by lazy { txPutVec }
 
         fun logPut(iid: ByteBuffer, validFrom: Long, validTo: Long, writeDocFun: Runnable) {
-            val pos = liveRelation.rowCount
+            val pos = txRelation.rowCount
 
-            iidVec.writeBytes(iid)
-            systemFromVec.writeLong(systemFrom)
-            validFromVec.writeLong(validFrom)
-            validToVec.writeLong(validTo)
+            txIidVec.writeBytes(iid)
+            txSystemFromVec.writeLong(systemFrom)
+            txValidFromVec.writeLong(validFrom)
+            txValidToVec.writeLong(validTo)
 
             writeDocFun.run()
 
-            liveRelation.endRow()
+            txRelation.endRow()
 
-            transientTrie += pos
-            rowCounter.addRows(1)
+            txTrie += pos
         }
 
         fun logDelete(iid: ByteBuffer, validFrom: Long, validTo: Long) {
-            val pos = liveRelation.rowCount
+            val pos = txRelation.rowCount
 
-            iidVec.writeBytes(iid)
-            systemFromVec.writeLong(systemFrom)
-            validFromVec.writeLong(validFrom)
-            validToVec.writeLong(validTo)
-            deleteVec.writeNull()
-            liveRelation.endRow()
+            txIidVec.writeBytes(iid)
+            txSystemFromVec.writeLong(systemFrom)
+            txValidFromVec.writeLong(validFrom)
+            txValidToVec.writeLong(validTo)
+            txDeleteVec.writeNull()
+            txRelation.endRow()
 
-            transientTrie += pos
-            rowCounter.addRows(1)
+            txTrie += pos
         }
 
         fun logErase(iid: ByteBuffer) {
-            val pos = liveRelation.rowCount
+            val pos = txRelation.rowCount
 
-            iidVec.writeBytes(iid)
-            systemFromVec.writeLong(systemFrom)
-            validFromVec.writeLong(MIN_LONG)
-            validToVec.writeLong(MAX_LONG)
-            eraseVec.writeNull()
-            liveRelation.endRow()
+            txIidVec.writeBytes(iid)
+            txSystemFromVec.writeLong(systemFrom)
+            txValidFromVec.writeLong(MIN_LONG)
+            txValidToVec.writeLong(MAX_LONG)
+            txEraseVec.writeNull()
+            txRelation.endRow()
 
-            transientTrie += pos
-            rowCounter.addRows(1)
+            txTrie += pos
         }
 
         fun commit(): LiveTable {
-            val pos = liveRelation.rowCount
-            trieMetadataCalculator.update(startPos, pos)
-            hllCalculator.update(opVec, startPos, pos)
+            val txRowCount = txRelation.rowCount
+            if (txRowCount > 0) {
+                val offset = this@LiveTable.liveRelation.rowCount
 
-            liveTrie = transientTrie
+                this@LiveTable.liveRelation.append(txRelation)
+
+                liveTrie = liveTrie.addRange(offset, txRowCount)
+
+                // Update metadata calculators with new range in liveRelation
+                trieMetadataCalculator.update(offset, offset + txRowCount)
+                hllCalculator.update(opVec, offset, offset + txRowCount)
+
+                rowCounter.addRows(txRowCount)
+            }
 
             return this@LiveTable
         }
@@ -144,6 +164,7 @@ constructor(
         }
 
         override fun close() {
+            txRelation.close()
         }
     }
 
@@ -164,6 +185,25 @@ constructor(
             val wmLiveTrie = trie.withIidReader(wmLiveRel["_iid"])
 
             return Snapshot(liveRelation.types, MemorySegment(wmLiveTrie, wmLiveRel))
+        }
+    }
+
+    private fun openSnapshot(trie: MemoryHashTrie, txTrie: MemoryHashTrie, txRel: RelationWriter): Snapshot {
+        liveRelation.openDirectSlice(al).closeOnCatch { wmLiveRel ->
+            val wmLiveTrie = trie.withIidReader(wmLiveRel["_iid"])
+
+            // Only include tx segment if there's actual tx data
+            val txSegment = if (txRel.rowCount > 0) {
+                txRel.openDirectSlice(al).closeOnCatch { wmTxRel ->
+                    val wmTxTrie = txTrie.withIidReader(wmTxRel["_iid"])
+                    MemorySegment(wmTxTrie, wmTxRel)
+                }
+            } else null
+
+            // txRel types are a superset (includes any new columns from this tx)
+            val types = if (txSegment != null) txRel.types else liveRelation.types
+
+            return Snapshot(types, MemorySegment(wmLiveTrie, wmLiveRel), txSegment)
         }
     }
 

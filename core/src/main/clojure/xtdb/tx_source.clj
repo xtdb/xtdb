@@ -14,37 +14,33 @@
            (xtdb.api.log Log Log$Message Log$Message$Tx)
            (xtdb.arrow Relation RelationReader)
            (xtdb.catalog BlockCatalog TableCatalog)
-           (xtdb.indexer Indexer$TxSource LiveIndex$Tx)
+           (xtdb.indexer Indexer$TxSource LiveIndex$Tx LiveTable$Tx)
            (xtdb.storage BufferPool)
            (xtdb.table TableRef)
            (xtdb.trie Trie TrieCatalog)))
 
-(defn read-relation-rows
-  ([rel] (read-relation-rows rel 0))
-  ([^RelationReader rel start]
-   (->> (.getAsMaps rel)
-        (drop start)
-        (map (fn [{:xt/keys [iid valid-from system-from valid-to]
-                   :keys [^TaggedValue op]}]
-               (let [op-tag (.getTag op)]
-                 (cond-> {:iid iid
-                          :valid-from (time/->instant valid-from)
-                          :system-from (time/->instant system-from)
-                          :valid-to (let [vt (time/->instant valid-to)]
-                                      (when-not (= vt time/end-of-time)
-                                        vt))
-                          :op op-tag}
-                   (= op-tag :put) (assoc :doc (.getValue op))))))
-        (into []))))
+(defn read-relation-rows [^RelationReader rel]
+  (->> (.getAsMaps rel)
+       (map (fn [{:xt/keys [iid valid-from system-from valid-to]
+                  :keys [^TaggedValue op]}]
+              (let [op-tag (.getTag op)]
+                (cond-> {:iid iid
+                         :valid-from (time/->instant valid-from)
+                         :system-from (time/->instant system-from)
+                         :valid-to (let [vt (time/->instant valid-to)]
+                                     (when-not (= vt time/end-of-time)
+                                       vt))
+                         :op op-tag}
+                  (= op-tag :put) (assoc :doc (.getValue op))))))
+       (into [])))
 
 (defn read-table-rows [^TableRef table ^LiveIndex$Tx live-idx-tx]
-  (let [live-table (.liveTable live-idx-tx table)
-        start-pos (.getStartPos live-table)
-        live-relation (.getLiveRelation live-table)]
+  (let [^LiveTable$Tx live-table (.liveTable live-idx-tx table)
+        tx-relation (.getTxRelation live-table)]
     {:db (.getDbName table)
      :schema (.getSchemaName table)
      :table (.getTableName table)
-     :ops (map #(dissoc % :system-from) (read-relation-rows live-relation start-pos))}))
+     :ops (map #(dissoc % :system-from) (read-relation-rows tx-relation))}))
 
 (defn ->encode-fn [fmt]
   (case fmt
@@ -182,11 +178,7 @@
         (let [live-tables (.getLiveTables live-idx-snap)]
           @(.appendMessage output-log
                            (-> {:transaction {:id tx-key}
-                                :system-time (let [live-table (.liveTable live-idx-tx (first live-tables))
-                                                   start-pos (.getStartPos live-table)
-                                                   live-relation (.getLiveRelation live-table)
-                                                   system-from-vec (.vectorFor live-relation "_system_from")]
-                                               (time/->instant (.getObject system-from-vec start-pos)))
+                                :system-time (.getSystemTime tx-key)
                                 :source {;:version "1.0.0" ;; TODO
                                          :db db-name
                                          :block-idx (inc (or (.getCurrentBlockIndex block-cat) -1))}

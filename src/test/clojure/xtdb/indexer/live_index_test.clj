@@ -35,25 +35,25 @@
                        (mapv (comp vec util/uuid->bytes)))]
 
     (t/testing "commit"
-      (let [live-idx-tx (.startTx live-index (serde/->TxKey 0 (.toInstant #inst "2000")))
-            live-table-tx (.liveTable live-idx-tx #xt/table my-table)
-            put-doc-wrt (.getDocWriter live-table-tx)]
-        (doseq [^UUID iid iids]
-          (.logPut live-table-tx (util/uuid->byte-buffer iid) 0 0
-                   #(.writeObject put-doc-wrt {:some :doc})))
+      (with-open [live-idx-tx (.startTx live-index (serde/->TxKey 0 (.toInstant #inst "2000")))]
+        (let [live-table-tx (.liveTable live-idx-tx #xt/table my-table)
+              put-doc-wrt (.getDocWriter live-table-tx)]
+          (doseq [^UUID iid iids]
+            (.logPut live-table-tx (util/uuid->byte-buffer iid) 0 0
+                     #(.writeObject put-doc-wrt {:some :doc})))
 
-        (.commit live-idx-tx)
+          (.commit live-idx-tx)
 
-        (let [live-table (.liveTable live-index #xt/table my-table)
-              live-rel (.getLiveRelation live-table)
-              iid-vec (.vectorFor live-rel "_iid")
+          (let [live-table (.liveTable live-index #xt/table my-table)
+                live-rel (.getLiveRelation live-table)
+                iid-vec (.vectorFor live-rel "_iid")
 
-              trie (.getLiveTrie live-table)]
+                trie (.getLiveTrie live-table)]
 
-          (t/is (= iid-bytes
-                   (->> (.getLeaves (.compactLogs trie))
-                        (mapcat (fn [^MemoryHashTrie$Leaf leaf]
-                                  (mapv #(vec (.getObject iid-vec %)) (.getData leaf))))))))))
+            (t/is (= iid-bytes
+                     (->> (.getLeaves (.compactLogs trie))
+                          (mapcat (fn [^MemoryHashTrie$Leaf leaf]
+                                    (mapv #(vec (.getObject iid-vec %)) (.getData leaf)))))))))))
 
     (t/testing "finish block"
       (tu/finish-block! tu/*node*)
@@ -136,49 +136,49 @@
 (t/deftest test-new-table-discarded-on-abort-2721
   (let [live-index (.getLiveIndex (db/primary-db tu/*node*))]
 
-    (let [live-tx0 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})
-          foo-table-tx (.liveTable live-tx0 #xt/table foo)
-          doc-wtr (.getDocWriter foo-table-tx)]
-      (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0
-               (fn []
-                 (.endStruct doc-wtr)))
-      (.commit live-tx0))
-
-    (t/testing "aborting bar means it doesn't get added to the committed live-index")
-    (let [live-tx1 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-02T00:00:00Z"})
-          bar-table-tx (.liveTable live-tx1 #xt/table bar)
-          doc-wtr (.getDocWriter bar-table-tx)]
-      (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0
-               (fn []
-                 (.endStruct doc-wtr)))
-
-      (t/testing "doesn't get added in the tx either"
-        (t/is (nil? (.liveTable live-index #xt/table bar))))
-
-      (.abort live-tx1)
-
-      (t/is (some? (.liveTable live-index #xt/table foo)))
-      (t/is (nil? (.liveTable live-index #xt/table bar))))
-
-    (t/testing "aborting foo doesn't clear it from the live-index"
-      (let [live-tx2 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-03T00:00:00Z"})
-            foo-table-tx (.liveTable live-tx2 #xt/table foo)
+    (with-open [live-tx0 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
+      (let [foo-table-tx (.liveTable live-tx0 #xt/table foo)
             doc-wtr (.getDocWriter foo-table-tx)]
         (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0
                  (fn []
                    (.endStruct doc-wtr)))
-        (.abort live-tx2))
+        (.commit live-tx0)))
 
-      (t/is (some? (.liveTable live-index #xt/table foo))))
-
-    (t/testing "committing bar after an abort adds it correctly"
-      (let [live-tx3 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-04T00:00:00Z"})
-            bar-table-tx (.liveTable live-tx3 #xt/table bar)
+    (t/testing "aborting bar means it doesn't get added to the committed live-index")
+    (with-open [live-tx1 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
+      (let [bar-table-tx (.liveTable live-tx1 #xt/table bar)
             doc-wtr (.getDocWriter bar-table-tx)]
         (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0
                  (fn []
                    (.endStruct doc-wtr)))
-        (.commit live-tx3))
+
+        (t/testing "doesn't get added in the tx either"
+          (t/is (nil? (.liveTable live-index #xt/table bar))))
+
+        (.abort live-tx1)
+
+        (t/is (some? (.liveTable live-index #xt/table foo)))
+        (t/is (nil? (.liveTable live-index #xt/table bar)))))
+
+    (t/testing "aborting foo doesn't clear it from the live-index"
+      (with-open [live-tx2 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-03T00:00:00Z"})]
+        (let [foo-table-tx (.liveTable live-tx2 #xt/table foo)
+              doc-wtr (.getDocWriter foo-table-tx)]
+          (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0
+                   (fn []
+                     (.endStruct doc-wtr)))
+          (.abort live-tx2)))
+
+      (t/is (some? (.liveTable live-index #xt/table foo))))
+
+    (t/testing "committing bar after an abort adds it correctly"
+      (with-open [live-tx3 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-04T00:00:00Z"})]
+        (let [bar-table-tx (.liveTable live-tx3 #xt/table bar)
+              doc-wtr (.getDocWriter bar-table-tx)]
+          (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0
+                   (fn []
+                     (.endStruct doc-wtr)))
+          (.commit live-tx3)))
 
       (t/is (some? (.liveTable live-index #xt/table bar))))))
 

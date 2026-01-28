@@ -287,7 +287,11 @@
                                      (BufferPoolSegment. allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
 
                              (when live-table-snap
-                               (.add !segments (.getSegment live-table-snap)))
+                               (.add !segments (.getSegment live-table-snap))
+
+                               ;; Add tx segment for read-own-writes (when snapshot opened from within transaction)
+                               (when-let [tx-seg (.getTxSegment live-table-snap)]
+                                 (.add !segments tx-seg)))
 
                              (when template-table?
                                (.add !segments
