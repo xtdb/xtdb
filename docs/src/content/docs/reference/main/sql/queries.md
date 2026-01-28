@@ -175,7 +175,10 @@ const binaryOp = rr.Sequence("<value>", rr.HorizontalChoice("+", "-", "*", "/"),
 
 const fn = rr.Sequence("<function name>", "(", rr.ZeroOrMore("<value>", ",", "skip"), ")")
 
-const wfn = rr.Sequence("ROW_NUMBER", "(", ")", "OVER", "(", "<window>", ")")
+const rowNumber = rr.Sequence("ROW_NUMBER", "(", ")")
+const leadLagOffset = rr.Optional(rr.Sequence(",", "<offset>"), "skip")
+const leadLag = rr.Sequence(rr.Choice(0, "LEAD", "LAG"), "(", "<value>", leadLagOffset, ")")
+const wfn = rr.Sequence(rr.Choice(0, rowNumber, leadLag), "OVER", "(", "<window>", ")")
 
 const cast = rr.Sequence("CAST", "(", "<value>", "AS", "<data type>", ")")
 const caseValue = rr.Sequence("<value>", rr.ZeroOrMore(rr.Sequence("WHEN", "<value>", "THEN", "<value>"), ","))
@@ -260,6 +263,12 @@ const wfnOrder = rr.Sequence("ORDER", "BY", rr.OneOrMore(rr.Sequence("<value>", 
 
 return rr.Diagram(rr.Optional(wfnPartition), rr.Optional(wfnOrder))
 ```
+
+Note:
+
+- `LEAD`/`LAG` currently only support column references, not arbitrary expressions.
+- The default value parameter to `LEAD`/`LAG` is not yet supported.
+- `IGNORE NULLS` with `LEAD`/`LAG` is not yet supported.
 
 ## Nested sub-queries
 

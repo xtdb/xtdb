@@ -10,12 +10,12 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang IPersistentMap)
-           (com.carrotsearch.hppc LongLongHashMap LongLongMap)
+           (com.carrotsearch.hppc IntArrayList LongLongHashMap LongLongMap)
            (java.io Closeable)
            (java.util LinkedList List Map Spliterator)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb ICursor)
-           (xtdb.arrow IntVector LongVector RelationReader Relation)
+           (xtdb.arrow IntVector LongVector RelationReader Relation Vector VectorReader)
            (xtdb.arrow.agg GroupMapper)))
 
 (s/def ::window-name symbol?)
@@ -32,6 +32,9 @@
   (s/or :nullary (s/cat :f simple-symbol?)
         :unary (s/cat :f simple-symbol?
                       :from-column ::lp/column)
+        :unary-with-offset (s/cat :f simple-symbol?
+                                  :from-column ::lp/column
+                                  :offset integer?)
         :binary (s/cat :f simple-symbol?
                        :left-column ::lp/column
                        :right-column ::lp/column)))
@@ -57,7 +60,7 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWindowFnSpec
   (^xtdb.arrow.VectorReader aggregate [^xtdb.arrow.VectorReader groupMapping
-                                       ^ints sortMapping
+                                       ^ints sort-mapping
                                        ^xtdb.arrow.RelationReader in-rel]))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -81,15 +84,87 @@
             ^LongLongMap group-to-cnt (LongLongHashMap.)]
         (reify
           IWindowFnSpec
-          (aggregate [_ group-mapping sortMapping _in-rel]
+          (aggregate [_ group-mapping sort-mapping _in-rel]
             (let [offset (.getValueCount out-vec)
                   row-count (.getValueCount group-mapping)]
               (dotimes [idx row-count]
-                (.setLong out-vec (+ offset idx) (.putOrAdd group-to-cnt (.getInt group-mapping (aget sortMapping idx)) 1 1)))
+                (.setLong out-vec (+ offset idx) (.putOrAdd group-to-cnt (.getInt group-mapping (aget sort-mapping idx)) 1 1)))
               (.openSlice out-vec al)))
 
           Closeable
           (close [_] (.close out-vec)))))))
+
+(defn- build-partition-starts
+  "Returns an IntArrayList of partition start indices, with row-count as final sentinel.
+  Partition n runs from starts[n] (inclusive) to starts[n+1] (exclusive)."
+  ^IntArrayList [^VectorReader group-mapping, ^ints sort-mapping]
+  (let [row-count (alength sort-mapping)
+        starts (IntArrayList.)]
+    (dotimes [sorted-idx row-count]
+      (let [orig-idx (aget sort-mapping sorted-idx)
+            group-id (.getInt group-mapping orig-idx)]
+        (when (= (.size starts) group-id)
+          (.add starts sorted-idx))))
+    (.add starts row-count)
+    starts))
+
+(defmethod ->window-fn-factory :lead [{:keys [to-name from-name from-type ^long offset]}]
+  (let [out-type (types/->nullable-type from-type)]
+    (reify IWindowFnSpecFactory
+      (getToColumnName [_] to-name)
+      (getToColumnType [_] out-type)
+
+      (build [_ al]
+        (let [out-vec (Vector/open al (str to-name) out-type)]
+          (reify IWindowFnSpec
+            (aggregate [_ group-mapping sort-mapping in-rel]
+              (let [from-vec (.vectorFor in-rel (str from-name))
+                    row-copier (.rowCopier from-vec out-vec)
+                    partition-starts (build-partition-starts group-mapping sort-mapping)
+                    n-partitions (dec (.size partition-starts))]
+                (dotimes [part-idx n-partitions]
+                  (let [partition-start (.get partition-starts part-idx)
+                        partition-end (.get partition-starts (inc part-idx))]
+                    (dotimes [within-part-idx (- partition-end partition-start)]
+                      (let [sorted-idx (+ partition-start within-part-idx)
+                            lead-row-idx (+ sorted-idx offset)]
+                        (if (< lead-row-idx partition-end)
+                          (.copyRow row-copier (aget ^ints sort-mapping lead-row-idx))
+                          (.writeNull out-vec)))))))
+
+              (.openSlice out-vec al))
+
+            Closeable
+            (close [_] (.close out-vec))))))))
+
+(defmethod ->window-fn-factory :lag [{:keys [to-name from-name from-type ^long offset]}]
+  (let [out-type (types/->nullable-type from-type)]
+    (reify IWindowFnSpecFactory
+      (getToColumnName [_] to-name)
+      (getToColumnType [_] out-type)
+
+      (build [_ al]
+        (let [out-vec (Vector/open al (str to-name) out-type)]
+          (reify IWindowFnSpec
+            (aggregate [_ group-mapping sort-mapping in-rel]
+              (let [from-vec (.vectorFor in-rel (str from-name))
+                    row-copier (.rowCopier from-vec out-vec)
+                    partition-starts (build-partition-starts group-mapping sort-mapping)
+                    n-partitions (dec (.size partition-starts))]
+                (dotimes [part-idx n-partitions]
+                  (let [partition-start (.get partition-starts part-idx)
+                        partition-end (.get partition-starts (inc part-idx))]
+                    (dotimes [within-part-idx (- partition-end partition-start)]
+                      (let [sorted-idx (+ partition-start within-part-idx)
+                            lag-row-idx (- sorted-idx offset)]
+                        (if (>= lag-row-idx partition-start)
+                          (.copyRow row-copier (aget ^ints sort-mapping lag-row-idx))
+                          (.writeNull out-vec)))))))
+
+              (.openSlice out-vec al))
+
+            Closeable
+            (close [_] (.close out-vec))))))))
 
 (deftype WindowFnCursor [^BufferAllocator allocator
                          ^ICursor in-cursor
@@ -143,11 +218,18 @@
                                            (->window-fn-factory (into {:to-name to-column
                                                                        :zero-row? (empty? partition-cols)}
                                                                       (zmatch window-agg
-                                                                              [:nullary agg-opts]
-                                                                              (select-keys agg-opts [:f])
+                                                                        [:nullary agg-opts]
+                                                                        agg-opts
 
-                                                                              [:unary _agg-opts]
-                                                                              (throw (UnsupportedOperationException.))))))))
+                                                                        [:unary agg-opts]
+                                                                        (assoc agg-opts
+                                                                               :from-name (:from-column agg-opts)
+                                                                               :from-type (get vec-types (:from-column agg-opts)))
+
+                                                                        [:unary-with-offset agg-opts]
+                                                                        (assoc agg-opts
+                                                                               :from-name (:from-column agg-opts)
+                                                                               :from-type (get vec-types (:from-column agg-opts)))))))))
               out-vec-types (into vec-types
                                   (->> window-fn-factories
                                        (into {} (map (juxt #(.getToColumnName ^IWindowFnSpecFactory %)

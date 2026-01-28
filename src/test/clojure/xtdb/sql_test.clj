@@ -995,6 +995,50 @@
              (xt/q tu/*node* "SELECT a, b, ROW_NUMBER() OVER (PARTITION BY y ORDER BY z) AS rn FROM docs"))
           "no existing columns")))
 
+(t/deftest test-lead-lag-window-functions
+  (xt/submit-tx tu/*node* [[:put-docs :docs
+                            {:xt/id 0, :a 1, :b 10}
+                            {:xt/id 1, :a 1, :b 20}
+                            {:xt/id 2, :a 1, :b 30}
+                            {:xt/id 3, :a 2, :b 40}
+                            {:xt/id 4, :a 2, :b 50}]])
+
+  (t/is (= #{{:a 1, :b 10}
+             {:a 1, :b 20, :prevb 10}
+             {:a 1, :b 30, :prevb 20}
+             {:a 2, :b 40}
+             {:a 2, :b 50, :prevb 40}}
+           (->> (xt/q tu/*node* "SELECT a, b, LAG(b, 1) OVER (PARTITION BY a ORDER BY b) AS prevb FROM docs")
+                set))
+        "LAG returns previous value within partition")
+
+  (t/is (= #{{:a 1, :b 10, :nextb 20}
+             {:a 1, :b 20, :nextb 30}
+             {:a 1, :b 30}
+             {:a 2, :b 40, :nextb 50}
+             {:a 2, :b 50}}
+           (->> (xt/q tu/*node* "SELECT a, b, LEAD(b, 1) OVER (PARTITION BY a ORDER BY b) AS nextb FROM docs")
+                set))
+        "LEAD returns next value within partition")
+
+  (t/is (= #{{:a 1, :b 10, :nextb 30}
+             {:a 1, :b 20}
+             {:a 1, :b 30}
+             {:a 2, :b 40}
+             {:a 2, :b 50}}
+           (->> (xt/q tu/*node* "SELECT a, b, LEAD(b, 2) OVER (PARTITION BY a ORDER BY b) AS nextb FROM docs")
+                set))
+        "LEAD with offset 2")
+
+  (t/is (= #{{:a 1, :b 10}
+             {:a 1, :b 20, :prevb 10}
+             {:a 1, :b 30, :prevb 20}
+             {:a 2, :b 40}
+             {:a 2, :b 50, :prevb 40}}
+           (->> (xt/q tu/*node* "SELECT a, b, LAG(b) OVER (PARTITION BY a ORDER BY b) AS prevb FROM docs")
+                set))
+        "LAG with default offset of 1"))
+
 (t/deftest test-operators-with-unresolved-column-references-3640
   (t/is (=plan-file
          "test-group-by-with-unresolved-column-reference"
