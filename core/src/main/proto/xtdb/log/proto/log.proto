@@ -12,6 +12,7 @@ message LogMessage {
         TriesAdded tries_added = 2;
         AttachDatabase attach_database = 3;
         DetachDatabase detach_database = 4;
+        TriesDeleted tries_deleted = 5;
     }
 }
 
@@ -62,4 +63,11 @@ message AttachDatabase {
 
 message DetachDatabase {
     string db_name = 1;
+}
+
+message TriesDeleted {
+    int32 storage_version = 1;
+    int32 storage_epoch = 2;
+    string table_name = 3;
+    repeated string trie_keys = 4;
 }

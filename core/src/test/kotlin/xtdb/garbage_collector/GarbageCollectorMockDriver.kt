@@ -1,12 +1,14 @@
 package xtdb.garbage_collector
 
 import kotlinx.coroutines.yield
+import xtdb.api.log.Log.Message
 import xtdb.database.IDatabase
 import xtdb.table.TableRef
 import xtdb.trie.TrieKey
 import xtdb.util.debug
 import xtdb.util.logger
 import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
 
 private val LOGGER = GarbageCollectorMockDriver::class.logger
 
@@ -15,11 +17,11 @@ class GarbageCollectorMockDriver() : GarbageCollector.Driver.Factory {
 
     // Track all deleted paths and trie keys across all systems
     val deletedPaths = mutableListOf<Path>()
-    val deletedTrieKeys = mutableMapOf<TableRef, MutableSet<TrieKey>>()
+    val deletedTrieKeys = ConcurrentHashMap<TableRef, MutableSet<TrieKey>>()
 
     override fun create(db: IDatabase) = ForDatabase(db, nextSystemId++)
 
-    inner class ForDatabase(val db: IDatabase, val systemId: Int) : GarbageCollector.Driver {
+    inner class ForDatabase(private val db: IDatabase, val systemId: Int) : GarbageCollector.Driver {
         private val bufferPool = db.bufferPool
         private val trieCatalog = db.trieCatalog
 
@@ -30,13 +32,18 @@ class GarbageCollectorMockDriver() : GarbageCollector.Driver.Factory {
             bufferPool.deleteIfExists(path)
         }
 
-        override suspend fun deleteTries(tableName: TableRef, trieKeys: Set<TrieKey>) {
+        override suspend fun appendMessage(msg: Message.TriesDeleted) {
             yield()
-            LOGGER.debug("systemId=$systemId Removing ${trieKeys.size} tries from catalog for table $tableName: $trieKeys")
-            synchronized(deletedTrieKeys) {
-                deletedTrieKeys.getOrPut(tableName) { mutableSetOf() }.addAll(trieKeys)
+
+            val table = msg.tableName.let { TableRef.parse(db.name, it) }
+
+            deletedTrieKeys.compute(table) { _, existingKeys ->
+                val keys = existingKeys ?: mutableSetOf()
+                keys.addAll(msg.trieKeys)
+                keys
             }
-            trieCatalog.deleteTries(tableName, trieKeys)
+
+            trieCatalog.deleteTries(table, msg.trieKeys.toSet())
         }
 
         override fun close() {}

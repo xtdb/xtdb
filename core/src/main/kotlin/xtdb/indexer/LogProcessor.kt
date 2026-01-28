@@ -224,6 +224,18 @@ class LogProcessor(
                         null
                     }
 
+                    is Message.TriesDeleted -> {
+                        if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == db.bufferPool.epoch) {
+                            val table = TableRef.parse(db.name, msg.tableName)
+                            val trieKeySet = msg.trieKeys.toSet()
+
+                            trieCatalog.deleteTries(table, trieKeySet)
+
+                            LOG.debug("Processed TriesDeleted: deleted ${trieKeySet.size} tries from table ${msg.tableName}")
+                        }
+                        null
+                    }
+
                     is Message.AttachDatabase -> {
                         requireNotNull(dbCatalog) { "attach-db received on non-primary database ${db.name}" }
                         val res = try {

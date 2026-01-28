@@ -2,8 +2,12 @@ package xtdb.garbage_collector
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.plus
 import org.slf4j.LoggerFactory
+import xtdb.api.log.Log
+import xtdb.api.log.Log.Message
+import xtdb.api.storage.Storage
 import xtdb.database.IDatabase
 import xtdb.table.TableRef
 import xtdb.time.microsAsInstant
@@ -20,7 +24,6 @@ import kotlin.time.Duration.Companion.seconds
 
 private val LOGGER = LoggerFactory.getLogger(GarbageCollector::class.java)
 
-
 interface GarbageCollector : Closeable {
     suspend fun garbageCollectTries(garbageAsOf: Instant? = null)
     suspend fun collectGarbage()
@@ -29,7 +32,7 @@ interface GarbageCollector : Closeable {
 
     interface Driver : AutoCloseable {
         suspend fun deletePath(path: Path)
-        suspend fun deleteTries(tableName: TableRef, trieKeys: Set<TrieKey>)
+        suspend fun appendMessage(msg: Message.TriesDeleted)
 
         interface Factory {
             fun create(db: IDatabase): Driver
@@ -39,15 +42,26 @@ interface GarbageCollector : Closeable {
             @JvmStatic
             fun real() = object : Factory {
                 override fun create(db: IDatabase) = object : Driver {
-                    private val trieCatalog = db.trieCatalog
                     private val bufferPool = db.bufferPool
+                    private val log = db.log
 
                     override suspend fun deletePath(path: Path) {
                         bufferPool.deleteIfExists(path)
                     }
 
-                    override suspend fun deleteTries(tableName: TableRef, trieKeys: Set<TrieKey>) {
-                        trieCatalog.deleteTries(tableName, trieKeys)
+                    override suspend fun appendMessage(msg: Message.TriesDeleted) {
+                        try {
+                            val sentMessage = log.appendMessage(msg).await()
+
+                            LOGGER.debug(
+                                "Emitted TriesDeleted message for table {} ({} tries) at offset {}",
+                                msg.tableName,
+                                msg.trieKeys.size,
+                                sentMessage.logOffset
+                            )
+                        } catch (e: Exception) {
+                            LOGGER.warn("Failed to emit TriesDeleted message for table {}", msg.tableName, e)
+                        }
                     }
 
                     override fun close() {}
@@ -57,7 +71,7 @@ interface GarbageCollector : Closeable {
     }
 
     class Impl @JvmOverloads constructor(
-        db: IDatabase,
+        private val db: IDatabase,
         driverFactory: Driver.Factory,
         private val blocksToKeep: Int,
         private val garbageLifetime: Duration,
@@ -68,8 +82,7 @@ interface GarbageCollector : Closeable {
         private val driver = driverFactory.create(db)
         private val blockCatalog = db.blockCatalog
         private val trieCatalog = db.trieCatalog
-        private val bufferPool = db.bufferPool
-        private val blockGc = BlockGarbageCollector(blockCatalog, bufferPool, blocksToKeep)
+        private val blockGc = BlockGarbageCollector(blockCatalog, db.bufferPool, blocksToKeep)
 
         private fun defaultGarbageAsOf(): Instant? =
             blockCatalog.blockFromLatest(blocksToKeep)
@@ -90,14 +103,35 @@ interface GarbageCollector : Closeable {
                 yieldIfSimulation() // simulate suspension for testing
                 LOGGER.debug("Starting trie garbage collection")
                 val tableNames = blockCatalog.allTables.shuffled().take(100)
+
                 for (tableName in tableNames) {
                     val garbageTries = trieCatalog.garbageTries(tableName, asOf)
+
+                    if (garbageTries.isEmpty()) continue
+
+                    // Delete files (track successes for message)
+                    val successfullyDeleted = mutableSetOf<TrieKey>()
+
                     for (garbageTrie in garbageTries) {
-                        driver.deletePath(tableName.metaFilePath(garbageTrie))
-                        driver.deletePath(tableName.dataFilePath(garbageTrie))
+                        try {
+                            driver.deletePath(tableName.metaFilePath(garbageTrie))
+                            driver.deletePath(tableName.dataFilePath(garbageTrie))
+                            successfullyDeleted.add(garbageTrie)
+                        } catch (e: Exception) {
+                            LOGGER.warn("Failed to delete trie files for {}", garbageTrie, e)
+                        }
                     }
-                    driver.deleteTries(tableName, garbageTries)
+
+                    if (successfullyDeleted.isNotEmpty()) {
+                        driver.appendMessage(
+                            Message.TriesDeleted(
+                                Storage.VERSION, db.bufferPool.epoch,
+                                tableName.schemaAndTable, successfullyDeleted
+                            )
+                        )
+                    }
                 }
+
                 LOGGER.debug("Trie garbage collection completed")
             } catch (e: Exception) {
                 LOGGER.warn("Trie garbage collection failed", e)
