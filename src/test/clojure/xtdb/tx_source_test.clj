@@ -87,6 +87,18 @@
         (let [msg (-> (.getMessages output-log) first (decode-record :json))]
           (t/is (= #{:transaction :system-time :source :tables} (set (keys msg))))
           (t/is (= "xtdb" (-> msg :source :db)))))))
+
+  (t/testing "transit+json-verbose"
+    (with-open [node (xtn/start-node (merge tu/*node-opts*
+                                            {:tx-source {:enable true
+                                                         :output-log [::tu/recording {}]
+                                                         :format :transit+json-verbose}}))]
+      (let [^RecordingLog output-log (tu/get-output-log node)]
+        (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1, :value "test"}]])
+        (let [msg (-> (.getMessages output-log) first (decode-record :json))]
+          (t/is (= #{:transaction :system-time :source :tables} (set (keys msg))))
+          (t/is (= "xtdb" (-> msg :source :db)))))))
+
   (t/testing "transit+msgpack"
     (with-open [node (xtn/start-node (merge tu/*node-opts*
                                             {:tx-source {:enable true

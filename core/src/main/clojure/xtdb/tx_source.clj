@@ -49,11 +49,12 @@
 (defn ->encode-fn [fmt]
   (case fmt
     :transit+json #(xtdb.serde/write-transit % :json)
+    :transit+json-verbose #(xtdb.serde/write-transit % :json-verbose)
     :transit+msgpack #(xtdb.serde/write-transit % :msgpack)))
 
 (defn ->decode-fn [fmt]
   (case fmt
-    :transit+json #(xtdb.serde/read-transit % :json)
+    (:transit+json :transit+json-verbose) #(xtdb.serde/read-transit % :json)
     :transit+msgpack #(xtdb.serde/read-transit % :msgpack)))
 
 (defn- read-l0-data-file
