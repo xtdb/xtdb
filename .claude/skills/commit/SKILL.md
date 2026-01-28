@@ -2,7 +2,7 @@
 name: commit
 description: Create a commit with contextual body explaining the why
 user-invocable: true
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 # Contextual Git Commit

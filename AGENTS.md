@@ -16,6 +16,7 @@ We take great inspiration from the principle of 'making illegal states unreprese
   * Use sub-tags/scopes in parentheses where relevant, e.g. `fix(ee):`, `feat(sql):`, `refactor(logical-plan):`.
   * Indicate breaking changes with `!`, e.g. `tidy!:`.
 * If you need to create git worktrees, create them in the `.tasks` directory in the repo root without setting upstream tracking (e.g., `git worktree add .tasks/<branch-name> -b <branch-name> origin/main`). This allows developers to explicitly push to their own forks.
+  * After creating a worktree, `cd` into it before performing any further operations.
   * Check to see whether you're in a worktree when you start up - if you are, ensure that any reads and updates are done within that worktree.
 * When tests fail, read the test report at `build/reports/tests/test/index.html` instead of re-running tests with different flags to get error details.
 * For file operations (reading, searching, editing, writing), use the built-in tools (`Read`, `Edit`, `Write`, `Glob`, `Grep`).
