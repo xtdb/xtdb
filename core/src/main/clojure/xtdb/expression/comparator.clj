@@ -27,6 +27,22 @@
 (defmethod expr/codegen-call [:<> :any :any] [_]
   {:return-type #xt/type :bool, :->call-code #(do `(not= ~@%))})
 
+;; distinct_from is the SQL standard NULL-safe inequality operator (IS DISTINCT FROM).
+;; NULL IS DISTINCT FROM NULL → false (they're not distinct)
+;; NULL IS DISTINCT FROM <value> → true (they are distinct)
+;; <value> IS DISTINCT FROM <value> → delegates to <>
+(defmethod expr/codegen-call [:distinct_from :null :null] [_]
+  {:return-type #xt/type :bool, :->call-code (constantly false)})
+
+(defmethod expr/codegen-call [:distinct_from :null :any] [_]
+  {:return-type #xt/type :bool, :->call-code (constantly true)})
+
+(defmethod expr/codegen-call [:distinct_from :any :null] [_]
+  {:return-type #xt/type :bool, :->call-code (constantly true)})
+
+(defmethod expr/codegen-call [:distinct_from :any :any] [expr]
+  (expr/codegen-call (assoc expr :f :<>)))
+
 (defmethod expr/codegen-call [:compare :bool :bool] [_]
   {:return-type #xt/type :i32
    :->call-code (fn [emitted-args]

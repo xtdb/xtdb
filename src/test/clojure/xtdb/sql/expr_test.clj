@@ -402,7 +402,10 @@
     "foo.a IS NOT UNKNOWN" '(not (nil? f/a))
 
     "foo.a IS NULL" '(nil? f/a)
-    "foo.a IS NOT NULL" '(not (nil? f/a))))
+    "foo.a IS NOT NULL" '(not (nil? f/a))
+
+    "foo.a IS DISTINCT FROM foo.b" '(distinct-from f/a f/b)
+    "foo.a IS NOT DISTINCT FROM foo.b" '(not (distinct-from f/a f/b))))
 
 (t/deftest test-interval-exprs
   (t/are [sql expected]

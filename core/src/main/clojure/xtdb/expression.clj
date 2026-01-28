@@ -628,6 +628,7 @@
 (def ^:private shortcut-null-args?
   (complement (comp #{:is_true :is_false :is_null :true? :false? :nil? :boolean
                       :=== :null_eq :compare_nulls_first :compare_nulls_last
+                      :distinct_from
                       :period :str :_patch}
                     normalise-fn-name)))
 
