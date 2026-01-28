@@ -14,7 +14,6 @@
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
             [xtdb.xtql :as xtql]
             [xtdb.xtql.plan :as xtql.plan])
   (:import clojure.lang.MapEntry
@@ -1883,6 +1882,25 @@
     (let [window-sym (-> (->col-sym (str "xt$row_number_" (swap! !id-count inc)))
                          (vary-meta assoc :window-out-sym? true))]
       [window-sym {:window-agg '(row-number)}]))
+
+  (visitLeadOrLagWindowFunction [{{:keys [!id-count]} :env :as this} ctx]
+    (let [fn-name (if (.LEAD ctx) 'lead 'lag)
+          extent-expr (-> (.leadOrLagExtent ctx) (.accept this))
+          offset (if-let [offset-ctx (.offset ctx)]
+                   (Long/parseLong (.getText offset-ctx))
+                   1)]
+      (when (.defaultExpression ctx)
+        (throw (err/unsupported ::lead-lag-default-expr
+                                "LEAD/LAG default expressions are not currently supported")))
+      (when (.nullTreatment ctx)
+        (throw (err/unsupported ::lead-lag-ignore-nulls
+                                "LEAD/LAG IGNORE NULLS is not currently supported")))
+      (when-not (symbol? extent-expr)
+        (throw (err/unsupported ::lead-lag-expr
+                                "LEAD/LAG currently only supports column references, not arbitrary expressions")))
+      (let [window-sym (-> (->col-sym (str "xt$" fn-name "_" (swap! !id-count inc)))
+                           (vary-meta assoc :window-out-sym? true))]
+        [window-sym {:window-agg (list fn-name extent-expr offset)}])))
 
   (visitWindowSpecification [this ctx]
     (-> (.windowSpecificationDetails ctx) (.accept this)))
