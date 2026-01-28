@@ -9,6 +9,7 @@ import xtdb.api.TransactionKey
 import xtdb.arrow.*
 import xtdb.arrow.VectorType.*
 import xtdb.log.proto.TrieMetadata
+import xtdb.segment.MemorySegment
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
@@ -57,15 +58,17 @@ constructor(
 
     class Snapshot(
         val columnTypes: Map<ColumnName, VectorType>,
-        val liveRelation: RelationReader,
-        val liveTrie: MemoryHashTrie
+        val segment: MemorySegment
     ) : AutoCloseable {
+        val liveRelation: RelationReader get() = segment.rel
+        val liveTrie: MemoryHashTrie get() = segment.trie
+
         fun columnType(col: ColumnName): VectorType = columnTypes[col] ?: Null
 
         val types: Map<ColumnName, VectorType> get() = columnTypes
 
         override fun close() {
-            liveRelation.close()
+            segment.rel.close()
         }
     }
 
@@ -160,7 +163,7 @@ constructor(
         liveRelation.openDirectSlice(al).closeOnCatch { wmLiveRel ->
             val wmLiveTrie = trie.withIidReader(wmLiveRel["_iid"])
 
-            return Snapshot(liveRelation.types, wmLiveRel, wmLiveTrie)
+            return Snapshot(liveRelation.types, MemorySegment(wmLiveTrie, wmLiveRel))
         }
     }
 

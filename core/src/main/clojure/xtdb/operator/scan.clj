@@ -287,8 +287,7 @@
                                      (BufferPoolSegment. allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
 
                              (when live-table-snap
-                               (.add !segments
-                                     (MemorySegment. (.getLiveTrie live-table-snap) (.getLiveRelation live-table-snap))))
+                               (.add !segments (.getSegment live-table-snap)))
 
                              (when template-table?
                                (.add !segments
