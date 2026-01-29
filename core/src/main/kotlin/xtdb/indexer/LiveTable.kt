@@ -170,9 +170,9 @@ constructor(
 
     fun startTx(txKey: TransactionKey, newLiveTable: Boolean) = Tx(txKey, newLiveTable)
 
-    private val RelationWriter.types: Map<String, VectorType>
+    private val RelationWriter.types: Map<String, VectorType>?
         get() {
-            val putVec = vectorFor("op").vectorForOrNull("put") ?: return emptyMap()
+            val putVec = vectorFor("op").vectorForOrNull("put") ?: return null
             val type = putVec.type
             check(type is Mono && type.arrowType == STRUCT_TYPE) {
                 "Expected 'put' vector to be STRUCT type, got: $type"
@@ -184,7 +184,7 @@ constructor(
         liveRelation.openDirectSlice(al).closeOnCatch { wmLiveRel ->
             val wmLiveTrie = trie.withIidReader(wmLiveRel["_iid"])
 
-            return Snapshot(liveRelation.types, MemorySegment(wmLiveTrie, wmLiveRel))
+            return Snapshot(liveRelation.types.orEmpty(), MemorySegment(wmLiveTrie, wmLiveRel))
         }
     }
 
@@ -201,9 +201,9 @@ constructor(
             } else null
 
             // txRel types are a superset (includes any new columns from this tx)
-            val types = if (txSegment != null) txRel.types else liveRelation.types
+            val types = if (txSegment != null) txRel.types ?: liveRelation.types else liveRelation.types
 
-            return Snapshot(types, MemorySegment(wmLiveTrie, wmLiveRel), txSegment)
+            return Snapshot(types.orEmpty(), MemorySegment(wmLiveTrie, wmLiveRel), txSegment)
         }
     }
 
@@ -226,7 +226,7 @@ constructor(
         return liveRelation.openDirectSlice(al).use { dataRel ->
             val dataFileSize = trieWriter.writeLiveTrie(table, trieKey, liveTrie, dataRel)
             FinishedBlock(
-                liveRelation.types, trieKey, dataFileSize, rowCount,
+                liveRelation.types.orEmpty(), trieKey, dataFileSize, rowCount,
                 trieMetadataCalculator.build(), hllCalculator.build()
             )
         }
