@@ -1,0 +1,378 @@
+-- memory-hash-trie.allium
+--
+-- NOTE: generated, unverified. may contain errors.
+--
+-- Scope: In-memory hierarchical hash trie for row index organization
+-- Includes: MemoryHashTrie, MutableMemoryHashTrie, Node (Branch/Leaf), log compaction
+-- Excludes: Arrow serialization, disk persistence, ArrowHashTrie
+--
+-- Purpose:
+--   MemoryHashTrie organizes row indices (integers pointing into Arrow vectors)
+--   into a tree structure based on IID (Internal Identifier, a 16-byte hash of
+--   entity primary keys). Used as the in-memory index for LiveTable before
+--   transactions are written to block storage.
+--
+-- Concurrency model:
+--   - Single-writer: all mutations create new immutable trie instances
+--   - Multiple concurrent readers: immutable structure allows safe concurrent reads
+--   - Writers never block readers: persistent data structure semantics
+--
+-- Critical invariants:
+--   - The trie stores INTEGER INDICES, not actual row data
+--   - Indices reference rows in an external IID vector (Arrow VectorReader)
+--   - Within each leaf, indices are ordered by: (1) IID ascending, (2) row index DESCENDING
+--   - Row index descending means newer rows for the same IID appear first
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity IID   -- 16-byte fixed-size binary (entity identifier hash)
+
+external entity VectorReader   -- Arrow vector for reading IID values by index
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value Path {
+    -- Sequence of bucket indices representing position in trie
+    -- Each byte is a bucket index (0-3 for 2-bit bucketing)
+    -- NOT a slice of the IID itself
+    buckets: List<Byte>
+}
+
+------------------------------------------------------------
+-- Configuration Constants
+------------------------------------------------------------
+
+-- Threshold for promoting log entries to sorted data
+-- Batches writes before incurring sort cost
+default LOG_LIMIT = 64
+
+-- Maximum entries per leaf before splitting into branch
+default PAGE_LIMIT = 1024
+
+-- Maximum tree depth (supports 16-byte IIDs with 2-bit bucketing)
+default MAX_LEVEL = 64
+
+-- Bits extracted per level (determines branching factor)
+-- 2 bits -> 4 children, 4 bits -> 16 children, 8 bits -> 256 children
+default LEVEL_BITS = 2
+
+------------------------------------------------------------
+-- Entities
+------------------------------------------------------------
+
+entity MemoryHashTrie {
+    root_node: Node
+    iid_reader: VectorReader   -- external vector for IID lookups
+    log_limit: Integer = LOG_LIMIT
+    page_limit: Integer = PAGE_LIMIT
+}
+
+entity Node {
+    path: Path                 -- position in trie hierarchy
+    type: branch | leaf
+}
+
+entity Branch extends Node {
+    -- Branch nodes distribute indices across children by IID bits
+    -- Number of children = 2^LEVEL_BITS (4 for default 2-bit bucketing)
+    children: List<Node?>      -- sparse array, nulls for empty buckets
+}
+
+entity Leaf extends Node {
+    -- Leaf nodes store actual row indices
+
+    data: List<Integer>        -- SORTED indices (compacted from previous logs)
+    log: List<Integer>         -- UNSORTED indices (recent additions, up to log_limit)
+    log_count: Integer         -- number of valid entries in log
+
+    -- Mutable cache for merged result (breaks pure immutability for performance)
+    sorted_data_cache: List<Integer>?
+
+    total_count: data.count + log_count
+}
+
+------------------------------------------------------------
+-- Bucketing (IID -> Path navigation)
+--
+-- Counter-intuitive: the path does NOT store IID bytes directly.
+-- Instead, it stores bucket indices derived from IID bits.
+--
+-- Behavioral guarantees (not implementation):
+--   - Bucketing is DETERMINISTIC: same IID always yields same bucket sequence
+--   - Bucketing is PREFIX-PRESERVING: IIDs sharing a prefix share path prefix
+--   - At max depth, the full path reconstructs the original IID
+--   - Branching factor = 2^LEVEL_BITS (4 children with default 2-bit bucketing)
+------------------------------------------------------------
+
+rule BucketFor {
+    when: BucketFor(iid, level)
+
+    -- Deterministically maps IID to bucket index at given level
+    -- Returns value in range [0, 2^LEVEL_BITS - 1]
+
+    ensures:
+        result in 0..(2^LEVEL_BITS - 1)
+        -- Same IID at same level always returns same bucket
+        BucketFor(iid, level) = BucketFor(iid, level)
+}
+
+------------------------------------------------------------
+-- Rules: Adding indices
+--
+-- Counter-intuitive design: adds go to unsorted `log` array first.
+-- Only when log fills up does compaction occur.
+-- This amortizes sort cost across multiple writes.
+------------------------------------------------------------
+
+rule AddIndex {
+    when: AddIndex(trie, new_idx)
+
+    -- Creates new trie with index added (immutable operation)
+    -- Navigates to correct leaf based on IID at new_idx
+
+    ensures: result = MemoryHashTrie.created(
+        root_node: trie.root_node.add(new_idx),
+        iid_reader: trie.iid_reader,
+        log_limit: trie.log_limit,
+        page_limit: trie.page_limit
+    )
+}
+
+rule AddToLeaf {
+    when: Leaf.add(leaf, trie, new_idx)
+
+    -- Append to log (O(1) operation, no sorting)
+    let new_log_count = leaf.log_count + 1
+    let new_leaf = Leaf.created(
+        path: leaf.path,
+        data: leaf.data,
+        log: leaf.log.with(leaf.log_count, new_idx),
+        log_count: new_log_count
+    )
+
+    ensures:
+        if new_log_count = trie.log_limit:
+            -- Log full: trigger compaction
+            new_leaf.compact_logs(trie)
+        else:
+            new_leaf
+}
+
+rule AddToBranch {
+    when: Branch.add(branch, trie, new_idx)
+
+    let bucket = BucketFor(trie.iid_reader.get(new_idx), branch.path.count)
+    let child = branch.children[bucket]
+    let new_child =
+        if child = null:
+            Leaf.created(path: branch.path.append(bucket))
+        else:
+            child
+
+    ensures: Branch.created(
+        path: branch.path,
+        children: branch.children.with(bucket, new_child.add(trie, new_idx))
+    )
+}
+
+------------------------------------------------------------
+-- Rules: Log compaction
+--
+-- Counter-intuitive: compactLogs merges TWO arrays:
+--   1. `data` - already sorted from previous compactions
+--   2. `log` - unsorted recent additions (must be sorted first)
+--
+-- The merge is O(n) because one input is already sorted.
+-- Only the log needs sorting (typically small: up to log_limit).
+------------------------------------------------------------
+
+rule CompactLogs {
+    when: Leaf.compact_logs(leaf, trie)
+
+    requires: leaf.log_count > 0
+
+    let sorted_log = leaf.log.take(leaf.log_count).sort_by(idx =>
+        (trie.iid_reader.get(idx), -idx)   -- IID asc, row index DESC
+    )
+    let merged = merge_sorted(leaf.data, sorted_log, trie)
+
+    ensures:
+        if merged.count > trie.page_limit and leaf.path.count < MAX_LEVEL:
+            -- Split into branch with child leaves
+            leaf.split_into_branch(trie, merged)
+        else:
+            -- Return compacted leaf
+            Leaf.created(
+                path: leaf.path,
+                data: merged,
+                log: empty_log(trie.log_limit),
+                log_count: 0
+            )
+}
+
+rule SplitIntoBranch {
+    when: Leaf.split_into_branch(leaf, trie, merged_data)
+
+    -- Redistribute indices across child leaves by their bucket at new depth
+    let buckets = merged_data.group_by(idx =>
+        BucketFor(trie.iid_reader.get(idx), leaf.path.count)
+    )
+
+    ensures: Branch.created(
+        path: leaf.path,
+        children: for bucket_idx in 0..(2^LEVEL_BITS - 1):
+            if buckets[bucket_idx] != null:
+                Leaf.created(
+                    path: leaf.path.append(bucket_idx),
+                    data: buckets[bucket_idx]
+                )
+            else:
+                null
+    )
+}
+
+------------------------------------------------------------
+-- Rules: Merge sort (on-demand sorted access)
+--
+-- Counter-intuitive: mergeSort returns a CACHED result.
+-- The sortedData field is mutated even though the trie
+-- presents an immutable API. This is a performance optimization
+-- to avoid re-sorting on repeated queries.
+------------------------------------------------------------
+
+rule MergeSort {
+    when: Leaf.merge_sort(leaf, trie)
+
+    -- Returns fully sorted indices (data + log merged)
+    -- Caches result in sorted_data_cache
+
+    ensures:
+        if leaf.log_count = 0:
+            leaf.data   -- no log entries, data is already sorted
+        else if leaf.sorted_data_cache != null:
+            leaf.sorted_data_cache   -- use cached result
+        else:
+            let sorted_log = leaf.log.take(leaf.log_count).sort_by(idx =>
+                (trie.iid_reader.get(idx), -idx)
+            )
+            let merged = merge_sorted(leaf.data, sorted_log, trie)
+            leaf.sorted_data_cache = merged   -- cache for future calls
+            merged
+}
+
+------------------------------------------------------------
+-- Rules: Comparison ordering
+--
+-- Counter-intuitive: comparison is (IID ascending, row index DESCENDING).
+-- The descending row index ensures that for the same IID, newer rows
+-- (higher indices = written later) appear FIRST. This is critical for
+-- bitemporal queries where we want the most recent version first.
+------------------------------------------------------------
+
+rule Compare {
+    when: Compare(trie, left_idx, right_idx)
+
+    let left_iid = trie.iid_reader.get(left_idx)
+    let right_iid = trie.iid_reader.get(right_idx)
+    let iid_cmp = left_iid.compare_to(right_iid)
+
+    ensures:
+        if iid_cmp != 0:
+            iid_cmp   -- different IIDs: order by IID
+        else:
+            right_idx - left_idx   -- same IID: higher index (newer) comes first
+}
+
+------------------------------------------------------------
+-- Serialization
+--
+-- When serializing to protobuf, logs are compacted first.
+-- Only the sorted `data` arrays are persisted.
+-- Log entries would be lost if not compacted before serialization.
+------------------------------------------------------------
+
+rule ToProto {
+    when: ToProto(trie)
+
+    -- MUST compact logs before serialization
+    -- Logs are ephemeral and not persisted
+
+    ensures: trie.compact_logs().root_node.as_proto()
+}
+
+------------------------------------------------------------
+-- Rules: Lookup operations (MutableMemoryHashTrie variant)
+--
+-- MutableMemoryHashTrie is a variant optimized for hash-based lookups
+-- (used by DistinctRelationMap for deduplication). Key differences:
+--   - Uses integer hash codes instead of 16-byte IIDs
+--   - Provides find/match operations for existence checks
+--   - Mutable internal state (not persistent data structure)
+------------------------------------------------------------
+
+rule FindValue {
+    when: FindValue(trie, hash, comparator)
+
+    -- Find first index matching hash where comparator returns 0
+    -- Returns -1 if not found
+
+    ensures: result = first index in trie.leaves where
+        bucket_matches(index, hash) and comparator(index) = 0
+}
+
+rule ForEachMatch {
+    when: ForEachMatch(trie, hash, consumer)
+
+    -- Iterate all indices that could match the given hash
+    -- (same bucket path). Consumer receives each candidate.
+
+    ensures: for each index in trie where bucket_matches(index, hash):
+        consumer(index)
+}
+
+rule AddIfNotPresent {
+    when: AddIfNotPresent(trie, hash, new_idx, comparator, on_add)
+
+    -- Add index only if no existing index matches via comparator
+    -- Returns (added_idx, was_new)
+
+    let existing = FindValue(trie, hash, comparator)
+
+    ensures:
+        if existing >= 0:
+            (existing, false)   -- already present, return existing
+        else:
+            on_add()            -- callback to write hash to vector
+            trie.add(new_idx)
+            (new_idx, true)     -- newly added
+}
+
+------------------------------------------------------------
+-- Consistency Guarantees
+------------------------------------------------------------
+
+-- 1. Immutable API: AddIndex returns a NEW trie, never mutates the original
+--    (internal sorted_data_cache mutation is invisible to callers)
+
+-- 2. Path determinism: given an IID, there is exactly one path through the trie
+
+-- 3. Ordering within leaves: after merge_sort, indices are always ordered by
+--    (IID ascending, row index descending)
+--    This ensures newest rows for same IID appear first in iteration.
+
+-- 4. Log batching: up to log_limit writes are batched before sorting overhead
+
+-- 5. Splitting: leaves split into branches when exceeding page_limit,
+--    EXCEPT at max depth where leaves can grow unbounded
+
+-- 6. Max depth overflow: at MAX_LEVEL depth, a leaf CANNOT split further.
+--    It accumulates all indices for that IID prefix regardless of page_limit.
+--    (Tested with 50,000 entries in a single max-depth leaf)
+
+-- 7. Path = IID at max depth: when a leaf reaches max depth, its path
+--    reconstructs the full IID (each 4 path buckets = 1 IID byte with 2-bit bucketing)
+
