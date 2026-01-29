@@ -133,6 +133,9 @@ title: String functions
     - `from_pos`: 1-based start position
     - `length`: defaults to end-of-string if not provided
 
+`REVERSE(str)`
+: reverses the characters in the string
+
 `UPPER(str)`
 : upper-case
 

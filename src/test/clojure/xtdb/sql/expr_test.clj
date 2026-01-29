@@ -124,6 +124,18 @@
 (t/deftest test-lower-expr
   (t/is (= '(lower f/a) (plan-expr-with-foo "LOWER(foo.a)"))))
 
+(t/deftest test-reverse-expr
+  (t/is (= '(reverse f/a) (plan-expr-with-foo "REVERSE(foo.a)"))))
+
+(t/deftest test-reverse-query
+  (t/testing "REVERSE reverses characters in a string"
+    (t/is (= [{:result "olleh"}]
+             (xt/q tu/*node* "SELECT REVERSE('hello') AS result")))
+    (t/is (= [{:result ""}]
+             (xt/q tu/*node* "SELECT REVERSE('') AS result")))
+    (t/is (= [{:result "321cba"}]
+             (xt/q tu/*node* "SELECT REVERSE('abc123') AS result")))))
+
 (t/deftest test-substring-expr
   (t/are [sql expected] (= expected (plan-expr-with-foo sql))
     "SUBSTRING(foo.a FROM 1)" '(substring f/a 1)

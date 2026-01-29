@@ -1287,6 +1287,11 @@
    :->call-code (fn [[code]]
                   `(str->buf (.toLowerCase (resolve-string ~code))))})
 
+(defmethod codegen-call [:reverse :utf8] [_]
+  {:return-type #xt/type :utf8
+   :->call-code (fn [[code]]
+                  `(str->buf (-> (resolve-string ~code) (StringBuilder.) (.reverse) (.toString))))})
+
 (defmethod codegen-call [:namespace :keyword] [_]
   {:return-type #xt/type [:? :utf8]
    :continue-call (fn [f [kw]]

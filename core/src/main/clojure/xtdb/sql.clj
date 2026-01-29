@@ -1122,7 +1122,7 @@
 ;; stringy
 (def-sql-fns [str] 1 Long/MAX_VALUE)
 (def-sql-fns [format] 1 Long/MAX_VALUE)
-(def-sql-fns [namespace local_name] 1 1)
+(def-sql-fns [namespace local_name reverse] 1 1)
 
 ;; system info
 (def-sql-fns [col_description] 2 2)
