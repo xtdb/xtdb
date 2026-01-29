@@ -1,0 +1,319 @@
+-- live-index.allium
+--
+-- NOTE: generated, unverified. may contain errors.
+--
+-- Scope: In-memory staging for transactions before block compaction
+-- Includes: LiveIndex, LiveTable, row operations, transaction lifecycle, snapshot visibility
+-- Excludes: Block storage, trie serialization, Arrow memory management
+--
+-- Concurrency model:
+--   - Single-writer thread: all transaction operations (StartTransaction, LogPut,
+--     CommitTransaction, AbortTransaction, FinishBlock, NextBlock) execute serially
+--   - Multiple concurrent readers: snapshots can be held and read concurrently
+--   - Writes don't block reads: persistent data structures ensure existing snapshots
+--     remain valid while new transactions commit
+--
+-- Critical invariant: External queries MUST NOT see in-flight transaction data
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity TransactionKey {
+    tx_id: Integer
+    system_time: Timestamp
+}
+
+external entity TableRef {
+    dbName: String
+    schemaName: String
+    tableName: String
+}
+
+external entity IID   -- 16-byte entity identifier
+
+external entity Document   -- the actual row data for puts
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value ValidTimeRange {
+    from: Timestamp
+    to: Timestamp
+}
+
+value Row {
+    iid: IID
+    system_from: Timestamp
+    valid_time: ValidTimeRange
+    op: Put | Delete | Erase
+}
+
+value Put {
+    doc: Document
+}
+
+value Delete { }
+value Erase { }
+
+------------------------------------------------------------
+-- Entities
+------------------------------------------------------------
+
+entity LiveIndex {
+    latest_completed_tx: TransactionKey?
+    rows_per_block: Integer
+
+    tables: LiveTable for this index
+
+    row_count: tables.sum(t => t.row_count)
+    is_full: row_count >= rows_per_block
+}
+
+entity LiveTable {
+    -- LiveTables are cleared (removed) by NextBlock, not just emptied
+    index: LiveIndex
+    table_ref: TableRef
+    rows: Set<Row>
+
+    row_count: rows.count
+}
+
+entity LiveIndexTx {
+    index: LiveIndex
+    tx_key: TransactionKey
+    status: active | committed | aborted
+
+    table_txs: LiveTableTx for this transaction
+
+    system_from: tx_key.system_time
+}
+
+entity LiveTableTx {
+    transaction: LiveIndexTx
+    table_ref: TableRef
+    live_table: LiveTable?   -- null if table is new
+    is_new_table: live_table = null
+
+    rows: Set<Row>           -- uncommitted rows in this tx
+    row_count: rows.count
+}
+
+------------------------------------------------------------
+-- Snapshots (visibility)
+--
+-- Consistency guarantees:
+--   - A snapshot's visible_rows are fixed at creation and never change
+--   - Commits are atomic: all tx rows become visible together, or none
+--   - Multiple snapshots can be held concurrently without interference
+--   - Writes don't block reads: transactions can commit while queries
+--     hold snapshots, and existing snapshots remain unaffected
+------------------------------------------------------------
+
+entity Snapshot {
+    basis_tx: TransactionKey
+
+    table_snapshots: TableSnapshot for this snapshot
+
+    -- Derived: which tables are visible in this snapshot
+    visible_tables: table_snapshots.map(ts => ts.table_ref)
+}
+
+entity TableSnapshot {
+    snapshot: Snapshot
+    table_ref: TableRef
+
+    -- The rows visible through this snapshot
+    -- This is a COPY of the rows at snapshot creation time, not a reference
+    -- Subsequent commits or NextBlock do not affect existing snapshots
+    visible_rows: Set<Row>
+}
+
+------------------------------------------------------------
+-- Defaults
+------------------------------------------------------------
+
+default erase_valid_time = ValidTimeRange{ from: MIN_TIMESTAMP, to: MAX_TIMESTAMP }
+
+------------------------------------------------------------
+-- Rules: Transaction lifecycle
+------------------------------------------------------------
+
+rule StartTransaction {
+    when: StartTransaction(index, tx_key)
+
+    ensures: LiveIndexTx.created(
+        index: index,
+        tx_key: tx_key,
+        status: active
+    )
+}
+
+rule GetTableTx {
+    when: GetTableTx(tx, table_ref)
+
+    let existing_table = tx.index.tables.find(t => t.table_ref = table_ref)
+
+    requires: tx.status = active
+
+    ensures: LiveTableTx.created(
+        transaction: tx,
+        table_ref: table_ref,
+        live_table: existing_table,
+        rows: {}
+    )
+}
+
+------------------------------------------------------------
+-- Rules: Row operations
+------------------------------------------------------------
+
+rule LogPut {
+    when: LogPut(table_tx, iid, valid_time, doc)
+
+    requires: table_tx.transaction.status = active
+
+    ensures: table_tx.rows.add(Row{
+        iid: iid,
+        system_from: table_tx.transaction.system_from,
+        valid_time: valid_time,
+        op: put,
+        doc: doc
+    })
+}
+
+rule LogDelete {
+    when: LogDelete(table_tx, iid, valid_time)
+
+    requires: table_tx.transaction.status = active
+
+    ensures: table_tx.rows.add(Row{
+        iid: iid,
+        system_from: table_tx.transaction.system_from,
+        valid_time: valid_time,
+        op: delete,
+        doc: null
+    })
+}
+
+rule LogErase {
+    when: LogErase(table_tx, iid)
+
+    requires: table_tx.transaction.status = active
+
+    ensures: table_tx.rows.add(Row{
+        iid: iid,
+        system_from: table_tx.transaction.system_from,
+        valid_time: erase_valid_time,
+        op: erase,
+        doc: null
+    })
+}
+
+------------------------------------------------------------
+-- Rules: Commit and Abort
+------------------------------------------------------------
+
+rule CommitTransaction {
+    when: CommitTransaction(tx)
+
+    requires: tx.status = active
+
+    ensures: tx.status = committed
+    ensures: tx.index.latest_completed_tx = tx.tx_key
+
+    -- For each touched table: move rows from tx to live table
+    ensures: for each table_tx in tx.table_txs:
+        if table_tx.is_new_table:
+            LiveTable.created(
+                index: tx.index,
+                table_ref: table_tx.table_ref,
+                rows: table_tx.rows
+            )
+        else:
+            table_tx.live_table.rows.addAll(table_tx.rows)
+}
+
+rule AbortTransaction {
+    when: AbortTransaction(tx)
+
+    requires: tx.status = active
+
+    ensures: tx.status = aborted
+    -- latest_completed_tx tracks "processed up to", not "successfully committed up to"
+    -- even aborted transactions advance this marker
+    ensures: tx.index.latest_completed_tx = tx.tx_key
+    -- tx rows are discarded (not moved to live tables)
+    -- new tables are not created
+}
+
+------------------------------------------------------------
+-- Rules: Snapshot visibility
+--
+-- CRITICAL: External queries must not see in-flight transaction data
+------------------------------------------------------------
+
+rule OpenExternalSnapshot {
+    -- Called by queries outside any transaction
+    when: OpenSnapshot(index)
+
+    ensures:
+        let snap = Snapshot.created(basis_tx: index.latest_completed_tx)
+        for each table in index.tables:
+            TableSnapshot.created(
+                snapshot: snap,
+                table_ref: table.table_ref,
+                visible_rows: table.rows   -- committed rows only
+            )
+}
+
+rule OpenTransactionSnapshot {
+    -- Called by queries within a transaction (e.g. UPDATE...WHERE)
+    -- Only active transactions can open snapshots; committed/aborted txs are closed
+    when: OpenSnapshot(tx)
+
+    requires: tx.status = active
+
+    ensures:
+        let snap = Snapshot.created(basis_tx: tx.tx_key)
+        for each table in tx.index.tables:
+            let table_tx = tx.table_txs.find(tt => tt.table_ref = table.table_ref)
+            TableSnapshot.created(
+                snapshot: snap,
+                table_ref: table.table_ref,
+                visible_rows:
+                    if table_tx != null:
+                        table.rows + table_tx.rows   -- committed + own uncommitted
+                    else:
+                        table.rows                   -- committed only
+            )
+        -- Also include new tables created in this tx
+        for each table_tx in tx.table_txs with is_new_table:
+            TableSnapshot.created(
+                snapshot: snap,
+                table_ref: table_tx.table_ref,
+                visible_rows: table_tx.rows
+            )
+}
+
+------------------------------------------------------------
+-- Rules: Block lifecycle
+------------------------------------------------------------
+
+rule FinishBlock {
+    when: FinishBlock(index, block_idx)
+
+    -- Writes current live table contents to block storage
+    -- Rows remain in memory until NextBlock
+    ensures: BlockWritten(index, block_idx)
+}
+
+rule NextBlock {
+    when: NextBlock(index)
+
+    -- Remove all live tables (their data is now in block storage)
+    -- Tables will be recreated on demand by future transactions
+    ensures: index.tables = {}
+}
+

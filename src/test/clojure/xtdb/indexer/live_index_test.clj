@@ -6,17 +6,21 @@
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
+            [xtdb.indexer.live-index :as li]
             xtdb.node.impl
             [xtdb.object-store :as os]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
-           [java.util Random UUID]
+           [java.util HashMap Random UUID]
+           [java.util.concurrent.locks StampedLock]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            (xtdb.arrow Relation)
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf Bucketer MemoryHashTrie$Leaf)))
+           (xtdb.indexer LiveIndex)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf Bucketer MemoryHashTrie$Leaf)
+           (xtdb.util RefCounter RowCounter)))
 
 (t/use-fixtures :each tu/with-allocator
   (tu/with-opts {:compactor {:threads 0}})
@@ -199,3 +203,225 @@
           (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") 38)
                     (os/->StoredObject (util/->path "blocks/b01.binpb") 40)]
                    (.listAllObjects bp (util/->path "blocks")))))))))
+
+;; -----------------------------------------------------------------------------
+;; Tests derived from live-index.allium spec - verifying implicit behaviours
+;; -----------------------------------------------------------------------------
+
+(t/deftest external-snapshot-does-not-see-uncommitted-data
+  (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
+        table #xt/table test-table
+        iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
+
+    (with-open [live-tx (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
+      (let [table-tx (.liveTable live-tx table)
+            doc-wtr (.getDocWriter table-tx)]
+        (.logPut table-tx iid 0 0 #(.endStruct doc-wtr))
+
+        ;; External snapshot (from live-index, not from tx) should NOT see the uncommitted row
+        (with-open [external-snap (.openSnapshot live-index)]
+          (let [live-idx-snap (.getLiveIndex external-snap)]
+            (t/is (nil? (.liveTable live-idx-snap table))
+                  "External snapshot should not see table created in uncommitted tx")))
+
+        ;; But the transaction's own snapshot SHOULD see its data (in txRelation)
+        (with-open [tx-snap (.openSnapshot live-tx)]
+          (let [table-snap (.liveTable tx-snap table)]
+            (t/is (some? table-snap)
+                  "Transaction snapshot should see its own uncommitted table")
+            (t/is (some? (.getTxRelation table-snap))
+                  "Transaction snapshot should have tx relation for uncommitted data")
+            (t/is (= 1 (.getRowCount (.getTxRelation table-snap)))
+                  "Transaction snapshot should see its own uncommitted row in txRelation")))
+
+        (.commit live-tx))
+
+      ;; After commit, external snapshot should now see the data
+      (with-open [external-snap (.openSnapshot live-index)]
+        (let [live-idx-snap (.getLiveIndex external-snap)
+              table-snap (.liveTable live-idx-snap table)]
+          (t/is (some? table-snap)
+                "External snapshot should see committed table")
+          (t/is (= 1 (.getRowCount (.getLiveRelation table-snap)))
+                "External snapshot should see committed row"))))))
+
+(t/deftest concurrent-external-snapshot-unaffected-by-later-commit
+  (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
+        table #xt/table test-table
+        iid1 (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))
+        iid2 (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
+
+    ;; Commit first transaction
+    (with-open [live-tx1 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
+      (let [table-tx (.liveTable live-tx1 table)
+            doc-wtr (.getDocWriter table-tx)]
+        (.logPut table-tx iid1 0 0 #(.endStruct doc-wtr))
+        (.commit live-tx1)))
+
+    ;; Take a snapshot BEFORE second transaction
+    (with-open [snap-before (.openSnapshot live-index)]
+      (let [live-idx-snap-before (.getLiveIndex snap-before)
+            table-snap-before (.liveTable live-idx-snap-before table)
+            row-count-before (.getRowCount (.getLiveRelation table-snap-before))]
+
+        ;; Commit second transaction
+        (with-open [live-tx2 (.startTx live-index #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
+          (let [table-tx (.liveTable live-tx2 table)
+                doc-wtr (.getDocWriter table-tx)]
+            (.logPut table-tx iid2 0 0 #(.endStruct doc-wtr))
+            (.commit live-tx2)))
+
+        ;; The snapshot taken before should still show only 1 row (immutability)
+        (t/is (= row-count-before
+                 (.getRowCount (.getLiveRelation table-snap-before)))
+              "Snapshot taken before commit should be unaffected by later commit")
+        (t/is (= 1 row-count-before)
+              "Pre-commit snapshot should have 1 row"))
+
+      ;; New snapshot should see both rows
+      (with-open [snap-after (.openSnapshot live-index)]
+        (let [live-idx-snap-after (.getLiveIndex snap-after)
+              table-snap-after (.liveTable live-idx-snap-after table)]
+          (t/is (= 2 (.getRowCount (.getLiveRelation table-snap-after)))
+                "Post-commit snapshot should have 2 rows"))))))
+
+(t/deftest abort-updates-latest-completed-tx
+  (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
+        table #xt/table test-table
+        iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))
+        tx-key-1 #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-01T00:00:00Z"}
+        tx-key-2 #xt/tx-key {:tx-id 2, :system-time #xt/instant "2020-01-02T00:00:00Z"}]
+
+    (t/is (nil? (.getLatestCompletedTx live-index))
+          "Initially no completed tx")
+
+    ;; Commit tx-1
+    (with-open [live-tx1 (.startTx live-index tx-key-1)]
+      (let [table-tx (.liveTable live-tx1 table)
+            doc-wtr (.getDocWriter table-tx)]
+        (.logPut table-tx iid 0 0 #(.endStruct doc-wtr))
+        (.commit live-tx1)))
+
+    (t/is (= tx-key-1 (.getLatestCompletedTx live-index))
+          "After commit, latest_completed_tx should be tx-1")
+
+    ;; Abort tx-2 - should still update latest_completed_tx
+    (with-open [live-tx2 (.startTx live-index tx-key-2)]
+      (let [table-tx (.liveTable live-tx2 table)
+            doc-wtr (.getDocWriter table-tx)]
+        (.logPut table-tx iid 0 0 #(.endStruct doc-wtr))
+        (.abort live-tx2)))
+
+    (t/is (= tx-key-2 (.getLatestCompletedTx live-index))
+          "After abort, latest_completed_tx should advance to tx-2 (processed, not committed)")))
+
+(t/deftest get-table-tx-multiple-times-returns-same-tx
+  (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
+        table #xt/table test-table
+        iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
+
+    (with-open [live-tx (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
+      (let [table-tx-1 (.liveTable live-tx table)
+            table-tx-2 (.liveTable live-tx table)]
+
+        (t/is (identical? table-tx-1 table-tx-2)
+              "Multiple calls to liveTable should return same tx context")
+
+        (let [doc-wtr (.getDocWriter table-tx-1)]
+          (.logPut table-tx-1 iid 0 0 #(.endStruct doc-wtr)))
+
+        (with-open [tx-snap (.openSnapshot live-tx)]
+          (let [table-snap (.liveTable tx-snap table)]
+            (t/is (= 1 (.getRowCount (.getTxRelation table-snap)))
+                  "Row written via first reference should be visible in txRelation")))))))
+
+(t/deftest multiple-puts-same-iid-records-all
+  (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
+        table #xt/table test-table
+        iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
+
+    (with-open [live-tx (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
+      (let [table-tx (.liveTable live-tx table)
+            doc-wtr (.getDocWriter table-tx)]
+
+        (.logPut table-tx (.duplicate iid) 0 0 #(.endStruct doc-wtr))
+        (.logPut table-tx (.duplicate iid) 0 0 #(.endStruct doc-wtr))
+        (.logPut table-tx (.duplicate iid) 0 0 #(.endStruct doc-wtr))
+
+        (.commit live-tx))
+
+      (with-open [snap (.openSnapshot live-index)]
+        (let [live-idx-snap (.getLiveIndex snap)
+              table-snap (.liveTable live-idx-snap table)]
+          (t/is (= 3 (.getRowCount (.getLiveRelation table-snap)))
+                "All puts should be recorded (temporal history)"))))))
+
+(t/deftest next-block-removes-tables
+  (util/with-open [allocator (RootAllocator.)]
+    (let [db (db/primary-db tu/*node*)
+          bp (.getBufferPool db)
+          block-cat (.getBlockCatalog db)
+          log (.getLog db)
+          table-catalog (.getTableCatalog db)
+          trie-catalog (.getTrieCatalog db)
+          tables (HashMap.)
+          live-index-allocator (util/->child-allocator allocator "live-index")]
+
+      (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator "xtdb" bp log
+                                                             block-cat table-catalog trie-catalog
+                                                             nil tables
+                                                             nil (StampedLock.)
+                                                             (RefCounter.)
+                                                             (RowCounter.) 102400
+                                                             64 1024
+                                                             [])]
+        (let [table #xt/table test-table
+              iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
+
+          (with-open [live-tx (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
+            (let [table-tx (.liveTable live-tx table)
+                  doc-wtr (.getDocWriter table-tx)]
+              (.logPut table-tx iid 0 0 #(.endStruct doc-wtr))
+              (.commit live-tx)))
+
+          (t/is (some? (.liveTable live-index table))
+                "Table should exist after commit")
+
+          (.finishBlock live-index 0)
+          (.nextBlock live-index)
+
+          (t/is (nil? (.liveTable live-index table))
+                "Table should be removed after nextBlock (not just emptied)"))))))
+
+(t/deftest transaction-snapshot-shows-read-your-writes
+  (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
+        table #xt/table test-table
+        iid1 (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))
+        iid2 (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
+
+    ;; First commit some data
+    (with-open [live-tx1 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
+      (let [table-tx (.liveTable live-tx1 table)
+            doc-wtr (.getDocWriter table-tx)]
+        (.logPut table-tx iid1 0 0 #(.endStruct doc-wtr))
+        (.commit live-tx1)))
+
+    ;; Start second transaction and write more data
+    (with-open [live-tx2 (.startTx live-index #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
+      (let [table-tx (.liveTable live-tx2 table)
+            doc-wtr (.getDocWriter table-tx)]
+        (.logPut table-tx iid2 0 0 #(.endStruct doc-wtr))
+
+        ;; Transaction snapshot should see BOTH committed (iid1) and own uncommitted (iid2)
+        (with-open [tx-snap (.openSnapshot live-tx2)]
+          (let [table-snap (.liveTable tx-snap table)
+                live-rel (.getLiveRelation table-snap)
+                tx-rel (.getTxRelation table-snap)]
+
+            (t/is (= 1 (.getRowCount live-rel))
+                  "Transaction snapshot should see 1 committed row")
+
+            (t/is (= 1 (.getRowCount tx-rel))
+                  "Transaction snapshot should see 1 uncommitted row")))
+
+        (.abort live-tx2)))))
