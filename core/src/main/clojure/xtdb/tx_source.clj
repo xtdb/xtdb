@@ -175,7 +175,8 @@
   (onCommit [_ tx-key live-idx-tx]
     (when (or (nil? last-tx-key) (gt tx-key last-tx-key))
       (util/with-open [live-idx-snap (.openSnapshot live-idx-tx)]
-        (let [live-tables (.getLiveTables live-idx-snap)]
+        (let [live-tables (->> (.getLiveTables live-idx-snap)
+                               (filter #(some? (.getTxRelation (.liveTable live-idx-snap %)))))]
           @(.appendMessage output-log
                            (-> {:transaction {:id tx-key}
                                 :system-time (.getSystemTime tx-key)

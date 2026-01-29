@@ -312,6 +312,31 @@
         {:keys [tx-key]} (tx-source/events->tx-output t1 table->events "xtdb" 0 encode-fn)]
     (t/is (= 42 (:tx-id tx-key)) "tx-key should have correct tx-id")))
 
+(def ^:private gen-distinct-tables
+  (gen/let [tables (gen/shuffle [:alpha :beta :gamma :delta :epsilon])
+            n (gen/choose 2 5)]
+    (vec (take n tables))))
+
+(t/deftest ^:property tx-source-outputs-only-modified-tables-test
+  (tu/run-property-test
+   {:num-tests tu/property-test-iterations}
+   (prop/for-all [table-sequence gen-distinct-tables]
+                 (with-open [node (xtn/start-node {:compactor {:threads 0}
+                                                   :tx-source {:enable true
+                                                               :output-log [::tu/recording {}]
+                                                               :format :transit+json}})]
+                   ;; Each tx inserts into a distinct table
+                   (doseq [[idx table] (map-indexed vector table-sequence)]
+                     (xt/execute-tx node [[:put-docs table {:xt/id idx}]]))
+
+                   (let [^RecordingLog output-log (tu/get-output-log node)
+                         msgs (->> (.getMessages output-log) (map decode-record))]
+                     ;; Each tx output should contain ONLY its table + txs
+                     (every? (fn [[expected-table msg]]
+                               (let [actual-tables (->> msg :tables (map :table) set)]
+                                 (= #{(name expected-table) "txs"} actual-tables)))
+                             (map vector table-sequence msgs)))))))
+
 (t/deftest test-initial-scan-disabled
   (util/with-tmp-dirs #{node-dir}
     ; Create L0 block
