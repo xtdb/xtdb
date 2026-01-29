@@ -127,21 +127,54 @@
 
 (def ^:private dummy-iid (byte-array 16))
 
-(defn selects->iid-bytes ^bytes [selects ^RelationReader args-rel]
-  (when-let [eid-select (get selects "_id")]
-    (when (= '== (first eid-select))
-      (when-let [eid (eid-select->eid eid-select)]
-        (cond
-          (and (s/valid? ::lp/value eid) (util/valid-iid? eid))
-          (util/->iid eid)
+(defn- resolve-eid-to-iid ^bytes [eid ^RelationReader args-rel]
+  (or (cond
+        (and (s/valid? ::lp/value eid) (util/valid-iid? eid))
+        (util/->iid eid)
 
-          (s/valid? ::lp/param eid)
-          (let [eid-rdr (.vectorForOrNull args-rel (name eid))]
-            (when (= 1 (.getValueCount eid-rdr))
-              (let [eid (.getObject eid-rdr 0)]
-                (if (util/valid-iid? eid)
-                  (util/->iid eid)
-                  dummy-iid)))))))))
+        (s/valid? ::lp/param eid)
+        (when-let [eid-rdr (.vectorForOrNull args-rel (name eid))]
+          (when (= 1 (.getValueCount eid-rdr))
+            (let [eid-val (.getObject eid-rdr 0)]
+              (when (util/valid-iid? eid-val)
+                (util/->iid eid-val))))))
+      dummy-iid))
+
+(defn- flatten-or
+  [expr]
+  (if (and (sequential? expr) (= 'or (first expr)))
+    (mapcat flatten-or (rest expr))
+    [expr]))
+
+(defn- extract-id-eqs-from-or
+  [expr]
+  (when (and (sequential? expr) (= 'or (first expr)))
+    (let [clauses (flatten-or expr)]
+      (when (seq clauses)
+        (let [eids (for [clause clauses
+                         :when (and (sequential? clause)
+                                    (= '== (first clause)))]
+                     (eid-select->eid clause))]
+          (when (and (= (count eids) (count clauses))
+                     (every? some? eids))
+            eids))))))
+
+(defn selects->iid-set ^SortedSet [selects ^RelationReader args-rel]
+  (when-let [eid-select (get selects "_id")]
+    (cond
+      ;; Single equality: (== _id value)
+      (= '== (first eid-select))
+      (when-let [eid (eid-select->eid eid-select)]
+        (doto (TreeSet. Bytes/COMPARATOR)
+          (.add (resolve-eid-to-iid eid args-rel))))
+
+      ;; OR chain: (or (== _id v1) (== _id v2) ...)
+      (= 'or (first eid-select))
+      (when-let [eids (extract-id-eqs-from-or eid-select)]
+        (let [iid-set (TreeSet. Bytes/COMPARATOR)]
+          (doseq [eid eids]
+            (.add iid-set (resolve-eid-to-iid eid args-rel)))
+          iid-set)))))
 
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^PageMetadata page-metadata, pushdown-blooms, ^String col-name]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get pushdown-blooms (symbol col-name))]
@@ -249,9 +282,7 @@
                        (if (and derived-table-schema (not template-table?))
                          (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args)
 
-                         (let [iid-set (or (when-let [bytes (selects->iid-bytes selects args)]
-                                             (doto (TreeSet. Bytes/COMPARATOR)
-                                               (.add bytes)))
+                         (let [iid-set (or (selects->iid-set selects args)
                                            (get pushdown-iids '_iid) ; usually patch
                                            (get pushdown-iids '_id)) ; any other foreign-key join
                                col-preds (cond-> col-preds

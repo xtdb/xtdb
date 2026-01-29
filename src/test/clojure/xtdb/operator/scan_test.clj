@@ -389,29 +389,29 @@
                              [:put-docs :xt-docs {:xt/id after-uuid :version 1}]])
     (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id search-uuid :version 2}]])
 
-    (t/is (nil? (scan/selects->iid-bytes {} vw/empty-args)))
+    (t/is (nil? (scan/selects->iid-set {} vw/empty-args)))
 
-    (t/is (Arrays/equals (util/uuid->bytes search-uuid)
-                         (scan/selects->iid-bytes {"_id" (list '== '_id search-uuid)} vw/empty-args)))
+    (let [iid-set (scan/selects->iid-set {"_id" (list '== '_id search-uuid)} vw/empty-args)]
+      (t/is (= 1 (.size iid-set)))
+      (t/is (Arrays/equals (util/uuid->bytes search-uuid) (.first iid-set))))
 
-    (t/is (nil? (scan/selects->iid-bytes {"_id" (list '< '_id search-uuid)} vw/empty-args)))
+    (t/is (nil? (scan/selects->iid-set {"_id" (list '< '_id search-uuid)} vw/empty-args)))
 
     (with-open [^RelationReader args-rel (tu/open-args {:search-uuid #uuid "80000000-0000-0000-0000-000000000000"})]
-      (t/is (Arrays/equals (util/uuid->bytes search-uuid)
-                           (scan/selects->iid-bytes '{"_id" (== _id ?search_uuid)}
-                                                    args-rel))))
+      (let [iid-set (scan/selects->iid-set '{"_id" (== _id ?search_uuid)} args-rel)]
+        (t/is (= 1 (.size iid-set)))
+        (t/is (Arrays/equals (util/uuid->bytes search-uuid) (.first iid-set)))))
 
     (with-open [^RelationReader args-rel (tu/open-args {:search-uuid [#uuid "00000000-0000-0000-0000-000000000000"
                                                                       #uuid "80000000-0000-0000-0000-000000000000"]})]
-      (t/is (nil? (scan/selects->iid-bytes '{_id (== _id ?search_uuid)}
-                                                 args-rel))))
+      (t/is (nil? (scan/selects->iid-set '{_id (== _id ?search_uuid)} args-rel))))
 
-    (let [old-select->iid-byte-buffer scan/selects->iid-bytes]
-      (with-redefs [scan/selects->iid-bytes
+    (let [old-selects->iid-set scan/selects->iid-set]
+      (with-redefs [scan/selects->iid-set
                     (fn [& args]
-                      (let [iid-pred (apply old-select->iid-byte-buffer args)]
-                        (assert iid-pred "iid-pred can't be nil")
-                        iid-pred))]
+                      (let [iid-set (apply old-selects->iid-set args)]
+                        (assert iid-set "iid-set can't be nil")
+                        iid-set))]
 
         (t/is (= [{:version 2, :xt/id search-uuid}]
                  (tu/query-ra [:scan {:table #xt/table xt_docs, :columns ['version {'_id (list '== '_id search-uuid)}]}]
@@ -430,6 +430,59 @@
                  (tu/query-ra [:scan {:table #xt/table xt_docs
                                       :for-valid-time :all-time, :columns ['version {'_id (list '== '_id search-uuid)}]}]
                               {:node tu/*node*})))))))
+
+(t/deftest test-iid-fast-path-or-chain
+  (let [uuid1 #uuid "00000000-0000-0000-0000-000000000001"
+        uuid2 #uuid "00000000-0000-0000-0000-000000000002"
+        uuid3 #uuid "00000000-0000-0000-0000-000000000003"
+        uuid4 #uuid "00000000-0000-0000-0000-000000000004"]
+    (xt/submit-tx tu/*node* [[:put-docs :xt-docs {:xt/id uuid1 :v 1}]
+                             [:put-docs :xt-docs {:xt/id uuid2 :v 2}]
+                             [:put-docs :xt-docs {:xt/id uuid3 :v 3}]
+                             [:put-docs :xt-docs {:xt/id uuid4 :v 4}]])
+
+    (t/testing "selects->iid-set with OR chain"
+      (let [iid-set (scan/selects->iid-set {"_id" (list 'or
+                                                        (list '== '_id uuid1)
+                                                        (list '== '_id uuid2))}
+                                           vw/empty-args)]
+        (t/is (= 2 (.size iid-set)) "Should have 2 IIDs for OR with 2 values")))
+
+    (t/testing "selects->iid-set with nested OR"
+      (let [iid-set (scan/selects->iid-set {"_id" (list 'or
+                                                        (list 'or
+                                                              (list '== '_id uuid1)
+                                                              (list '== '_id uuid2))
+                                                        (list '== '_id uuid3))}
+                                           vw/empty-args)]
+        (t/is (= 3 (.size iid-set)) "Should flatten nested ORs")))
+
+    (t/testing "selects->iid-set returns nil for non-equality OR"
+      (t/is (nil? (scan/selects->iid-set {"_id" (list 'or
+                                                      (list '== '_id uuid1)
+                                                      (list '< '_id uuid2))}
+                                         vw/empty-args))))
+
+    (t/testing "selects->iid-set returns nil for OR on different columns"
+      (t/is (nil? (scan/selects->iid-set {"_id" (list 'or
+                                                      (list '== '_id uuid1)
+                                                      (list '== 'other uuid2))}
+                                         vw/empty-args))))
+
+    (t/testing "query with OR on _id uses MultiIidSelector"
+      (let [old-selects->iid-set scan/selects->iid-set]
+        (with-redefs [scan/selects->iid-set
+                      (fn [& args]
+                        (let [iid-set (apply old-selects->iid-set args)]
+                          (when iid-set
+                            (assert (> (.size iid-set) 1) "Should use MultiIidSelector"))
+                          iid-set))]
+          (t/is (= #{{:v 1, :xt/id uuid1} {:v 2, :xt/id uuid2}}
+                   (set (tu/query-ra [:scan {:table #xt/table xt_docs
+                                             :columns ['v {'_id (list 'or
+                                                                      (list '== '_id uuid1)
+                                                                      (list '== '_id uuid2))}]}]
+                                     {:node tu/*node*})))))))))
 
 (t/deftest test-iid-fast-path-block-boundary
   (let [before-uuid #uuid "00000000-0000-0000-0000-000000000000"

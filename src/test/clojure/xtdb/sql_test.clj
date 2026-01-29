@@ -3084,3 +3084,13 @@ UNION ALL
     (xt/execute-tx tu/*node* [[:sql "UPDATE docs SET a = ? WHERE _id = 1" [{:x 0}]]])
     (t/is (= [{:xt/id 1, :a {:x 0}}] (xt/q tu/*node* "FROM docs")))
     (t/is (= 1 (count (xt/q tu/*node* "SELECT * FROM docs FOR VALID_TIME ALL"))))))
+
+(t/deftest test-or-on-id
+  (xt/execute-tx tu/*node* [[:put-docs :foo
+                             {:xt/id 1, :x "a"}
+                             {:xt/id 2, :x "b"}
+                             {:xt/id 3, :x "c"}
+                             {:xt/id 4, :x "d"}]])
+
+  (t/is (= [{:x "a", :xt/id 1} {:x "b", :xt/id 2} {:x "d", :xt/id 4}]
+           (xt/q tu/*node* "SELECT _id, x FROM foo WHERE _id = 1 OR _id = 4 OR _id = 2 ORDER BY _id"))))
