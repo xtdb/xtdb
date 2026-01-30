@@ -1,5 +1,6 @@
 (ns xtdb.tx-source
-  (:require [integrant.core :as ig]
+  (:require [clojure.tools.logging :as log]
+            [integrant.core :as ig]
             [xtdb.error :as err]
             [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
@@ -132,6 +133,7 @@
             (refresh!)
             (->> (trie-cat/l0-blocks trie-cat)
                  (drop-while #(>= (or last-block-idx -1) (:block-idx %)))))]
+    (log/info "Backfill starting")
     (loop [last-key (some-> last-message :transaction :id)
            ;; Decrement because the last block may not have been fully processed
            ;; (e.g. if the last message was from the live index before a flush)
@@ -139,6 +141,7 @@
       (if-let [blocks (seq (fetch-new-blocks last-block-idx))]
         (let [[new-last-key new-last-block-idx]
               (reduce (fn [[last-key _] {:keys [block-idx tables]}]
+                        (log/debugf "Backfill processing block %d (%d tables)" block-idx (count tables))
                         (let [grouped-txs (->> tables (read-l0-events al bp) group-events-by-system-time)
                               new-last-key (output-block-txs! output-log grouped-txs db-name block-idx encode-fn last-key)]
                           (when *after-block-hook* (*after-block-hook* block-idx))
@@ -211,6 +214,7 @@
                         (backfill-from-l0! allocator buffer-pool output-log
                                            db-name encode-fn trie-cat
                                            last-message refresh!))]
+      (log/info "Tx-source now processing live transactions")
       (map->TxSource {:output-log output-log
                       :encode-fn encode-fn
                       :block-cat block-cat
