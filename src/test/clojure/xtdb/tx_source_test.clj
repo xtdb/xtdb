@@ -18,6 +18,9 @@
            [xtdb.table TableRef]
            [xtdb.test.log RecordingLog]))
 
+(comment
+  (user/set-log-level! 'xtdb.tx-source :debug))
+
 (t/use-fixtures :each tu/with-mock-clock)
 
 (defn decode-record
