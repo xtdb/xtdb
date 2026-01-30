@@ -14,6 +14,7 @@ import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
+import software.amazon.awssdk.core.FileTransformerConfiguration
 import software.amazon.awssdk.core.async.AsyncRequestBody
 import software.amazon.awssdk.core.async.AsyncResponseTransformer
 import software.amazon.awssdk.regions.Region
@@ -155,7 +156,7 @@ class S3(
     }
 
     override fun getObject(k: Path, outPath: Path) = scope.future {
-        getObject(k, AsyncResponseTransformer.toFile(outPath)).await()
+        getObject(k, AsyncResponseTransformer.toFile(outPath, FileTransformerConfiguration.defaultCreateOrReplaceExisting())).await()
         outPath
     }
 

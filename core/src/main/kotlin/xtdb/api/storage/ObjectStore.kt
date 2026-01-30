@@ -6,8 +6,7 @@ import kotlinx.serialization.modules.polymorphic
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Path
-import java.nio.file.StandardOpenOption.CREATE
-import java.nio.file.StandardOpenOption.WRITE
+import java.nio.file.StandardOpenOption.*
 import java.util.*
 import java.util.concurrent.CompletableFuture
 import com.google.protobuf.Any as ProtoAny
@@ -57,11 +56,13 @@ interface ObjectStore : AutoCloseable {
     /**
      * Asynchronously writes the object to the given path.
      *
+     * Replaces any existing file at the given path.
+     *
      * If the object doesn't exist, the CompletableFuture completes with an IllegalStateException.
      */
     fun getObject(k: Path, outPath: Path): CompletableFuture<Path> =
         getObject(k).thenApply { buf ->
-            FileChannel.open(outPath, CREATE, WRITE).use { it.write(buf) }
+            FileChannel.open(outPath, CREATE, WRITE, TRUNCATE_EXISTING).use { it.write(buf) }
             outPath
         }
 
