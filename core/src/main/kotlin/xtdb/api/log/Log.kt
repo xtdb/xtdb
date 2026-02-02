@@ -89,7 +89,7 @@ interface Log : AutoCloseable {
                 fun parse(buffer: ByteBuffer): ProtobufMessage? =
                     LogMessage.parseFrom(buffer.duplicate().position(1))
                         .let { msg ->
-                            when (val msgCase = msg.messageCase) {
+                            when (msg.messageCase) {
                                 MessageCase.FLUSH_BLOCK ->
                                     msg.flushBlock
                                         .takeIf { it.hasExpectedBlockIdx() }
@@ -106,7 +106,7 @@ interface Log : AutoCloseable {
 
                                 MessageCase.DETACH_DATABASE -> DetachDatabase(msg.detachDatabase.dbName)
 
-                                else -> throw IllegalArgumentException("Unknown protobuf message type: $msgCase")
+                                else -> null
                             }
                         }
             }
