@@ -16,6 +16,7 @@ import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.NewTopic
+import org.apache.kafka.clients.consumer.ConsumerRebalanceListener
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -153,7 +154,8 @@ class KafkaCluster(
     private inner class KafkaLog(
         private val clusterAlias: LogClusterAlias,
         private val topic: String,
-        override val epoch: Int
+        override val epoch: Int,
+        private val groupId: String?
     ) : Log {
 
         private fun readLatestSubmittedMessage(kafkaConfigMap: KafkaConfigMap): LogOffset =
@@ -296,6 +298,60 @@ class KafkaCluster(
             return Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
         }
 
+        override fun subscribe(subscriber: Subscriber, listener: AssignmentListener): Subscription {
+            val groupId = requireNotNull(groupId) { "groupId must be configured to use subscribe" }
+
+            val consumerConfig = kafkaConfigMap + mapOf("group.id" to groupId)
+
+            val job = scope.launch {
+                consumerConfig.openConsumer().use { consumer ->
+                    val rebalanceListener = object : ConsumerRebalanceListener {
+                        override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) {
+                            listener.onPartitionsRevoked(partitions.map { it.partition() })
+                        }
+
+                        override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) {
+                            val offsets = listener.onPartitionsAssigned(partitions.map { it.partition() })
+                            for ((partition, offset) in offsets) {
+                                consumer.seek(TopicPartition(topic, partition), offset)
+                            }
+                        }
+
+                        override fun onPartitionsLost(partitions: Collection<TopicPartition>) {
+                            listener.onPartitionsLost(partitions.map { it.partition() })
+                        }
+                    }
+
+                    consumer.subscribe(listOf(topic), rebalanceListener)
+
+                    runInterruptible(Dispatchers.IO) {
+                        while (true) {
+                            val records = try {
+                                consumer.poll(pollDuration).records(topic)
+                            } catch (_: InterruptException) {
+                                throw InterruptedException()
+                            }
+
+                            subscriber.processRecords(
+                                records.mapNotNull { record ->
+                                    Message.parse(record.value())
+                                        ?.let { msg ->
+                                            Record(
+                                                record.offset(),
+                                                Instant.ofEpochMilli(record.timestamp()),
+                                                msg
+                                            )
+                                        }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            return Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
+        }
+
         override fun close() = Unit
     }
 
@@ -305,11 +361,13 @@ class KafkaCluster(
         val cluster: LogClusterAlias,
         val topic: String,
         var autoCreateTopic: Boolean = true,
-        var epoch: Int = 0
+        var epoch: Int = 0,
+        var groupId: String? = null
     ) : Factory {
 
         fun autoCreateTopic(autoCreateTopic: Boolean) = apply { this.autoCreateTopic = autoCreateTopic }
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
+        fun groupId(groupId: String) = apply { this.groupId = groupId }
 
         override fun openLog(clusters: Map<LogClusterAlias, Cluster>): Log {
             val clusterAlias = this.cluster
@@ -323,7 +381,7 @@ class KafkaCluster(
                 admin.ensureTopicExists(topic, autoCreateTopic)
             }
 
-            return cluster.KafkaLog(clusterAlias, topic, epoch)
+            return cluster.KafkaLog(clusterAlias, topic, epoch, groupId)
         }
 
         override fun openReadOnlyLog(clusters: Map<LogClusterAlias, Cluster>) =

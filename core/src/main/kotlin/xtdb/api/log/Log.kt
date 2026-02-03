@@ -237,6 +237,20 @@ interface Log : AutoCloseable {
 
     fun tailAll(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription
 
+    interface AssignmentListener {
+        /**
+         * @return Map of partition to next offset to consume from.
+         *         Partitions not in the map use Kafka's default (committed offset or auto.offset.reset).
+         */
+        fun onPartitionsAssigned(partitions: Collection<Int>): Map<Int, LogOffset>
+
+        fun onPartitionsRevoked(partitions: Collection<Int>)
+
+        fun onPartitionsLost(partitions: Collection<Int>) = onPartitionsRevoked(partitions)
+    }
+
+    fun subscribe(subscriber: Subscriber, listener: AssignmentListener): Subscription
+
     @FunctionalInterface
     fun interface Subscription : AutoCloseable
 

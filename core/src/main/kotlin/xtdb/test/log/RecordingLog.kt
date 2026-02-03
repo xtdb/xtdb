@@ -93,5 +93,18 @@ class RecordingLog(private val instantSource: InstantSource, messages: List<Log.
         latestProcessedOffset: LogOffset
     ): Log.Subscription = error("tailAll")
 
+    override fun subscribe(
+        subscriber: Log.Subscriber,
+        listener: Log.AssignmentListener
+    ): Log.Subscription {
+        val offsets = listener.onPartitionsAssigned(listOf(0))
+        val nextOffset = offsets[0] ?: 0L
+        val subscription = tailAll(subscriber, nextOffset - 1)
+        return Log.Subscription {
+            subscription.close()
+            listener.onPartitionsRevoked(listOf(0))
+        }
+    }
+
     override fun close() = Unit
 }
