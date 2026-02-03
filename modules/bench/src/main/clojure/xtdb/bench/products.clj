@@ -44,7 +44,7 @@
 
   {:title "Products"
    :parameters {:no-load? no-load? :limit limit}
-   :tasks [{:t :call, :stage :download
+   :tasks [{:t :call, :stage :download, :setup? true
             :f (fn [_]
                  (download-dataset))}
 

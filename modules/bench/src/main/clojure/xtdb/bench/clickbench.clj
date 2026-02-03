@@ -131,8 +131,8 @@
       (io/make-parents file)
 
       (.getObject (-> (S3Client/builder)
-                        (.region Region/EU_WEST_1)
-                        (.build))
+                      (.region Region/EU_WEST_1)
+                      (.build))
                   (-> (GetObjectRequest/builder)
                       (.bucket "xtdb-datasets")
                       (.key (format "clickbench/hits-%s.transit.json.gz" (name size)))
@@ -179,7 +179,7 @@
   {:title "Clickbench Hits"
    :benchmark-type :clickbench
    :parameters {:no-load? no-load? :limit limit :size size}
-   :tasks [{:t :call, :stage :download
+   :tasks [{:t :call, :stage :download, :setup? true
             :f (fn [_]
                  (download-dataset size))}
 

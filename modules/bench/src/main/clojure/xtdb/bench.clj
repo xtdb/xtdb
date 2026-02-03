@@ -206,13 +206,17 @@
                             :max-ms (/ (.max timer TimeUnit/MILLISECONDS) 1.0)}]))))
          (into {}))))
 
-(defn wrap-stage [f {:keys [stage]}]
+(defn wrap-stage [f {:keys [stage setup?]}]
   (fn instrumented-stage [worker]
-    (log/info "Starting stage:" stage)
+    (log/info "Starting stage:" stage (when setup? "(setup)"))
     (let [start-ms (System/currentTimeMillis)]
       (f worker)
-      (log-report worker {:stage stage,
-                          :time-taken-ms (- (System/currentTimeMillis) start-ms)})
+      (let [elapsed-ms (- (System/currentTimeMillis) start-ms)]
+        (when setup?
+          (swap! (:setup-time-ms worker) + elapsed-ms))
+        (log-report worker {:stage stage
+                            :time-taken-ms elapsed-ms
+                            :setup setup?}))
       (log/info "Done stage:" stage))))
 
 (defn wrap-transaction [f {:keys [transaction labels]}]
@@ -388,7 +392,8 @@
     (fn run-benchmark [node]
       (letfn [(execute []
                 (util/with-open [bench-log-wrt (when bench-log-file (io/writer bench-log-file))]
-                  (let [worker (into (->Worker node (Random. seed) (Clock/systemUTC) (random-uuid) (System/getProperty "user.name") bench-log-wrt)
+                  (let [worker (into (assoc (->Worker node (Random. seed) (Clock/systemUTC) (random-uuid) (System/getProperty "user.name") bench-log-wrt)
+                                            :setup-time-ms (atom 0))
                                      (cond
                                        (vector? ->state) (apply (first ->state) (rest ->state))
                                        (fn? ->state) (->state)))
@@ -407,6 +412,8 @@
                       (f worker))
 
                     (let [total-ms (- (System/currentTimeMillis) start-ms)
+                          setup-ms @(:setup-time-ms worker)
+                          benchmark-ms (- total-ms setup-ms)
                           tx-metrics (get-transaction-metrics)
                           tx-count (reduce + 0 (map :count (vals tx-metrics)))
                           ;; Calculate throughput using configured duration if available
@@ -419,21 +426,25 @@
                                                   :stage "summary"
                                                   :parameters parameters
                                                   :system system-info
-                                                  :time-taken-ms total-ms}
+                                                  :time-taken-ms benchmark-ms}
+                                           (pos? setup-ms) (assoc :setup-time-ms setup-ms
+                                                                  :total-time-ms total-ms)
                                            (pos? tx-count) (assoc :transaction-count tx-count
                                                                   :transactions tx-metrics)
                                            throughput (assoc :throughput throughput)
                                            timeout (assoc :timeout timeout)
                                            (seq run-context) (merge run-context)))
                       ;; Human-readable summary
-                      (let [secs (/ total-ms 1000.0)
+                      (let [secs (/ benchmark-ms 1000.0)
                             mins (int (/ secs 60))
                             remaining-secs (- secs (* mins 60))]
                         (if (>= mins 1)
-                          (log/infof "Benchmark Total Time: %dm %.1fs"
-                                    mins remaining-secs)
-                          (log/infof "Benchmark Total Time: %.1fs"
-                                    secs)))))))]
+                          (log/infof "Benchmark Time: %dm %.1fs%s"
+                                     mins remaining-secs
+                                     (if (pos? setup-ms) (format " (excludes %.1fs setup)" (/ setup-ms 1000.0)) ""))
+                          (log/infof "Benchmark Time: %.1fs%s"
+                                     secs
+                                     (if (pos? setup-ms) (format " (excludes %.1fs setup)" (/ setup-ms 1000.0)) ""))))))))]
         (run-with-timeout execute timeout)))))
 
 (defn sync-node

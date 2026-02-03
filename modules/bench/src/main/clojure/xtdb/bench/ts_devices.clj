@@ -35,6 +35,7 @@
             :stage :ingest
             :tasks [{:t :call
                      :stage :download-files
+                     :setup? true
                      :f (fn [{:keys [!state]}]
                           (swap! !state assoc
                                  :device-info-file (download-file size "device_info")
@@ -44,7 +45,7 @@
                      :stage :submit-docs
                      :f (fn [{:keys [node !state]}]
                           (tsd/submit-ts-devices node {:device-info-file (get @!state :device-info-file)
-                                                      :readings-file (get @!state :readings-file)}))}
+                                                       :readings-file (get @!state :readings-file)}))}
                     {:t :call
                      :stage :sync
                      :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofHours 5)))}
