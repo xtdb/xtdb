@@ -88,10 +88,10 @@ class RecordingLog(private val instantSource: InstantSource, messages: List<Log.
         override fun close() {}
     }
 
-    override fun subscribe(
+    override fun tailAll(
         subscriber: Log.Subscriber,
         latestProcessedOffset: LogOffset
-    ): Log.Subscription = error("subscribe")
+    ): Log.Subscription = error("tailAll")
 
     override fun close() = Unit
 }

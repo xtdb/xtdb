@@ -116,7 +116,7 @@ class InMemoryLog(
 
     override fun readLastMessage(): Message? = null
 
-    override fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
+    override fun tailAll(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
         val job = subscriberScope.launch {
             var latestCompletedOffset = latestProcessedOffset
             val ch = committedCh

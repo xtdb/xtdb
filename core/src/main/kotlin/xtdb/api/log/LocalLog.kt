@@ -251,7 +251,7 @@ class LocalLog(
         }
     }
 
-    override fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
+    override fun tailAll(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
         var latestCompletedOffset = latestProcessedOffset
 
         val ch = Channel<Record>(100)

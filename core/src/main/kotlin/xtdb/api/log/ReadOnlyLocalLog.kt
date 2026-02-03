@@ -109,7 +109,7 @@ class ReadOnlyLocalLog(
         }
     }
 
-    override fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
+    override fun tailAll(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
         var currentOffset = latestProcessedOffset
 
         val subscription = scope.launch(SupervisorJob()) {

@@ -149,7 +149,7 @@ class LogProcessor(
 
     private val flusher = Flusher(flushTimeout, blockCatalog)
 
-    private val subscription = log.subscribe(this, latestProcessedOffset)
+    private val subscription = log.tailAll(this, latestProcessedOffset)
 
     override fun processRecords(records: List<Log.Record>) = runBlocking {
         // Don't send FlushBlock messages in read-only mode - we can't write to the log

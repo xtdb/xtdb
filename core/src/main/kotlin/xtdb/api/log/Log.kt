@@ -235,7 +235,7 @@ interface Log : AutoCloseable {
 
     fun readLastMessage(): Message?
 
-    fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription
+    fun tailAll(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription
 
     @FunctionalInterface
     fun interface Subscription : AutoCloseable

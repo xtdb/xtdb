@@ -260,7 +260,7 @@ class KafkaCluster(
             }
         }
 
-        override fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
+        override fun tailAll(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
             val job = scope.launch {
                 kafkaConfigMap.openConsumer().use { c ->
                     TopicPartition(topic, 0).also { tp ->

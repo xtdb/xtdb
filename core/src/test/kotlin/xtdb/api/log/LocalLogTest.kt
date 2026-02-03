@@ -23,7 +23,7 @@ class LocalLogTest {
 
         // Create a subscription
         val records = mutableListOf<Record>()
-        val subscription = log.subscribe(
+        val subscription = log.tailAll(
             object : Log.Subscriber {
                 override val latestProcessedMsgId: Long = -1
                 override val latestSubmittedMsgId: Long = -1

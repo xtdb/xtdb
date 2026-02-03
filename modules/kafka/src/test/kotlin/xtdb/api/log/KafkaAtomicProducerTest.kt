@@ -52,7 +52,7 @@ class KafkaAtomicProducerTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.subscribe(subscriber, -1).use {
+                        log.tailAll(subscriber, -1).use {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
                                 producer.openTx().use { tx ->
                                     tx.appendMessage(txMessage(1))
@@ -95,7 +95,7 @@ class KafkaAtomicProducerTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.subscribe(subscriber, -1).use {
+                        log.tailAll(subscriber, -1).use {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
                                 // Abort this transaction
                                 producer.openTx().use { tx ->
@@ -144,7 +144,7 @@ class KafkaAtomicProducerTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.subscribe(subscriber, -1).use {
+                        log.tailAll(subscriber, -1).use {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
                                 // First transaction
                                 producer.openTx().use { tx ->
@@ -194,7 +194,7 @@ class KafkaAtomicProducerTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.subscribe(subscriber, -1).use {
+                        log.tailAll(subscriber, -1).use {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
                                 producer.openTx().use { tx ->
                                     tx.appendMessage(txMessage(1))
