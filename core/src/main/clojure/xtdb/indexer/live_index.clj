@@ -48,7 +48,7 @@
               (update-vals (some-> live-index-snap (.getAllColumnTypes))
                            (comp set keys))))
 
-(deftype LiveIndex [^BufferAllocator allocator, db-name, ^BufferPool buffer-pool, ^Log log
+(deftype LiveIndex [^BufferAllocator allocator, db-name, ^BufferPool buffer-pool, ^Log projection-log
                     ^BlockCatalog block-cat, table-cat, ^TrieCatalog trie-cat
 
                     ^:volatile-mutable ^TransactionKey latest-completed-tx
@@ -145,7 +145,7 @@
                                              :hlls (.getHllDeltas fb)})))]
       (let [added-tries (for [[table {:keys [trie-key data-file-size trie-metadata state]}] table-metadata]
                           (trie/->trie-details table trie-key data-file-size trie-metadata state))]
-        (.appendMessage log (Log$Message$TriesAdded. Storage/VERSION (.getEpoch buffer-pool) added-tries))
+        (.appendMessage projection-log (Log$Message$TriesAdded. Storage/VERSION (.getEpoch buffer-pool) added-tries))
         (doseq [^TrieDetails added-trie added-tries]
           (.addTries trie-cat (table/->ref db-name (.getTableName added-trie)) [added-trie] (.getSystemTime latest-completed-tx))))
 
@@ -196,7 +196,7 @@
       :buffer-pool (ig/ref :xtdb/buffer-pool)
       :block-cat (ig/ref :xtdb/block-catalog)
       :table-cat (ig/ref :xtdb/table-catalog)
-      :log (ig/ref :xtdb/log)
+      :projection-log (ig/ref :xtdb/projection-log)
       :trie-cat (ig/ref :xtdb/trie-catalog)
 
       :rows-per-block (.getRowsPerBlock indexer-conf)
@@ -205,13 +205,13 @@
       :skip-txs (.getSkipTxs indexer-conf)}})
 
 (defmethod ig/init-key :xtdb.indexer/live-index [_ {{:keys [meter-registry]} :base,
-                                                    :keys [allocator, db-name, ^BlockCatalog block-cat, buffer-pool log trie-cat table-cat
+                                                    :keys [allocator, db-name, ^BlockCatalog block-cat, buffer-pool projection-log trie-cat table-cat
                                                            ^long rows-per-block, ^long log-limit, ^long page-limit, skip-txs]}]
   (let [latest-completed-tx (.getLatestCompletedTx block-cat)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (metrics/add-allocator-gauge meter-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]
-        (->LiveIndex allocator db-name buffer-pool log
+        (->LiveIndex allocator db-name buffer-pool projection-log
                      block-cat table-cat trie-cat
                      latest-completed-tx
                      tables

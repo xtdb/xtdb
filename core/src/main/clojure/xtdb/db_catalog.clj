@@ -22,17 +22,18 @@
       :block-cat (ig/ref :xtdb/block-catalog)
       :table-cat (ig/ref :xtdb/table-catalog)
       :trie-cat (ig/ref :xtdb/trie-catalog)
-      :log (ig/ref :xtdb/log)
+      :source-log (ig/ref :xtdb/source-log)
+      :projection-log (ig/ref :xtdb/projection-log)
       :buffer-pool (ig/ref :xtdb/buffer-pool)
       :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)
       :live-index (ig/ref :xtdb.indexer/live-index)
       :tx-source (ig/ref :xtdb.tx-source/for-db)}})
 
 (defmethod ig/init-key ::for-query [_ {:keys [allocator db-name db-config block-cat table-cat
-                                              trie-cat log buffer-pool metadata-manager
+                                              trie-cat source-log projection-log buffer-pool metadata-manager
                                               live-index tx-source]}]
   (Database. db-name db-config allocator block-cat table-cat trie-cat
-             log buffer-pool metadata-manager live-index
+             source-log projection-log buffer-pool metadata-manager live-index
              live-index ; snap-src
              nil nil tx-source))
 
@@ -56,7 +57,8 @@
          :xtdb/table-catalog opts
          :xtdb/trie-catalog opts
          :xtdb.metadata/metadata-manager opts
-         :xtdb/log (assoc opts :factory (.getLog db-config) :mode mode)
+         :xtdb/source-log (assoc opts :factory (.getLog db-config) :mode mode)
+         :xtdb/projection-log (assoc opts :factory (.getLog db-config) :mode mode)
          :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config) :mode mode)
          :xtdb.indexer/live-index (assoc opts :indexer-conf indexer-conf)
 

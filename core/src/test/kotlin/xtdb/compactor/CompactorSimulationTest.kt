@@ -64,7 +64,8 @@ class MockDb(
     override val allocator: BufferAllocator get() = unsupported("allocator")
     override val blockCatalog: BlockCatalog get() = unsupported("blockCatalog")
     override val tableCatalog: TableCatalog get() = unsupported("tableCatalog")
-    override val log: Log get() = unsupported("log")
+    override val sourceLog: Log get() = unsupported("sourceLog")
+    override val projectionLog: Log get() = unsupported("projectionLog")
     override val metadataManager: PageMetadata.Factory get() = unsupported("metadataManager")
 
     override val logProcessor: LogProcessor get() = unsupported("logProcessor")

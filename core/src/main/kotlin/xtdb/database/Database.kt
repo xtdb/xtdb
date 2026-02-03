@@ -38,7 +38,8 @@ interface IDatabase {
     val blockCatalog: BlockCatalog
     val tableCatalog: TableCatalog
     val trieCatalog: TrieCatalog
-    val log: Log
+    val sourceLog: Log
+    val projectionLog: Log
     val bufferPool: BufferPool
     val metadataManager: PageMetadata.Factory
     val logProcessor: LogProcessor
@@ -51,7 +52,7 @@ data class Database(
 
     override val allocator: BufferAllocator,
     override val blockCatalog: BlockCatalog, override val tableCatalog: TableCatalog, override val trieCatalog: TrieCatalog,
-    override val log: Log, override val bufferPool: BufferPool,
+    override val sourceLog: Log, override val projectionLog: Log, override val bufferPool: BufferPool,
 
     // snapSource will mostly be the same as liveIndex - exception being within a transaction
     override val metadataManager: PageMetadata.Factory, val liveIndex: LiveIndex, val snapSource: Snapshot.Source,
@@ -74,15 +75,15 @@ data class Database(
     override fun hashCode() = Objects.hash(name)
 
     fun sendFlushBlockMessage(): Log.MessageMetadata = runBlocking {
-        log.appendMessage(Message.FlushBlock(blockCatalog.currentBlockIndex ?: -1)).await()
+        sourceLog.appendMessage(Message.FlushBlock(blockCatalog.currentBlockIndex ?: -1)).await()
     }
 
     fun sendAttachDbMessage(dbName: DatabaseName, config: Database.Config): Log.MessageMetadata = runBlocking {
-        log.appendMessage(Message.AttachDatabase(dbName, config)).await()
+        sourceLog.appendMessage(Message.AttachDatabase(dbName, config)).await()
     }
 
     fun sendDetachDbMessage(dbName: DatabaseName): Log.MessageMetadata = runBlocking {
-        log.appendMessage(Message.DetachDatabase(dbName)).await()
+        sourceLog.appendMessage(Message.DetachDatabase(dbName)).await()
     }
 
     @Serializable

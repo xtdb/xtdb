@@ -164,7 +164,13 @@
 (defmethod xtn/apply-config! :xtdb/log [^Xtdb$Config config _ [tag opts]]
   (.log config (->log-factory tag opts)))
 
-(defmethod ig/expand-key :xtdb/log [k {:keys [base factory mode]}]
+(defmethod ig/expand-key :xtdb/source-log [k {:keys [base factory mode]}]
+  {k {:base base
+      :block-cat (ig/ref :xtdb/block-catalog)
+      :factory factory
+      :mode mode}})
+
+(defmethod ig/expand-key :xtdb/projection-log [k {:keys [base factory mode]}]
   {k {:base base
       :block-cat (ig/ref :xtdb/block-catalog)
       :factory factory
@@ -195,15 +201,26 @@
           (throw (->out-of-sync-exception latest-completed-offset latest-submitted-offset epoch)))
         (log/info "Starting node with a log that has a different epoch than the latest completed tx (This is expected if you are starting a new epoch) - Skipping offset validation.")))))
 
-(defmethod ig/init-key :xtdb/log [_ {:keys [^BlockCatalog block-cat, ^Log$Factory factory, ^Database$Mode mode]
-                                     {:keys [log-clusters]} :base}]
+(defmethod ig/init-key :xtdb/source-log [_ {:keys [^BlockCatalog block-cat, ^Log$Factory factory, ^Database$Mode mode]
+                                            {:keys [log-clusters]} :base}]
   (let [log (if (= mode Database$Mode/READ_ONLY)
               (.openReadOnlyLog factory log-clusters)
               (.openLog factory log-clusters))]
     (validate-offsets log (.getLatestCompletedTx block-cat))
     log))
 
-(defmethod ig/halt-key! :xtdb/log [_ ^Log log]
+(defmethod ig/halt-key! :xtdb/source-log [_ ^Log log]
+  (util/close log))
+
+(defmethod ig/init-key :xtdb/projection-log [_ {:keys [^BlockCatalog block-cat, ^Log$Factory factory, ^Database$Mode mode]
+                                                 {:keys [log-clusters]} :base}]
+  (let [log (if (= mode Database$Mode/READ_ONLY)
+              (.openReadOnlyLog factory log-clusters)
+              (.openLog factory log-clusters))]
+    (validate-offsets log (.getLatestCompletedTx block-cat))
+    log))
+
+(defmethod ig/halt-key! :xtdb/projection-log [_ ^Log log]
   (util/close log))
 
 (defn- ->TxOps [tx-ops]
@@ -218,7 +235,7 @@
   (let [^Database db (or (.databaseOrNull db-cat default-db)
                          (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" default-db)
                                                {:db-name default-db})))
-        log (.getLog db)
+        log (.getSourceLog db)
         default-tz (:default-tz opts default-tz)]
     (util/rethrowing-cause
       (let [^Log$MessageMetadata message-meta @(.appendMessage log
@@ -272,9 +289,9 @@
   (.sendFlushBlockMessage db))
 
 (defn send-attach-db! ^long [^Database primary-db, db-name, db-config]
-  (MsgIdUtil/offsetToMsgId (.getEpoch (.getLog primary-db))
+  (MsgIdUtil/offsetToMsgId (.getEpoch (.getSourceLog primary-db))
                            (.getLogOffset (.sendAttachDbMessage primary-db db-name db-config))))
 
 (defn send-detach-db! ^long [^Database primary-db, db-name]
-  (MsgIdUtil/offsetToMsgId (.getEpoch (.getLog primary-db))
+  (MsgIdUtil/offsetToMsgId (.getEpoch (.getSourceLog primary-db))
                            (.getLogOffset (.sendDetachDbMessage primary-db db-name))))

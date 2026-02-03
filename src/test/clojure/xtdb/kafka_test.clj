@@ -76,7 +76,7 @@
                                                     :topic (str "xtdb.kafka-test." test-uuid)
                                                     :create-topic? true}]})]
       (t/testing "KafkaLog successfully created"
-        (t/is (instance? Log (.getLog (db/primary-db node))))))))
+        (t/is (instance? Log (.getSourceLog (db/primary-db node))))))))
 
 (t/deftest ^:integration test-kafka-closes-properly-with-messages-sent
   (let [test-uuid (random-uuid)]

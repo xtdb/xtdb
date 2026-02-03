@@ -67,7 +67,11 @@ class LogProcessor(
         assert((dbCatalog != null) == (db.name == "xtdb")) { "dbCatalog supplied iff db == 'xtdb'" }
     }
 
-    private val log = db.log
+    // LogProcessor subscribes to the source-log, which contains transaction messages.
+    // For now, both source-log and projection-log point to the same underlying log,
+    // so we still receive TriesAdded messages here even though they're written to projection-log.
+    // This is intentional for the transition period.
+    private val log = db.sourceLog
     private val epoch = log.epoch
 
     private val blockCatalog = db.blockCatalog

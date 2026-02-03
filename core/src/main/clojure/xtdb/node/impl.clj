@@ -155,7 +155,7 @@
       (let [^Database db (or (.databaseOrNull db-cat db-name)
                              (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" db-name)
                                                    {:db-name db-name})))
-            log (.getLog db)
+            log (.getSourceLog db)
             tx-opts (.withFallbackTz tx-opts default-tz)]
         (util/rethrowing-cause
          (let [tx-msg (Log$Message$Tx. (TxWriter/serializeTxOps tx-ops allocator tx-opts))
@@ -224,7 +224,7 @@
          (into {} (map (fn [db-name]
                          ;; TODO multi-part
                          [db-name [(-> (.databaseOrNull db-cat db-name)
-                                       (.getLog)
+                                       (.getSourceLog)
                                        (.getLatestSubmittedMsgId))]])))))
 
   (latest-processed-msg-ids [_]
