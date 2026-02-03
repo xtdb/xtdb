@@ -88,8 +88,7 @@
   [{:keys [rng]}]
   (let [fleet (random-fleet rng)]
     {:query-type :high-load
-     :sql "SELECT t.name, t.driver, d.current_load, t.load_capacity,
-                  (d.current_load / t.load_capacity) AS load_pct
+     :sql "SELECT t.name, t.driver, d.current_load
            FROM trucks t
            JOIN diagnostics d ON d._id = t._id
            WHERE t.name IS NOT NULL
@@ -134,7 +133,7 @@
                GROUP BY name, driver, ten_min_bucket
                HAVING AVG(velocity) > 1
              )
-             SELECT name, driver, COUNT(*) AS driving_periods
+             SELECT name, driver
              FROM driving_periods
              GROUP BY name, driver
              HAVING COUNT(*) > 22"
@@ -161,7 +160,7 @@
                GROUP BY name, driver, ten_min_bucket
                HAVING AVG(velocity) > 1
              )
-             SELECT name, driver, COUNT(*) AS driving_periods
+             SELECT name, driver
              FROM driving_periods
              GROUP BY name, driver
              HAVING COUNT(*) > 60"
@@ -176,7 +175,8 @@
                 AVG(t.nominal_fuel_consumption) AS projected_fuel_consumption
          FROM trucks t
          JOIN readings FOR ALL VALID_TIME AS r ON r._id = t._id
-         WHERE t.fleet IS NOT NULL
+         WHERE t.name IS NOT NULL
+           AND t.fleet IS NOT NULL
            AND t.nominal_fuel_consumption IS NOT NULL
            AND r.velocity > 1
          GROUP BY t.fleet"
@@ -218,32 +218,40 @@
    Calculates average duration of driving sessions, matching TSBS semantics."
   [_state]
   {:query-type :avg-daily-driving-session
-   :sql "WITH readings_bucketed AS (
-           SELECT t.name, t._id AS truck_id,
-                  FLOOR(EXTRACT(EPOCH FROM r._valid_from) / 600) AS ten_min_bucket,
-                  AVG(r.velocity) > 5 AS driving
-           FROM trucks t
-           JOIN readings FOR ALL VALID_TIME AS r ON r._id = t._id
-           WHERE t.name IS NOT NULL
-           GROUP BY t.name, t._id, FLOOR(EXTRACT(EPOCH FROM r._valid_from) / 600)
-         ),
-         status_with_prev AS (
-           SELECT name, truck_id, ten_min_bucket, driving,
-                  LAG(driving) OVER (PARTITION BY truck_id ORDER BY ten_min_bucket) AS prev_driving
-           FROM readings_bucketed
-         ),
-         status_changes AS (
-           SELECT name, ten_min_bucket AS start_bucket, driving,
-                  LEAD(ten_min_bucket) OVER (PARTITION BY truck_id ORDER BY ten_min_bucket) AS stop_bucket
-           FROM status_with_prev
-           WHERE driving <> prev_driving OR prev_driving IS NULL
-         )
-         SELECT name,
-                DATE_TRUNC(DAY, TIMESTAMP '1970-01-01' + start_bucket * INTERVAL '600 seconds') AS day_bucket,
-                AVG((stop_bucket - start_bucket) * 10.0) AS avg_session_duration_min
-         FROM status_changes
-         WHERE driving = true AND stop_bucket IS NOT NULL
-         GROUP BY name, DATE_TRUNC(DAY, TIMESTAMP '1970-01-01' + start_bucket * INTERVAL '600 seconds')
+   ;; Wrap final aggregation in subquery because XTDB doesn't support expressions in GROUP BY
+   :sql "SELECT name, day_bucket, AVG(session_duration_min) AS avg_session_duration_min
+         FROM (
+           WITH readings_with_bucket AS (
+             SELECT t.name, t._id AS truck_id, r.velocity,
+                    FLOOR(EXTRACT(EPOCH FROM r._valid_from) / 600) AS ten_min_bucket
+             FROM trucks t
+             JOIN readings FOR ALL VALID_TIME AS r ON r._id = t._id
+             WHERE t.name IS NOT NULL
+           ),
+           readings_bucketed AS (
+             SELECT name, truck_id, ten_min_bucket,
+                    AVG(velocity) > 5 AS driving
+             FROM readings_with_bucket
+             GROUP BY name, truck_id, ten_min_bucket
+           ),
+           status_with_prev AS (
+             SELECT name, truck_id, ten_min_bucket, driving,
+                    LAG(driving) OVER (PARTITION BY truck_id ORDER BY ten_min_bucket) AS prev_driving
+             FROM readings_bucketed
+           ),
+           status_changes AS (
+             SELECT name, truck_id, ten_min_bucket AS start_bucket, driving,
+                    LEAD(ten_min_bucket) OVER (PARTITION BY truck_id ORDER BY ten_min_bucket) AS stop_bucket
+             FROM status_with_prev
+             WHERE driving <> prev_driving OR prev_driving IS NULL
+           )
+           SELECT name,
+                  FLOOR(start_bucket / 144) AS day_bucket,
+                  (stop_bucket - start_bucket) * 10.0 AS session_duration_min
+           FROM status_changes
+           WHERE driving = true AND stop_bucket IS NOT NULL
+         ) sessions
+         GROUP BY name, day_bucket
          ORDER BY name, day_bucket"
    :params []})
 
