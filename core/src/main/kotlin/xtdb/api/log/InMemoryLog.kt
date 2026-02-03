@@ -16,6 +16,7 @@ import xtdb.database.proto.inMemoryLog
 import java.time.Instant
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS
+import java.util.concurrent.CompletableFuture
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -78,6 +79,40 @@ class InMemoryLog(
             appendCh.send(NewMessage(message, res))
             res.await()
         }
+
+    override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer {
+        override fun openTx() = object : AtomicProducer.Tx {
+            private val buffer = mutableListOf<Pair<Message, CompletableFuture<MessageMetadata>>>()
+            private var isOpen = true
+
+            override fun appendMessage(message: Message): CompletableFuture<MessageMetadata> {
+                check(isOpen) { "Transaction already closed" }
+                val future = CompletableFuture<MessageMetadata>()
+                buffer.add(message to future)
+                return future
+            }
+
+            override fun commit() {
+                check(isOpen) { "Transaction already closed" }
+                isOpen = false
+                for ((message, future) in buffer) {
+                    future.complete(this@InMemoryLog.appendMessage(message).join())
+                }
+            }
+
+            override fun abort() {
+                check(isOpen) { "Transaction already closed" }
+                isOpen = false
+                buffer.clear()
+            }
+
+            override fun close() {
+                if (isOpen) abort()
+            }
+        }
+
+        override fun close() {}
+    }
 
     override fun readLastMessage(): Message? = null
 

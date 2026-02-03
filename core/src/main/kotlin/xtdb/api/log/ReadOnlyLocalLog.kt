@@ -97,6 +97,9 @@ class ReadOnlyLocalLog(
     override fun appendMessage(message: Message) =
         throw Incorrect("Cannot append to read-only database log")
 
+    override fun openAtomicProducer(transactionalId: String) =
+        throw Incorrect("Cannot open atomic producer on read-only database log")
+
     override fun readLastMessage(): Message? {
         if (latestSubmittedOffset < 0) return null
 

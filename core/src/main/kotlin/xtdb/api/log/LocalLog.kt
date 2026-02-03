@@ -30,6 +30,7 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
 import java.time.Instant
 import java.time.InstantSource
+import java.util.concurrent.CompletableFuture
 import kotlin.coroutines.CoroutineContext
 import kotlin.io.path.createParentDirectories
 import kotlin.io.path.exists
@@ -206,6 +207,40 @@ class LocalLog(
             val record = onCommit.await()
             MessageMetadata(record.logOffset, record.logTimestamp)
         }
+
+    override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer {
+        override fun openTx() = object : AtomicProducer.Tx {
+            private val buffer = mutableListOf<Pair<Message, CompletableFuture<MessageMetadata>>>()
+            private var isOpen = true
+
+            override fun appendMessage(message: Message): CompletableFuture<MessageMetadata> {
+                check(isOpen) { "Transaction already closed" }
+                val future = CompletableFuture<MessageMetadata>()
+                buffer.add(message to future)
+                return future
+            }
+
+            override fun commit() {
+                check(isOpen) { "Transaction already closed" }
+                isOpen = false
+                for ((message, future) in buffer) {
+                    future.complete(this@LocalLog.appendMessage(message).join())
+                }
+            }
+
+            override fun abort() {
+                check(isOpen) { "Transaction already closed" }
+                isOpen = false
+                buffer.clear()
+            }
+
+            override fun close() {
+                if (isOpen) abort()
+            }
+        }
+
+        override fun close() {}
+    }
 
     override fun readLastMessage(): Message? {
         if (latestSubmittedOffset < 0) return null

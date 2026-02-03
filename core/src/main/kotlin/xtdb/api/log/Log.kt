@@ -217,6 +217,22 @@ interface Log : AutoCloseable {
 
     fun appendMessage(message: Message): CompletableFuture<MessageMetadata>
 
+    /**
+     * @param transactionalId uniquely identifies this producer for Kafka's transaction coordinator.
+     *   Must be stable across restarts for transaction recovery.
+     */
+    fun openAtomicProducer(transactionalId: String): AtomicProducer
+
+    interface AtomicProducer : AutoCloseable {
+        fun openTx(): Tx
+
+        interface Tx : AutoCloseable {
+            fun appendMessage(message: Message): CompletableFuture<MessageMetadata>
+            fun commit()
+            fun abort()
+        }
+    }
+
     fun readLastMessage(): Message?
 
     fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription

@@ -54,6 +54,40 @@ class RecordingLog(private val instantSource: InstantSource, messages: List<Log.
 
     override fun readLastMessage(): Log.Message? = messages.lastOrNull()
 
+    override fun openAtomicProducer(transactionalId: String) = object : Log.AtomicProducer {
+        override fun openTx() = object : Log.AtomicProducer.Tx {
+            private val buffer = mutableListOf<Pair<Log.Message, CompletableFuture<Log.MessageMetadata>>>()
+            private var isOpen = true
+
+            override fun appendMessage(message: Log.Message): CompletableFuture<Log.MessageMetadata> {
+                check(isOpen) { "Transaction already closed" }
+                val future = CompletableFuture<Log.MessageMetadata>()
+                buffer.add(message to future)
+                return future
+            }
+
+            override fun commit() {
+                check(isOpen) { "Transaction already closed" }
+                isOpen = false
+                for ((message, future) in buffer) {
+                    future.complete(this@RecordingLog.appendMessage(message).join())
+                }
+            }
+
+            override fun abort() {
+                check(isOpen) { "Transaction already closed" }
+                isOpen = false
+                buffer.clear()
+            }
+
+            override fun close() {
+                if (isOpen) abort()
+            }
+        }
+
+        override fun close() {}
+    }
+
     override fun subscribe(
         subscriber: Log.Subscriber,
         latestProcessedOffset: LogOffset

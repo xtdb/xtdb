@@ -195,6 +195,71 @@ class KafkaCluster(
                 records.firstOrNull()?.let { record -> Message.parse(record.value()) }
             }
 
+        override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer {
+            private val producer = KafkaProducer(
+                mapOf(
+                    "enable.idempotence" to "true",
+                    "acks" to "all",
+                    "compression.type" to "snappy",
+                    "transactional.id" to transactionalId,
+                ) + kafkaConfigMap,
+                UnitSerializer,
+                ByteArraySerializer()
+            ).also { it.initTransactions() }
+
+            override fun openTx(): AtomicProducer.Tx {
+                producer.beginTransaction()
+
+                return object : AtomicProducer.Tx {
+                    private val futures = mutableListOf<CompletableFuture<MessageMetadata>>()
+                    private var isOpen = true
+
+                    override fun appendMessage(message: Message): CompletableFuture<MessageMetadata> {
+                        check(isOpen) { "Transaction already closed" }
+                        val future = CompletableFuture<MessageMetadata>()
+                        futures.add(future)
+                        producer.send(ProducerRecord(topic, null, Unit, message.encode())) { recordMetadata, e ->
+                            if (e == null) {
+                                future.complete(
+                                    MessageMetadata(
+                                        recordMetadata.offset(),
+                                        Instant.ofEpochMilli(recordMetadata.timestamp())
+                                    )
+                                )
+                            } else {
+                                future.completeExceptionally(e)
+                            }
+                        }
+                        return future
+                    }
+
+                    override fun commit() {
+                        check(isOpen) { "Transaction already closed" }
+                        isOpen = false
+                        // commitTransaction flushes all pending sends, so futures are already complete
+                        producer.commitTransaction()
+                        futures.forEach {
+                            latestSubmittedOffset0.updateAndGet { prev -> prev.coerceAtLeast(it.join().logOffset) }
+                        }
+                    }
+
+                    override fun abort() {
+                        check(isOpen) { "Transaction already closed" }
+                        isOpen = false
+                        producer.abortTransaction()
+                    }
+
+                    override fun close() {
+                        if (isOpen) abort()
+                    }
+                }
+            }
+
+            override fun close() {
+                producer.close()
+            }
+        }
+
         override fun subscribe(subscriber: Subscriber, latestProcessedOffset: LogOffset): Subscription {
             val job = scope.launch {
                 kafkaConfigMap.openConsumer().use { c ->
