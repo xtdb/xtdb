@@ -282,7 +282,7 @@
                 (update :params (fnil into {})
                         (cond
                           subq? (map (fn [sym]
-                                       [sym (symbol (str "$" sym))]))
+                                       [sym (symbol (str "?_sq_" sym))]))
                           !param-count (map (fn [sym]
                                               [sym (symbol (str "?_" (dec (swap! !param-count inc))))]))
                           :else (map-indexed (fn [idx sym]

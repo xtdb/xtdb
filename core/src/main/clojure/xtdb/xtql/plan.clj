@@ -50,9 +50,9 @@
 
 (defn- apply-param-sym
   ([v]
-   (apply-param-sym nil v))
+   (apply-param-sym v nil))
   ([v prefix]
-   (-> (symbol (str "$" prefix v))
+   (-> (symbol (str "?_sq_" prefix v))
        util/symbol->normal-form-symbol
        (with-meta {:correlated-column? true}))))
 
