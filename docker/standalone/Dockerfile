@@ -22,7 +22,7 @@ ENTRYPOINT ["java", \
     "-cp","xtdb.jar", \
     "clojure.main", "-m", "xtdb.main"]
 
-CMD ["-f", "local_config.yaml"]
+CMD ["-f", "config.yaml"]
 
 HEALTHCHECK --start-period=15s --timeout=3s \
     CMD curl -f http://localhost:8080/healthz/alive || exit 1
@@ -37,7 +37,7 @@ VOLUME /var/lib/xtdb
 ENV GIT_SHA=${GIT_SHA}
 ENV XTDB_VERSION=${XTDB_VERSION}
 
-ADD local_config.yaml local_config.yaml
+ADD *.yaml .
 ADD build/libs/xtdb-standalone.jar xtdb.jar
 
 RUN groupadd -g 20000 xtdb && useradd -u 20000 -g 20000 -r xtdb

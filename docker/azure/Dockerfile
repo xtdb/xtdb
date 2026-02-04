@@ -19,7 +19,7 @@ ENTRYPOINT ["java", \
     "-cp","xtdb.jar", \
     "clojure.main", "-m", "xtdb.main"]
 
-CMD ["-f", "azure_config.yaml"]
+CMD ["-f", "config.yaml"]
 
 HEALTHCHECK --start-period=15s --timeout=3s \
     CMD curl -f http://localhost:8080/healthz/alive || exit 1
@@ -34,8 +34,7 @@ VOLUME /var/lib/xtdb
 ENV GIT_SHA=${GIT_SHA}
 ENV XTDB_VERSION=${XTDB_VERSION}
 
-ADD azure_config.yaml azure_config.yaml
-ADD azure_config_private_auth.yaml azure_config_private_auth.yaml
+ADD *.yaml .
 ADD build/libs/xtdb-azure.jar xtdb.jar
 
 RUN groupadd -g 20000 xtdb && useradd -u 20000 -g 20000 -r xtdb
