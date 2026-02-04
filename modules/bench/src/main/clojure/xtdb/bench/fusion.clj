@@ -106,7 +106,7 @@
 
      ;; Credential/controller fields (sparse, like production)
      :certificate-credential-id (when (random/chance? rng 0.3)
-                                   (str "cert-" (random/next-uuid rng)))
+                                  (str "cert-" (random/next-uuid rng)))
      :controller-listing-id (when (random/chance? rng 0.4)
                               (str "ctrl-" (random/next-uuid rng)))
 
@@ -353,25 +353,20 @@
         (b/finish-block! node)
         (b/compact! node))})
 
-(defn run-query
-  "Execute a HugSQL sqlvec against XTDB node"
-  [node sqlvec opts]
-  (xt/q node sqlvec opts))
-
 (defn exec-system-settings [node system-id opts]
-  (run-query node (query-system-settings-sqlvec {:system-id system-id}) opts))
+  (xt/q node (query-system-settings-sqlvec {:system-id system-id}) opts))
 
 (defn exec-readings-for-system [node system-id start end opts]
-  (run-query node (query-readings-for-system-sqlvec {:system-id system-id :start start :end end}) opts))
+  (xt/q node (query-readings-for-system-sqlvec {:system-id system-id :start start :end end}) opts))
 
 (defn exec-system-count-over-time [node start end opts]
-  (run-query node (query-system-count-over-time-sqlvec {:start start :end end}) opts))
+  (xt/q node (query-system-count-over-time-sqlvec {:start start :end end}) opts))
 
 (defn exec-readings-range-bins [node start end opts]
-  (run-query node (query-readings-range-bins-sqlvec {:start start :end end}) opts))
+  (xt/q node (query-readings-range-bins-sqlvec {:start start :end end}) opts))
 
 (defn exec-cumulative-registration [node start end opts]
-  (run-query node (query-cumulative-registration-sqlvec {:start start :end end}) opts))
+  (xt/q node (query-cumulative-registration-sqlvec {:start start :end end}) opts))
 
 ;; OLTP mixed workload procs
 
