@@ -1,7 +1,9 @@
 services:
   xtdb:
     build:
-      context: ../docker/standalone
+      context: ../docker
+      args:
+        VARIANT: standalone
     command: ["playground", "--port", "5439"]
     healthcheck:
       test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/5439'"]

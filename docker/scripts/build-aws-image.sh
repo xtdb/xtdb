@@ -11,6 +11,6 @@ set -e
     sha=$(git rev-parse --short HEAD)
 
     echo Building Docker image ...
-    docker build -t xtdb/xtdb-aws --build-arg GIT_SHA="$sha" --build-arg XTDB_VERSION="${XTDB_VERSION:-2-SNAPSHOT}" --output type=docker aws
+    docker build -t xtdb/xtdb-aws --build-arg VARIANT=aws --build-arg GIT_SHA="$sha" --build-arg XTDB_VERSION="${XTDB_VERSION:-2-SNAPSHOT}" --output type=docker -f Dockerfile .
     echo Done
 )
