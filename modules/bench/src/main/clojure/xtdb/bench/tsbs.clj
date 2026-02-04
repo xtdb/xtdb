@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
+            [hugsql.core :as hugsql]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.time :as time]
@@ -11,6 +12,8 @@
   (:import (java.time Duration Instant LocalTime)
            (java.util Random)
            (java.util.concurrent Executors ExecutorService TimeUnit)))
+
+(hugsql/def-sqlvec-fns "xtdb/bench/tsbs.sql")
 
 ;; TSBS fleet choices (from pkg/data/usecases/iot/truck.go)
 (def fleet-choices ["East" "West" "North" "South"])
@@ -48,53 +51,30 @@
 (defn- gen-last-loc-by-truck
   "LastLocByTruck - last location for specific random trucks"
   [{:keys [rng truck-names]}]
-  (let [trucks (random-trucks rng truck-names 5)
-        ;; Build IN clause with positional params: WHERE t.name IN (?, ?, ?, ?, ?)
-        placeholders (str/join ", " (repeat (count trucks) "?"))
-        sql (format "SELECT t.name, t.driver, r.longitude, r.latitude
-                     FROM trucks t
-                     JOIN readings r ON r._id = t._id
-                     WHERE t.name IN (%s)" placeholders)]
+  (let [trucks (random-trucks rng truck-names 5)]
     {:query-type :last-loc-by-truck
-     :sql sql
-     :params (vec trucks)}))
+     :sqlvec (query-last-loc-by-truck-sqlvec {:truck-names trucks})}))
 
 (defn- gen-last-loc-per-truck
   "LastLocPerTruck - last location for all trucks in a random fleet"
   [{:keys [rng]}]
   (let [fleet (random-fleet rng)]
     {:query-type :last-loc-per-truck
-     :sql "SELECT t.name, t.driver, r.longitude, r.latitude
-           FROM trucks t
-           JOIN readings r ON r._id = t._id
-           WHERE t.name IS NOT NULL AND t.fleet = ?"
-     :params [fleet]}))
+     :sqlvec (query-last-loc-per-truck-sqlvec {:fleet fleet})}))
 
 (defn- gen-low-fuel
   "TrucksWithLowFuel - trucks with fuel < 10% in a random fleet"
   [{:keys [rng]}]
   (let [fleet (random-fleet rng)]
     {:query-type :low-fuel
-     :sql "SELECT t.name, t.driver, d.fuel_state
-           FROM trucks t
-           JOIN diagnostics d ON d._id = t._id
-           WHERE t.name IS NOT NULL
-             AND t.fleet = ?
-             AND d.fuel_state < 0.1"
-     :params [fleet]}))
+     :sqlvec (query-low-fuel-sqlvec {:fleet fleet})}))
 
 (defn- gen-high-load
   "TrucksWithHighLoad - trucks with load > 90% capacity in a random fleet"
   [{:keys [rng]}]
   (let [fleet (random-fleet rng)]
     {:query-type :high-load
-     :sql "SELECT t.name, t.driver, d.current_load
-           FROM trucks t
-           JOIN diagnostics d ON d._id = t._id
-           WHERE t.name IS NOT NULL
-             AND t.fleet = ?
-             AND d.current_load / t.load_capacity > 0.9"
-     :params [fleet]}))
+     :sqlvec (query-high-load-sqlvec {:fleet fleet})}))
 
 (defn- gen-stationary-trucks
   "StationaryTrucks - trucks with avg velocity < 1 in random 10-min window.
@@ -103,13 +83,9 @@
   (when-let [[window-start window-end] (random-window rng min-time max-time (Duration/ofMinutes 10))]
     (let [fleet (random-fleet rng)]
       {:query-type :stationary-trucks
-       :sql "SELECT t.name, t.driver, AVG(r.velocity) AS avg_velocity
-             FROM trucks t
-             JOIN readings FOR VALID_TIME BETWEEN ? AND ? AS r ON r._id = t._id
-             WHERE t.name IS NOT NULL AND t.fleet = ?
-             GROUP BY t.name, t.driver
-             HAVING AVG(r.velocity) < 1"
-       :params [window-start window-end fleet]})))
+       :sqlvec (query-stationary-trucks-sqlvec {:window-start window-start
+                                                :window-end window-end
+                                                :fleet fleet})})))
 
 (defn- gen-long-driving-sessions
   "TrucksWithLongDrivingSessions - drove > 220 mins in random 4-hour window.
@@ -118,26 +94,9 @@
   (when-let [[window-start window-end] (random-window rng min-time max-time (Duration/ofHours 4))]
     (let [fleet (random-fleet rng)]
       {:query-type :long-driving-sessions
-       ;; TSBS uses 10-minute buckets, counts periods with avg velocity > 1, requires > 22 periods
-       ;; 22 periods × 10 min = 220 min = 3.67 hours of driving in 4 hour window
-       :sql "WITH base AS (
-               SELECT t.name, t.driver, r.velocity,
-                      FLOOR(EXTRACT(EPOCH FROM r._valid_from) / 600) AS ten_min_bucket
-               FROM trucks t
-               JOIN readings FOR VALID_TIME BETWEEN ? AND ? AS r ON r._id = t._id
-               WHERE t.name IS NOT NULL AND t.fleet = ?
-             ),
-             driving_periods AS (
-               SELECT name, driver, ten_min_bucket
-               FROM base
-               GROUP BY name, driver, ten_min_bucket
-               HAVING AVG(velocity) > 1
-             )
-             SELECT name, driver
-             FROM driving_periods
-             GROUP BY name, driver
-             HAVING COUNT(*) > 22"
-       :params [window-start window-end fleet]})))
+       :sqlvec (query-long-driving-sessions-sqlvec {:window-start window-start
+                                                    :window-end window-end
+                                                    :fleet fleet})})))
 
 (defn- gen-long-daily-sessions
   "TrucksWithLongDailySessions - drove > 10 hours in random 24-hour window.
@@ -146,71 +105,21 @@
   (when-let [[window-start window-end] (random-window rng min-time max-time (Duration/ofHours 24))]
     (let [fleet (random-fleet rng)]
       {:query-type :long-daily-sessions
-       ;; TSBS uses 10-minute buckets, requires > 60 periods = 600 min = 10 hours
-       :sql "WITH base AS (
-               SELECT t.name, t.driver, r.velocity,
-                      FLOOR(EXTRACT(EPOCH FROM r._valid_from) / 600) AS ten_min_bucket
-               FROM trucks t
-               JOIN readings FOR VALID_TIME BETWEEN ? AND ? AS r ON r._id = t._id
-               WHERE t.name IS NOT NULL AND t.fleet = ?
-             ),
-             driving_periods AS (
-               SELECT name, driver, ten_min_bucket
-               FROM base
-               GROUP BY name, driver, ten_min_bucket
-               HAVING AVG(velocity) > 1
-             )
-             SELECT name, driver
-             FROM driving_periods
-             GROUP BY name, driver
-             HAVING COUNT(*) > 60"
-       :params [window-start window-end fleet]})))
+       :sqlvec (query-long-daily-sessions-sqlvec {:window-start window-start
+                                                  :window-end window-end
+                                                  :fleet fleet})})))
 
 (defn- gen-avg-vs-projected-fuel-consumption
   "AvgVsProjectedFuelConsumption - actual vs nominal fuel per fleet (no random params)"
   [_state]
   {:query-type :avg-vs-projected-fuel-consumption
-   :sql "SELECT t.fleet,
-                AVG(r.fuel_consumption) AS avg_fuel_consumption,
-                AVG(t.nominal_fuel_consumption) AS projected_fuel_consumption
-         FROM trucks t
-         JOIN readings FOR ALL VALID_TIME AS r ON r._id = t._id
-         WHERE t.name IS NOT NULL
-           AND t.fleet IS NOT NULL
-           AND t.nominal_fuel_consumption IS NOT NULL
-           AND r.velocity > 1
-         GROUP BY t.fleet"
-   :params []})
+   :sqlvec (query-avg-vs-projected-fuel-consumption-sqlvec {})})
 
 (defn- gen-avg-daily-driving-duration
   "AvgDailyDrivingDuration - average hours driven per day per driver (no random params)"
   [_state]
   {:query-type :avg-daily-driving-duration
-   ;; TSBS: 10-min buckets, count periods with avg velocity > 1, divide by 6 to get hours
-   :sql "WITH base AS (
-           SELECT t.name, t.driver, t.fleet, r.velocity,
-                  DATE_TRUNC(DAY, r._valid_from) AS day_bucket,
-                  FLOOR(EXTRACT(EPOCH FROM r._valid_from) / 600) AS ten_min_bucket
-           FROM trucks t
-           JOIN readings FOR ALL VALID_TIME AS r ON r._id = t._id
-           WHERE t.name IS NOT NULL
-         ),
-         ten_min_driving AS (
-           SELECT name, driver, fleet, day_bucket, ten_min_bucket
-           FROM base
-           GROUP BY name, driver, fleet, day_bucket, ten_min_bucket
-           HAVING AVG(velocity) > 1
-         ),
-         daily_hours AS (
-           SELECT name, driver, fleet, day_bucket,
-                  CAST(COUNT(*) AS DOUBLE PRECISION) / 6.0 AS hours_driven
-           FROM ten_min_driving
-           GROUP BY name, driver, fleet, day_bucket
-         )
-         SELECT fleet, name, driver, AVG(hours_driven) AS avg_daily_hours
-         FROM daily_hours
-         GROUP BY fleet, name, driver"
-   :params []})
+   :sqlvec (query-avg-daily-driving-duration-sqlvec {})})
 
 (defn- gen-avg-daily-driving-session
   "AvgDailyDrivingSession - avg session duration per driver per day (no random params)
@@ -218,103 +127,26 @@
    Calculates average duration of driving sessions, matching TSBS semantics."
   [_state]
   {:query-type :avg-daily-driving-session
-   ;; Wrap final aggregation in subquery because XTDB doesn't support expressions in GROUP BY
-   :sql "SELECT name, day_bucket, AVG(session_duration_min) AS avg_session_duration_min
-         FROM (
-           WITH readings_with_bucket AS (
-             SELECT t.name, t._id AS truck_id, r.velocity,
-                    FLOOR(EXTRACT(EPOCH FROM r._valid_from) / 600) AS ten_min_bucket
-             FROM trucks t
-             JOIN readings FOR ALL VALID_TIME AS r ON r._id = t._id
-             WHERE t.name IS NOT NULL
-           ),
-           readings_bucketed AS (
-             SELECT name, truck_id, ten_min_bucket,
-                    AVG(velocity) > 5 AS driving
-             FROM readings_with_bucket
-             GROUP BY name, truck_id, ten_min_bucket
-           ),
-           status_with_prev AS (
-             SELECT name, truck_id, ten_min_bucket, driving,
-                    LAG(driving) OVER (PARTITION BY truck_id ORDER BY ten_min_bucket) AS prev_driving
-             FROM readings_bucketed
-           ),
-           status_changes AS (
-             SELECT name, truck_id, ten_min_bucket AS start_bucket, driving,
-                    LEAD(ten_min_bucket) OVER (PARTITION BY truck_id ORDER BY ten_min_bucket) AS stop_bucket
-             FROM status_with_prev
-             WHERE driving <> prev_driving OR prev_driving IS NULL
-           )
-           SELECT name,
-                  FLOOR(start_bucket / 144) AS day_bucket,
-                  (stop_bucket - start_bucket) * 10.0 AS session_duration_min
-           FROM status_changes
-           WHERE driving = true AND stop_bucket IS NOT NULL
-         ) sessions
-         GROUP BY name, day_bucket
-         ORDER BY name, day_bucket"
-   :params []})
+   :sqlvec (query-avg-daily-driving-session-sqlvec {})})
 
 (defn- gen-avg-load
   "AvgLoad - average load per truck model per fleet (no random params)"
   [_state]
   {:query-type :avg-load
-   :sql "SELECT t.fleet, t.model, t.load_capacity,
-                AVG(d.current_load / t.load_capacity) AS avg_load_pct
-         FROM trucks t
-         JOIN diagnostics FOR ALL VALID_TIME AS d ON d._id = t._id
-         WHERE t.name IS NOT NULL
-         GROUP BY t.fleet, t.model, t.load_capacity"
-   :params []})
+   :sqlvec (query-avg-load-sqlvec {})})
 
 (defn- gen-daily-activity
   "DailyTruckActivity - fraction of day active per fleet/model (no random params)"
   [_state]
   {:query-type :daily-activity
-   ;; TSBS: 10-min buckets, counts active periods, divides by 144 (10-min periods per day)
-   :sql "WITH base AS (
-           SELECT t.fleet, t.model, t._id AS truck_id, d.status,
-                  DATE_TRUNC(DAY, d._valid_from) AS day_bucket,
-                  FLOOR(EXTRACT(EPOCH FROM d._valid_from) / 600) AS ten_min_bucket
-           FROM trucks t
-           JOIN diagnostics FOR ALL VALID_TIME AS d ON d._id = t._id
-           WHERE t.name IS NOT NULL
-         ),
-         active_periods AS (
-           SELECT fleet, model, truck_id, day_bucket, ten_min_bucket
-           FROM base
-           GROUP BY fleet, model, truck_id, day_bucket, ten_min_bucket
-           HAVING AVG(status) < 1
-         )
-         SELECT fleet, model, day_bucket,
-                CAST(COUNT(*) AS DOUBLE PRECISION) / 144.0 AS daily_activity
-         FROM active_periods
-         GROUP BY fleet, model, day_bucket
-         ORDER BY day_bucket"
-   :params []})
+   :sqlvec (query-daily-activity-sqlvec {})})
 
 (defn- gen-breakdown-frequency
   "TruckBreakdownFrequency - breakdown events per model (no random params)
    Uses LEAD to detect transitions from working (status > 0) to broken (status = 0)."
   [_state]
   {:query-type :breakdown-frequency
-   :sql "WITH diagnostics_with_next AS (
-           SELECT t.model, t._id AS truck_id, d.status,
-                  LEAD(d.status) OVER (PARTITION BY t._id ORDER BY d._valid_from) AS next_status
-           FROM trucks t
-           JOIN diagnostics FOR ALL VALID_TIME AS d ON d._id = t._id
-           WHERE t.name IS NOT NULL
-         ),
-         breakdown_events AS (
-           SELECT model, truck_id
-           FROM diagnostics_with_next
-           WHERE status > 0 AND next_status = 0
-         )
-         SELECT model, COUNT(*) AS breakdown_count
-         FROM breakdown_events
-         GROUP BY model
-         HAVING COUNT(*) > 0"
-   :params []})
+   :sqlvec (query-breakdown-frequency-sqlvec {})})
 
 ;; All query generators in TSBS order
 (def query-generators
@@ -334,11 +166,9 @@
 
 (defn- execute-query
   "Execute a single query and return timing in nanoseconds"
-  [node {:keys [sql params]}]
+  [node {:keys [sqlvec]}]
   (let [start (System/nanoTime)
-        _ (if (seq params)
-            (xt/q node (into [sql] params))
-            (xt/q node sql))
+        _ (xt/q node sqlvec)
         end (System/nanoTime)]
     (- end start)))
 
