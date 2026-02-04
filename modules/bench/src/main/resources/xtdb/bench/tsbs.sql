@@ -24,7 +24,7 @@ FROM trucks t
 JOIN diagnostics d ON d._id = t._id
 WHERE t.name IS NOT NULL
   AND t.fleet = :fleet
-  AND d.current_load / t.load_capacity > 0.9
+  AND d.current_load / CAST(t.load_capacity AS DOUBLE PRECISION) > 0.9
 
 -- :name query-stationary-trucks :? :*
 SELECT t.name, t.driver, AVG(r.velocity) AS avg_velocity
@@ -147,7 +147,7 @@ ORDER BY name, day_bucket
 
 -- :name query-avg-load :? :*
 SELECT t.fleet, t.model, t.load_capacity,
-       AVG(d.current_load / t.load_capacity) AS avg_load_pct
+       AVG(d.current_load / CAST(t.load_capacity AS DOUBLE PRECISION)) AS avg_load_pct
 FROM trucks t
 JOIN diagnostics FOR ALL VALID_TIME AS d ON d._id = t._id
 WHERE t.name IS NOT NULL
