@@ -1,12 +1,12 @@
 (ns xtdb.indexer
-  (:require [clojure.pprint :as pp]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.authn.crypt :as authn.crypt]
             [xtdb.basis :as basis]
             [xtdb.error :as err]
+            [xtdb.indexer.crash-logger :refer [with-crash-log]]
             [xtdb.indexer.live-index :as li]
             [xtdb.log :as xt-log]
             [xtdb.logical-plan :as lp]
@@ -25,91 +25,19 @@
            (io.micrometer.core.instrument Counter Timer)
            (io.micrometer.tracing Tracer)
            (java.nio ByteBuffer)
-           (java.time Instant InstantSource)
-           (java.time.temporal ChronoUnit)
-           (java.util List)
+           (java.time Instant)
            (org.apache.arrow.memory BufferAllocator)
            xtdb.api.TransactionKey
            (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            (xtdb.database Database Database$Catalog)
            (xtdb.error Anomaly$Caller Interrupted)
-           (xtdb.indexer Indexer Indexer$ForDatabase Indexer$TxSource LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
+           (xtdb.indexer CrashLogger Indexer Indexer$ForDatabase Indexer$TxSource LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
            (xtdb.table TableRef)
            (xtdb.query IQuerySource PreparedQuery)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^:private skipped-exn (Exception. "skipped"))
-
-(def ^:dynamic ^java.time.InstantSource *crash-log-clock* (InstantSource/system))
-
-(defn crash-log! [{:keys [^BufferAllocator allocator ^Database db node-id]} ex {:keys [table] :as data} {:keys [^LiveIndex live-idx, ^LiveTable$Tx live-table-tx, ^RelationReader query-rel, ^VectorReader tx-ops-rdr]}]
-  (let [buffer-pool (.getBufferPool db)
-        ts (str (.truncatedTo (.instant *crash-log-clock*) ChronoUnit/SECONDS))
-        crash-dir (util/->path (format "crashes/%s/%s" node-id ts))]
-    (log/warn "writing a crash log:" (str crash-dir) (pr-str data))
-
-    (let [^String crash-edn (with-out-str
-                              (pp/pprint (-> data (assoc :ex ex))))]
-      (.putObject buffer-pool (.resolve crash-dir "crash.edn")
-                  (ByteBuffer/wrap (.getBytes crash-edn))))
-
-    (when (and live-idx table)
-      (.putObject buffer-pool (.resolve crash-dir "live-trie.binpb")
-                  (ByteBuffer/wrap (.getAsProto (.getLiveTrie (.liveTable live-idx table))))))
-
-    (when live-table-tx
-      ;; Write committed live-table data
-      (when (and live-idx table)
-        (let [live-table (.liveTable live-idx table)]
-          (when (pos? (.getRowCount (.getLiveRelation live-table)))
-            (with-open [live-rel (.openDirectSlice (.getLiveRelation live-table) allocator)
-                        wtr (.openArrowWriter buffer-pool (.resolve crash-dir "live-table.arrow") live-rel)]
-              (.writePage wtr)
-              (.end wtr)))))
-
-      ;; Write transaction-scoped data
-      (with-open [tx-rel (.openDirectSlice (.getTxRelation live-table-tx) allocator)
-                  wtr (.openArrowWriter buffer-pool (.resolve crash-dir "live-table-tx.arrow") tx-rel)]
-        (.writePage wtr)
-        (.end wtr))
-
-      (.putObject buffer-pool (.resolve crash-dir "live-trie-tx.binpb")
-                  (ByteBuffer/wrap (.getAsProto (.getTransientTrie live-table-tx)))))
-
-    (when query-rel
-      (with-open [query-rel (.openDirectSlice query-rel allocator)
-                  wtr (.openArrowWriter buffer-pool (.resolve crash-dir "query-rel.arrow") query-rel)]
-        (.writePage wtr)
-        (.end wtr)))
-
-    (when tx-ops-rdr
-      (let [^List vec-list [tx-ops-rdr]
-            tx-ops-rel (Relation. allocator vec-list (int (.getValueCount tx-ops-rdr)))]
-        (with-open [wtr (.openArrowWriter buffer-pool (.resolve crash-dir "tx-ops.arrow") tx-ops-rel)]
-          (.writePage wtr)
-          (.end wtr))))
-
-    (log/info "crash log written:" (str crash-dir))))
-
-(defmacro with-crash-log [indexer msg data state & body]
-  `(let [data# ~data]
-     (try
-       (err/wrap-anomaly data#
-                         ~@body)
-       (catch Interrupted e# (throw e#))
-       (catch Anomaly$Caller e# (throw e#))
-       (catch Throwable e#
-         (let [{node-id# :node-id, :as indexer#} ~indexer
-               msg# ~msg
-               data# (-> data#
-                         (assoc :node-id node-id#))]
-           (try
-             (crash-log! ~indexer e# data# ~state)
-             (catch Throwable t#
-               (.addSuppressed e# t#)))
-
-           (throw (ex-info msg# data# e#)))))))
 
 (defn- assert-timestamp-col-type [^VectorReader rdr]
   (when-not (or (nil? rdr) (= types/temporal-arrow-type (.getArrowType rdr)))
@@ -118,7 +46,7 @@
 
 (defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
                                                    ^Database db, ^Instant system-time
-                                                   {:keys [indexer tx-key ^Tracer tracer]}]
+                                                   {:keys [^CrashLogger crash-logger tx-key ^Tracer tracer]}]
   (let [db-name (.getName db)
         put-leg (.vectorFor tx-ops-rdr "put-docs")
         iids-rdr (.vectorFor put-leg "iids")
@@ -201,7 +129,7 @@
                                         {:valid-from (time/micros->instant valid-from)
                                          :valid-to (time/micros->instant valid-to)})))
 
-                (with-crash-log indexer "error putting document"
+                (with-crash-log crash-logger "error putting document"
                   {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :doc-idx doc-idx}
                   {:live-idx live-idx, :live-table-tx live-table-tx, :tx-ops-rdr tx-ops-rdr}
 
@@ -216,7 +144,7 @@
 
 (defn- ->delete-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
                                                       ^Database db, ^Instant current-time
-                                                      {:keys [indexer tx-key ^Tracer tracer]}]
+                                                      {:keys [^CrashLogger crash-logger tx-key ^Tracer tracer]}]
   (let [db-name (.getName db)
         delete-leg (.vectorFor tx-ops-rdr "delete-docs")
         table-rdr (.vectorFor delete-leg "table")
@@ -248,7 +176,7 @@
                                                                                  :table (.getTableName table)}}
             (let [iids-start-idx (.getListStartIndex iids-rdr tx-op-idx)]
               (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
-                (with-crash-log indexer "error deleting documents"
+                (with-crash-log crash-logger "error deleting documents"
                   {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :iid-idx iid-idx}
                   {:live-idx live-idx, :live-table-tx live-table-tx, :tx-ops-rdr tx-ops-rdr}
 
@@ -258,7 +186,7 @@
         nil))))
 
 (defn- ->erase-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr
-                                                     ^Database db, {:keys [indexer tx-key ^Tracer tracer]}]
+                                                     ^Database db, {:keys [^CrashLogger crash-logger tx-key ^Tracer tracer]}]
   (let [db-name (.getName db)
         erase-leg (.vectorFor tx-ops-rdr "erase-docs")
         table-rdr (.vectorFor erase-leg "table")
@@ -276,16 +204,16 @@
                                                                                 :schema (.getSchemaName table)
                                                                                 :table (.getTableName table)}}
             (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
-              (with-crash-log indexer "error erasing documents"
+              (with-crash-log crash-logger "error erasing documents"
                 {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :iid-idx iid-idx}
-                {:live-idx live-idx, :live-table live-table, :tx-ops-rdr tx-ops-rdr}
+                {:live-idx live-idx, :live-table-tx live-table, :tx-ops-rdr tx-ops-rdr}
 
                 (.logErase live-table (.getBytes iid-rdr (+ iids-start-idx iid-idx)))))))
 
         nil))))
 
 (defn- ->upsert-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
-                                                           {:keys [^Instant current-time, indexer tx-key]}]
+                                                           {:keys [^Instant current-time, ^CrashLogger crash-logger tx-key]}]
 
   (let [current-time-µs (time/instant->micros current-time)]
     (reify RelationIndexer
@@ -303,7 +231,7 @@
 
                   live-table-tx (.liveTable live-idx-tx table)]
 
-              (with-crash-log indexer "error upserting rows"
+              (with-crash-log crash-logger "error upserting rows"
                 {:table table, :tx-key tx-key}
                 {:live-idx live-idx, :live-table-tx live-table-tx, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
                 (let [live-idx-table-copier (.rowCopier (RelationAsStructReader. "content" content-rel)
@@ -332,7 +260,7 @@
                                         (when (< valid-from valid-to)
                                           (.logPut live-table-tx (ByteBuffer/wrap (util/->iid eid)) valid-from valid-to #(.copyRow live-idx-table-copier idx)))))))))))))))
 
-(defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr, {:keys [indexer tx-key]}]
+(defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr, {:keys [^CrashLogger crash-logger tx-key]}]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [row-count (.getRowCount in-rel)
@@ -344,7 +272,7 @@
           (throw (xt-log/forbidden-table-ex table)))
 
         (dotimes [idx row-count]
-          (with-crash-log indexer "error deleting rows"
+          (with-crash-log crash-logger "error deleting rows"
             {:table table, :tx-key tx-key, :row-idx idx}
             {:live-idx live-idx, :live-table-tx live-idx-tx, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
 
@@ -362,7 +290,7 @@
               (-> (.liveTable live-idx-tx table)
                   (.logDelete iid valid-from valid-to)))))))))
 
-(defn- ->erase-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr, {:keys [indexer tx-key]}]
+(defn- ->erase-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr, {:keys [^CrashLogger crash-logger tx-key]}]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [row-count (.getRowCount in-rel)
@@ -371,7 +299,7 @@
         (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
 
         (dotimes [idx row-count]
-          (with-crash-log indexer "error erasing rows"
+          (with-crash-log crash-logger "error erasing rows"
             {:table table, :tx-key tx-key, :row-idx idx}
             {:live-idx live-idx, :live-table-tx live-idx-tx, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
 
@@ -440,7 +368,7 @@
                               (aset selection 0 idx)
                               (eval-query (-> param-rel (.select selection))))))))))
 
-(defn- patch-rel! [table, ^LiveIndex live-idx, ^LiveTable$Tx live-table, ^RelationReader rel {:keys [indexer tx-key]}]
+(defn- patch-rel! [table, ^LiveIndex live-idx, ^LiveTable$Tx live-table, ^RelationReader rel {:keys [^CrashLogger crash-logger tx-key]}]
   (let [row-count (.getRowCount rel)]
     (when (pos? row-count)
       (let [iid-rdr (.vectorForOrNull rel "_iid")
@@ -448,9 +376,9 @@
             from-rdr (.vectorForOrNull rel "_valid_from")
             to-rdr (.vectorForOrNull rel "_valid_to")]
         (dotimes [idx row-count]
-          (with-crash-log indexer "error patching rows"
+          (with-crash-log crash-logger "error patching rows"
             {:table table, :tx-key tx-key, :row-idx idx}
-            {:live-idx live-idx, :live-table live-table, :query-rel rel}
+            {:live-idx live-idx, :live-table-tx live-table, :query-rel rel}
 
             (.logPut live-table
                      (.getBytes iid-rdr idx)
@@ -652,6 +580,7 @@
 
 (defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
                                ^Database db, ^LiveIndex live-index, table-catalog
+                               ^CrashLogger crash-logger
                                ^Timer tx-timer
                                ^Counter tx-error-counter
                                ^Tracer tracer]
@@ -713,7 +642,7 @@
                                :current-time system-time
                                :default-tz default-tz
                                :tx-key tx-key
-                               :indexer this
+                               :crash-logger crash-logger
                                :default-db (.getName db)
                                :user-metadata user-metadata
                                :tracer tracer}
@@ -773,13 +702,14 @@
                                     {:description "indicates the timing and number of transactions"})
         tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
     (reify Indexer
-      (openForDatabase [_ db]
+      (openForDatabase [_ db crash-logger]
         (util/with-close-on-catch [allocator (-> (.getAllocator db) (util/->child-allocator (str "indexer/" (.getName db))))]
           ;; TODO add db-name to allocator gauge
           (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
 
           (->IndexerForDatabase allocator (:node-id config) q-src
                                 db (.getLiveIndex db) (.getTableCatalog db)
+                                crash-logger
                                 tx-timer tx-error-counter tracer)))
 
       (close [_]))))
@@ -790,11 +720,12 @@
 (defmethod ig/expand-key ::for-db [k {:keys [base]}]
   {k {:base base
       :query-db (ig/ref :xtdb.db-catalog/for-query)
+      :crash-logger (ig/ref ::crash-logger)
       :tx-source (ig/ref :xtdb.tx-source/for-db)}})
 
-(defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base,
-                                    :keys [query-db]}]
-  (.openForDatabase indexer query-db))
+(defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base
+                                    :keys [query-db ^CrashLogger crash-logger]}]
+  (.openForDatabase indexer query-db crash-logger))
 
 (defmethod ig/halt-key! ::for-db [_ indexer-for-db]
   (util/close indexer-for-db))

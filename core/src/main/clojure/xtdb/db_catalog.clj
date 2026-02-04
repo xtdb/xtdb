@@ -61,6 +61,7 @@
          :xtdb/projection-log (assoc opts :factory (.getLog db-config) :mode mode)
          :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config) :mode mode)
          :xtdb.indexer/live-index (assoc opts :indexer-conf indexer-conf)
+         :xtdb.indexer/crash-logger opts
 
          ::for-query (assoc opts :db-config db-config)
 
