@@ -6,6 +6,7 @@
             [hugsql.core :as hugsql]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
+            [xtdb.bench.stats :as stats]
             [xtdb.time :as time]
             [xtdb.tsbs :as tsbs]
             [xtdb.util :as util])
@@ -164,40 +165,6 @@
    gen-daily-activity
    gen-breakdown-frequency])
 
-(defn- execute-query
-  "Execute a single query and return timing in nanoseconds"
-  [node {:keys [sqlvec]}]
-  (let [start (System/nanoTime)
-        _ (xt/q node sqlvec)
-        end (System/nanoTime)]
-    (- end start)))
-
-(defn- percentile
-  "Calculate percentile from sorted timings"
-  [sorted-timings p]
-  (let [n (count sorted-timings)
-        idx (min (dec n) (int (* p n)))]
-    (nth sorted-timings idx)))
-
-(defn- calculate-stats
-  "Calculate statistics from a collection of timing values (in nanoseconds)"
-  [timings-ns]
-  (when (seq timings-ns)
-    (let [sorted (vec (sort timings-ns))
-          n (count sorted)
-          total-ns (reduce + sorted)
-          mean-ns (/ total-ns n)
-          ->ms #(/ % 1e6)]
-      {:count n
-       :total-ms (->ms total-ns)
-       :min-ms (->ms (first sorted))
-       :max-ms (->ms (last sorted))
-       :mean-ms (->ms mean-ns)
-       :p50-ms (->ms (percentile sorted 0.50))
-       :p90-ms (->ms (percentile sorted 0.90))
-       :p95-ms (->ms (percentile sorted 0.95))
-       :p99-ms (->ms (percentile sorted 0.99))})))
-
 ;; All possible query types (for detecting skipped queries)
 (def ^:private all-query-types
   #{:last-loc-by-truck :last-loc-per-truck :low-fuel :high-load
@@ -231,7 +198,7 @@
    (fn [acc query]
      (when (Thread/interrupted) (throw (InterruptedException.)))
      (let [query-type (:query-type query)
-           timing-ns (execute-query node query)]
+           timing-ns (b/execute-query node query)]
        (when progress-atom (swap! progress-atom inc))
        (update acc query-type (fnil conj []) timing-ns)))
    {}
@@ -519,11 +486,11 @@
                                                      :burn-in burn-in})
                        stats-by-type (into {}
                                            (map (fn [[qt timings]]
-                                                  [qt (calculate-stats timings)]))
+                                                  [qt (stats/timing-stats timings)]))
                                            timings-by-type)
                        ;; Calculate overall stats
                        all-timings (into [] cat (vals timings-by-type))
-                       overall-stats (calculate-stats all-timings)]
+                       overall-stats (stats/timing-stats all-timings)]
 
                    ;; Log per-query-type stats to console
                    (log/info "Query execution complete. Results by query type:")

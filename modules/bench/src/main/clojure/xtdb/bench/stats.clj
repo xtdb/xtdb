@@ -21,6 +21,33 @@
         p99 (if (pos? n) (sorted (idx 0.99)) 0)]
     {:mean mean :median median :p90 p90 :p99 p99 :min mn :max mx}))
 
+(defn percentile
+  "Calculate percentile from sorted timings"
+  [sorted-timings p]
+  (let [n (count sorted-timings)
+        idx (min (dec n) (int (* p n)))]
+    (nth sorted-timings idx)))
+
+(defn timing-stats
+  "Calculate statistics from a collection of timing values (in nanoseconds).
+   Returns map with count, total-ms, min-ms, max-ms, mean-ms, and percentiles."
+  [timings-ns]
+  (when (seq timings-ns)
+    (let [sorted (vec (sort timings-ns))
+          n (count sorted)
+          total-ns (reduce + sorted)
+          mean-ns (/ total-ns n)
+          ->ms #(/ % 1e6)]
+      {:count n
+       :total-ms (->ms total-ns)
+       :min-ms (->ms (first sorted))
+       :max-ms (->ms (last sorted))
+       :mean-ms (->ms mean-ns)
+       :p50-ms (->ms (percentile sorted 0.50))
+       :p90-ms (->ms (percentile sorted 0.90))
+       :p95-ms (->ms (percentile sorted 0.95))
+       :p99-ms (->ms (percentile sorted 0.99))})))
+
 (defn draw-lognormal
   "Draw a log-normal random variable using the underlying normal distribution
   parameters `mu` (mean) and `sigma` (standard deviation)."

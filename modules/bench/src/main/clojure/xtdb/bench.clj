@@ -431,9 +431,9 @@
                             remaining-secs (- secs (* mins 60))]
                         (if (>= mins 1)
                           (log/infof "Benchmark Total Time: %dm %.1fs"
-                                    mins remaining-secs)
+                                     mins remaining-secs)
                           (log/infof "Benchmark Total Time: %.1fs"
-                                    secs)))))))]
+                                     secs)))))))]
         (run-with-timeout execute timeout)))))
 
 (defn sync-node
@@ -447,6 +447,14 @@
 
 (defn compact! [node]
   (c/compact-all! node (Duration/ofMinutes 10)))
+
+(defn execute-query
+  "Execute a single query and return timing in nanoseconds"
+  [node {:keys [sqlvec]}]
+  (let [start (System/nanoTime)
+        _ (xt/q node sqlvec)
+        end (System/nanoTime)]
+    (- end start)))
 
 (defn generate
   ([worker table f n]
