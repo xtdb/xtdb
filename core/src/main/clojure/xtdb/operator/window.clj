@@ -166,12 +166,33 @@
             Closeable
             (close [_] (.close out-vec))))))))
 
+(defn- invert-sort-mapping
+  "Create inverse mapping: if sort-mapping[i] = j, then inverse[j] = i.
+   This converts from sorted order back to original row order."
+  ^ints [^ints sort-mapping]
+  (let [n (alength sort-mapping)
+        inverse (int-array n)]
+    (dotimes [i n]
+      (aset inverse (aget sort-mapping i) i))
+    inverse))
+
+(defn- compose-mappings
+  "Given a value at position i in sorted order A, find where it should go in sorted order B.
+   inverse-a[sort-b[i]] gives the position in A that corresponds to position i in B."
+  ^ints [^ints inverse-a ^ints sort-b]
+  (let [n (alength sort-b)
+        result (int-array n)]
+    (dotimes [i n]
+      (aset result i (aget inverse-a (aget sort-b i))))
+    result))
+
 (deftype WindowFnCursor [^BufferAllocator allocator
                          ^ICursor in-cursor
                          static-vec-types
-                         ^GroupMapper group-mapper
-                         order-specs
-                         ^List window-specs
+                         ;; Map of window-name -> {:group-mapper GroupMapper :order-specs ...}
+                         ^IPersistentMap window-name->spec
+                         ;; Vector of {:window-name ... :spec IWindowFnSpec}
+                         ^List window-specs-with-names
                          ^:unsynchronized-mutable ^boolean done?]
   ICursor
   (getCursorType [_] "window")
@@ -182,76 +203,126 @@
      (when-not done?
        (set! (.done? this) true)
 
-       (let [window-groups (gensym "window-groups")]
-         ;; TODO we likely want to do some retaining here instead of copying
-         (util/with-open [out-rel (Relation. allocator ^Map (update-keys static-vec-types str))
-                          group-mapping (IntVector/open allocator (str window-groups) false)]
+       ;; TODO we likely want to do some retaining here instead of copying
+       (util/with-open [out-rel (Relation. allocator ^Map (update-keys static-vec-types str))]
+         ;; Build group mappings for each window spec
+         (let [group-mapping-vecs (into {} (map (fn [[window-name _]]
+                                                  [window-name (IntVector/open allocator (str (gensym "window-groups")) false)]))
+                                        window-name->spec)]
+           (util/with-close-on-catch [_ (vals group-mapping-vecs)]
+             (.forEachRemaining in-cursor
+                                (fn [^RelationReader in-rel]
+                                  (vw/append-rel out-rel in-rel)
+                                  (doseq [[window-name {:keys [^GroupMapper group-mapper]}] window-name->spec]
+                                    (let [^IntVector group-mapping-vec (get group-mapping-vecs window-name)]
+                                      (.append group-mapping-vec (.groupMapping group-mapper in-rel))))))
 
-           (.forEachRemaining in-cursor (fn [^RelationReader in-rel]
-                                          (vw/append-rel out-rel in-rel)
-                                          (.append group-mapping (.groupMapping group-mapper in-rel))))
+             ;; Build sort mappings for each window spec (sort by group first, then by order-specs)
+             (let [sort-mappings (into {} (map (fn [[window-name {:keys [order-specs]}]]
+                                                 (let [^IntVector group-mapping-vec (get group-mapping-vecs window-name)
+                                                       rel-with-groups (RelationReader/from (conj (seq out-rel) group-mapping-vec)
+                                                                                            (.getValueCount group-mapping-vec))]
+                                                   [window-name (order-by/sorted-idxs rel-with-groups
+                                                                                      (into [[(symbol (.getName group-mapping-vec))]]
+                                                                                            order-specs))])))
+                                       window-name->spec)
+                   ;; Pick a canonical sort mapping for final output (use first window's)
+                   first-window-name (first (keys window-name->spec))
+                   ^ints canonical-sort-mapping (get sort-mappings first-window-name)]
 
-           (let [sort-mapping (order-by/sorted-idxs (RelationReader/from (conj (seq out-rel) group-mapping) (.getValueCount group-mapping))
-                                                    (into [[window-groups]] order-specs))]
-             (util/with-open [window-cols (->> window-specs
-                                               (mapv #(.aggregate ^IWindowFnSpec % group-mapping sort-mapping out-rel)))]
-               (let [out-rel (vr/rel-reader (concat (.select out-rel sort-mapping) window-cols))]
-                 (if (pos? (.getRowCount out-rel))
-                   (do
-                     (.accept c out-rel)
-                     true)
-                   false)))))))))
+               ;; Compute window columns - each is computed in its own sorted order,
+               ;; then reordered to match the canonical sort order
+               (util/with-open [window-cols
+                                (vec (for [{:keys [window-name ^IWindowFnSpec spec]} window-specs-with-names]
+                                       (let [^IntVector group-mapping-vec (get group-mapping-vecs window-name)
+                                             ^ints sort-mapping (get sort-mappings window-name)
+                                             ;; Compute window values in this spec's sorted order
+                                             window-col (.aggregate spec group-mapping-vec sort-mapping out-rel)]
+                                         (if (identical? sort-mapping canonical-sort-mapping)
+                                           ;; Same sort order - use directly
+                                           window-col
+                                           ;; Different sort order - reorder to canonical order
+                                           ;; Window col values are in sort-mapping order
+                                           ;; We need them in canonical-sort-mapping order
+                                           ;; inverse[canonical[i]] gives where in window-col to get value for row i in output
+                                           (let [reorder-mapping (compose-mappings (invert-sort-mapping sort-mapping)
+                                                                                   canonical-sort-mapping)]
+                                             (.select window-col reorder-mapping))))))]
+
+                 (util/close (vals group-mapping-vecs))
+
+                 (let [out-rel (vr/rel-reader (concat (.select out-rel canonical-sort-mapping) window-cols))]
+                   (if (pos? (.getRowCount out-rel))
+                     (do
+                       (.accept c out-rel)
+                       true)
+                     false))))))))))
 
   (characteristics [_] Spliterator/IMMUTABLE)
 
   (close [_]
-    (util/close [window-specs group-mapper in-cursor])))
+    (util/close [(map :spec window-specs-with-names)
+                 (map :group-mapper (vals window-name->spec))
+                 in-cursor])))
 
 (defmethod lp/emit-expr :window [{:keys [specs relation]} args]
-  (let [{:keys [projections windows]} specs
-        [_window-name {:keys [partition-cols order-specs]}] (first windows)]
+  (let [{:keys [projections windows]} specs]
     (lp/unary-expr (lp/emit-expr relation args)
       (fn [{:keys [vec-types] :as inner-rel}]
-        (let [window-fn-factories (vec (for [p projections]
-                                         ;; ignoring window-name for now
-                                         (let [[to-column {:keys [_window-name window-agg]}] (first p)]
-                                           (->window-fn-factory (into {:to-name to-column
-                                                                       :zero-row? (empty? partition-cols)}
-                                                                      (zmatch window-agg
-                                                                        [:nullary agg-opts]
-                                                                        agg-opts
+        (let [;; Build window-fn-factories with their window-name attached
+              window-fn-factories-with-names
+              (vec (for [p projections]
+                     (let [[to-column {:keys [window-name window-agg]}] (first p)
+                           {:keys [partition-cols]} (get windows window-name)]
+                       {:window-name window-name
+                        :factory (->window-fn-factory (into {:to-name to-column
+                                                             :zero-row? (empty? partition-cols)}
+                                                            (zmatch window-agg
+                                                              [:nullary agg-opts]
+                                                              agg-opts
 
-                                                                        [:unary agg-opts]
-                                                                        (assoc agg-opts
-                                                                               :from-name (:from-column agg-opts)
-                                                                               :from-type (get vec-types (:from-column agg-opts)))
+                                                              [:unary agg-opts]
+                                                              (assoc agg-opts
+                                                                     :from-name (:from-column agg-opts)
+                                                                     :from-type (get vec-types (:from-column agg-opts)))
 
-                                                                        [:unary-with-offset agg-opts]
-                                                                        (assoc agg-opts
-                                                                               :from-name (:from-column agg-opts)
-                                                                               :from-type (get vec-types (:from-column agg-opts)))))))))
+                                                              [:unary-with-offset agg-opts]
+                                                              (assoc agg-opts
+                                                                     :from-name (:from-column agg-opts)
+                                                                     :from-type (get vec-types (:from-column agg-opts))))))})))
+
               out-vec-types (into vec-types
-                                  (->> window-fn-factories
-                                       (into {} (map (juxt #(.getToColumnName ^IWindowFnSpecFactory %)
-                                                           #(.getToColumnType ^IWindowFnSpecFactory %))))))]
+                                  (->> window-fn-factories-with-names
+                                       (into {} (map (fn [{:keys [^IWindowFnSpecFactory factory]}]
+                                                       [(.getToColumnName factory) (.getToColumnType factory)])))))]
           {:op :window
            :children [inner-rel]
-           :explain {:partition-by (vec partition-cols)
-                     :order-by (pr-str order-specs)
+           :explain {:windows (into {} (map (fn [[window-name {:keys [partition-cols order-specs]}]]
+                                              [window-name {:partition-by (vec partition-cols)
+                                                            :order-by (pr-str order-specs)}]))
+                                    windows)
                      :window-functions (->> projections
                                             (mapv (fn [p]
-                                                    (let [[to-column {:keys [window-agg]}] (first p)]
-                                                      [to-column (pr-str window-agg)]))))}
+                                                    (let [[to-column {:keys [window-name window-agg]}] (first p)]
+                                                      [to-column {:window window-name :agg (pr-str window-agg)}]))))}
            :vec-types out-vec-types
 
            :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
                        (cond-> (util/with-close-on-catch [window-fn-specs (LinkedList.)]
-                                 (doseq [^IWindowFnSpecFactory factory window-fn-factories]
-                                   (.add window-fn-specs (.build factory allocator)))
+                                 ;; Build window specs with their window-name
+                                 (doseq [{:keys [window-name ^IWindowFnSpecFactory factory]} window-fn-factories-with-names]
+                                   (.add window-fn-specs {:window-name window-name
+                                                          :spec (.build factory allocator)}))
 
-                                 (WindowFnCursor. allocator in-cursor vec-types
-                                                  (group-by/->group-mapper allocator (select-keys vec-types partition-cols))
-                                                  order-specs
-                                                  (vec window-fn-specs)
-                                                  false))
+                                 ;; Build window-name->spec map with group-mappers
+                                 (let [window-name->spec
+                                       (into {} (map (fn [[window-name {:keys [partition-cols order-specs]}]]
+                                                       [window-name {:group-mapper (group-by/->group-mapper allocator
+                                                                                                            (select-keys vec-types partition-cols))
+                                                                     :order-specs order-specs}]))
+                                             windows)]
+                                   (WindowFnCursor. allocator in-cursor vec-types
+                                                    window-name->spec
+                                                    (vec window-fn-specs)
+                                                    false)))
                          (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))))

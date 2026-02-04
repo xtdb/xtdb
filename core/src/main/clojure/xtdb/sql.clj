@@ -2157,9 +2157,6 @@
         plan))))
 
 (defn- wrap-windows [plan windows]
-  (when (> (count windows) 1)
-    (throw (UnsupportedOperationException. "TODO: only one window function supported at the moment!")))
-
   (let [{:keys [windows] :as window-opts} (apply merge-with into (vals windows))
         in-projs (not-empty (->> (mapcat :order-specs (vals windows))
                                  (into [] (keep :in-projection))))
