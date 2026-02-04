@@ -16,7 +16,7 @@ ENTRYPOINT ["java", \
     "--add-opens=java.base/java.nio=ALL-UNNAMED", \
     "--enable-native-access=ALL-UNNAMED", \
     "-Dio.netty.tryReflectionSetAccessible=true", \
-    "-cp","xtdb-aws.jar", \
+    "-cp","xtdb.jar", \
     "clojure.main", "-m", "xtdb.main"]
 
 CMD ["-f", "aws_config.yaml"]
@@ -35,7 +35,7 @@ ENV GIT_SHA=${GIT_SHA}
 ENV XTDB_VERSION=${XTDB_VERSION}
 
 ADD aws_config.yaml aws_config.yaml
-ADD build/libs/xtdb-aws.jar xtdb-aws.jar
+ADD build/libs/xtdb-aws.jar xtdb.jar
 
 RUN groupadd -g 20000 xtdb && useradd -u 20000 -g 20000 -r xtdb
 RUN mkdir -p /home/xtdb && chown -R xtdb:xtdb /home/xtdb

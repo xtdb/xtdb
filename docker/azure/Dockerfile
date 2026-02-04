@@ -16,7 +16,7 @@ ENTRYPOINT ["java", \
     "--add-opens=java.base/java.nio=ALL-UNNAMED", \
     "--enable-native-access=ALL-UNNAMED", \
     "-Dio.netty.tryReflectionSetAccessible=true", \
-    "-cp","xtdb-azure.jar", \
+    "-cp","xtdb.jar", \
     "clojure.main", "-m", "xtdb.main"]
 
 CMD ["-f", "azure_config.yaml"]
@@ -36,7 +36,7 @@ ENV XTDB_VERSION=${XTDB_VERSION}
 
 ADD azure_config.yaml azure_config.yaml
 ADD azure_config_private_auth.yaml azure_config_private_auth.yaml
-ADD build/libs/xtdb-azure.jar xtdb-azure.jar
+ADD build/libs/xtdb-azure.jar xtdb.jar
 
 RUN groupadd -g 20000 xtdb && useradd -u 20000 -g 20000 -r xtdb
 RUN mkdir -p /home/xtdb && chown -R xtdb:xtdb /home/xtdb
