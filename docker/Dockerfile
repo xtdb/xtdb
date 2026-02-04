@@ -1,5 +1,6 @@
 FROM eclipse-temurin:21
 
+ARG VARIANT=standalone
 ARG GIT_SHA
 ARG XTDB_VERSION
 
@@ -37,8 +38,8 @@ VOLUME /var/lib/xtdb
 ENV GIT_SHA=${GIT_SHA}
 ENV XTDB_VERSION=${XTDB_VERSION}
 
-ADD *.yaml .
-ADD build/libs/xtdb-standalone.jar xtdb.jar
+COPY ${VARIANT}/*.yaml ./
+COPY ${VARIANT}/build/libs/xtdb-${VARIANT}.jar xtdb.jar
 
 RUN groupadd -g 20000 xtdb && useradd -u 20000 -g 20000 -r xtdb
 RUN mkdir -p /home/xtdb && chown -R xtdb:xtdb /home/xtdb

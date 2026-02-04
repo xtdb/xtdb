@@ -84,47 +84,51 @@ jobs:
       - name: Push Standalone
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
-          context: docker/standalone
+          context: docker
           platforms: linux/arm64/v8,linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.standalone-meta.outputs.tags }}
           labels: ${{ steps.standalone-meta.outputs.labels }}
           build-args: |
+            VARIANT=standalone
             GIT_SHA=${{ github.sha }}
             XTDB_VERSION=${{ steps.standalone-meta.outputs.version }}
 
       - name: Push Azure
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
-          context: docker/azure
+          context: docker
           platforms: linux/arm64/v8,linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.azure-meta.outputs.tags }}
           labels: ${{ steps.azure-meta.outputs.labels }}
           build-args: |
+            VARIANT=azure
             GIT_SHA=${{ github.sha }}
             XTDB_VERSION=${{ steps.azure-meta.outputs.version }}
 
       - name: Push AWS
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
-          context: docker/aws
+          context: docker
           platforms: linux/arm64/v8,linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.aws-meta.outputs.tags }}
           labels: ${{ steps.aws-meta.outputs.labels }}
           build-args: |
+            VARIANT=aws
             GIT_SHA=${{ github.sha }}
             XTDB_VERSION=${{ steps.aws-meta.outputs.version }}
 
       - name: Push Google Cloud
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
-          context: docker/google-cloud
+          context: docker
           platforms: linux/arm64/v8,linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.google-cloud-meta.outputs.tags }}
           labels: ${{ steps.google-cloud-meta.outputs.labels }}
           build-args: |
+            VARIANT=google-cloud
             GIT_SHA=${{ github.sha }}
             XTDB_VERSION=${{ steps.google-cloud-meta.outputs.version }}
