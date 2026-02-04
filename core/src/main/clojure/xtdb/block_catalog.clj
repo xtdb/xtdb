@@ -4,14 +4,14 @@
             [xtdb.serde :as serde]
             [xtdb.time :as time])
   (:import (xtdb.block.proto Block TxKey)
-           xtdb.catalog.BlockCatalog))
+           (xtdb.catalog BlockCatalog)))
 
 (defmethod ig/expand-key :xtdb/block-catalog [k {:keys [db-name]}]
   {k {:db-name db-name
       :buffer-pool (ig/ref :xtdb/buffer-pool)}})
 
 (defmethod ig/init-key :xtdb/block-catalog [_ {:keys [db-name buffer-pool]}]
-  (BlockCatalog. db-name buffer-pool))
+  (BlockCatalog. db-name (BlockCatalog/getLatestBlock buffer-pool)))
 
 (defn- <-TxKey [^TxKey tx-key]
   (serde/->TxKey (.getTxId tx-key) (time/micros->instant (.getSystemTime tx-key))))

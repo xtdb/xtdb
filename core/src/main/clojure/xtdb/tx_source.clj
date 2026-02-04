@@ -207,7 +207,7 @@
                                 decode-record))
                          (catch Exception _ nil))
           refresh! (fn []
-                     (.refresh block-cat)
+                     (.refresh block-cat (BlockCatalog/getLatestBlock buffer-pool))
                      (.refresh table-cat)
                      (.refresh trie-cat))
           last-tx-key (when (or last-message (.getInitialScan tx-source-conf))

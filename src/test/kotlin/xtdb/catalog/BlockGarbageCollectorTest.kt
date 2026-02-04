@@ -10,6 +10,7 @@ import xtdb.api.storage.Storage
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
 import xtdb.cache.MemoryCache
+import xtdb.catalog.BlockCatalog.Companion.latestBlock
 import xtdb.garbage_collector.BlockGarbageCollector
 import xtdb.storage.BufferPool
 import xtdb.test.AllocatorResolver
@@ -62,7 +63,7 @@ class BlockGarbageCollectorTest {
                 assertBlockCount(bufferPool, table1BlockPath, 10)
                 assertBlockCount(bufferPool, table2BlockPath, 10)
 
-                val blockCat = BlockCatalog("xtdb", bufferPool)
+                val blockCat = BlockCatalog("xtdb", bufferPool.latestBlock)
 
                 val gc = BlockGarbageCollector(blockCat, bufferPool, blocksToKeep = 3)
 

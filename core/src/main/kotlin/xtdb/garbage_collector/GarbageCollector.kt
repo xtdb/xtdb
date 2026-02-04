@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.plus
 import org.slf4j.LoggerFactory
+import xtdb.catalog.BlockCatalog.Companion.blockFromLatest
 import xtdb.database.IDatabase
 import xtdb.table.TableRef
 import xtdb.time.microsAsInstant
@@ -72,7 +73,7 @@ interface GarbageCollector : Closeable {
         private val blockGc = BlockGarbageCollector(blockCatalog, bufferPool, blocksToKeep)
 
         private fun defaultGarbageAsOf(): Instant? =
-            blockCatalog.blockFromLatest(blocksToKeep)
+            bufferPool.blockFromLatest(blocksToKeep)
                 ?.let { it.latestCompletedTx.systemTime.microsAsInstant - garbageLifetime }
 
         // For testing

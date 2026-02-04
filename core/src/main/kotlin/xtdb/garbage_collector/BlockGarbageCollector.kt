@@ -2,6 +2,8 @@ package xtdb.garbage_collector
 
 import org.slf4j.LoggerFactory
 import xtdb.catalog.BlockCatalog
+import xtdb.catalog.BlockCatalog.Companion.allBlockFiles
+import xtdb.catalog.BlockCatalog.Companion.tableBlocks
 import xtdb.storage.BufferPool
 import xtdb.util.StringUtil.fromLexHex
 import java.nio.file.Path
@@ -32,7 +34,7 @@ class BlockGarbageCollector(
     fun garbageCollectBlocks(blocksToKeep: Int = this.blocksToKeep) {
         LOGGER.debug("Garbage collecting blocks, keeping $blocksToKeep blocks")
 
-        blockCatalog.allBlockFiles
+        bufferPool.allBlockFiles.toList()
             .dropLast(blocksToKeep)
             .let { blocks ->
                 LOGGER.debug("Deleting oldest ${blocks.size} block files")
@@ -43,7 +45,7 @@ class BlockGarbageCollector(
             .shuffled().take(100)
             .forEach { table ->
                 LOGGER.debug("Garbage collecting blocks for table {}, keeping {} blocks", table.sym, blocksToKeep)
-                blockCatalog.tableBlocks(table).toList()
+                bufferPool.tableBlocks(table).toList()
                     .dropLast(blocksToKeep)
                     .let { blocks ->
                         LOGGER.debug("Deleting oldest ${blocks.size} table block files")

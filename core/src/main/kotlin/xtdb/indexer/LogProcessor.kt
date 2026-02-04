@@ -17,6 +17,7 @@ import xtdb.api.storage.Storage
 import xtdb.arrow.Relation
 import xtdb.arrow.asChannel
 import xtdb.catalog.BlockCatalog
+import xtdb.catalog.BlockCatalog.Companion.allBlockFiles
 import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.block.proto.Block
@@ -307,10 +308,13 @@ class LogProcessor(
         val tables = liveIndex.finishBlock(blockIdx)
         val secondaryDatabases = dbCatalog?.takeIf { db.name == "xtdb" }?.serialisedSecondaryDatabases
 
-        blockCatalog.finishBlock(
+        val block = blockCatalog.buildBlock(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
             tables, secondaryDatabases
         )
+
+        db.bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
+        blockCatalog.refresh(block)
 
         liveIndex.nextBlock()
         compactor.signalBlock()
@@ -329,7 +333,7 @@ class LogProcessor(
         val pollInterval = Duration.ofSeconds(1)
 
         while (true) {
-            val blockFile = blockCatalog.allBlockFiles
+            val blockFile = db.bufferPool.allBlockFiles
                 .find { parseBlockIndex(it.key.fileName) == expectedBlockIdx }
 
             if (blockFile != null) {
@@ -340,7 +344,7 @@ class LogProcessor(
                     blockMsgId == latestProcessedMsgId -> {
                         // Exact match - the block covers exactly the transactions we've indexed
                         LOG.debug("read-only mode: found matching block 'b${expectedBlockIdx.asLexHex}'")
-                        blockCatalog.refresh()
+                        blockCatalog.refresh(block)
                         tableCatalog.refresh()
                         trieCatalog.refresh()
                         liveIndex.nextBlock()
