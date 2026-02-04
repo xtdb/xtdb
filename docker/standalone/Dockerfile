@@ -1,8 +1,13 @@
 FROM eclipse-temurin:21
 
+ARG GIT_SHA
+ARG XTDB_VERSION
+
 LABEL org.opencontainers.image.source=https://github.com/xtdb/xtdb
 LABEL org.opencontainers.image.description="XTDB 2.x"
 LABEL org.opencontainers.image.licenses="MPL-2.0"
+LABEL org.opencontainers.image.version=${XTDB_VERSION}
+LABEL org.opencontainers.image.revision=${GIT_SHA}
 
 LABEL usage="Example docker-run options for custom logging configuration: \
 --volume .:/config --env JDK_JAVA_OPTIONS='-Dlogback.configurationFile=/config/logback.xml'"
@@ -29,13 +34,8 @@ EXPOSE 8080
 RUN mkdir -p /var/lib/xtdb
 VOLUME /var/lib/xtdb
 
-ARG GIT_SHA
-ARG XTDB_VERSION
 ENV GIT_SHA=${GIT_SHA}
 ENV XTDB_VERSION=${XTDB_VERSION}
-
-LABEL org.opencontainers.image.version=${XTDB_VERSION}
-LABEL org.opencontainers.image.revision=${GIT_SHA}
 
 ADD local_config.yaml local_config.yaml
 ADD build/libs/xtdb-standalone.jar xtdb-standalone.jar
