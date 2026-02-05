@@ -248,7 +248,8 @@
 (defmethod ig/expand-key :xtdb.log/processor [k {:keys [base ^IndexerConfig indexer-conf ^Database$Mode mode]}]
   {k {:base base
       :allocator (ig/ref :xtdb.db-catalog/allocator)
-      :db (ig/ref :xtdb.db-catalog/for-query)
+      :storage (ig/ref :xtdb.db-catalog/storage)
+      :state (ig/ref :xtdb.db-catalog/state)
       :indexer (ig/ref :xtdb.indexer/for-db)
       :compactor (ig/ref :xtdb.compactor/for-db)
       :block-flush-duration (.getFlushDuration indexer-conf)
@@ -257,10 +258,10 @@
       :mode mode}})
 
 (defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry db-catalog]} :base
-                                               :keys [allocator db indexer compactor block-flush-duration skip-txs enabled? ^Database$Mode mode]}]
+                                               :keys [allocator storage state indexer compactor block-flush-duration skip-txs enabled? ^Database$Mode mode]}]
   (when enabled?
     (LogProcessor. allocator meter-registry db-catalog
-                   (.getStorage db) (.getState db)
+                   storage state
                    indexer compactor block-flush-duration (set skip-txs)
                    (or mode Database$Mode/READ_WRITE))))
 

@@ -130,15 +130,14 @@
 (defmethod ig/expand-key ::for-db [k {:keys [base mode]}]
   {k {:base base
       :mode mode
-      :query-db (ig/ref :xtdb.db-catalog/for-query)}})
+      :allocator (ig/ref :xtdb.db-catalog/allocator)
+      :storage (ig/ref :xtdb.db-catalog/storage)
+      :state (ig/ref :xtdb.db-catalog/state)}})
 
-(defmethod ig/init-key ::for-db [_ {{:keys [^Compactor compactor]} :base, :keys [query-db ^Database$Mode mode]}]
-  (let [allocator (.getAllocator query-db)
-        db-storage (.getStorage query-db)
-        db-state (.getState query-db)]
-    (if (= mode Database$Mode/READ_ONLY)
-      (.openForDatabase Compactor/NOOP allocator db-storage db-state)
-      (.openForDatabase compactor allocator db-storage db-state))))
+(defmethod ig/init-key ::for-db [_ {{:keys [^Compactor compactor]} :base, :keys [allocator storage state ^Database$Mode mode]}]
+  (if (= mode Database$Mode/READ_ONLY)
+    (.openForDatabase Compactor/NOOP allocator storage state)
+    (.openForDatabase compactor allocator storage state)))
 
 (defmethod ig/halt-key! ::for-db [_ compactor-for-db]
   (util/close compactor-for-db))

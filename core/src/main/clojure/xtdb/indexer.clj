@@ -29,7 +29,6 @@
            (org.apache.arrow.memory BufferAllocator)
            xtdb.api.TransactionKey
            (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
-           (xtdb.database Database Database$Catalog)
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.indexer CrashLogger Indexer Indexer$ForDatabase Indexer$TxSource LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
            (xtdb.table TableRef)
@@ -45,9 +44,9 @@
                       {:field (.getField rdr)}))))
 
 (defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
-                                                   ^Database db, ^Instant system-time
-                                                   {:keys [^CrashLogger crash-logger tx-key ^Tracer tracer]}]
-  (let [db-name (.getName db)
+                                                   ^Instant system-time
+                                                   {:keys [^CrashLogger crash-logger tx-key ^Tracer tracer default-db]}]
+  (let [db-name default-db
         put-leg (.vectorFor tx-ops-rdr "put-docs")
         iids-rdr (.vectorFor put-leg "iids")
         iid-rdr (.getListElements iids-rdr)
@@ -143,9 +142,9 @@
         nil))))
 
 (defn- ->delete-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
-                                                      ^Database db, ^Instant current-time
-                                                      {:keys [^CrashLogger crash-logger tx-key ^Tracer tracer]}]
-  (let [db-name (.getName db)
+                                                      ^Instant current-time
+                                                      {:keys [^CrashLogger crash-logger tx-key ^Tracer tracer default-db]}]
+  (let [db-name default-db
         delete-leg (.vectorFor tx-ops-rdr "delete-docs")
         table-rdr (.vectorFor delete-leg "table")
         iids-rdr (.vectorFor delete-leg "iids")
@@ -186,8 +185,8 @@
         nil))))
 
 (defn- ->erase-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr
-                                                     ^Database db, {:keys [^CrashLogger crash-logger tx-key ^Tracer tracer]}]
-  (let [db-name (.getName db)
+                                                     {:keys [^CrashLogger crash-logger tx-key ^Tracer tracer default-db]}]
+  (let [db-name default-db
         erase-leg (.vectorFor tx-ops-rdr "erase-docs")
         table-rdr (.vectorFor erase-leg "table")
         iids-rdr (.vectorFor erase-leg "iids")
@@ -579,7 +578,8 @@
   (some-> tx-source (.onCommit tx-key live-idx-tx)))
 
 (defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
-                               ^Database db, ^LiveIndex live-index, table-catalog
+                               db-name, db-storage, db-state, ^Indexer$TxSource tx-source
+                               ^LiveIndex live-index, table-catalog
                                ^CrashLogger crash-logger
                                ^Timer tx-timer
                                ^Counter tx-error-counter
@@ -591,8 +591,7 @@
   (indexTx [this msg-id msg-ts tx-ops-rdr
             system-time default-tz _user user-metadata]
     (metrics/with-span tracer "xtdb.transaction" {:attributes {:operations.count (str (.getValueCount tx-ops-rdr))}}
-      (let [db-name (.getName db)
-            lc-tx (.getLatestCompletedTx live-index)
+      (let [lc-tx (.getLatestCompletedTx live-index)
             default-system-time (or (when-let [lc-sys-time (some-> lc-tx (.getSystemTime))]
                                       (when-not (neg? (compare lc-sys-time msg-ts))
                                         (.plusNanos lc-sys-time 1000)))
@@ -612,7 +611,7 @@
               (when tx-error-counter
                 (.increment tx-error-counter))
               (add-tx-row! db-name live-idx-tx tx-key err user-metadata)
-              (commit tx-key live-idx-tx (.getTxSource db)))
+              (commit tx-key live-idx-tx tx-source))
 
             (serde/->tx-aborted msg-id default-system-time err))
 
@@ -624,11 +623,11 @@
                   (.abort live-idx-tx)
                   (util/with-open [live-idx-tx (.startTx live-index tx-key)]
                     (add-tx-row! db-name live-idx-tx tx-key skipped-exn user-metadata)
-                    (commit tx-key live-idx-tx (.getTxSource db)))
+                    (commit tx-key live-idx-tx tx-source))
 
                   (serde/->tx-aborted msg-id system-time skipped-exn))
 
-                (let [db-cat (Indexer/queryCatalog (.getStorage db) (.getState db)
+                (let [db-cat (Indexer/queryCatalog db-storage db-state
                                                    (reify Snapshot$Source
                                                      (openSnapshot [_]
                                                        (util/with-close-on-catch [live-index-snap (.openSnapshot live-idx-tx)]
@@ -640,14 +639,14 @@
                                :default-tz default-tz
                                :tx-key tx-key
                                :crash-logger crash-logger
-                               :default-db (.getName db)
+                               :default-db db-name
                                :user-metadata user-metadata
                                :tracer tracer}
 
-                      !put-docs-idxer (delay (->put-docs-indexer live-index live-idx-tx tx-ops-rdr db system-time tx-opts))
+                      !put-docs-idxer (delay (->put-docs-indexer live-index live-idx-tx tx-ops-rdr system-time tx-opts))
                       !patch-docs-idxer (delay (->patch-docs-indexer live-index live-idx-tx tx-ops-rdr q-src db-cat system-time tx-opts))
-                      !delete-docs-idxer (delay (->delete-docs-indexer live-index live-idx-tx tx-ops-rdr db system-time tx-opts))
-                      !erase-docs-idxer (delay (->erase-docs-indexer live-index live-idx-tx tx-ops-rdr db tx-opts))
+                      !delete-docs-idxer (delay (->delete-docs-indexer live-index live-idx-tx tx-ops-rdr system-time tx-opts))
+                      !erase-docs-idxer (delay (->erase-docs-indexer live-index live-idx-tx tx-ops-rdr tx-opts))
                       !sql-idxer (delay (->sql-indexer allocator live-index live-idx-tx tx-ops-rdr q-src db-cat tx-opts))]
 
                   (if-let [e (try
@@ -680,34 +679,36 @@
                         (when tx-error-counter
                           (.increment tx-error-counter))
                         (add-tx-row! db-name live-idx-tx tx-key e user-metadata)
-                        (commit tx-key live-idx-tx (.getTxSource db)))
+                        (commit tx-key live-idx-tx tx-source))
 
                       (serde/->tx-aborted msg-id system-time e))
 
                     (do
                       (add-tx-row! db-name live-idx-tx tx-key nil user-metadata)
-                      (commit tx-key live-idx-tx (.getTxSource db))
+                      (commit tx-key live-idx-tx tx-source)
                       (serde/->tx-committed msg-id system-time)))))))))))
 
   (addTxRow [_ tx-key e]
     (util/with-open [live-idx-tx (.startTx live-index tx-key)]
-      (add-tx-row! (.getName db) live-idx-tx tx-key e {})
-      (commit tx-key live-idx-tx (.getTxSource db)))))
+      (add-tx-row! db-name live-idx-tx tx-key e {})
+      (commit tx-key live-idx-tx tx-source))))
 
 (defmethod ig/init-key :xtdb/indexer [_ {:keys [config, q-src, metrics-registry, ^Tracer tracer]}]
   (let [tx-timer (metrics/add-timer metrics-registry "tx.op.timer"
                                     {:description "indicates the timing and number of transactions"})
         tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
     (reify Indexer
-      (openForDatabase [_ db crash-logger]
-        (util/with-close-on-catch [allocator (-> (.getAllocator db) (util/->child-allocator (str "indexer/" (.getName db))))]
-          ;; TODO add db-name to allocator gauge
-          (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
+      (openForDatabase [_ allocator db-storage db-state tx-source crash-logger]
+        (let [db-name (.getName db-state)]
+          (util/with-close-on-catch [allocator (util/->child-allocator allocator (str "indexer/" db-name))]
+            ;; TODO add db-name to allocator gauge
+            (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
 
-          (->IndexerForDatabase allocator (:node-id config) q-src
-                                db (.getLiveIndex db) (.getTableCatalog db)
-                                crash-logger
-                                tx-timer tx-error-counter tracer)))
+            (->IndexerForDatabase allocator (:node-id config) q-src
+                                  db-name db-storage db-state tx-source
+                                  (.getLiveIndex db-state) (.getTableCatalog db-state)
+                                  crash-logger
+                                  tx-timer tx-error-counter tracer))))
 
       (close [_]))))
 
@@ -716,13 +717,15 @@
 
 (defmethod ig/expand-key ::for-db [k {:keys [base]}]
   {k {:base base
-      :query-db (ig/ref :xtdb.db-catalog/for-query)
+      :allocator (ig/ref :xtdb.db-catalog/allocator)
+      :db-storage (ig/ref :xtdb.db-catalog/storage)
+      :db-state (ig/ref :xtdb.db-catalog/state)
       :crash-logger (ig/ref ::crash-logger)
       :tx-source (ig/ref :xtdb.tx-source/for-db)}})
 
 (defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base
-                                    :keys [query-db ^CrashLogger crash-logger]}]
-  (.openForDatabase indexer query-db crash-logger))
+                                    :keys [allocator db-storage db-state ^CrashLogger crash-logger tx-source]}]
+  (.openForDatabase indexer allocator db-storage db-state tx-source crash-logger))
 
 (defmethod ig/halt-key! ::for-db [_ indexer-for-db]
   (util/close indexer-for-db))

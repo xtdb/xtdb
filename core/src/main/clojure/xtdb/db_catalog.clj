@@ -44,18 +44,6 @@
 (defmethod ig/init-key ::storage [_ {:keys [source-log projection-log buffer-pool metadata-manager]}]
   (DatabaseStorage. source-log projection-log buffer-pool metadata-manager))
 
-(defmethod ig/expand-key ::for-query [k {:keys [db-name db-config]}]
-  {k {:db-name db-name
-      :db-config db-config
-      :storage (ig/ref ::storage)
-      :state (ig/ref ::state)
-      :allocator (ig/ref ::allocator)
-      :tx-source (ig/ref :xtdb.tx-source/for-db)}})
-
-(defmethod ig/init-key ::for-query [_ {:keys [allocator db-config storage state tx-source]}]
-  (Database. allocator db-config storage state
-             nil nil tx-source))
-
 (defmethod ig/expand-key :xtdb/db-catalog [k _]
   {k {:base {:allocator (ig/ref :xtdb/allocator)
              :config (ig/ref :xtdb/config)
@@ -84,7 +72,6 @@
 
          ::storage opts
          ::state opts
-         ::for-query (assoc opts :db-config db-config)
 
          :xtdb.tx-source/for-db (assoc opts :tx-source-conf (.getTxSource conf))
          :xtdb.indexer/for-db opts
@@ -110,14 +97,8 @@
                        (throw (doto e (.addSuppressed t))))))
 
                  (throw (ex-cause e))))]
-    {:db (try
-           (-> ^Database (::for-query sys)
-               (.withComponents (:xtdb.log/processor sys)
-                                (:xtdb.compactor/for-db sys)))
-           (catch Throwable t
-             (log/debug "Failed to initialize database components" {:db-name db-name, :exception (class t), :message (.getMessage t)})
-             (ig/halt! sys)
-             (throw t)))
+    {:db (Database. (::allocator sys) db-config (::storage sys) (::state sys)
+                    (:xtdb.log/processor sys) (:xtdb.compactor/for-db sys) (:xtdb.tx-source/for-db sys))
      :sys sys}))
 
 (defmethod ig/init-key :xtdb/db-catalog [_ {:keys [base]}]

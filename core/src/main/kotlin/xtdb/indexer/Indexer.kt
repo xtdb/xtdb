@@ -1,10 +1,10 @@
 package xtdb.indexer
 
+import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.log.MessageId
 import xtdb.arrow.VectorReader
-import xtdb.database.Database
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
@@ -46,5 +46,11 @@ interface Indexer : AutoCloseable {
         }
     }
 
-    fun openForDatabase(db: Database, crashLogger: CrashLogger): ForDatabase
+    fun openForDatabase(
+        allocator: BufferAllocator,
+        storage: DatabaseStorage,
+        state: DatabaseState,
+        txSource: TxSource?,
+        crashLogger: CrashLogger
+    ): ForDatabase
 }

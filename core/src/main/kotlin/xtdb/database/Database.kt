@@ -59,9 +59,6 @@ data class Database(
     val logProcessor: LogProcessor get() = logProcessorOrNull ?: error("log processor not initialised")
     val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")
 
-    fun withComponents(logProcessor: LogProcessor?, compactor: Compactor.ForDatabase?) =
-        copy(logProcessorOrNull = logProcessor, compactorOrNull = compactor)
-
     override fun equals(other: Any?): Boolean =
         this === other || (other is Database && name == other.name)
 
