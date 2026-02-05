@@ -234,11 +234,21 @@ Example: `./dev/read-crash-log-folder.sh /path/to/my-crash-logs` outputs to `/pa
 
 == Comments
 
-(mostly for AI agents)
+Comments that merely restate the code add visual noise without value.
+Assume your reader is a senior developer familiar with XTDB and its codebase.
 
-Elide comments and docstrings that only describe the code under question or repeat the name of the function - assume that the reading developer is familiar with standard development practices.
-DO write comments describing any non-standard practices, or anything that might be counter-intuitive.
-e.g. "This is for performance, because ...", "see #bugnum", "this might be mutated by <...>"
+**Don't write:**
+
+* Comments that repeat the function/variable name
+* Docstrings that describe obvious behaviour
+* Step-by-step narration of what code does
+
+**Do write:**
+
+* Rationale for counter-intuitive choices ("This is for performance, because...")
+* Non-obvious constraints or invariants ("this might be mutated by...")
+* Links to issues or external context ("see #1234", "per RFC 7231 §6.5.1")
+* Warnings about subtle behaviour that could trip up future developers
 
 == Git
 

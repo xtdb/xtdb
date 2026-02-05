@@ -35,6 +35,8 @@ For user-visible features:
 
 Use sentence-per-line in documentation files (one sentence per line) - this makes diffs cleaner and easier to review.
 
+For comments, see the "Comments" section in @dev/README.adoc - focus on the 'why', not the 'what'.
+
 ## Running tests
 
 - You MUST NOT run tests yourself - use sub-agents.
