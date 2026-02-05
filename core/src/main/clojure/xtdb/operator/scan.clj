@@ -26,7 +26,6 @@
            xtdb.arrow.RelationReader
            (xtdb.bloom BloomUtils)
            xtdb.catalog.TableCatalog
-           xtdb.database.Database$Catalog
            (xtdb ICursor Bytes)
            (xtdb.indexer Snapshot Snapshot$Source)
            (xtdb.metadata MetadataPredicate PageMetadata PageMetadata$Factory)
@@ -50,7 +49,7 @@
                        :opt-un [::lp/for-valid-time ::lp/for-system-time])))
 
 (definterface IScanEmitter
-  (emitScan [^xtdb.database.Database$Catalog db-cat scan-expr scan-vec-types param-types]))
+  (emitScan [^xtdb.query.IQuerySource$QueryCatalog db-cat scan-expr scan-vec-types param-types]))
 
 (defn ->scan-cols [{:keys [opts]}]
   (let [{:keys [table columns]} opts]
@@ -204,7 +203,7 @@
             {:allocator (ig/ref :xtdb/allocator)
              :info-schema (ig/ref :xtdb/information-schema)})})
 
-(defn scan-vec-types [^Database$Catalog db-catalog, snaps, scan-cols]
+(defn scan-vec-types [db-catalog, snaps, scan-cols]
   (letfn [(->vec-type [[^TableRef table col-name]]
             (let [col-name (str col-name)]
               (or (types/temporal-vec-types col-name)
@@ -213,8 +212,9 @@
                   (-> (info-schema/template-table table)
                       (get (symbol col-name)))
                   (let [db-name (.getDbName table)
-                        ^TableCatalog table-catalog (.getTableCatalog (.databaseOrNull db-catalog db-name))
-                        ^Snapshot snap (get snaps db-name)]
+                        state (.getState (.databaseOrNull db-catalog db-name))
+                        table-catalog (.getTableCatalog state)
+                        snap (get snaps db-name)]
                     (types/merge-types (some-> (.getType table-catalog table col-name))
                                        (some-> (.getLiveIndex snap)
                                                (.liveTable table)
@@ -228,10 +228,12 @@
       (let [{:keys [^TableRef table columns] :as scan-opts} opts
             db-name (.getDbName table)
             db (.databaseOrNull db-cat db-name)
-            ^PageMetadata$Factory metadata-mgr (.getMetadataManager db)
-            ^BufferPool buffer-pool (.getBufferPool db)
-            ^TrieCatalog trie-catalog (.getTrieCatalog db)
-            ^TableCatalog table-catalog (.getTableCatalog db)
+            storage (.getStorage db)
+            state (.getState db)
+            metadata-mgr (.getMetadataManager storage)
+            buffer-pool (.getBufferPool storage)
+            trie-catalog (.getTrieCatalog state)
+            table-catalog (.getTableCatalog state)
             col-names (->> columns
                            (into #{} (map (fn [[col-type arg]]
                                             (case col-type
@@ -307,7 +309,7 @@
                                live-table-snap (some-> (.getLiveIndex snapshot) (.liveTable table))
                                temporal-bounds (->temporal-bounds allocator args scan-opts
                                                                   (-> (basis/<-time-basis-str snapshot-token)
-                                                                      (get-in [(.getName db) 0])))]
+                                                                      (get-in [db-name 0])))]
 
                            (util/with-close-on-catch [!segments (LinkedList.)]
                              

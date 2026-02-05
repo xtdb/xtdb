@@ -27,6 +27,7 @@ import xtdb.indexer.LogProcessor
 import xtdb.indexer.Snapshot
 import xtdb.indexer.Indexer.TxSource
 import xtdb.metadata.PageMetadata
+import xtdb.query.IQuerySource
 import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
 import java.time.Duration
@@ -35,17 +36,16 @@ import java.util.*
 data class Database(
     val allocator: BufferAllocator,
     val config: Config,
-    val storage: DatabaseStorage,
-    val state: DatabaseState,
-
-    // snapSource will mostly be the same as liveIndex - exception being within a transaction
-    val snapSource: Snapshot.Source,
+    override val storage: DatabaseStorage,
+    override val state: DatabaseState,
 
     val logProcessorOrNull: LogProcessor?,
     private val compactorOrNull: Compactor.ForDatabase?,
     val txSource: TxSource?,
-) {
+) : IQuerySource.QueryDatabase {
     val name: DatabaseName get() = state.name
+    override fun openSnapshot(): Snapshot = state.liveIndex.openSnapshot()
+
     val blockCatalog: BlockCatalog get() = state.blockCatalog
     val tableCatalog: TableCatalog get() = state.tableCatalog
     val trieCatalog: TrieCatalog get() = state.trieCatalog
@@ -61,8 +61,6 @@ data class Database(
 
     fun withComponents(logProcessor: LogProcessor?, compactor: Compactor.ForDatabase?) =
         copy(logProcessorOrNull = logProcessor, compactorOrNull = compactor)
-
-    fun withSnapSource(snapSource: Snapshot.Source) = copy(snapSource = snapSource)
 
     override fun equals(other: Any?): Boolean =
         this === other || (other is Database && name == other.name)
@@ -133,7 +131,7 @@ data class Database(
         }
     }
 
-    interface Catalog : ILookup, Seqable, Iterable<Database> {
+    interface Catalog : ILookup, Seqable, Iterable<Database>, IQuerySource.QueryCatalog {
         companion object {
             private suspend fun Database.await(msgId: MessageId) = logProcessor.awaitAsync(msgId).await()
             private suspend fun Database.sync() = await(logProcessor.latestSubmittedMsgId)
@@ -156,19 +154,6 @@ data class Database(
                     .joinAll()
             }
 
-            @JvmStatic
-            fun singleton(db: Database) = object : Catalog {
-                override val databaseNames: Collection<DatabaseName> get() = setOf(db.name)
-
-                override fun databaseOrNull(dbName: DatabaseName) = db.takeIf { dbName == it.name }
-
-                override fun attach(dbName: DatabaseName, config: Config?) =
-                    error("can't attach database to singleton db-cat")
-
-                override fun detach(dbName: DatabaseName) =
-                    error("can't detach database from singleton db-cat")
-            }
-
             @JvmField
             val EMPTY = object : Catalog {
                 override val databaseNames: Collection<DatabaseName> = emptySet()
@@ -183,12 +168,12 @@ data class Database(
             }
         }
 
-        val databaseNames: Collection<DatabaseName>
-        fun databaseOrNull(dbName: DatabaseName): Database?
+        override val databaseNames: Collection<DatabaseName>
+        override fun databaseOrNull(dbName: DatabaseName): Database?
 
         operator fun get(dbName: DatabaseName) = databaseOrNull(dbName)
 
-        val primary: Database get() = this["xtdb"]!!
+        val primary: Database get() = databaseOrNull("xtdb")!!
 
         fun attach(dbName: DatabaseName, config: Config?): Database
         fun detach(dbName: DatabaseName)

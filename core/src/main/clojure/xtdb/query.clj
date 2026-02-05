@@ -49,7 +49,6 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn)
            (xtdb.arrow RelationReader VectorReader VectorType)
-           (xtdb.database Database$Catalog)
            (xtdb.indexer Snapshot)
            xtdb.operator.scan.IScanEmitter
            (xtdb.query IQuerySource PreparedQuery)
@@ -190,14 +189,14 @@
     conformed-plan))
 
 (defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache, explain-analyze?]},
-                   scan-emitter, ^Database$Catalog db-cat, snaps
+                   scan-emitter, db-cat, snaps
                    param-types, {:keys [default-tz]}]
   (.get emit-cache {:scan-vec-types (scan/scan-vec-types db-cat snaps scan-cols)
 
                     ;; this one is just to reset the cache for up-to-date stats
                     ;; probably over-zealous
                     :last-known-blocks (->> (for [db-name (.getDatabaseNames db-cat)]
-                                              [db-name (some-> (.databaseOrNull db-cat db-name) .getBlockCatalog .getCurrentBlockIndex)]))
+                                              [db-name (some-> (.databaseOrNull db-cat db-name) .getState .getBlockCatalog .getCurrentBlockIndex)]))
 
                     :default-tz default-tz
                     :param-types param-types
@@ -304,14 +303,14 @@
                 ;; thankfully we can probably figure out what databases may be relevant to the query at parse-time
                 (util/with-close-on-catch [!snaps (HashMap.)]
                   (doseq [db-name (.getDatabaseNames db-cat)]
-                    (.put !snaps db-name (.openSnapshot (.getSnapSource (.databaseOrNull db-cat db-name)))))
+                    (.put !snaps db-name (.openSnapshot (.databaseOrNull db-cat db-name))))
                   (into {} !snaps)))
 
               (->table-info []
                 ;; TODO this, too, gets the schema for *every* db in the catalog
                 (->> (.getDatabaseNames db-cat)
                      (into {} (mapcat (fn [db-name]
-                                        (util/with-open [snap (.openSnapshot (.getSnapSource (.databaseOrNull db-cat db-name)))]
+                                        (util/with-open [snap (.openSnapshot (.databaseOrNull db-cat db-name))]
                                           (.getSchema snap)))))))
 
               (plan-query* [table-info]

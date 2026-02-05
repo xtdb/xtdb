@@ -1,7 +1,21 @@
 package xtdb.query
 
-import xtdb.database.Database
+import xtdb.database.DatabaseName
+import xtdb.database.DatabaseState
+import xtdb.database.DatabaseStorage
+import xtdb.indexer.Snapshot
 
 interface IQuerySource {
-    fun prepareQuery(query: Any, dbs: Database.Catalog, opts: Any?): PreparedQuery
+
+    interface QueryCatalog {
+        val databaseNames: Collection<DatabaseName>
+        fun databaseOrNull(dbName: DatabaseName): QueryDatabase?
+    }
+
+    interface QueryDatabase : Snapshot.Source {
+        val storage: DatabaseStorage
+        val state: DatabaseState
+    }
+
+    fun prepareQuery(query: Any, dbs: QueryCatalog, opts: Any?): PreparedQuery
 }

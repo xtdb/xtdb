@@ -20,7 +20,6 @@
            (xtdb ICursor)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader VectorType VectorReader VectorWriter)
-           xtdb.database.Database
            xtdb.pgwire.PgType
            (xtdb.indexer Snapshot)
            xtdb.operator.SelectionSpec
@@ -483,10 +482,10 @@
                  schema params]
         ;; TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
         ;; should be types/merge-types as per scan-vec-types
-        (let [^Database db db
-              db-name (.getName db)
-              table-catalog (.getTableCatalog db)
-              trie-catalog (.getTrieCatalog db)
+        (let [db-state (.getState db)
+              db-name (.getName db-state)
+              table-catalog (.getTableCatalog db-state)
+              trie-catalog (.getTrieCatalog db-state)
               schema-info (-> (merge-with merge
                                           (.getTypes table-catalog)
                                           (some-> (.getLiveIndex ^Snapshot snap)
@@ -513,7 +512,7 @@
                                        pg_catalog/pg_attribute (pg-attribute (schema-info->col-rows schema-info))
                                        pg_catalog/pg_namespace (pg-namespace)
                                        pg_catalog/pg_proc (pg-proc)
-                                       pg_catalog/pg_database (pg-database (.getName db))
+                                       pg_catalog/pg_database (pg-database db-name)
                                        pg_catalog/pg_stat_user_tables (pg-stat-user-tables schema-info)
                                        pg_catalog/pg_settings (pg-settings)
                                        pg_catalog/pg_range (pg-range)

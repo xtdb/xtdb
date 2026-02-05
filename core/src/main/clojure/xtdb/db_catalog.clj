@@ -50,12 +50,10 @@
       :storage (ig/ref ::storage)
       :state (ig/ref ::state)
       :allocator (ig/ref ::allocator)
-      :live-index (ig/ref :xtdb.indexer/live-index)
       :tx-source (ig/ref :xtdb.tx-source/for-db)}})
 
-(defmethod ig/init-key ::for-query [_ {:keys [allocator db-config storage state live-index tx-source]}]
+(defmethod ig/init-key ::for-query [_ {:keys [allocator db-config storage state tx-source]}]
   (Database. allocator db-config storage state
-             live-index ; snap-src
              nil nil tx-source))
 
 (defmethod ig/expand-key :xtdb/db-catalog [k _]

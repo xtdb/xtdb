@@ -387,7 +387,7 @@
                      #(.copyRow doc-copier idx))))))))
 
 (defn- ->patch-docs-indexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
-                             ^IQuerySource q-src, ^Database$Catalog db-cat, ^Instant system-time
+                             ^IQuerySource q-src, db-cat, ^Instant system-time
                              {:keys [default-db ^Tracer tracer] :as tx-opts}]
   (let [patch-leg (.vectorFor tx-ops-rdr "patch-docs")
         iids-rdr (.vectorFor patch-leg "iids")
@@ -428,7 +428,7 @@
                           (metrics/with-span tracer "xtdb.transaction.patch-docs" {:attributes {:db (.getDbName table)
                                                                                                 :schema (.getSchemaName table)
                                                                                                 :table (.getTableName table)}}
-                            (let [table-info (-> (with-open [snap (.openSnapshot (.getSnapSource (.databaseOrNull db-cat default-db)))]
+                            (let [table-info (-> (with-open [snap (.openSnapshot (.databaseOrNull db-cat default-db))]
                                                    (.getSchema snap))
                                                  (sql/xform-table-info default-db))
                                   pq (.prepareQuery q-src (-> (sql/plan-patch {:table-info table-info}
@@ -628,15 +628,12 @@
 
                   (serde/->tx-aborted msg-id system-time skipped-exn))
 
-                (let [db (-> db
-                             (.withSnapSource
-                              (reify Snapshot$Source
-                                (openSnapshot [_]
-                                  (util/with-close-on-catch [live-index-snap (.openSnapshot live-idx-tx)]
-                                    (Snapshot. tx-key live-index-snap
-                                               (li/->schema live-index-snap table-catalog)))))))
-
-                      db-cat (Database$Catalog/singleton db)
+                (let [db-cat (Indexer/queryCatalog (.getStorage db) (.getState db)
+                                                   (reify Snapshot$Source
+                                                     (openSnapshot [_]
+                                                       (util/with-close-on-catch [live-index-snap (.openSnapshot live-idx-tx)]
+                                                         (Snapshot. tx-key live-index-snap
+                                                                    (li/->schema live-index-snap table-catalog))))))
 
                       tx-opts {:snapshot-token (basis/->time-basis-str {db-name [system-time]})
                                :current-time system-time
