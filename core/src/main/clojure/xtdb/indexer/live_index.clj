@@ -19,7 +19,7 @@
            (xtdb.api.log Log Log$Message$TriesAdded)
            xtdb.api.storage.Storage
            xtdb.storage.BufferPool
-           (xtdb.catalog BlockCatalog TableCatalog)
+           (xtdb.catalog BlockCatalog TableBlockMetadata TableCatalog)
            (xtdb.indexer LiveIndex$Snapshot LiveIndex$Tx LiveTable LiveTable$FinishedBlock LiveTable$Snapshot LiveTable$Tx Snapshot)
            (xtdb.log.proto TrieDetails)
            (xtdb.trie TrieCatalog)
@@ -149,13 +149,18 @@
         (doseq [^TrieDetails added-trie added-tries]
           (.addTries trie-cat (table/->ref db-name (.getTableName added-trie)) [added-trie] (.getSystemTime latest-completed-tx))))
 
-      (let [all-tables (set (concat (keys table-metadata) (.getAllTables block-cat)))
-            table->partitions (->> all-tables
-                                   (map (fn [table]
-                                          (MapEntry/create table (->> (trie-cat/trie-state trie-cat table)
-                                                                      trie-cat/partitions))))
-                                   (into {}))]
-        (table-cat/finish-block! table-cat block-idx table-metadata table->partitions))))
+      (let [all-tables (set (concat (keys table-metadata) (.getAllTables block-cat)))]
+        (.finishBlock table-cat
+                      (->> table-metadata
+                           (map (fn [[table {:keys [vec-types row-count trie-key data-file-size trie-metadata hlls]}]]
+                                  (MapEntry/create table (TableBlockMetadata. vec-types row-count trie-key data-file-size trie-metadata hlls))))
+                           (into {}))
+
+                      (->> all-tables
+                           (map (fn [table]
+                                  (MapEntry/create table (->> (trie-cat/trie-state trie-cat table)
+                                                              trie-cat/partitions))))
+                           (into {}))))))
 
   (nextBlock [this]
     (.nextBlock row-counter)

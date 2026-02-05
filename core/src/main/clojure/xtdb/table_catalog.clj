@@ -15,13 +15,11 @@
            (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb.block.proto TableBlock Partition)
            xtdb.catalog.BlockCatalog
+           xtdb.catalog.TableBlockMetadata
            (xtdb.storage BufferPool)
            xtdb.table.TableRef
            xtdb.trie.Trie
            (xtdb.util HyperLogLog)))
-
-(defprotocol PTableCatalog
-  (finish-block! [table-cat block-idx delta-tables->metadata table->current-tries]))
 
 (def ^java.nio.file.Path block-table-metadata-path (util/->path "blocks"))
 
@@ -34,21 +32,16 @@
       (.resolve block-table-metadata-path)
       (.resolve (format "b%s.binpb" (util/->lex-hex-string block-idx)))))
 
-(defn write-table-block-data ^java.nio.ByteBuffer [vec-types ^long row-count
-                                                   partitions hlls]
+(defn ->table-block ^TableBlock [vec-types ^long row-count partitions hlls]
   (let [table-schema (Schema. (->> vec-types
                                    (mapv (fn [[col-name vec-type]]
-                                           (types/->field col-name vec-type)))))
-        res (ByteBuffer/wrap (-> (doto (TableBlock/newBuilder)
-                                   (.setArrowSchema (ByteString/copyFrom (.serializeAsMessage table-schema)))
-                                   (.setRowCount row-count)
-                                   (.putAllColumnNameToHll ^Map (update-vals hlls #(ByteString/copyFrom ^ByteBuffer %)))
-                                   (.addAllPartitions partitions))
-                                 (.build)
-                                 (.toByteArray)))]
-    ;; ByteString/copyFrom is messing with the position
-    (update-vals hlls #(doto ^ByteBuffer % (.position 0)))
-    res))
+                                           (types/->field col-name vec-type)))))]
+    (-> (doto (TableBlock/newBuilder)
+          (.setArrowSchema (ByteString/copyFrom (.serializeAsMessage table-schema)))
+          (.setRowCount row-count)
+          (.putAllColumnNameToHll ^Map (update-vals hlls (comp #(ByteString/copyFrom ^ByteBuffer %) ByteBuffer/.duplicate)))
+          (.addAllPartitions partitions))
+        (.build))))
 
 (defn- local-date->instant [^java.time.LocalDate local-date]
   (.toInstant (.atStartOfDay local-date ZoneOffset/UTC)))
@@ -149,23 +142,6 @@
 
 (deftype TableCatalog [^BufferPool buffer-pool, ^BlockCatalog block-cat
                        ^:volatile-mutable table->metadata]
-  PTableCatalog
-  (finish-block! [this block-idx delta-table->metadata table->partitions]
-    (let [new-table->metadata (new-tables-metadata table->metadata delta-table->metadata)
-          tables (ArrayList.)]
-      (doseq [[^TableRef table {:keys [row-count vec-types hlls]}] new-table->metadata]
-        (let [table-partitions (get table->partitions table)
-              table-block-path (->table-block-metadata-obj-key (Trie/getTablePath table) block-idx)]
-          (.add tables table)
-          (.putObject buffer-pool table-block-path
-                      (write-table-block-data vec-types row-count
-                                              (map (comp ->partition
-                                                         #(update % :tries (partial map (fn [trie] (trie/->trie-details table trie)))))
-                                                   table-partitions)
-                                              hlls))))
-      (set! (.table->metadata this) new-table->metadata)
-      (vec tables)))
-
   xtdb.catalog.TableCatalog
   (rowCount [_ table] (get-in table->metadata [table :row-count]))
 
@@ -173,16 +149,34 @@
     (some-> (get-in table->metadata [table :vec-types])
             (get col-name)))
 
-  (getTypes [_ table]
-    (get-in table->metadata [table :vec-types]))
-
-  (getTypes [_]
-    (update-vals table->metadata :vec-types))
+  (getTypes [_ table] (get-in table->metadata [table :vec-types]))
+  (getTypes [_] (update-vals table->metadata :vec-types))
 
   (refresh [this]
     (set! (.table->metadata this)
           (-> (load-tables-to-metadata buffer-pool block-cat)
-              (update-vals #(dissoc % :partitions))))))
+              (update-vals #(dissoc % :partitions)))))
+
+  (finishBlock [this table-metadata table-partitions]
+    (let [delta-table->metadata (->> table-metadata
+                                     (map (fn [[table ^TableBlockMetadata m]]
+                                            [table {:vec-types (.getVecTypes m)
+                                                    :row-count (.getRowCount m)
+                                                    :hlls (.getHlls m)}]))
+                                     (into {}))
+          new-table->metadata (new-tables-metadata table->metadata delta-table->metadata)]
+
+      (set! (.table->metadata this) new-table->metadata)
+
+      (->> (for [[^TableRef table {:keys [row-count vec-types hlls]}] new-table->metadata
+                 :let [partitions (get table-partitions table)
+                       table-block (->table-block vec-types row-count
+                                                  (map (comp ->partition
+                                                             #(update % :tries (partial map (fn [trie] (trie/->trie-details table trie)))))
+                                                       partitions)
+                                                  hlls)]]
+             (MapEntry/create table table-block))
+           (into {})))))
 
 (defmethod ig/expand-key :xtdb/table-catalog [k _]
   {k {:buffer-pool (ig/ref :xtdb/buffer-pool)

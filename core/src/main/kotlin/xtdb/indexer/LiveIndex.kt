@@ -3,6 +3,7 @@ package xtdb.indexer
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.TransactionKey
 import xtdb.arrow.VectorType
+import xtdb.block.proto.TableBlock
 import xtdb.table.TableRef
 import xtdb.trie.BlockIndex
 
@@ -36,6 +37,6 @@ interface LiveIndex : Snapshot.Source, AutoCloseable {
     fun startTx(txKey: TransactionKey): Tx
 
     fun isFull(): Boolean
-    fun finishBlock(blockIdx: BlockIndex) : Collection<TableRef>
+    fun finishBlock(blockIdx: BlockIndex): Map<TableRef, TableBlock>
     fun nextBlock()
 }

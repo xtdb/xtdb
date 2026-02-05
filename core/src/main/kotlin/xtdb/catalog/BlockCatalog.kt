@@ -31,6 +31,10 @@ class BlockCatalog(
         fun blockFilePath(blockIndex: BlockIndex): Path =
             blocksPath.resolve("b${blockIndex.asLexHex}.binpb")
 
+        @JvmStatic
+        fun tableBlockPath(table: TableRef, blockIndex: BlockIndex): Path =
+            table.tablePath.resolve(blocksPath).resolve("b${blockIndex.asLexHex}.binpb")
+
         val BufferPool.allBlockFiles: Iterable<ObjectStore.StoredObject>
             get() = listAllObjects(blocksPath).filter { it.key.fileName.extension == "binpb" }
 

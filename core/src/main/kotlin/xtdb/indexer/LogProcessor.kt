@@ -309,12 +309,18 @@ class LogProcessor(
     fun finishBlock() {
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
-        val tables = liveIndex.finishBlock(blockIdx)
+        val tableBlocks = liveIndex.finishBlock(blockIdx)
+
+        for ((table, tableBlock) in tableBlocks) {
+            val path = BlockCatalog.tableBlockPath(table, blockIdx)
+            bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
+        }
+
         val secondaryDatabases = dbCatalog?.takeIf { dbState.name == "xtdb" }?.serialisedSecondaryDatabases
 
         val block = blockCatalog.buildBlock(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
-            tables, secondaryDatabases
+            tableBlocks.keys, secondaryDatabases
         )
 
         bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
