@@ -5,9 +5,7 @@
             [xtdb.buffer-pool]
             [xtdb.metrics :as metrics]
             [xtdb.table :as table]
-            [xtdb.table-catalog :as table-cat]
             [xtdb.trie :as trie]
-            [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
            (java.lang AutoCloseable)
@@ -149,18 +147,10 @@
         (doseq [^TrieDetails added-trie added-tries]
           (.addTries trie-cat (table/->ref db-name (.getTableName added-trie)) [added-trie] (.getSystemTime latest-completed-tx))))
 
-      (let [all-tables (set (concat (keys table-metadata) (.getAllTables block-cat)))]
-        (.finishBlock table-cat
-                      (->> table-metadata
-                           (map (fn [[table {:keys [vec-types row-count trie-key data-file-size trie-metadata hlls]}]]
-                                  (MapEntry/create table (TableBlockMetadata. vec-types row-count trie-key data-file-size trie-metadata hlls))))
-                           (into {}))
-
-                      (->> all-tables
-                           (map (fn [table]
-                                  (MapEntry/create table (->> (trie-cat/trie-state trie-cat table)
-                                                              trie-cat/partitions))))
-                           (into {}))))))
+      (->> table-metadata
+           (map (fn [[table {:keys [vec-types row-count trie-key data-file-size trie-metadata hlls]}]]
+                  (MapEntry/create table (TableBlockMetadata. vec-types row-count trie-key data-file-size trie-metadata hlls))))
+           (into {}))))
 
   (nextBlock [this]
     (.nextBlock row-counter)

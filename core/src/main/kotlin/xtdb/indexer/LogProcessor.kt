@@ -309,7 +309,13 @@ class LogProcessor(
     fun finishBlock() {
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
-        val tableBlocks = liveIndex.finishBlock(blockIdx)
+
+        val tableMetadata = liveIndex.finishBlock(blockIdx)
+
+        val allTables = tableMetadata.keys + blockCatalog.allTables
+        val tablePartitions = allTables.associateWith { trieCatalog.getPartitions(it) }
+
+        val tableBlocks = tableCatalog.finishBlock(tableMetadata, tablePartitions)
 
         for ((table, tableBlock) in tableBlocks) {
             val path = BlockCatalog.tableBlockPath(table, blockIdx)

@@ -1,5 +1,6 @@
 package xtdb.trie
 
+import xtdb.block.proto.Partition
 import xtdb.log.proto.TrieDetails
 import xtdb.table.TableRef
 import java.time.Instant
@@ -13,6 +14,7 @@ interface TrieCatalog {
     fun deleteTries(table: TableRef, garbageTrieKeys: Set<TrieKey>)
     fun listAllTrieKeys(table: TableRef) : List<TrieKey>
     fun listLiveAndNascentTrieKeys(table: TableRef) : List<TrieKey>
+    fun getPartitions(table: TableRef): List<Partition>
 
     fun refresh()
 }

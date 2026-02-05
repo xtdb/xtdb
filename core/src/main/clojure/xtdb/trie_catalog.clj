@@ -471,6 +471,14 @@
   (listLiveAndNascentTrieKeys [this table]
     (mapv :trie-key (live-and-nascent-tries (trie-state this table))))
 
+  (getPartitions [this table]
+    (->> (trie-state this table)
+         partitions
+         (mapv (fn [partition]
+                 (table-cat/->partition
+                   (update partition :tries
+                           (partial mapv #(trie/->trie-details table %))))))))
+
   (refresh [_]
     ;; HACK this is duplicated in `load-tries`
     (doseq [[table {:keys [partitions]}] (table-cat/load-tables-to-metadata buffer-pool block-cat)

@@ -1,7 +1,6 @@
 (ns xtdb.table-catalog
   (:require [clojure.set :as set]
             [integrant.core :as ig]
-            [xtdb.table :as table]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -11,7 +10,7 @@
            [java.time ZoneId ZoneOffset]
            [java.nio ByteBuffer]
            [java.nio.file Path]
-           [java.util ArrayList Map]
+           [java.util Map]
            (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb.block.proto TableBlock Partition)
            xtdb.catalog.BlockCatalog
@@ -170,11 +169,7 @@
 
       (->> (for [[^TableRef table {:keys [row-count vec-types hlls]}] new-table->metadata
                  :let [partitions (get table-partitions table)
-                       table-block (->table-block vec-types row-count
-                                                  (map (comp ->partition
-                                                             #(update % :tries (partial map (fn [trie] (trie/->trie-details table trie)))))
-                                                       partitions)
-                                                  hlls)]]
+                       table-block (->table-block vec-types row-count partitions hlls)]]
              (MapEntry/create table table-block))
            (into {})))))
 
