@@ -37,7 +37,7 @@
            (xtdb.arrow Relation RelationReader Vector VectorType)
            [xtdb.database Database Database$Catalog]
            xtdb.database.Database$Catalog
-           (xtdb.indexer LiveTable)
+           (xtdb.indexer LiveTable LogProcessor)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.storage.BufferPool
@@ -119,7 +119,11 @@
   (ZonedDateTimeRange. (time/->zdt from) (some-> to time/->zdt)))
 
 (defn finish-block! [node]
-  (.finishBlock (.getLogProcessor (db/primary-db node))))
+  (let [db (db/primary-db node)
+        live-idx (.getLiveIndex db)
+        system-time (or (some-> (.getLatestCompletedTx live-idx) .getSystemTime)
+                        (Instant/now))]
+    (.finishBlock (.getLogProcessor db) system-time)))
 
 (defn flush-block!
   ([node] (flush-block! node #xt/duration "PT5S"))

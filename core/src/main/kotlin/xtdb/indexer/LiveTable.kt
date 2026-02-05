@@ -210,7 +210,7 @@ constructor(
     fun openSnapshot() = openSnapshot(liveTrie)
 
     data class FinishedBlock(
-        val types: Map<FieldName, VectorType>,
+        val vecTypes: Map<FieldName, VectorType>,
         val trieKey: TrieKey,
         val dataFileSize: FileSize,
         val rowCount: Int,
@@ -226,8 +226,12 @@ constructor(
         return liveRelation.openDirectSlice(al).use { dataRel ->
             val dataFileSize = trieWriter.writeLiveTrie(table, trieKey, liveTrie, dataRel)
             FinishedBlock(
-                liveRelation.types.orEmpty(), trieKey, dataFileSize, rowCount,
-                trieMetadataCalculator.build(), hllCalculator.build()
+                vecTypes = liveRelation.types.orEmpty(),
+                trieKey = trieKey,
+                dataFileSize = dataFileSize,
+                rowCount = rowCount,
+                trieMetadata = trieMetadataCalculator.build(),
+                hllDeltas = hllCalculator.build()
             )
         }
     }

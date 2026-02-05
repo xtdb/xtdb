@@ -14,7 +14,7 @@
            (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb.block.proto TableBlock Partition)
            xtdb.catalog.BlockCatalog
-           xtdb.catalog.TableBlockMetadata
+           (xtdb.indexer LiveTable$FinishedBlock)
            (xtdb.storage BufferPool)
            xtdb.table.TableRef
            xtdb.trie.Trie
@@ -158,10 +158,10 @@
 
   (finishBlock [this table-metadata table-partitions]
     (let [delta-table->metadata (->> table-metadata
-                                     (map (fn [[table ^TableBlockMetadata m]]
-                                            [table {:vec-types (.getVecTypes m)
-                                                    :row-count (.getRowCount m)
-                                                    :hlls (.getHlls m)}]))
+                                     (map (fn [[table ^LiveTable$FinishedBlock fb]]
+                                            [table {:vec-types (.getVecTypes fb)
+                                                    :row-count (.getRowCount fb)
+                                                    :hlls (.getHllDeltas fb)}]))
                                      (into {}))
           new-table->metadata (new-tables-metadata table->metadata delta-table->metadata)]
 

@@ -26,6 +26,7 @@ import xtdb.block.proto.Block
 import xtdb.error.Anomaly
 import xtdb.error.Fault
 import xtdb.error.Interrupted
+import xtdb.log.proto.TrieDetails
 import xtdb.table.TableRef
 import xtdb.util.MsgIdUtil.msgIdToEpoch
 import xtdb.util.MsgIdUtil.msgIdToOffset
@@ -272,7 +273,7 @@ class LogProcessor(
                     if (readOnly) {
                         waitForBlock()
                     } else {
-                        finishBlock()
+                        finishBlock(record.logTimestamp)
                     }
                 }
                 watchers.notify(msgId, res)
@@ -306,16 +307,35 @@ class LogProcessor(
         }
     }
 
-    fun finishBlock() {
+    fun finishBlock(systemTime: Instant) {
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
 
-        val tableMetadata = liveIndex.finishBlock(blockIdx)
+        val finishedBlocks = liveIndex.finishBlock(blockIdx)
 
-        val allTables = tableMetadata.keys + blockCatalog.allTables
+        // Build TrieDetails and append to projection-log
+        val addedTries = finishedBlocks.map { (table, fb) ->
+            TrieDetails.newBuilder()
+                .setTableName(table.schemaAndTable)
+                .setTrieKey(fb.trieKey)
+                .setDataFileSize(fb.dataFileSize)
+                .also { fb.trieMetadata?.let { tm -> it.setTrieMetadata(tm) } }
+                .build()
+        }
+        dbStorage.projectionLog.appendMessage(
+            Message.TriesAdded(Storage.VERSION, bufferPool.epoch, addedTries)
+        )
+
+        // Add tries to trie catalog
+        finishedBlocks.forEach { (table, _) ->
+            val trie = addedTries.find { it.tableName == table.schemaAndTable }!!
+            trieCatalog.addTries(table, listOf(trie), systemTime)
+        }
+
+        val allTables = finishedBlocks.keys + blockCatalog.allTables
         val tablePartitions = allTables.associateWith { trieCatalog.getPartitions(it) }
 
-        val tableBlocks = tableCatalog.finishBlock(tableMetadata, tablePartitions)
+        val tableBlocks = tableCatalog.finishBlock(finishedBlocks, tablePartitions)
 
         for ((table, tableBlock) in tableBlocks) {
             val path = BlockCatalog.tableBlockPath(table, blockIdx)

@@ -361,14 +361,12 @@
     (let [db (db/primary-db tu/*node*)
           bp (.getBufferPool db)
           block-cat (.getBlockCatalog db)
-          projection-log (.getProjectionLog db)
           table-catalog (.getTableCatalog db)
-          trie-catalog (.getTrieCatalog db)
           tables (HashMap.)
           live-index-allocator (util/->child-allocator allocator "live-index")]
 
-      (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator "xtdb" bp projection-log
-                                                             block-cat table-catalog trie-catalog
+      (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp
+                                                             block-cat table-catalog
                                                              nil tables
                                                              nil (StampedLock.)
                                                              (RefCounter.)

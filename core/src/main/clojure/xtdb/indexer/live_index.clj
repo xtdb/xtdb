@@ -4,23 +4,17 @@
             [integrant.core :as ig]
             [xtdb.buffer-pool]
             [xtdb.metrics :as metrics]
-            [xtdb.table :as table]
             [xtdb.trie :as trie]
             [xtdb.util :as util])
-  (:import (clojure.lang MapEntry)
-           (java.lang AutoCloseable)
+  (:import (java.lang AutoCloseable)
            (java.time Duration)
            (java.util HashMap List Map)
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api IndexerConfig TransactionKey)
-           (xtdb.api.log Log Log$Message$TriesAdded)
-           xtdb.api.storage.Storage
            xtdb.storage.BufferPool
-           (xtdb.catalog BlockCatalog TableBlockMetadata TableCatalog)
-           (xtdb.indexer LiveIndex$Snapshot LiveIndex$Tx LiveTable LiveTable$FinishedBlock LiveTable$Snapshot LiveTable$Tx Snapshot)
-           (xtdb.log.proto TrieDetails)
-           (xtdb.trie TrieCatalog)
+           (xtdb.catalog BlockCatalog TableCatalog)
+           (xtdb.indexer LiveIndex$Snapshot LiveIndex$Tx LiveTable LiveTable$Snapshot LiveTable$Tx Snapshot)
            (xtdb.util RefCounter RowCounter)))
 
 (defn open-live-idx-snap [^Map tables]
@@ -46,8 +40,8 @@
               (update-vals (some-> live-index-snap (.getAllColumnTypes))
                            (comp set keys))))
 
-(deftype LiveIndex [^BufferAllocator allocator, db-name, ^BufferPool buffer-pool, ^Log projection-log
-                    ^BlockCatalog block-cat, table-cat, ^TrieCatalog trie-cat
+(deftype LiveIndex [^BufferAllocator allocator, ^BufferPool buffer-pool
+                    ^BlockCatalog block-cat, table-cat
 
                     ^:volatile-mutable ^TransactionKey latest-completed-tx
                     ^Map tables,
@@ -133,24 +127,8 @@
     (>= (.getBlockRowCount row-counter) rows-per-block))
 
   (finishBlock [_ block-idx]
-    (let [table-metadata (-> (LiveTable/finishBlock tables block-idx)
-                             (update-vals (fn [^LiveTable$FinishedBlock fb]
-                                            {:vec-types (.getTypes fb)
-                                             :trie-key (.getTrieKey fb)
-                                             :row-count (.getRowCount fb)
-                                             :data-file-size (.getDataFileSize fb)
-                                             :trie-metadata (.getTrieMetadata fb)
-                                             :hlls (.getHllDeltas fb)})))]
-      (let [added-tries (for [[table {:keys [trie-key data-file-size trie-metadata state]}] table-metadata]
-                          (trie/->trie-details table trie-key data-file-size trie-metadata state))]
-        (.appendMessage projection-log (Log$Message$TriesAdded. Storage/VERSION (.getEpoch buffer-pool) added-tries))
-        (doseq [^TrieDetails added-trie added-tries]
-          (.addTries trie-cat (table/->ref db-name (.getTableName added-trie)) [added-trie] (.getSystemTime latest-completed-tx))))
-
-      (->> table-metadata
-           (map (fn [[table {:keys [vec-types row-count trie-key data-file-size trie-metadata hlls]}]]
-                  (MapEntry/create table (TableBlockMetadata. vec-types row-count trie-key data-file-size trie-metadata hlls))))
-           (into {}))))
+    ;; Return FinishedBlock map directly - LogProcessor handles I/O (log append, trie-cat.addTries)
+    (LiveTable/finishBlock tables block-idx))
 
   (nextBlock [this]
     (.nextBlock row-counter)
@@ -183,16 +161,13 @@
       (log/warn "Failed to shut down live-index after 60s due to outstanding watermarks.")
       (util/close allocator))))
 
-(defmethod ig/expand-key :xtdb.indexer/live-index [k {:keys [base, db-name, ^IndexerConfig indexer-conf]}]
+(defmethod ig/expand-key :xtdb.indexer/live-index [k {:keys [base, ^IndexerConfig indexer-conf]}]
   {k {:base base
-      :db-name db-name
 
       :allocator (ig/ref :xtdb.db-catalog/allocator)
       :buffer-pool (ig/ref :xtdb/buffer-pool)
       :block-cat (ig/ref :xtdb/block-catalog)
       :table-cat (ig/ref :xtdb/table-catalog)
-      :projection-log (ig/ref :xtdb/projection-log)
-      :trie-cat (ig/ref :xtdb/trie-catalog)
 
       :rows-per-block (.getRowsPerBlock indexer-conf)
       :log-limit (.getLogLimit indexer-conf)
@@ -200,14 +175,14 @@
       :skip-txs (.getSkipTxs indexer-conf)}})
 
 (defmethod ig/init-key :xtdb.indexer/live-index [_ {{:keys [meter-registry]} :base,
-                                                    :keys [allocator, db-name, ^BlockCatalog block-cat, buffer-pool projection-log trie-cat table-cat
+                                                    :keys [allocator, ^BlockCatalog block-cat, buffer-pool table-cat
                                                            ^long rows-per-block, ^long log-limit, ^long page-limit, skip-txs]}]
   (let [latest-completed-tx (.getLatestCompletedTx block-cat)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (metrics/add-allocator-gauge meter-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]
-        (->LiveIndex allocator db-name buffer-pool projection-log
-                     block-cat table-cat trie-cat
+        (->LiveIndex allocator buffer-pool
+                     block-cat table-cat
                      latest-completed-tx
                      tables
 
