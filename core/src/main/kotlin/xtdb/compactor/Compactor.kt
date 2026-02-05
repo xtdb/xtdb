@@ -14,7 +14,9 @@ import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.api.storage.Storage
 import xtdb.arrow.Relation
 import xtdb.compactor.PageTree.Companion.asTree
-import xtdb.database.IDatabase
+import org.apache.arrow.memory.BufferAllocator
+import xtdb.database.DatabaseState
+import xtdb.database.DatabaseStorage
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.TrieMetadata
 import xtdb.segment.BufferPoolSegment
@@ -50,27 +52,27 @@ interface Compactor : AutoCloseable {
         fun startCompaction(): CompletableDeferred<Unit>
     }
 
-    fun openForDatabase(db: IDatabase): ForDatabase
+    fun openForDatabase(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState): ForDatabase
 
     interface Driver : AutoCloseable {
         suspend fun executeJob(job: Job): TriesAdded
         suspend fun appendMessage(triesAdded: TriesAdded): Log.MessageMetadata
 
         interface Factory {
-            fun create(db: IDatabase): Driver
+            fun create(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState): Driver
         }
 
         companion object {
             @JvmStatic
             fun real(meterRegistry: MeterRegistry?, pageSize: Int, recencyPartition: RecencyPartition?) =
                 object : Factory {
-                    override fun create(db: IDatabase) = object : Driver {
-                        private val al = db.allocator.openChildAllocator("compactor")
+                    override fun create(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState) = object : Driver {
+                        private val al = allocator.openChildAllocator("compactor")
                             .also { meterRegistry?.register(it) }
 
-                        private val log = db.projectionLog
-                        private val bp = db.bufferPool
-                        private val mm = db.metadataManager
+                        private val log = dbStorage.projectionLog
+                        private val bp = dbStorage.bufferPool
+                        private val mm = dbStorage.metadataManager
 
                         private val trieWriter = PageTrieWriter(al, bp, calculateBlooms = true)
                         private val segMerge = SegmentMerge(al)
@@ -151,14 +153,14 @@ interface Compactor : AutoCloseable {
 
         private val jobsDispatcher = dispatcher.limitedParallelism(threadCount, "compactor")
 
-        override fun openForDatabase(db: IDatabase) = object : ForDatabase {
+        override fun openForDatabase(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState) = object : ForDatabase {
 
             private val dbJob = Job()
             private val scope = CoroutineScope(dbJob + dispatcher)
 
-            private val trieCatalog = db.trieCatalog
+            private val trieCatalog = dbState.trieCatalog
 
-            val driver = driverFactory.create(db)
+            val driver = driverFactory.create(allocator, dbStorage, dbState)
 
             @Volatile
             private var availableJobs = emptyMap<JobKey, Job>()
@@ -288,7 +290,7 @@ interface Compactor : AutoCloseable {
     companion object {
         @JvmField
         val NOOP = object : Compactor {
-            override fun openForDatabase(db: IDatabase) = object : ForDatabase {
+            override fun openForDatabase(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState) = object : ForDatabase {
                 override fun signalBlock() = Unit
                 override fun compactAll(timeout: Duration?) = Unit
                 override fun startCompaction() = CompletableDeferred<Unit>().apply { complete(Unit) }

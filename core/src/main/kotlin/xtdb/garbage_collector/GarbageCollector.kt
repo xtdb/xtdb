@@ -5,7 +5,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.plus
 import org.slf4j.LoggerFactory
 import xtdb.catalog.BlockCatalog.Companion.blockFromLatest
-import xtdb.database.IDatabase
+import xtdb.database.DatabaseState
+import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.time.microsAsInstant
 import xtdb.trie.Trie.dataFilePath
@@ -33,15 +34,14 @@ interface GarbageCollector : Closeable {
         suspend fun deleteTries(tableName: TableRef, trieKeys: Set<TrieKey>)
 
         interface Factory {
-            fun create(db: IDatabase): Driver
+            fun create(bufferPool: BufferPool, dbState: DatabaseState): Driver
         }
 
         companion object {
             @JvmStatic
             fun real() = object : Factory {
-                override fun create(db: IDatabase) = object : Driver {
-                    private val trieCatalog = db.trieCatalog
-                    private val bufferPool = db.bufferPool
+                override fun create(bufferPool: BufferPool, dbState: DatabaseState) = object : Driver {
+                    private val trieCatalog = dbState.trieCatalog
 
                     override suspend fun deletePath(path: Path) {
                         bufferPool.deleteIfExists(path)
@@ -58,7 +58,8 @@ interface GarbageCollector : Closeable {
     }
 
     class Impl @JvmOverloads constructor(
-        db: IDatabase,
+        private val bufferPool: BufferPool,
+        dbState: DatabaseState,
         driverFactory: Driver.Factory,
         private val blocksToKeep: Int,
         private val garbageLifetime: Duration,
@@ -66,10 +67,9 @@ interface GarbageCollector : Closeable {
         private val coroutineCtx: CoroutineContext = Dispatchers.IO
     ) : GarbageCollector {
         private val parentJob = Job()
-        private val driver = driverFactory.create(db)
-        private val blockCatalog = db.blockCatalog
-        private val trieCatalog = db.trieCatalog
-        private val bufferPool = db.bufferPool
+        private val driver = driverFactory.create(bufferPool, dbState)
+        private val blockCatalog = dbState.blockCatalog
+        private val trieCatalog = dbState.trieCatalog
         private val blockGc = BlockGarbageCollector(blockCatalog, bufferPool, blocksToKeep)
 
         private fun defaultGarbageAsOf(): Instant? =

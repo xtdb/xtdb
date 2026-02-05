@@ -32,37 +32,32 @@ import xtdb.trie.TrieCatalog
 import java.time.Duration
 import java.util.*
 
-interface IDatabase {
-    val name: DatabaseName
-    val allocator: BufferAllocator
-    val blockCatalog: BlockCatalog
-    val tableCatalog: TableCatalog
-    val trieCatalog: TrieCatalog
-    val sourceLog: Log
-    val projectionLog: Log
-    val bufferPool: BufferPool
-    val metadataManager: PageMetadata.Factory
-    val logProcessor: LogProcessor
-    val compactor: Compactor.ForDatabase
-    val txSource: TxSource?
-}
-
 data class Database(
-    override val name: DatabaseName, val config: Config,
-
-    override val allocator: BufferAllocator,
-    override val blockCatalog: BlockCatalog, override val tableCatalog: TableCatalog, override val trieCatalog: TrieCatalog,
-    override val sourceLog: Log, override val projectionLog: Log, override val bufferPool: BufferPool,
+    val allocator: BufferAllocator,
+    val config: Config,
+    val storage: DatabaseStorage,
+    val state: DatabaseState,
 
     // snapSource will mostly be the same as liveIndex - exception being within a transaction
-    override val metadataManager: PageMetadata.Factory, val liveIndex: LiveIndex, val snapSource: Snapshot.Source,
+    val snapSource: Snapshot.Source,
 
     val logProcessorOrNull: LogProcessor?,
     private val compactorOrNull: Compactor.ForDatabase?,
-    override val txSource: TxSource?,
-): IDatabase {
-    override val logProcessor: LogProcessor get() = logProcessorOrNull ?: error("log processor not initialised")
-    override val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")
+    val txSource: TxSource?,
+) {
+    val name: DatabaseName get() = state.name
+    val blockCatalog: BlockCatalog get() = state.blockCatalog
+    val tableCatalog: TableCatalog get() = state.tableCatalog
+    val trieCatalog: TrieCatalog get() = state.trieCatalog
+    val liveIndex: LiveIndex get() = state.liveIndex
+
+    val sourceLog: Log get() = storage.sourceLog
+    val projectionLog: Log get() = storage.projectionLog
+    val bufferPool: BufferPool get() = storage.bufferPool
+    val metadataManager: PageMetadata.Factory get() = storage.metadataManager
+
+    val logProcessor: LogProcessor get() = logProcessorOrNull ?: error("log processor not initialised")
+    val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")
 
     fun withComponents(logProcessor: LogProcessor?, compactor: Compactor.ForDatabase?) =
         copy(logProcessorOrNull = logProcessor, compactorOrNull = compactor)

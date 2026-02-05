@@ -15,11 +15,8 @@ import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.SimulationTestUtils.Companion.prefix
 import xtdb.SimulationTestUtils.Companion.setLogLevel
 import xtdb.api.TransactionKey
-import xtdb.api.log.Log
-import xtdb.arrow.unsupported
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.BlockCatalog.Companion.latestBlock
-import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.compactor.CompactorDriverConfig
 import xtdb.compactor.CompactorMockDriver
@@ -31,13 +28,11 @@ import xtdb.SimulationTestUtils.Companion.L0TrieKeys
 import xtdb.SimulationTestUtils.Companion.L3TrieKeys
 import xtdb.compactor.MockDb
 import xtdb.database.DatabaseName
-import xtdb.database.IDatabase
+import xtdb.database.DatabaseState
+import xtdb.database.DatabaseStorage
 import xtdb.garbage_collector.GarbageCollector
 import xtdb.garbage_collector.GarbageCollectorMockDriver
-import xtdb.indexer.Indexer
-import xtdb.indexer.LogProcessor
 import xtdb.log.proto.TrieDetails
-import xtdb.metadata.PageMetadata
 import xtdb.storage.BufferPool
 import xtdb.storage.MemoryStorage
 import xtdb.table.TableRef
@@ -53,20 +48,16 @@ import java.util.UUID
 import kotlin.time.Duration.Companion.microseconds
 
 data class MockDatabase(
-    override val name: DatabaseName,
-    override val allocator: BufferAllocator,
-    override val bufferPool: BufferPool,
-    override val trieCatalog: TrieCatalog,
-    override val blockCatalog: BlockCatalog,
+    val name: DatabaseName,
+    val allocator: BufferAllocator,
+    val bufferPool: BufferPool,
+    val trieCatalog: TrieCatalog,
+    val blockCatalog: BlockCatalog,
     private val compactorOrNull: Compactor.ForDatabase?,
-) : IDatabase {
-    override val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")
-    override val tableCatalog: TableCatalog get() = unsupported("tableCatalog")
-    override val sourceLog: Log get() = unsupported("sourceLog")
-    override val projectionLog: Log get() = unsupported("projectionLog")
-    override val metadataManager: PageMetadata.Factory get() = unsupported("metadataManager")
-    override val logProcessor: LogProcessor get() = unsupported("logProcessor")
-    override val txSource: Indexer.TxSource get() = unsupported("txSource")
+) {
+    val dbStorage: DatabaseStorage get() = DatabaseStorage(null, null, bufferPool, null)
+    val dbState: DatabaseState get() = DatabaseState(name, blockCatalog, null, trieCatalog, null)
+    val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")
     fun withCompactor(compactor: Compactor.ForDatabase) = copy(compactorOrNull = compactor)
 }
 
@@ -141,13 +132,13 @@ class NodeSimulationTest : SimulationTestBase() {
             MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalogs[i], blockCatalogs[i], null)
         }
         compactorsForDb = uninitializedDbs.mapIndexed {
-            i, db -> compactors[i].openForDatabase(db)
+            i, db -> compactors[i].openForDatabase(db.allocator, db.dbStorage, db.dbState)
         }
         dbs = uninitializedDbs.mapIndexed {
             i, db -> db.withCompactor(compactorsForDb[i])
         }
         garbageCollectors = dbs.map {
-            db -> GarbageCollector.Impl(db, gcDriver, 2, garbageLifetime, Duration.ofSeconds(30), dispatcher)
+            db -> GarbageCollector.Impl(db.bufferPool, db.dbState, gcDriver, 2, garbageLifetime, Duration.ofSeconds(30), dispatcher)
         }
     }
 

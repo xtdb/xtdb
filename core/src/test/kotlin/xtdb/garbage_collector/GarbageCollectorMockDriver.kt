@@ -1,7 +1,8 @@
 package xtdb.garbage_collector
 
 import kotlinx.coroutines.yield
-import xtdb.database.IDatabase
+import xtdb.database.DatabaseState
+import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.trie.TrieKey
 import xtdb.util.debug
@@ -17,11 +18,10 @@ class GarbageCollectorMockDriver() : GarbageCollector.Driver.Factory {
     val deletedPaths = mutableListOf<Path>()
     val deletedTrieKeys = mutableMapOf<TableRef, MutableSet<TrieKey>>()
 
-    override fun create(db: IDatabase) = ForDatabase(db, nextSystemId++)
+    override fun create(bufferPool: BufferPool, dbState: DatabaseState) = ForDatabase(bufferPool, dbState, nextSystemId++)
 
-    inner class ForDatabase(val db: IDatabase, val systemId: Int) : GarbageCollector.Driver {
-        private val bufferPool = db.bufferPool
-        private val trieCatalog = db.trieCatalog
+    inner class ForDatabase(val bufferPool: BufferPool, val dbState: DatabaseState, val systemId: Int) : GarbageCollector.Driver {
+        private val trieCatalog = dbState.trieCatalog
 
         override suspend fun deletePath(path: Path) {
             yield()

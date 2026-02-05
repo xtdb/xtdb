@@ -23,20 +23,15 @@ import xtdb.WithSeed
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message.TriesAdded
 import xtdb.api.storage.Storage
-import xtdb.arrow.unsupported
-import xtdb.catalog.BlockCatalog
-import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor.Driver
 import xtdb.compactor.Compactor.Driver.Factory
 import xtdb.compactor.Compactor.Job
 import xtdb.compactor.RecencyPartition.WEEK
 import xtdb.compactor.TemporalSplitting.*
 import xtdb.database.DatabaseName
-import xtdb.database.IDatabase
-import xtdb.indexer.Indexer
-import xtdb.indexer.LogProcessor
+import xtdb.database.DatabaseState
+import xtdb.database.DatabaseStorage
 import xtdb.log.proto.TrieDetails
-import xtdb.metadata.PageMetadata
 import xtdb.storage.BufferPool
 import xtdb.storage.MemoryStorage
 import xtdb.symbol
@@ -57,20 +52,12 @@ import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
 class MockDb(
-    override val name: DatabaseName,
-    override val trieCatalog: TrieCatalog,
-    override val bufferPool: BufferPool
-) : IDatabase {
-    override val allocator: BufferAllocator get() = unsupported("allocator")
-    override val blockCatalog: BlockCatalog get() = unsupported("blockCatalog")
-    override val tableCatalog: TableCatalog get() = unsupported("tableCatalog")
-    override val sourceLog: Log get() = unsupported("sourceLog")
-    override val projectionLog: Log get() = unsupported("projectionLog")
-    override val metadataManager: PageMetadata.Factory get() = unsupported("metadataManager")
-
-    override val logProcessor: LogProcessor get() = unsupported("logProcessor")
-    override val compactor: Compactor.ForDatabase get() = unsupported("compactor")
-    override val txSource: Indexer.TxSource get() = unsupported("txSource")
+    val name: DatabaseName,
+    val trieCatalog: TrieCatalog,
+    val bufferPool: BufferPool
+) {
+    val dbStorage: DatabaseStorage get() = DatabaseStorage(null, null, bufferPool, null)
+    val dbState: DatabaseState get() = DatabaseState(name, null, null, trieCatalog, null)
 }
 
 private val LOGGER = CompactorMockDriver::class.logger
@@ -104,10 +91,14 @@ class CompactorMockDriver(
     val sharedFlow = MutableSharedFlow<AppendMessage>(extraBufferCapacity = Int.MAX_VALUE)
     var nextSystemId = 0
 
-    override fun create(db: IDatabase) = ForDatabase(db, nextSystemId++)
+    override fun create(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState): Driver {
+        val systemId = nextSystemId++
+        return ForDatabase(dbStorage, dbState, systemId)
+    }
 
-    inner class ForDatabase(val db: IDatabase, val systemId: Int) : Driver {
-        val trieCatalog = db.trieCatalog
+    inner class ForDatabase(val dbStorage: DatabaseStorage, val dbState: DatabaseState, val systemId: Int) : Driver {
+        val trieCatalog = dbState.trieCatalog
+        val bufferPool = dbStorage.bufferPool
 
         val job = CoroutineScope(dispatcher).launch {
             sharedFlow.collect { msg ->
@@ -115,8 +106,8 @@ class CompactorMockDriver(
                 LOGGER.debug("[channel msg received] systemId=$systemId received ${trieKeys.size} tries: $trieKeys")
                 yield() // force suspension mid-message processing
                 msg.triesAdded.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                    val tableRef = TableRef.parse(db.name, tableName)
-                    addTriesToBufferPool(db.bufferPool, tableRef, tries)
+                    val tableRef = TableRef.parse(dbState.name, tableName)
+                    addTriesToBufferPool(bufferPool, tableRef, tries)
                     trieCatalog.addTries(tableRef, tries, msg.msgTimestamp)
                 }
 
@@ -192,7 +183,7 @@ class CompactorMockDriver(
                         )
                     }
                 }
-                addTriesToBufferPool(db.bufferPool, job.table, addedTries)
+                addTriesToBufferPool(bufferPool, job.table, addedTries)
                 TriesAdded(Storage.VERSION, 0, addedTries)
             } else {
                 val addedTries = listOf(
@@ -203,7 +194,7 @@ class CompactorMockDriver(
                         .build()
                 )
 
-                addTriesToBufferPool(db.bufferPool, job.table, addedTries)
+                addTriesToBufferPool(bufferPool, job.table, addedTries)
                 TriesAdded(Storage.VERSION, 0, addedTries)
 
 
@@ -333,7 +324,7 @@ class CompactorSimulationTest : SimulationTestBase() {
             mockDriver.trieKeyToFileSize[mockDriver.fileSizeKey(tableRef.tableName, it.trieKey.toString())] = it.dataFileSize
         }
         dbs.forEach { db ->
-            addTriesToBufferPool(db.bufferPool, tableRef, l0s)
+            addTriesToBufferPool(sharedBufferPool, tableRef, l0s)
             db.trieCatalog.addTries(tableRef, l0s, Instant.now())
         }
     }
@@ -348,7 +339,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         val trieCatalog = trieCatalogs[0]
         val db = dbs[0]
 
-        compactor.openForDatabase(db).use {
+        compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, listOf(l0Trie))
             it.compactAll()
         }
@@ -373,7 +364,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         val trieCatalog = trieCatalogs[0]
         val db = dbs[0]
 
-        compactor.openForDatabase(db).use {
+        compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             // Round 1: Add 3 L0 tries and compact
             addL0s(
                 table,
@@ -433,7 +424,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         val trieCatalog = trieCatalogs[0]
         val db = dbs[0]
 
-        compactor.openForDatabase(db).use {
+        compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, l0tries.toList())
             it.compactAll()
             val allTries = trieCatalog.listAllTrieKeys(docsTable)
@@ -456,7 +447,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
         val l1Tries = L1TrieKeys.take(4).map { buildTrieDetails(docsTable.tableName, it, defaultFileTarget) }
 
-        compactor.openForDatabase(db).use {
+        compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, l1Tries.toList())
 
             it.compactAll()
@@ -495,7 +486,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
         val missingPartitions = (0..3).filterNot { it in existingPartitions }
 
-        compactor.openForDatabase(db).use {
+        compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, l1Tries.toList() + existingL2Tries)
 
             it.compactAll()
@@ -543,7 +534,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p3-b03", defaultFileTarget))
         l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p3-b07", defaultFileTarget))
 
-        compactor.openForDatabase(db).use {
+        compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, l1Tries.toList() + l2tries)
 
             it.compactAll()
@@ -581,7 +572,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         addL0s(ordersTable, ordersTries.toList())
 
         compactors.zip(dbs).safeMap { (compactor, db) ->
-            compactor.openForDatabase(db)
+            compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
         }.useAll { dbs ->
             compactCompletions = dbs.shuffled(rand).map { db -> db.startCompaction() }
         }
@@ -627,7 +618,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         addL0s(docsTable, listOf(l0Trie))
 
         compactors.zip(dbs).safeMap { (compactor, db) ->
-            compactor.openForDatabase(db)
+            compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
         }.useAll { dbs ->
             compactCompletions = dbs.shuffled(rand).map { db -> db.startCompaction() }
         }
@@ -657,7 +648,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         addL0s(docsTable, l0tries.toList())
 
         compactors.zip(dbs).safeMap { (compactor, db) ->
-            compactor.openForDatabase(db)
+            compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
         }.useAll { dbs ->
             compactCompletions = dbs.shuffled(rand).map { db -> db.startCompaction() }
         }

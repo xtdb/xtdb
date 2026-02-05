@@ -20,6 +20,8 @@ import xtdb.catalog.BlockCatalog
 import xtdb.catalog.BlockCatalog.Companion.allBlockFiles
 import xtdb.compactor.Compactor
 import xtdb.database.Database
+import xtdb.database.DatabaseState
+import xtdb.database.DatabaseStorage
 import xtdb.block.proto.Block
 import xtdb.error.Anomaly
 import xtdb.error.Fault
@@ -54,7 +56,8 @@ class LogProcessor(
     allocator: BufferAllocator,
     meterRegistry: MeterRegistry,
     private val dbCatalog: Database.Catalog?,
-    private val db: Database,
+    private val dbStorage: DatabaseStorage,
+    private val dbState: DatabaseState,
     private val indexer: Indexer.ForDatabase,
     private val compactor: Compactor.ForDatabase,
     flushTimeout: Duration,
@@ -65,20 +68,21 @@ class LogProcessor(
     private val readOnly: Boolean get() = mode == Database.Mode.READ_ONLY
 
     init {
-        assert((dbCatalog != null) == (db.name == "xtdb")) { "dbCatalog supplied iff db == 'xtdb'" }
+        assert((dbCatalog != null) == (dbState.name == "xtdb")) { "dbCatalog supplied iff db == 'xtdb'" }
     }
 
     // LogProcessor subscribes to the source-log, which contains transaction messages.
     // For now, both source-log and projection-log point to the same underlying log,
     // so we still receive TriesAdded messages here even though they're written to projection-log.
     // This is intentional for the transition period.
-    private val log = db.sourceLog
+    private val log = dbStorage.sourceLog
     private val epoch = log.epoch
+    private val bufferPool = dbStorage.bufferPool
 
-    private val blockCatalog = db.blockCatalog
-    private val tableCatalog = db.tableCatalog
-    private val trieCatalog = db.trieCatalog
-    private val liveIndex = db.liveIndex
+    private val blockCatalog = dbState.blockCatalog
+    private val tableCatalog = dbState.tableCatalog
+    private val trieCatalog = dbState.trieCatalog
+    private val liveIndex = dbState.liveIndex
 
     @Volatile
     override var latestProcessedMsgId: MessageId =
@@ -173,7 +177,7 @@ class LogProcessor(
                             
                             // Store skipped transaction to object store
                             val skippedTxPath = "skipped-txs/${msgId.asLexDec}".asPath
-                            db.bufferPool.putObject(skippedTxPath, ByteBuffer.wrap(msg.payload))
+                            bufferPool.putObject(skippedTxPath, ByteBuffer.wrap(msg.payload))
                             LOG.debug("Stored skipped transaction to $skippedTxPath")
                             
                             // use abort flow in indexTx
@@ -222,15 +226,15 @@ class LogProcessor(
                     }
 
                     is Message.TriesAdded -> {
-                        if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == db.bufferPool.epoch)
+                        if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
                             msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                                trieCatalog.addTries(TableRef.parse(db.name, tableName), tries, record.logTimestamp)
+                                trieCatalog.addTries(TableRef.parse(dbState.name, tableName), tries, record.logTimestamp)
                             }
                         null
                     }
 
                     is Message.AttachDatabase -> {
-                        requireNotNull(dbCatalog) { "attach-db received on non-primary database ${db.name}" }
+                        requireNotNull(dbCatalog) { "attach-db received on non-primary database ${dbState.name}" }
                         val res = try {
                             dbCatalog.attach(msg.dbName, msg.config)
                             TransactionCommitted(msgId, record.logTimestamp)
@@ -247,7 +251,7 @@ class LogProcessor(
                     }
 
                     is Message.DetachDatabase -> {
-                        requireNotNull(dbCatalog) { "detach-db received on non-primary database ${db.name}" }
+                        requireNotNull(dbCatalog) { "detach-db received on non-primary database ${dbState.name}" }
                         val res = try {
                             dbCatalog.detach(msg.dbName)
                             TransactionCommitted(msgId, record.logTimestamp)
@@ -285,7 +289,7 @@ class LogProcessor(
                 watchers.notify(msgId, e)
                 LOG.error(
                     e,
-                    "Ingestion stopped for '${db.name}' database: error processing log record at id $msgId (epoch: $epoch, logOffset: ${record.logOffset})"
+                    "Ingestion stopped for '${dbState.name}' database: error processing log record at id $msgId (epoch: $epoch, logOffset: ${record.logOffset})"
                 )
                 LOG.error(
                     """
@@ -306,14 +310,14 @@ class LogProcessor(
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
         val tables = liveIndex.finishBlock(blockIdx)
-        val secondaryDatabases = dbCatalog?.takeIf { db.name == "xtdb" }?.serialisedSecondaryDatabases
+        val secondaryDatabases = dbCatalog?.takeIf { dbState.name == "xtdb" }?.serialisedSecondaryDatabases
 
         val block = blockCatalog.buildBlock(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
             tables, secondaryDatabases
         )
 
-        db.bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
+        bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
         blockCatalog.refresh(block)
 
         liveIndex.nextBlock()
@@ -333,11 +337,11 @@ class LogProcessor(
         val pollInterval = Duration.ofSeconds(1)
 
         while (true) {
-            val blockFile = db.bufferPool.allBlockFiles
+            val blockFile = bufferPool.allBlockFiles
                 .find { parseBlockIndex(it.key.fileName) == expectedBlockIdx }
 
             if (blockFile != null) {
-                val block = Block.parseFrom(db.bufferPool.getByteArray(blockFile.key))
+                val block = Block.parseFrom(bufferPool.getByteArray(blockFile.key))
                 val blockMsgId = block.latestProcessedMsgId
 
                 when {

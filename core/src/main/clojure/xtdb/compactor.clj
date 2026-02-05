@@ -133,9 +133,12 @@
       :query-db (ig/ref :xtdb.db-catalog/for-query)}})
 
 (defmethod ig/init-key ::for-db [_ {{:keys [^Compactor compactor]} :base, :keys [query-db ^Database$Mode mode]}]
-  (if (= mode Database$Mode/READ_ONLY)
-    (.openForDatabase Compactor/NOOP query-db)
-    (.openForDatabase compactor query-db)))
+  (let [allocator (.getAllocator query-db)
+        db-storage (.getStorage query-db)
+        db-state (.getState query-db)]
+    (if (= mode Database$Mode/READ_ONLY)
+      (.openForDatabase Compactor/NOOP allocator db-storage db-state)
+      (.openForDatabase compactor allocator db-storage db-state))))
 
 (defmethod ig/halt-key! ::for-db [_ compactor-for-db]
   (util/close compactor-for-db))

@@ -17,7 +17,7 @@
            (xtdb.api.log Log Log$Cluster$Factory Log$Factory Log$Message$Tx Log$MessageMetadata)
            (xtdb.arrow Relation Vector)
            xtdb.catalog.BlockCatalog
-           (xtdb.database Database Database$Catalog Database$Mode)
+           (xtdb.database Database DatabaseStorage Database$Catalog Database$Mode)
            xtdb.indexer.LogProcessor
            xtdb.table.TableRef
            (xtdb.tx TxOp$DeleteDocs TxOp$EraseDocs TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts TxWriter)
@@ -259,7 +259,9 @@
 (defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry db-catalog]} :base
                                                :keys [allocator db indexer compactor block-flush-duration skip-txs enabled? ^Database$Mode mode]}]
   (when enabled?
-    (LogProcessor. allocator meter-registry db-catalog db indexer compactor block-flush-duration (set skip-txs)
+    (LogProcessor. allocator meter-registry db-catalog
+                   (.getStorage db) (.getState db)
+                   indexer compactor block-flush-duration (set skip-txs)
                    (or mode Database$Mode/READ_WRITE))))
 
 (defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]

@@ -6,8 +6,18 @@
   (:import [java.lang AutoCloseable]
            [java.util HashMap]
            xtdb.api.Xtdb$Config
-           [xtdb.database Database Database$Catalog Database$Config Database$Mode]
+           [xtdb.database Database DatabaseState DatabaseStorage Database$Catalog Database$Config Database$Mode]
            [xtdb.database.proto DatabaseConfig DatabaseConfig$LogCase DatabaseConfig$StorageCase DatabaseMode]))
+
+;; Database components follow a hexagonal architecture pattern:
+;;
+;; - Storage (::storage): I/O layer - logs, buffer pool, metadata manager
+;; - State (::state): In-memory state holders - catalogs (block, table, trie), live index
+;; - Services: Orchestration components that depend on storage and state -
+;;             LogProcessor, Compactor, GarbageCollector (no explicit aggregate)
+;;
+;; Dependencies flow inward: Services → State, Services → Storage
+;; State will eventually have no I/O dependencies at runtime (only at startup to hydrate).
 
 (defmethod ig/init-key ::allocator [_ {{:keys [allocator]} :base, :keys [db-name]}]
   (util/->child-allocator allocator (format "database/%s" db-name)))
@@ -15,25 +25,36 @@
 (defmethod ig/halt-key! ::allocator [_ allocator]
   (util/close allocator))
 
-(defmethod ig/expand-key ::for-query [k {:keys [db-name db-config]}]
+(defmethod ig/expand-key ::state [k {:keys [db-name]}]
   {k {:db-name db-name
-      :db-config db-config
-      :allocator (ig/ref ::allocator)
       :block-cat (ig/ref :xtdb/block-catalog)
       :table-cat (ig/ref :xtdb/table-catalog)
       :trie-cat (ig/ref :xtdb/trie-catalog)
-      :source-log (ig/ref :xtdb/source-log)
+      :live-index (ig/ref :xtdb.indexer/live-index)}})
+
+(defmethod ig/init-key ::state [_ {:keys [db-name block-cat table-cat trie-cat live-index]}]
+  (DatabaseState. db-name block-cat table-cat trie-cat live-index))
+
+(defmethod ig/expand-key ::storage [k _]
+  {k {:source-log (ig/ref :xtdb/source-log)
       :projection-log (ig/ref :xtdb/projection-log)
       :buffer-pool (ig/ref :xtdb/buffer-pool)
-      :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)
+      :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)}})
+
+(defmethod ig/init-key ::storage [_ {:keys [source-log projection-log buffer-pool metadata-manager]}]
+  (DatabaseStorage. source-log projection-log buffer-pool metadata-manager))
+
+(defmethod ig/expand-key ::for-query [k {:keys [db-name db-config]}]
+  {k {:db-name db-name
+      :db-config db-config
+      :storage (ig/ref ::storage)
+      :state (ig/ref ::state)
+      :allocator (ig/ref ::allocator)
       :live-index (ig/ref :xtdb.indexer/live-index)
       :tx-source (ig/ref :xtdb.tx-source/for-db)}})
 
-(defmethod ig/init-key ::for-query [_ {:keys [allocator db-name db-config block-cat table-cat
-                                              trie-cat source-log projection-log buffer-pool metadata-manager
-                                              live-index tx-source]}]
-  (Database. db-name db-config allocator block-cat table-cat trie-cat
-             source-log projection-log buffer-pool metadata-manager live-index
+(defmethod ig/init-key ::for-query [_ {:keys [allocator db-config storage state live-index tx-source]}]
+  (Database. allocator db-config storage state
              live-index ; snap-src
              nil nil tx-source))
 
@@ -63,6 +84,8 @@
          :xtdb.indexer/live-index (assoc opts :indexer-conf indexer-conf)
          :xtdb.indexer/crash-logger opts
 
+         ::storage opts
+         ::state opts
          ::for-query (assoc opts :db-config db-config)
 
          :xtdb.tx-source/for-db (assoc opts :tx-source-conf (.getTxSource conf))
