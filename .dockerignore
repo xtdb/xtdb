@@ -1,6 +1,9 @@
 # Ignore everything, then allow only what Docker builds need
 *
 
+!gradlew
+!gradle/wrapper/
+!build-logic/jlink/
 !docker/standalone/
 !docker/aws/
 !docker/azure/

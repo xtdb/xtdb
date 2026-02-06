@@ -1,4 +1,14 @@
-FROM eclipse-temurin:21-jre-alpine
+# Build JRE
+FROM eclipse-temurin:21-jdk-alpine AS jlink
+WORKDIR /build
+COPY gradlew gradlew
+COPY gradle/wrapper gradle/wrapper
+COPY build-logic/jlink/settings.gradle.kts settings.gradle.kts
+COPY build-logic/jlink/build.gradle.kts build.gradle.kts
+RUN chmod +x gradlew && ./gradlew buildCustomJre --no-daemon
+
+# Runtime
+FROM alpine:3.23.3
 
 ARG VARIANT=standalone
 ARG GIT_SHA
@@ -12,6 +22,13 @@ LABEL org.opencontainers.image.revision=${GIT_SHA}
 
 LABEL usage="Example docker-run options for custom logging configuration: \
 --volume .:/config --env JDK_JAVA_OPTIONS='-Dlogback.configurationFile=/config/logback.xml'"
+
+# For healthcheck
+RUN apk add --no-cache wget
+
+COPY --from=jlink /build/build/custom-jre /opt/java
+ENV PATH="/opt/java/bin:$PATH"
+ENV JAVA_HOME="/opt/java"
 
 WORKDIR /usr/local/lib/xtdb
 
