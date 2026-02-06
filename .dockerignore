@@ -1,6 +1,7 @@
-/build/resources/test/
-/src/test/
-/docs/
-.git
-docker-compose.yml
-Dockerfile.*
+# Ignore everything, then allow only what Docker builds need
+*
+
+!docker/standalone/
+!docker/aws/
+!docker/azure/
+!docker/google-cloud/

@@ -38,8 +38,8 @@ VOLUME /var/lib/xtdb
 ENV GIT_SHA=${GIT_SHA}
 ENV XTDB_VERSION=${XTDB_VERSION}
 
-COPY ${VARIANT}/*.yaml ./
-COPY ${VARIANT}/build/libs/xtdb-${VARIANT}.jar xtdb.jar
+COPY docker/${VARIANT}/*.yaml ./
+COPY docker/${VARIANT}/build/libs/xtdb-${VARIANT}.jar xtdb.jar
 
 RUN addgroup -g 20000 xtdb && adduser -u 20000 -G xtdb -D -H xtdb
 RUN mkdir -p /home/xtdb && chown -R xtdb:xtdb /home/xtdb
