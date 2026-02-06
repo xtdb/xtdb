@@ -93,7 +93,7 @@ class LogProcessor(
         } ?: -1
         private set
 
-    private val latestProcessedOffset = blockCatalog.latestProcessedMsgId?.let {
+    val latestProcessedOffset = blockCatalog.latestProcessedMsgId?.let {
         if (msgIdToEpoch(it) == epoch) msgIdToOffset(it) else -1
     } ?: -1
 
@@ -149,13 +149,10 @@ class LogProcessor(
             }
 
     override fun close() {
-        subscription.close()
         allocator.close()
     }
 
     private val flusher = Flusher(flushTimeout, blockCatalog)
-
-    private val subscription = log.tailAll(this, latestProcessedOffset)
 
     override fun processRecords(records: List<Log.Record>) = runBlocking {
         // Don't send FlushBlock messages in read-only mode - we can't write to the log

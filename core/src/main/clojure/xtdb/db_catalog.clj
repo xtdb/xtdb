@@ -98,7 +98,7 @@
 
                  (throw (ex-cause e))))]
     {:db (Database. (::allocator sys) db-config (::storage sys) (::state sys)
-                    (:xtdb.log/processor sys) (:xtdb.compactor/for-db sys) (:xtdb.tx-source/for-db sys))
+                    (:processor (:xtdb.log/processor sys)) (:xtdb.compactor/for-db sys) (:xtdb.tx-source/for-db sys))
      :sys sys}))
 
 (defmethod ig/init-key :xtdb/db-catalog [_ {:keys [base]}]

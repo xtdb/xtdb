@@ -258,15 +258,21 @@
       :mode mode}})
 
 (defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry db-catalog]} :base
-                                               :keys [allocator storage state indexer compactor block-flush-duration skip-txs enabled? ^Database$Mode mode]}]
+                                               :keys [allocator ^DatabaseStorage storage state indexer compactor block-flush-duration skip-txs enabled? ^Database$Mode mode]}]
   (when enabled?
-    (LogProcessor. allocator meter-registry db-catalog
-                   storage state
-                   indexer compactor block-flush-duration (set skip-txs)
-                   (or mode Database$Mode/READ_WRITE))))
+    (let [lp (LogProcessor. allocator meter-registry db-catalog
+                            storage state
+                            indexer compactor block-flush-duration (set skip-txs)
+                            (or mode Database$Mode/READ_WRITE))]
+      {:processor lp
+       :subscription (.tailAll (.getSourceLog storage) lp (.getLatestProcessedOffset lp))})))
 
-(defmethod ig/halt-key! :xtdb.log/processor [_ ^LogProcessor log-processor]
-  (util/close log-processor))
+(defmethod ig/resolve-key :xtdb.log/processor [_ {:keys [processor]}]
+  processor)
+
+(defmethod ig/halt-key! :xtdb.log/processor [_ {:keys [processor subscription]}]
+  (util/close subscription)
+  (util/close processor))
 
 (defn await-db
   ([db msg-id] (await-db db msg-id nil))
