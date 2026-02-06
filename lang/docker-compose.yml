@@ -1,7 +1,8 @@
 services:
   xtdb:
     build:
-      context: ../docker
+      context: ..
+      dockerfile: docker/Dockerfile
       args:
         VARIANT: standalone
     command: ["playground", "--port", "5439"]
