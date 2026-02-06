@@ -1,4 +1,4 @@
-FROM eclipse-temurin:21
+FROM eclipse-temurin:21-jre-alpine
 
 ARG VARIANT=standalone
 ARG GIT_SHA
@@ -26,7 +26,7 @@ ENTRYPOINT ["java", \
 CMD ["-f", "config.yaml"]
 
 HEALTHCHECK --start-period=15s --timeout=3s \
-    CMD curl -f http://localhost:8080/healthz/alive || exit 1
+    CMD wget -q --spider http://localhost:8080/healthz/alive || exit 1
 
 EXPOSE 5432
 EXPOSE 3000
@@ -41,7 +41,7 @@ ENV XTDB_VERSION=${XTDB_VERSION}
 COPY ${VARIANT}/*.yaml ./
 COPY ${VARIANT}/build/libs/xtdb-${VARIANT}.jar xtdb.jar
 
-RUN groupadd -g 20000 xtdb && useradd -u 20000 -g 20000 -r xtdb
+RUN addgroup -g 20000 xtdb && adduser -u 20000 -G xtdb -D -H xtdb
 RUN mkdir -p /home/xtdb && chown -R xtdb:xtdb /home/xtdb
 RUN chown -R xtdb:xtdb /var/lib/xtdb
 
