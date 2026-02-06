@@ -1,4 +1,7 @@
 import dev.clojurephant.plugin.clojure.tasks.ClojureCompile
+import org.gradle.jvm.toolchain.JavaInstallationMetadata
+import org.gradle.jvm.toolchain.JavaLauncher
+import org.gradle.jvm.toolchain.JavaToolchainService
 import org.jetbrains.dokka.base.DokkaBase
 import org.jetbrains.dokka.base.DokkaBaseConfiguration
 import org.jreleaser.gradle.plugin.dsl.deploy.maven.MavenDeployer
@@ -84,6 +87,23 @@ layout.buildDirectory.set(
 )
 
 val rootProj = project
+
+val jlinkBuild = gradle.includedBuild("jlink")
+val buildCustomJre = jlinkBuild.task(":buildCustomJre")
+val customJreDir = jlinkBuild.projectDir.resolve("build/custom-jre")
+val useCustomJre = !rootProj.hasProperty("fullJdk")
+
+fun Project.customJreLauncher(): Provider<JavaLauncher> {
+    val toolchainLauncher = extensions.getByType(JavaToolchainService::class.java)
+        .launcherFor(java.toolchain)
+    return toolchainLauncher.map { existing ->
+        object : JavaLauncher {
+            override fun getExecutablePath() =
+                layout.projectDirectory.file(customJreDir.resolve("bin/java").absolutePath)
+            override fun getMetadata() = existing.metadata
+        }
+    }
+}
 
 allprojects {
     val proj = this
@@ -172,6 +192,25 @@ allprojects {
             }
         }
 
+        // Use custom JRE for all Test and JavaExec tasks (skip with -PfullJdk)
+        if (useCustomJre) {
+            val customLauncher = proj.customJreLauncher()
+
+            tasks.withType<Test> {
+                dependsOn(buildCustomJre)
+                javaLauncher.set(customLauncher)
+            }
+
+            val jreExcludedTasks = setOf("build-codox")
+
+            tasks.withType<JavaExec> {
+                if (name !in jreExcludedTasks) {
+                    dependsOn(buildCustomJre)
+                    javaLauncher.set(customLauncher)
+                }
+            }
+        }
+
         dependencies {
             testRuntimeOnly(libs.logback.classic)
             testRuntimeOnly(libs.logback.classic)
@@ -206,6 +245,11 @@ allprojects {
             }
 
             tasks.clojureRepl {
+                if (useCustomJre) {
+                    dependsOn(buildCustomJre)
+                    javaLauncher.set(proj.customJreLauncher())
+                }
+
                 doFirst {
                     project.ext.set("buildEnv", "repl")
                 }
