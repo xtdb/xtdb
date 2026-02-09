@@ -51,35 +51,31 @@
 
 (defn- gen-last-loc-by-truck
   "LastLocByTruck - last location for specific random trucks"
-  [{:keys [rng truck-names max-time]}]
+  [{:keys [rng truck-names]}]
   (let [trucks (random-trucks rng truck-names 5)]
     {:query-type :last-loc-by-truck
-     :sqlvec (query-last-loc-by-truck-sqlvec {:truck-names trucks
-                                              :as-of-time max-time})}))
+     :sqlvec (query-last-loc-by-truck-sqlvec {:truck-names trucks})}))
 
 (defn- gen-last-loc-per-truck
   "LastLocPerTruck - last location for all trucks in a random fleet"
-  [{:keys [rng max-time]}]
+  [{:keys [rng]}]
   (let [fleet (random-fleet rng)]
     {:query-type :last-loc-per-truck
-     :sqlvec (query-last-loc-per-truck-sqlvec {:fleet fleet
-                                               :as-of-time max-time})}))
+     :sqlvec (query-last-loc-per-truck-sqlvec {:fleet fleet})}))
 
 (defn- gen-low-fuel
   "TrucksWithLowFuel - trucks with fuel < 10% in a random fleet"
-  [{:keys [rng max-time]}]
+  [{:keys [rng]}]
   (let [fleet (random-fleet rng)]
     {:query-type :low-fuel
-     :sqlvec (query-low-fuel-sqlvec {:fleet fleet
-                                     :as-of-time max-time})}))
+     :sqlvec (query-low-fuel-sqlvec {:fleet fleet})}))
 
 (defn- gen-high-load
   "TrucksWithHighLoad - trucks with load > 90% capacity in a random fleet"
-  [{:keys [rng max-time]}]
+  [{:keys [rng]}]
   (let [fleet (random-fleet rng)]
     {:query-type :high-load
-     :sqlvec (query-high-load-sqlvec {:fleet fleet
-                                      :as-of-time max-time})}))
+     :sqlvec (query-high-load-sqlvec {:fleet fleet})}))
 
 (defn- gen-stationary-trucks
   "StationaryTrucks - trucks with avg velocity < 1 in random 10-min window.
