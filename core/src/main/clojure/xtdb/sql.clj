@@ -3214,37 +3214,44 @@
   ([sql] (plan sql nil))
   ([sql query-opts] (-plan-query sql query-opts)))
 
+(defn- ->const
+  "Resolves a planned value (symbols, collections, maps) to a concrete value
+   by substituting parameter symbols from `arg-row`.
+   Throws RuntimeException for unresolvable expressions (seqs)."
+  [v arg-row]
+  (letfn [(->const* [obj]
+            (cond
+              (symbol? obj) (->const* (val (or (find arg-row obj) (throw (RuntimeException.)))))
+              (seq? obj) (throw (RuntimeException.))
+              (vector? obj) (mapv ->const* obj)
+              (set? obj) (into #{} (map ->const*) obj)
+              (instance? Map obj) (->> obj
+                                       (into {} (map (fn [[k v]]
+                                                       (MapEntry/create (str (symbol k))
+                                                                        (->const* v))))))
+              :else obj))]
+    (->const* v)))
+
+(defn- ->param-row [arg-row]
+  (->> arg-row
+       (into {} (map-indexed (fn [idx v]
+                               (MapEntry/create (symbol (str "?_" idx)) v))))))
+
 (defrecord SqlToStaticOpsVisitor [env scope arg-rows]
   SqlVisitor
   (visitInsertStatement [this ctx]
     (let [table (-> (identifier-sym (.targetTable ctx)) (util/with-default-schema))]
       (when-let [rows (-> (.insertColumnsAndSource ctx) (.accept this))]
-        (letfn [(->const [v arg-row]
-                  (letfn [(->const* [obj]
-                            (cond
-                              (symbol? obj) (->const* (val (or (find arg-row obj) (throw (RuntimeException.)))))
-                              (seq? obj) (throw (RuntimeException.))
-                              (vector? obj) (mapv ->const* obj)
-                              (set? obj) (into #{} (map ->const*) obj)
-                              (instance? Map obj) (->> obj
-                                                       (into {} (map (fn [[k v]]
-                                                                       (MapEntry/create (str (symbol k))
-                                                                                        (->const* v))))))
-                              :else obj))]
-                    (->const* v)))]
+        (->> (for [arg-row (or arg-rows [[]])
+                   row rows]
+               (->const row (->param-row arg-row)))
 
-          (->> (for [arg-row (or arg-rows [[]])
-                     row rows]
-                 (->const row (->> arg-row
-                                   (into {} (map-indexed (fn [idx v]
-                                                           (MapEntry/create (symbol (str "?_" idx)) v)))))))
+             (group-by (juxt #(get % "_valid_from")
+                             #(get % "_valid_to")))
 
-               (group-by (juxt #(get % "_valid_from")
-                               #(get % "_valid_to")))
-
-               (into [] (map (fn [[[vf vt] rows]]
-                               (tx-ops/->PutDocs table (mapv #(dissoc % "_valid_from" "_valid_to") rows)
-                                                 vf vt)))))))))
+             (into [] (map (fn [[[vf vt] rows]]
+                             (tx-ops/->PutDocs table (mapv #(dissoc % "_valid_from" "_valid_to") rows)
+                                               vf vt))))))))
 
   (visitInsertFromSubquery [_ _])
 
