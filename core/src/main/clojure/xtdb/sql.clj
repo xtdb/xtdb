@@ -3272,8 +3272,38 @@
 
   (visitUpdateStatement [_ _])
 
-  ;; TODO these can be made static ops too
-  (visitPatchStatement [_ _])
+  (visitPatchStatement [this ctx]
+    (let [table (-> (identifier-sym (.targetTable ctx)) (util/with-default-schema))
+          ;; visit valid-time before patchSource to match parameter ordering in the SQL text
+          expr-visitor (->ExprPlanVisitor env scope)
+          [vf-expr vt-expr] (if-let [vt-ctx (.patchStatementValidTimeExtents ctx)]
+                              (.accept vt-ctx
+                                       (reify SqlVisitor
+                                         (visitPatchStatementValidTimePortion [_ ctx]
+                                           ;; NULL → start/end-of-time, matching plan-patch (#4448)
+                                           [(or (some-> (.from ctx) (.accept expr-visitor)) time/start-of-time)
+                                            (or (some-> (.to ctx) (.accept expr-visitor)) time/end-of-time)])))
+                              [nil nil])]
+      (when-let [rows (-> (.patchSource ctx) (.accept this))]
+        (->> (for [arg-row (or arg-rows [[]])
+                   :let [param-row (->param-row arg-row)
+                         vf (some-> vf-expr (->const param-row))
+                         vt (some-> vt-expr (->const param-row))]
+                   row rows]
+               [(->const row param-row) vf vt])
+
+             (group-by (fn [[_ vf vt]] [vf vt]))
+
+             (into [] (map (fn [[[vf vt] row-triples]]
+                             (tx-ops/->PatchDocs table (mapv first row-triples)
+                                                 vf vt))))))))
+
+  (visitPatchRecords [_ ctx]
+    (let [{:keys [rows]} (-> (.recordsValueConstructor ctx)
+                             (.accept (->TableRowsVisitor env scope nil)))]
+      rows))
+
+  ;; TODO delete/erase can be made static ops too
   (visitDeleteStatement [_ _])
   (visitEraseStatement [_ _])
 

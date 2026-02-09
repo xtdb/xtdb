@@ -2919,7 +2919,7 @@ UNION ALL
   (t/is (anomalous? [:incorrect :xtdb.indexer/invalid-valid-times
                      "Invalid valid times"
                      {:valid-from #xt/instant "2020-01-01T00:00:00Z", :valid-to #xt/instant "2015-01-01T00:00:00Z"
-                      :arg-idx 0, :sql "PATCH INTO users FOR PORTION OF VALID_TIME FROM $1 TO $2 RECORDS {_id: 1, foo: 3}", :tx-op-idx 0,
+                      :tx-op-idx 0,
                       :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]
                     (xt/execute-tx tu/*node* [[:sql "PATCH INTO users FOR PORTION OF VALID_TIME FROM ? TO ? RECORDS {_id: 1, foo: 3}" [#inst "2020" #inst "2015"]]])))
 
@@ -2928,7 +2928,7 @@ UNION ALL
                                "Invalid valid times"
                                {:valid-from #xt/instant "2020-01-01T00:00:00Z",
                                 :valid-to #xt/instant "2015-01-01T00:00:00Z"
-                                :arg-idx 0, :sql "PATCH INTO users FOR PORTION OF VALID_TIME FROM $1 TO $2 RECORDS {_id: 1, foo: 3}", :tx-op-idx 0,
+                                :tx-op-idx 0,
                                 :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]}]
            (xt/q tu/*node* '(from :xt/txs [{:xt/id 1} committed error])))))
 

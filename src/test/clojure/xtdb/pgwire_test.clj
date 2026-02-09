@@ -2409,16 +2409,7 @@ ORDER BY t.oid DESC LIMIT 1"
                         [{:xt/id 1, :a 1, :b 2} #xt/zdt "2020-01-07Z[UTC]" nil]
                         [{:xt/id 2, :a 6, :b 8} #xt/zdt "2020-01-08Z[UTC]" nil]]]
           (t/is (= expected
-                   (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from")))
-
-          (t/testing "parse error doesn't halt ingestion"
-            (t/is (thrown-with-msg? PSQLException
-                                    #"internal error conforming query plan"
-                                    (q conn ["PATCH INTO bar FOR VALID_TIME FROM '2020-01-05' TO DATE '2020-01-07' RECORDS {_id: 1, tmp: 'hi!'}"])))
-
-            (t/is (= expected
-                     (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from"))
-                  "node continues"))))
+                   (q* "SELECT *, _valid_from, _valid_to FROM bar FOR ALL VALID_TIME ORDER BY _id, _valid_from")))))
 
       (t/testing "out-of-order updates"
         (q conn ["PATCH INTO baz FOR VALID_TIME FROM TIMESTAMP '2020-01-01Z' RECORDS {_id: 1, version: 1}"])

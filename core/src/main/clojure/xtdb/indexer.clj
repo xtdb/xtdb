@@ -409,50 +409,51 @@
                                                             (into #{} (filter (every-pred #(str/starts-with? % "_")
                                                                                           (complement #{"_id" "_fn"}))))))]
                     (throw (err/incorrect :xtdb/forbidden-columns
-                                          (str "Cannot put documents with columns: " (pr-str forbidden-cols))
+                                          (str "Cannot patch documents with columns: " (pr-str forbidden-cols))
                                           {:table table, :forbidden-cols forbidden-cols})))
 
                   (let [live-table (.liveTable live-idx-tx table)]
                     (reify OpIndexer
                       (indexOp [_ tx-op-idx]
-                        (let [valid-from (time/micros->instant (if (.isNull valid-from-rdr tx-op-idx)
-                                                                 system-time-µs
-                                                                 (.getLong valid-from-rdr tx-op-idx)))
-                              valid-to (when-not (.isNull valid-to-rdr tx-op-idx)
-                                         (time/micros->instant (.getLong valid-to-rdr tx-op-idx)))]
-                          (when-not (or (nil? valid-to) (pos? (compare valid-to valid-from)))
-                            (throw (err/incorrect :xtdb.indexer/invalid-valid-times
-                                                  "Invalid valid times"
-                                                  {:valid-from valid-from, :valid-to valid-to})))
-                          (metrics/with-span tracer "xtdb.transaction.patch-docs" {:attributes {:db (.getDbName table)
-                                                                                                :schema (.getSchemaName table)
-                                                                                                :table (.getTableName table)}}
-                            (let [table-info (-> (with-open [snap (.openSnapshot (.databaseOrNull db-cat default-db))]
-                                                   (.getSchema snap))
-                                                 (sql/xform-table-info default-db))
-                                  pq (.prepareQuery q-src (-> (sql/plan-patch {:table-info table-info}
-                                                                              {:table table
-                                                                               :valid-from valid-from
-                                                                               :valid-to valid-to
-                                                                               :patch-rel (sql/->QueryExpr '[:table {:output-cols [_iid doc]
-                                                                                                                    :param ?patch_docs}]
-                                                                                                           '[_iid doc])})
-                                                              (lp/rewrite-plan))
-                                                    db-cat tx-opts)
-                                  args (vr/rel-reader [(SingletonListReader.
-                                                        "?patch_docs"
-                                                        (RelationAsStructReader.
-                                                         "patch_doc"
-                                                         (vr/rel-reader [(-> (.select iid-rdr (.getListStartIndex iids-rdr tx-op-idx) (.getListCount iids-rdr tx-op-idx))
-                                                                             (.withName "_iid"))
-                                                                         (-> (.select doc-rdr (.getListStartIndex table-docs-rdr tx-op-idx) (.getListCount table-docs-rdr tx-op-idx))
-                                                                             (.withName "doc"))])))])]
+                        (err/wrap-anomaly {:tx-op-idx tx-op-idx, :tx-key (:tx-key tx-opts)}
+                          (let [valid-from (time/micros->instant (if (.isNull valid-from-rdr tx-op-idx)
+                                                                   system-time-µs
+                                                                   (.getLong valid-from-rdr tx-op-idx)))
+                                valid-to (when-not (.isNull valid-to-rdr tx-op-idx)
+                                           (time/micros->instant (.getLong valid-to-rdr tx-op-idx)))]
+                            (when-not (or (nil? valid-to) (pos? (compare valid-to valid-from)))
+                              (throw (err/incorrect :xtdb.indexer/invalid-valid-times
+                                                    "Invalid valid times"
+                                                    {:valid-from valid-from, :valid-to valid-to})))
+                            (metrics/with-span tracer "xtdb.transaction.patch-docs" {:attributes {:db (.getDbName table)
+                                                                                                  :schema (.getSchemaName table)
+                                                                                                  :table (.getTableName table)}}
+                              (let [table-info (-> (util/with-open [snap (.openSnapshot (.databaseOrNull db-cat default-db))]
+                                                     (.getSchema snap))
+                                                   (sql/xform-table-info default-db))
+                                    pq (.prepareQuery q-src (-> (sql/plan-patch {:table-info table-info}
+                                                                                {:table table
+                                                                                 :valid-from valid-from
+                                                                                 :valid-to valid-to
+                                                                                 :patch-rel (sql/->QueryExpr '[:table {:output-cols [_iid doc]
+                                                                                                                       :param ?patch_docs}]
+                                                                                                             '[_iid doc])})
+                                                                (lp/rewrite-plan))
+                                                      db-cat tx-opts)
+                                    args (vr/rel-reader [(SingletonListReader.
+                                                           "?patch_docs"
+                                                           (RelationAsStructReader.
+                                                             "patch_doc"
+                                                             (vr/rel-reader [(-> (.select iid-rdr (.getListStartIndex iids-rdr tx-op-idx) (.getListCount iids-rdr tx-op-idx))
+                                                                                 (.withName "_iid"))
+                                                                             (-> (.select doc-rdr (.getListStartIndex table-docs-rdr tx-op-idx) (.getListCount table-docs-rdr tx-op-idx))
+                                                                                 (.withName "doc"))])))])]
 
-                              (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
-                                                                 (assoc :args args, :close-args? false)))]
-                                (.forEachRemaining res
-                                                   (fn [^RelationReader rel]
-                                                     (patch-rel! table live-idx live-table rel tx-opts)))))))))))))]
+                                (util/with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
+                                                                        (assoc :args args, :close-args? false)))]
+                                  (.forEachRemaining res
+                                                     (fn [^RelationReader rel]
+                                                       (patch-rel! table live-idx live-table rel tx-opts))))))))))))))]
 
       (let [tables (->> (.getLegNames docs-rdr)
                         (into {} (keep (fn [table-name]

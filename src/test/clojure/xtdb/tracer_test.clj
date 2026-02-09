@@ -168,7 +168,7 @@
           ;; we may expect the patch/delete/erase to differ here if they go through delete-docs/erase-docs indexer
           (t/is (= ["xtdb.transaction.put-docs"
                     "xtdb.transaction.sql"
-                    "xtdb.transaction.sql"
+                    "xtdb.transaction.patch-docs"
                     "xtdb.transaction.sql"
                     "xtdb.transaction.sql"]
                    (mapv :name tx-child-spans)))

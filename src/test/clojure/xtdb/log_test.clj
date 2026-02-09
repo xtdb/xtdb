@@ -134,12 +134,13 @@
                                                (not (record? tx-op)) tx-ops/parse-tx-op))
                                            {:default-db "xtdb", :default-tz #xt/zone "Europe/London"})]
     (with-open [rel (Relation/openFromArrowStream tu/*allocator* actual-bytes)]
-      (t/is (= (util/->clj [{:tx-ops [#xt/tagged [:patch-docs
+      (t/is (= (util/->clj [{:default-tz "Europe/London"
+                             :tx-ops [#xt/tagged [:patch-docs
                                                   {:iids [#bytes "4cd9b7672d7fbee8fb51fb1e049f6903"
                                                           #bytes "9a83c6cb1126d93de4a30715b28f1f4b"],
                                                    :documents #xt/tagged [:public/foo [{:xt/id 1, :v 2}
                                                                                        {:xt/id 3, :x "hello"}]]}]]}])
-               (.getAsMaps rel))))))
+               (util/->clj (.getAsMaps rel)))))))
 
 (t/deftest validate-offset-returns-proper-errors
   (letfn [(->simulated-log [epoch latest-submitted-offset]
